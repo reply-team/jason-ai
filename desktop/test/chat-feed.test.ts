@@ -4,12 +4,12 @@
 // the catch-up a restarted desktop reads of the lines written while the window was closed.
 
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, ChatRefused, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { newConversationId, readConversations, writeConversation, type Conversation } from '../src/chat-conversations.ts';
+import { newConversationId, readConversations, serialize, writeConversation, type Conversation } from '../src/chat-conversations.ts';
 import { feedKinds, feedLimit, type LineEntry } from '../src/feed.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
@@ -29,7 +29,7 @@ interface Rig {
     journal: string;
 }
 
-function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
+function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partial<ChatOptions> = {}): Rig {
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'] });
     const campaigns = join(b.root, 'campaigns.json');
@@ -63,6 +63,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }): Rig {
                     }
                 }
             },
+            ...options,
             ...more,
         });
         chats.push(chat);
@@ -215,6 +216,60 @@ test('a line never starts a turn: not alone, not while a turn of the Feed runs, 
         (r.events.get(feed.id) ?? []).map((event) => event.kind).filter((kind) => kind !== 'step'),
         ['line', 'line', 'line', 'text', 'text', 'done'],
     );
+    // The line handed while that turn ran was given to no turn yet: the next one hears it, and only it.
+    plan(r, []);
+    await r.turn(feed.id, 'And since?', { host: 'claude' });
+    const next = r.hosts()[1]?.stdin ?? '';
+    assert.ok(next.includes(jrn(3)) && !next.includes(jrn(1)) && !next.includes(jrn(2)), next);
+});
+
+test('a line that lands while a turn of the Feed is starting is given to the next turn, never lost between the two', async (t) => {
+    let landing: (() => void) | null = null;
+    const r = rig(t, {
+        // The fence is read inside the turn after its lines are chosen and before the host starts: a line handed there
+        // lands in the span the person's message and the endpoint take.
+        fence: () => {
+            const land = landing;
+            landing = null;
+            land?.();
+            return fence;
+        },
+    });
+    const feed = r.chat.feed([journalLine(1)]);
+    landing = () => void r.chat.feed([journalLine(2, { campaign_id: cmp(2) })]);
+    await r.turn(feed.id, 'What happened?', { host: 'claude' });
+    const first = r.hosts()[0]?.stdin ?? '';
+    assert.ok(first.includes(jrn(1)) && !first.includes(jrn(2)), first);
+    await r.turn(feed.id, 'And then?', { host: 'claude' });
+    const second = r.hosts()[1]?.stdin ?? '';
+    assert.ok(second.includes(jrn(2)) && !second.includes(jrn(1)), second);
+    assert.equal((JSON.parse(recordOf(r, feed.id)) as { delivered?: string }).delivered, jrn(2), 'the record keeps the newest line handed');
+});
+
+test('a turn whose host never started has given no line: the next turn is given them', async (t) => {
+    let breaking: (() => void) | null = null;
+    const r = rig(t, {
+        fence: () => {
+            const doIt = breaking;
+            breaking = null;
+            doIt?.();
+            return fence;
+        },
+    });
+    const bin = join(r.b.root, 'bin');
+    const feed = r.chat.feed([journalLine(1), journalLine(2, { campaign_id: cmp(2) })]);
+    // The host cannot be started once the turn has chosen its lines: on Windows its launcher is a Node that is no
+    // program, elsewhere its file is gone.
+    const bogus = join(bin, 'node.exe');
+    if (process.platform === 'win32') writeFileSync(bogus, 'not a program');
+    else breaking = () => rmSync(join(bin, 'codex'), { force: true });
+    const failed = await r.turn(feed.id, 'What happened?', { host: 'codex' });
+    assert.match((failed.at(-1) as { error: string | null }).error ?? '', /could not be started|cannot be started/i);
+    assert.deepEqual(r.hosts(), [], 'no host ran');
+    rmSync(bogus, { force: true });
+    await r.turn(feed.id, 'And now?', { host: 'claude' });
+    const given = r.hosts()[0]?.stdin ?? '';
+    assert.ok(given.includes(jrn(1)) && given.includes(jrn(2)), given);
 });
 
 test('the lines reach the agent with the person\'s next message, after the Feed\'s header, set apart as records, and each only once', async (t) => {
@@ -262,18 +317,66 @@ test('a restarted desktop reads back the lines written since the Feed\'s newest,
     // Newest first, as the runtime answers; the kept line itself comes back too (since is at or after).
     writeFileSync(r.journal, JSON.stringify([journalLine(4, { kind: 'campaign_paused', campaign_id: cmp(4) }), journalLine(3, { campaign_id: cmp(3) }), journalLine(1)]));
     const after = r.again();
-    after.feed([journalLine(5, { campaign_id: cmp(5) })]);
+    after.feed([journalLine(5, { campaign_id: cmp(5) })], { catchUp: true });
     after.feed([journalLine(6, { campaign_id: cmp(6) })]);
     await after.idle();
     const reads = r.jason().filter((asked) => asked.startsWith('journal list'));
-    assert.deepEqual(reads, [`journal list ${feedKinds.map((kind) => `--kind ${kind}`).join(' ')} --since ${at(1)} --limit 100`]);
+    // A few seconds before the newest kept moment, as lines are committed out of order.
+    assert.deepEqual(reads, [`journal list ${feedKinds.map((kind) => `--kind ${kind}`).join(' ')} --since 2026-11-11T09:59:56.000Z --limit 100`]);
     assert.deepEqual(
         after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)),
         [jrn(1), jrn(3), jrn(4), jrn(5), jrn(6)],
     );
     after.feed([]);
     await after.idle();
-    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 1, 'read once a run');
+    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 1, 'an ask that carries no catch-up reads nothing back');
+});
+
+test('the catch-up runs at each load of the page, as each first ask carries it, and takes no line twice, folded ones included, across a restart', async (t) => {
+    const r = rig(t);
+    // Two lines of one kind and campaign fold into one; the older id is gone from the entry, and kept on the record.
+    const feed = r.chat.feed([journalLine(1), journalLine(2)]);
+    assert.deepEqual(r.chat.open(feed.id).entries, [kept(2, { count: 2 })]);
+    writeFileSync(r.journal, JSON.stringify([journalLine(3, { campaign_id: cmp(3) }), journalLine(2), journalLine(1)]));
+    r.chat.feed([], { catchUp: true });
+    await r.chat.idle();
+    r.chat.feed([], { catchUp: true });
+    await r.chat.idle();
+    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 2, 'a page loaded again reads back again');
+    const after = r.again();
+    after.feed([], { catchUp: true });
+    await after.idle();
+    assert.deepEqual(after.open(feed.id).entries, [kept(2, { count: 2 }), kept(3, { campaign_id: cmp(3) })], 'nothing counted twice');
+});
+
+test('lines handed while the catch-up reads are checked at once and bounded, the overflow said as a gap; a slow read is cut short', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(1)]);
+    r.b.env.STUB_JOURNAL_SLEEP = '1500';
+    const after = r.again();
+    after.feed([], { catchUp: true });
+    for (let batch = 0; batch < 3; batch++) {
+        const lines = Array.from({ length: 200 }, (_, i) => journalLine(100 + batch * 200 + i, { campaign_id: cmp(100 + batch * 200 + i) }));
+        after.feed([...lines.slice(0, 190), { planted: 'x'.repeat(100_000) }, 'junk', ...lines.slice(190)].slice(0, 200));
+    }
+    await after.idle();
+    const entries = after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind));
+    assert.equal(entries[0], jrn(1));
+    assert.equal(entries[1], 'gap', 'what overflowed the waiting lines is said as a gap');
+    assert.equal(entries.length, 2 + 200, 'the waiting lines are held to two hundred');
+    assert.equal(entries.at(-1), jrn(100 + 3 * 200 - 1 - 2), 'the newest of them are kept');
+    assert.ok(!recordOf(r, feed.id).includes('planted'));
+
+    // A read that does not answer in its own limit is cut, and the lines handed meanwhile go in at once.
+    const slow = rig(t, { feedReadLimitMs: 300 });
+    const slowFeed = slow.chat.feed([journalLine(1)]);
+    slow.b.env.STUB_JOURNAL_SLEEP = '5000';
+    const again = slow.again();
+    const begun = Date.now();
+    again.feed([journalLine(9, { campaign_id: cmp(9) })], { catchUp: true });
+    await again.idle();
+    assert.ok(Date.now() - begun < 4000, `the read was cut short: ${Date.now() - begun} ms`);
+    assert.deepEqual(again.open(slowFeed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)), [jrn(1), jrn(9)]);
 });
 
 test('a catch-up that did not read every line leaves a gap before what it read; one that failed reads nothing in; a Feed with no line reads nothing back', async (t) => {
@@ -282,19 +385,19 @@ test('a catch-up that did not read every line leaves a gap before what it read; 
     writeFileSync(r.journal, JSON.stringify([journalLine(3, { campaign_id: cmp(3) })]));
     r.b.env.STUB_JOURNAL_MORE = 'yes';
     const second = r.again();
-    second.feed([]);
+    second.feed([], { catchUp: true });
     await second.idle();
     assert.deepEqual(second.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)), [jrn(1), 'gap', jrn(3)]);
     assert.deepEqual(linesSaid(r, feed.id).slice(-2), [{ kind: 'gap' }, { kind: 'line', line: kept(3, { campaign_id: cmp(3) }), folded: false }]);
     delete r.b.env.STUB_JOURNAL_MORE;
     r.b.env.STUB_JOURNAL_FAILS = 'yes';
     const third = r.again();
-    third.feed([journalLine(7, { campaign_id: cmp(7) })]);
+    third.feed([journalLine(7, { campaign_id: cmp(7) })], { catchUp: true });
     await third.idle();
     assert.deepEqual(third.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)), [jrn(1), 'gap', jrn(3), jrn(7)]);
 
     const fresh = rig(t);
-    fresh.chat.feed([]);
+    fresh.chat.feed([], { catchUp: true });
     await fresh.chat.idle();
     assert.deepEqual(fresh.jason(), [], 'nothing to read back from');
 });
@@ -326,4 +429,26 @@ test('of two records marked as the Feed the oldest is it; the other is read as a
     const demoted = after.open(newer.id);
     assert.deepEqual([demoted.main, demoted.entries, demoted.dropped], [undefined, [{ kind: 'user', text: 'hi' }], 2]);
     assert.deepEqual(after.list().filter((each) => each.main === true).map((each) => each.id), [older.id]);
+});
+
+test('a kept line out of shape is skipped and counted, and the Feed\'s record is read with the rest', (t) => {
+    const r = rig(t);
+    const record: Conversation = {
+        id: newConversationId(),
+        campaign_id: null,
+        main: true,
+        title: 'Feed',
+        created_at: '2026-11-01T00:00:00.000Z',
+        updated_at: '2026-11-01T00:00:00.000Z',
+        sessions: {},
+        entries: [kept(1), kept(2, { campaign_id: cmp(2) })],
+        dropped: 0,
+    };
+    const text = serialize(record).replace(`"journal_kind":"inbound_reply_observed","journal_id":"${jrn(2)}"`, `"journal_kind":"a_kind_a_later_desktop_takes","journal_id":"${jrn(2)}"`);
+    assert.ok(text.includes('a_kind_a_later_desktop_takes'));
+    mkdirSync(r.b.paths.conversations, { recursive: true });
+    writeFileSync(join(r.b.paths.conversations, `${record.id}.json`), text);
+    const read = readConversations(r.b.paths.conversations);
+    assert.equal(read.unreadable, 0);
+    assert.deepEqual([read.kept[0]?.entries, read.kept[0]?.dropped], [[kept(1)], 1]);
 });

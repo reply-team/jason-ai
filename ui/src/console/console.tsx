@@ -21,7 +21,7 @@ import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
 import { listen } from './actions';
-import { askFeed, ChatPanel, handLine, reloadConversations, startChat } from './chat';
+import { askFeed, catchUpFeed, ChatPanel, handLine, reloadConversations, startChat } from './chat';
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
@@ -205,6 +205,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 else if (to) dock.page(to);
             }),
             journal.onState((state) => {
+                // A resume the runtime refused starts the stream afresh: what was written meanwhile is read back for the
+                // Feed.
+                const before = streamState.value;
+                if (state.fresh && state.last === null && (!before.fresh || before.last !== null)) catchUpFeed();
                 streamState.value = state;
             }),
             journal.onLine((line) => {

@@ -92,13 +92,14 @@ campaign's work while what is running finishes; the provider's own sequence keep
 `jason campaign start`, with your reason). An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed, and moves
-nowhere; the Campaigns list's Chat opens the same one. The desktop's window opens on a new set-up chat, about no
-campaign yet. Its sidebar lists the conversations it keeps, newest first and the open one marked, a campaign's by its
-name and a set-up chat by its first words; a conversation is kept, and listed, from its first turn, so a chat never
-sent to leaves nothing behind. Above them all stands the **Feed**, the desktop's main chat: what happens in the
-campaigns arrives in it as one line each (a reply, an approval or a question waiting, a campaign created, started or
-paused, work that stopped), with the campaign's name opening that campaign's conversation, and an approval or a question
-opening Needs you. A line carries no one's words and never starts a turn; the agent hears the lines that came with your
+nowhere; the Campaigns list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
+to reach; what you send there starts a set-up chat, about no campaign yet, and no chat is made before you send. The
+sidebar's first item is the **Feed**, the desktop's main chat; below **New chat** it lists the other conversations it
+keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
+conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. What happens in
+the campaigns arrives in the Feed as one line each (a reply, an approval or a question waiting, a campaign created,
+started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
+conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the agent hears the lines that came with your
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. **Start afresh** begins the agent's next turn without its memory

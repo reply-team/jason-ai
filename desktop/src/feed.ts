@@ -3,8 +3,8 @@
 // campaign created, started or paused, and work that stopped. A line keeps identifiers, the kind, the moment and a count,
 // and never a person's text: no reason, no old or new value, no campaign or contact name. Lines of the same kind and
 // campaign that follow one another fold into one, at most `feedLimit` are kept, and a turn of the Feed is given the
-// lines since the person's last message, set apart as records (`feedBlock` in `chat-header.ts`). A line never starts a
-// turn.
+// lines newer than the newest one a turn was given before, which the record keeps, set apart as records (`feedBlock` in
+// `chat-header.ts`). A line never starts a turn.
 
 import type { KeptEntry } from './chat-conversations.ts';
 
@@ -115,14 +115,22 @@ export function trimmed(entries: KeptEntry[], limit = feedLimit): number {
     return gone;
 }
 
-/** The lines since the person's last message, oldest first: the newest `limit`, and how many older ones are left out. */
-export function linesSince(entries: readonly KeptEntry[], limit = headerLimit): { lines: LineEntry[]; more: number } {
-    const lines: LineEntry[] = [];
-    for (let i = entries.length - 1; i >= 0; i--) {
-        const entry = entries[i];
-        if (entry?.kind === 'user') break;
-        if (entry?.kind === 'line') lines.unshift(entry);
-    }
+/**
+ * The lines no turn was given yet, in the order they stand: those whose journal id is newer than `delivered`, the newest
+ * one a turn was given before (ids are ULIDs, so they sort by their moment), or every line when none was. A line folded
+ * after it was given takes a newer id and is given again, with its count. The newest `limit`, and how many older ones are
+ * left out.
+ */
+export function linesSince(entries: readonly KeptEntry[], delivered: string | undefined, limit = headerLimit): { lines: LineEntry[]; more: number } {
+    const lines = entries.filter((entry): entry is LineEntry => entry.kind === 'line' && (delivered === undefined || entry.journal_id > delivered));
     const more = Math.max(0, lines.length - limit);
     return { lines: lines.slice(more), more };
 }
+
+/** The newest journal id among lines, or null for none. */
+export function newestId(lines: readonly LineEntry[]): string | null {
+    return lines.reduce<string | null>((newest, line) => (newest === null || line.journal_id > newest ? line.journal_id : newest), null);
+}
+
+/** Whether a value is a journal id, `jrn_` and its ULID. */
+export const isJournalId = (value: unknown): value is string => shaped(value, journalIdShape);

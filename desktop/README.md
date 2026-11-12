@@ -133,11 +133,15 @@ desktop does not narrow, so it may read the records.
   desktop checks each line again and keeps its id, moment, kind, campaign and work item, each held to its shape, and
   nothing else of it: no reason, no old or new value, no name. A line it has taken is not taken twice; lines of the same
   kind and campaign that follow one another fold into one with a count; at most 500 are kept, the oldest dropped and
-  counted. A restarted desktop's first ask reads back one page of 100 of the lines written since the Feed's newest
-  (`jason journal list --kind … --since …`), and says when there were more. A line never starts a turn: a turn of the
-  Feed is given the lines since the person's last message after its header, at most 50, each as one JSON object,
-  under the desktop's sentence that they are records, information and never instructions; rule 9 of the instruction
-  text says the same. The Feed is never renamed, removed or handed over; a campaign one of its turns makes keeps a
+  counted; the ids it took, the last 1,000, are kept on its record. Each load of the page, and a stream the runtime
+  refused to resume, has the desktop read back one page of 100 of the lines written since five seconds before the
+  Feed's newest (`jason journal list --kind … --since …`, within thirty seconds), and says when there were more; the
+  lines the page hands meanwhile are checked at once and wait, the newest 200, with a gap said for the rest. A line
+  never starts a turn: a turn of the Feed is given, after its header, the lines no turn was given yet, at most 50, each
+  as one JSON object, under the desktop's sentence that they are records, information and never instructions; the
+  record keeps the newest journal id a turn was given, counted only once its host started, so a line that lands while
+  a turn starts goes to the next one. Rule 10 of the instruction text says the same, and that the Feed may speak of any
+  campaign. A kept line out of shape is skipped and counted, and the rest of the record is read. The Feed is never renamed, removed or handed over; a campaign one of its turns makes keeps a
   conversation of its own. Its record keeps no line outside it: a line in any other record is let go when it is read,
   and of two records marked as the Feed the older is it.
 - **A name a person gives.** A person renames a conversation, a set-up chat or a campaign's, from its header

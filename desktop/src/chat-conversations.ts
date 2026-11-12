@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { currentModel, isEffort, modelShape, type Effort } from './chat-models.ts';
-import { keptLineOf, type LineEntry } from './feed.ts';
+import { isJournalId, keptLineOf, type LineEntry } from './feed.ts';
 
 export type KeptAnswer = 'allow' | 'always' | 'deny' | 'gone';
 
@@ -45,6 +45,10 @@ export interface Conversation {
     campaign_id: string | null;
     /** Present, and true, for the Feed: the person's main chat, one per desktop, which keeps lines and is never handed over. */
     main?: true;
+    /** The Feed's alone: the newest journal id a turn whose host started was given; absent before the first. */
+    delivered?: string;
+    /** The Feed's alone: the journal ids it took, oldest first, at most `takenLimit`, so no line is taken twice. */
+    taken?: string[];
     title: string;
     /**
      * Present, and true, when a person gave the title: nothing replaces it afterwards, not a hand-over to a campaign, not
@@ -70,6 +74,8 @@ export const keptTextLimit = 128 * 1024;
 export const cutMark = '[The desktop kept only the end of this; its start was cut to keep the conversation within its size.] ';
 
 export const conversationIdShape = /^conv_[0-9A-HJKMNP-TV-Z]{26}$/;
+/** How many journal ids the Feed's record keeps of the lines it took. */
+export const takenLimit = 1000;
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
 const hostIdShape = /^[a-z][a-z0-9-]{0,63}$/;
 /**
@@ -174,6 +180,8 @@ export function parseConversation(text: string, id: string): Conversation | null
         // A line or a gap belongs to the Feed's record alone: anywhere else it is skipped and counted.
         if (entry !== null && (entry.kind === 'line' || entry.kind === 'gap') && !main) skipped++;
         else if (entry !== null) entries.push(entry);
+        // A line out of shape, a kind a later desktop takes among them, is skipped and counted: the rest of the record stands.
+        else if ((each as { kind?: unknown } | null)?.kind === 'line') skipped++;
         // An entry of a kind another version of the desktop wrote is skipped and counted, as an entry dropped is.
         else if (isText((each as { kind?: unknown } | null)?.kind) && !knownKinds.has((each as { kind: string }).kind)) skipped++;
         else return null;
@@ -181,10 +189,14 @@ export function parseConversation(text: string, id: string): Conversation | null
     const given = typeof raw.dropped === 'number' && Number.isSafeInteger(raw.dropped) && raw.dropped >= 0 ? raw.dropped : 0;
     const dropped = given + skipped;
     const chosen = chosenOf(raw.chosen);
+    const delivered = main && isJournalId(raw.delivered) ? { delivered: raw.delivered } : {};
+    const taken = main && Array.isArray(raw.taken) ? { taken: (raw.taken as unknown[]).filter(isJournalId).slice(-takenLimit) } : {};
     const read: Conversation = {
         id,
         campaign_id: raw.campaign_id as string | null,
         ...(main ? { main: true as const } : {}),
+        ...delivered,
+        ...taken,
         title: raw.title,
         ...(raw.named_by_person === true ? { named_by_person: true as const } : {}),
         created_at: raw.created_at,
@@ -199,7 +211,7 @@ export function parseConversation(text: string, id: string): Conversation | null
 /** The record as it is written: its fields in a fixed order, the Feed's mark and the person's only where they stand. */
 export function serialize(conversation: Conversation): string {
     const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, chosen } = conversation;
-    const main = conversation.main === true ? { main: true } : {};
+    const main = conversation.main === true ? { main: true, ...(conversation.delivered === undefined ? {} : { delivered: conversation.delivered }), ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
     return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }) });
 }

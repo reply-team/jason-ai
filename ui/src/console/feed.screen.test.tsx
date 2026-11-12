@@ -76,9 +76,14 @@ describe('the Feed', () => {
     it('is asked of the desktop once as the console opens, and drawn first in the sidebar, above New chat and apart from the list', async () => {
         const { desktop } = renderConsole();
         await waitFor(() => expect(feedButton().textContent?.trim()).toBe('Feed'));
-        expect(calls(desktop, 'chat.feed').map((each) => each.args)).toEqual([[[]]]);
+        // The first ask of the page's load also has the desktop read back what was written while no page followed.
+        expect(calls(desktop, 'chat.feed').map((each) => each.args)).toEqual([[[], { catchUp: true }]]);
         const order = Array.from(side().querySelectorAll('button')).map((each) => each.textContent?.trim());
+        expect(order[0]).toBe('Feed');
         expect(order.indexOf('Feed')).toBeLessThan(order.indexOf('New chat'));
+        // The window opens on Start, and no chat is made before the person sends one.
+        expect(screen.getByRole('heading', { name: 'Who do you want to reach?' })).toBeTruthy();
+        expect(calls(desktop, 'chat.create')).toEqual([]);
         await waitFor(() =>
             expect(conversations.value.map((each) => [each.title, each.main])).toEqual([['Feed', true]]),
         );
@@ -167,6 +172,7 @@ describe('the Feed', () => {
         const id = (await desktop.chat.list()).find((each) => each.main === true)!.id;
         fireEvent.click(feedButton());
         await waitFor(() => screen.getByRole('heading', { name: 'The Feed' }));
+        expect(screen.getByText(/work that stopped, a provider block holding work\./)).toBeTruthy();
         flush(() => {
             for (let n = 1; n <= 3; n++)
                 desktop.emit(id, {
@@ -183,5 +189,26 @@ describe('the Feed', () => {
         expect(within(feed).queryByRole('button', { name: 'Rename' })).toBeNull();
         expect(within(feed).queryByRole('button', { name: 'Remove' })).toBeNull();
         expect(within(feed).getByRole('button', { name: 'Start afresh' })).toBeTruthy();
+    });
+
+    it('has the desktop read back what was missed when the stream starts afresh after a resume the runtime refused', async () => {
+        const { desktop, journal } = renderConsole();
+        await waitFor(() => expect(calls(desktop, 'chat.feed')).toHaveLength(1));
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_401', kind: 'contacts_added' }));
+        });
+        // The runtime goes away; the stream resumes after its last line, and the runtime refuses that resume.
+        flush(() => journal.close());
+        await waitFor(() => expect(journal.opened).toHaveLength(2), { timeout: 3000 });
+        flush(() => journal.close());
+        await waitFor(
+            () =>
+                expect(calls(desktop, 'chat.feed').map((each) => each.args)).toEqual([
+                    [[], { catchUp: true }],
+                    [[], { catchUp: true }],
+                ]),
+            { timeout: 3000 },
+        );
     });
 });

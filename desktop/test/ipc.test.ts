@@ -145,7 +145,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.restart', ['conv_01']],
         ['chat.attach', ['conv_01', 'cmp_01']],
         ['chat.rename', ['conv_01', 'Mine']],
-        ['chat.feed', [[]]],
+        ['chat.feed', [[], { catchUp: true }]],
         ['setup.status', []],
         ['setup.connectReply', []],
         ['setup.connectReplyWithKey', ['k']],

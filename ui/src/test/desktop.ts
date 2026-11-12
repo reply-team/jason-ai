@@ -418,6 +418,8 @@ export interface StubStream {
     opened: { url: string; protocols: string[] }[];
     open(): void;
     send(line: JournalEntry): void;
+    /** Closes the connection as a runtime that went away does. */
+    close(): void;
 }
 
 export function stubStream(): StubStream {
@@ -440,6 +442,7 @@ export function stubStream(): StubStream {
         opened,
         open: () => socket?.onopen?.(),
         send: (line) => socket?.onmessage?.({ data: JSON.stringify(line) }),
+        close: () => socket?.onclose?.(),
     };
 }
 

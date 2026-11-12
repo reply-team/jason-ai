@@ -80,17 +80,25 @@ function unless<T>(answer: T | DesktopRefusal): T {
 }
 
 /**
- * The Feed, made by the desktop on the first ask: its id is kept for the sidebar. A refusal or a failure leaves the
+ * The Feed, made by the desktop on the first ask: its id is kept for the sidebar. The ask also has the desktop read back
+ * what was written while no page followed the journal, as each load of the page asks. A refusal or a failure leaves the
  * sidebar without it, and is said there.
  */
 export async function askFeed(): Promise<void> {
     try {
-        const feed = unless(await here().desktop.chat.feed([]));
+        const feed = unless(await here().desktop.chat.feed([], { catchUp: true }));
         feedId.value = feed.id;
         void reloadConversations();
     } catch (error) {
         conversationsFailure.value = messageOf(error);
     }
+}
+
+/** The stream started afresh, after a resume the runtime refused: the desktop reads back what the page missed. */
+export function catchUpFeed(): void {
+    here()
+        .desktop.chat.feed([], { catchUp: true })
+        .catch(() => undefined);
 }
 
 /** Hands the desktop a line of the journal's stream when the Feed takes its kind; the desktop checks it again. */
@@ -367,7 +375,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             <h2>The Feed</h2>
             <p>
                 What happens in your campaigns comes here: a reply, an approval or a question waiting, a campaign
-                started or paused, work that stopped. Ask about any of it below.
+                created, started or paused, work that stopped, a provider block holding work. Ask about any of it below.
             </p>
         </div>`;
     if (chat.entries.length === 0)

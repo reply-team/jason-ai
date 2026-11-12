@@ -377,10 +377,11 @@ export interface JasonDesktop {
         /**
          * The Feed, made on the first ask, with the journal lines the page hands it: each line of a kind the Feed takes,
          * about a campaign, with every id in its shape, and not taken before, goes at its end and is said as a `line`
-         * event; any other is left out. No turn starts. The first ask of the desktop's run also reads back the lines
-         * written since the Feed's newest. At most 200 lines a call; more is refused.
+         * event; any other is left out. No turn starts. An ask with `catchUp`, which the page makes at each load and when
+         * its stream started afresh, also reads back the lines written since a few seconds before the Feed's newest. At
+         * most 200 lines a call; more is refused.
          */
-        feed(lines: DesktopFeedLine[]): Promise<DesktopConversation | DesktopRefusal>;
+        feed(lines: DesktopFeedLine[], options?: { catchUp: true }): Promise<DesktopConversation | DesktopRefusal>;
     };
     setup: {
         status(): Promise<DesktopSetup>;
