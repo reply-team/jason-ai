@@ -32,6 +32,7 @@ const desktop = {
         attach: (chatId: string, campaignId: string) => ipcRenderer.invoke('jason:chat.attach', chatId, campaignId),
         rename: (chatId: string, title: string) => ipcRenderer.invoke('jason:chat.rename', chatId, title),
         setMode: (chatId: string, mode: string, host: string) => ipcRenderer.invoke('jason:chat.setMode', chatId, mode, host),
+        feed: (lines: unknown, options?: unknown) => ipcRenderer.invoke('jason:chat.feed', lines, options),
     },
     theme: {
         get: () => ipcRenderer.invoke('jason:theme.get'),

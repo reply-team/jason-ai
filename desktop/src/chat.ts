@@ -19,6 +19,11 @@
  * it. The first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes
  * back to Ask first. Before every turn the chat folder's agent settings are put right (`chat-agent-folder.ts`). No turn starts without a person's
  * send; the naming run of a set-up chat (`chat-naming.ts`) is no turn: it runs with no tool at all, in any mode.
+ *
+ * One conversation is of its own kind, the Feed (`feed.ts`): the person's main chat, about no campaign, made on the
+ * page's first ask, into which the page hands the journal's lines of a closed table of kinds. It is never renamed,
+ * removed or handed over; a campaign one of its turns makes keeps its own conversation. A line never starts a turn: the
+ * lines reach the agent only with the person's next message, after the header, set apart as records.
  */
 
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -29,6 +34,7 @@ import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, data
 import {
     bounded,
     conversationIdShape,
+    takenLimit,
     ConversationUnwritten,
     type Chosen,
     newConversationId,
@@ -38,7 +44,7 @@ import {
     type Conversation,
     type KeptEntry,
 } from './chat-conversations.ts';
-import { givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
+import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
 import { currentModel, effortRefusal, haikuEffortFrom, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
 import {
     claudeNamingArguments,
@@ -60,6 +66,7 @@ import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import { codexFullAccess, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
+import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs } from './programs.ts';
@@ -80,6 +87,10 @@ export type ChatEvent =
     | { kind: 'renamed'; title: string }
     /** The conversation's mode changed: a person chose it, or the desktop put the chat back to Ask first. */
     | { kind: 'mode'; mode: ChatMode }
+    /** A line the Feed took: at its end, or folded into its last line, which it then stands in for. */
+    | { kind: 'line'; line: LineEntry; folded: boolean }
+    /** The lines written while the window was closed were more than one read brings back: the older ones are not shown. */
+    | { kind: 'gap' }
     | { kind: 'done'; error: string | null };
 
 /** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
@@ -94,6 +105,8 @@ export interface ChatSendOptions {
 export interface ConversationSummary {
     id: string;
     campaignId: string | null;
+    /** Present, and true, for the Feed. */
+    main?: true;
     title: string;
     updatedAt: string;
     running: boolean;
@@ -180,6 +193,8 @@ export interface ChatOptions {
     named?(outcome: NamingOutcome): void;
     /** How long a naming run may take; thirty seconds unless a test shortens it. */
     namingLimitMs?: number;
+    /** How long the Feed's catch-up read may take; thirty seconds unless a test shortens it. */
+    feedReadLimitMs?: number;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
     platform?: Platform;
@@ -262,6 +277,18 @@ type Listed = Map<string, { created: number; name: string }>;
 const chatIdShape = /^[A-Za-z0-9_.:-]{1,200}$/;
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
 const textLimit = 1_000_000;
+/** The most lines one `feed` call takes: as many as the runtime's stream sends at one look. */
+const feedBatch = 200;
+/** How many lines a catch-up reads back, in one page; more than that leaves a gap. */
+const catchUpLimit = 100;
+/** How many lines handed while the catch-up reads wait for it; the older ones beyond are let go and said as a gap. */
+const feedWaitingLimit = 200;
+/** How long the catch-up's read may take: a slow runtime keeps the Feed waiting no longer. */
+const feedReadLimitMs = 30_000;
+/** How far before the newest kept line the catch-up reads, since lines are committed out of the order of their moments. */
+const catchUpLookbackMs = 5_000;
+const notAFeedBatch = 'That is not a list of journal lines the desktop takes.';
+const feedKept = 'The Feed is always kept; it cannot be removed or renamed.';
 /** The longest text a rename reads before it makes it one line and cuts it to the title's cap. */
 const renameLimit = 10_000;
 const wordsKept = 600;
@@ -373,6 +400,16 @@ export class Chat {
     #namingNow: { stop: AbortController; folder: string } | null = null;
     /** The conversations in Full access, by id. In memory only: never on a record, gone with the window. */
     #fullAccess = new Set<string>();
+    /** The Feed's id, once it is made or read. */
+    #feedId: string | null = null;
+    /** The journal ids the Feed took, oldest first, at most `takenLimit`, kept on its record too (`taken`). */
+    #feedSeen = new Set<string>();
+    /** The lines handed while a catch-up reads, checked already, which wait for it; null while none runs. */
+    #feedWaiting: LineEntry[] | null = null;
+    /** Whether lines waiting for the catch-up were let go for want of room, which the catch-up then says as a gap. */
+    #feedOverflow = false;
+    /** The catch-up's read, settled once it has put its lines in. */
+    #feedRead: Promise<void> = Promise.resolve();
 
     constructor(options: ChatOptions) {
         this.#options = options;
@@ -391,6 +428,7 @@ export class Chat {
             this.#conversations.set(conversation.id, conversation);
             this.#kept.add(conversation.id);
         }
+        this.#settleFeed();
         options.conversationsRead?.(read.kept.length, read.unreadable);
         this.#broker = new PermissionBroker({
             emit: (chatId, event) => {
@@ -423,6 +461,7 @@ export class Chat {
         return {
             id: conversation.id,
             campaignId: conversation.campaign_id,
+            ...(conversation.main === true ? { main: true as const } : {}),
             title: conversation.title,
             updatedAt: conversation.updated_at,
             running: this.#running.has(conversation.id),
@@ -507,6 +546,7 @@ export class Chat {
     /** Removes a conversation's record; the host's own transcript stays the host's. One whose turn runs is refused. */
     remove(id: unknown): void {
         const conversation = this.#own(id);
+        if (conversation.main === true) throw new ChatRefused(feedKept);
         if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('remove it'));
         try {
             removeConversation(this.#options.paths.conversations, conversation.id);
@@ -539,6 +579,7 @@ export class Chat {
      */
     rename(id: unknown, title: unknown): ConversationSummary {
         const conversation = this.#own(id);
+        if (conversation.main === true) throw new ChatRefused(feedKept);
         if (!this.#kept.has(conversation.id)) throw new ChatRefused('Send this chat a message first; then it can be renamed.');
         if (typeof title === 'string' && title.length > renameLimit) throw new ChatRefused('That name is too long. Keep it to a short line.');
         const name = givenTitle(title);
@@ -550,9 +591,134 @@ export class Chat {
         return this.#summaryOf(conversation);
     }
 
-    /** Resolves once no naming run of a set-up chat runs or waits. */
+    /** Resolves once no naming run of a set-up chat runs or waits, and the Feed's catch-up has put its lines in. */
     idle(): Promise<void> {
-        return this.#naming;
+        return Promise.all([this.#naming, this.#feedRead]).then(() => undefined);
+    }
+
+    /**
+     * The Feed, made and written on the first ask, then listed with the others. Each of `lines` is made a Feed line
+     * (`lineOf`) or left out, a journal line it took already is left out, and the rest go at its end (`take`), each said
+     * as a `line` event. Nothing else happens: no turn starts, in any mode, and a turn that runs goes on; the lines reach
+     * the agent with the person's next message. An ask that carries `catchUp`, which the page makes at each load and when
+     * its stream started afresh, also reads back one page of the lines written since a few seconds before the newest kept
+     * one (`jason journal list`), when the Feed kept one and no read runs already; those go in before the lines handed
+     * while it reads, which are checked at once and wait, the newest two hundred of them, with a gap for the rest. A page
+     * that was not all of them leaves a gap before them too.
+     */
+    feed(lines: unknown, options?: unknown): ConversationSummary {
+        if (!Array.isArray(lines) || lines.length > feedBatch) throw new ChatRefused(notAFeedBatch);
+        const feed = this.#feedConversation();
+        const catchUp = options !== null && typeof options === 'object' && (options as { catchUp?: unknown }).catchUp === true;
+        if (catchUp && this.#feedWaiting === null) {
+            const newest = feed.entries.reduce<string | null>((found, entry) => (entry.kind === 'line' && (found === null || entry.at > found) ? entry.at : found), null);
+            if (newest !== null) {
+                this.#feedWaiting = [];
+                this.#feedOverflow = false;
+                this.#feedRead = this.#catchUp(feed, new Date(Date.parse(newest) - catchUpLookbackMs).toISOString());
+            }
+        }
+        const checked = lines.map(lineOf).filter((line): line is LineEntry => line !== null);
+        if (this.#feedWaiting === null) this.#takeLines(feed, checked, false);
+        else {
+            this.#feedWaiting.push(...checked);
+            const over = this.#feedWaiting.length - feedWaitingLimit;
+            if (over > 0) {
+                this.#feedWaiting.splice(0, over);
+                this.#feedOverflow = true;
+            }
+        }
+        return this.#summaryOf(feed);
+    }
+
+    /** The Feed, as read, or made now and written at once. */
+    #feedConversation(): Conversation {
+        const known = this.#feedId === null ? undefined : this.#conversations.get(this.#feedId);
+        if (known !== undefined) return known;
+        const feed = this.#made(null, feedTitle);
+        feed.main = true;
+        this.#feedId = feed.id;
+        this.#kept.add(feed.id);
+        this.#keep(feed);
+        return feed;
+    }
+
+    /**
+     * The one Feed among the records read: the oldest marked main. Any other so marked is read as a set-up chat, its
+     * lines and gaps let go and counted, and is written so when it is next kept.
+     */
+    #settleFeed(): void {
+        const marked = [...this.#conversations.values()]
+            .filter((each) => each.main === true)
+            .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id < b.id ? -1 : 1));
+        const [feed, ...others] = marked;
+        for (const other of others) {
+            delete other.main;
+            const kept = other.entries.filter((entry) => entry.kind !== 'line' && entry.kind !== 'gap');
+            other.dropped += other.entries.length - kept.length;
+            other.entries = kept;
+        }
+        if (feed === undefined) return;
+        this.#feedId = feed.id;
+        for (const id of feed.taken ?? []) this.#remember(id);
+        for (const entry of feed.entries) if (entry.kind === 'line') this.#remember(entry.journal_id);
+    }
+
+    #remember(id: string): void {
+        this.#feedSeen.delete(id);
+        this.#feedSeen.add(id);
+        if (this.#feedSeen.size > takenLimit) {
+            const oldest = this.#feedSeen.values().next();
+            if (!oldest.done) this.#feedSeen.delete(oldest.value);
+        }
+    }
+
+    /** Puts the lines new to the Feed at its end, says each, and keeps the record, with the ids taken, when any went in. */
+    #takeLines(feed: Conversation, lines: readonly LineEntry[], gap: boolean): void {
+        let changed = false;
+        if (gap) {
+            feed.entries.push({ kind: 'gap' });
+            this.#options.emit(feed.id, { kind: 'gap' });
+            changed = true;
+        }
+        for (const line of lines) {
+            if (this.#feedSeen.has(line.journal_id)) continue;
+            this.#remember(line.journal_id);
+            const taken = take(feed.entries, line);
+            this.#options.emit(feed.id, { kind: 'line', line: { ...taken.line }, folded: taken.folded });
+            changed = true;
+        }
+        if (!changed) return;
+        feed.dropped += trimmed(feed.entries);
+        feed.taken = [...this.#feedSeen];
+        this.#keep(feed);
+    }
+
+    /**
+     * Reads back the lines written since `since`, a few seconds before the newest kept line's moment, at or after which
+     * the runtime answers (the lines already taken among them, left out as such): one page, newest first, put in oldest
+     * first, within its own time limit. Then the lines handed meanwhile go in, after a gap when some of them were let go.
+     * A read that fails or runs out of time puts nothing in and leaves no gap of its own.
+     */
+    async #catchUp(feed: Conversation, since: string): Promise<void> {
+        try {
+            const args = ['journal', 'list', ...feedKinds.flatMap((kind) => ['--kind', kind]), '--since', since, '--limit', String(catchUpLimit)];
+            const answer = await this.#readJson(args, this.#options.feedReadLimitMs ?? feedReadLimitMs);
+            if (answer !== null && Array.isArray(answer.items)) {
+                const more = typeof answer.next_cursor === 'string' && answer.next_cursor !== '';
+                // Each line read is made a Feed line by the same check as a line the page hands, or left out.
+                const read = (answer.items as unknown[]).map(lineOf).filter((line): line is LineEntry => line !== null);
+                this.#takeLines(feed, read.reverse(), more);
+            }
+        } catch {
+            // Nothing read is nothing put in.
+        } finally {
+            const waiting = this.#feedWaiting ?? [];
+            const overflow = this.#feedOverflow;
+            this.#feedWaiting = null;
+            this.#feedOverflow = false;
+            this.#takeLines(feed, waiting, overflow);
+        }
     }
 
     /**
@@ -564,6 +730,7 @@ export class Chat {
         const conversation = this.#own(id);
         if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
         const refusal = () => {
+            if (conversation.main === true) return "The Feed is about no campaign. Open the campaign's own conversation from the campaign.";
             if (this.#running.has(conversation.id)) return stillAnswering('choose its campaign');
             if (conversation.campaign_id !== null) return 'This conversation is already about a campaign.';
             if (this.#ofCampaign(campaignId) !== undefined) return 'That campaign has its conversation already. Open it from the campaign.';
@@ -788,8 +955,8 @@ export class Chat {
         return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model, named: model, effort, folder: null, checksKeySource: false, key: null };
     }
 
-    async #readJson(args: string[]): Promise<Record<string, unknown> | null> {
-        const answer = await this.#options.cli.run(args);
+    async #readJson(args: string[], timeoutMs?: number): Promise<Record<string, unknown> | null> {
+        const answer = await this.#options.cli.run(args, timeoutMs === undefined ? undefined : { timeoutMs });
         return answer.exit === 0 ? objectOf(answer.stdout) : null;
     }
 
@@ -892,8 +1059,9 @@ export class Chat {
     async #turn(conversation: Conversation, text: string, resolved: Resolved, launch: { file: string; prefix: string[] }, running: Running): Promise<void> {
         const { paths } = this.#options;
         const replyTo = running.replyTo;
-        const setup = conversation.campaign_id === null;
-        let about: About = { campaign: null };
+        const main = conversation.main === true;
+        const setup = conversation.campaign_id === null && !main;
+        let about: About = main ? { main: true, campaign: null } : { campaign: null };
         let added: string[] = [];
         let before: Listed | null = null;
         let since = 0;
@@ -903,12 +1071,17 @@ export class Chat {
             added = read.added;
             const name = read.about.campaign?.name;
             if (name && conversation.named_by_person !== true) conversation.title = nameOf(name) || conversation.title;
-        } else {
+        } else if (setup) {
             since = Date.now();
             this.#setupBegun(conversation.id);
             before = await this.#listCampaigns();
         }
-        const head = header(about);
+        // A turn of the Feed is given the lines no turn was given yet, after the header, set apart as records. They count as
+        // given once its host ran (`delivered`); a line that lands from here on is newer, and the next turn's.
+        const given = main ? linesSince(conversation.entries, conversation.delivered) : null;
+        const handing = given === null ? null : newestId(given.lines);
+        const block = given === null ? null : feedBlock(given.lines, given.more);
+        const head = block === null ? header(about) : `${header(about)}\n\n${block}`;
         // The recap is of what came before this turn; the person's words of this turn follow it.
         const earlier = recap(conversation.entries);
         const resume = conversation.sessions[resolved.host];
@@ -1138,6 +1311,8 @@ export class Chat {
             this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
             if (running.stopped || stoppedFor !== null) started.stop();
             const exit = await started.exited;
+            // The lines this turn was given count as given once its host ran: a start the system refused gave none.
+            if (exit.startError === null && handing !== null && (conversation.delivered === undefined || handing > conversation.delivered)) conversation.delivered = handing;
             // Every tool use is said as a step before it runs, so a host that said nothing did nothing.
             const failedSilently = shown === 0 && (exit.code !== 0 || typeof result === 'string');
             // A key that was refused or not taken is the key's, not the session's: a fresh session would fail the same way.

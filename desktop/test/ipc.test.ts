@@ -117,6 +117,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             attach: 'function',
             rename: 'function',
             setMode: 'function',
+            feed: 'function',
         },
         theme: { get: 'function', set: 'function' },
         setup: {
@@ -147,6 +148,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.attach', ['conv_01', 'cmp_01']],
         ['chat.rename', ['conv_01', 'Mine']],
         ['chat.setMode', ['conv_01', 'plan_only', 'claude']],
+        ['chat.feed', [[], { catchUp: true }]],
         ['theme.get', []],
         ['theme.set', ['dark']],
         ['setup.status', []],

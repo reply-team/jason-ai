@@ -26,6 +26,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false, mode: 'ask_first' }),
             rename: (...args) => (calls.push(['rename', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'ask_first' }),
             setMode: async (...args) => (calls.push(['setMode', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'plan_only' }),
+            feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' }),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -39,6 +40,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
         'jason:chat.answer',
         'jason:chat.attach',
         'jason:chat.create',
+        'jason:chat.feed',
         'jason:chat.list',
         'jason:chat.open',
         'jason:chat.remove',
@@ -60,6 +62,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
     await listeners.get('jason:chat.rename')?.(page, 'conv_1', 'Mine');
     await listeners.get('jason:chat.setMode')?.(page, 'conv_1', 'plan_only', 'claude');
+    await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
         ['stop', 'c1'],
@@ -72,6 +75,7 @@ test('the chat registers its eleven calls, and each reaches the chat from the ru
         ['attach', 'conv_1', 'cmp_1'],
         ['rename', 'conv_1', 'Mine'],
         ['setMode', 'conv_1', 'plan_only', 'claude'],
+        ['feed', [], { catchUp: true }],
     ]);
 });
 

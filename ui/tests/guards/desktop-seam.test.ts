@@ -25,6 +25,7 @@ const chat = {
     attach: true,
     rename: true,
     setMode: true,
+    feed: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const setup = {
     status: true,
@@ -80,6 +81,7 @@ describe('the desktop seam', () => {
             'chat.attach',
             'chat.rename',
             'chat.setMode',
+            'chat.feed',
             'setup.status',
             'setup.connectReply',
             'setup.connectReplyWithKey',

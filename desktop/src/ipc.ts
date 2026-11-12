@@ -26,6 +26,7 @@ export const invokeChannels = {
     'chat.attach': 'jason:chat.attach',
     'chat.rename': 'jason:chat.rename',
     'chat.setMode': 'jason:chat.setMode',
+    'chat.feed': 'jason:chat.feed',
 } as const;
 
 /** What the desktop sends the page. */

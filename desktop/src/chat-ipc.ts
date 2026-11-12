@@ -1,8 +1,9 @@
 /**
  * The chat's calls from the page, each behind the origin check every call the page makes passes: a send, a stop, a
- * person's answer to a card, and the conversations the desktop keeps (list, open, create, remove, start afresh,
- * attach a set-up chat to a campaign it made, rename one, and choose its mode, whose Full access the desktop confirms
- * with the person itself). Nothing the page sends is trusted further than the chat checks it.
+ * person's answer to a card, the conversations the desktop keeps (list, open, create, remove, start afresh, attach a
+ * set-up chat to a campaign it made, rename one, and choose its mode, whose Full access the desktop confirms with the
+ * person itself), and the Feed with the journal lines the page hands it. Nothing the page sends is trusted further than
+ * the chat checks it.
  *
  * A refusal is answered as a value, `{ refused }` with the desktop's sentence alone, and a call that did what it was
  * asked and has nothing to say answers null. A refusal thrown across the seam would reach the page wrapped: Electron
@@ -16,7 +17,7 @@
 import { ChatRefused, type Chat } from './chat.ts';
 import { handle, type IpcRegistrar, type Refusal } from './ipc.ts';
 
-export type ChatCalls = Pick<Chat, 'send' | 'stop' | 'answer' | 'list' | 'open' | 'create' | 'remove' | 'restart' | 'attach' | 'rename' | 'setMode'>;
+export type ChatCalls = Pick<Chat, 'send' | 'stop' | 'answer' | 'list' | 'open' | 'create' | 'remove' | 'restart' | 'attach' | 'rename' | 'setMode' | 'feed'>;
 
 /** What the page is answered with when the chat refused a call: `DesktopRefusal` on the page's side. */
 export interface ChatRefusal {
@@ -46,4 +47,5 @@ export function registerChat(ipc: IpcRegistrar, chat: ChatCalls, origin: () => s
     handle(ipc, 'chat.attach', origin, (chatId, campaignId) => answered(() => chat.attach(chatId, campaignId)), refused);
     handle(ipc, 'chat.rename', origin, (chatId, title) => answered(() => chat.rename(chatId, title)), refused);
     handle(ipc, 'chat.setMode', origin, (chatId, mode, host) => answered(() => chat.setMode(chatId, mode, host)), refused);
+    handle(ipc, 'chat.feed', origin, (lines, options) => answered(() => chat.feed(lines, options)), refused);
 }

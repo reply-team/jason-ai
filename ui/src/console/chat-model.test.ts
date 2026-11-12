@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DesktopConversationRecord, DesktopEffort, DesktopHost } from '../platform/desktop';
+import type { DesktopConversationRecord, DesktopEffort, DesktopHost, DesktopLineEntry } from '../platform/desktop';
 import {
     anotherModel,
     answered,
@@ -197,6 +197,74 @@ describe('a chat as the page keeps it', () => {
             running: false,
             entries: [{ kind: 'user' }, { kind: 'error', text: 'No such host' }],
         });
+    });
+});
+
+describe('the Feed as the page keeps it', () => {
+    const line = (n: number, fields: Partial<DesktopLineEntry> = {}): DesktopLineEntry => ({
+        kind: 'line',
+        journal_kind: 'inbound_reply_observed',
+        journal_id: `jrn_${n}`,
+        at: '2026-11-11T10:00:00.000Z',
+        campaign_id: 'cmp_1',
+        count: 1,
+        ...fields,
+    });
+    const feedRecord = {
+        id: 'conv_feed',
+        campaignId: null,
+        main: true as const,
+        title: 'Feed',
+        updatedAt: '',
+        running: false,
+        mode: 'ask_first' as const,
+        entries: [{ kind: 'user' as const, text: 'Hi' }, line(1), { kind: 'gap' as const }],
+        dropped: 0,
+        chosen: null,
+    };
+
+    it('opens with its lines and gaps drawn as kept, and is the main chat', () => {
+        const feed = fromRecord(feedRecord, 'claude');
+        expect(feed.main).toBe(true);
+        expect(feed.entries).toEqual([{ kind: 'user', text: 'Hi' }, { kind: 'line', line: line(1) }, { kind: 'gap' }]);
+        expect(newChat('c1', 'claude').main).toBe(false);
+    });
+
+    it('takes a line at its end, or in place of its last line when the desktop folded it', () => {
+        let feed = fromRecord({ ...feedRecord, entries: [] }, 'claude');
+        feed = received(feed, { kind: 'line', line: line(1), folded: false });
+        feed = received(feed, { kind: 'line', line: line(2, { count: 2 }), folded: true });
+        feed = received(feed, { kind: 'gap' });
+        feed = received(feed, { kind: 'line', line: line(3), folded: false });
+        expect(feed.entries).toEqual([
+            { kind: 'line', line: line(2, { count: 2 }) },
+            { kind: 'gap' },
+            { kind: 'line', line: line(3) },
+        ]);
+        // A fold the page cannot place, after a page-only entry, goes at the end.
+        feed = received(
+            { ...feed, entries: [...feed.entries, { kind: 'afresh' }] },
+            { kind: 'line', line: line(4), folded: true },
+        );
+        expect(feed.entries.at(-1)).toEqual({ kind: 'line', line: line(4) });
+    });
+
+    it('never starts a turn for a line: nothing is sent, the waiting message waits, and the turn that runs goes on', () => {
+        const idle = received(fromRecord({ ...feedRecord, entries: [] }, 'claude'), {
+            kind: 'line',
+            line: line(1),
+            folded: false,
+        });
+        expect([idle.running, idle.outbox, idle.waiting]).toEqual([false, null, null]);
+        const waiting = kept(
+            typed(said(fromRecord({ ...feedRecord, entries: [] }, 'claude'), 'What happened?'), 'And then?'),
+        );
+        const after = received(waiting, { kind: 'line', line: line(2), folded: false });
+        expect([after.running, after.outbox, after.waiting]).toEqual([true, null, 'And then?']);
+    });
+
+    it('keeps its title when the person writes in it first', () => {
+        expect(said(fromRecord({ ...feedRecord, entries: [] }, 'claude'), 'What happened today?').title).toBe('Feed');
     });
 });
 
