@@ -35,6 +35,7 @@ export class Session {
         if (!response.ok) return;
         const session = (await response.json()) as UiSession;
         this.store(session);
+        tellDesktop(session.token_id);
         if (previous && previous !== session.token_id) await revoke(previous, session.token);
     }
 
@@ -79,6 +80,21 @@ export class Session {
         this.tokenId.value = stored.token_id;
         this.actorId.value = stored.actor_id;
         this.instanceId.value = stored.instance_id;
+    }
+}
+
+/**
+ * In the desktop, the id of the token this page now holds, never the token: the desktop's window keeps its storage in
+ * memory, so the desktop ends the token its window held before. A desktop without the member, or one that refuses it,
+ * changes nothing here.
+ */
+function tellDesktop(tokenId: string): void {
+    // A desktop older than this page offers no such member.
+    const desktop = window.jasonDesktop as { pairing?: { paired?: (id: string) => Promise<void> } } | undefined;
+    try {
+        void desktop?.pairing?.paired?.(tokenId)?.catch(() => undefined);
+    } catch {
+        // An older desktop: the token it held stays listed until it is revoked.
     }
 }
 

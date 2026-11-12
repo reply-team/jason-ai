@@ -136,32 +136,56 @@ describe('a chat’s access mode', () => {
         await waitFor(() => expect(note()).toBeNull());
     });
 
-    it('says under the composer, on Codex and on the OpenAI key alike, what a Codex command can reach', async () => {
-        const status = structuredClone(setupFound);
-        const codex = status.hosts.find((each) => each.id === 'codex')!;
-        codex.found = true;
-        status.hosts.push({
-            ...structuredClone(codex),
-            id: 'codex-api-key',
-            label: 'OpenAI',
-            kind: 'provider',
-            version: null,
-            install: null,
-        });
-        renderConsole(chatDesktop(status));
-        await waitFor(() => menu());
-        const note = () => screen.queryByRole('note', { name: 'What a Codex command can reach' });
-        expect(note()).toBeNull();
-        for (const id of ['codex', 'codex-api-key']) {
-            fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: id } });
-            await waitFor(() => expect(note()).not.toBeNull());
-            expect(note()!.textContent).toBe(
-                'A Codex command can read files on this computer, Jason’s own data and settings among them, but cannot change anything or act for you.',
-            );
-        }
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
-        await waitFor(() => expect(note()).toBeNull());
-    });
+    it.each([
+        [
+            'win32',
+            'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, but not the key Jason’s own commands use, its run token. Codex runs it read-only.',
+        ],
+        [
+            'darwin',
+            'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, and the key Jason’s own commands use, its run token. Codex runs it read-only.',
+        ],
+        [
+            'linux',
+            'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, and the key Jason’s own commands use, its run token. Codex runs it read-only.',
+        ],
+        [
+            'unsaid',
+            'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, and the key Jason’s own commands use, its run token. Codex runs it read-only.',
+        ],
+    ] as const)(
+        'says under the composer, on Codex and on the OpenAI key alike, what a Codex command can reach on %s, as seen there',
+        async (platform, line) => {
+            const status = structuredClone(setupFound);
+            const codex = status.hosts.find((each) => each.id === 'codex')!;
+            codex.found = true;
+            status.hosts.push({
+                ...structuredClone(codex),
+                id: 'codex-api-key',
+                label: 'OpenAI',
+                kind: 'provider',
+                version: null,
+                install: null,
+            });
+            const desktop = chatDesktop(status);
+            // Only Windows was seen keeping the run token from a command; a desktop that does not say its system is told nothing more.
+            const said = desktop as { platform?: string };
+            if (platform === 'unsaid') delete said.platform;
+            else said.platform = platform;
+            renderConsole(desktop);
+            await waitFor(() => menu());
+            const note = () => screen.queryByRole('note', { name: 'What a Codex command can reach' });
+            expect(note()).toBeNull();
+            for (const id of ['codex', 'codex-api-key']) {
+                fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: id } });
+                await waitFor(() => expect(note()).not.toBeNull());
+                expect(note()!.textContent).toBe(line);
+                expect(note()!.textContent).not.toMatch(/act for you|acts through nothing|network/);
+            }
+            fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+            await waitFor(() => expect(note()).toBeNull());
+        },
+    );
 
     it('says a mode the desktop refused in its own words, and keeps the mode it holds', async () => {
         const desktop = chatDesktop();

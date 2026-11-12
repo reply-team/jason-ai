@@ -988,7 +988,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 )}
                 {host !== null && codexHosts.has(host.id) && (
                     <div className="note codex-reach" role="note" aria-label="What a Codex command can reach">
-                        {codexReachLine}
+                        {codexReachLine((here().desktop as { platform?: string }).platform)}
                     </div>
                 )}
                 {chat.mode === 'full_access' && (

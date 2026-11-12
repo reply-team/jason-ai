@@ -198,12 +198,21 @@ export const codexConfigLine =
     'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.';
 
 /**
- * What the line under the composer says while the chat's host is Codex, on the person's sign-in or on the OpenAI key:
- * a Codex turn runs in Codex's read-only sandbox, which keeps Jason's run token from it on Windows and keeps nothing
- * else of the data directory on any system, and it asks for nothing, so it acts through nothing.
+ * What the line under the composer says while the chat's host is Codex, on the person's sign-in or on the OpenAI key,
+ * system by system as it was seen. On Windows the desktop's check has shown Codex's elevated sandbox keeping the run
+ * file from a command; on macOS and Linux nobody has looked, and a read-only command reads what the person can, so the
+ * line there names the run token among what it can read. Neither says anything of the network or of acting for the
+ * person, which nobody has seen; "read-only" is the mode the desktop runs Codex in.
  */
-export const codexReachLine =
-    'A Codex command can read files on this computer, Jason’s own data and settings among them, but cannot change anything or act for you.';
+export const codexReachWindows =
+    'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, but not the key Jason’s own commands use, its run token. Codex runs it read-only.';
+export const codexReachElsewhere =
+    'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, and the key Jason’s own commands use, its run token. Codex runs it read-only.';
+
+/** Pure: the line for the system the desktop says it runs on; one that says none is told the line that claims nothing. */
+export function codexReachLine(platform: string | undefined): string {
+    return platform === 'win32' ? codexReachWindows : codexReachElsewhere;
+}
 
 /** The hosts whose turns run on Codex: the person's sign-in, and the OpenAI key. */
 export const codexHosts: ReadonlySet<string> = new Set(['codex', 'codex-api-key']);

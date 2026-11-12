@@ -329,6 +329,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const stub: StubDesktop = {
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
+        pairing: { paired: call('pairing.paired') },
         calls,
         refuse,
         actAnswers,
