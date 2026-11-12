@@ -451,7 +451,10 @@ test('reply auth status and reply account list are allowed without a card, and a
             // The package's own name through a runner is reply too.
             'npx reply-cli contacts delete', 'pnpm dlx reply-cli@0.19.0 contacts delete', 'yarn dlx reply-cli contacts delete',
             // A reply refusal comes before the card a jason command gets.
-            'jason status && reply contacts delete']) {
+            'jason status && reply contacts delete',
+            // The calls the desktop's main process makes for the Reply card's links are the person's, never the chat's.
+            'reply api /v3/linkedin-accounts/connection-link --method POST --body - --json', 'reply api /v3/linkedin-accounts/pending',
+            'reply api /v3/linkedin-accounts/77/reconnect --method POST', 'reply api /v1/SharedPageUrl --json', 'reply api /v1/SharedPageUrl']) {
             assert.ok(refused(run(scope, command)), command);
             assert.ok(refused(judge('PowerShell', { command }, scope)), `PowerShell: ${command}`);
         }

@@ -1,15 +1,15 @@
-import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import type { DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { madeUpLinks, setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { replyDismissed } from './connect';
+import { heldLink, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting, submitStart } from './start';
 
@@ -303,6 +303,32 @@ describe('Reply in a chat', () => {
         expect(within(card).getByRole('button', { name: 'Sign in' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
         expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull();
+    });
+
+    it('drops a link its chat card showed when the card is dismissed, and when Reply is wired', async () => {
+        const unwired: DesktopSetup = { ...setupFound, reply: { ...setupFound.reply, wired: false, accounts: [] } };
+        for (const end of ['dismissed', 'wired'] as const) {
+            replyDismissed.value = [];
+            const desktop = renderConsole(stubDesktop(unwired));
+            await waitFor(() => startForm());
+            await ready();
+            await openCampaignChat(desktop, 'Autumn');
+            const card = () => screen.getByRole('region', { name: 'Connect Reply' });
+            fireEvent.click(within(await waitFor(card)).getByRole('button', { name: 'Add account' }));
+            fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' })));
+            await waitFor(() => expect(heldLink()).toBe(madeUpLinks.gmail));
+            expect(calls(desktop, 'setup.replyMailboxLink')).toHaveLength(1);
+            if (end === 'dismissed') {
+                fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+            } else {
+                desktop.status = { ...unwired, reply: { ...unwired.reply, wired: true } };
+                flush(() => desktop.changed());
+            }
+            await waitFor(() => expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull());
+            expect(heldLink(), end).toBeNull();
+            expect(document.body.innerHTML).not.toContain('madeUpToken_ForTests');
+            cleanup();
+        }
     });
 
     it('appears in the set-up chat once its campaign is attached and is a draft', async () => {

@@ -39,6 +39,10 @@ const setup = {
     installProgram: true,
     configurePlugin: true,
     disconnectPlugin: true,
+    replyLinkedInConnect: true,
+    replyLinkedInPendingLink: true,
+    replyLinkedInReconnect: true,
+    replyMailboxLink: true,
     onChanged: true,
 } as const satisfies Record<keyof JasonDesktop['setup'], true>;
 // What setup.status answers is the seam too: the desktop's main process fills each field.
@@ -98,6 +102,10 @@ describe('the desktop seam', () => {
             'setup.installProgram',
             'setup.configurePlugin',
             'setup.disconnectPlugin',
+            'setup.replyLinkedInConnect',
+            'setup.replyLinkedInPendingLink',
+            'setup.replyLinkedInReconnect',
+            'setup.replyMailboxLink',
             'setup.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([

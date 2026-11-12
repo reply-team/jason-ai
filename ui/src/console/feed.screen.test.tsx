@@ -82,7 +82,7 @@ describe('the Feed', () => {
         expect(order[0]).toBe('Feed');
         expect(order.indexOf('Feed')).toBeLessThan(order.indexOf('New chat'));
         // The window opens on Start, and no chat is made before the person sends one.
-        expect(screen.getByRole('heading', { name: 'Who do you want to reach?' })).toBeTruthy();
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(calls(desktop, 'chat.create')).toEqual([]);
         await waitFor(() =>
             expect(conversations.value.map((each) => [each.title, each.main])).toEqual([['Feed', true]]),
