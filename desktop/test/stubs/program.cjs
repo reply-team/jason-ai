@@ -54,8 +54,17 @@ if (process.env.STUB_HANG === name) {
     process.exit(0);
 } else if (name === 'reply' && said === 'auth login --with-token') {
     process.exit(stdin.trim() === '' ? 1 : 0);
-} else if (name === 'reply' && said === 'account list --json') {
-    process.stdout.write(JSON.stringify({ items: [] }));
+} else if (name === 'reply' && (said === 'account list --channel email --json' || said === 'account list --channel linkedin --json')) {
+    // Per channel, as reply-cli prints it: the items of that channel, or a refusal when the plan or role has none.
+    const channel = args[3];
+    const raw = process.env[`STUB_REPLY_ACCOUNTS_${channel.toUpperCase()}`];
+    if (raw === 'refused') {
+        process.stderr.write(`This account has no ${channel} access.
+`);
+        process.exitCode = 1;
+    } else {
+        process.stdout.write(JSON.stringify({ items: raw ? JSON.parse(raw) : [] }));
+    }
 } else if (name === 'reply' && said === 'skills install adapter --project --agent codex') {
     for (const skill of ['reply-cli', 'reply-api', 'campaign-launch']) {
         mkdirSync(join(process.cwd(), '.agents', 'skills', skill), { recursive: true });

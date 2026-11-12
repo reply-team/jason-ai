@@ -26,6 +26,7 @@ import {
     isConfigured,
     parseInstallationSettings,
     parseReplyAccounts,
+    replyChannels,
     parseReplyAuth,
     pluginRuntimes,
     programInstalls,
@@ -76,6 +77,8 @@ export interface ReplyState {
     user: string | null;
     wired: boolean;
     accounts: ReplyAccount[];
+    /** The channels whose list Reply refused, an account with no plan or role for it; the other channel's rows stay. */
+    unavailable: string[];
 }
 
 export interface PluginState {
@@ -333,7 +336,7 @@ export class Setup {
     async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [] };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], unavailable: [] };
         }
         const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
         const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
@@ -342,8 +345,17 @@ export class Setup {
         // which it has no command for.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
-        const accounts = auth.signedIn && current ? parseReplyAccounts((await this.#run('reply', 'account list', ['account', 'list', '--json'])).stdout) : [];
-        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts };
+        const accounts: ReplyAccount[] = [];
+        const unavailable: string[] = [];
+        if (auth.signedIn && current) {
+            // One read per channel: a plan or role without one of them makes `account list` refuse as a whole.
+            for (const channel of replyChannels) {
+                const read = await this.#run('reply', 'account list', ['account', 'list', '--channel', channel, '--json']);
+                if (read.exit === 0) accounts.push(...parseReplyAccounts(read.stdout));
+                else unavailable.push(channel);
+            }
+        }
+        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts, unavailable };
     }
 
     connectReply(): Promise<void> {

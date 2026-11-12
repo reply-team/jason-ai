@@ -59,6 +59,13 @@ const cap = (text: string): string => {
     return characters.length > 40 ? `${characters.slice(0, 40).join('')}…` : text;
 };
 
+/** The heading a channel goes by on the card; a channel it does not know goes by its own name, cut. */
+const channelName = (channel: string): string => channels.find(([known]) => known === channel)?.[1] ?? cap(channel);
+
+/** The channels Reply refused to list, as text only; an older desktop that does not say reads as none. */
+const unavailableOf = (state: DesktopSetup['reply']): string[] =>
+    Array.isArray(state.unavailable) ? state.unavailable : [];
+
 function stateOf(account: DesktopReplyAccount): readonly [string, Tone] {
     if (!account.status) return ['State unknown', 'gray'];
     const known = Object.hasOwn(states, account.channel) ? states[account.channel]! : {};
@@ -78,14 +85,33 @@ function grouped(accounts: readonly DesktopReplyAccount[]): [string, DesktopRepl
         .filter(([, members]) => members.length > 0);
 }
 
+/** How many reads of the setup are going, and when the last one began. */
+let reading = 0;
+let lastRead = Number.NEGATIVE_INFINITY;
+
+/** The window taking the focus back reads again no more often than this. */
+const focusReadSpacingMs = 30_000;
+
 export async function reload(): Promise<void> {
+    reading += 1;
+    lastRead = Date.now();
     try {
         const status = await here().desktop.setup.status();
         setup.value = { ...status, hosts: withModels(status.hosts) };
     } catch (error) {
         setupError.value = messageOf(error);
+    } finally {
+        reading -= 1;
     }
 }
+
+/** The window took the focus back: read again, unless a read is going or the last began under thirty seconds ago. */
+export function reloadOnFocus(): void {
+    if (reading > 0 || Date.now() - lastRead < focusReadSpacingMs) return;
+    void reload();
+}
+
+define('connect.check', () => void reload());
 
 async function doing(what: string, run: () => Promise<void>): Promise<void> {
     if (setupBusy.value !== null) return;
@@ -286,6 +312,20 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string):
                         })}
                     </div>`,
             )}
+            ${unavailableOf(state).map(
+                (channel) =>
+                    html`<div class="setrow meta acct-none">
+                        This Reply account has no ${channel === 'email' ? 'email' : channelName(channel)}.
+                    </div>`,
+            )}
+            ${
+                state.signedIn && state.cli.found
+                    ? html`<div class="setrow">
+                          <div class="grow meta">Accounts are read again when this window takes the focus back.</div>
+                          <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
+                      </div>`
+                    : null
+            }
             <div class="setrow">
                 <div class="grow meta">
                     Limits, signatures, pauses and an account's connection are set in Reply.

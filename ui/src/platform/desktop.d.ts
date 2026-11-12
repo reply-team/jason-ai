@@ -208,6 +208,8 @@ export interface DesktopReply {
     /** Whether the runtime has the Reply plugin set up with this sign-in. */
     wired: boolean;
     accounts: DesktopReplyAccount[];
+    /** The channels (`email`, `linkedin`) Reply refused to list, an account with none of it; the other channel's rows stay. */
+    unavailable: string[];
 }
 
 /**

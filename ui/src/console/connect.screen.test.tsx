@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import type { DesktopReplyAccount, DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
@@ -68,6 +68,10 @@ const withAccounts = (accounts: DesktopReplyAccount[]): DesktopSetup => ({
     ...setupFound,
     reply: { ...setupFound.reply, accounts },
 });
+
+const statusReads = (desktop: StubDesktop) => desktop.calls.filter((call) => call.name === 'setup.status').length;
+
+const focusBack = () => fireEvent.focus(window);
 
 /** Each account row as a person reads it: the heading over it, its name and its state. */
 function rows(card: HTMLElement): [string, string, string][] {
@@ -211,6 +215,77 @@ describe('the Reply card', () => {
         expect(link.getAttribute('rel')).toBe('noreferrer');
         expect(link.getAttribute('data-act')).toBeNull();
         for (const row of card.querySelectorAll('.acct')) expect(row.querySelector('button, a')).toBeNull();
+    });
+});
+
+describe('the Reply card, a channel the account does not have', () => {
+    it('says so in one line, beside the accounts of the other channel, and shows no error', async () => {
+        renderConnect({
+            ...withAccounts([account('em1', 'email', 'connected')]),
+            reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], unavailable: ['linkedin'] },
+        });
+        const card = replyCard(await openConnect());
+        expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
+        const lines = Array.from(card.querySelectorAll('.acct-none'), words);
+        expect(lines).toEqual(['This Reply account has no LinkedIn.']);
+        expect(within(card).queryByRole('alert')).toBeNull();
+    });
+
+    it('says nothing when both channels were read', async () => {
+        renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        expect((await openConnect()).querySelector('.acct-none')).toBeNull();
+    });
+});
+
+describe('the Reply card, reading again', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('has a Check again button that reads the list again', async () => {
+        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const card = replyCard(await openConnect());
+        const before = statusReads(desktop);
+        fireEvent.click(within(card).getByRole('button', { name: 'Check again' }));
+        await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
+    });
+
+    it('reads again when the window takes the focus back, not more often than once in thirty seconds', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
+        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        await openConnect();
+        await waitFor(() => expect(statusReads(desktop)).toBeGreaterThan(0));
+        const first = statusReads(desktop);
+        vi.setSystemTime(new Date('2026-11-12T10:00:29Z'));
+        focusBack();
+        await Promise.resolve();
+        expect(statusReads(desktop)).toBe(first);
+        vi.setSystemTime(new Date('2026-11-12T10:00:31Z'));
+        focusBack();
+        await waitFor(() => expect(statusReads(desktop)).toBe(first + 1));
+        vi.setSystemTime(new Date('2026-11-12T10:00:50Z'));
+        focusBack();
+        await Promise.resolve();
+        expect(statusReads(desktop)).toBe(first + 1);
+    });
+
+    it('does not start a read on the focus while one is going', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
+        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        await openConnect();
+        const first = statusReads(desktop);
+        let release: () => void = () => undefined;
+        const slow = new Promise<DesktopSetup>((resolve) => (release = () => resolve(desktop.status)));
+        desktop.setup.status = () => {
+            desktop.calls.push({ name: 'setup.status', args: [] });
+            return slow;
+        };
+        vi.setSystemTime(new Date('2026-11-12T10:01:00Z'));
+        focusBack();
+        vi.setSystemTime(new Date('2026-11-12T10:02:00Z'));
+        focusBack();
+        expect(statusReads(desktop)).toBe(first + 1);
+        release();
     });
 });
 

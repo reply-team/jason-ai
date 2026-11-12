@@ -649,12 +649,33 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [] });
-    assert.ok(b.record().some((entry) => entry.name === 'reply' && entry.args.join(' ') === 'account list --json'));
+    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], unavailable: [] });
+    const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
+    assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
+    assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');
 
     const missing = bench(t);
     const absent = await setupOn(missing).status();
     assert.deepEqual(absent.reply.cli, { found: false, version: null, install: null }, 'without npm there is nothing to install it with');
+});
+
+test('the Reply card reads each channel on its own, so a channel the account lacks does not blank the other', async (t) => {
+    const email = JSON.stringify([{ id: 'e1', channel: 'email', name: 'Sales', address: 'sales@example.test', reply_status: 'connected' }]);
+    const linkedin = JSON.stringify([{ id: 'l1', channel: 'linkedin', name: 'Ada', address: '', reply_status: 'enabled' }]);
+    const both = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: email, STUB_REPLY_ACCOUNTS_LINKEDIN: linkedin } });
+    const all = (await setupOn(both).status()).reply;
+    assert.deepEqual(all.accounts.map((each) => each.id), ['e1', 'l1']);
+    assert.deepEqual(all.unavailable, []);
+
+    const noLinkedin = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: email, STUB_REPLY_ACCOUNTS_LINKEDIN: 'refused' } });
+    const kept = (await setupOn(noLinkedin).status()).reply;
+    assert.deepEqual(kept.accounts.map((each) => each.id), ['e1'], 'the email account stays');
+    assert.deepEqual(kept.unavailable, ['linkedin']);
+
+    const noEmail = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_ACCOUNTS_EMAIL: 'refused', STUB_REPLY_ACCOUNTS_LINKEDIN: linkedin } });
+    const other = (await setupOn(noEmail).status()).reply;
+    assert.deepEqual(other.accounts.map((each) => each.id), ['l1']);
+    assert.deepEqual(other.unavailable, ['email']);
 });
 
 test('a Reply CLI older than the one Jason’s Reply plugin requires is offered the update, and is not asked what it cannot answer', async (t) => {

@@ -399,6 +399,9 @@ export function versionAtLeast(found: string, wanted: string): boolean {
 
 export const replyMinimumVersion = '0.18.0';
 
+/** The channels `reply account list --channel` takes, read one at a time, in the order the card shows them. */
+export const replyChannels = ['email', 'linkedin'] as const;
+
 export interface ReplyAccount {
     id: string;
     channel: string;
