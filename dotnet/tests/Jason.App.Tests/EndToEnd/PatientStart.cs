@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jason.Cli;
 using Jason.Contracts.Discovery;
 
@@ -25,8 +26,18 @@ namespace Jason.App.Tests.EndToEnd;
 /// <see cref="GoldenPath.StartAsDocumentedAsync"/>, which is where such a creep should still fail.
 /// </para>
 /// </remarks>
-internal static class PatientStart
+internal static partial class PatientStart
 {
+    /// <summary>The number of the process the verb launched, as its "did not publish" answer names it.</summary>
+    [GeneratedRegex(@"The runtime process (?<pid>[0-9]+) did not publish", RegexOptions.CultureInvariant)]
+    private static partial Regex LaunchedProcess();
+
+    /// <summary>How long a runtime that was told to end is given to be gone before its folder is removed.</summary>
+    private static TimeSpan Ending { get; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>The most log lines a start that gave up says, so a runtime that logged a great deal cannot flood the output.</summary>
+    private const int MostLines = 300;
+
     /// <summary>What the verb promises: its own wait for the runtime it launched to publish and answer.</summary>
     public static TimeSpan Documented { get; } = TimeSpan.FromSeconds(30);
 
@@ -85,7 +96,132 @@ internal static class PatientStart
             await Task.Delay(Poll, Ct);
         }
 
+        await GiveUpAsync(paths, output, say);
         return started;
+    }
+
+    /// <summary>
+    /// The start gave up with the runtime still not answering. Say what the runtime's own log holds, so that a slow step
+    /// can be told from a stuck one, and end the process the verb launched so that nothing outlives the test.
+    /// </summary>
+    /// <remarks>
+    /// The log is said by its timestamps and message templates alone: a line carries a person's text only in its
+    /// properties, which are never read here. The process is the one the verb named, by its number and never by a name,
+    /// and the caller removes the data directory only after it has been gone.
+    /// </remarks>
+    private static async Task GiveUpAsync(JasonPaths paths, string verbAnswer, Action<string> say)
+    {
+        say("jason runtime start: gave up waiting; the runtime's log up to now (time and message template of each line):");
+        foreach (var line in LogLines(paths))
+        {
+            say(line);
+        }
+
+        var match = LaunchedProcess().Match(JsonMessage(verbAnswer));
+        if (!match.Success || !int.TryParse(match.Groups["pid"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var pid))
+        {
+            say("jason runtime start: the verb named no process, so none was ended.");
+            return;
+        }
+
+        try
+        {
+            using var runtime = Process.GetProcessById(pid);
+            runtime.Kill(entireProcessTree: true);
+            await runtime.WaitForExitAsync(Ct).WaitAsync(Ending, Ct);
+            say(string.Create(CultureInfo.InvariantCulture, $"jason runtime start: ended the runtime process {pid} the verb launched."));
+        }
+        catch (ArgumentException)
+        {
+            say(string.Create(CultureInfo.InvariantCulture, $"jason runtime start: the runtime process {pid} was already gone."));
+        }
+        catch (InvalidOperationException)
+        {
+            say(string.Create(CultureInfo.InvariantCulture, $"jason runtime start: the runtime process {pid} was already gone."));
+        }
+        catch (TimeoutException)
+        {
+            say(string.Create(CultureInfo.InvariantCulture, $"jason runtime start: the runtime process {pid} was still there {Ending.TotalSeconds:F0} s after it was told to end."));
+        }
+    }
+
+    /// <summary>The runtime's log lines under the data directory, each as its time and template and nothing else.</summary>
+    private static List<string> LogLines(JasonPaths paths)
+    {
+        var said = new List<string>();
+        if (!Directory.Exists(paths.LogsDirectory))
+        {
+            said.Add("(no log directory)");
+            return said;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(paths.LogsDirectory).Order(StringComparer.Ordinal))
+        {
+            try
+            {
+                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                while (reader.ReadLine() is { } text)
+                {
+                    if (said.Count >= MostLines)
+                    {
+                        said.Add("(more lines not said)");
+                        return said;
+                    }
+
+                    if (TimeAndTemplate(text) is { } line)
+                    {
+                        said.Add(line);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                said.Add("(a log file could not be read)");
+            }
+        }
+
+        if (said.Count == 0)
+        {
+            said.Add("(the log holds no lines)");
+        }
+
+        return said;
+    }
+
+    private static string? TimeAndTemplate(string text)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("@mt", out var template)
+                || template.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            var time = root.TryGetProperty("@t", out var at) && at.ValueKind == JsonValueKind.String ? at.GetString() : "?";
+            return $"{time} {template.GetString()}";
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string JsonMessage(string output)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            return document.RootElement.GetProperty("error").GetProperty("message").GetString() ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>Whether the verb's answer is its own "it may still be starting": a start failure it marks as worth asking again.</summary>
