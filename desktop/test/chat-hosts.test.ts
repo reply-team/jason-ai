@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFence } from '../src/chat-deny.ts';
-import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { claudeAllowedTools, claudeArguments, claudeLine, claudeStep, codexArguments, codexSearchSettings, codexLine, dataRules, hostEnvironment, knownDataEntries, knownDesktopEntries, rulePath, type HostLine } from '../src/chat-hosts.ts';
+import { codexNamingArguments } from '../src/chat-naming.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { markersIn, plantedConfiguration, plantedMarkers } from './planted-session.ts';
 
@@ -45,7 +46,7 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
 test('every Claude Code turn blocks reads outside its working folders, so a read-only command on such a path asks', () => {
     for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] })]) {
         assert.equal(args.filter((arg) => arg === '--settings').length, 1);
-        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}');
+        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}');
     }
 });
 
@@ -58,7 +59,7 @@ test('the person\'s words are never on a host\'s command line: every argument is
         if (listFlags.has(arg)) i += valuesOf(claude.slice(i), arg).length;
         else if (flagsWithValue.has(arg)) i++;
     }
-    assert.deepEqual(codexArguments({}), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-']);
+    assert.deepEqual(codexArguments({}), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-']);
 });
 
 test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, and each allowed jason verb', () => {
@@ -140,8 +141,42 @@ test('the campaign\'s and the project\'s folders are added one --add-dir each; a
 
 test('a Codex turn runs exec with JSON events in the read-only sandbox, resumed by its thread, the prompt from stdin', () => {
     assert.deepEqual(codexArguments({ model: 'gpt-5', resume: 'thr-1' }), [
-        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--model', 'gpt-5', 'resume', 'thr-1', '-',
+        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '--model', 'gpt-5', 'resume', 'thr-1', '-',
     ]);
+});
+
+test('a Codex turn searches the web from OpenAI\'s cached index on every turn, resumed or not, and never live', () => {
+    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }, { model: 'gpt-5', resume: 'thr-1' }]) {
+        const args = codexArguments(shape);
+        const settings = args.flatMap((arg, i) => (args[i - 1] === '-c' ? [arg] : []));
+        assert.deepEqual(settings.filter((setting) => setting.startsWith('web_search')), ['web_search=cached'], JSON.stringify(shape));
+        assert.deepEqual(settings.filter((setting) => setting.includes('web_search')), [...codexSearchSettings], JSON.stringify(shape));
+        assert.ok(!args.includes('--search'), 'the flag that sets live search');
+        assert.ok(args.indexOf('web_search=cached') < (args.includes('resume') ? args.indexOf('resume') : args.length - 1), 'before the resumed thread');
+    }
+    // The naming run keeps no tool: its search stays off.
+    assert.ok(codexNamingArguments(null).includes('web_search=disabled'));
+    assert.ok(!codexNamingArguments(null).includes('web_search=cached'));
+});
+
+test('on a Codex that predates the top-level key, the legacy toggles are passed off, so no legacy setting of the person\'s makes a turn search live', () => {
+    assert.deepEqual(codexSearchSettings, ['web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false']);
+    for (const shape of [{}, { resume: 'thr-1' }, { model: 'gpt-6.1-sol', effort: 'low' as const, resume: 'thr-1' }]) {
+        const args = codexArguments(shape);
+        for (const setting of codexSearchSettings) assert.equal(args.filter((arg, i) => args[i - 1] === '-c' && arg === setting).length, 1, setting);
+        // The two toggles whose meaning beside the top-level key the reference does not state are left alone.
+        assert.ok(!args.some((arg) => arg.startsWith('features.web_search=') || arg.startsWith('tools.web_search')), JSON.stringify(shape));
+    }
+});
+
+test('every Claude Code turn asks about every fetch, so a page of a host Claude Code preapproves still reaches the permission model', () => {
+    const settings = JSON.parse(valueOf(claudeArguments(turn), '--settings') ?? '{}') as { permissions?: { ask?: unknown; allow?: unknown; deny?: unknown } };
+    assert.deepEqual(settings.permissions?.ask, ['WebFetch(domain:*)']);
+    assert.equal(settings.permissions?.allow, undefined);
+    assert.equal(settings.permissions?.deny, undefined);
+    // Fetching stays possible: neither form of the rule is denied, which would take the tool away or refuse each page.
+    const disallowed = valuesOf(claudeArguments(turn), '--disallowedTools');
+    assert.ok(!disallowed.some((rule) => rule.startsWith('WebFetch')));
 });
 
 test('an effort reaches each host as its own flag on every turn that names one, resumed or not, and nothing when none is named', () => {
@@ -152,9 +187,9 @@ test('an effort reaches each host as its own flag on every turn that names one, 
     }
     assert.ok(!claudeArguments({ ...turn, model: 'opus' }).includes('--effort'));
     assert.deepEqual(codexArguments({ model: 'gpt-6.1-sol', effort: 'high', resume: 'thr-1' }), [
-        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', 'resume', 'thr-1', '-',
+        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', 'resume', 'thr-1', '-',
     ]);
-    assert.ok(!codexArguments({ model: 'gpt-6.1-sol' }).includes('-c'));
+    assert.ok(!codexArguments({ model: 'gpt-6.1-sol' }).some((arg) => arg.startsWith('model_reasoning_effort')));
 });
 
 test('a word outside the five levels never reaches a host, ultracode and ultra among them', () => {

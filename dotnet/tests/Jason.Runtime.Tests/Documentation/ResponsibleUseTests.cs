@@ -43,14 +43,16 @@ public sealed partial class ResponsibleUseTests
 
     /// <summary>
     /// The request is the one the feed reader makes, which <c>UpdateFeedTests</c> pins to a <c>User-Agent</c> of
-    /// <c>jason/&lt;version&gt;</c> and nothing else; the page says it identifies only the version.
+    /// <c>jason/&lt;version&gt;</c> and nothing else; the page says it identifies only the version. A download names the
+    /// file, and the source a link names where the link a person followed carries one, which the product itself never
+    /// adds.
     /// </summary>
     [Fact]
     public void The_page_says_what_the_check_carries_and_that_nothing_else_is_sent()
     {
         var page = Page();
 
-        Assert.Contains("The update check identifies only the runtime's version, including its build, and a download only the file requested;", page, StringComparison.Ordinal);
+        Assert.Contains("The update check identifies only the runtime's version, including its build, and a download only the file requested, and the `ref` of the link you followed where it carries one;", page, StringComparison.Ordinal);
         Assert.Contains("apart from the requests described below the runtime sends no telemetry, usage data or crash reports.", page, StringComparison.Ordinal);
     }
 
@@ -85,13 +87,14 @@ public sealed partial class ResponsibleUseTests
 
     /// <summary>
     /// What the address keeps, for how long and under which policy is ReplyApp Inc.'s statement, carried as the
-    /// licence made it to the people who installed Jason under it.
+    /// licence made it to the people who installed Jason under it, and then what its counts are made of: every dimension
+    /// they are kept by, after the sentence whose "them" is the records.
     /// </summary>
     [Fact]
     public void The_page_keeps_the_promise_about_the_address_s_records()
     {
         Assert.Contains(
-            "ReplyApp Inc. uses these records only to operate and secure the service and to count downloads in aggregate, keeps them for no longer than 31 days, and does not combine them with any other data. ReplyApp Inc.'s privacy policy (<https://reply.io/privacy-policy/>) applies to them.",
+            "ReplyApp Inc. uses these records only to operate and secure the service and to count downloads in aggregate, keeps them for no longer than 31 days, and does not combine them with any other data. ReplyApp Inc.'s privacy policy (<https://reply.io/privacy-policy/>) applies to them. That address counts the downloads and install-page reads it answers by day, file, the `ref` the followed link names and the kind of program that asked (a browser, a command-line or agent fetcher, or a crawler), and keeps nothing of the person in those counts.",
             Page(),
             StringComparison.Ordinal);
     }
@@ -122,7 +125,7 @@ public sealed partial class ResponsibleUseTests
     /// Jason Runtime Licence and differ from them only in framing, so a change of one word in either is a change to text
     /// legal read. Have the new wording read again first, then put its digest here.
     /// </summary>
-    private const string ReadSections = "40a5bbf8059be17a9d3acb37dc12c45d344c28ae0680e2f170321c001216cc90";
+    private const string ReadSections = "c69a471ef4cebea676655e8d1e73de4ffed66430df98580d645d217a680dbbf5";
 
     /// <summary>The two sections that carry the earlier licence's words are held whole, not by the sentences quoted above.</summary>
     [Fact]

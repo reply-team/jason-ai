@@ -125,7 +125,7 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     expect(first?.headers()['content-security-policy']).toBe(
         "default-src 'self'; frame-ancestors 'none'; base-uri 'none'",
     );
-    await expect(page.getByRole('heading', { name: 'What should Jason work on?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Who do you want to reach?', level: 1 })).toBeVisible();
     await expect(page.locator('.dv-dockview')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Needs you', level: 1 })).toBeVisible();
 
