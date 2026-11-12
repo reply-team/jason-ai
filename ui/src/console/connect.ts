@@ -33,8 +33,8 @@ effect(() => {
 });
 
 /**
- * Reply's web app, where what the card does not do is managed: signatures, and a LinkedIn account's limits. The card
- * links there for those.
+ * Reply's web app, where what the card does not do is managed: a mailbox other than Gmail or Outlook (SMTP/IMAP),
+ * signatures, and a LinkedIn account's limits. The card links there for those.
  */
 export const replyAccountsAddress = 'https://run.reply.io/';
 
@@ -884,7 +884,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
             }
             <div class="setrow">
                 <div class="grow meta">
-                    Signatures and a LinkedIn account’s limits are set in Reply.
+                    Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account’s limits are set in Reply.
                     <a href="${replyAccountsAddress}" target="_blank" rel="noreferrer">Manage accounts in Reply</a>
                 </div>
             </div>

@@ -236,7 +236,9 @@ describe('the Reply card', () => {
         expect(link.getAttribute('target')).toBe('_blank');
         expect(link.getAttribute('rel')).toBe('noreferrer');
         expect(link.getAttribute('data-act')).toBeNull();
-        expect(words(link.parentElement!)).toContain('Signatures and a LinkedIn account’s limits are set in Reply.');
+        expect(words(link.parentElement!)).toContain(
+            'Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account’s limits are set in Reply.',
+        );
         for (const row of card.querySelectorAll('.acct')) expect(row.querySelector('a')).toBeNull();
     });
 });

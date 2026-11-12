@@ -77,10 +77,13 @@ prints and the codes it ends with are read in one module, `src/reply-cli-account
 CLI's own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`.
 A link the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it
 (https, a host name, no user, port or anything but printable ASCII) and hands it to the system browser through the
-navigation lock's one way out, and nothing else of the desktop holds it. The page learns that a link was opened, when it
-stops working and its pending entry; the CLI's output for these verbs is never logged, recorded or put into an error.
+navigation lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one
+account, writes it to the clipboard itself; the shared mailbox page is never copied, whatever the page asks. Nothing
+else of the desktop holds it. The page learns that a link was opened or copied, when it stops working and its pending
+entry; the CLI's output for these verbs is never logged, recorded or put into an error.
 A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the main process
-that names the account as the list does (a connect and a reconnect make a link and ask nothing), with Cancel focused; no window to ask on is a no, and `delete` passes `--yes` only after the yes. Two
+that names the account as the list does (a connect and a reconnect make a link and ask nothing), with Cancel focused;
+no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and `delete` passes `--yes` only after the yes. Two
 offers open only after a code that calls for them, each for the ask it answered and behind a box of its own: the
 account's shared mailbox page (`--allow-shared-page`) after `email_link.not_available`, with the CLI's warning that the
 address does not expire and lets its holder manage all of the user's mailboxes, and a forced delete (`--force`) after
