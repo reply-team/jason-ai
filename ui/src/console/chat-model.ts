@@ -207,14 +207,21 @@ const modeWords: Readonly<Record<DesktopChatMode, string>> = {
     full_access: 'Full access',
 };
 
+/** Why the desktop refuses Full access for the Feed, in its words. */
+const feedFullAccess =
+    'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
+
 /**
  * The menu's choices on the host the next turn runs on: each mode, and why it cannot be chosen there, or null. Full
- * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex.
+ * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex;
+ * and for the Feed, in the order the desktop refuses it.
  */
 export function modeChoices(
     host: DesktopHost | null,
+    feed = false,
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
-    const full = host === null ? 'Full access runs on Claude Code only.' : host.fullAccess;
+    const full =
+        host === null ? 'Full access runs on Claude Code only.' : (host.fullAccess ?? (feed ? feedFullAccess : null));
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
         label: modeWords[mode],
