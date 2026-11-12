@@ -62,6 +62,7 @@ import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
+import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
@@ -178,6 +179,8 @@ export interface ChatOptions {
     unchecked?(): void;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
+    /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
+    skillsGate?: Pick<SkillsGate, 'wait'>;
     /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
     now?(): number;
     /** How many entries one pass of the sweep of the ended grants' folders takes; absent, `sweepCap`. */
@@ -947,6 +950,8 @@ export class Chat {
         // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
         for (const [id, each] of this.#setupTurns) if (id !== conversation.id) each.overlapped = true;
         try {
+            // A start that deploys skills into the chat folder holds the gate: the turn is built after it lets go.
+            await this.#options.skillsGate?.wait();
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
             // answering while the version is read, so a second send is refused as busy. The version read also says
             // whether the model named takes the effort named.

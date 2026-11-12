@@ -83,8 +83,12 @@ function recorded(records: string, folder: (typeof skillsFolders)[number]): Map<
     return files;
 }
 
-/** Removes from a skills folder every entry the records do not name, and every named file whose bytes changed. */
-function ownSkills(skills: string, kept: Map<string, string>, remove: (path: string) => void): void {
+/**
+ * Removes from a skills folder every entry the records do not name, and every named file whose bytes changed. Returns
+ * whether it removed a file the records name, which a start takes for a skills folder to deploy again.
+ */
+function ownSkills(skills: string, kept: Map<string, string>, remove: (path: string) => void): boolean {
+    let changed = false;
     const walk = (folder: string, relative: string) => {
         for (const name of readdirSync(folder)) {
             const path = join(folder, name);
@@ -95,10 +99,12 @@ function ownSkills(skills: string, kept: Map<string, string>, remove: (path: str
                 continue;
             }
             if (what === 'file' && kept.get(rel) === digest(path)) continue;
+            if (kept.has(rel)) changed = true;
             remove(path);
         }
     };
     walk(skills, '');
+    return changed;
 }
 
 /** Removes a name and what is under it; a link is removed as a link and what it names is left. */
@@ -108,9 +114,11 @@ function removed(path: string): void {
 
 /**
  * Puts the chat folder's agent settings right before a turn, against the records under `records`. Throws
- * `AgentFolderUnowned` when that cannot be done.
+ * `AgentFolderUnowned` when that cannot be done. Returns whether it removed a recorded file, one whose bytes changed:
+ * that skill is gone until the folder is deployed again, which the next start does.
  */
-export function ownAgentFolder(chat: string, records: string, remove: (path: string) => void = removed): void {
+export function ownAgentFolder(chat: string, records: string, remove: (path: string) => void = removed): boolean {
+    let changed = false;
     try {
         for (const name of [...unwrittenMemoryFiles, '.codex']) if (kind(join(chat, name)) !== null) remove(join(chat, name));
         for (const host of skillsFolders) {
@@ -123,13 +131,14 @@ export function ownAgentFolder(chat: string, records: string, remove: (path: str
             }
             for (const name of readdirSync(top)) {
                 const path = join(top, name);
-                if (name === 'skills' && kind(path) === 'folder') ownSkills(path, recorded(records, host), remove);
+                if (name === 'skills' && kind(path) === 'folder') changed = ownSkills(path, recorded(records, host), remove) || changed;
                 else remove(path);
             }
         }
     } catch (error) {
         throw new AgentFolderUnowned((error as NodeJS.ErrnoException | null)?.code);
     }
+    return changed;
 }
 
 /**

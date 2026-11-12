@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { endedName, keptMs, newGrantId } from '../src/chat-full-folder.ts';
+import { SkillsGate } from '../src/skills-gate.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -311,4 +312,22 @@ test('a campaign folder whose .claude holds skills, agents or commands is left o
         await r.turn(id, 'again', claude);
         assert.equal(notices(r.events.get(id)).length, 1, 'said once for the folder, not at each turn');
     }
+});
+
+test('a send during the deploy a start makes into the chat folder builds its turn only after the deploy ends', async (t) => {
+    const gate = new SkillsGate();
+    const r = rig(t, { chat: { skillsGate: gate } });
+    const { id } = await r.chat.create();
+    const release = gate.hold();
+    const said = (kind: string) => (r.events.get(id) ?? []).filter((event) => event.kind === kind);
+    const sending = r.chat.send(id, 'hello', claude);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.deepEqual(r.hosts(), [], 'no host started while the deploy was going');
+    assert.equal(said('done').length, 0);
+    await r.chat.send(id, 'second', claude);
+    assert.equal(said('done').length, 1, 'a second send while one waits is refused as busy');
+    release();
+    await sending;
+    await settled(() => said('done').length === 2);
+    assert.equal(r.hosts().length, 1);
 });
