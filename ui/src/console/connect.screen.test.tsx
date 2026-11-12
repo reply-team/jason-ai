@@ -14,14 +14,14 @@ import { chatPlace, dropLinks, heldLink, replyAccountsAddress, replyCardFor, res
 import { Painted } from './painted';
 import { Console } from './console';
 import { attention } from './needs';
-import { bind, chats, lines, setup } from './state';
+import { bind, chats, lines, setup, setupError } from './state';
 
 // The Connect panel's Reply card, its accounts grouped by channel with the state Reply reports, and Disconnect on the
 // cards of the notification plugins.
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
-function renderConnect(status: DesktopSetup): StubDesktop {
+function renderConnect(status: DesktopSetup, firstReadMs = 0): StubDesktop {
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
@@ -39,6 +39,14 @@ function renderConnect(status: DesktopSetup): StubDesktop {
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     const desktop = chatDesktop(status);
+    if (firstReadMs > 0) {
+        // A first read of the setup that answers late, as one does on a slow or busy machine.
+        const read = desktop.setup.status;
+        desktop.setup.status = async () => {
+            await new Promise((resolve) => setTimeout(resolve, firstReadMs));
+            return read();
+        };
+    }
     render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
     return desktop;
 }
@@ -85,6 +93,9 @@ function rows(card: HTMLElement): [string, string, string][] {
 }
 
 beforeEach(() => {
+    // The setup is module state: one test's reading must not stand in for the next test's before its own arrives.
+    setup.value = null;
+    setupError.value = null;
     chats.value = {};
     lines.value = [];
     attention.loaded.value = false;
@@ -120,6 +131,15 @@ describe('the Reply card', () => {
             ['LinkedIn', 'Account li2'],
             ['whatsapp', 'Account x1'],
         ]);
+    });
+
+    it('shows the accounts however late the first read of the setup answers', async () => {
+        renderConnect(
+            withAccounts([account('em1', 'email', 'connected'), account('li1', 'linkedin', 'enabled')]),
+            1500,
+        );
+        const card = replyCard(await openConnect());
+        expect(Array.from(card.querySelectorAll('.acct-hd'), words)).toEqual(['Email', 'LinkedIn']);
     });
 
     it('draws no heading for a channel with no account', async () => {

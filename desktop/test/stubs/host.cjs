@@ -12,6 +12,7 @@
 //   { "campaign": "name" }                            add a campaign of that name, created now, to STUB_CAMPAIGNS_FILE;
 //   { "campaign": { "name", "id", "created_at" } }    or one with the id and the moment given
 //   { "sleep": 300 }                                  wait that many milliseconds
+//   { "hold": "<file>" }                              wait until that file exists, so a test decides when the turn goes on
 //   { "retry": { "status": 401, "error": "..." } }    Claude Code only: report a retry of a failed API request, as system/api_retry
 //   { "end": "refused", "status": 401, "text": "w" }  Claude Code only: end with a failed result naming that HTTP status
 //   { "refusedMessage": "w" }                         Claude Code only: say an assistant message that reports a failed authentication
@@ -21,13 +22,13 @@
 // session other than the one asked for and goes on as a turn would.
 // A naming run (`naming` below) answers by STUB_NAMING, a JSON object: { "say": "words" } says them, { "use": true }
 // uses a tool first, { "block": "type" } (Claude Code) or { "item": "type" } (Codex) says a content block or an item of
-// that type first, { "error": "words" } ends with a failed result, { "sleep": ms } waits first, { "touch": true } leaves a
+// that type first, { "error": "words" } ends with a failed result, { "sleep": ms } waits first, { "hold": "<file>" } waits until the file exists, { "touch": true } leaves a
 // file in the folder it runs in, { "stuck": "<file>" } never answers, outlives the first signal and writes its ids there. With none it ends well and says nothing. STUB_NAMING_LOG, when set, has a line appended
 // as each naming run starts and ends.
 // STUB_SILENT keeps the turn from saying anything of its own before its plan: "always", or "resumed" on a resume alone,
 // as a host that fails on an account, not on the session, ends with nothing said.
 const { spawn } = require('node:child_process');
-const { mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { decide } = require('./mcp-http.cjs');
 
@@ -89,6 +90,7 @@ async function claude(args, stdin) {
         if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say }] } });
         else if (step.campaign !== undefined) addCampaign(step.campaign);
         else if (step.sleep !== undefined) await new Promise((resolve) => setTimeout(resolve, step.sleep));
+        else if (step.hold !== undefined) while (!existsSync(step.hold)) await new Promise((resolve) => setTimeout(resolve, 20));
         else if (step.refusedMessage !== undefined) {
             print({ type: 'assistant', error: 'authentication_failed', message: { content: [{ type: 'text', text: step.refusedMessage }] } });
         } else if (step.retry !== undefined) {
@@ -177,6 +179,7 @@ async function naming(name, args) {
         return;
     }
     if (asked.sleep) await new Promise((resolve) => setTimeout(resolve, asked.sleep));
+    if (asked.hold !== undefined) while (!existsSync(asked.hold)) await new Promise((resolve) => setTimeout(resolve, 20));
     if (name === 'claude') {
         print({ type: 'system', subtype: 'init', session_id: 'naming-session', ...(process.env.STUB_KEY_SOURCE === undefined ? {} : { apiKeySource: process.env.STUB_KEY_SOURCE }) });
         if (asked.use) print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_n', name: 'Read', input: { file_path: '/x' } }] } });

@@ -37,6 +37,10 @@ const desktop = {
         get: () => ipcRenderer.invoke('jason:theme.get'),
         set: (choice: 'system' | 'light' | 'dark') => ipcRenderer.invoke('jason:theme.set', choice),
     },
+    links: {
+        take: () => ipcRenderer.invoke('jason:links.take'),
+        onOpen: (handler: Handler) => subscribe('jason:links.open', handler),
+    },
     setup: {
         status: () => ipcRenderer.invoke('jason:setup.status'),
         connectReply: () => ipcRenderer.invoke('jason:setup.connectReply'),

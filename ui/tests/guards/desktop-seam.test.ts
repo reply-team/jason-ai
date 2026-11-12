@@ -7,10 +7,14 @@ import type { DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
 // type-checks this file, so either is a red build.
 type Exactly<Named, Declared> = [Named] extends [Declared] ? ([Declared] extends [Named] ? true : false) : false;
 
-const top = { platform: true, onCommand: true, theme: true, chat: true, setup: true } as const satisfies Record<
-    keyof JasonDesktop,
-    true
->;
+const top = {
+    platform: true,
+    onCommand: true,
+    theme: true,
+    chat: true,
+    links: true,
+    setup: true,
+} as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
 const chat = {
     send: true,
@@ -26,6 +30,7 @@ const chat = {
     rename: true,
     feed: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
+const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
 const setup = {
     status: true,
     connectReply: true,
@@ -57,15 +62,19 @@ const held: [
     Exactly<keyof typeof chat, keyof JasonDesktop['chat']>,
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
-] = [true, true, true, true, true];
+    Exactly<keyof typeof links, keyof JasonDesktop['links']>,
+] = [true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true]);
         expect([
-            ...Object.keys(top).filter((name) => name !== 'theme' && name !== 'chat' && name !== 'setup'),
+            ...Object.keys(top).filter(
+                (name) => name !== 'theme' && name !== 'chat' && name !== 'links' && name !== 'setup',
+            ),
             ...Object.keys(theme).map((name) => `theme.${name}`),
             ...Object.keys(chat).map((name) => `chat.${name}`),
+            ...Object.keys(links).map((name) => `links.${name}`),
             ...Object.keys(setup).map((name) => `setup.${name}`),
         ]).toEqual([
             'platform',
@@ -84,6 +93,8 @@ describe('the desktop seam', () => {
             'chat.attach',
             'chat.rename',
             'chat.feed',
+            'links.take',
+            'links.onOpen',
             'setup.status',
             'setup.connectReply',
             'setup.connectReplyWithKey',

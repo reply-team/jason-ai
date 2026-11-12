@@ -68,6 +68,10 @@ export const templates = {
     bundle_copies_removed: 'The copies of other versions an AppImage carried were removed: {Count}',
     bundle_copies_kept: 'The copies of other versions an AppImage carried were kept at this start: {Why}',
     bundle_copy_removal_failed: 'A copy of another version an AppImage carried could not be removed',
+    // The links: the page a link opened, or why it opened nothing, never the address.
+    deep_link_opened: 'A link opened the page {Page}',
+    deep_link_refused: 'A link opened nothing: {Code}',
+    deep_link_registration_failed: 'The jason link scheme could not be registered for this application',
     // The sandbox.
     sandbox_refused: 'The start carried --no-sandbox and was refused, running as {Form}; the desktop does not run without its sandbox',
     // The chat.
