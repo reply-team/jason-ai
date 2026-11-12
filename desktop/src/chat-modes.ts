@@ -3,8 +3,8 @@
 // default mode with a hook that lets a command run with no card where Jason reads it plainly, refuses what Ask first
 // refuses, and puts anything else to the person as Ask first's card; the deny list, the chat's confinement and the keys
 // still hold wherever the desktop can see the attempt, and it is chosen only through a confirmation shown each time, held
-// in memory for that conversation alone, and never remembered past the window. Codex has no Full access. Nothing here
-// starts a process or reads a file.
+// in memory for that conversation alone, and never remembered past the window. Codex has no Full access, nor has the
+// Feed. Nothing here starts a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
 
@@ -54,6 +54,12 @@ export function fullAccessSentence(version: string | null): string | null {
 
 /** Why Full access cannot be chosen on Codex: its own sandbox and hooks hold none of the chat's refusals. */
 export const codexFullAccess = 'Full access runs on Claude Code only.';
+
+/**
+ * Why Full access cannot be chosen for the Feed: its turns are handed journal lines by default, words that others and
+ * providers wrote, the widest road for a steer.
+ */
+export const feedFullAccess = 'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
 
 /** What a chat in Plan only answers every request it does not take. */
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';

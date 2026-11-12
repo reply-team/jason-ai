@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { endedName, keptMs, newGrantId } from '../src/chat-full-folder.ts';
+import { feedFullAccess } from '../src/chat-modes.ts';
 import { startHost, type HostProcess } from '../src/chat-process.ts';
 import { SkillsGate } from '../src/skills-gate.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
@@ -550,4 +551,17 @@ test('a move that failed with no host in the folder is tried again at the daily 
     assert.deepEqual(readdirSync(r.b.paths.chatFull), []);
     await new Promise((resolve) => setTimeout(resolve, 300));
     assert.equal(notices(r.events.get(id)).length, 1, 'said once');
+});
+
+test('Full access is refused for the Feed, in its own sentence, before any box opens', async (t) => {
+    const box = heldBox();
+    const r = rig(t, { chat: { confirmFullAccess: box.confirm } });
+    const feed = r.chat.feed([]);
+    await assert.rejects(r.chat.setMode(feed.id, 'full_access', 'claude'), { message: feedFullAccess });
+    assert.equal(feedFullAccess, 'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.');
+    assert.equal(box.opened(), 0, 'no box');
+    assert.ok(!existsSync(r.b.paths.chatFull) || readdirSync(r.b.paths.chatFull).length === 0, 'no grant');
+    assert.equal(r.chat.open(feed.id).mode, 'ask_first');
+    await r.chat.setMode(feed.id, 'plan_only');
+    assert.equal(r.chat.open(feed.id).mode, 'plan_only', 'the other modes are the Feed\'s to choose');
 });

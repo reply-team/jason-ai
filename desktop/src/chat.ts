@@ -66,7 +66,7 @@ import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
-import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
+import { codexFullAccess, feedFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
@@ -751,7 +751,8 @@ export class Chat {
     /**
      * A person's choice of a conversation's mode, from the menu beside the composer, on the host the page will send to.
      * Full access is refused before any confirmation where it cannot apply: on Codex, on a host that does not drive the
-     * chat, and on a Claude Code older than its floor or whose version cannot be read, read now as a turn reads it.
+     * chat, on a Claude Code older than its floor or whose version cannot be read, read now as a turn reads it, and for
+     * the Feed.
      * Otherwise it is given only once the person said yes to the confirmation, asked again each time it is chosen; a no
      * leaves the mode as it was. Leaving Full access stops a turn that runs in it. Plan only is kept on the record; Full
      * access never is.
@@ -771,6 +772,7 @@ export class Chat {
             try {
                 const below = fullAccessSentence(await this.#claudeVersion());
                 if (below !== null) throw new ChatRefused(below);
+                if (conversation.main === true) throw new ChatRefused(feedFullAccess);
                 if (this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
                 const yes = (await this.#options.confirmFullAccess?.()) === true;
                 // A yes for a conversation removed meanwhile, or after the window closed, gives nothing.

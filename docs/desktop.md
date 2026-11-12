@@ -276,7 +276,8 @@ program can still act as you. None of your own MCP servers or connectors reaches
 its own; when Full access ends, the chat says where it is, with an Open folder button, and Jason removes it after seven
 days. The host keeps a session by the folder it began in, so the first turn after a change into or out of Full access
 starts a fresh session, with a recap of the last words. Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said
-once. Full access is never a default and is gone when you close Jason.
+once. Full access is never a default and is gone when you close Jason. It is not offered for the Feed, whose turns are
+handed lines that others and providers wrote without you asking for them.
 
 ### What runs without asking, what is refused, what is a card
 
