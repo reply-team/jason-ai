@@ -151,10 +151,83 @@ public class LaunchEnvironmentTests
     }
 
     /// <summary>
+    /// A setting of the runtime given as a variable, a plugin's secret under <c>Plugins:Config</c> among them, is the
+    /// runtime's configuration and never the child's: every name that starts with <c>JASON_</c> and holds the double
+    /// underscore between a section and a key is taken out, in any case, and in a dictionary that compares names exactly,
+    /// as a started process's does outside Windows.
+    /// </summary>
+    [Theory]
+    [InlineData("JASON_Dispatcher__MaxParallel")]
+    [InlineData("JASON_Plugins__Config__acme-provider__api_key")]
+    [InlineData("jason_runtime__port")]
+    [InlineData("Jason_Harness__Root")]
+    public void A_configuration_override_of_the_runtime_never_reaches_the_child(string name)
+    {
+        foreach (var environment in new[] { Existing(), ExistingExactly() })
+        {
+            environment[name] = "made-up-value";
+
+            LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason");
+
+            Assert.DoesNotContain(name, environment.Keys);
+            Assert.DoesNotContain("made-up-value", environment.Values);
+        }
+    }
+
+    [Fact]
+    public void Taking_the_runtimes_configuration_out_leaves_the_four_and_everything_else_it_holds()
+    {
+        var environment = ExistingExactly();
+        environment["JASON_Plugins__Config__acme-provider__api_key"] = "made-up-secret";
+        environment["JASON_Dispatcher__MaxParallel"] = "3";
+        environment["JASON_SINGLE_WORD"] = "kept";
+        environment["ORDINARY__WITH_UNDERSCORES"] = "kept";
+
+        LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason");
+
+        string[] expected =
+        [
+            "HOME",
+            ExecutionEnvironment.AttemptIdVariable,
+            JasonPaths.DataDirectoryVariable,
+            "JASON_SINGLE_WORD",
+            ExecutionEnvironment.WorkItemIdVariable,
+            "ORDINARY__WITH_UNDERSCORES",
+            "PATH",
+        ];
+        Assert.Equal(expected.Order(StringComparer.Ordinal), environment.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("/home/somebody", environment["HOME"]);
+        Assert.Equal("/opt/jason" + Path.PathSeparator + "/usr/bin", environment["PATH"]);
+    }
+
+    /// <summary>
+    /// A refused host constant still leaves the environment as it was: nothing is taken out before every name is known to
+    /// be one the host may set.
+    /// </summary>
+    [Fact]
+    public void A_refused_host_constant_takes_nothing_out_either()
+    {
+        var environment = Existing();
+        environment["JASON_Dispatcher__MaxParallel"] = "3";
+
+        Assert.Throws<ArgumentException>(
+            () => LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason", new Dictionary<string, string> { ["JASON_SNEAKY"] = "x" }));
+
+        Assert.Equal("3", environment["JASON_Dispatcher__MaxParallel"]);
+    }
+
+    /// <summary>
     /// The environment as a started process really gets it: a copy of this one, on Windows in a dictionary that
     /// does not care that the variable is spelled <c>Path</c> there and <c>PATH</c> everywhere else.
     /// </summary>
     private static Dictionary<string, string?> Existing() => new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["PATH"] = "/usr/bin",
+        ["HOME"] = "/home/somebody",
+    };
+
+    /// <summary>The same, as a started process gets it outside Windows: names are compared exactly.</summary>
+    private static Dictionary<string, string?> ExistingExactly() => new(StringComparer.Ordinal)
     {
         ["PATH"] = "/usr/bin",
         ["HOME"] = "/home/somebody",
