@@ -6,6 +6,48 @@
  */
 export {};
 
+/**
+ * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, a campaign created, started or
+ * paused, and work that stopped. Each is a kind the runtime writes itself.
+ */
+export type DesktopFeedKind =
+    | 'inbound_reply_observed'
+    | 'approval_requested'
+    | 'decision_raised'
+    | 'campaign_created'
+    | 'campaign_started'
+    | 'campaign_paused'
+    | 'workitem_failed'
+    | 'workitem_expired'
+    | 'provider_blocked';
+
+/**
+ * A journal line as the page hands it to the Feed: its id, moment, kind, campaign and work item, as `journal.list` and
+ * the journal's stream carry them, and nothing else of it.
+ */
+export interface DesktopFeedLine {
+    id: string;
+    ts: string;
+    kind: DesktopFeedKind;
+    campaign_id: string;
+    work_item_id: string | null;
+}
+
+/**
+ * One line of the Feed as the desktop keeps it: identifiers, a kind, a moment and a count, never a person's text.
+ * `journal_id` and `at` are the newest journal line's it stands for; `count` how many lines of its kind and campaign
+ * followed one another into it.
+ */
+export interface DesktopLineEntry {
+    kind: 'line';
+    journal_kind: DesktopFeedKind;
+    journal_id: string;
+    at: string;
+    campaign_id: string;
+    work_item_id?: string;
+    count: number;
+}
+
 /** A command from the desktop's menu, tray or keybindings. The page ignores one it does not know. */
 export type DesktopCommand =
     | 'chat.new'
@@ -61,8 +103,13 @@ export interface DesktopChosen {
 export interface DesktopConversation {
     /** `conv_` and 26 Crockford base-32 characters, made by the desktop. */
     id: string;
-    /** The campaign it is about: `cmp_` and its ULID; null for a set-up chat. */
+    /** The campaign it is about: `cmp_` and its ULID; null for a set-up chat and for the Feed. */
     campaignId: string | null;
+    /**
+     * Present, and true, for the Feed: the person's main chat, one per desktop, into which the journal's lines come. It is
+     * never renamed, removed or handed over to a campaign.
+     */
+    main?: true;
     /**
      * The name a person gave it, one line within sixty characters, which nothing replaces afterwards; else the
      * campaign's name, one line; else for a set-up chat a name of two to five words the desktop asked its model for
@@ -94,7 +141,11 @@ export type DesktopKeptEntry =
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
     | { kind: 'error'; text: string }
-    | { kind: 'pick'; campaignIds: string[] };
+    | { kind: 'pick'; campaignIds: string[] }
+    /** A line of the Feed, which only the Feed keeps. */
+    | DesktopLineEntry
+    /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
+    | { kind: 'gap' };
 
 /** A conversation with what the page drew, oldest first, within 2 MB: `dropped` counts the oldest entries let go. */
 export interface DesktopConversationRecord extends DesktopConversation {
@@ -144,6 +195,13 @@ export type DesktopChatEvent =
      * is about once its first turn ended well, which may come after that turn's `done`.
      */
     | { kind: 'renamed'; title: string }
+    /**
+     * The Feed took a line: at its end, or, when `folded`, in place of its last line, which was of the same kind and
+     * campaign. A line never starts a turn.
+     */
+    | { kind: 'line'; line: DesktopLineEntry; folded: boolean }
+    /** The Feed's catch-up read back fewer lines than were written while the window was closed; newer ones follow. */
+    | { kind: 'gap' }
     /** The turn is over: `error` is null when it ended well, else the host's own words for why it did not. */
     | { kind: 'done'; error: string | null };
 
@@ -362,6 +420,14 @@ export interface JasonDesktop {
          * nothing that shows.
          */
         rename(chatId: string, title: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * The Feed, made on the first ask, with the journal lines the page hands it: each line of a kind the Feed takes,
+         * about a campaign, with every id in its shape, and not taken before, goes at its end and is said as a `line`
+         * event; any other is left out. No turn starts. An ask with `catchUp`, which the page makes at each load and when
+         * its stream started afresh, also reads back the lines written since a few seconds before the Feed's newest. At
+         * most 200 lines a call; more is refused.
+         */
+        feed(lines: DesktopFeedLine[], options?: { catchUp: true }): Promise<DesktopConversation | DesktopRefusal>;
     };
     setup: {
         status(): Promise<DesktopSetup>;
