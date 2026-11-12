@@ -2,7 +2,7 @@
 name: approvals-and-questions
 description: Use when a person asks what Jason is waiting for them to decide, or arrives because a notification said approvals or questions are waiting, or tells you to decide something Jason has parked - list the approvals and the questions waiting on a person, present each in their own words, and record their decision as theirs.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Approvals and questions
@@ -15,8 +15,8 @@ are confident, not when they told you earlier to handle things, not when work is
 runtime refuses a decision that does not name a person, and that refusal is the floor of this rule
 rather than the whole of it.
 
-**Status: verified** against Claude Code 2.1.318. It covers the two waiting things this
-build publishes and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do. It covers the two waiting things this build publishes and nothing else.
 
 ## The two things that wait, and how they differ
 
@@ -166,6 +166,10 @@ jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_
   set and starts its count over; taking one back leaves the drafts already let go as they were.
 - **`--actor human:<their id>` is required**, as with the three verbs above. A role or an attempt is refused with
   `approval_not_human`, and no name with `actor_required`.
+- **A search is approved and allowed in one act**: `jason approval approve <apr_…> --allow <people> --actor human:<their id>`
+  approves it and lets the campaign's later searches under its audience ask for up to that many more people without a
+  question, only on the person's word for the number; `list-standing` shows how many they have asked for. The section
+  below says when to offer it.
 
 **What it releases is a draft nobody has been asked about, and nothing else.** A reply parked before the standing
 approval was set still waits for the person, however long ago, and setting one releases none of it; it stays theirs
@@ -181,6 +185,45 @@ in the campaign's chronicle. `list-standing` also says how many each one let go 
 jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status approved
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied
 ```
+
+### A search, and the allowance for the ones after it
+
+A search spends the provider's money, so the first search under an audience, its probe, always waits for the person.
+Present it as any approval, and add what the preview does not carry: the planner's proposal, under `proposal` in the
+search's context, which says how many people the definition matched, why this many, what it costs, the threshold and
+the allowance it suggests. Read it from the work item the approval names, and give it as the planner wrote it:
+
+```
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+The price is the provider's: give the planner's figure as the planner's, and where there is none, say that the
+provider charges per person found and Jason does not know its price. The threshold the proposal names is the campaign's
+own field, set only on the person's word, under their name, and once the probe's people have landed: set while nobody
+is on the campaign yet, it says at once that the reserve is low, and wakes the manager for nothing.
+
+```
+jason campaign update cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --audience-threshold 5 --actor human:ada --reason "a fifth of the probe, as proposed"
+```
+
+**The allowance comes once the audience works.** After the probe, the manager tops the audience up when its people run
+low, and a top-up the allowance does not cover waits for the person as the probe did, its preview's
+`standing_approval` saying why: `no_standing_approval`, `another_audience`, `expired`, `over_per_search` or
+`ceiling_reached`. That is the moment to offer the allowance, never before the audience has been judged: as the planner
+suggests it, top-ups the size of the probe with a ceiling of ten probes' worth of people, and the numbers are the
+person's to change. They
+give it by approving with `--allow`, or set it on its own for an audience they name by its number:
+
+```
+jason approval approve apr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --allow 250 --allow-per-search 25 --actor human:ada --reason "the audience works; top-ups of 25 up to 250"
+jason approval set-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation audience.search --audience 2 --max-people 250 --max-per-search 25 --actor human:ada --reason "top-ups of 25 up to 250"
+jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation audience.search --actor human:ada --reason "no more people for now"
+```
+
+`--allow` counts people beyond the search being approved. A campaign holds one allowance: a new one replaces the old,
+and approving a search under another audience without `--allow`, a new audience's probe among them, takes the old one
+back in the same act. Say so before they approve such a search, because it stops the top-ups of the audience the
+campaign is working now. No act but the person's moves the allowance: no role, no verdict and no probe that waits.
 
 ## What an approval covers, and what changes it
 

@@ -70,6 +70,106 @@ internal sealed class CampaignWorld
         return await WriteAsync(scope.ServiceProvider.GetRequiredService<JasonDbContext>(), ct);
     }
 
+    /// <summary>Spring's audience <paramref name="number"/>, written into a running runtime's database.</summary>
+    public Task<Audience> AudienceAsync(RuntimeApiFixture api, int number, CancellationToken ct, params string[] landed) =>
+        AudienceAsync(api, number, ct, [Finished(landed)]);
+
+    /// <summary>Spring's audience <paramref name="number"/> and its searches, written into a running runtime's database.</summary>
+    public async Task<Audience> AudienceAsync(RuntimeApiFixture api, int number, CancellationToken ct, IReadOnlyList<SearchRun> searches)
+    {
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        return await AudienceAsync(scope.ServiceProvider.GetRequiredService<JasonDbContext>(), number, ct, searches);
+    }
+
+    /// <summary>Spring's audience <paramref name="number"/>, made by one search that finished having landed these of Spring's people.</summary>
+    public Task<Audience> AudienceAsync(JasonDbContext db, int number, CancellationToken ct, params string[] landed) =>
+        AudienceAsync(db, number, ct, [Finished(landed)]);
+
+    /// <summary>
+    /// Spring's audience <paramref name="number"/>, made before the week began, and its searches in the order given, an hour
+    /// apart: the audience's row, each search's work item and row, and one landing row per membership a search made, as a
+    /// search's landing writes them. Its definition names one industry of its own, so no two audiences share one.
+    /// </summary>
+    public async Task<Audience> AudienceAsync(JasonDbContext db, int number, CancellationToken ct, IReadOnlyList<SearchRun> searches)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(searches);
+        var audience = new Audience
+        {
+            PublicId = _id("aud"),
+            CampaignId = Spring.Id,
+            Number = number,
+            Definition = new JsonObject { ["industries"] = new JsonArray("Industry " + number) },
+            DefinitionHash = "sha256:" + number.ToString("D64", System.Globalization.CultureInfo.InvariantCulture),
+            CreatedAt = Added,
+        };
+        db.Audiences.Add(audience);
+        await db.SaveChangesAsync(ct);
+
+        foreach (var (run, index) in searches.Select((run, index) => (run, index)))
+        {
+            var began = Added.AddHours(index + 1);
+            var search = new WorkItem
+            {
+                PublicId = _id("wi"),
+                CampaignId = Spring.Id,
+                Kind = WorkItemKind.ProviderOp,
+                Operation = "audience.search",
+                CreatedByType = ActorType.Role,
+                CreatedById = "manager",
+                Status = WorkItemStatus.Succeeded,
+                CreatedAt = began,
+                UpdatedAt = began,
+                FinishedAt = began,
+            };
+            db.WorkItems.Add(search);
+            await db.SaveChangesAsync(ct);
+
+            var people = run.Landed.Select(name => _people[name].Id).ToList();
+            var memberships = await db.CampaignContacts.AsNoTracking()
+                .Where(membership => membership.CampaignId == Spring.Id && people.Contains(membership.ContactId))
+                .Select(membership => membership.Id)
+                .ToListAsync(ct);
+            db.AudienceSearches.Add(new AudienceSearch
+            {
+                CampaignId = Spring.Id,
+                AudienceId = audience.Id,
+                SearchWorkItemId = search.Id,
+                PluginId = "reply",
+                Reference = "srch-" + search.PublicId,
+                State = run.State,
+                Asked = run.Asked,
+                Found = run.Found,
+                Landed = memberships.Count,
+                QuietSince = began,
+                ReadAt = began.AddMinutes(30),
+                CreatedAt = began,
+                EndedAs = run.EndedAs,
+                EndedAt = run.EndedAs is null ? null : began.AddMinutes(30),
+            });
+            db.AudienceLandings.AddRange(memberships.Select(membership => new AudienceLanding
+            {
+                CampaignContactId = membership,
+                AudienceId = audience.Id,
+                SearchWorkItemId = search.Id,
+                ReadWorkItemId = search.Id,
+                LandedAt = began,
+            }));
+            await db.SaveChangesAsync(ct);
+        }
+
+        return audience;
+    }
+
+    /// <summary>A search that finished, found what it was asked for, and landed these.</summary>
+    public static SearchRun Finished(params string[] landed) => new(landed.Length, landed.Length, "finished", "finished", landed);
+
+    /// <summary>
+    /// One search under an audience as its row holds it — what it was asked for, what the provider found and last said,
+    /// how it ended — and the people of Spring it landed.
+    /// </summary>
+    public sealed record SearchRun(int Asked, int? Found, string? State, string? EndedAs, params string[] Landed);
+
     /// <summary>
     /// A research item about the person that succeeded in each campaign named, at ten in the morning of the day given
     /// for it: one more person worked on in the week, in each of those campaigns.

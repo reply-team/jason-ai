@@ -15,6 +15,29 @@ public partial class RoleSkillTests
         Assert.Contains("what a noticed reply or provider-event line asks of it and whose thread it is", line, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The runtime counts the reserve and follows each search, and starts none: whether to top an audience up is the
+    /// manager's, and only an audience the campaign holds, under the person's allowance or waiting for them. Forming,
+    /// judging and allowing are other hands', and a search the provider holds is the person's to free.
+    /// </summary>
+    [Fact]
+    public void The_manager_tops_up_an_audience_the_campaign_holds_and_spends_nothing_a_person_has_not_allowed()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("The runtime counts the reserve and follows each search, and never starts one itself: whether the campaign needs more people, and from which audience, is yours.", skill, StringComparison.Ordinal);
+        Assert.Contains("You run the campaign's pulse and nothing else: the planner forms an audience, the analyst judges it, and no other role is made for this; the researcher owns no audience.", skill, StringComparison.Ordinal);
+
+        // A top-up is the one search the manager makes: under an audience the campaign already holds, let go by the
+        // person's allowance or parked for them. A manager that wrote a new definition would spend on an audience nobody
+        // formed or judged.
+        Assert.Contains("**top up an audience** the campaign already holds, by its number: a search the person's allowance lets go, or one that parks for them, which spends nothing until they decide;", skill, StringComparison.Ordinal);
+
+        // A held search spends nothing until a person acts at the provider; another search would only wait behind it.
+        Assert.Contains("Create no search of the campaign meanwhile: it runs one search at a time, so another would only wait behind this one.", skill, StringComparison.Ordinal);
+        Assert.Contains("Anything that changes who the campaign reaches, what it says or how much it spends, beyond what campaign context already permits, is a person's decision", skill, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_manager_is_told_which_items_run_without_anybody_and_proposes_the_rest()
     {

@@ -25,7 +25,7 @@
         {
           "field": "operations",
           "code": "invalid",
-          "message": "operations must name one or both of conversation.reply and message.send."
+          "message": "operations must name one or both of conversation.reply and message.send, or audience.search alone for the allowance."
         }
       ]
     }

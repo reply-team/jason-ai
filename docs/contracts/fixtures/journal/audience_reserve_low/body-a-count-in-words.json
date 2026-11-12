@@ -1,0 +1,11 @@
+{
+  "kind": "audience_reserve_low",
+  "version": 1,
+  "case": "the count is a number, never words",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": { "untouched": "three", "threshold": 5 }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/untouched", "reason": "type" }] }
+}

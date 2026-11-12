@@ -51,6 +51,8 @@ public sealed record RemoveContactsResult(string CampaignId, RemoveContactsSumma
 /// people one count of <c>campaign.summary</c> counts, and <c>activity</c>, with its <c>since</c> and <c>until</c>, the
 /// people one count of <c>campaign.activity</c> counts, removed ones included, the latest to whom it happened first; one
 /// of the two at most, and neither takes a <c>state</c>. <c>query</c> finds people as <c>contact.list</c> does.
+/// <c>audience</c>, the number of one of the campaign's audiences, lists only the people a search landed under it, with or
+/// without a count; an audience is one campaign's, so the request then names that campaign alone.
 /// </summary>
 public sealed record ListContactsRequest(
     string? CampaignId,
@@ -62,13 +64,14 @@ public sealed record ListContactsRequest(
     DateTimeOffset? Since = null,
     DateTimeOffset? Until = null,
     string? Query = null,
-    IReadOnlyList<string>? CampaignIds = null);
+    IReadOnlyList<string>? CampaignIds = null,
+    int? Audience = null);
 
 /// <summary>
 /// A person listed once, with the whole contact so an agent listing a campaign avoids a get per member. <c>counted</c>
 /// names each campaign asked that lists them, with what it counts them for when a filter asked: the latest first under an
-/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c> and <c>why</c> are
-/// the first of those memberships.
+/// activity count, otherwise in the campaigns' order. <c>state</c>, <c>added_at</c>, <c>updated_at</c>, <c>why</c> and
+/// <c>source</c> are the first of those memberships.
 /// </summary>
 public sealed record MembershipItemDto(
     ContactDto Contact,
@@ -76,7 +79,15 @@ public sealed record MembershipItemDto(
     DateTimeOffset AddedAt,
     DateTimeOffset UpdatedAt,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipWhy? Why = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CountedIn>? Counted = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CountedIn>? Counted = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MembershipSource? Source = null);
+
+/// <summary>
+/// Where a member came from, when a search brought them: the campaign's audience it ran under (<c>audience</c>, its id and
+/// number, as every answer names an audience), the search's work item (<c>search</c>) and when the person landed
+/// (<c>landed_at</c>). Absent for a member added any other way.
+/// </summary>
+public sealed record MembershipSource(AudienceRef Audience, string Search, DateTimeOffset LandedAt);
 
 /// <summary>A campaign that lists the person, and what it counts them for when a filter asked.</summary>
 public sealed record CountedIn(

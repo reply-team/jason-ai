@@ -1,0 +1,30 @@
+{
+  "operation": "audience.search",
+  "version": 1,
+  "case": "no credits to start a search, in an answer the plugin cannot read as a block",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "insufficient_credits",
+      "message": "Not enough credits to start a search.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "class": "permanent",
+    "retriable": false
+  }
+}

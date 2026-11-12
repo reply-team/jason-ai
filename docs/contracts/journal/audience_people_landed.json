@@ -1,0 +1,52 @@
+{
+  "kind": "audience_people_landed",
+  "version": 1,
+  "since": "0.36.0",
+  "summary": "One page of a search's people landed in its campaign: what the page held, whom it made members, and whom it made contacts of the directory; one line per page that carried anybody.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "contact": { "at": "/new/contact_ids", "presence": "sometimes", "each": true },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^wi_", "description": "The work item whose answer carried the page: a read of the search, or the search itself where it finished inside its call. One line per page." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["audience", "plugin", "state", "people", "landed", "created", "already_member", "skipped", "contact_ids", "created_contact_ids"],
+        "properties": {
+          "audience": { "type": "string", "pattern": "^aud_", "description": "The audience the search ran under." },
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin that answered the page, whose identifiers the people were pinned by." },
+          "state": {
+            "type": "string",
+            "enum": ["in_progress", "finished", "exhausted", "paused", "paused_for_credits", "paused_for_limit"],
+            "description": "What the provider said of the search with the page."
+          },
+          "people": { "type": "integer", "minimum": 1, "description": "The people the page held, each once." },
+          "landed": { "type": "integer", "minimum": 0, "description": "Those the page made members of the campaign." },
+          "created": { "type": "integer", "minimum": 0, "description": "Of those landed, the people the page also made contacts of the directory." },
+          "already_member": { "type": "integer", "minimum": 0, "description": "People the campaign already held, who stay as they were." },
+          "skipped": { "type": "integer", "minimum": 0, "description": "People left out: removed from this campaign, or archived in the directory." },
+          "contact_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "The people landed, in the page's order; empty when nobody was."
+          },
+          "created_contact_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^cnt_" },
+            "description": "Those of the people landed that the page also made contacts of the directory."
+          }
+        }
+      }
+    }
+  }
+}

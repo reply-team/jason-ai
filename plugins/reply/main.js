@@ -24,6 +24,14 @@ import { socialInvitationSend } from "./modules/invite.js";
 import { messageSend } from "./modules/message.js";
 import { messageCancel, messageStatus } from "./modules/directsend.js";
 import { eventsRead } from "./modules/events.js";
+import {
+  audienceAvailability,
+  audienceFilterValues,
+  audiencePreview,
+  audienceSearch,
+  audienceSearchCancel,
+  audienceSearchStatus,
+} from "./modules/audience.js";
 
 export function invoke(operation, input, context) {
   switch (operation) {
@@ -98,6 +106,24 @@ export function invoke(operation, input, context) {
 
     case "message.cancel":
       return messageCancel(input, context);
+
+    case "audience.preview":
+      return audiencePreview(input, context);
+
+    case "audience.search":
+      return audienceSearch(input, context);
+
+    case "audience.search_status":
+      return audienceSearchStatus(input, context);
+
+    case "audience.search_cancel":
+      return audienceSearchCancel(input, context);
+
+    case "audience.filter_values":
+      return audienceFilterValues(input, context);
+
+    case "audience.availability":
+      return audienceAvailability(input, context);
 
     // Not an operation: the runtime's own reader asks for the account's events, under the events contract the manifest
     // declares.

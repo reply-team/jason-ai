@@ -1067,7 +1067,7 @@ public partial class PageClaimsTests
             (@"(\d+) API fixtures", [Files(Path.Combine("docs", "api", "fixtures"), "*").Length]),
             (@"(\d+) C# test files", [Files(Path.Combine("dotnet", "tests"), "*.cs").Length]),
             (@"(\d+) business skills, (\d+) runtime skills and (\d+) role skills", [Skills("skills", "business"), Skills("skills", "runtime"), Skills("skills", "runtime", "roles")]),
-            (@"(\d+) of the (\d+) skills are `verified`", [Status("verified"), skills.Length]),
+            (@"(\d+) of the (\d+) skills (?:is|are) `verified`", [Status("verified"), skills.Length]),
             (@"the other (\d+) are still `draft`", [Status("draft")]),
             (@"(\d+) SDR operations", [operations]),
             (@"(\d+) SDR operations in (\d+) families", [operations, families.Length]),

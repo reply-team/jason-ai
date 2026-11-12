@@ -77,9 +77,10 @@ public class WorkItemQueriesTests
     /// <summary>
     /// The one predicate has three readers — the listing's SQL, its compiled twin, and the claimer's own query — and all
     /// three agree in every campaign state and for every kind of work: a paused campaign holds its work, except a
-    /// provider operation whose contract says it runs there; a draft or an archived one holds everything. Two
-    /// operations say so, which is what makes the claim's set a set; an add is `control` and `auto` like them, and
-    /// still waits.
+    /// provider operation whose contract says it runs there; an archived one holds everything but a search's stop, the one
+    /// operation whose contract says it runs there too; a draft holds everything. Several operations say they run in a
+    /// paused campaign, which is what makes the claim's set a set; an add is `control` and `auto` like them, and still
+    /// waits.
     /// </summary>
     [Fact]
     [Critical(Family.W6, "eligibility in SQL and in memory agree")]
@@ -94,6 +95,7 @@ public class WorkItemQueriesTests
             {
                 ("a pause", campaign => WorkItemFactory.NewProviderOp(campaign, "campaign.pause", Noon)),
                 ("a record of a stop", campaign => WorkItemFactory.NewProviderOp(campaign, "optout.record", Noon)),
+                ("a search's stop", campaign => WorkItemFactory.NewProviderOp(campaign, "audience.search_cancel", Noon)),
                 ("an add", campaign => WorkItemFactory.NewProviderOp(campaign, "list_membership.add", Noon)),
                 ("an enrollment", campaign => WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon)),
                 ("a role's work", campaign => WorkItemFactory.NewAiRole(campaign, now: Noon)),
@@ -105,7 +107,9 @@ public class WorkItemQueriesTests
                 var item = make(campaign);
                 db.Campaigns.Add(campaign);
                 db.WorkItems.Add(item);
-                items.Add((item, status == CampaignStatus.Active || (status == CampaignStatus.Paused && name is "a pause" or "a record of a stop")));
+                items.Add((item, status == CampaignStatus.Active
+                    || (status == CampaignStatus.Paused && name is "a pause" or "a record of a stop" or "a search's stop")
+                    || (status == CampaignStatus.Archived && name is "a search's stop")));
             }
         }
 

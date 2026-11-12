@@ -122,7 +122,7 @@ so in one line on stderr, naming the variable and never its value.
 - **Timestamps are ISO-8601 in UTC**, as `2026-10-26T09:00:00.000Z`.
 - **Ids are prefixed ULIDs**, and the prefix says what an id names. Among them: `cmp_` a campaign, `cnt_` a contact,
   `wi_` a work item, `att_` an attempt, `apr_` an approval, `dec_` a question, `blk_` a block, `jrn_` a journal entry,
-  `rpt_` a report, `prj_` a project, `rol_` a role, `prf_` an execution profile, `sup_` a do-not-contact entry, `uit_` a
+  `rpt_` a report, `prj_` a project, `aud_` a campaign's audience, `rol_` a role, `prf_` an execution profile, `sup_` a do-not-contact entry, `uit_` a
   UI token, `evs_` an event source, `evb_` a backfill, `sbr_` a subscription chain's record, `rt_` a run of the runtime,
   and `rts_` and `snp_` the routing and plugin snapshots a route and an approval name.
 - **Success is `200`** with the answer as it is, in no envelope.
@@ -175,7 +175,9 @@ runtime's own descriptions say it; an operation with only its name here does wha
 They are the runtime's own operations, on Jason's own records. The operations a plugin performs at a provider are
 another vocabulary, one document each under `docs/contracts/` ([docs/contracts/](contracts/README.md)), and run as
 `provider_op` work items. Four names are in both — `campaign.create`, `campaign.get`, `campaign.pause` and
-`contact.update` — and here each of them means Jason's own record.
+`contact.update` — and here each of them means Jason's own record. Three more are in both and mean the same work in each:
+`audience.preview`, `audience.filter_values` and `audience.availability` are the provider's reads, asked here for a
+campaign when a person or an agent asks, outside any work item.
 `docs/api/fixtures/` holds requests and answers the runtime's own tests recorded for many of them, one folder per
 operation ([docs/api/fixtures/](api/fixtures/)).
 
@@ -205,12 +207,23 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.add_contacts`: the people Jason's campaign is about; enrolling them at the provider is a `provider_op`
   work item.
 - `campaign.remove_contacts`
-- `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once.
+- `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
+  a member a search brought in carries its `source`: the audience, as `{id, number}` like every answer that names one,
+  the search and when they landed.
 - `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole;
   `exclude_archived_contacts` leaves out the people whose own record is archived.
 - `campaign.activity`: for the same campaigns, what happened to their people between `since`, included, and `until`,
   not included, whole.
 - `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time.
+
+  The four take `audience`, the number of one of the campaign's audiences, and then read only the people a search landed
+  under it, each count by its own definition, in the one campaign they name; an audience nobody landed under answers
+  zeros, and a number the campaign holds none under is `audience_unknown`.
+- `campaign.audience`: where one campaign's audience stands, read from Jason's own records: how many members nobody has
+  started on against the reserve's threshold, the allowance and how much of it is used, and a page of the campaign's
+  audiences, the newest first, each with its definition, how many people its searches landed, how many searches the
+  provider took under it, and the latest of them (`search_limit`, 10 when absent), with what each asked for, found and
+  landed and how it ended.
 
 ### `project`
 
@@ -244,6 +257,21 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `contact.threads`: a person's threads, read from the provider when a person asks, outside any work item.
 - `contact.thread`: one thread, read the same way.
 
+### `audience`
+
+A campaign's reads at the provider, answered by the plugin the campaign's route for each operation names, when a person
+or an agent asks, outside any work item: nothing is recorded, journaled or pinned
+([docs/routing.md](routing.md), "A read on request").
+
+- `audience.preview`: how many people an audience holds, and a sample of them without contact details. It takes the
+  audience's `definition`, held first to the schema the routed plugin declares, or an audience the campaign holds by its
+  number, previewed by the definition it was made from, and answers `count`, `companies` and `sample`. It makes no
+  audience.
+- `audience.filter_values`: the values one of the provider's filters takes, starting with `query`, in the provider's
+  order.
+- `audience.availability`: whether the campaign's account may search now, why not, and its credits and headroom where
+  the provider says.
+
 ### `workitem`
 
 - `workitem.create`: takes a caller's `idempotency_key`.
@@ -267,13 +295,19 @@ that is not that attempt does not call them.
 
 - `approval.list`: what is waiting; pending by default.
 - `approval.get`
-- `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved.
+- `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved. An
+  approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
+  approving a search under another audience than the allowance names takes the allowance back in the same act.
 - `approval.reject`: the work ends, carrying the decision and the person who made it.
 - `approval.set_standing`: a person's word in advance for one campaign and one category of verdict: a drafted reply
-  that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names.
-- `approval.unset_standing`: the person takes it back; what it already let go stays approved.
-- `approval.list_standing`: a campaign's standing approvals, one per category, with how many drafts each let go and
-  whether it is still in force. [`docs/work-execution.md`](work-execution.md), "Standing approvals", is the contract.
+  that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names. With the
+  search operation alone as its `operations`, the campaign's allowance: the searches under one of its audiences go
+  without being asked until the people they ask for reach `max_people`.
+- `approval.unset_standing`: the person takes it back, a category's by its `category` and the allowance by its
+  `operation`; what it already let go stays approved.
+- `approval.list_standing`: a campaign's standing approvals, one per category, and its allowance, with how much each let
+  go — for the allowance, the searches and the people they asked for — and whether it is still in force.
+  [`docs/work-execution.md`](work-execution.md), "Standing approvals", is the contract.
 
 ### `block`
 
@@ -367,6 +401,17 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 - `route.set`: sends one campaign's work, or one of its operations, to a plugin.
 - `route.unset`: takes one campaign route away.
 
+  Either is refused `409` with the code `route_orphans_search`, and changes nothing, when it would take the last of the
+  search's campaign's routes and the global ones naming the plugin and account a search still followed ran under away
+  from it: its reads and its stop would have nowhere to go. Each detail names one such search and says what to do: stop the search, or let it end, then change the route
+  ([docs/routing.md](routing.md), §6).
+
+### `operation`
+
+- `operation.describe`: what a canonical operation takes for a campaign — its argument schema and, for one that carries
+  an audience's definition, the schema the plugin the campaign's route names declares for it, with that schema's keys.
+  The route is resolved now and held to the route's half of the claim; nothing is invoked.
+
 ### `suppression`
 
 - `suppression.add`: adds to the do-not-contact list, global across campaigns and scoped to one channel; an existing
@@ -397,7 +442,8 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 ## What a program can read
 
 - **Campaigns**: `campaign.list` and `campaign.get`; `campaign.summary` for counts, `campaign.activity` and
-  `campaign.activity_by_period` for what happened over a span; `campaign.list_contacts` for who is in one.
+  `campaign.activity_by_period` for what happened over a span; `campaign.list_contacts` for who is in one; each of the
+  four for one audience's people alone with `audience`; `campaign.audience` for where the campaign's audience stands.
 - **People**: `contact.list` and `contact.get`, with a contact's channels and custom fields; `contact.threads` and
   `contact.thread` for their conversations, read from the provider when asked and kept nowhere.
 - **Work**: `workitem.list`, `workitem.get` and `workitem.count`.
@@ -479,7 +525,7 @@ interrupted.
   performs, its arguments in the context's `input` and checked against the operation's contract
   ([docs/contracts/](contracts/README.md)). Work that reaches a real person waits for a person's approval, however it
   was created, unless a person's standing approval covers it: a drafted reply that names, under `reply_verdict`, the
-  verdict it answers.
+  verdict it answers. A search, which spends, waits the same way unless the campaign's allowance covers it.
 - **A verdict on a reply**, through `reply.record`: what kind of reply it is, how sure the role is, what it decided to
   do and which goal that steers to, kept as the line `reply_classified`, which `journal.append` refuses to anyone else.
 - **A nudge**: `events.signal` asks the runtime to read one account's events sooner, for a program that receives a

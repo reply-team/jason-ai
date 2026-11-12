@@ -30,7 +30,7 @@ public class ProviderOpBudgetTests
         var failure = await Assert.ThrowsAsync<InvalidSettingsException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         // An operator who raised a timeout has to be told which contract forces the number, not only the number.
-        Assert.Contains("campaign.enroll", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("audience.preview", failure.Message, StringComparison.Ordinal);
         Assert.Contains("Dispatcher:ProviderOp:TimeoutSeconds", failure.Message, StringComparison.Ordinal);
         Assert.Contains("305", failure.Message, StringComparison.Ordinal);
     }
@@ -71,7 +71,7 @@ public class ProviderOpBudgetTests
 
         var failure = Assert.Single(result.Failures!);
         Assert.Equal(
-            "Dispatcher:ProviderOp:TimeoutSeconds must be at least 305 to hold 'campaign.enroll', which declares 300000 ms, "
+            "Dispatcher:ProviderOp:TimeoutSeconds must be at least 305 to hold 'audience.preview', which declares 300000 ms, "
                 + "and the 5000 ms a child is given to stop; got 120.",
             failure);
     }

@@ -44,6 +44,13 @@ public static class OperationCatalog
         [.. All.Where(contract => contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs).Select(contract => contract.Id)];
 
     /// <summary>
+    /// The operations whose work is created, kept and claimed after its campaign is archived, from each document's
+    /// <c>dispatch.in_archived_campaign</c>: a stop whose not running is the harm. Read once, as the documents are.
+    /// </summary>
+    public static IReadOnlyList<string> RunsInArchivedCampaign { get; } =
+        [.. All.Where(contract => contract.Dispatch.InArchivedCampaign == InArchivedCampaign.Runs).Select(contract => contract.Id)];
+
+    /// <summary>
     /// The operations whose work a provider block holds, from each document's <c>dispatch.under_provider_block</c>: every
     /// one that declares <c>waits</c>. Every operation whose <c>reach</c> is <c>act</c> declares it, because a block is
     /// the provider refusing to let work reach a person; a control declares it where its one run must not end on that

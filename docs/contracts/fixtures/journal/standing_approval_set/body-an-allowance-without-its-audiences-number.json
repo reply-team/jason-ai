@@ -1,0 +1,19 @@
+{
+  "kind": "standing_approval_set",
+  "version": 1,
+  "case": "an allowance names its audience by id and by number",
+  "body": {
+    "key": "audience.search",
+    "old": null,
+    "new": {
+      "category": null,
+      "operations": ["audience.search"],
+      "expires_at": null,
+      "max_releases": null,
+      "audience": { "id": "aud_01JC0000000000000000000002" },
+      "max_people": 500,
+      "max_per_search": null
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }, { "pointer": "/new", "reason": "any_of" }] }
+}

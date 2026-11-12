@@ -76,6 +76,7 @@ Cancelling a cancelled send changes nothing, and a send that went meanwhile answ
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `not_applicable`, provider contact `not_used` |
 | in a paused campaign | `runs` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.14.8
+version: 0.15.0
 kind: provider
 name: Reply
 description: >-
@@ -12,7 +12,7 @@ contracts:
   operations: [1]
   # The runtime's own reader asks the account's events of this package, from Reply's change feed (`reply inbox changes`).
   events: [1]
-operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, schedule.list, social_invitation.send, message.send, message.status, message.cancel]
+operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete, sender.list, schedule.list, social_invitation.send, message.send, message.status, message.cancel, audience.preview, audience.search, audience.search_status, audience.search_cancel, audience.filter_values, audience.availability]
 entry:
   module: main.js
   function: invoke
@@ -36,8 +36,11 @@ capabilities:
         # client a call came through, which the CLI reads from `REPLY_CLIENT` from 0.17.2, and the reference a LinkedIn
         # send Reply holds for later is read and cancelled by, `linkedin-scheduled-<n>`, a code of its own for a cancel
         # of a send Reply is sending, a cancel Reply could not confirm and a sending schedule that cannot time a send,
-        # and the moment Reply expects to send one waiting for its schedule, which it gives from 0.18.0. This package makes no raw call. A reload runs the version command and refuses an older one.
-        min_version: 0.18.0
+        # and the moment Reply expects to send one waiting for its schedule, which it gives from 0.18.0 — and Live Data and
+        # the contact lists a search fills, `reply live-data preview|start|get|list|delete|filter-values` and `reply
+        # contact-list create|get|delete|contacts`, from 0.20.0. This package makes no raw call. A reload runs the version
+        # command and refuses an older one.
+        min_version: 0.20.0
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak
@@ -98,3 +101,192 @@ binding:
         first name derived from their last name or, failing that, from their address's text before the @. Absent
         means true. False refuses such a person instead, and they are not created at Reply. An opt-out derives
         whatever this says: it greets nobody, and refusing it would leave the person unflagged.
+# The definition of an audience, as Reply's Live Data search takes its filters: Reply's own names and shapes, passed to
+# `reply live-data start` and `reply live-data preview` exactly as written, with Reply's own bounds — at most 25 values a
+# filter, each at most 200 characters, and at least one filter that filters — so a definition Reply would refuse for them
+# is refused at the claim, before Reply is asked. The rules of Reply's the dialect cannot say are Reply's to refuse,
+# `definition_rejected`: account lists included beside a company filter, a minimum above its maximum — revenue, or a
+# growth range — and a value of nothing but spaces. `keys`
+# says which side of a person each filter is about and which of Reply's lists of values (`reply live-data filter-values`)
+# it pairs with: those lists are suggestions, and Reply checks no value against them.
+audience_definition:
+  schema:
+    type: object
+    additionalProperties: false
+    anyOf:
+      - { required: [accountListIds] }
+      - { required: [industries] }
+      - { required: [companyLocations] }
+      - { required: [companySizes] }
+      - { required: [headcountGrowth] }
+      - { required: [departmentHeadcountGrowth] }
+      - { required: [minRevenue] }
+      - { required: [maxRevenue] }
+      - { required: [accountKeywords] }
+      - { required: [isHiringOnLinkedIn] }
+      - { required: [contactLocations] }
+      - { required: [jobTitles] }
+      - { required: [departments] }
+      - { required: [seniorities] }
+      - { required: [contactKeywords] }
+    properties:
+      accountListIds:
+        description: >-
+          Saved account lists at Reply, by their id, each to include or exclude. An included list is the set of
+          companies searched, so it cannot stand beside a company filter: Reply refuses that combination. Contact
+          filters still apply.
+        type: array
+        minItems: 1
+        maxItems: 25
+        items:
+          type: object
+          additionalProperties: false
+          required: [value, type]
+          properties:
+            value: { type: integer, minimum: 1, maximum: 2147483647 }
+            type: { enum: [include, exclude] }
+      industries:
+        description: >-
+          The industries the company is in, as Reply names them, each to include or exclude. Reply's suggestions are the
+          `industries` values; Reply also takes any other text.
+        type: array
+        minItems: 1
+        maxItems: 25
+        items: { $ref: "#/$defs/term" }
+      companyLocations:
+        description: >-
+          Where the company is — a country, a region or a city — each to include or exclude. Reply's suggestions are the
+          `locations` values, which mix countries, regions and cities.
+        type: array
+        minItems: 1
+        maxItems: 25
+        items: { $ref: "#/$defs/term" }
+      companySizes:
+        description: >-
+          The company's headcount, as Reply's bands: selfEmployed, ten (2-10), fifty (11-50), twoHundred (51-200),
+          fiveHundred (201-500), oneThousand (501-1000), fiveThousand (1001-5000), tenThousand (5001-10000),
+          overTenThousand (more), or none (no headcount known). A company in any band listed is included.
+        type: array
+        minItems: 1
+        maxItems: 25
+        uniqueItems: true
+        items: { enum: [none, selfEmployed, ten, fifty, twoHundred, fiveHundred, oneThousand, fiveThousand, tenThousand, overTenThousand] }
+      headcountGrowth:
+        description: >-
+          How much the company's whole headcount grew, in percent: `min`, `max` or both, whole numbers from 0, the bounds
+          included.
+        type: object
+        additionalProperties: false
+        anyOf: [{ required: [min] }, { required: [max] }]
+        properties:
+          min: { type: integer, minimum: 0 }
+          max: { type: integer, minimum: 0 }
+      departmentHeadcountGrowth:
+        description: >-
+          How much one department's headcount grew, in percent: the `department` by name, and `min`, `max` or both,
+          whole numbers from 0, the bounds included. Reply's suggestions for a department's name are the `departments`
+          values.
+        type: object
+        additionalProperties: false
+        required: [department]
+        anyOf: [{ required: [min] }, { required: [max] }]
+        properties:
+          department: { type: string, minLength: 1, maxLength: 200 }
+          min: { type: integer, minimum: 0 }
+          max: { type: integer, minimum: 0 }
+      minRevenue:
+        description: >-
+          The company's smallest annual revenue, as Reply's tiers in US dollars: zeroMillion, halfMillion, oneMillion,
+          twoAndHalfMillion, fiveMillion, tenMillion, twentyMillion, fiftyMillion, oneHundredMillion, fiveHundredMillion,
+          oneThousandMillion, overOneThousandMillion. Not above `maxRevenue`.
+        $ref: "#/$defs/revenue"
+      maxRevenue:
+        description: >-
+          The company's largest annual revenue, as Reply's tiers in US dollars, the same tiers as `minRevenue`. Not below
+          `minRevenue`.
+        $ref: "#/$defs/revenue"
+      accountKeywords:
+        description: >-
+          Words the company is described by, each to include or exclude, and whether a company needs any of them (`or`)
+          or all of them (`and`).
+        $ref: "#/$defs/keywords"
+      isHiringOnLinkedIn:
+        description: >-
+          Only companies hiring on LinkedIn now. Written true or left out: false filters nothing, and Reply reads it as
+          left out.
+        const: true
+      contactLocations:
+        description: >-
+          Where the person is — a country, a region or a city — each to include or exclude. Reply's suggestions are the
+          `locations` values, which mix countries, regions and cities.
+        type: array
+        minItems: 1
+        maxItems: 25
+        items: { $ref: "#/$defs/term" }
+      jobTitles:
+        description: >-
+          The person's job title, each to include or exclude, matched as Reply matches titles. Reply's suggestions are the
+          `job-titles` values; Reply also takes any other text.
+        type: array
+        minItems: 1
+        maxItems: 25
+        items: { $ref: "#/$defs/term" }
+      departments:
+        description: >-
+          The department the person works in, each to include or exclude. Reply's suggestions are the `departments`
+          values.
+        type: array
+        minItems: 1
+        maxItems: 25
+        items: { $ref: "#/$defs/term" }
+      seniorities:
+        description: >-
+          The person's seniority, each written as Reply's own word for it, plain text with no include or exclude: every
+          seniority listed is included. Reply's words are the `seniorities` values.
+        type: array
+        minItems: 1
+        maxItems: 25
+        uniqueItems: true
+        items: { type: string, minLength: 1, maxLength: 200 }
+      contactKeywords:
+        description: >-
+          Words the person's profile is described by, each to include or exclude, and whether a person needs any of them
+          (`or`) or all of them (`and`).
+        $ref: "#/$defs/keywords"
+    $defs:
+      term:
+        type: object
+        additionalProperties: false
+        required: [value, type]
+        properties:
+          value: { type: string, minLength: 1, maxLength: 200 }
+          type: { enum: [include, exclude] }
+      revenue:
+        enum: [zeroMillion, halfMillion, oneMillion, twoAndHalfMillion, fiveMillion, tenMillion, twentyMillion, fiftyMillion, oneHundredMillion, fiveHundredMillion, oneThousandMillion, overOneThousandMillion]
+      keywords:
+        type: object
+        additionalProperties: false
+        required: [values, type]
+        properties:
+          values:
+            type: array
+            minItems: 1
+            maxItems: 25
+            items: { $ref: "#/$defs/term" }
+          type: { enum: [or, and] }
+  keys:
+    accountListIds: { side: company }
+    industries: { side: company, typeahead: industries }
+    companyLocations: { side: company, typeahead: locations }
+    companySizes: { side: company }
+    headcountGrowth: { side: company }
+    departmentHeadcountGrowth: { side: company, typeahead: departments }
+    minRevenue: { side: company }
+    maxRevenue: { side: company }
+    accountKeywords: { side: company }
+    isHiringOnLinkedIn: { side: company }
+    contactLocations: { side: person, typeahead: locations }
+    jobTitles: { side: person, typeahead: job-titles }
+    departments: { side: person, typeahead: departments }
+    seniorities: { side: person, typeahead: seniorities }
+    contactKeywords: { side: person }

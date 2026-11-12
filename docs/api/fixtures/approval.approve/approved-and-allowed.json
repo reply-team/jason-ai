@@ -1,0 +1,58 @@
+{
+  "operation": "approval.approve",
+  "case": "approved-and-allowed",
+  "request": {
+    "approval_id": "apr_1",
+    "allow": {
+      "max_people": 300,
+      "max_per_search": 100
+    },
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "the logistics heads answer"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_1",
+    "work_item_id": "wi_1",
+    "campaign_id": "cmp_1",
+    "operation": "audience.search",
+    "operation_version": 1,
+    "status": "approved",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-1",
+    "subject": {
+      "operation": "audience.search",
+      "work_item": "wi_1"
+    },
+    "preview": {
+      "summary": "Search the provider for up to 100 people matching the definition below, for Jason's campaign Spring outreach: a metered search, charged per person found.",
+      "standing_approval": {
+        "standing": null,
+        "audience": null,
+        "expires_at": null,
+        "max_people": null,
+        "max_per_search": null,
+        "people": null,
+        "count": 100,
+        "why": "no_standing_approval"
+      }
+    },
+    "plugin_id": "stand-in-search",
+    "binding_identity": "sha256:account",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_one",
+    "routing_snapshot_id": "rts_one",
+    "requested_at": "2026-09-14T12:00:00.000Z",
+    "decided_at": "2026-09-14T12:00:00.000Z",
+    "decided_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "decision_reason": "the logistics heads answer",
+    "campaign_name": "Spring outreach",
+    "contact_name": null
+  }
+}

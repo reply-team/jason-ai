@@ -43,7 +43,7 @@ if (process.env.STUB_HANG === name) {
     process.stderr.write(answer.stderr ?? '');
     process.exitCode = answer.exit ?? 0;
 } else if (said === '--version') {
-    process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.19.0'}\n` :'10.9.2\n');
+    process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.20.0'}\n` :'10.9.2\n');
 } else if (name === 'reply' && said === 'auth status --json') {
     // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.
     const signedIn = process.env.STUB_REPLY_SIGNED_IN === 'yes';

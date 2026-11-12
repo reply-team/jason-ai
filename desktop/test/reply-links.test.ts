@@ -403,7 +403,8 @@ test('the LinkedIn acts need reply-cli 0.20.0, which reads a body from standard 
     assert.deepEqual(await setup.replyLinkedInConnect('x'), { refused: said.linkedInFloor });
     assert.deepEqual(await setup.replyLinkedInReconnect('77'), { refused: said.linkedInFloor });
     assert.deepEqual(await setup.replyLinkedInPendingLink('41'), { refused: said.linkedInFloor });
-    assert.equal((await setup.status()).reply.linkedinBelowFloor, said.linkedInFloor);
+    // Jason's Reply plugin needs 0.20.0 too, so below it the card offers the CLI's update and says nothing of LinkedIn.
+    assert.equal((await setup.status()).reply.linkedinBelowFloor, null);
     assert.deepEqual(apiCalls(old).filter((entry) => entry.args[1] !== '/v3/linkedin-accounts/pending'), [], 'no LinkedIn act was asked');
     // The mailbox act keeps the card's own floor.
     assert.equal(((await setup.replyMailboxLink('hosted')) as { link: string }).link, mailboxPage);

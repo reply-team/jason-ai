@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
@@ -107,6 +108,7 @@ internal sealed class DispatchHarness : IDisposable
         services.AddScoped<JournalWriter>();
         services.AddScoped<AttemptOutcomes>();
         services.AddScoped<SentFacts>();
+        services.AddScoped<SearchLanding>();
         services.AddScoped<ProviderOutcomeRecorder>();
 
         // What the claim reads before it hands out provider work. The registries are empty here — these tests
@@ -318,6 +320,22 @@ internal sealed class DispatchHarness : IDisposable
         using var scope = _provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
         return await scope.ServiceProvider.GetRequiredService<Responder>().RespondAsync(db, ct);
+    }
+
+    /// <summary>Runs one reserve count, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<int> ReserveAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<ReserveCounter>().CountAsync(db, ct);
+    }
+
+    /// <summary>Runs one poll of the searches, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<SearchPollReport> PollAsync(CancellationToken ct)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<SearchPoll>().PollAsync(db, ct);
     }
 
     /// <summary>Runs one inbound read step, in a scope of its own, the way the scan runs it.</summary>

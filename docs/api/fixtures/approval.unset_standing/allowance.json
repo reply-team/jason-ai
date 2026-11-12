@@ -1,0 +1,32 @@
+{
+  "operation": "approval.unset_standing",
+  "case": "allowance",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": "audience.search",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "enough of this audience"
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "category": null,
+    "operations": [
+      "audience.search"
+    ],
+    "audience": null,
+    "expires_at": null,
+    "max_releases": null,
+    "max_people": null,
+    "max_per_search": null,
+    "released": 0,
+    "people": null,
+    "in_force": false,
+    "set_by": null,
+    "set_at": null,
+    "line_id": null
+  }
+}

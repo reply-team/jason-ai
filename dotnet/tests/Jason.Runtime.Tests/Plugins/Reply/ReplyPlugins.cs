@@ -65,10 +65,11 @@ public static class ReplyPlugins
     /// tree: a resolution that escaped would not be a wrong answer, it would be a call to somebody's real
     /// account, so it fails here rather than in whatever the test went on to do.
     /// </summary>
-    public static async Task<RuntimeApiFixture> StartAsync(CancellationToken cancellationToken, Action<JasonPaths>? prepare = null)
+    public static async Task<RuntimeApiFixture> StartAsync(CancellationToken cancellationToken, Action<JasonPaths>? prepare = null, TimeProvider? clock = null)
     {
         var fixture = await RuntimeApiFixture.StartAsync(
             cancellationToken,
+            clock: clock,
             prepare: paths =>
             {
                 Install(paths);

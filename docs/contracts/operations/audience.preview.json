@@ -1,0 +1,188 @@
+{
+  "id": "audience.preview",
+  "version": 1,
+  "l1": { "name": "segment.preview", "contract_version": "2.0.0", "family": 3, "core": false },
+  "intent": "\"How big is this audience, and who is in it?\" — counted and sampled by the provider before anything is spent on it",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["B10", "D2"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "channel_arguments": null,
+  "channel_templates": null,
+  "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "runs" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.preview:1:input",
+    "title": "audience.preview input",
+    "description": "One look at an audience before anything is spent on it: a new definition, or an audience this campaign already searched under, counted and sampled by the provider.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "definition", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Exactly one of `audience` and `definition`: both at once are refused, and so is neither.",
+        "properties": {
+          "audience": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The number of an audience this campaign already searched under, to see how many it still holds before a top-up. The runtime composes its definition under `definition`."
+          },
+          "definition": { "$ref": "#/$defs/definition" },
+          "people_per_company": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many people from any one company, as a search of the audience would take them. Absent reads as 1."
+          }
+        },
+        "anyOf": [
+          { "required": ["audience"], "not": { "required": ["definition"] } },
+          { "required": ["definition"], "not": { "required": ["audience"] } }
+        ]
+      },
+      "definition": { "$ref": "#/$defs/definition" },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "definition": {
+        "type": "object",
+        "description": "The audience in the provider's own words: the filters its search takes, in the shape the routed plugin declares under `audience_definition` in its manifest. This document holds it to being an object; the plugin's declared schema is applied before the plugin is started, never when the request or the work item is written. The runtime composes it at the root from `args.definition`, or from the audience `args.audience` names, and a plugin reads it there and nowhere else."
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:audience.preview:1:output",
+    "title": "audience.preview result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["count", "companies", "sample"],
+    "properties": {
+      "count": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "description": "How many people the provider estimates the audience holds, `people_per_company` applied where it can apply it, or null where it gives no estimate. An estimate, never a promise of what a search finds."
+      },
+      "companies": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "description": "How many companies those people work at, by the provider's estimate, or null where it gives none."
+      },
+      "sample": {
+        "type": "array",
+        "maxItems": 25,
+        "items": { "$ref": "#/$defs/sample_person" },
+        "description": "A few of the people, in the provider's own order, as it shows them before anybody is revealed. Empty where it shows none."
+      }
+    },
+    "$defs": {
+      "sample_person": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_id", "first_name", "last_name", "title", "company", "location", "raw"],
+        "description": "One person of the sample, in the one shape every provider answers in, without any way to reach them: no channels.",
+        "properties": {
+          "external_id": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "The provider's identifier for the person, or null where its look gives none. Reported, never pinned."
+          },
+          "first_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's first name, or null where the provider shows none." },
+          "last_name": { "type": ["string", "null"], "maxLength": 200, "description": "The person's last name, or null where the provider shows none." },
+          "title": { "type": ["string", "null"], "maxLength": 200, "description": "The person's job title, as the provider holds it, or null where it shows none." },
+          "company": { "$ref": "#/$defs/company" },
+          "location": {
+            "type": ["string", "null"],
+            "maxLength": 500,
+            "description": "Where the person is, as the provider spells it — a city, a region, a country, or all three on one line — or null where it shows none."
+          },
+          "raw": {
+            "type": ["string", "null"],
+            "maxLength": 16384,
+            "description": "The provider's own record for the person as its look shows it, untranslated, written as JSON text and trimmed by the plugin to fit, or null where it gives none to keep. It carries no address, number or profile link. Jason reads none of it."
+          }
+        }
+      },
+      "company": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "domain", "size", "industry"],
+        "description": "The company the person works at, as the provider holds it; each member null where it holds none.",
+        "properties": {
+          "name": { "type": ["string", "null"], "maxLength": 200 },
+          "domain": { "type": ["string", "null"], "maxLength": 253, "description": "The company's web domain, such as `example.com`." },
+          "size": { "type": ["string", "null"], "maxLength": 64, "description": "The company's headcount in the provider's own words or band, such as `51-200`." },
+          "industry": { "type": ["string", "null"], "maxLength": 200, "description": "The company's industry, as the provider names it." }
+        }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "definition_rejected", "class": "validation", "when": "The provider refused the definition for a rule of its own that the schema the plugin declares cannot express: a value it does not know, a combination it does not take. Nothing was counted; the provider's own words travel in the message." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include searching its database, so no look by this account can be answered." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential, or the user it signs in to the provider as, may not search for this account. This code stands for an answer the plugin cannot read as a provider block; one it can is `provider_blocked`." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side — a look it ran in the background and did not finish among them." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A look changes nothing and spends nothing, so the next attempt simply asks again." },
+    { "code": "provider_blocked", "class": "blocked", "when": "The provider refused this call for a reason outside the work item — the account's money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did nothing for it. The failure's block says what is blocked, why and where a person clears it; a repeat once it clears is a first act. It is said even where the operation also declares an older code for the condition, which then stands for an answer the plugin cannot read as a block." }
+  ],
+
+  "timeout_ms": 300000,
+
+  "conformance": [
+    "The definition counted is the one the runtime composed under `definition`; the plugin reads it there and nowhere else. It satisfies the schema the plugin declares under `audience_definition`, which the runtime checked before the plugin was started; a rule of the provider's that the schema cannot express fails `definition_rejected`.",
+    "Nothing is spent and nobody is revealed. A provider that charges for a look leaves this operation out of its manifest, and one whose API has no look answers the reserved `capability_not_offered`.",
+    "`count` and `companies` are the provider's own estimate, null where it gives none, and never a promise of what a search will find.",
+    "A sample reaches nobody: it carries no channels, and nothing in `raw` is an address, a number or a profile link. It holds at most 25 people, in the provider's own order.",
+    "`people_per_company` applies as a search of the audience would apply it; absent, it reads as 1.",
+    "A look the provider runs in the background is waited for inside the call; one that does not finish in time fails `provider_unavailable`, transient.",
+    "An answer larger than the plugin may read from a program fails `provider_answer_too_large` as permanent: asking again would cut it at the same place.",
+    "Nothing is pinned."
+  ]
+}

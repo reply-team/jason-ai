@@ -1,0 +1,30 @@
+{
+  "operation": "audience.search_status",
+  "version": 1,
+  "case": "an answer longer than a plugin may read from a program: asking again would cut it the same way",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "provider_answer_too_large",
+      "message": "The answer was cut off at the limit this installation sets.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "class": "permanent",
+    "retriable": false
+  }
+}

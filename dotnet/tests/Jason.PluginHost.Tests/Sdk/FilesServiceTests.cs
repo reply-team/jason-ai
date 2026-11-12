@@ -429,6 +429,51 @@ public sealed class FilesServiceTests : IDisposable
         Assert.Equal("here\n", Text(File("a.log")));
     }
 
+    /// <summary>
+    /// Writers that keep passing the file from line to line are not a file kept: while its length moves, the wait goes on
+    /// past the sharing wait. The other writer is this test, holding the file three times as long as the wait and adding a
+    /// byte every few milliseconds, and the line lands after the last of them.
+    /// </summary>
+    [Fact]
+    public async Task A_file_another_writer_keeps_appending_to_is_waited_for_past_the_sharing_wait()
+    {
+        var growing = Grow(Hold(File("a.log")), TimeSpan.FromSeconds(3));
+        using var harness = Granted(sharingWait: TimeSpan.FromSeconds(1));
+
+        harness.Evaluate(Call(File("a.log"), "here"));
+
+        var grown = await growing;
+        Assert.True(grown > 0, "the holder added nothing, so the wait was never told the file was moving.");
+        Assert.Equal(new string('x', grown) + "here\n", Text(File("a.log")));
+    }
+
+    /// <summary>
+    /// A file that keeps moving is waited for no further than the invocation allows, and the append still ends as its own
+    /// failure, with time left for the plugin to answer: the plugin catches it and returns, and the invocation is never cut
+    /// off in the append's place.
+    /// </summary>
+    [Fact]
+    public async Task A_file_that_keeps_growing_past_the_invocations_time_ends_the_append_as_its_own_failure_in_time()
+    {
+        var growing = Grow(Hold(File("a.log")), TimeSpan.FromSeconds(6));
+        var watch = Stopwatch.StartNew();
+
+        var outcome = Run($$"""
+            export function invoke() {
+              try { {{Call(File("a.log"), "here")}}; return { result: null }; }
+              catch (e) { return { result: { name: e.name, class: e.class, code: e.code } }; }
+            }
+            """, timeoutMs: 2_000, deadlineMs: 10_000);
+
+        var took = watch.Elapsed;
+        await growing;
+        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+        Assert.Equal(HostFailure.Name, outcome.Result!["name"]!.GetValue<string>());
+        Assert.Equal("transient", outcome.Result!["class"]!.GetValue<string>());
+        Assert.Equal(HostOutcomeCodes.FileWriteFailed, outcome.Result!["code"]!.GetValue<string>());
+        Assert.True(took < TimeSpan.FromSeconds(2), $"the append answered after {took}, past the invocation's two seconds.");
+    }
+
     [Fact]
     public void The_wait_stays_inside_what_is_left_of_the_invocation()
     {
@@ -732,6 +777,33 @@ public sealed class FilesServiceTests : IDisposable
 
     /// <summary>A program that keeps the file to itself, as a second host does for the length of one line.</summary>
     private static FileStream Hold(string file) => new(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+    /// <summary>
+    /// Another writer that keeps the file and adds one byte every few milliseconds for <paramref name="time"/>, then lets
+    /// go of it: the bytes it added, counted once it has let go.
+    /// </summary>
+    private static Task<int> Grow(FileStream held, TimeSpan time) =>
+        Task.Factory.StartNew(
+            () =>
+            {
+                using (held)
+                {
+                    var grown = 0;
+                    var watch = Stopwatch.StartNew();
+                    while (watch.Elapsed < time)
+                    {
+                        held.WriteByte((byte)'x');
+                        held.Flush();
+                        grown++;
+                        Thread.Sleep(TimeSpan.FromMilliseconds(20));
+                    }
+
+                    return grown;
+                }
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
 
     /// <summary>A link to a folder: a junction on Windows, which an account without the link privilege may still make.</summary>
     private static void Link(string link, string target)

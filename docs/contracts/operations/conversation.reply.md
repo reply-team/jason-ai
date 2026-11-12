@@ -130,6 +130,7 @@ show each case.
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_only` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `waits` |
 | contact projection | `id`; channels: `consumed` |
 | precondition | The thread's person is this person: the one pinned, where there is a pin, and in every case the one whose address on the channel named by `args.channel` is that channel's value as the runtime keys it for its suppression register; otherwise nothing is sent. |

@@ -31,6 +31,17 @@ namespace Jason.Runtime.Routing;
 /// The send the work names under <c>args.send</c>, read only for an operation whose input carries one, and null where the
 /// campaign holds no work item under that id.
 /// </param>
+/// <param name="Search">
+/// The search the work names under <c>args.search</c>, read only for an operation whose input carries one, and null where
+/// the campaign holds no work item under that id.
+/// </param>
+/// <param name="Audience">
+/// The audience the work names by its number under <c>args.audience</c>, and null where the campaign holds none under it.
+/// </param>
+/// <param name="SearchInTheWay">
+/// For a search, the work item of another search of its campaign that has not ended — a row still followed, or a search
+/// running now — and null where none has, or for any other operation.
+/// </param>
 /// <param name="Learned">
 /// The kinds of the routed plugin's pins of the person and of the campaign that <paramref name="Unsettled"/> recorded
 /// itself, from the answer it ended with, or null where there is no such attempt: the input its claim composed did not
@@ -46,7 +57,10 @@ public sealed record PreflightFacts(
     IReadOnlyList<ProviderBlock>? Blocks = null,
     Attempt? Unsettled = null,
     NamedSend? Send = null,
-    PinsLearned? Learned = null)
+    PinsLearned? Learned = null,
+    NamedSearch? Search = null,
+    NamedAudience? Audience = null,
+    string? SearchInTheWay = null)
 {
     /// <summary>What an entity no plugin has pinned yet has: nothing, stated once rather than allocated per claim.</summary>
     public static IReadOnlyDictionary<string, string> NoPins { get; } = new Dictionary<string, string>(StringComparer.Ordinal);

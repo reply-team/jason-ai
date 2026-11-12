@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
@@ -61,7 +62,9 @@ internal static partial class WorkItemValidation
         {
             if (ValidateOperation(request.Operation, errors) is { } operation)
             {
+                AudienceReadService.RefuseAsWork(operation, errors);
                 ValidateProviderOperation(operation, request.Context?[WorkItemService.InputKey], timing, errors);
+                CampaignAudiences.RefuseWritten(operation, request.Context?.ContainsKey(CampaignAudiences.ContextKey) == true, errors);
                 ValidateProviderTimeout(operation, request.TimeoutSeconds, killGraceMs, errors);
             }
 

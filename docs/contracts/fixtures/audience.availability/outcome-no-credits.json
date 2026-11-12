@@ -1,0 +1,36 @@
+{
+  "operation": "audience.availability",
+  "version": 1,
+  "case": "the account's credits are spent",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "available": false,
+      "reason": "no_credits",
+      "detail": "The account has no search credits left this month.",
+      "credits": {
+        "balance": 0,
+        "price_per_person": 1,
+        "currency": "credits"
+      },
+      "headroom": 1800,
+      "vendor": {
+        "status": "out_of_credits"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

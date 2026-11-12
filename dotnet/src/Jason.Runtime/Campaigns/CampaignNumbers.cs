@@ -1,6 +1,9 @@
+using System.Globalization;
 using Jason.Contracts.Api;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,12 +20,17 @@ public sealed class CampaignNumbers(JasonDbContext db)
     public async Task<CampaignSummaryResponse> SummaryAsync(CampaignSummaryRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var errors = new ValidationErrors();
+        ValidateAudience(request.Audience, request.CampaignIds is { Count: 1 }, errors);
+        errors.ThrowIfAny();
+
         var campaigns = await CampaignsAsync(request.CampaignIds, cancellationToken).ConfigureAwait(false);
         var ids = campaigns.Select(campaign => campaign.Id).ToList();
+        var audience = await AudienceAsync(db, campaigns, request.Audience, cancellationToken).ConfigureAwait(false);
         var withoutArchived = request.ExcludeArchivedContacts == true;
-        var counts = await CampaignPeople.SummaryCountsAsync(db, ids, withoutArchived, cancellationToken).ConfigureAwait(false);
+        var counts = await CampaignPeople.SummaryCountsAsync(db, ids, audience, withoutArchived, cancellationToken).ConfigureAwait(false);
         var pinned = await CampaignPeople.PinnedAsync(db, ids, cancellationToken).ConfigureAwait(false);
-        var t = await CampaignPeople.SummaryTotalAsync(db, ids, withoutArchived, cancellationToken).ConfigureAwait(false);
+        var t = await CampaignPeople.SummaryTotalAsync(db, ids, audience, withoutArchived, cancellationToken).ConfigureAwait(false);
         return new CampaignSummaryResponse(
             [.. campaigns.Select(campaign => counts.TryGetValue(campaign.Id, out var c)
                 ? new CampaignSummaryRow(campaign.PublicId, c.People, c.Waiting, c.Failed, c.Working, c.New, c.Idle, c.Sequence, c.Out, c.Removed, pinned.Contains(campaign.Id))
@@ -33,11 +41,16 @@ public sealed class CampaignNumbers(JasonDbContext db)
     public async Task<CampaignActivityResponse> ActivityAsync(CampaignActivityRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var (since, until) = Period(request.Since, request.Until);
+        var errors = new ValidationErrors();
+        ValidateAudience(request.Audience, request.CampaignIds is { Count: 1 }, errors);
+        var (since, until) = Period(request.Since, request.Until, errors);
+        errors.ThrowIfAny();
+
         var campaigns = await CampaignsAsync(request.CampaignIds, cancellationToken).ConfigureAwait(false);
         var ids = campaigns.Select(campaign => campaign.Id).ToList();
-        var counts = await CampaignPeople.ActivityCountsAsync(db, ids, since, until, cancellationToken).ConfigureAwait(false);
-        var t = await CampaignPeople.ActivityTotalAsync(db, ids, since, until, cancellationToken).ConfigureAwait(false);
+        var audience = await AudienceAsync(db, campaigns, request.Audience, cancellationToken).ConfigureAwait(false);
+        var counts = await CampaignPeople.ActivityCountsAsync(db, ids, since, until, audience, cancellationToken).ConfigureAwait(false);
+        var t = await CampaignPeople.ActivityTotalAsync(db, ids, since, until, audience, cancellationToken).ConfigureAwait(false);
         return new CampaignActivityResponse(
             [.. campaigns.Select(campaign => counts.TryGetValue(campaign.Id, out var c)
                 ? new CampaignActivityRow(campaign.PublicId, c.People, c.Added, c.WorkedOn, c.Contacted, c.Replied, c.OptedOut, c.Removed)
@@ -65,12 +78,14 @@ public sealed class CampaignNumbers(JasonDbContext db)
 
         var zoneId = TimeZoneRules.Normalize(request.Zone, "zone", errors);
         var (since, until) = Period(request.Since, request.Until, errors);
+        ValidateAudience(request.Audience, request.CampaignIds is { Count: 1 }, errors);
         errors.ThrowIfAny();
 
         var zone = TimeZoneRules.Find(zoneId);
         var buckets = ActivityBuckets.Cut(since, until, request.Period!.Value, zone);
         var campaigns = await CampaignsAsync(request.CampaignIds, cancellationToken).ConfigureAwait(false);
-        var moments = await CampaignPeople.MomentsAsync(db, [.. campaigns.Select(campaign => campaign.Id)], request.Count!.Value, since, until, cancellationToken)
+        var audience = await AudienceAsync(db, campaigns, request.Audience, cancellationToken).ConfigureAwait(false);
+        var moments = await CampaignPeople.MomentsAsync(db, [.. campaigns.Select(campaign => campaign.Id)], request.Count!.Value, since, until, audience, cancellationToken)
             .ConfigureAwait(false);
 
         var starts = buckets.Select(bucket => Milliseconds(bucket.Start)).ToArray();
@@ -121,6 +136,48 @@ public sealed class CampaignNumbers(JasonDbContext db)
         }
 
         return (since?.UtcDateTime ?? default, until?.UtcDateTime ?? default);
+    }
+
+    /// <summary>
+    /// An audience named on a people read is a number from 1, and one campaign's, so the read names that campaign alone:
+    /// <paramref name="oneCampaign"/> says whether it does.
+    /// </summary>
+    internal static void ValidateAudience(int? audience, bool oneCampaign, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        if (audience is null)
+        {
+            return;
+        }
+
+        if (audience < 1)
+        {
+            errors.Add("audience", "invalid", "audience is the number of one of the campaign's audiences, from 1.");
+        }
+        else if (!oneCampaign)
+        {
+            errors.Add("audience", "invalid", "audience is one campaign's audience: name that campaign, and no other.");
+        }
+    }
+
+    /// <summary>
+    /// The row of the audience <paramref name="number"/> names in the one campaign asked, by the campaign's index on its
+    /// numbers; null where no audience is asked. A number the campaign holds none under is not found, as a top-up's is.
+    /// </summary>
+    internal static async Task<int?> AudienceAsync(
+        JasonDbContext db, IReadOnlyList<(int Id, string PublicId)> campaigns, int? number, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        if (number is not { } asked)
+        {
+            return null;
+        }
+
+        var campaign = campaigns.Single();
+        return await CampaignAudiences.ByNumber(db, campaign.Id, asked).Select(audience => (int?)audience.Id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new NotFoundException(
+                AttemptErrors.AudienceUnknown,
+                string.Create(CultureInfo.InvariantCulture, $"Campaign '{campaign.PublicId}' holds no audience under {asked}: a campaign numbers its audiences from 1, in the order their first searches were claimed, so name one it holds."));
     }
 
     private Task<List<(int Id, string PublicId)>> CampaignsAsync(IReadOnlyList<string>? requested, CancellationToken cancellationToken) =>

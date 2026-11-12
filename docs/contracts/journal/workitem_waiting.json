@@ -11,13 +11,13 @@
     "contact": { "at": "/contact_id", "presence": "sometimes" },
     "provider_block": { "at": "/new/blocked_by/provider_block_id", "presence": "sometimes" }
   },
-  "field_since": { "/new/held_by": "0.30.0", "/new/held_by/role": "0.31.0" },
+  "field_since": { "/new/held_by": "0.30.0", "/new/held_by/role": "0.31.0", "/new/behind_search": "0.36.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
     "required": ["key", "old", "new"],
     "properties": {
-      "key": { "type": ["null", "string"], "pattern": "^att_", "description": "The attempt that ended by waiting, by its id; null where no attempt ended: an item written already waiting, or one the claim parked on a provider block or held at a limit." },
+      "key": { "type": ["null", "string"], "pattern": "^att_", "description": "The attempt that ended by waiting, by its id; null where no attempt ended: an item written already waiting, or one the claim parked on a provider block, held at a limit or kept behind another search." },
       "old": { "type": "null" },
       "new": {
         "type": "object",
@@ -54,6 +54,11 @@
               "limit": { "type": "integer", "minimum": 1 },
               "role": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" }
             }
+          },
+          "behind_search": {
+            "type": "string",
+            "pattern": "^wi_",
+            "description": "Since 0.36.0: the search of the same campaign that has not ended, by its work item, which a search waits behind: a campaign runs one search at a time, so the claim keeps it, with no attempt of its own, until the moment the claim asks again."
           }
         }
       }
@@ -124,6 +129,20 @@
               "deadline": { "type": "string" }
             },
             "required": ["on", "mode", "until", "deadline", "held_by"]
+          }
+        }
+      },
+      {
+        "properties": {
+          "key": { "type": "null" },
+          "new": {
+            "properties": {
+              "on": { "maxItems": 0 },
+              "mode": { "type": "null" },
+              "until": { "type": "string" },
+              "deadline": { "type": "string" }
+            },
+            "required": ["on", "mode", "until", "deadline", "behind_search"]
           }
         }
       }
