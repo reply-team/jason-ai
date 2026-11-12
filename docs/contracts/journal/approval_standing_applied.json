@@ -10,7 +10,7 @@
     "contact": { "at": "/contact_id", "presence": "sometimes" },
     "approval": { "at": "/new/id", "presence": "always" }
   },
-  "field_since": { "/new/audience": "0.35.0", "/new/count": "0.35.0" },
+  "field_since": { "/new/audience": "0.36.0", "/new/count": "0.36.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -32,7 +32,7 @@
       },
       "search": {
         "type": "object",
-        "description": "Since 0.35.0: a search released under the campaign's allowance.",
+        "description": "Since 0.36.0: a search released under the campaign's allowance.",
         "additionalProperties": false,
         "required": ["id", "operation", "subject_hash", "standing", "verdict", "category"],
         "properties": {
@@ -64,7 +64,7 @@
           { "$ref": "#/$defs/reply" },
           { "$ref": "#/$defs/search" }
         ],
-        "description": "What was released: a drafted reply under a category's standing approval, as since 0.25.0, or since 0.35.0 a search under the allowance, a branch of its own."
+        "description": "What was released: a drafted reply under a category's standing approval, as since 0.25.0, or since 0.36.0 a search under the allowance, a branch of its own."
       }
     }
   }

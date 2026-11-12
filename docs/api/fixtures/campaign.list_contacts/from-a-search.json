@@ -51,7 +51,10 @@
               "campaign_name": "Spring search",
               "state": "enrolled",
               "added_at": "2026-10-16T09:00:00.000Z",
-              "updated_at": "2026-10-16T09:00:00.000Z"
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": {
@@ -139,7 +142,10 @@
               "campaign_name": "Spring search",
               "state": "enrolled",
               "added_at": "2026-10-16T09:00:00.000Z",
-              "updated_at": "2026-10-16T09:00:00.000Z"
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": {
@@ -227,7 +233,10 @@
               "campaign_name": "Spring search",
               "state": "enrolled",
               "added_at": "2026-10-16T09:00:00.000Z",
-              "updated_at": "2026-10-16T09:00:00.000Z"
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             }
           ],
           "last_activity": {

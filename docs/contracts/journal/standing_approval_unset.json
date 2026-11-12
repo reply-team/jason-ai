@@ -7,7 +7,7 @@
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" }
   },
-  "field_since": { "/old/audience": "0.35.0", "/old/max_people": "0.35.0", "/old/max_per_search": "0.35.0" },
+  "field_since": { "/old/audience": "0.36.0", "/old/max_people": "0.36.0", "/old/max_per_search": "0.36.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -38,7 +38,7 @@
       },
       "allowance": {
         "type": "object",
-        "description": "Since 0.35.0: the campaign's allowance for the searches under one of its audiences, as it was set.",
+        "description": "Since 0.36.0: the campaign's allowance for the searches under one of its audiences, as it was set.",
         "additionalProperties": false,
         "required": ["category", "operations", "expires_at", "max_releases"],
         "properties": {
@@ -68,13 +68,13 @@
       }
     },
     "properties": {
-      "key": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply, which the campaign's newest line for it decides; since 0.35.0, `audience.search` on an allowance's line." },
+      "key": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply, which the campaign's newest line for it decides; since 0.36.0, `audience.search` on an allowance's line." },
       "old": {
         "anyOf": [
           { "$ref": "#/$defs/standing" },
           { "$ref": "#/$defs/allowance" }
         ],
-        "description": "The standing approval taken back, as it was set: a category of reply's, as since 0.25.0, or since 0.35.0 the allowance's, a branch of its own, taken back by the person's unset, by a new allowance that replaces it, or by the person's approval of a search under another audience."
+        "description": "The standing approval taken back, as it was set: a category of reply's, as since 0.25.0, or since 0.36.0 the allowance's, a branch of its own, taken back by the person's unset, by a new allowance that replaces it, or by the person's approval of a search under another audience."
       },
       "new": { "type": "null" }
     }

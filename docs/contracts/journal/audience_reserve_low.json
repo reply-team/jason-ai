@@ -1,7 +1,7 @@
 {
   "kind": "audience_reserve_low",
   "version": 1,
-  "since": "0.35.0",
+  "since": "0.36.0",
   "summary": "A campaign's untouched members fell under the threshold the campaign set, said once per crossing; a default manager trigger.",
   "subscribable": true,
   "entities": {

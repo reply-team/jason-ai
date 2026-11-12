@@ -263,12 +263,16 @@ public sealed class RouteService(
                 if (candidate.Snapshot is null)
                 {
                     // This route was checked before it was written, so reaching here means another route in the
-                    // set no longer holds. Nothing is committed and nothing is swapped, and the answer names
-                    // every route that refused — exactly as a rejected reload does — and only those: a binding that
-                    // merely went unmeasured is no refusal, and alone it makes this a write to send again.
+                    // set no longer holds, or the set would leave a search still followed with no route to the
+                    // account it ran under, refused under a code of its own. Nothing is committed and nothing is
+                    // swapped, and the answer names every route or search that refused — exactly as a rejected reload
+                    // does — and only those: a binding that merely went unmeasured is no refusal, and alone it makes
+                    // this a write to send again.
                     throw candidate.Unmeasured
                         ? DomainErrors.ValidationTimedOut(candidate.Problems)
-                        : DomainErrors.PluginReloadRejected(candidate.Refusals);
+                        : candidate.Refusals.All(problem => problem.Code == RouteProblemCodes.OrphansSearch)
+                            ? DomainErrors.RouteOrphansSearch(candidate.Refusals)
+                            : DomainErrors.PluginReloadRejected(candidate.Refusals);
                 }
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

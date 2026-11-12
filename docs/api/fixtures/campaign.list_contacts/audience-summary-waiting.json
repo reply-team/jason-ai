@@ -37,14 +37,20 @@
               "campaign_name": "Autumn",
               "state": "enrolled",
               "added_at": "2026-10-01T10:00:00.000Z",
-              "updated_at": "2026-10-01T10:00:00.000Z"
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "new"
+              ]
             },
             {
               "campaign_id": "cmp_1",
               "campaign_name": "Spring",
               "state": "enrolled",
               "added_at": "2026-10-12T09:00:00.000Z",
-              "updated_at": "2026-10-12T09:00:00.000Z"
+              "updated_at": "2026-10-12T09:00:00.000Z",
+              "standing": [
+                "waiting"
+              ]
             }
           ],
           "last_activity": null
@@ -110,7 +116,11 @@
               "campaign_name": "Spring",
               "state": "enrolled",
               "added_at": "2026-10-01T10:00:00.000Z",
-              "updated_at": "2026-10-01T10:00:00.000Z"
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "waiting",
+                "idle"
+              ]
             }
           ],
           "last_activity": null

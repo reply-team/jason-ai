@@ -47,6 +47,28 @@ internal static class AudienceSearches
                 && (item.Status == WorkItemStatus.Scheduled || item.Status == WorkItemStatus.Processing))
             .Select(item => item.PublicId);
 
+    /// <summary>
+    /// Every search still followed that the provider gave a reference to, of any campaign, an archived one's included, with
+    /// its campaign's state and the plugin and the binding its succeeded attempt ran under: what a route change has to leave
+    /// a route to. One with no reference is read and stopped nowhere, so no route keeps it. Off the index that holds only
+    /// the searches still followed.
+    /// </summary>
+    public static IQueryable<FollowedSearch> Followed(JasonDbContext db) =>
+        db.AudienceSearches
+            .Where(search => search.EndedAs == null && search.Reference != null)
+            .OrderBy(search => search.CampaignId)
+            .ThenBy(search => search.Id)
+            .Select(search => new FollowedSearch(
+                search.Campaign!.PublicId,
+                search.Campaign.Status,
+                search.SearchWorkItem!.PublicId,
+                search.PluginId,
+                search.SearchWorkItem.Attempts
+                    .Where(attempt => attempt.Status == AttemptStatus.Succeeded)
+                    .OrderByDescending(attempt => attempt.Number)
+                    .Select(attempt => attempt.Provenance)
+                    .FirstOrDefault()));
+
     /// <summary>The row of the search a campaign's work names by its work item, in that campaign alone.</summary>
     public static IQueryable<AudienceSearch> Named(JasonDbContext db, int campaignId, string searchWorkItem) =>
         db.AudienceSearches.Where(search => search.CampaignId == campaignId && search.SearchWorkItem!.PublicId == searchWorkItem);
@@ -61,3 +83,9 @@ internal static class AudienceSearches
     public static IQueryable<WorkItem> OpenWork(JasonDbContext db, IReadOnlyCollection<int> campaigns) =>
         db.WorkItems.Where(item => campaigns.Contains(item.CampaignId) && Open.Contains(item.Status) && OfASearch.Contains(item.Operation));
 }
+
+/// <summary>
+/// A search still followed: its campaign and the campaign's state, its work item, the plugin its row names, and its succeeded
+/// attempt's provenance.
+/// </summary>
+internal sealed record FollowedSearch(string Campaign, CampaignStatus Status, string WorkItem, string PluginId, AttemptProvenanceDto? Ran);
