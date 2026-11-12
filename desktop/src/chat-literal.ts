@@ -68,8 +68,11 @@ export type LiteralReading = { held: false; commands: LiteralCommand[] } | { hel
 
 export interface LiteralContext {
     platform: Platform;
-    /** What a leading `~` resolves to on POSIX. */
-    home: string;
+    /**
+     * What a leading `~` resolves to on POSIX: the home folder of the host's shell. Null when that is not known to be the
+     * folder the rest of the judgement takes for the home folder, so a `~` is held.
+     */
+    home: string | null;
 }
 
 const held = (reason: HeldReason): LiteralReading => ({ held: true, reason });
@@ -92,10 +95,11 @@ export function readLiteral(tool: string, command: string, context: LiteralConte
         else if (tool === 'PowerShell') commands = readPowerShell(command);
         else return held('unknown_shell');
         if (commands.length === 0) return held('syntax');
+        if (tool === 'Bash' && context.platform === 'win32') for (const each of commands) rewrittenByMsys(each);
         return { held: false, commands: withDirectories(commands, tool === 'PowerShell', context) };
     } catch (error) {
-        if (error instanceof Held) return held(error.reason);
-        throw error;
+        // Whatever else goes wrong, the command is held: a reading that failed never runs anything.
+        return held(error instanceof Held ? error.reason : 'syntax');
     }
 }
 
@@ -103,6 +107,20 @@ interface Parsed {
     words: string[];
     targets: string[];
     input: LiteralInput;
+    /** What ended it: the operator before the next command, or the end. */
+    next: Separator;
+}
+
+/**
+ * Git Bash's own layer rewrites a word that looks like a POSIX path when it starts a Windows program (`/tmp/x`,
+ * `--out=/x`, `/a:/b`), so the program receives another word than the one read; a drive's own path (`/c`, `/c/...`) is
+ * the one form read as the drive's. A redirection's target is opened by the shell itself, so only `/dev/null` and a
+ * drive's own path are read there.
+ */
+function rewrittenByMsys(command: Parsed): void {
+    const drive = /^\/[A-Za-z](\/|$)/;
+    if (command.words.some((word) => (word.startsWith('/') && !drive.test(word)) || word.includes('=/'))) throw new Held('character');
+    if (command.targets.some((target) => target.startsWith('/') && !drive.test(target) && target !== '/dev/null')) throw new Held('character');
 }
 
 type Separator = 'and' | 'or' | 'semicolon' | 'pipe' | 'newline' | 'end';
@@ -163,7 +181,7 @@ class Builder {
             if (separator === 'end' && (this.pending === null || this.pending === 'semicolon' || this.pending === 'newline')) return;
             throw new Held('syntax');
         }
-        this.commands.push({ words: this.words, targets: this.targets, input: this.input });
+        this.commands.push({ words: this.words, targets: this.targets, input: this.input, next: separator });
         this.words = [];
         this.targets = [];
         this.input = separator === 'pipe' ? 'pipe' : 'none';
@@ -192,7 +210,7 @@ function asciiOnly(text: string): void {
 }
 
 /** The POSIX grammar: the Bash tool's shell. */
-function readPosix(text: string, home: string): Parsed[] {
+function readPosix(text: string, home: string | null): Parsed[] {
     const builder = new Builder((b, word) => {
         // zsh rewrites an unquoted word that starts with `=` to the path of the program it names.
         if (b.raw.startsWith('=')) throw new Held('expansion');
@@ -250,7 +268,7 @@ function readPosix(text: string, home: string): Parsed[] {
         }
         if (c === '~') {
             const next = text[at + 1];
-            if (startOfWord() && (next === undefined || next === '/' || posixDelimiter.test(next))) {
+            if (home !== null && startOfWord() && (next === undefined || next === '/' || posixDelimiter.test(next))) {
                 builder.append(home, '~', false);
                 at++;
                 continue;
@@ -523,7 +541,7 @@ const posixDirectoryChanges = new Set(['cd', 'chdir', 'pushd', 'popd']);
 const powerShellDirectoryChanges = new Set(['cd', 'chdir', 'sl', 'set-location', 'pushd', 'push-location', 'popd', 'pop-location']);
 
 /** The folder a directory change goes to, as the command spells it; null when it is not one literal path. */
-function directoryTarget(words: readonly string[], powerShell: boolean, home: string): string | null {
+function directoryTarget(words: readonly string[], powerShell: boolean, home: string | null): string | null {
     const program = programName(words[0] ?? '');
     if (program === 'popd' || program === 'pop-location') return null;
     const rest = words.slice(1);
@@ -539,21 +557,27 @@ function isAbsolute(path: string, powerShell: boolean, platform: Platform): bool
 }
 
 /**
- * Settles the folder each command runs in. A directory change to a literal absolute path sets it for the commands after
- * it; one to any other target leaves the folder unknown, and a command after it is held, since its relative words could
- * not be read plainly.
+ * Settles the folder each command runs in. A directory change to a literal absolute path, joined to the next command by
+ * `&&`, sets it for the commands after it while each is joined by `&&` or a pipe; a change to any other target, or one
+ * joined otherwise, leaves the folder unknown, and a command after it is held, since its relative words could not be
+ * read plainly.
  */
 function withDirectories(parsed: readonly Parsed[], powerShell: boolean, context: LiteralContext): LiteralCommand[] {
     const changes = powerShell ? powerShellDirectoryChanges : posixDirectoryChanges;
     let cwd: string | null = null;
     let unknown = false;
-    return parsed.map((command) => {
+    return parsed.map(({ words, targets, input, next }) => {
         if (unknown) throw new Held('directory_change');
-        const read: LiteralCommand = { ...command, cwd };
-        if (changes.has(programName(command.words[0] ?? ''))) {
-            const target = directoryTarget(command.words, powerShell, context.home);
-            if (target !== null && isAbsolute(target, powerShell, context.platform)) cwd = target;
+        const read: LiteralCommand = { words, targets, input, cwd };
+        if (changes.has(programName(words[0] ?? ''))) {
+            // A change in a pipeline runs in a subshell of its own; one that is not joined to the next command by `&&`
+            // may fail while the next runs all the same, in the folder it started in.
+            const target = directoryTarget(words, powerShell, context.home);
+            if (target !== null && isAbsolute(target, powerShell, context.platform) && next === 'and' && input !== 'pipe') cwd = target;
             else unknown = true;
+        } else if (cwd !== null && next !== 'and' && next !== 'pipe' && next !== 'end') {
+            // After `||`, `;` or a newline the next command runs whether or not the change took place.
+            unknown = true;
         }
         return read;
     });

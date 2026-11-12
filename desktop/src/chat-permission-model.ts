@@ -20,6 +20,11 @@ export interface ChatScope {
     data: string;
     /** The person's home folder, for `~/.jason` when the data directory is the default one. */
     home: string;
+    /**
+     * The home folder the host's shell resolves `~` to: the `HOME` of the host's environment, or the profile's folder
+     * when it carries none. Absent, taken to be `home`. Under Full access a `~` is held where the two differ.
+     */
+    shellHome?: string;
     /** The files refused first: the installation's settings file and the runtime's run file. */
     protectedFiles: readonly string[];
     /** The deny list's commands. */
@@ -1146,7 +1151,14 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
     // A tool of the person's own MCP server is held on every call: its arguments are no shell words, so Jason cannot
     // read what the program does with them, whatever they are named.
     if (isPersonsTool(tool)) return { outcome: 'held', message: heldSentence };
-    if (literal) return literalJudgement(tool, typeof command === 'string' ? command : null, scope);
+    if (literal) {
+        // Whatever goes wrong while a command is read, it is held: a judgement that failed never runs anything.
+        try {
+            return literalJudgement(tool, typeof command === 'string' ? command : null, scope);
+        } catch {
+            return heldFor('syntax');
+        }
+    }
     if (judged.verdict === 'allow' || toolsThatRunNothing.has(tool)) return { outcome: 'runs' };
     return plainCards.has(judged.title) ? { outcome: 'runs' } : { outcome: 'held', message: heldSentence };
 }
@@ -1179,8 +1191,18 @@ function refusalOver(text: string, places: readonly string[], scope: ChatScope):
     return chatsOwnPlace(places, scope);
 }
 
+/**
+ * What a `~` resolves to in the host's shell, which is the profile's home folder when the shell's is the same folder,
+ * however spelled, and null, so a `~` is held, when it is another.
+ */
+function shellHomeOf(scope: ChatScope): string | null {
+    if (scope.shellHome === undefined) return scope.home;
+    const shell = keyOf(scope.platform, located(nativeSpelling(scope.shellHome, scope), scope));
+    return shell === keyOf(scope.platform, located(scope.home, scope)) ? scope.home : null;
+}
+
 function literalOutcome(tool: string, command: string, scope: ChatScope): FullAccessJudgement {
-    const reading = readLiteral(tool, command, { platform: scope.platform, home: scope.home });
+    const reading = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope) });
     if (reading.held) return heldFor(reading.reason);
     // Each command's words are located against the folder it runs in: a directory change's literal absolute target.
     const commands = reading.commands.map((each) => ({ command: each, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) } }));

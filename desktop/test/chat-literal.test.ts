@@ -339,7 +339,7 @@ test('a relative word after a directory change to a relative target is held; aft
     assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location sub; cat notes.md' }, scope), heldAs('directory_change'));
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cd sub' }, scope), runs, 'a change with nothing after it reads nothing');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cd /home/someone/work && cat notes.md' }, scope), runs);
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location -Path /home/someone/work; cat notes.md' }, scope), runs);
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location -Path /home/someone/work && cat notes.md' }, scope), runs);
     assert.equal(fullAccessJudgement('Bash', { command: 'cd /home/someone && cat .jason/run/runtime.json' }, scope).outcome, 'refused', 'read from the absolute target');
     assert.equal(fullAccessJudgement('Bash', { command: 'cd ~ && cat .jason/run/runtime.json' }, scope).outcome, 'refused');
 });
@@ -507,4 +507,48 @@ test('a server verb that starts with add, and the plugin verbs, are held whateve
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('servers'), command);
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'frobnicate plugin list' }, scope), runs);
+});
+
+test('a directory change sets the folder only when && joins it to the next command; after anything else the folder is unknown', () => {
+    for (const command of [
+        'cd /home/someone/work | cat notes.md',
+        'cd /home/someone/work || cat notes.md',
+        'cd /home/someone/work; cat notes.md',
+        'cd /home/someone/work\ncat notes.md',
+        'cd /home/someone/work && echo a; cat notes.md',
+        'cd /home/someone/work && echo a || cat notes.md',
+        'echo a | cd /home/someone/work && cat notes.md',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('directory_change'), JSON.stringify(command));
+    }
+    for (const command of ['cd /home/someone/work && cat notes.md', 'cd /home/someone/work && echo a | cat notes.md', 'cd /home/someone/work && echo a && cat notes.md']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+    }
+});
+
+test('~ resolves to the home the host\'s shell carries, and is held when that differs from the profile', () => {
+    const elsewhere: ChatScope = { ...scope, shellHome: '/home/other' };
+    for (const command of ['ls ~/notes', 'cat ~', 'frobnicate > ~/out.txt']) assert.deepEqual(fullAccessJudgement('Bash', { command }, elsewhere), heldAs('tilde'), command);
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls /home/someone/notes' }, elsewhere), runs);
+    const same: ChatScope = { ...scope, shellHome: '/home/someone/' };
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls ~/notes' }, same), runs);
+    const windows = homeScope('win32', 'C:\\Users\\someone');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls ~/notes' }, { ...windows, shellHome: '/c/Users/someone' }), runs, 'Git Bash spells the same folder its own way');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'ls ~/notes' }, { ...windows, shellHome: 'D:\\home' }), heldAs('tilde'));
+});
+
+test('on Windows a Bash word Git Bash would rewrite for a Windows program is held; a drive\'s own path is not', () => {
+    const windows = homeScope('win32', 'C:\\Users\\someone');
+    for (const command of ['cat /tmp/x', 'frobnicate --out=/tmp/x', 'frobnicate /a:/b', '/usr/bin/frobnicate a', 'frobnicate > /tmp/x']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), heldAs('character'), command);
+    }
+    for (const command of ['cat /c/Work/notes.md', 'cat /d', 'frobnicate a 2>/dev/null', 'frobnicate --level=2']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), runs, command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat /tmp/x' }, scope), runs, 'not on Linux');
+});
+
+test('anything that goes wrong while a command is judged in Full access holds it, never runs it', () => {
+    const failing: ChatScope = { ...scope, real: () => { throw new Error('no reading'); } };
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat notes.md' }, failing), heldAs('syntax'));
 });
