@@ -147,7 +147,7 @@ test('the Feed is made and written on the first ask, listed as the main chat fro
     assert.deepEqual(r.chat.list(), [], 'nothing is made before the page asks');
     const feed = r.chat.feed([]);
     assert.match(feed.id, /^conv_[0-9A-HJKMNP-TV-Z]{26}$/);
-    assert.deepEqual({ ...feed, updatedAt: '' }, { id: feed.id, campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false });
+    assert.deepEqual({ ...feed, updatedAt: '' }, { id: feed.id, campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' });
     assert.deepEqual(readdirSync(r.b.paths.conversations), [`${feed.id}.json`]);
     assert.equal((JSON.parse(recordOf(r, feed.id)) as { main?: unknown }).main, true);
     assert.equal(r.chat.feed([]).id, feed.id);

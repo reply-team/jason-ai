@@ -84,9 +84,10 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     const lines = text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
     const { '@t': _at, ...startLine } = lines.find((line) => line.EventName === 'chat_turn_started') ?? {};
     assert.deepEqual(startLine, {
-        '@mt': 'A chat turn started on {Host}; resumed {Resumed}',
+        '@mt': 'A chat turn started on {Host}; resumed {Resumed}; mode {Mode}',
         Host: 'deepseek',
         Resumed: false,
+        Mode: 'ask_first',
         SourceContext: 'Jason.Desktop',
         EventName: 'chat_turn_started',
     });

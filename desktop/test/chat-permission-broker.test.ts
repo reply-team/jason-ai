@@ -64,7 +64,7 @@ test('what the model allows is allowed with its input as received, and no card i
     const input = { file_path: '/Users/someone/.jason/desktop/chat/a.md' };
     assert.deepEqual(await broker.ask('turn_1', 'Read', input), { behavior: 'allow', updatedInput: input });
     assert.deepEqual(sent, []);
-    assert.deepEqual(decided, [{ outcome: 'allowed', by: 'model' }]);
+    assert.deepEqual(decided, [{ outcome: 'allowed', by: 'model', mode: 'ask_first' }]);
 });
 
 test('what the model refuses is refused with its message, and no card is shown', async () => {
@@ -74,7 +74,7 @@ test('what the model refuses is refused with its message, and no card is shown',
     assert.equal(answer.behavior, 'deny');
     assert.match(answer.behavior === 'deny' ? answer.message : '', /installation's own data/);
     assert.deepEqual(sent, []);
-    assert.deepEqual(decided, [{ outcome: 'refused', by: 'model' }]);
+    assert.deepEqual(decided, [{ outcome: 'refused', by: 'model', mode: 'ask_first' }]);
 });
 
 test('a card is shown to the asking chat, and the person allowing it allows the call with its input', async () => {
@@ -85,7 +85,7 @@ test('a card is shown to the asking chat, and the person allowing it allows the 
     assert.deepEqual(sent, [{ chat: 'chat_a', event: { kind: 'permission', request: 'req_1', title: 'Read a file outside the chat\'s folders', detail: '/Users/someone/notes/plan.txt', remember: 'files in /Users/someone/notes' } }]);
     broker.answer('chat_a', 'req_1', { allow: true, always: false });
     assert.deepEqual(await asked, { behavior: 'allow', updatedInput: outside });
-    assert.deepEqual(decided, [{ outcome: 'allowed', by: 'person' }]);
+    assert.deepEqual(decided, [{ outcome: 'allowed', by: 'person', mode: 'ask_first' }]);
 });
 
 test('the person refusing a card refuses the call with a message the agent reads', async () => {
@@ -97,7 +97,7 @@ test('the person refusing a card refuses the call with a message the agent reads
     const answer = await asked;
     assert.equal(answer.behavior, 'deny');
     assert.match(answer.behavior === 'deny' ? answer.message : '', /said no/);
-    assert.deepEqual(decided, [{ outcome: 'refused', by: 'person' }]);
+    assert.deepEqual(decided, [{ outcome: 'refused', by: 'person', mode: 'ask_first' }]);
 });
 
 test('a request is answered once: a second answer changes nothing and says the card is gone', async () => {
@@ -150,7 +150,7 @@ test('"always" holds for the chat: the same kind of request is settled without a
     turn('chat_a', 'turn_3');
     assert.deepEqual(await within(broker.ask('turn_3', 'Bash', { command: 'git status --short' })), { behavior: 'allow', updatedInput: { command: 'git status --short' } });
     assert.equal(sent.length, cards);
-    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'person' });
+    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'person', mode: 'ask_first' });
 });
 
 test('"always" on a web page holds for its host: a second page of it opens without a card, another host asks again', async () => {
@@ -164,7 +164,7 @@ test('"always" on a web page holds for its host: a second page of it opens witho
     const cards = sent.length;
     assert.deepEqual(await within(broker.ask('turn_1', 'WebFetch', { url: 'https://example.com/b', prompt: 'p' })), { behavior: 'allow', updatedInput: { url: 'https://example.com/b', prompt: 'p' } });
     assert.equal(sent.length, cards);
-    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'person' });
+    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'person', mode: 'ask_first' });
     void broker.ask('turn_1', 'WebFetch', { url: 'https://example.org/a', prompt: 'p' });
     await settle();
     assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Open a web page', detail: 'https://example.org/a', remember: 'pages on example.org' });
@@ -176,7 +176,7 @@ test('a documentation page opens with no card, decided by the model; the same pa
     const input = { url: 'https://code.claude.com/docs/en/cli-reference', prompt: 'p' };
     assert.deepEqual(await within(broker.ask('turn_1', 'WebFetch', input)), { behavior: 'allow', updatedInput: input });
     assert.equal(sent.length, 0);
-    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'model' });
+    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'model', mode: 'ask_first' });
     void broker.ask('turn_1', 'WebFetch', { url: 'http://code.claude.com/docs/en/cli-reference', prompt: 'p' });
     await settle();
     assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_1', title: 'Open a web page', detail: 'http://code.claude.com/docs/en/cli-reference', remember: 'pages on code.claude.com' });
@@ -200,7 +200,7 @@ test('a remembered grant never allows what the model refuses: the refusal is the
         const answer = await within(broker.ask('turn_1', tool, input));
         assert.equal(answer.behavior, 'deny', `${tool} ${JSON.stringify(input)}`);
         assert.match(answer.behavior === 'deny' ? answer.message : '', /installation's own data/);
-        assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model' });
+        assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model', mode: 'ask_first' });
     }
     assert.equal(sent.length, cards);
     // The grants still hold for what the model leaves to the person.
@@ -339,9 +339,9 @@ test('a request the host withdraws is refused, its card goes, and an answer afte
     const answer = await within(asked);
     assert.equal(answer.behavior, 'deny');
     assert.deepEqual(sent.at(-1)?.event, { kind: 'permission_gone', request: 'req_1' });
-    assert.deepEqual(decided, [{ outcome: 'withdrawn', by: 'host' }]);
+    assert.deepEqual(decided, [{ outcome: 'withdrawn', by: 'host', mode: 'ask_first' }]);
     broker.answer('chat_a', 'req_1', { allow: true, always: true });
-    assert.deepEqual(decided, [{ outcome: 'withdrawn', by: 'host' }]);
+    assert.deepEqual(decided, [{ outcome: 'withdrawn', by: 'host', mode: 'ask_first' }]);
     // A request withdrawn before it is asked makes no card.
     const early = new AbortController();
     early.abort();
@@ -368,7 +368,7 @@ test('a request nobody answers is refused when the time is up, and its card goes
     assert.equal(answer.behavior, 'deny');
     assert.match(answer.behavior === 'deny' ? answer.message : '', /Nobody answered/);
     assert.deepEqual(sent.at(-1), { chat: 'chat_a', event: { kind: 'permission_gone', request: 'req_1' } });
-    assert.deepEqual(decided, [{ outcome: 'timed_out', by: 'person' }]);
+    assert.deepEqual(decided, [{ outcome: 'timed_out', by: 'person', mode: 'ask_first' }]);
     broker.answer('chat_a', 'req_1', { allow: true, always: true });
     assert.equal(decided.length, 1);
 });
@@ -444,10 +444,10 @@ test('a grant of a command never allows one longer than the card shows, nor one 
     assert.equal(answer.behavior, 'deny');
     assert.match(answer.behavior === 'deny' ? answer.message : '', /longer than the card can show whole/);
     assert.equal(sent.length, cards);
-    assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model' });
-    void broker.ask('turn_1', 'Bash', { command: 'cp notes.md CLAUDE.md' });
+    assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model', mode: 'ask_first' });
+    void broker.ask('turn_1', 'Bash', { command: 'cp notes.md GEMINI.md' });
     await settle();
-    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions an agent reads', detail: 'cp notes.md CLAUDE.md', remember: null });
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions an agent reads', detail: 'cp notes.md GEMINI.md', remember: null });
 });
 
 test('a grant of a command never covers one whose word names a guarded file outside the working folders', async () => {

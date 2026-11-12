@@ -2,7 +2,12 @@
 // events, by the name it was started as. What the turn does comes from STUB_HOST_PLAN, a JSON array of steps:
 //   { "ask": { "tool": "Bash", "input": { ... } } }  ask the permission prompt tool, then say what it decided
 //   { "say": "text" }                                 say a line of text
-//   { "use": { "tool": "Read", "input": { ... } } }  use a tool without asking, as one the allowed tools let through
+//   { "use": { "tool": "Read", "input": { ... } } }  use a tool without asking, as one the allowed tools let through, and
+//                                                    say its result; with a Full access settings file (--settings naming a
+//                                                    file with a PreToolUse hook), the hook is asked first, as Claude Code
+//                                                    asks it, and a refusal, or a hook that fails, says the result refused
+//   { "unhooked": { "tool": "Bash", "input": {...} } } use a tool and say its result without asking any hook, as a hook
+//                                                    filtered out by a managed policy would let it
 //   { "wait": "<file>" }                              start a process of its own, write that process's id to the file, and hang
 //   { "fail": { "stderr": "words", "code": 3 } }      write to stderr and exit with the code, with no result
 //   { "end": "no_result" }                            exit 0 with no result
@@ -75,7 +80,37 @@ function resumed(args) {
     return at < 0 ? null : args[at + 1];
 }
 
+/** The turn's PreToolUse hook, when --settings names a file that holds one: its URL, its headers and what a failure does. */
+function hookOf(args) {
+    const at = args.indexOf('--settings');
+    const given = at < 0 ? '' : args[at + 1];
+    if (!given || given.startsWith('{')) return null;
+    try {
+        const settings = JSON.parse(readFileSync(given, 'utf8'));
+        const hook = settings.hooks.PreToolUse[0].hooks[0];
+        return hook.type === 'http' ? hook : null;
+    } catch {
+        return null;
+    }
+}
+
+/** What the hook decided, as Claude Code reads it: a refusal's reason, null for no decision, or 'failed'. */
+async function askHook(hook, session, tool, input, id) {
+    try {
+        const body = JSON.stringify({ session_id: session, hook_event_name: 'PreToolUse', permission_mode: 'bypassPermissions', tool_name: tool, tool_input: input, tool_use_id: id });
+        const response = await fetch(hook.url, { method: 'POST', headers: { 'content-type': 'application/json', ...hook.headers }, body });
+        if (response.status < 200 || response.status > 299) return { failed: true };
+        const text = await response.text();
+        if (text === '') return { reason: null };
+        const output = JSON.parse(text).hookSpecificOutput;
+        return { reason: output && output.permissionDecision === 'deny' ? output.permissionDecisionReason : null };
+    } catch {
+        return { failed: true };
+    }
+}
+
 async function claude(args, stdin) {
+    const hook = hookOf(args);
     const asked = resumed(args);
     if (asked !== null && process.env.STUB_RESUME === 'missing') {
         process.stderr.write(`No conversation found with session ID: ${asked}\n`);
@@ -98,7 +133,24 @@ async function claude(args, stdin) {
         } else if (step.end === 'refused') {
             print({ type: 'result', subtype: 'success', is_error: true, api_error_status: step.status, result: step.text, session_id: session });
             process.exit(1);
-        } else if (step.use !== undefined) print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_use_${++n}`, name: step.use.tool, input: step.use.input }] } });
+        } else if (step.use !== undefined) {
+            const id = `toolu_use_${++n}`;
+            print({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: step.use.tool, input: step.use.input }] } });
+            let content = 'ran';
+            let error = false;
+            if (hook !== null) {
+                const decided = await askHook(hook, session, step.use.tool, step.use.input, id);
+                if (decided.failed && hook.onFailure === 'block') [content, error] = ['blocked: the hook failed', true];
+                else if (decided.reason) [content, error] = [`refused: ${decided.reason}`, true];
+            }
+            print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
+            if (hook !== null) print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content}` }] } });
+        } else if (step.unhooked !== undefined) {
+            const id = `toolu_unhooked_${++n}`;
+            print({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: step.unhooked.tool, input: step.unhooked.input }] } });
+            print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ran' }] } });
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: 'tool ran unhooked' }] } });
+        }
         else if (step.ask !== undefined) {
             n++;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `toolu_${n}`, name: step.ask.tool, input: step.ask.input }] } });

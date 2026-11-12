@@ -1159,15 +1159,23 @@ test('a command naming a guarded file in a working folder takes the guard\'s tit
     const plain = run(mac(), 'cp notes.md backup.md');
     assert.ok(plain.verdict === 'ask' && plain.remember === 'Bash:cp notes.md');
     for (const [scope, command, title] of [
-        [mac(), 'cp notes.md CLAUDE.md', 'Change instructions an agent reads'],
-        [windows(), 'cp notes.md claude.md', 'Change instructions an agent reads'],
+        [mac(), 'cp notes.md GEMINI.md', 'Change instructions an agent reads'],
         [mac(), `cp notes.md ${macProject}/AGENTS.md`, 'Change instructions an agent reads'],
         [windows(), `cp x.json ${winCampaign}\\.jason\\marker.json`, 'Change a folder\'s Jason marker'],
-        [mac(), 'mkdir -p .agents/skills/x', 'Change the skills or settings an agent loads'],
-        [mac(), 'jason campaign update cmp_A --description AGENTS.md', 'Change instructions an agent reads'],
+        [mac(), `mkdir -p ${macProject}/.agents/skills/x`, 'Change the skills or settings an agent loads'],
     ] as const) {
         const judged = run(scope, command);
         assert.deepEqual(judged, { verdict: 'ask', title, detail: command, remember: null }, `${scope.platform} ${command}`);
+    }
+    // The chat's own names directly in the chat folder are refused to a command in every mode, a word that only names
+    // one included: a command cannot be told apart as a read or a write.
+    for (const [scope, command, message] of [
+        [mac(), 'cp notes.md CLAUDE.md', instructionsRefusal],
+        [windows(), 'cp notes.md claude.md', instructionsRefusal],
+        [mac(), 'mkdir -p .agents/skills/x', configurationRefusal],
+        [mac(), 'jason campaign update cmp_A --description AGENTS.md', instructionsRefusal],
+    ] as const) {
+        assert.deepEqual(run(scope, command), { verdict: 'deny', message }, `${scope.platform} ${command}`);
     }
 });
 
@@ -1230,7 +1238,7 @@ test('a name the volume folds to a guarded name is that name: compatibility form
     }
     // Linux compares names exactly.
     assert.deepEqual(write(linux, `${macChat}/.agent\u017f/skills/x/SKILL.md`), { verdict: 'allow' });
-    assert.deepEqual(run(mac(), 'cp notes.md AGENT\u017f.md'), guardCard(instructionsTitle, 'cp notes.md AGENT\u017f.md'));
+    assert.deepEqual(run(mac(), 'cp notes.md AGENT\u017f.md'), { verdict: 'deny', message: instructionsRefusal });
 });
 
 test('on Windows a guarded name with a trailing dot or space or a stream suffix is the guarded name, and the chat\'s own is refused so', () => {
@@ -1241,7 +1249,7 @@ test('on Windows a guarded name with a trailing dot or space or a stream suffix 
     assert.deepEqual(write(windows(), `${winCampaign}\\AGENTS.md:stream`), guardCard(instructionsTitle, `${winCampaign}\\AGENTS.md:stream`));
     // Any other name so spelled keeps the spelling's card.
     assert.equal((write(windows(), `${winChat}\\notes.md.`) as { title?: string }).title, 'Use a path Windows reads as another name');
-    assert.deepEqual(run(windows(), 'cp notes.md CLAUDE.local.md.'), guardCard(instructionsTitle, 'cp notes.md CLAUDE.local.md.'));
+    assert.deepEqual(run(windows(), 'cp notes.md CLAUDE.local.md.'), { verdict: 'deny', message: instructionsRefusal });
     // macOS and Linux read a trailing dot as part of the name.
     assert.deepEqual(write(mac(), `${macChat}/CLAUDE.md.`), { verdict: 'allow' });
 });
@@ -1330,11 +1338,12 @@ test('in the chat folder itself a write under .claude, .agents or .codex is refu
         const judged = write(scope, path);
         assert.ok(judged.verdict === 'ask' && judged.remember === null, path);
     }
-    // A shell word naming them takes the guard's title and is never remembered: the shell is never refused by a word.
-    for (const [scope, command, title] of [[mac(), 'cp x.json .claude/settings.json', settingsTitle], [windows(), 'copy x.md .claude\\skills\\x\\SKILL.md', settingsTitle],
-        [mac(), `cp x.json ${macProject}/.claude/settings.json`, settingsTitle], [mac(), 'mkdir -p .codex', loadsTitle]] as const) {
-        assert.deepEqual(run(scope, command), guardCard(title, command), command);
+    // A shell word naming them in the chat folder is refused as the file tools refuse them; in a person's folder it takes
+    // the guard's title and is never remembered.
+    for (const [scope, command] of [[mac(), 'cp x.json .claude/settings.json'], [windows(), 'copy x.md .claude\\skills\\x\\SKILL.md'], [mac(), 'mkdir -p .codex']] as const) {
+        assert.deepEqual(run(scope, command), { verdict: 'deny', message: configurationRefusal }, command);
     }
+    assert.deepEqual(run(mac(), `cp x.json ${macProject}/.claude/settings.json`), guardCard(settingsTitle, `cp x.json ${macProject}/.claude/settings.json`));
 });
 
 test('cmd\'s path command is refused only as the command handed to cmd; a line of prose or a Bash word named path is not it', () => {

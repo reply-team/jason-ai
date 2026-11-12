@@ -210,7 +210,7 @@ test('a request the model settles makes no card, and the host reads the answer',
     const answers = texts(said).filter((text) => text.startsWith('decision'));
     assert.equal(answers[0], 'decision allow');
     assert.match(answers[1] ?? '', /^decision deny: /);
-    assert.deepEqual(r.decided, [{ outcome: 'allowed', by: 'model' }, { outcome: 'refused', by: 'model' }]);
+    assert.deepEqual(r.decided, [{ outcome: 'allowed', by: 'model', mode: 'ask_first' }, { outcome: 'refused', by: 'model', mode: 'ask_first' }]);
     assert.equal(r.ended[0]?.requests, 2);
     assert.deepEqual(doneOf(said), { kind: 'done', error: null });
 });
@@ -230,7 +230,7 @@ test('a card the person allows lets the tool run, and a card the person refuses 
         if (allow) assert.equal(answer, 'decision allow');
         else assert.match(answer ?? '', /^decision deny: The person said no/);
     }
-    assert.deepEqual(r.decided, [{ outcome: 'allowed', by: 'person' }, { outcome: 'refused', by: 'person' }]);
+    assert.deepEqual(r.decided, [{ outcome: 'allowed', by: 'person', mode: 'ask_first' }, { outcome: 'refused', by: 'person', mode: 'ask_first' }]);
 });
 
 test('"always" makes no card for the same command in the next turn of that chat, which resumes its session', async (t) => {
@@ -299,7 +299,7 @@ test('a card nobody answers is refused when its window ends, and the card goes',
     const said = await r.turn('c1', words, { host: 'claude' });
     assert.deepEqual(kinds(said).filter((kind) => kind.startsWith('permission')), ['permission', 'permission_gone']);
     assert.match(texts(said).at(-1) ?? '', /^decision deny: Nobody answered/);
-    assert.deepEqual(r.decided, [{ outcome: 'timed_out', by: 'person' }]);
+    assert.deepEqual(r.decided, [{ outcome: 'timed_out', by: 'person', mode: 'ask_first' }]);
     assert.deepEqual(doneOf(said), { kind: 'done', error: null });
 });
 

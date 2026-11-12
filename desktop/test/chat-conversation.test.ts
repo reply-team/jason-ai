@@ -113,7 +113,7 @@ test('a campaign\'s conversation is made once, and every turn of it takes the ca
     r.b.env.STUB_CAMPAIGN_FOLDER = folder;
     const made = await r.chat.create('cmp_01ABC');
     assert.match(made.id, /^conv_[0-9A-HJKMNP-TV-Z]{26}$/);
-    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '', running: false });
+    assert.deepEqual({ ...made, updatedAt: '' }, { id: made.id, campaignId: 'cmp_01ABC', title: 'Spring', updatedAt: '', running: false, mode: 'ask_first' });
     assert.equal((await r.chat.create('cmp_01ABC')).id, made.id, 'a campaign has one conversation');
     // The page's own campaignId on a known conversation is not read: the record decides.
     await r.turn(made.id, 'How is it doing?', { host: 'claude', campaignId: 'cmp_99OTHER' });

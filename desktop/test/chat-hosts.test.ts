@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { replyNoCardForms } from '../src/chat-permission-model.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -64,7 +65,7 @@ test('the person\'s words are never on a host\'s command line: every argument is
 
 test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, and each allowed jason verb', () => {
     assert.deepEqual(valuesOf(claudeArguments(turn), '--allowedTools'), [...claudeAllowedTools, ...fence.allowed.map((verb) => `Bash(jason ${verb}:*)`)]);
-    assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), ['Bash(reply auth status:*)', 'Bash(reply account list:*)']);
+    assert.deepEqual(claudeAllowedTools.filter((tool) => tool.startsWith('Bash(')), replyNoCardForms.map((form) => `Bash(${form})`));
     assert.ok(!claudeArguments(turn).includes('Bash(jason:*)'));
     for (const tool of ['Skill', 'WebSearch', 'Task', 'TodoWrite']) assert.ok(claudeAllowedTools.includes(tool), tool);
     // A web page is opened by a card: the agent reads text outsiders wrote, and a fetch could carry what it sees out in a URL.
@@ -224,7 +225,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(targetsOf(rules), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -236,7 +237,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 
@@ -432,8 +433,12 @@ test('a recorded Claude Code turn maps to its session, its words and one step pe
         { kind: 'session', id: '0b6f3c1e-2d4a-4c8e-9f10-5a7b8c9d0e1f' },
         { kind: 'key_source', source: 'absent' },
         { kind: 'text', text: 'Let me look at what is waiting.' },
+        { kind: 'tool_use', id: 'toolu_1', name: 'Bash' },
         { kind: 'step', text: 'Ran a jason command', detail: 'jason approval list --json' },
+        { kind: 'tool_result', id: 'toolu_1' },
+        { kind: 'tool_use', id: 'toolu_2', name: 'Read' },
         { kind: 'step', text: 'Read a file', detail: '/data/desktop/chat/notes.md' },
+        { kind: 'tool_use', id: 'toolu_3', name: 'Bash' },
         { kind: 'step', text: 'Ran a command', detail: 'git log --oneline -5 /home/someone/private' },
         { kind: 'text', text: 'Nothing is waiting for you.' },
         { kind: 'result', error: null },

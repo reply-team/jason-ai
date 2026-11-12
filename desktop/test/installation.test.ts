@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { AgentFolderUnowned } from '../src/chat-agent-folder.ts';
 import { loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
 import type { DesktopSettings } from '../src/settings.ts';
 import { bench, memoryLog, type Bench } from './harness.ts';
 
 const bundleVersion = '0.34.0-rc.1';
 
-async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }) {
+async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }, extra: { ownChatFolder?: (chat: string, records: string) => void } = {}) {
     const log = memoryLog();
     const saved: DesktopSettings[] = [];
     const started = await startInstallation({
@@ -19,6 +21,8 @@ async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsD
         bundleVersion,
         settings,
         saveSettings: (next) => void saved.push(next),
+        programs: b.programs,
+        ...extra,
     });
     return { started, log, saved, verbs: b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args) };
 }
@@ -53,8 +57,10 @@ test('with no runtime up, the desktop starts one through jason runtime start and
     assert.deepEqual(readdirSync(b.paths.chat).sort(), ['.agents', '.claude']);
     for (const host of ['.claude', '.agents']) {
         assert.deepEqual(readdirSync(join(b.paths.chat, host)), ['skills']);
-        assert.deepEqual(readdirSync(join(b.paths.chat, host, 'skills')).sort(), ['.jason-skills.json', 'campaign-launch'], host);
+        assert.deepEqual(readdirSync(join(b.paths.chat, host, 'skills')).sort(), ['campaign-launch'], host);
     }
+    // Each deployment's record lives outside the chat folder, under the desktop's own folder.
+    assert.deepEqual(readdirSync(b.paths.skillsRecords).sort(), ['agents.json', 'claude.json']);
     assert.deepEqual(saved, [{ feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: bundleVersion, theme: null }]);
 });
 
@@ -116,8 +122,22 @@ test('a UI that is served but not this runtime’s is installed again, and an in
 test('the skills are deployed once per bundle version', async (t) => {
     const b = bench(t);
     runtimeAlreadyUp(b);
+    mkdirSync(b.paths.skillsRecords, { recursive: true });
+    for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
     const { verbs } = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
     assert.equal(verbs.some((args) => args[0] === 'skills'), false);
+});
+
+test('a chat skills folder whose deployment the desktop keeps no record of is deployed afresh, and what stood there unrecorded is gone', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    mkdirSync(join(b.paths.chat, '.claude', 'skills', 'planted'), { recursive: true });
+    writeFileSync(join(b.paths.chat, '.claude', 'skills', 'planted', 'SKILL.md'), '---\nallowed-tools: Bash\n---');
+    writeFileSync(join(b.paths.chat, '.claude', 'skills', '.jason-skills.json'), '{"version":1,"packs":[]}');
+    const { verbs } = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.ok(verbs.some((args) => args[0] === 'skills' && args.includes('claude_code')));
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
+    assert.deepEqual(readdirSync(b.paths.skillsRecords).sort(), ['agents.json', 'claude.json']);
 });
 
 test('a start that fails, or a link that is not the runtime’s UI, stops with what the CLI said', async (t) => {
@@ -144,4 +164,154 @@ test('every CLI run is logged by its verb, exit and time, never by its arguments
     assert.equal(runs.length, 9);
     for (const run of runs) assert.deepEqual(Object.keys(run.fields).sort(), ['ElapsedMs', 'Exit', 'Verb']);
     assert.equal(JSON.stringify(log.lines).includes('manifest.json'), false);
+});
+
+// The Reply skills at the start, for a person already signed in to Reply, while the desktop keeps no record of them.
+
+const replySkillCalls = (b: Bench) => b.record().filter((entry) => entry.name === 'reply' && entry.args.join(' ') === 'skills install adapter --project --agent codex');
+const replyRecordFile = (b: Bench) => join(b.paths.skillsRecords, 'reply.json');
+
+test('a first start with no record of the Reply skills and Reply signed in deploys them and records them with their digests', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    await start(b);
+    assert.equal(replySkillCalls(b).length, 1);
+    const kept = JSON.parse(readFileSync(replyRecordFile(b), 'utf8')) as Record<string, { path: string; sha256: string }[]>;
+    for (const folder of ['.claude', '.agents']) {
+        const skills = readdirSync(join(b.paths.chat, folder, 'skills')).filter((name) => name.startsWith('reply-')).sort();
+        assert.deepEqual(skills, ['reply-api', 'reply-cli'], folder);
+        assert.deepEqual(kept[folder]?.map((each) => each.path).sort(), ['reply-api/SKILL.md', 'reply-cli/SKILL.md'], folder);
+        assert.equal(kept[folder]?.find((each) => each.path === 'reply-cli/SKILL.md')?.sha256, createHash('sha256').update('# reply-cli\n').digest('hex'));
+    }
+    // With the record kept, a later start runs nothing of Reply's.
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 1);
+});
+
+test('not signed in to Reply, or no Reply CLI, a start runs no install of the Reply skills and records nothing', async (t) => {
+    const out = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'no' } });
+    runtimeAlreadyUp(out);
+    await start(out);
+    assert.equal(replySkillCalls(out).length, 0);
+    assert.ok(!existsSync(replyRecordFile(out)));
+    const none = bench(t);
+    runtimeAlreadyUp(none);
+    await start(none);
+    assert.ok(!none.record().some((entry) => entry.name === 'reply'));
+    assert.ok(!existsSync(replyRecordFile(none)));
+});
+
+test('a reply- folder that stands there with no record is removed and the CLI\'s copy put in its place, never read or kept', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    // Jason's own skills are deployed and recorded already, so nothing but the Reply step touches the folders.
+    mkdirSync(b.paths.skillsRecords, { recursive: true });
+    for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
+    for (const folder of ['.claude', '.agents']) {
+        mkdirSync(join(b.paths.chat, folder, 'skills', 'reply-cli'), { recursive: true });
+        writeFileSync(join(b.paths.chat, folder, 'skills', 'reply-cli', 'SKILL.md'), '---\nallowed-tools: Bash\n---');
+        mkdirSync(join(b.paths.chat, folder, 'skills', 'reply-x'), { recursive: true });
+        writeFileSync(join(b.paths.chat, folder, 'skills', 'reply-x', 'SKILL.md'), 'planted');
+    }
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 1);
+    for (const folder of ['.claude', '.agents']) {
+        assert.ok(!existsSync(join(b.paths.chat, folder, 'skills', 'reply-x')), folder);
+        assert.equal(readFileSync(join(b.paths.chat, folder, 'skills', 'reply-cli', 'SKILL.md'), 'utf8'), '# reply-cli\n', folder);
+    }
+    const kept = JSON.parse(readFileSync(replyRecordFile(b), 'utf8')) as Record<string, { path: string }[]>;
+    assert.ok(!kept['.claude']?.some((each) => each.path.startsWith('reply-x/')));
+});
+
+test('a failed install of the Reply skills lets the start go on with no record, and the next start tries again', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes', STUB_REPLY_SKILLS_FAIL: 'yes' } });
+    runtimeAlreadyUp(b);
+    const { started, log } = await start(b);
+    assert.equal(started.link, 'http://127.0.0.1:41234/ui/#pair=planted-pair-code');
+    assert.ok(!existsSync(replyRecordFile(b)));
+    assert.ok(log.lines.some((line) => line.name === 'skills_deployed' && line.fields.Target === 'chat_reply' && line.fields.Exit === 1));
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 2, 'tried again, since the record is still absent');
+});
+
+test('a start never deploys through a link at the chat folder\'s .claude: the link is removed, its target left byte for byte, the skills deployed into a real folder', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    const person = join(b.root, 'person');
+    mkdirSync(join(person, 'skills', 'mine'), { recursive: true });
+    writeFileSync(join(person, 'skills', 'mine', 'SKILL.md'), 'the person\'s own skill');
+    mkdirSync(b.paths.chat, { recursive: true });
+    try {
+        symlinkSync(person, join(b.paths.chat, '.claude'), 'junction');
+    } catch {
+        t.skip('links cannot be made here');
+        return;
+    }
+    await start(b);
+    assert.deepEqual(readdirSync(person), ['skills']);
+    assert.deepEqual(readdirSync(join(person, 'skills')), ['mine']);
+    assert.equal(readFileSync(join(person, 'skills', 'mine', 'SKILL.md'), 'utf8'), 'the person\'s own skill');
+    const claude = lstatSync(join(b.paths.chat, '.claude'));
+    assert.ok(claude.isDirectory() && !claude.isSymbolicLink());
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
+});
+
+test('a lost host record costs the Reply skills nothing: their record goes with it, and the start copies them in again', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    await start(b);
+    assert.equal(replySkillCalls(b).length, 1);
+    // The record of the Claude Code skills is lost; the Reply skills' record is still there.
+    rmSync(join(b.paths.skillsRecords, 'claude.json'));
+    await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: null });
+    assert.equal(replySkillCalls(b).length, 2, 'the Reply skills are deployed again');
+    const kept = JSON.parse(readFileSync(replyRecordFile(b), 'utf8')) as Record<string, { path: string }[]>;
+    for (const folder of ['.claude', '.agents']) {
+        assert.ok(existsSync(join(b.paths.chat, folder, 'skills', 'reply-cli', 'SKILL.md')), folder);
+        assert.ok(kept[folder]?.some((each) => each.path === 'reply-cli/SKILL.md'), folder);
+    }
+});
+
+test('a start whose pass over the chat folder\'s top fails deploys nothing into the chat folder, the Reply skills included, and marks nothing', async (t) => {
+    const b = bench(t, { programs: ['reply'], env: { STUB_REPLY_SIGNED_IN: 'yes' } });
+    runtimeAlreadyUp(b);
+    const failing = () => {
+        throw new AgentFolderUnowned('EPERM');
+    };
+    const { verbs, saved, log } = await start(b, undefined, { ownChatFolder: failing });
+    assert.ok(verbs.some((args) => args.join(' ').startsWith('skills install --roles-only')), 'the roles deploy is unaffected');
+    assert.ok(!verbs.some((args) => args.includes('--root')), 'no deploy into the chat folder');
+    assert.equal(replySkillCalls(b).length, 0);
+    assert.deepEqual(saved, []);
+    assert.ok(log.lines.some((line) => line.name === 'agent_folder_unowned' && line.fields.Code === 'EPERM'));
+});
+
+test('a link left at the skills folder\'s record name is removed as itself before the record is copied: what it names is left as it was', async (t) => {
+    const b = bench(t);
+    runtimeAlreadyUp(b);
+    mkdirSync(b.paths.skillsRecords, { recursive: true });
+    for (const name of ['claude.json', 'agents.json']) writeFileSync(join(b.paths.skillsRecords, name), '{"version":1,"packs":[]}');
+    const person = join(b.root, 'person');
+    mkdirSync(person, { recursive: true });
+    writeFileSync(join(person, 'precious.json'), 'the person\'s own');
+    const at = join(b.paths.chat, '.claude', 'skills', '.jason-skills.json');
+    mkdirSync(dirname(at), { recursive: true });
+    let linked = false;
+    for (const [target, type] of [[join(person, 'precious.json'), 'file'], [person, 'junction']] as const) {
+        try {
+            symlinkSync(target, at, type);
+            linked = true;
+            break;
+        } catch {
+            // The next kind of link, or none.
+        }
+    }
+    if (!linked) {
+        t.skip('links cannot be made here');
+        return;
+    }
+    await start(b);
+    assert.deepEqual(readdirSync(person), ['precious.json']);
+    assert.equal(readFileSync(join(person, 'precious.json'), 'utf8'), 'the person\'s own');
+    assert.deepEqual(readdirSync(join(b.paths.chat, '.claude', 'skills')), ['campaign-launch']);
 });

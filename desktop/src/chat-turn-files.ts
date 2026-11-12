@@ -1,11 +1,12 @@
 // What one chat turn writes, and removes when it ends: the host's MCP configuration, which names the turn's permission
-// endpoint and carries the turn's secret. It lies in `<data>/desktop/turns/`, outside the chat folder, so the permission
+// endpoint and carries the turn's secret, and in Full access the turn's settings, whose hook carries the same secret. It lies in `<data>/desktop/turns/`, outside the chat folder, so the permission
 // model refuses the agent a read of it and one host rule covers every turn's; the secret is never on argv and never in
 // a log. Every function here takes that folder.
 
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fullAccessSettings } from './chat-hosts.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
 const turnIdShape = /^[0-9a-f]{24}$/;
@@ -49,11 +50,29 @@ export function writeTurnConfig(turns: string, turnId: string, url: string, secr
     return file;
 }
 
-export function removeTurnFiles(turns: string, turnId: string): void {
-    rmSync(turnConfigPath(turns, turnId), { force: true });
+export function turnSettingsPath(turns: string, turnId: string): string {
+    if (!turnIdShape.test(turnId)) throw new Error('That is not a turn id the desktop made.');
+    return join(turns, `turn-${turnId}.settings.json`);
 }
 
-const turnFileShape = /^turn-[0-9a-f]{24}\.mcp\.json$/;
+/**
+ * Writes the settings of a turn in Full access (`fullAccessSettings`) beside its MCP configuration, the same way: readable
+ * by this user alone, never over a file already there.
+ */
+export function writeTurnSettings(turns: string, turnId: string, hookUrl: string, secret: string): string {
+    const file = turnSettingsPath(turns, turnId);
+    mkdirSync(turns, { recursive: true, mode: 0o700 });
+    writeFileSync(file, `${JSON.stringify(fullAccessSettings(hookUrl, secret))}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    return file;
+}
+
+/** Removes the turn's files: its MCP configuration, and its settings when it had them. */
+export function removeTurnFiles(turns: string, turnId: string): void {
+    rmSync(turnConfigPath(turns, turnId), { force: true });
+    rmSync(turnSettingsPath(turns, turnId), { force: true });
+}
+
+const turnFileShape = /^turn-[0-9a-f]{24}\.(mcp|settings)\.json$/;
 
 /** The empty folder one naming run of a set-up chat runs in (`chat-naming.ts`), removed after with what it holds. */
 export function namingFolderPath(turns: string, id: string): string {

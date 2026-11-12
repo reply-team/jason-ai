@@ -95,6 +95,8 @@ if (process.env.STUB_HANG === name) {
         process.exitCode = answer.exit ?? (answer.status >= 400 ? 1 : 0);
     }
 } else if (name === 'reply' && said === 'skills install adapter --project --agent codex') {
+    // STUB_REPLY_SKILLS_FAIL=yes makes the install fail before it writes anything.
+    if (process.env.STUB_REPLY_SKILLS_FAIL === 'yes') process.exit(1);
     for (const skill of ['reply-cli', 'reply-api', 'campaign-launch']) {
         mkdirSync(join(process.cwd(), '.agents', 'skills', skill), { recursive: true });
         writeFileSync(join(process.cwd(), '.agents', 'skills', skill, 'SKILL.md'), `# ${skill}\n`);

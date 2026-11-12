@@ -125,8 +125,12 @@ if (args[0] === 'status') {
     }
     const root = args[args.indexOf('--root') + 1];
     mkdirSync(join(root, 'campaign-launch'), { recursive: true });
-    writeFileSync(join(root, 'campaign-launch', 'SKILL.md'), '# campaign-launch\n');
-    writeFileSync(join(root, '.jason-skills.json'), '{}\n');
+    const skill = '# campaign-launch\n';
+    writeFileSync(join(root, 'campaign-launch', 'SKILL.md'), skill);
+    // The record as the CLI writes it (SkillsRecord): every file written, relative, with the digest of what was written.
+    const sha256 = require('node:crypto').createHash('sha256').update(skill).digest('hex');
+    const deployment = { pack: 'business', source: 'bundle', ref: 'stub', ref_overridden: false, commit: null, installed_at: '2026-11-12T00:00:00Z', files: [{ path: 'campaign-launch/SKILL.md', sha256 }] };
+    writeFileSync(join(root, '.jason-skills.json'), `${JSON.stringify({ version: 1, packs: [deployment] })}\n`);
     print({});
 } else if (['ui install', 'skills install', 'plugin install', 'plugin reload'].includes(verb)) {
     print({});

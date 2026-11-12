@@ -78,6 +78,71 @@ public class DesktopDenyListTests
     }
 
     /// <summary>
+    /// The allow list's verbs that change nothing: a chat in Plan only runs these and no other jason command. Each verb of
+    /// the allow list is declared here or in <see cref="ChangesTheAgentMakes"/>, never both, so a verb added to the CLI is
+    /// red until someone says which it is.
+    /// </summary>
+    private static readonly string[] ReadsOfThePlan =
+    [
+        "approval get", "approval list", "approval list-standing", "block get", "block list", "campaign activity",
+        "campaign activity-by-period", "campaign get", "campaign list", "campaign list-contacts", "campaign summary",
+        "contact get", "contact list", "contact thread", "contact threads", "decision get", "decision list", "events sources",
+        "journal kinds", "journal list", "logs", "plugin list", "preference list", "project get", "project list", "report get",
+        "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "status",
+        "subscription list", "subscription runs", "suppression list", "workitem count", "workitem get", "workitem list",
+        "workitem wait",
+    ];
+
+    /// <summary>The allow list's verbs that change something: a chat in Plan only never runs them.</summary>
+    private static readonly string[] ChangesTheAgentMakes =
+    [
+        "campaign add-contacts", "campaign archive", "campaign create", "campaign pause", "campaign remove-contacts",
+        "campaign start", "campaign update", "campaign update-context", "contact archive", "contact create", "contact update",
+        "decision raise", "events backfill", "events signal", "journal append", "project create", "project update",
+        "reply record", "rolenote set", "suppression add", "workitem cancel", "workitem complete", "workitem create",
+        "workitem heartbeat", "workitem set-result", "workitem update",
+    ];
+
+    private const string PlanListHeader =
+        "# The jason commands the desktop's chat runs in Plan only, one per line: the verbs of chat-allow-list.txt that change\n" +
+        "# nothing. In Plan only every other jason command is refused.\n" +
+        "#\n" +
+        "# Written from chat-allow-list.txt by DesktopDenyListTests, where each verb of the allow list is declared a read or a\n" +
+        "# change; a verb added to the CLI is red there until it is declared and JASON_UPDATE_FIXTURES=1 writes this file\n" +
+        "# again. Do not edit it by hand.\n";
+
+    /// <summary>
+    /// Every verb of the allow list is declared a read or a change, exactly once, and every declared verb is on the allow
+    /// list; the plan list is the reads, in the allow list's order.
+    /// </summary>
+    [Fact]
+    public void The_plan_list_is_the_allow_list_s_verbs_declared_reads()
+    {
+        var allowed = AllowList();
+        var reads = ReadsOfThePlan.ToHashSet(StringComparer.Ordinal);
+        var changes = ChangesTheAgentMakes.ToHashSet(StringComparer.Ordinal);
+
+        Assert.Empty(reads.Intersect(changes).ToList());
+        Assert.Empty(allowed.Where(verb => !reads.Contains(verb) && !changes.Contains(verb)).ToList());
+        Assert.Empty(reads.Concat(changes).Where(verb => !allowed.Contains(verb)).ToList());
+
+        var text = PlanListHeader + string.Concat(allowed.Where(reads.Contains).Select(verb => verb + "\n"));
+        var file = Path.Combine(RepositoryRoot(), "desktop", "chat-plan-list.txt");
+        if (Environment.GetEnvironmentVariable(UpdateVariable) == "1")
+        {
+            File.WriteAllText(file, text);
+            return;
+        }
+
+        Assert.True(File.Exists(file), $"desktop/chat-plan-list.txt is not there. Rerun this test with {UpdateVariable}=1 and commit the file.");
+        Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
+    }
+
+    private static List<string> AllowList() =>
+        File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt"))
+            .Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
+
+    /// <summary>
     /// Each verb asked each time is a leaf of the CLI's command tree, as the allow list's walk reads it: one that became a
     /// group, or was renamed, would take nothing out of the allow list, and its verbs would run without asking.
     /// </summary>
