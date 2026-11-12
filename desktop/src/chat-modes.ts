@@ -93,6 +93,17 @@ export const unguardedStandingSentence =
 export const standingUnkeptSentence = 'Always could not be kept: its file could not be written; Full access holds this time only.';
 
 /**
+ * Said in the chat when a tool ran unchecked and the file of the standing choice would not let Always be removed: it is
+ * held as taken back while this run lasts, and the next start removes it.
+ */
+export const standingUnremovedSentence =
+    'Always could not be removed from its file and is not in force until Jason is closed. Close anything that has full-access.json open: Jason removes it when it next starts, and if the System screen then still shows Always, choose Ask each time again there.';
+
+/** Said in a new chat the standing choice would have started in Full access when the folder for Full access was not made. */
+export const newChatAskFirstSentence =
+    'This chat starts in Ask first: the folder for Full access could not be made. Choose Full access from the menu to try again.';
+
+/**
  * The number the standing choice of Full access is given under (`full-access-standing.ts`): a choice kept under any
  * other number, lower or higher, is no choice, and the confirmation is shown again. It is raised only by a release that
  * widens what Full access reaches; a change of wording alone, the confirmation's or the page's, does not raise it.

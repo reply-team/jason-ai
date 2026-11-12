@@ -75,6 +75,39 @@ test('a write that fails leaves no file half-written and nothing a later read co
     assert.equal(readStanding(file, 'claude'), null);
 });
 
+test('reading is strict: a key it does not know, a key named twice, a moment that is no date or a file too large is no choice', (t) => {
+    const right = { consent: fullAccessConsent, given_at: given, new_chats: true };
+    assert.deepEqual(parseStanding(JSON.stringify({ claude: right }), 'claude'), { consent: fullAccessConsent, givenAt: given, newChats: true });
+    assert.equal(parseStanding(JSON.stringify({ claude: right, gemini: right }), 'claude'), null, 'a host it does not know');
+    assert.equal(parseStanding(JSON.stringify({ claude: right, note: 'x' }), 'claude'), null, 'a key it does not know');
+    assert.equal(parseStanding(JSON.stringify({ claude: { ...right, scope: 'all' } }), 'claude'), null, 'a field it does not know');
+    const once = JSON.stringify({ claude: { ...right, new_chats: false } });
+    assert.equal(parseStanding(`{"claude":${JSON.stringify(right)},${once.slice(1)}`, 'claude'), null, 'a host named twice');
+    assert.equal(parseStanding(`{"claude":{"consent":1,"given_at":"${given}","new_chats":false,"new_chats":true}}`, 'claude'), null, 'a field named twice');
+    for (const moment of ['2026-99-99T99:99:99Z', '2026-02-30T00:00:00Z', '2026-13-01T00:00:00.000Z']) {
+        assert.equal(parseStanding(JSON.stringify({ claude: { ...right, given_at: moment } }), 'claude'), null, moment);
+    }
+    assert.equal(parseStanding(`${JSON.stringify({ claude: right })}${' '.repeat(5000)}`, 'claude'), null, 'larger than the desktop writes');
+    const root = mkdtempSync(join(tmpdir(), 'jason-standing-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const file = join(root, 'full-access.json');
+    writeFileSync(file, `${JSON.stringify({ claude: right })}${' '.repeat(5000)}`);
+    assert.equal(readStanding(file, 'claude'), null);
+});
+
+test('a write goes through a file no one can foretell, made only where nothing is, and leaves nothing beside it', (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'jason-standing-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const file = join(root, 'full-access.json');
+    // A file put where a predictable name would have been is neither followed nor taken.
+    writeFileSync(`${file}.${process.pid}.tmp`, 'planted');
+    writeStanding(file, 'claude', { consent: fullAccessConsent, givenAt: given, newChats: false });
+    writeStanding(file, 'claude', { consent: fullAccessConsent, givenAt: given, newChats: true });
+    assert.deepEqual(readStanding(file, 'claude'), { consent: fullAccessConsent, givenAt: given, newChats: true });
+    assert.deepEqual(readdirSync(root).sort(), ['full-access.json', `full-access.json.${process.pid}.tmp`]);
+    assert.equal(readFileSync(`${file}.${process.pid}.tmp`, 'utf8'), 'planted');
+});
+
 test('the confirmation offers This time, Always and Cancel, Cancel focused and Escape\'s answer, and a checkbox that counts only with Always', () => {
     const dialog = fullAccessDialog();
     assert.deepEqual(dialog.buttons, ['Give full access this time', 'Always on this computer', 'Cancel']);
