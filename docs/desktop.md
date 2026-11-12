@@ -155,17 +155,23 @@ lists each key and each card's grant.
   without LinkedIn still shows its email. A channel that account's plan or role does not have says so ("This Reply
   account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
   accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
-  **Add account** offers Gmail, Outlook, another mailbox and LinkedIn (a channel the account does not have is not
-  offered; the LinkedIn acts need Reply CLI 0.20.0 or later, and below it the card turns them off and says so), and a row that is not in a good state offers **Reconnect**. Each opens a dialog with Reply's own link for the
-  act, its host in plain text, **Copy link**, **Open in the browser** and **Check now**. Reply's page needs no Reply
-  sign-in, so you can send the link to whoever owns the mailbox or the LinkedIn account, who signs in to Google,
-  Microsoft or LinkedIn there with their own credentials; a mailbox by SMTP or IMAP is added on Reply's page, so its
-  password never passes through Jason. For a mailbox, the desktop first asks you in a box of its own, each time, before it asks Reply for the link; with no window to ask in, it does not ask. The dialog then warns that anyone who has the link can add and manage
-  the Reply account's mailboxes and that it does not expire. A LinkedIn link is valid for a limited time, and the
-  card lists pending connections with Waiting or Expired and their expiry. The desktop asks Reply for the link, checks it
-  before showing it, shows it only on your click, and keeps it nowhere after the dialog closes. Finishing happens on
-  Reply's side, so the card learns of it by **Check now**, **Check again** or a focus. Limits, signatures, pauses and
-  removal stay in Reply.
+  Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
+  to update the Reply CLI and offers nothing. **Add account** offers Gmail, Outlook and LinkedIn (a channel the account
+  does not have is not offered). A mailbox row offers **Limits** (its daily limit), **Unblock** (sending again after its
+  provider stopped it) and **Delete**; a LinkedIn row **Pause** or **Resume** and **Delete**; and a row that is not in a
+  good state **Reconnect**. A connect or a reconnect opens Reply's own page in your browser: it needs no Reply sign-in,
+  and whoever owns the mailbox or the LinkedIn account signs in to Google, Microsoft or LinkedIn there with their own
+  credentials, so a password never passes through Jason. The desktop hands the link to the browser and keeps it nowhere;
+  the card says only that it opened and until when it works. Every change to an account asks you first in a box of the
+  desktop's own that names the account; with no window to ask in, it does not act. Where Reply does not yet make a link
+  for one mailbox, the card offers the account's shared mailbox page instead, only on your click and after a box that
+  warns that the address does not expire and lets whoever holds it manage all of the user's mailboxes. Where sequences
+  use a LinkedIn account, its delete is refused, and **Delete anyway** asks again in a box of its own. A signed-out
+  LinkedIn account offers **Reconnect**, and no pause or resume until it is reconnected. An answer that leaves the
+  account's state unknown reads the list again and shows what is; nothing is repeated by itself. The card lists the links
+  made and not used yet under their channel, with Waiting or Expired and their expiry. Finishing a connection happens on
+  Reply's side, so the card learns of it by **Check now**, **Check again** or a focus. Signatures and a
+  LinkedIn account's limits stay in Reply.
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
