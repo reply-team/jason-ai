@@ -82,13 +82,12 @@ describe('a link the desktop hands the console', () => {
             .answer('journal.list', 'journal.list/by-campaign');
         renderConsole(desktop, fake);
         await waitFor(() => expect(calls(desktop, 'links.take')).toHaveLength(1));
-        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        // The window opens on Start, with no chat made.
+        await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
         desktop.link({ page: 'campaign', id: 'cmp_1' });
         await waitFor(() => expect(document.querySelector('.harness .campaign-tabs')).not.toBeNull());
         expect(route.value).toMatchObject({ screen: 'campaigns', id: 'cmp_1' });
-        expect(Object.values(chats.value).map((chat) => [chat.draft, chat.entries.length, chat.running])).toEqual([
-            ['', 0, false],
-        ]);
+        expect(Object.values(chats.value)).toEqual([]);
         expect(calls(desktop, 'chat.send')).toEqual([]);
         expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toEqual([]);
         // A panel's link brings that panel forward.

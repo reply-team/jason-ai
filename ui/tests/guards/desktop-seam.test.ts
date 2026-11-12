@@ -7,10 +7,15 @@ import type { DesktopSetup, JasonDesktop } from '../../src/platform/desktop';
 // type-checks this file, so either is a red build.
 type Exactly<Named, Declared> = [Named] extends [Declared] ? ([Declared] extends [Named] ? true : false) : false;
 
-const top = { platform: true, onCommand: true, chat: true, links: true, setup: true } as const satisfies Record<
-    keyof JasonDesktop,
-    true
->;
+const top = {
+    platform: true,
+    onCommand: true,
+    theme: true,
+    chat: true,
+    links: true,
+    setup: true,
+} as const satisfies Record<keyof JasonDesktop, true>;
+const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
 const chat = {
     send: true,
     stop: true,
@@ -48,23 +53,29 @@ const status = {
 
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
+    Exactly<keyof typeof theme, keyof JasonDesktop['theme']>,
     Exactly<keyof typeof chat, keyof JasonDesktop['chat']>,
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
-] = [true, true, true, true, true];
+] = [true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true]);
         expect([
-            ...Object.keys(top).filter((name) => name !== 'chat' && name !== 'setup' && name !== 'links'),
+            ...Object.keys(top).filter(
+                (name) => name !== 'theme' && name !== 'chat' && name !== 'links' && name !== 'setup',
+            ),
+            ...Object.keys(theme).map((name) => `theme.${name}`),
             ...Object.keys(chat).map((name) => `chat.${name}`),
             ...Object.keys(links).map((name) => `links.${name}`),
             ...Object.keys(setup).map((name) => `setup.${name}`),
         ]).toEqual([
             'platform',
             'onCommand',
+            'theme.get',
+            'theme.set',
             'chat.send',
             'chat.stop',
             'chat.answer',

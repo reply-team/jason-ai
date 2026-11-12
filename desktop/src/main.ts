@@ -5,7 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -36,6 +36,7 @@ import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
 import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
@@ -185,7 +186,7 @@ function linkOf(data: unknown): unknown {
 }
 
 /** The window's run; `links` is where a link waits for the page, made by the start before Electron was ready. */
-async function run(links: LinkPost): Promise<void> {
+async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
@@ -208,6 +209,8 @@ async function run(links: LinkPost): Promise<void> {
 
     const conduct = windowConduct(process.platform);
     const atLogin = openedAtLogin(process.argv);
+    // The theme the person chose last, before any page is drawn: the window's first paint and the starting page follow it.
+    nativeTheme.themeSource = startingTheme(readSettings(paths.settings).theme, newInstallation);
     const window = new BrowserWindow({
         width: 1280,
         height: 860,
@@ -217,7 +220,7 @@ async function run(links: LinkPost): Promise<void> {
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
-        backgroundColor: '#f7f7f5',
+        backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackground : lightBackground,
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -260,6 +263,11 @@ async function run(links: LinkPost): Promise<void> {
     if (registration !== null && !app.setAsDefaultProtocolClient(registration.scheme, registration.path, registration.args)) log.warn('deep_link_registration_failed', {});
 
     let settings: DesktopSettings = readSettings(paths.settings);
+    // A new installation meets Light, and is told so in its settings, so its second start is not an existing one's.
+    if (newInstallation && settings.theme === null) {
+        settings = { ...settings, theme: 'light' };
+        writeSettings(paths.settings, settings);
+    }
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);
@@ -373,6 +381,16 @@ async function run(links: LinkPost): Promise<void> {
         changed: () => current?.webContents.send(eventChannels['setup.changed']),
         ...loggedModels(log),
     });
+    const refusedTheme = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
+    const themeDeps = {
+        setSource: (choice: 'system' | 'light' | 'dark') => {
+            nativeTheme.themeSource = choice;
+            window.setBackgroundColor(nativeTheme.shouldUseDarkColors ? darkBackground : lightBackground);
+        },
+        write: (next: DesktopSettings) => writeSettings(paths.settings, next),
+    };
+    handle(ipcMain, 'theme.get', origin, () => settings.theme, refusedTheme);
+    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refusedTheme);
     registerSetup(
         new Setup({
             paths,
@@ -499,6 +517,9 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
+// Whether this installation is new is read next: before Electron makes its profile under the data directory, before the
+// single-instance lock, before anything is written there, on either start below.
+const installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -555,6 +576,6 @@ function startDesktop(): void {
         if (fromArgs.kind === 'link') linkArrived(fromArgs.raw, links, early);
         app.on('activate', () => showWindow());
         app.on('window-all-closed', () => app.quit());
-        void app.whenReady().then(() => run(links));
+        void app.whenReady().then(() => run(links, installationWasNew));
     }
 }

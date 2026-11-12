@@ -149,7 +149,7 @@ test('the main process decides a start\'s link after the sandbox and before ever
     const start = main.indexOf('function startDesktop(): void {');
     const decided = main.indexOf('const fromArgs = linkIn(process.argv.slice(1));');
     assert.ok(sandbox > 0 && start > sandbox && decided > start, 'the link is decided inside the start the sandbox lets through');
-    for (const later of ['uninstallStart(process.argv', 'stopRuntimeStart(process.argv', 'app.requestSingleInstanceLock(', 'app.whenReady().then(() => run(links))']) {
+    for (const later of ['uninstallStart(process.argv', 'stopRuntimeStart(process.argv', 'app.requestSingleInstanceLock(', 'app.whenReady().then(() => run(links, installationWasNew))']) {
         assert.ok(main.indexOf(later) > decided, `${later} comes after the link is decided`);
     }
     // A refused start does nothing else and quits.
@@ -159,7 +159,7 @@ test('the main process decides a start\'s link after the sandbox and before ever
     assert.ok(main.includes("app.on('second-instance', (_event, argv, _directory, data) => {\n            const link = linkOf(data);"));
     // macOS: open-url is listened for before ready, in the start that holds the lock.
     const openUrl = main.indexOf("app.on('open-url', (event, url) => {");
-    assert.ok(openUrl > main.indexOf("app.on('second-instance'") && openUrl < main.indexOf('void app.whenReady().then(() => run(links));'));
+    assert.ok(openUrl > main.indexOf("app.on('second-instance'") && openUrl < main.indexOf('void app.whenReady().then(() => run(links, installationWasNew));'));
     // Windows: registered at each start as linkRegistration says.
     assert.ok(main.includes('const registration = linkRegistration(process.platform, app.isPackaged, process.execPath);'));
     assert.ok(main.includes('!app.setAsDefaultProtocolClient(registration.scheme, registration.path, registration.args)'));
