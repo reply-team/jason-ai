@@ -59,6 +59,10 @@ the token it held, so the list stays one row per browser. The System screen show
 recently first; one not used for a month is dimmed, since a private window that closed or a browser whose data was
 cleared never comes back for its token, and one button revokes every browser but the one you are using.
 
+A browser you paired keeps its token in its own profile, which a command of a Codex chat may read; revoke a browser you
+no longer use. The desktop's own window keeps its token in memory only and pairs afresh at each start. The first start of
+a desktop that kept it on disk before revokes every UI token once, so a browser you paired must be paired again once.
+
 ## The port
 
 The runtime listens on `127.0.0.1:52766` by default, so the bookmark is stable. When that port is taken it takes the
