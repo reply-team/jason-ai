@@ -200,6 +200,8 @@ export interface ChatOptions {
     now?(): number;
     /** How many entries one pass of the sweep of the ended grants' folders takes; absent, `sweepCap`. */
     sweepCap?: number;
+    /** How often the ended place is swept while the desktop runs; absent, `sweepEveryMs`, a day. A row shortens it. */
+    sweepEveryMs?: number;
     /** Opens a folder for the person to see (the Open folder button); absent, nothing is opened. */
     openFolder?(path: string): void | Promise<void>;
     /**
@@ -379,6 +381,9 @@ const busy = 'This chat is still answering. Wait for it to finish, or stop it, t
  */
 export const grantEndWaitMs = 5_000;
 
+/** How often the ended place is swept while the desktop runs, beside the sweep at each start: once a day. */
+export const sweepEveryMs = 24 * 60 * 60 * 1000;
+
 const notAHost = 'That is not an agent host this desktop knows. Choose Claude Code or Codex for the chat.';
 const notAConversation = 'That conversation is not one this desktop keeps.';
 const stillAnswering = (act: string) => `This conversation is still answering. Wait for it to finish, or stop it, then ${act}.`;
@@ -467,6 +472,8 @@ export class Chat {
      * once the folder moves, and whether the host of a turn in it may still be running (`held`).
      */
     #endingGrants = new Map<string, { conversation: string; say: boolean; held: boolean }>();
+    /** The daily sweep's timer, which never keeps the process alive; cleared when the window closes. */
+    #daily: NodeJS.Timeout;
     /** The conversations whose Full access confirmation is open: a second request while it is opens no second box. */
     #asking = new Set<string>();
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
@@ -519,6 +526,13 @@ export class Chat {
             ...(options.answerWindowMs !== undefined ? { timeoutMs: options.answerWindowMs } : {}),
         });
         this.#sweepAtStart();
+        // A desktop left running sweeps each day too, so an ended folder goes within a day of its seven days, start or no
+        // start; a grant whose move failed with no host in its folder is tried again first.
+        this.#daily = setInterval(() => {
+            for (const [id, ending] of [...this.#endingGrants]) if (!ending.held) this.#moveEnded(id);
+            this.#sweepLater();
+        }, options.sweepEveryMs ?? sweepEveryMs);
+        this.#daily.unref();
     }
 
     #now(): number {
@@ -1144,6 +1158,7 @@ export class Chat {
      */
     closeAll(): void {
         this.#closed = true;
+        clearInterval(this.#daily);
         for (const running of [...this.#running.values()]) {
             running.stopped = true;
             running.process?.stop();

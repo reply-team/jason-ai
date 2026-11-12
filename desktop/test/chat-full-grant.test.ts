@@ -524,3 +524,30 @@ test('closing the window during a Full access turn stops it first and moves the 
     assert.equal(readdirSync(r.b.paths.chatFullEnded).length, 1);
     assert.deepEqual(notices(r.events.get(id)), []);
 });
+
+test('a desktop left running sweeps the ended place each day, so a folder goes once its seven days are over without a new start', async (t) => {
+    const r = rig(t, { chat: { sweepEveryMs: 50 } });
+    const ended = join(r.b.paths.chatFullEnded, endedName(newGrantId(r.clock.now - 6 * day), r.clock.now - 6 * day));
+    mkdirSync(join(ended, 'deep'), { recursive: true });
+    writeFileSync(join(ended, 'deep', 'file.txt'), 'x');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.ok(existsSync(ended), 'six days old: kept');
+    r.clock.now += 2 * day;
+    await settled(() => !existsSync(ended));
+});
+
+test('a move that failed with no host in the folder is tried again at the daily sweep, and said once when the folder moved', async (t) => {
+    const r = rig(t, { chat: { sweepEveryMs: 50 } });
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    mkdirSync(r.b.paths.desktop, { recursive: true });
+    writeFileSync(r.b.paths.chatFullEnded, 'in the way');
+    await r.chat.setMode(id, 'ask_first');
+    assert.equal(r.codes.length >= 1, true);
+    assert.deepEqual(notices(r.events.get(id)), []);
+    rmSync(r.b.paths.chatFullEnded);
+    await settled(() => notices(r.events.get(id)).length === 1);
+    assert.deepEqual(readdirSync(r.b.paths.chatFull), []);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(notices(r.events.get(id)).length, 1, 'said once');
+});
