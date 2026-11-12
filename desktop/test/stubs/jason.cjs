@@ -99,6 +99,21 @@ if (args[0] === 'status') {
     }
     const next = from + size < items.length ? String(from + size) : null;
     print({ items: items.slice(from, from + size), next_cursor: next });
+} else if (verb === 'journal list') {
+    // The lines STUB_JOURNAL_FILE holds, as one page: newest first, as the runtime answers; STUB_JOURNAL_MORE=yes says
+    // there is a next page, and STUB_JOURNAL_FAILS=yes answers as an unreachable runtime does.
+    if (process.env.STUB_JOURNAL_FAILS === 'yes') {
+        process.stderr.write('No runtime answered.\n');
+        process.exit(3);
+    }
+    let items = [];
+    try {
+        items = JSON.parse(readFileSync(process.env.STUB_JOURNAL_FILE, 'utf8'));
+    } catch {}
+    // STUB_JOURNAL_SLEEP holds the answer back that many milliseconds, as a slow runtime does.
+    const answer = () => print({ items, next_cursor: process.env.STUB_JOURNAL_MORE === 'yes' ? 'jrn_next' : null });
+    if (process.env.STUB_JOURNAL_SLEEP) setTimeout(answer, Number(process.env.STUB_JOURNAL_SLEEP));
+    else answer();
 } else if (verb === 'project get') {
     print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {

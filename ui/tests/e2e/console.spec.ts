@@ -14,6 +14,16 @@ function standInDesktop(): void {
     let count = 0;
     const notKept = { refused: 'That conversation is not one this desktop keeps.' };
     const kept = (id: unknown) => (typeof id === 'string' ? made.get(id) : undefined);
+    // The Feed as the desktop answers for it, and every line the page handed it, for the test to read.
+    const feed: Made = {
+        id: 'conv_01JDFEED000000000000000000',
+        campaignId: null,
+        title: 'Feed',
+        updatedAt: '2026-11-11T00:00:00.000Z',
+        running: false,
+    };
+    const handed: unknown[] = [];
+    (window as unknown as { handedToFeed: unknown[] }).handedToFeed = handed;
     (window as unknown as { jasonDesktop: unknown }).jasonDesktop = {
         platform: 'win32',
         onCommand: quiet,
@@ -25,6 +35,8 @@ function standInDesktop(): void {
             onEvent: quiet,
             list: () => Promise.resolve([...made.values()].filter((each) => sent.has(each.id))),
             open: (id: unknown) => {
+                if (id === feed.id)
+                    return Promise.resolve({ ...feed, main: true, entries: [], dropped: 0, chosen: null });
                 const found = kept(id);
                 return Promise.resolve(found ? { ...found, entries: [], dropped: 0 } : notKept);
             },
@@ -60,6 +72,10 @@ function standInDesktop(): void {
                 if (name === '') return Promise.resolve({ refused: 'A name needs at least one character that shows.' });
                 found.title = name;
                 return Promise.resolve(found);
+            },
+            feed: (lines: unknown[]) => {
+                handed.push(...lines);
+                return Promise.resolve({ ...feed, main: true });
             },
         },
         setup: {
@@ -143,6 +159,13 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     await jason.campaignCreate('Smoke campaign');
     await expect(page.locator('.ev.activity').filter({ hasText: 'Smoke campaign' })).toBeVisible();
     expect(received).toBeGreaterThan(0);
+    // The line of the campaign made is handed to the Feed as its ids, moment and kind alone, and the Feed stands first.
+    const toFeed = await page.evaluate(() => (window as unknown as { handedToFeed: unknown[] }).handedToFeed);
+    expect(toFeed).toContainEqual(expect.objectContaining({ kind: 'campaign_created' }));
+    for (const line of toFeed)
+        expect(Object.keys(line as object).sort()).toEqual(['campaign_id', 'id', 'kind', 'ts', 'work_item_id']);
+    await side.getByRole('navigation', { name: 'Feed' }).getByRole('button', { name: 'Feed' }).click();
+    await expect(page.getByRole('heading', { name: 'The Feed' })).toBeVisible();
     await side.getByRole('button', { name: 'Connect' }).click();
     await expect(page.getByText('Drives the chat')).toBeVisible();
 
