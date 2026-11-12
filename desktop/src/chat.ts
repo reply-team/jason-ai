@@ -424,6 +424,8 @@ export class Chat {
     #grants = new Map<string, string>();
     /** The campaign and project folders already said to be left out, by path, so each is said once. */
     #leftOut = new Set<string>();
+    /** Folders this start moved that an earlier move had failed on, by conversation: said once, when it is opened. */
+    #movedAtStart = new Map<string, string>();
     /** The Feed's id, once it is made or read. */
     #feedId: string | null = null;
     /** The journal ids the Feed took, oldest first, at most `takenLimit`, kept on its record too (`taken`). */
@@ -481,7 +483,9 @@ export class Chat {
      */
     #sweepAtStart(): void {
         try {
-            moveLeftovers(this.#fullFolders(), this.#now(), (code) => this.#options.fullFolderFailed?.('move', code));
+            for (const each of moveLeftovers(this.#fullFolders(), this.#now(), (code) => this.#options.fullFolderFailed?.('move', code))) {
+                if (each.conversation !== null && conversationIdShape.test(each.conversation)) this.#movedAtStart.set(each.conversation, each.name);
+            }
         } catch {
             // Nothing to move.
         }
@@ -513,7 +517,7 @@ export class Chat {
         }
         const id = newGrantId(this.#now());
         try {
-            makeGrantFolder(this.#fullFolders(), id, paths.chat, paths.skillsRecords);
+            makeGrantFolder(this.#fullFolders(), id, paths.chat, paths.skillsRecords, conversation.id);
         } catch (error) {
             if (error instanceof GrantFolderUnmade) {
                 this.#options.fullFolderFailed?.('move', error.code);
@@ -686,6 +690,18 @@ export class Chat {
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
     open(id: unknown): ConversationOpened {
         const conversation = this.#own(id);
+        const moved = this.#movedAtStart.get(conversation.id);
+        if (moved !== undefined) {
+            this.#movedAtStart.delete(conversation.id);
+            const path = join(this.#options.paths.chatFullEnded, moved);
+            queueMicrotask(() =>
+                this.#options.emit(conversation.id, {
+                    kind: 'notice',
+                    text: `Full access has ended. The folder the agent worked in is kept for seven days and then removed: ${path}`,
+                    folder: moved,
+                }),
+            );
+        }
         return { ...this.#summaryOf(conversation), entries: structuredClone(conversation.entries), dropped: conversation.dropped, chosen: conversation.chosen === undefined ? null : { ...conversation.chosen } };
     }
 

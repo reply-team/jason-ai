@@ -6,7 +6,7 @@
 // enter is the one it looked at, stops after a number of entries it is given and takes up again at the next pass. A
 // failure leaves the folder and says a code; nothing here ever refuses a turn.
 
-import { copyFileSync, lstatSync, mkdirSync, opendirSync, readdirSync, renameSync, rmdirSync, unlinkSync, type BigIntStats } from 'node:fs';
+import { copyFileSync, lstatSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, unlinkSync, writeFileSync, type BigIntStats } from 'node:fs';
 import { join } from 'node:path';
 import { ownAgentFolder, skillsFolders } from './chat-agent-folder.ts';
 import { newConversationId } from './chat-conversations.ts';
@@ -64,12 +64,13 @@ function copyOwn(from: string, to: string): void {
  * turn puts them right first), copied, and the copy put right against the records as the chat folder's top is, so only
  * what the desktop recorded, with the bytes recorded, is there. Returns the folder's path.
  */
-export function makeGrantFolder(folders: FullFolders, id: string, chat: string, records: string): string {
+export function makeGrantFolder(folders: FullFolders, id: string, chat: string, records: string, conversation?: string): string {
     if (!grantIdShape.test(id)) throw new Error('That is not a grant id the desktop made.');
     const folder = join(folders.full, id);
     try {
         mkdirSync(folders.full, { recursive: true, mode: 0o700 });
         mkdirSync(folder);
+        if (conversation !== undefined) writeFileSync(join(folder, conversationMarker), conversation);
         for (const host of skillsFolders) {
             const skills = join(chat, host.folder, 'skills');
             let stat;
@@ -92,6 +93,9 @@ export function makeGrantFolder(folders: FullFolders, id: string, chat: string, 
 
 /** The name an ended folder has: the grant's id and the moment it moved. */
 export const endedName = (id: string, now: number): string => `${id}-${now}`;
+
+/** The file at a grant folder's top that names the conversation it was made for, so a later start can say where it went. */
+export const conversationMarker = '.grant-conversation';
 
 /**
  * Moves a grant's folder to the ended place, named with the moment it moved. Returns the name it has there; null when
@@ -120,14 +124,28 @@ export function endGrantFolder(folders: FullFolders, id: string, now: number, sa
  * At a start no grant is running, so every folder still in the grants' place is a leftover (a window closed on a turn that
  * held it, or a move that failed): each is moved to the ended place, its seven days counted from now.
  */
-export function moveLeftovers(folders: FullFolders, now: number, said: (code: string) => void = () => {}): void {
+export function moveLeftovers(folders: FullFolders, now: number, said: (code: string) => void = () => {}): { name: string; conversation: string | null }[] {
     let names: string[];
     try {
         names = readdirSync(folders.full);
     } catch {
-        return;
+        return [];
     }
-    for (const name of names) if (grantIdShape.test(name)) endGrantFolder(folders, name, now, said);
+    const moved: { name: string; conversation: string | null }[] = [];
+    for (const name of names) {
+        if (!grantIdShape.test(name)) continue;
+        const ended = endGrantFolder(folders, name, now, said);
+        if (ended === null) continue;
+        let conversation: string | null = null;
+        try {
+            const marker = join(folders.ended, ended, conversationMarker);
+            if (lstatSync(marker).isFile()) conversation = readFileSync(marker, 'utf8').slice(0, 64);
+        } catch {
+            // No marker: the move is not said to any conversation.
+        }
+        moved.push({ name: ended, conversation });
+    }
+    return moved;
 }
 
 function codeOf(error: unknown): string {

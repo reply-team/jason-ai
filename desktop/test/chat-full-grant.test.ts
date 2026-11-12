@@ -236,6 +236,7 @@ test('a folder a host still holds is left in place and a code is said; the next 
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'full_access', 'claude');
+    await r.turn(id, 'go', claude);
     // A file where the ended place should be makes the move fail.
     mkdirSync(r.b.paths.desktop, { recursive: true });
     writeFileSync(r.b.paths.chatFullEnded, 'in the way');
@@ -245,9 +246,19 @@ test('a folder a host still holds is left in place and a code is said; the next 
     assert.match(r.codes[0] ?? '', /^E[A-Z]+$/);
     assert.deepEqual(notices(r.events.get(id)), [], 'nothing is said of a folder that did not move');
     rmSync(r.b.paths.chatFullEnded);
-    r.again();
+    const next = r.again();
     await settled(() => readdirSync(r.b.paths.chatFull).length === 0);
     assert.equal(readdirSync(r.b.paths.chatFullEnded).length, 1);
+    // The start that moved it says so once, when the conversation is opened, with the folder it moved to.
+    assert.deepEqual(notices(r.events.get(id)), []);
+    next.open(id);
+    await settled(() => notices(r.events.get(id)).length === 1);
+    const moved = readdirSync(r.b.paths.chatFullEnded)[0];
+    assert.equal(notices(r.events.get(id))[0]?.folder, moved);
+    assert.ok(notices(r.events.get(id))[0]?.text.includes(join(r.b.paths.chatFullEnded, moved ?? '')));
+    next.open(id);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(notices(r.events.get(id)).length, 1, 'said once');
 });
 
 test('the ended place is kept for exactly seven days', () => {
