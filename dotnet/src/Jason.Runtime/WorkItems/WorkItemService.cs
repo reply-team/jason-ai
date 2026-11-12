@@ -485,6 +485,11 @@ public sealed class WorkItemService(
             journal.Append(db, actor, JournalKinds.WorkItemContextUpdated, campaign: null, key: change.Key, old: change.Old, updated: change.New, reason: reason, workItem: item);
         }
 
+        if (item.Status == WorkItemStatus.AwaitingApproval && contextChanges.Exists(change => change.Key == InputKey))
+        {
+            await WithdrawAskAsync(item, actor, now, cancellationToken).ConfigureAwait(false);
+        }
+
         if (item.Status == WorkItemStatus.Expired && request.DueAt.IsSet)
         {
             var previous = item.Status;
@@ -503,6 +508,37 @@ public sealed class WorkItemService(
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
+    }
+
+    /// <summary>
+    /// The question a parked item waits on was about arguments this patch has just replaced, so it is withdrawn, by the
+    /// person who replaced them and saying why, and the item goes back to the queue. Nothing is asked here: the claim is
+    /// the one place that decides whether a person is asked, and it decides about this item as about any other, under
+    /// what the item now says. Written with the patch, in its one save, so an approval that read the question first and
+    /// commits after this finds it superseded and approves nothing — its UPDATE carries the status it read, as this
+    /// one does, which is also what makes this write nothing when that approval committed first.
+    /// </summary>
+    private async Task WithdrawAskAsync(WorkItem item, ActorRef actor, DateTime now, CancellationToken cancellationToken)
+    {
+        var live = await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, cancellationToken).ConfigureAwait(false);
+        if (live is not { Status: ApprovalStatus.Pending })
+        {
+            return;
+        }
+
+        ApprovalGate.Resolve(db, journal, item, live, ApprovalStatus.Superseded, actor, ApprovalGate.InputChanged, now);
+        var previous = item.Status;
+        WorkItemTransitions.Apply(item, WorkItemStatus.Created, now);
+        journal.Append(
+            db,
+            actor,
+            WorkItemTransitions.JournalKind(previous, WorkItemStatus.Created),
+            campaign: null,
+            key: "status",
+            old: Status(previous),
+            updated: Status(WorkItemStatus.Created),
+            reason: ApprovalGate.InputChanged,
+            workItem: item);
     }
 
     /// <summary>Stops the work for good. Asking twice is how a retry after a lost response looks, so it is not a second event.</summary>
