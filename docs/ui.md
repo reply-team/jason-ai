@@ -241,9 +241,9 @@ before the agent acts.
 ## Accounts
 
 One screen for what you have connected. **Provider** is the Reply connection of the desktop's Connect panel, drawn by
-the same code and acting through the same acts of the desktop: pausing and resuming, unblocking, changing a daily
-limit and deleting each ask in a box of the desktop's own; a connection link is opened or copied by the desktop and never
-shown in or kept by the page. In a browser the page says in one sentence that these
+the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
+the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
+box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
 acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
 with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
