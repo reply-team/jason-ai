@@ -5,12 +5,12 @@ import type { DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { madeUpLinks, setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { heldLink, replyDismissed } from './connect';
+import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting, submitStart } from './start';
 
@@ -315,7 +315,7 @@ describe('Reply in a chat', () => {
         expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull();
     });
 
-    it('drops a link its chat card showed when the card is dismissed, and when Reply is wired', async () => {
+    it('drops a dialog its chat card showed when the card is dismissed, and when Reply is wired', async () => {
         const unwired: DesktopSetup = { ...setupFound, reply: { ...setupFound.reply, wired: false, accounts: [] } };
         for (const end of ['dismissed', 'wired'] as const) {
             replyDismissed.value = [];
@@ -326,8 +326,8 @@ describe('Reply in a chat', () => {
             const card = () => screen.getByRole('region', { name: 'Connect Reply' });
             fireEvent.click(within(await waitFor(card)).getByRole('button', { name: 'Add account' }));
             fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' })));
-            await waitFor(() => expect(heldLink()).toBe(madeUpLinks.gmail));
-            expect(calls(desktop, 'setup.replyMailboxLink')).toHaveLength(1);
+            await waitFor(() => expect(heldDialog()).not.toBeNull());
+            expect(calls(desktop, 'setup.replyConnect')).toHaveLength(1);
             if (end === 'dismissed') {
                 fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
             } else {
@@ -335,8 +335,8 @@ describe('Reply in a chat', () => {
                 flush(() => desktop.changed());
             }
             await waitFor(() => expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull());
-            expect(heldLink(), end).toBeNull();
-            expect(document.body.innerHTML).not.toContain('madeUpToken_ForTests');
+            expect(heldDialog(), end).toBeNull();
+            expect(screen.queryByRole('dialog'), end).toBeNull();
             cleanup();
         }
     });

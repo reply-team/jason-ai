@@ -372,7 +372,17 @@ test('reply is refused in Full access where Ask first refuses it, held but for i
         assert.equal(judged.verdict, 'deny', `Ask first: ${command}`);
         return { outcome: 'refused', message: judged.verdict === 'deny' ? judged.message : '' };
     };
-    for (const command of ['reply sequence start seq_1', 'reply api DELETE /v3/sequences/1', 'reply account delete acc_1 --yes', 'npx reply-cli sequence start seq_1']) {
+    // The Reply card's account verbs among them: they stay the person's acts in both modes.
+    for (const command of [
+        'reply sequence start seq_1',
+        'reply api DELETE /v3/sequences/1',
+        'reply account delete acc_1 --yes',
+        'npx reply-cli sequence start seq_1',
+        'reply account connect --channel email --provider gmail --allow-shared-page --json',
+        'reply account reconnect 34 --channel linkedin --json',
+        'reply account pause 34 --channel linkedin --json',
+        'reply account delete 34 --channel linkedin --yes --force --json',
+    ]) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), asAskFirst('Bash', command), command);
     }
     assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'reply sequence start seq_1' }, scope), asAskFirst('PowerShell', 'reply sequence start seq_1'));

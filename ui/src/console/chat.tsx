@@ -44,7 +44,7 @@ import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
 import { offersReply, readEnrolRoute } from './enrol-route';
-import { chatPlace, dropLinks, replyCardFor, replyDismissed, reload as listHosts } from './connect';
+import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
 import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
@@ -725,7 +725,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 offersReply(chat.campaignId) &&
                 !replyDismissed.value.includes(chatId) && (
                     <div className="chat-reply">
-                        <Painted view={replyCardFor(chatId)} onGone={() => dropLinks(chatPlace(chatId))} />
+                        <Painted view={replyCardFor(chatId)} onGone={() => dropDialogs(chatPlace(chatId))} />
                         <button
                             className="btn sm"
                             type="button"

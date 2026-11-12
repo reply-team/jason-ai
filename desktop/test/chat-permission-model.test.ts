@@ -452,9 +452,12 @@ test('reply auth status and reply account list are allowed without a card, and a
             'npx reply-cli contacts delete', 'pnpm dlx reply-cli@0.19.0 contacts delete', 'yarn dlx reply-cli contacts delete',
             // A reply refusal comes before the card a jason command gets.
             'jason status && reply contacts delete',
-            // The calls the desktop's main process makes for the Reply card's links are the person's, never the chat's.
-            'reply api /v3/linkedin-accounts/connection-link --method POST --body - --json', 'reply api /v3/linkedin-accounts/pending',
-            'reply api /v3/linkedin-accounts/77/reconnect --method POST', 'reply api /v1/SharedPageUrl --json', 'reply api /v1/SharedPageUrl']) {
+            // The verbs the desktop's main process runs for the Reply card's acts are the person's, never the chat's.
+            'reply account connect --channel linkedin --name=x --json', 'reply account connect --channel email --provider gmail --allow-shared-page --json',
+            'reply account reconnect 34 --channel linkedin --json', 'reply account pending --channel email --json',
+            'reply account limits 12 --channel email --daily 5 --json', 'reply account pause 34 --channel linkedin --json',
+            'reply account resume 34 --channel linkedin', 'reply account unblock 12', 'reply account delete 34 --channel linkedin --yes --force --json',
+            'reply api /v3/linkedin-accounts/connection-link --method POST --body - --json', 'reply api /v1/SharedPageUrl']) {
             assert.ok(refused(run(scope, command)), command);
             assert.ok(refused(judge('PowerShell', { command }, scope)), `PowerShell: ${command}`);
         }
