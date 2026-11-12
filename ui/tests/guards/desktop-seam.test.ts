@@ -28,6 +28,7 @@ const chat = {
     restart: true,
     attach: true,
     rename: true,
+    feed: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
 const setup = {
@@ -87,6 +88,7 @@ describe('the desktop seam', () => {
             'chat.restart',
             'chat.attach',
             'chat.rename',
+            'chat.feed',
             'links.take',
             'links.onOpen',
             'setup.status',
