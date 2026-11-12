@@ -138,7 +138,7 @@ performs it in its own process, and what ran is pinned to the attempt — the pa
 the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh runtime routes nothing
 anywhere until somebody writes a route: work with no route fails at the claim with `no_route`. An operation that
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
-such plugin is in this repository**: [`plugins/reply/`](../plugins/reply/README.md) performs all twenty-four published
+such plugin is in this repository**: [`plugins/reply/`](../plugins/reply/README.md) performs every one of the thirty published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
 CLI, signs in with it, places the package from the release with `jason plugin install reply`, grants it that one program,
 and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of
@@ -290,7 +290,9 @@ jason doctor
 answers the same when the runtime is stopped, will not start, or has never run. Every filter you give must
 hold — a level and everything above it, a campaign, a work item, a moment written with `Z` or an offset —
 and the newest events that match come back, oldest first, exactly as the runtime wrote them; `--limit` says
-how many.
+how many. A runtime that an exception nothing caught ended writes one last line at level `fatal` before it goes —
+the exception's type, the types it wraps and the methods it was thrown through, never a message — and `jason logs --level fatal`
+finds it; a runtime gone without that line or its own `stopped` line was ended from outside.
 
 `jason doctor` collects this installation into one file you can read before you share it. **Run it with
 `--dry-run` first**: that composes the whole bundle, writes nothing, and lists what a plain run would
@@ -497,10 +499,13 @@ When a campaign is looked at, and by whom, is its own loop: a failure, a rejecte
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
 and a cadence does it anyway when nothing has happened at all. Replies are found by reading each live
 campaign's conversations on a cadence. How often a manager looks at a campaign when nothing has happened is the
-campaign's own setting:
+campaign's own setting, and so is how many untouched people it wants to keep in reserve: when fewer than that are left,
+the manager is told once, and told again only after the number has gone back up
+([campaign manager](campaign-manager.md) §9):
 
 ```sh
 jason campaign update <campaign-id> --review-seconds 3600
+jason campaign update <campaign-id> --audience-threshold 50
 jason workitem list --campaign <campaign-id> --role manager
 ```
 

@@ -25,7 +25,8 @@ public sealed record CampaignSummaryDto(
 /// is always a list, possibly empty, for the same reason a contact's is. <c>execution_profile</c> is the
 /// campaign's policy on which host its agent work uses, and null means it has none of its own. <c>project_id</c> and
 /// <c>project_slug</c> name the project it is in. <c>folder_path</c> is the full path of its folder under the harness root,
-/// null where none is recorded — a campaign made before folders were.
+/// null where none is recorded — a campaign made before folders were. <c>audience_threshold</c> is how few untouched
+/// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them.
 /// </summary>
 public sealed record CampaignDto(
     string Id,
@@ -43,7 +44,8 @@ public sealed record CampaignDto(
 
     /// <summary>The key the campaign was created with, when its creator gave one; absent otherwise.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null,
-    string? FolderPath = null);
+    string? FolderPath = null,
+    int? AudienceThreshold = null);
 
 /// <summary>
 /// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign
@@ -78,7 +80,8 @@ public sealed record CampaignListRequest(
 /// <c>execution_profile</c> leaves its policy alone. An explicit null clears the policy; a value has to name a
 /// profile this runtime knows. <c>review_seconds</c> behaves the same way, and null there means "however often
 /// the installation reviews everything else". <c>project_id</c> moves the campaign to another project; a campaign is
-/// always in one, so null is refused.
+/// always in one, so null is refused. <c>audience_threshold</c> behaves as <c>review_seconds</c> does, and null there
+/// means nobody counts the campaign's untouched members.
 /// </summary>
 public sealed record CampaignUpdateRequest(
     string? CampaignId,
@@ -87,7 +90,8 @@ public sealed record CampaignUpdateRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> ReviewSeconds,
     ActorRef? Actor,
     string? Reason,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ProjectId = default);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ProjectId = default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> AudienceThreshold = default);
 
 /// <summary>The body of <c>campaign.start</c>, <c>campaign.pause</c> and <c>campaign.archive</c>.</summary>
 public sealed record CampaignTransitionRequest(string? CampaignId, ActorRef? Actor, string? Reason);
@@ -102,11 +106,13 @@ public sealed record CampaignUpdateContextRequest(
 
 /// <summary>
 /// <c>campaign_ids</c> names one to a hundred campaigns, archived ones included, answered in the order asked; absent, it
-/// means every campaign <c>campaign.list</c> shows by default, in its order. <c>exclude_archived_contacts</c> true leaves
+/// means every campaign <c>campaign.list</c> shows by default, in its order. <c>audience</c>, the number of one of the
+/// campaign's audiences, counts only the people a search landed under it, each count by its own definition; an audience is
+/// one campaign's, so <c>campaign_ids</c> then names that campaign alone. <c>exclude_archived_contacts</c> true leaves
 /// out every membership of a contact whose own record is archived, so each count agrees with <c>contact.list</c> without
 /// <c>include_archived</c>; absent, null or false, they are counted. A campaign's status plays no part in it.
 /// </summary>
-public sealed record CampaignSummaryRequest(IReadOnlyList<string>? CampaignIds, bool? ExcludeArchivedContacts = null);
+public sealed record CampaignSummaryRequest(IReadOnlyList<string>? CampaignIds, int? Audience = null, bool? ExcludeArchivedContacts = null);
 
 /// <summary>
 /// Where one campaign's people stand now, each count a number of people: one person may be in several, so they need not
@@ -136,8 +142,11 @@ public sealed record CampaignSummaryTotal(int People, int Waiting, int Failed, i
 /// <summary>A row per campaign asked, and <c>total</c> across them.</summary>
 public sealed record CampaignSummaryResponse(IReadOnlyList<CampaignSummaryRow> Campaigns, CampaignSummaryTotal Total);
 
-/// <summary>The campaigns as <see cref="CampaignSummaryRequest"/> names them, and the period: <c>since</c> included, <c>until</c> not, both required.</summary>
-public sealed record CampaignActivityRequest(IReadOnlyList<string>? CampaignIds, DateTimeOffset? Since, DateTimeOffset? Until);
+/// <summary>
+/// The campaigns and the audience as <see cref="CampaignSummaryRequest"/> names them, and the period: <c>since</c>
+/// included, <c>until</c> not, both required.
+/// </summary>
+public sealed record CampaignActivityRequest(IReadOnlyList<string>? CampaignIds, DateTimeOffset? Since, DateTimeOffset? Until, int? Audience = null);
 
 /// <summary>
 /// What happened to one campaign's people in the period, each count a number of people, removed ones included:
@@ -152,9 +161,9 @@ public sealed record CampaignActivityTotal(int People, int Added, int WorkedOn, 
 public sealed record CampaignActivityResponse(IReadOnlyList<CampaignActivityRow> Campaigns, CampaignActivityTotal Total);
 
 /// <summary>
-/// One Activity count over time: the campaigns as <see cref="CampaignSummaryRequest"/> names them, the count, the period
-/// each bucket is (an hour, a day or a week), the window (<c>since</c> included, <c>until</c> not) and the IANA zone the
-/// buckets are cut in, UTC when absent.
+/// One Activity count over time: the campaigns and the audience as <see cref="CampaignSummaryRequest"/> names them, the
+/// count, the period each bucket is (an hour, a day or a week), the window (<c>since</c> included, <c>until</c> not) and the
+/// IANA zone the buckets are cut in, UTC when absent.
 /// </summary>
 public sealed record CampaignActivityByPeriodRequest(
     IReadOnlyList<string>? CampaignIds,
@@ -162,7 +171,8 @@ public sealed record CampaignActivityByPeriodRequest(
     ActivityPeriod? Period,
     DateTimeOffset? Since,
     DateTimeOffset? Until,
-    string? Zone = null);
+    string? Zone = null,
+    int? Audience = null);
 
 /// <summary>
 /// The count with this bucket as its period, people counted once within it across the campaigns asked: a person counted

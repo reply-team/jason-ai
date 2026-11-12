@@ -241,14 +241,16 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         var publicIds = campaigns.ToDictionary(campaign => campaign.Id, campaign => campaign.PublicId);
         var order = campaigns.Select((campaign, index) => (campaign.Id, index)).ToDictionary(pair => pair.Id, pair => pair.index);
         var limit = Paging.ResolveLimit(request.Limit);
+        var audience = await CampaignNumbers.AudienceAsync(db, campaigns, request.Audience, cancellationToken).ConfigureAwait(false);
 
         // A summary count decides who is listed by its own definition — the counts' — so it takes no state. Under an activity
         // count the moments decide who is listed, and the page's people's memberships are few: one is counted exactly when
-        // the count's why says what happened in it, removed since or not.
+        // the count's why says what happened in it, removed since or not. An audience keeps each to the memberships a search
+        // landed under it.
         IQueryable<CampaignContact> memberships;
         if (request.Summary is { } summary)
         {
-            memberships = CampaignPeople.Matching(db, ids, summary);
+            memberships = CampaignPeople.Matching(db, ids, summary, audience);
         }
         else if (request.Activity is not null)
         {
@@ -263,8 +265,13 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 : memberships.Where(membership => membership.State != MembershipState.Excluded);
         }
 
+        if (audience is { } landedUnder && request.Summary is null)
+        {
+            memberships = CampaignPeople.LandedUnder(db, memberships, landedUnder);
+        }
+
         var (people, next) = request.Activity is { } happened
-            ? await ByMomentAsync(ids, happened, period, text, request.Cursor, limit, cancellationToken).ConfigureAwait(false)
+            ? await ByMomentAsync(ids, happened, period, text, request.Cursor, limit, audience, cancellationToken).ConfigureAwait(false)
             : await ByIdAsync(memberships, text, request.Cursor, limit, cancellationToken).ConfigureAwait(false);
 
         var loaded = await db.Contacts.AsNoTracking()
@@ -276,9 +283,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         var page = people.Select(id => loaded[id]).ToList();
         var contacts = await ContactService.WithCampaignsAndLatestLineAsync(db, page, cancellationToken).ConfigureAwait(false);
 
-        var counted = await memberships
-            .Where(membership => people.Contains(membership.ContactId))
-            .Select(membership => new { membership.ContactId, membership.CampaignId, membership.State, membership.AddedAt, membership.UpdatedAt })
+        var counted = await Listed(memberships, people)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var pairs = counted.Select(membership => (membership.ContactId, membership.CampaignId)).ToList();
@@ -314,11 +319,39 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 ContactMapper.ToOffset(lead.Membership.AddedAt),
                 ContactMapper.ToOffset(lead.Membership.UpdatedAt),
                 lead.Why,
-                [.. mine.Select(entry => new CountedIn(publicIds[entry.Membership.CampaignId], entry.Why))]));
+                [.. mine.Select(entry => new CountedIn(publicIds[entry.Membership.CampaignId], entry.Why))],
+                lead.Membership.Source is { } source
+                    ? new MembershipSource(new AudienceRef(source.Audience, source.Number), source.Search, ContactMapper.ToOffset(source.LandedAt))
+                    : null));
         }
 
         return new Page<MembershipItemDto>(items, next);
     }
+
+    /// <summary>
+    /// The memberships of the listed people, each with where it came from: the search that made it, read beside the
+    /// membership by a left join on the row a landing wrote, through its unique index; null for a member added any other way.
+    /// </summary>
+    internal static IQueryable<ListedMembership> Listed(IQueryable<CampaignContact> memberships, IReadOnlyCollection<int> people) =>
+        memberships
+            .Where(membership => people.Contains(membership.ContactId))
+            .Select(membership => new ListedMembership(
+                membership.ContactId,
+                membership.CampaignId,
+                membership.State,
+                membership.AddedAt,
+                membership.UpdatedAt,
+                membership.Landing == null
+                    ? null
+                    : new ListedSource(
+                        membership.Landing.Audience!.PublicId,
+                        membership.Landing.Audience.Number,
+                        membership.Landing.SearchWorkItem!.PublicId,
+                        membership.Landing.LandedAt)));
+
+    internal sealed record ListedMembership(int ContactId, int CampaignId, MembershipState State, DateTime AddedAt, DateTime UpdatedAt, ListedSource? Source);
+
+    internal sealed record ListedSource(string Audience, int Number, string Search, DateTime LandedAt);
 
     private async Task<(int Id, string PublicId)> OneAsync(string campaignId, CancellationToken cancellationToken)
     {
@@ -375,6 +408,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         string? text,
         string? cursor,
         int limit,
+        int? audience,
         CancellationToken cancellationToken)
     {
         // A person's place is the latest moment it happened to them, so a page needs only what happened since the earliest
@@ -388,7 +422,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         {
             // Compared as spans: near the calendar's start, top - span would fall before it.
             var from = top - period.Since <= span ? period.Since : top - span;
-            fetched = await PageByMoment(db, campaigns, count, from, period.Until, text, after, limit + 1)
+            fetched = await PageByMoment(db, campaigns, count, from, period.Until, text, after, limit + 1, audience)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
             if (fetched.Count > limit || from == period.Since)
@@ -415,9 +449,10 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         DateTime until,
         string? text,
         (long Ms, string PublicId)? after,
-        int take)
+        int take,
+        int? audience = null)
     {
-        var rows = CampaignPeople.ByMoment(db, campaigns, count, from, until);
+        var rows = CampaignPeople.ByMoment(db, campaigns, count, from, until, audience);
         if (text is not null)
         {
             var found = ContactSearch.Apply(db.Contacts, text);
@@ -478,6 +513,8 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         {
             errors.Add(request.Since is not null ? "since" : "until", "invalid", "since and until bound an activity; send activity as well.");
         }
+
+        CampaignNumbers.ValidateAudience(request.Audience, request.CampaignId is not null || request.CampaignIds is { Count: 1 }, errors);
 
         var text = string.IsNullOrWhiteSpace(request.Query) ? null : request.Query.Trim();
         if (text is { Length: > ContactSearch.MaxLength })

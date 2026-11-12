@@ -107,10 +107,12 @@ when the moment arrives. Say when that is, and stop.
 ### 2. Paused or archived
 
 **How you recognise it.** The item looks perfectly healthy and is never claimed — and the campaign it belongs
-to is not active. Only an active campaign's work is claimed, with one exception: a paused campaign still lets
+to is not active. Only an active campaign's work is claimed, with two exceptions: a paused campaign still lets
 through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record`,
-`campaign.pause` and `message.cancel`). So an archived or still-draft campaign holds every one of its items at once, and a paused one
-holds every item but theirs.
+`campaign.pause`, `message.cancel` and `audience.search_cancel`), and an archived one a stop of a search, whose
+operation declares `dispatch.in_archived_campaign: runs` (`audience.search_cancel`). So a still-draft campaign holds
+every one of its items at once, a paused one holds every item but theirs, and an archived one every item but a
+search's stop.
 
 **What it means.** This is about the *campaign*, not the item, which is why reading the item over and over
 tells you nothing. Somebody paused it, or it was never started. Say which campaign and in which status; the
@@ -488,3 +490,10 @@ jason logs --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 Read them when the readings above have not settled it. They never contain request bodies, prompts, work-item
 contexts or the capability token, so do not send somebody to the logs expecting to find what was actually
 sent to a provider — it was never written there.
+
+**A runtime that stopped with nobody asking it to** may have been ended by a fault of its own. When an exception
+nothing caught ends it, the last line it writes says so, at level `fatal`: `The runtime is ending on an unhandled
+...`, with the exception's type, the types of the exceptions it wraps, and the methods it was thrown through,
+innermost first. It never carries a message, so it cannot say which value was being handled. `jason logs --level fatal` finds it. That line,
+whole, with `jason --version`, is what a report needs; starting the runtime again is safe. A runtime that stopped with
+no such line, and no `Runtime ... stopped` line either, was ended from outside: killed, or its machine went down.

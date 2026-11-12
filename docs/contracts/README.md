@@ -67,6 +67,12 @@ a condition beside it — and the last column is the line the operation's own pa
 
 | Operation | Level one | Reach | Approval | After an ambiguous end | Provider contact | What it is |
 |---|---|---|---|---|---|---|
+| [`audience.availability`](operations/audience.availability.md) | `capability.list` | `read` | `auto` | `safe` | `not_used` | whether this account can search now, and what it has left |
+| [`audience.filter_values`](operations/audience.filter_values.md) | `vocabulary.list` | `read` | `auto` | `safe` | `not_used` | the values one of the provider's filters may take, matching some text |
+| [`audience.preview`](operations/audience.preview.md) | `segment.preview` | `read` | `auto` | `safe` | `not_used` | count and sample an audience before anything is spent on it |
+| [`audience.search`](operations/audience.search.md) | `candidate.promote` | `control` | `confirm_once` | `after_recovery_read` | `not_used` | find people matching a definition, and make them ours |
+| [`audience.search_cancel`](operations/audience.search_cancel.md) | `job.cancel` | `control` | `auto` | `after_recovery_read` | `not_used` | stop a search the provider is running; what it found stays found |
+| [`audience.search_status`](operations/audience.search_status.md) | `job.get` | `read` | `auto` | `safe` | `not_used` | how far a search has got, and the people it found since the last read |
 | [`campaign.activate`](operations/campaign.activate.md) | `campaign.activate` | `act` | `confirm_once` | `after_recovery_read` | `not_used` | start a provider campaign sending |
 | [`campaign.create`](operations/campaign.create.md) | `campaign.create` | `control` | `auto` | `after_recovery_read` | `not_used` | make the provider's campaign, as an empty draft |
 | [`campaign.enroll`](operations/campaign.enroll.md) | `campaign.enroll` | `act` | `confirm_once` | `after_recovery_read` | `find_or_create` | put one person into a provider campaign |
@@ -93,6 +99,69 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`social_invitation.send`](operations/social_invitation.send.md) | `social_invitation.send` | `act` | `confirm_each` | `after_recovery_read` | `find_or_create` | invite a person to connect, from one of the provider's accounts |
 
 <!-- END GENERATED operations -->
+
+## The audience family
+
+Six operations find people for a campaign at the provider, under the noun `audience`. The envelope — how many people,
+how many of one company, whether people without an email count, whether phones are wanted — is the documents'. The
+**definition** inside it — which industries, titles and company sizes, as the provider names them — is the provider's
+own shape, which the plugin declares (below). A person comes back in one shape whoever the provider:
+`external_id`, names, title, company (name, domain, size, industry), location, the channels the provider holds, and
+`raw`, the provider's own record as JSON text of at most 16 KiB, which a plugin trims rather than exceed and which
+nothing in the runtime reads.
+
+- [`audience.preview`](operations/audience.preview.md): how many people a definition matches, or an audience the
+  campaign holds by its number, and a sample of them with no contact detail. A read on request (below), free by
+  contract and approved by nobody; a provider that charges for the look leaves it out of its manifest.
+- [`audience.search`](operations/audience.search.md): find up to `count` people matching the definition and make them
+  the campaign's. It is the spending act: a work item, `confirm_once` and `metered`, charged per person found by the
+  provider's own tariff. Like every write it answers one item: `finished` with every person found, where the provider
+  searches inside one call, or `accepted` with the provider's reference, by which the search is read and stopped. A search reaches nobody, it buys
+  records, so it is `reach: control` and runs through a provider block. A person confirms the first search under an
+  audience, and the campaign's allowance, a standing approval capped in people, may then let the top-ups under it go
+  without the question ([`docs/work-execution.md`](../work-execution.md), "Standing approvals").
+- [`audience.search_status`](operations/audience.search_status.md): how far a search has got, and the people it found
+  from the cursor on. A work item whose search the runtime composes, reference and cursor, and a caller never writes;
+  the runtime makes one itself on a cadence for each search it follows, and lands the people of every read that succeeds
+  as the campaign's members, whoever made it ([`docs/campaign-manager.md`](../campaign-manager.md) §10).
+  `in_progress` is read again. `finished` (the count asked for was reached) and `exhausted` (the source ran out) are
+  terminal, and the search is read no more. `paused` (a person stopped it at the provider), `paused_for_credits` (the
+  account ran out of credits) and `paused_for_limit` (the plan's limit of contacts was reached) hold the search until a
+  person acts at the provider, so it may move again and is read again.
+- [`audience.search_cancel`](operations/audience.search_cancel.md): stop a search; what it found stays found. It
+  answers `cancelled`, or `already_ended` for a search that had already ended, which is a success; a repeat after a
+  lost answer reads the search first. A running search
+  keeps spending after a campaign stops, so the stop carries the protective floor: approved by nobody, and run in a
+  paused campaign and through a provider block.
+- [`audience.filter_values`](operations/audience.filter_values.md): the values one of the provider's filters takes,
+  starting with some text. A read on request, which a provider may not offer.
+- [`audience.availability`](operations/audience.availability.md): whether the account may search now, a reason when
+  not, and its credits and headroom where the provider can say. A read on request; a provider that can say nothing
+  beyond "allowed" answers `available: true` with the rest null.
+
+**The definition is the provider's, declared in its manifest.** A plugin that performs `audience.search` or
+`audience.preview` declares the schema of a definition under **`audience_definition`** in `plugin.yaml`
+([`docs/plugins.md`](../plugins.md) §3): a schema in the [dialect](#the-schema-dialect) below, every property described,
+and beside it, optionally, `keys` — the side of a person each property filters on, and the filter whose values
+`audience.filter_values` lists for it. The loader holds the schema to the dialect as it holds a binding schema, refuses
+the key on a plugin that performs neither operation, and refuses a plugin that performs `audience.search` without
+`audience.search_status` or without `audience.search_cancel` (`audience_family_incomplete`). A definition is checked against the routed plugin's schema at
+the claim (`definition_invalid`, right after `input_invalid`) and at the preview, never at `workitem.create`, where the
+route, and so the schema, is not resolved yet. The dialect expresses the shapes a provider's filters take: arrays of
+`{value, type}` pairs with `type` one of `include` and `exclude`, enumerations, nested ranges of a `minimum` and a
+`maximum`, a switch between `or` and `and`, and "at least one filter" as an `anyOf` of `required` branches.
+
+**An audience by its number.** `audience.search` and `audience.preview` take an audience the campaign holds by its
+number, `args.audience`, or a definition, `args.definition`: exactly one of the two. The runtime composes the root
+`definition` from either (below). The runtime numbers a campaign's audiences, 1, 2, 3, as the claim of each one's first
+search makes it ([`docs/campaign-manager.md`](../campaign-manager.md) §10), and a number the campaign holds none under is
+refused `audience_unknown`, at the claim and at the preview.
+
+**A campaign's reads are routed by the campaign's route.** `audience.preview`, `audience.filter_values` and
+`audience.availability` are read when a person or an agent asks, outside any work item, routed by the campaign's route
+for the operation and held to the route's half of the claim ([`docs/routing.md`](../routing.md), "A read on request").
+`operation.describe` resolves the same route and answers what the operation takes there: its argument schema, and the
+routed plugin's declared definition — `jason operation describe audience.search --campaign <id>`.
 
 ## The delivery contract
 
@@ -168,6 +237,12 @@ instead where it is not offered.
 - `message.status` and `message.cancel`: where the provider does not offer them, a send that ended `accepted` is known
   only as accepted. Say so rather than guess whether it went, and read the conversation for what the person received;
   a send that cannot be cancelled is stopped, if at all, at the provider by a person.
+- `audience.preview`: where the provider does not offer a free look, nothing says in advance how many people a
+  definition matches. Say so, and ask for a search whose `count` is the most the person will pay for: it is an upper
+  bound, and the search's `found` says how many there were.
+- `audience.filter_values`: where the provider does not offer it, write the values as the person gave them and as the
+  provider's own documentation names them. A value the provider does not hold matches nobody, or is refused
+  `definition_rejected`; ask the person rather than guess another.
 
 ## The named preferences
 
@@ -221,6 +296,13 @@ and the line is a verdict of the same campaign about the thread the reply answer
 same person. Anything else is refused as `validation_failed` at the field `context.reply_verdict`. The key is what a
 standing approval reads at the claim, and nothing else reads it
 ([`docs/work-execution.md`](../work-execution.md), "Standing approvals").
+
+**A third, the runtime's own: `context.audience` on a search.** The claim of an `audience.search` that it does not
+refuse records there the audience the search runs under, `{"id": "aud_…", "number": 2, "definition": {…}}`, with the
+definition the search is searched by, whichever way its arguments named the audience
+([`docs/campaign-manager.md`](../campaign-manager.md) §10). `workitem.create` and `workitem.update` refuse a search that
+writes the key or removes it, as `validation_failed` at the field `context.audience`; on any other work the key is the
+caller's own.
 
 **A reserved journal line beside the goals.** A role records its verdict on a reply — the category it read, its
 confidence, the reaction it chose and the goal it steers to — through the Runtime API's `reply.record`
@@ -306,13 +388,18 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`approval_cancelled`](journal/approval_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision was ended because the work it was about was cancelled or passed its due date. |
 | [`approval_rejected`](journal/approval_rejected.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person rejected parked work, so it ends as failed. |
 | [`approval_requested`](journal/approval_requested.json) | `0.1.0` | yes | campaign, contact, work_item, approval | Work was parked to wait for a person's decision, and the line names the approval that asks for it. |
-| [`approval_standing_applied`](journal/approval_standing_applied.json) | `0.25.0` | yes | campaign, contact, work_item, approval | A standing approval released a drafted reply without asking a person, and the line names the approval that records the release, the standing approval and the verdict the reply answers. |
+| [`approval_standing_applied`](journal/approval_standing_applied.json) | `0.25.0` | yes | campaign, contact, work_item, approval | A standing approval released work without asking a person, a drafted reply under a category's or a search under the allowance, and the line names the approval that records the release, the standing approval, and the verdict the reply answers or the audience and the people the search asks for. |
 | [`approval_superseded`](journal/approval_superseded.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place. |
-| [`campaign_archived`](journal/campaign_archived.json) | `0.1.0` | yes | campaign | A campaign was archived for good: its open work and its pending questions are cancelled and it never runs again. |
+| [`audience_people_landed`](journal/audience_people_landed.json) | `0.36.0` | yes | campaign, contact, work_item, plugin | One page of a search's people landed in its campaign: what the page held, whom it made members, and whom it made contacts of the directory; one line per page that carried anybody. |
+| [`audience_reserve_low`](journal/audience_reserve_low.json) | `0.36.0` | yes | campaign | A campaign's untouched members fell under the threshold the campaign set, said once per crossing; a default manager trigger. |
+| [`audience_reserve_recovered`](journal/audience_reserve_recovered.json) | `0.36.0` | yes | campaign | A campaign's untouched members are back at or above the threshold it set, after a line said they had fallen under it; not a trigger. |
+| [`audience_search_ended`](journal/audience_search_ended.json) | `0.36.0` | yes | campaign, work_item, plugin | A search for a campaign's audience ended — finished, exhausted, stalled, stopped, or found gone by a read or a stop — with what it was asked for, found and landed; said once per search, a default manager trigger. |
+| [`audience_search_held`](journal/audience_search_held.json) | `0.36.0` | yes | campaign, work_item, plugin | A search for a campaign's audience is held at the provider — paused, out of credits or at the plan's limit — with what it was asked for, found and landed; said when a read first reports the hold, and again only after the search moves and holds again; a default manager trigger. |
+| [`campaign_archived`](journal/campaign_archived.json) | `0.1.0` | yes | campaign | A campaign was archived for good: its open work and its pending questions are cancelled and it never runs again, but for the stop of each search still running. |
 | [`campaign_created`](journal/campaign_created.json) | `0.1.0` | yes | campaign | A campaign was created as a draft, under the name the line carries. |
 | [`campaign_paused`](journal/campaign_paused.json) | `0.1.0` | yes | campaign | A campaign stopped being active, so none of its work is dispatched until it is started again. |
 | [`campaign_started`](journal/campaign_started.json) | `0.1.0` | yes | campaign | A campaign became active, from a draft or from a pause, so its work can be dispatched. |
-| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence or the project it is in; a change of several settings writes one line for each. |
+| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold or the project it is in; a change of several settings writes one line for each. |
 | [`contact_archived`](journal/contact_archived.json) | `0.1.0` | yes | contact | A person was archived in the contact directory, so nothing reaches out to them any more and their open work is cancelled. |
 | [`contact_created`](journal/contact_created.json) | `0.1.0` | yes | contact | A person was added to the contact directory. |
 | [`contact_updated`](journal/contact_updated.json) | `0.1.0` | yes | contact | A person's details in the contact directory changed; the line names the fields that changed and never their values. |
@@ -350,8 +437,8 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`role_note_set`](journal/role_note_set.json) | `0.1.0` | yes | campaign, project, role | A role's note at one level, a campaign, a project or the client, was written; the line records its size and hash, never what it says. |
 | [`role_updated`](journal/role_updated.json) | `0.1.0` | yes | role, profile | The execution profile a role's work runs under was set, changed or cleared. |
 | [`routes_updated`](journal/routes_updated.json) | `0.1.0` | yes | campaign, plugin | A campaign's route was set or taken away, so an operation, or the campaign's default, goes to the plugin it names or back to the routes above it. |
-| [`standing_approval_set`](journal/standing_approval_set.json) | `0.25.0` | yes | campaign | A person gave a campaign a standing approval for one category of reply, or replaced the one in force, so drafted replies it covers go without a decision each time. |
-| [`standing_approval_unset`](journal/standing_approval_unset.json) | `0.25.0` | yes | campaign | A person took back a campaign's standing approval for one category of reply, so drafted replies of it wait for a decision again. |
+| [`standing_approval_set`](journal/standing_approval_set.json) | `0.25.0` | yes | campaign | A person gave a campaign a standing approval for one category of reply, or its allowance for the searches under one of its audiences, or replaced the one in force, so the work it covers goes without a decision each time. |
+| [`standing_approval_unset`](journal/standing_approval_unset.json) | `0.25.0` | yes | campaign | A person took back a campaign's standing approval for one category of reply, or its allowance for searches, so the work it covered waits for a decision again. |
 | [`subscription_cursor_rewound`](journal/subscription_cursor_rewound.json) | `0.29.0` | no | none | A person moved a subscribed kind's cursor back, so the kind's chain hands its plugins again every line after the new cursor; every rewind is a line of its own. |
 | [`subscription_failed`](journal/subscription_failed.json) | `0.29.0` | no | plugin | A subscriber's handler ended in a final class for one line, so the chain of the line's kind ended there for that line and the kind moved on. |
 | [`suppression_added`](journal/suppression_added.json) | `0.1.0` | yes | none | An address or number was put on the do-not-contact register, so nothing reaches it on its channel. |
@@ -409,7 +496,7 @@ The second group is Jason's own, and it is about execution:
 | `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them); and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used` — [`docs/plugins.md`](../plugins.md) §7, "The contact proxy rule", is the rule), which the loader holds to what each word implies: a way that finds the person declares `external_ids.contact`, `find_or_create` takes its channel `from_args`, `pinned_only` declares `contact_not_linked`, and `not_used` is said exactly where `contact` is `not_used` |
 | `channel_arguments` | the arguments a provider may offer on some of the operation's channels and not on others, which a plugin takes only where its manifest lists them per channel ([`docs/plugins.md`](../plugins.md) §3), and which the claim refuses on any other channel (`argument_unsupported`); null where there are none. The loader holds each name to be an argument the arguments declare and a caller may leave out, named once, of an operation whose `preflight.channel` is `from_args` |
 | `channel_templates` | the channels on which the operation's message may be a template the provider fills in for the person, which a plugin writes one on only where its manifest lists the channel under `templates` ([`docs/plugins.md`](../plugins.md) §3), the claim refusing a template elsewhere as `template_not_offered`: a non-empty list, or null where the message is never one. The loader holds each to be a channel the arguments offer, named once, of an operation whose `preflight.channel` is `from_args` and whose `message` declares `compose` |
-| `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm; `under_provider_block` is `waits` — the claim parks the work on an open provider block of its plugin and binding, and it goes back to the queue when the block clears — or `runs`, the work going through an open block and a `blocked` answer ending it. An operation whose `reach` is `act` waits; a block's trial goes to its `act` work first, and a control's answer never clears a block |
+| `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm; `in_archived_campaign` is `cancelled` — archiving the campaign cancels the work, as it cancels all open work — or `runs`, allowed only where `in_paused_campaign` is `runs`, for a stop without which the provider goes on spending: the work is created, kept and claimed in an archived campaign, today `audience.search_cancel` alone; `under_provider_block` is `waits` — the claim parks the work on an open provider block of its plugin and binding, and it goes back to the queue when the block clears — or `runs`, the work going through an open block and a `blocked` answer ending it. An operation whose `reach` is `act` waits; a block's trial goes to its `act` work first, and a control's answer never clears a block |
 | `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change. It names exactly what the operation's implementation reads, the least of a person that reaches a plugin's process, for the fields as for the channels |
 | `precondition` | what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence |
 | `preview` | what a person deciding on the operation reads first — a one-line summary rendered from the composed input, and the values in that input it highlights — or `null` where nobody is asked to decide |
@@ -464,6 +551,15 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
 - `send` appears where the operation's input schema declares it — today `message.status` and `message.cancel`. The
   runtime composes it from the succeeded attempt of the send `args.send` names: that work item, its operation and the
   provider's reference for the send. A caller never writes it.
+- `search` appears the same way — today `audience.search_status` and `audience.search_cancel` — composed from the
+  succeeded attempt of the search `args.search` names: that work item and the provider's reference for the search,
+  returned under `external_ids.search`, and, for the status read, the `cursor` the next read starts at: the plugin's
+  own, as the search's row keeps it from the last read that answered one, never parsed, and null to read from the start.
+  A caller never writes it.
+- `definition` appears at the root of `audience.search` and `audience.preview`: the audience's definition, in the
+  provider's own shape, composed from `args.definition`, or, for an audience named by its number, from the audience the
+  campaign holds. `args` is the caller's as written and the runtime never rewrites it, so the definition is placed at
+  the root, as `send` is, and the plugin reads it there and nowhere else.
 - Every `external_ids` object is filtered to the calling plugin's own pins. Another provider's identifier is never
   visible.
 
@@ -522,7 +618,8 @@ is approved.
 ## Pages
 
 A read that can answer more items than one result may hold — `enrollment.list`, `conversation.list`,
-`conversation.get`, `sender.list` and `schedule.list` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
+`conversation.get`, `sender.list` and `schedule.list` — answers a page of them by an offset, and every such read pages
+the same way; `audience.search_status` pages by a cursor, the last point below. `engagement.summarize` answers
 at most a row per channel and is not paged.
 
 - `args.limit` — at least 1, at most what the operation states — and `args.offset` — 0 to 1 000 000 — are both
@@ -539,9 +636,14 @@ at most a row per channel and is not paged.
 - One item always fits. Every output string of a paged read is bounded, and the largest result the schema allows
   with one item on the page — every string at its longest, twelve bytes a character — is held under 768 KiB by a
   test.
-- No canonical operation pages by a cursor: the providers mapped first page by offset, and
+- One canonical operation pages by a cursor: `audience.search_status`, by the plugin's own cursor, which the runtime
+  composes into the input as `search.cursor` and never parses — null to read from the start, otherwise the one the last
+  read answered — and which the result answers as `cursor`, the same one back when nothing moved,
+  with `has_more` saying whether more people are readable now. `args.limit` is required and there is no `offset`, and the
+  page is held to the same two bounds: `people.maxItems` is the same number as `limit`'s maximum, and one person always
+  fits under 768 KiB. The other operations page by offset, as the providers mapped first do, and
   [`divergence-from-l1.md`](divergence-from-l1.md) records where the catalogue says otherwise. The events contract is
-  the one read that does: it pages by a cursor its plugin returns and nothing else reads, with a page of at most 100
+  the other read that pages by a cursor: one its plugin returns and nothing else reads, with a page of at most 100
   events held to the same 768 KiB, and one event always fits.
 
 ## The schema dialect

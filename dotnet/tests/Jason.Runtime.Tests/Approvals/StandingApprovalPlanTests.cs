@@ -6,9 +6,9 @@ namespace Jason.Runtime.Tests.Approvals;
 
 /// <summary>
 /// Each read a standing approval makes of the chronicle names the index it is answered from, and SQLite answers it from
-/// that index, bounded as the reason in <see cref="StandingApprovals"/> says: by the kind, and for a count or a later
-/// verdict by the kind and the line's own place in the chronicle. Its one read of the approvals is bounded by the
-/// campaign. The plans are read from the very queries the claim and the verbs run.
+/// that index, bounded as the reason in <see cref="StandingApprovals"/> says: by the kind, and for a count, the people
+/// an allowance's searches asked for or a later verdict by the kind and the line's own place in the chronicle. Its one
+/// read of the approvals is bounded by the campaign. The plans are read from the very queries the claim and the verbs run.
 /// </summary>
 public class StandingApprovalPlanTests
 {
@@ -18,6 +18,7 @@ public class StandingApprovalPlanTests
     [InlineData("the standing approval in force", "ix_journal_kind (kind=?)")]
     [InlineData("the campaign's standing approvals", "ix_journal_kind (kind=?)")]
     [InlineData("the releases since the set", "ix_journal_kind (kind=? AND rowid>?)")]
+    [InlineData("the people asked for since the allowance was set", "ix_journal_kind (kind=? AND rowid>?)")]
     [InlineData("a later verdict on the same reply", "ix_journal_kind (kind=? AND rowid>?)")]
     [InlineData("a change to the draft's context", "ix_journal_work_item_id_public_id (work_item_id=?)")]
     public async Task StandingApprovals_EachRead_UsesTheIndexItNames(string read, string search)
@@ -30,6 +31,7 @@ public class StandingApprovalPlanTests
             "the standing approval in force" => StandingApprovals.Newest(db, 3, "interested").Take(1),
             "the campaign's standing approvals" => StandingApprovals.Lines(db, 3),
             "the releases since the set" => StandingApprovals.Released(db, line),
+            "the people asked for since the allowance was set" => StandingApprovals.People(db, line),
             "a later verdict on the same reply" => StandingApprovals.Later(db, line),
             "a change to the draft's context" => StandingApprovals.ContextChanges(db, "wi_01K52JR0000000000000000007"),
             _ => throw new ArgumentOutOfRangeException(nameof(read), read, "no such read"),

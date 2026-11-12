@@ -8,6 +8,7 @@ using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Decisions;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Harness;
 using Jason.Runtime.Journal;
@@ -238,6 +239,15 @@ public sealed class CampaignService(
                 $"review_seconds must be between {ManagerOptions.MinimumReviewSeconds} and {ManagerOptions.MaximumReviewSeconds}; got {seconds}.");
         }
 
+        if (request.AudienceThreshold is { IsSet: true, Value: { } threshold }
+            && (threshold < ReserveCounter.MinimumThreshold || threshold > ReserveCounter.MaximumThreshold))
+        {
+            errors.Add(
+                "audience_threshold",
+                "out_of_range",
+                $"audience_threshold must be between {ReserveCounter.MinimumThreshold} and {ReserveCounter.MaximumThreshold}; got {threshold}.");
+        }
+
         // A campaign is always in a project, so the patch can move it but never take it out of every one.
         if (request.ProjectId is { IsSet: true, Value: var target } && string.IsNullOrWhiteSpace(target))
         {
@@ -303,6 +313,15 @@ public sealed class CampaignService(
                 JsonValue.Create(campaign.ManagerReviewSeconds),
                 JsonValue.Create(request.ReviewSeconds.Value)));
             campaign.ManagerReviewSeconds = request.ReviewSeconds.Value;
+        }
+
+        if (request.AudienceThreshold.IsSet && campaign.AudienceThreshold != request.AudienceThreshold.Value)
+        {
+            changes.Add(new FieldChange(
+                "audience_threshold",
+                JsonValue.Create(campaign.AudienceThreshold),
+                JsonValue.Create(request.AudienceThreshold.Value)));
+            campaign.AudienceThreshold = request.AudienceThreshold.Value;
         }
 
         // A move says where the campaign was and where it went by the projects' ids: their names change, their ids do not.

@@ -1,0 +1,286 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "from-a-search",
+  "request": {
+    "campaign_id": "cmp_1"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "contact": {
+          "id": "cnt_1",
+          "first_name": "Person",
+          "last_name": "1",
+          "company": "Northwind",
+          "title": "Head of Sales",
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "person1@northwind.example",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {
+            "location": "Lisbon",
+            "company_domain": "northwind.example",
+            "company_size": "51-200",
+            "company_industry": "Software",
+            "provider_record": {
+              "id": 1
+            }
+          },
+          "external_ids": [
+            {
+              "plugin_id": "stand-in-search",
+              "kind": "contact",
+              "value": "p-1",
+              "recorded_at": "2026-10-16T09:00:00.000Z",
+              "recorded_by_attempt_id": "att_1"
+            }
+          ],
+          "created_at": "2026-10-16T09:00:00.000Z",
+          "updated_at": "2026-10-16T09:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring search",
+              "state": "enrolled",
+              "added_at": "2026-10-16T09:00:00.000Z",
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_1",
+            "ts": "2026-10-16T09:00:00.000Z",
+            "actor": {
+              "type": "attempt",
+              "id": "att_1"
+            },
+            "kind": "external_id_pinned",
+            "campaign_id": "cmp_1",
+            "work_item_id": "wi_1",
+            "attempt_id": "att_1",
+            "key": "contact/stand-in-search/contact",
+            "old": null,
+            "new": "p-1",
+            "reason": null,
+            "contact_id": "cnt_1",
+            "campaign_name": "Spring search",
+            "contact_name": "Person 1",
+            "work_item_kind": "provider_op",
+            "work_item_role": null,
+            "work_item_operation": "audience.search_status",
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": {
+            "id": "aud_1",
+            "number": 1
+          },
+          "search": "wi_2",
+          "landed_at": "2026-10-16T09:00:00.000Z"
+        }
+      },
+      {
+        "contact": {
+          "id": "cnt_2",
+          "first_name": "Person",
+          "last_name": "2",
+          "company": "Northwind",
+          "title": "Head of Sales",
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "person2@northwind.example",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {
+            "location": "Lisbon",
+            "company_domain": "northwind.example",
+            "company_size": "51-200",
+            "company_industry": "Software",
+            "provider_record": {
+              "id": 2
+            }
+          },
+          "external_ids": [
+            {
+              "plugin_id": "stand-in-search",
+              "kind": "contact",
+              "value": "p-2",
+              "recorded_at": "2026-10-16T09:00:00.000Z",
+              "recorded_by_attempt_id": "att_1"
+            }
+          ],
+          "created_at": "2026-10-16T09:00:00.000Z",
+          "updated_at": "2026-10-16T09:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring search",
+              "state": "enrolled",
+              "added_at": "2026-10-16T09:00:00.000Z",
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_2",
+            "ts": "2026-10-16T09:00:00.000Z",
+            "actor": {
+              "type": "attempt",
+              "id": "att_1"
+            },
+            "kind": "external_id_pinned",
+            "campaign_id": "cmp_1",
+            "work_item_id": "wi_1",
+            "attempt_id": "att_1",
+            "key": "contact/stand-in-search/contact",
+            "old": null,
+            "new": "p-2",
+            "reason": null,
+            "contact_id": "cnt_2",
+            "campaign_name": "Spring search",
+            "contact_name": "Person 2",
+            "work_item_kind": "provider_op",
+            "work_item_role": null,
+            "work_item_operation": "audience.search_status",
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": {
+            "id": "aud_1",
+            "number": 1
+          },
+          "search": "wi_2",
+          "landed_at": "2026-10-16T09:00:00.000Z"
+        }
+      },
+      {
+        "contact": {
+          "id": "cnt_3",
+          "first_name": "Person",
+          "last_name": "3",
+          "company": "Northwind",
+          "title": "Head of Sales",
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "person3@northwind.example",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {
+            "location": "Lisbon",
+            "company_domain": "northwind.example",
+            "company_size": "51-200",
+            "company_industry": "Software",
+            "provider_record": {
+              "id": 3
+            }
+          },
+          "external_ids": [
+            {
+              "plugin_id": "stand-in-search",
+              "kind": "contact",
+              "value": "p-3",
+              "recorded_at": "2026-10-16T09:00:00.000Z",
+              "recorded_by_attempt_id": "att_2"
+            }
+          ],
+          "created_at": "2026-10-16T09:00:00.000Z",
+          "updated_at": "2026-10-16T09:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring search",
+              "state": "enrolled",
+              "added_at": "2026-10-16T09:00:00.000Z",
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_3",
+            "ts": "2026-10-16T09:00:00.000Z",
+            "actor": {
+              "type": "attempt",
+              "id": "att_2"
+            },
+            "kind": "external_id_pinned",
+            "campaign_id": "cmp_1",
+            "work_item_id": "wi_3",
+            "attempt_id": "att_2",
+            "key": "contact/stand-in-search/contact",
+            "old": null,
+            "new": "p-3",
+            "reason": null,
+            "contact_id": "cnt_3",
+            "campaign_name": "Spring search",
+            "contact_name": "Person 3",
+            "work_item_kind": "provider_op",
+            "work_item_role": null,
+            "work_item_operation": "audience.search_status",
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ],
+        "source": {
+          "audience": {
+            "id": "aud_1",
+            "number": 1
+          },
+          "search": "wi_2",
+          "landed_at": "2026-10-16T09:00:00.000Z"
+        }
+      }
+    ],
+    "next_cursor": null
+  }
+}

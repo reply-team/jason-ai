@@ -1,0 +1,25 @@
+{
+  "operation": "route.resolve",
+  "case": "elsewhere-first",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": "campaign.enroll"
+  },
+  "status": 200,
+  "response": {
+    "operation": "campaign.enroll",
+    "campaign_id": "cmp_1",
+    "plugin_id": "other-tool",
+    "plugin_version": "1.0.0",
+    "digest": "sha256:recorded-1",
+    "plugin_status": "valid",
+    "scope": "global_default",
+    "binding": null,
+    "binding_identity": null,
+    "routing_snapshot_id": "rts_1",
+    "plugin_snapshot_id": "snp_1",
+    "operation_version": 1,
+    "usable": true,
+    "problems": []
+  }
+}

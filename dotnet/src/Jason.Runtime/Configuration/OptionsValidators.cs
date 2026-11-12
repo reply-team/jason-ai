@@ -117,6 +117,23 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
         OptionRules.Range(failures, "Dispatcher:RetryDelaySeconds", options.RetryDelaySeconds, 0, 86400);
         OptionRules.Range(failures, "Dispatcher:ExitGraceSeconds", options.ExitGraceSeconds, 0, 600);
         OptionRules.Range(failures, "Dispatcher:EventsCadenceSeconds", options.EventsCadenceSeconds, DispatcherOptions.MinimumEventsCadenceSeconds, DispatcherOptions.MaximumEventsCadenceSeconds);
+        OptionRules.Range(failures, "Dispatcher:SearchCadenceSeconds", options.SearchCadenceSeconds, DispatcherOptions.MinimumSearchCadenceSeconds, DispatcherOptions.MaximumSearchCadenceSeconds);
+        OptionRules.Range(failures, "Dispatcher:SearchStallSeconds", options.SearchStallSeconds, DispatcherOptions.MinimumSearchStallSeconds, DispatcherOptions.MaximumSearchStallSeconds);
+        OptionRules.Range(failures, "Dispatcher:SearchHeldCadenceSeconds", options.SearchHeldCadenceSeconds, DispatcherOptions.MinimumSearchCadenceSeconds, DispatcherOptions.MaximumSearchCadenceSeconds);
+        OptionRules.Range(failures, "Dispatcher:SearchHeldStallSeconds", options.SearchHeldStallSeconds, DispatcherOptions.MinimumSearchStallSeconds, DispatcherOptions.MaximumSearchStallSeconds);
+        if (failures.Count == 0 && options.SearchStallSeconds < options.SearchCadenceSeconds)
+        {
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Dispatcher:SearchStallSeconds ({options.SearchStallSeconds}) is below Dispatcher:SearchCadenceSeconds ({options.SearchCadenceSeconds}): every search whose first read lands nobody would be stalled at once."));
+        }
+
+        if (failures.Count == 0 && options.SearchHeldStallSeconds < options.SearchHeldCadenceSeconds)
+        {
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Dispatcher:SearchHeldStallSeconds ({options.SearchHeldStallSeconds}) is below Dispatcher:SearchHeldCadenceSeconds ({options.SearchHeldCadenceSeconds}): every held search would be stalled at its first read."));
+        }
         ValidateKind(failures, "Dispatcher:AiRole", options.AiRole);
         if (options.AiRole is { } role)
         {

@@ -41,14 +41,14 @@ public class OperationFamiliesTests
         string[] reads =
         [
             "approval.get", "approval.list", "approval.list_standing", "block.get", "block.list", "campaign.activity",
-            "campaign.activity_by_period", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
+            "campaign.activity_by_period", "campaign.audience", "campaign.get", "campaign.list", "campaign.list_contacts", "campaign.summary",
             "contact.get", "contact.list", "decision.get", "decision.list", "events.sources", "journal.kinds", "journal.list",
-            "plugin.list", "preference.list", "profile.get", "profile.list", "project.get", "project.list", "report.get",
+            "operation.describe", "plugin.list", "preference.list", "profile.get", "profile.list", "project.get", "project.list", "report.get",
             "report.list", "role.list", "rolenote.get", "rolenote.list", "route.list", "route.resolve", "subscription.list",
             "suppression.list", "workitem.count", "workitem.get", "workitem.list",
         ];
 
-        Assert.Equal(36, reads.Length);
+        Assert.Equal(38, reads.Length);
         Assert.Equal(reads, OperationFamilies.OperationsOf([OperationFamilies.Read]).Order(StringComparer.Ordinal));
     }
 
@@ -70,15 +70,18 @@ public class OperationFamiliesTests
     }
 
     /// <summary>
-    /// The installation's and the UI's own doors read nothing a handler needs, a conversation read spends a provider call,
-    /// and a subscription run's record carries the envelopes other plugins' handlers made, so none of them is a read a
-    /// grant opens.
+    /// The installation's and the UI's own doors read nothing a handler needs, a conversation read and a campaign's read of
+    /// an audience each spend a provider call, and a subscription run's record carries the envelopes other plugins'
+    /// handlers made, so none of them is a read a grant opens.
     /// </summary>
     [Theory]
     [InlineData("system.info")]
     [InlineData("ui.tokens")]
     [InlineData("contact.threads")]
     [InlineData("contact.thread")]
+    [InlineData("audience.preview")]
+    [InlineData("audience.filter_values")]
+    [InlineData("audience.availability")]
     [InlineData("journal.kinds.extra")]
     [InlineData("subscription.runs")]
     public void Not_every_question_is_a_read_a_grant_opens(string operation)

@@ -5,11 +5,12 @@ import type { DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { madeUpLinks, setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import type { FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { heldLink, replyDismissed } from './connect';
+import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting, submitStart } from './start';
 
@@ -22,12 +23,21 @@ const noReply: DesktopSetup = {
     reply: { ...setupFound.reply, signedIn: false, wired: false, user: null },
 };
 
-function renderConsole(desktop: StubDesktop): StubDesktop {
+/** Enrolment goes where the global default sends it, which is Reply: the route a draft campaign's chat reads. */
+const toReply: FixtureName = 'route.resolve/global-default';
+
+function renderConsole(
+    desktop: StubDesktop,
+    routed: FixtureName | null = toReply,
+    prepare: (fake: FakeApi) => void = () => undefined,
+): StubDesktop {
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
+    if (routed) fake.answer('route.resolve', routed);
+    prepare(fake);
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -305,7 +315,7 @@ describe('Reply in a chat', () => {
         expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull();
     });
 
-    it('drops a link its chat card showed when the card is dismissed, and when Reply is wired', async () => {
+    it('drops a dialog its chat card showed when the card is dismissed, and when Reply is wired', async () => {
         const unwired: DesktopSetup = { ...setupFound, reply: { ...setupFound.reply, wired: false, accounts: [] } };
         for (const end of ['dismissed', 'wired'] as const) {
             replyDismissed.value = [];
@@ -316,8 +326,8 @@ describe('Reply in a chat', () => {
             const card = () => screen.getByRole('region', { name: 'Connect Reply' });
             fireEvent.click(within(await waitFor(card)).getByRole('button', { name: 'Add account' }));
             fireEvent.click(await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' })));
-            await waitFor(() => expect(heldLink()).toBe(madeUpLinks.gmail));
-            expect(calls(desktop, 'setup.replyMailboxLink')).toHaveLength(1);
+            await waitFor(() => expect(heldDialog()).not.toBeNull());
+            expect(calls(desktop, 'setup.replyConnect')).toHaveLength(1);
             if (end === 'dismissed') {
                 fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
             } else {
@@ -325,8 +335,8 @@ describe('Reply in a chat', () => {
                 flush(() => desktop.changed());
             }
             await waitFor(() => expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull());
-            expect(heldLink(), end).toBeNull();
-            expect(document.body.innerHTML).not.toContain('madeUpToken_ForTests');
+            expect(heldDialog(), end).toBeNull();
+            expect(screen.queryByRole('dialog'), end).toBeNull();
             cleanup();
         }
     });
@@ -360,5 +370,76 @@ describe('Reply in a chat', () => {
         expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull();
         await openCampaignChat(desktop, 'Summer referrals');
         expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull();
+    });
+});
+
+describe('Reply in a chat, by the route of enrolment', () => {
+    const card = () => screen.queryByRole('region', { name: 'Connect Reply' });
+
+    it('is asked for where enrolment is routed to Reply, and the question names the campaign and the operation', async () => {
+        const fake: { value: FakeApi | null } = { value: null };
+        const desktop = renderConsole(stubDesktop(noReply), toReply, (each) => (fake.value = each));
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        await waitFor(() => expect(card()).not.toBeNull());
+        expect(fake.value!.sent('route.resolve')).toEqual({ campaign_id: 'cmp_2', operation: 'campaign.enroll' });
+    });
+
+    it('is not asked for where enrolment is routed to another plugin', async () => {
+        const fake: { value: FakeApi | null } = { value: null };
+        const desktop = renderConsole(stubDesktop(noReply), 'route.resolve/elsewhere', (each) => (fake.value = each));
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        await waitFor(() => expect(fake.value!.sent('route.resolve')).toBeDefined());
+        await flush(() => Promise.resolve());
+        expect(card()).toBeNull();
+    });
+
+    it('is asked for where no route sends enrolment anywhere yet: the sign-in is what writes the first one', async () => {
+        const fake: { value: FakeApi | null } = { value: null };
+        const desktop = renderConsole(stubDesktop(noReply), 'route.resolve/no-route', (each) => (fake.value = each));
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        await waitFor(() => expect(card()).not.toBeNull());
+    });
+
+    it('is asked for when the route cannot be read, and the chat works on', async () => {
+        const fake: { value: FakeApi | null } = { value: null };
+        const desktop = renderConsole(stubDesktop(noReply), toReply, (each) => {
+            fake.value = each;
+            each.unreachable('route.resolve');
+        });
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        await waitFor(() => expect(fake.value!.sent('route.resolve')).toBeDefined());
+        await waitFor(() => expect(card()).not.toBeNull());
+        expect(screen.getByRole('form', { name: 'Message' })).toBeTruthy();
+    });
+
+    it('waits for the route: nothing shows until the read answers', async () => {
+        let release: () => void = () => undefined;
+        const desktop = renderConsole(stubDesktop(noReply), toReply, (each) => {
+            release = each.hold('route.resolve');
+        });
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Autumn');
+        expect(card()).toBeNull();
+        release();
+        await waitFor(() => expect(card()).not.toBeNull());
+    });
+
+    it('does not ask the runtime where a campaign that runs is routed', async () => {
+        const fake: { value: FakeApi | null } = { value: null };
+        const desktop = renderConsole(stubDesktop(noReply), null, (each) => (fake.value = each));
+        await waitFor(() => startForm());
+        await ready();
+        await openCampaignChat(desktop, 'Spring');
+        expect(fake.value!.calls.filter((each) => each.operation === 'route.resolve')).toHaveLength(0);
+        expect(card()).toBeNull();
     });
 });

@@ -709,6 +709,14 @@ Classifying an inbound reply as interested may deterministically trigger immedia
 rather than waiting for the next periodic review; conversely, work that simply remains
 unclaimed produces no transition event, so scheduled review remains necessary.
 
+**In this build:** two scan steps follow a campaign's audiences and start nothing. The poll reads each search in
+flight at the provider on a cadence, lands the people each read brings as members of the campaign, says once per hold
+that the provider holds a search (`audience_search_held`) and once that it ended (`audience_search_ended`), and stops
+the searches of a campaign that was archived. The reserve counts the members nobody has started on against the
+threshold the campaign set and says once per crossing that it fell under it (`audience_reserve_low`). The held, ended
+and low lines are default manager triggers: whether the campaign needs more people, and from which audience, is the
+manager's (`docs/campaign-manager.md` §9 and §10).
+
 ### 8.9 Deterministic guardrails
 
 Rules that can be stated and tested deterministically must not depend on eventual AI
@@ -728,7 +736,9 @@ Runtime owns approval state and validates whether a proposed operation has the r
 authorization. The eventual model must make approval scope mechanically enforceable; exact
 action/payload binding and duration are deferred. A person's standing approval for one campaign and one category
 of verdict lets the draft that verdict's own work made go without asking again (`docs/work-execution.md`,
-"Standing approvals").
+"Standing approvals"). A campaign's allowance is the same for its searches under one of its audiences: set only by a
+person, capped in people, it lets the top-ups under that audience go until the people they ask for reach its ceiling,
+and the first search under an audience, its probe, always waits for a person.
 
 AI roles may escalate when they cannot safely or confidently proceed — through broader or
 more senior AI roles and ultimately to the human user. Escalation preserves structured
@@ -1022,6 +1032,14 @@ and evidence needed for conformance and reconciliation.
 The exact catalog and schemas are deferred. Runtime need not expose an entire vendor-neutral
 SDR operation catalog at once; the architecture only requires that supported managed effects
 use stable canonical semantics.
+
+**In this build:** the audience family finds a campaign's people at a provider. `audience.search` is one metered search
+the provider runs, approved by a person or let go by the campaign's allowance (§8.10); `audience.search_status` reads it
+and `audience.search_cancel` stops it, by the reference the provider gave, wherever the search ran. Three reads answer a
+campaign on request and are never work: `audience.preview` counts a definition and samples a few of its people,
+`audience.filter_values` lists the values one of the provider's filters takes, and `audience.availability` says whether
+the account may search now. A definition is the provider's own shape, held at the claim to the schema the routed plugin
+declares, never a neutral language of criteria (`docs/contracts/operations/audience.search.md`, `docs/routing.md`).
 
 ### 12.3 Plugin responsibility
 
@@ -1731,6 +1749,7 @@ original chat session.
 | DEC-EVENTS-001 | A provider's events are read through a contract family of their own, `events.read` (`docs/contracts/events/`), by a cursor the plugin returns and the runtime stores per plugin and binding identity and never parses; never as work items. What is read is kept whole in an append-only store — each event once under a key per plugin, an event no pin matches kept concerning nobody — and reaches a campaign by the provider campaign that campaign's operations pinned or, where that finds none, by the contact its members are pinned as at the event's plugin, decided once when it is stored, as a reserved line in the campaign's chronicle: a thread the other side moved as `inbound_reply_observed` under the inbound read's own key, every other kind as `provider_event_observed`. A read pins nothing. A span a person asks for again, at most 366 days back, is read only in a scan where every account is current, by a cursor of its own that never moves the account's, and ends failed on an answer repeating cannot change; a signal from the program that receives a provider's webhooks names the account and nothing else and brings its next read forward, never within a minute of the last; `events.sources` is each account's record and never answers its cursor. Every account a route binds at such a plugin is read by a scan step that hands one read at a time to a reader off the scan — on `Dispatcher:EventsCadenceSeconds`, thirty days deep, a span older than that said once as a gap a notification counts — and the inbound read leaves a campaign to its plugin's account only where an event would reach it by the campaign-pin rule the store attributes by, and only while that account's last read that succeeded started within the shorter of two cadences and the inbound look-back, so a hand-back always reads from no later than that read; the skip rests on a plugin naming, under `campaign`, the provider campaign a moved thread belongs to (`docs/events.md`). |
 | DEC-JOURNAL-001 | Every kind the runtime reserves for its own journal lines is a contract: one document per kind under `docs/contracts/journal/`, a sixth family embedded beside the others, stating the release that first wrote the kind, what a line of it records, whether a program may subscribe to it, which things its lines name and where, the release each later field arrived in, and the schema of the line's body — its key, old and new, each always present. A kind arrives with its document, and a guard holds the two lists to each other both ways. Every line of a reserved kind is checked against its document as it is written: refused under test, so a writer that drifts from its document fails the test that drives it, and written in an installation with its kind in the log, because a line the runtime meant to keep is never lost to its own check. A body grows by optional fields only; a field never changes meaning and is never removed, and a kind is never renamed or retired while a release that writes it is supported (`docs/contracts/README.md`, "The journal's kinds"). The runtime answers these documents through `journal.kinds`. |
 | DEC-SUBSCRIPTIONS-001 | A plugin granted a journal kind is handed that kind's lines after the runtime wrote them, by a runner of the runtime's own off the scan, under a seventh contract family, `subscription.handle` (`docs/contracts/subscriptions/`), never a work item or a route. The subscribers of one kind form a chain in the order the settings give, each handed the envelope the one before returned, and a kind takes one line at a time in the journal's order from a position kept per kind, read afresh before each line and moved by a guarded update that carries the revision it read, so a rewind during a turn is seen at the next line, never later. A line is handed at least once: a stop writes nothing more and the line is run again. Only `transient` is tried again, after a doubling wait held to an hour that holds no child; every other class ends the chain for that line, said once by a reserved `subscription_failed` line in the same transaction as the position's move, never with the envelope or the failure's words; a member that cannot run makes its kind wait, and is no failure. There are no cascades one step deep: a line a plugin wrote, and a line that names a work item a plugin created, are passed over whoever wrote it; what a role that item runs creates afterwards (new work items, new contacts, its lines on other entities) is the role's work and is handed out as any work is (`docs/plugins.md`, "Writing a subscriber"). There is no hook before a line is written. |
+| DEC-AUDIENCE-001 | A campaign's audience is a definition in the provider's own shape, held to the schema its routed plugin declares, and searched by the metered `audience.search`, which a person approves: the first search under an audience always, and the later ones by the campaign's allowance, capped in people. Two scan steps follow the audiences and start nothing — the poll reads each search in flight and lands its people, and the reserve counts the people nobody has started on against the campaign's threshold — so whether to search again is the manager's, never the runtime's. |
 | DEC-IDEM-001 | A caller's idempotency key is a property of the entity it created — stored on that row under a unique index, installation-wide for a campaign and campaign-wide for a work item — never a replay cache with a lifetime: the same key with the same request answers the same entity, with a different request a non-retryable conflict; neither the runtime nor the CLI ever derives a key — a caller gives one or there is none. |
 | DEC-AI-001 | Jason ships no AI client, model account, model-provider credentials, or mandatory interactive agent. |
 | DEC-AI-002 | Interactive AI agents are user-owned external clients that use skills and Jason CLI. |

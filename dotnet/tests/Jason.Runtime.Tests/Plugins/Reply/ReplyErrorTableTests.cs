@@ -555,8 +555,10 @@ public partial class ReplyErrorTableTests
     /// <c>inbox changes</c> in both, which the row above, comparing the texts only with each other, could not see. The
     /// commands left out are held here from reply-cli 0.18.0's source: those whose every call reads a 404 as the thing
     /// asked for not being found (<c>contact-record.ts</c> lines 44 and 221, <c>inbox.ts</c> 148 and 158,
-    /// <c>inbox-reply.ts</c> 76 and 141, <c>sequence-read.ts</c> 28, 44, 59, 89 and 133, <c>sequence-state.ts</c> 11), and
-    /// <c>auth whoami</c>, which answers through the CLI's own client and never as <c>reply.refused</c>.
+    /// <c>inbox-reply.ts</c> 76 and 141, <c>sequence-read.ts</c> 28, 44, 59, 89 and 133, <c>sequence-state.ts</c> 11), with
+    /// reply-cli 0.20.0's Live Data and list commands that read a 404 so (<c>contact-list.ts</c> 122, <c>live-data.ts</c> 39
+    /// for a search it names, and 113 for a start's list), and <c>auth whoami</c>, which answers through the CLI's own client
+    /// and never as <c>reply.refused</c>.
     /// </summary>
     [Fact]
     public void A_404_without_reply_s_code_is_written_for_every_command_but_those_that_read_a_404_as_missing()
@@ -566,7 +568,8 @@ public partial class ReplyErrorTableTests
         [
             .. new[]
             {
-                "auth whoami", "contact delete", "contact get", "inbox get", "inbox reply",
+                "auth whoami", "contact delete", "contact get", "contact-list delete", "inbox get", "inbox reply",
+                "live-data delete", "live-data get", "live-data start",
                 "sequence contacts", "sequence get", "sequence pause", "sequence start", "sequence stats",
             }.Order(StringComparer.Ordinal),
         ];

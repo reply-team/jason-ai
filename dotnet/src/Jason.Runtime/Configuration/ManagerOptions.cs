@@ -60,6 +60,23 @@ public sealed class ManagerOptions
         // trigger: the work runs again by itself. An installation that narrowed this list before the kind existed is
         // not woken by blocks until it adds it.
         JournalKinds.ProviderBlocked,
+
+        // The campaign's untouched people fell under the threshold it set: whether to top the audience up, and how, is
+        // the manager's. Said once per crossing. Its recovery is not a trigger: the manager was told when it fell. An
+        // installation that narrowed this list before the kind existed is not woken by it until it adds it.
+        JournalKinds.AudienceReserveLow,
+
+        // A search for the campaign's audience ended — finished, ran out, stalled or stopped: whether the audience needs
+        // more, another search or a person's word is the manager's. Said once per search. A page that landed is not a
+        // trigger: the reserve counts it. An installation that narrowed this list before the kind existed is not woken
+        // by it until it adds it.
+        JournalKinds.AudienceSearchEnded,
+
+        // A search is held at the provider — paused, out of credits, at the plan's limit — and spends nothing until a person
+        // acts there: telling the person what holds it and what to do is the manager's, since the runtime tells nobody
+        // directly. Said once per hold. An installation that narrowed this list before the kind existed is not woken by it
+        // until it adds it.
+        JournalKinds.AudienceSearchHeld,
     ];
 
     /// <summary>

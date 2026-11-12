@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
@@ -37,6 +38,7 @@ public sealed class ProviderOutcomeRecorder(
     AttemptOutcomes outcomes,
     ExternalIdStore identifiers,
     SentFacts sent,
+    SearchLanding searches,
     LiveSettings<PluginsOptions> plugins,
     PatternTiming? timing = null)
 {
@@ -142,6 +144,9 @@ public sealed class ProviderOutcomeRecorder(
                     await sent.SayAsync(db, item, pluginId, input, succeeded.Result, cancellationToken).ConfigureAwait(false);
                 }
 
+                // A search's row, the people a page carried and a search's end commit with the answer, or not at all.
+                await searches.AnsweredAsync(db, item, attempt, pluginId, input, succeeded.Result, cancellationToken).ConfigureAwait(false);
+
                 answer = BlockAnswer.GotPast;
                 break;
 
@@ -218,6 +223,9 @@ public sealed class ProviderOutcomeRecorder(
                     failureClass: recorded,
                     retriable: OutcomeContract.Retriable(recorded, contract, settlesByKey),
                     block: recorded == FailureClass.Blocked ? failed.Error.Block : null);
+
+                // A read or a stop that found its search gone ends the search, in the change set that ends the item.
+                await searches.FailedAsync(db, item, input, failed.Error.Code, cancellationToken).ConfigureAwait(false);
                 break;
 
             case InvocationOutcome.ProtocolFailure protocol:

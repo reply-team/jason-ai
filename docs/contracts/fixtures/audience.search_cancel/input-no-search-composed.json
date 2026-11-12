@@ -1,0 +1,26 @@
+{
+  "operation": "audience.search_cancel",
+  "version": 1,
+  "case": "an input without the search the runtime composes",
+  "input": {
+    "args": {
+      "search": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRG"
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "paused",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/search",
+        "reason": "required"
+      }
+    ]
+  }
+}

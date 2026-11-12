@@ -1,0 +1,11 @@
+{
+  "kind": "audience_reserve_recovered",
+  "version": 1,
+  "case": "five untouched, back at a threshold of five",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": { "untouched": 5, "threshold": 5 }
+  },
+  "expect": "valid"
+}

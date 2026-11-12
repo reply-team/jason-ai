@@ -1,0 +1,17 @@
+{
+  "operation": "audience.availability",
+  "version": 1,
+  "case": "nothing named: the route's binding names the account",
+  "input": {
+    "args": {},
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    }
+  },
+  "expect": "valid"
+}

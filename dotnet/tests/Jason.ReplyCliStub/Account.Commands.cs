@@ -85,7 +85,7 @@ internal static partial class Account
                     // goes with it — except a sequence it was making, whose identifier only the lost answer carried.
                     // A send says which contact and account it was about, as reply-cli does for every ending of one.
                     var effect = Handle(root, command, line, stdin);
-                    var learned = command == "sequence create"
+                    var learned = command is "sequence create" or "contact-list create" or "live-data start"
                         ? null
                         : IsDirectSend(command)
                             ? LostSendIds(command, line, effect)
@@ -110,6 +110,10 @@ internal static partial class Account
         "sequence pause" => SequencePause(root, line),
         "sequence start" => SequenceStart(root, line),
         "contact-list add-contact" => ListAddContact(root, line, stdin),
+        "contact-list create" => ListCreate(root, line, stdin),
+        "contact-list get" => ListGet(root, line),
+        "contact-list delete" => ListDelete(root, line),
+        "contact-list contacts" => ListPeople(root, line),
         "contact find" => ContactFind(root, line, stdin),
         "contact get" => ContactGet(root, line),
         "contact update" => ContactUpdate(root, line, stdin),
@@ -129,6 +133,12 @@ internal static partial class Account
         "direct-send cancel" => DirectSendCancel(root, line),
         "account list" => AccountList(root, line),
         "schedule list" => ScheduleList(root),
+        "live-data preview" => LiveDataPreview(root, line, stdin),
+        "live-data start" => LiveDataStart(root, line, stdin),
+        "live-data get" => LiveDataGet(root, line),
+        "live-data list" => LiveDataList(root, line),
+        "live-data delete" => LiveDataDelete(root, line),
+        "live-data filter-values" => LiveDataFilterValues(root, line),
         "auth whoami" => AuthWhoami(root),
         _ => throw new InvalidOperationException($"No handler for '{command}'."),
     };
@@ -1230,7 +1240,7 @@ internal static partial class Account
     private static JsonObject? IdsOf(JsonObject result)
     {
         var ids = new JsonObject();
-        foreach (var name in new[] { "sequence_id", "contact_id", "list_id", "thread_id" })
+        foreach (var name in new[] { "sequence_id", "contact_id", "list_id", "thread_id", "search_id" })
         {
             if (result[name] is JsonValue value && value.TryGetValue<int>(out var id))
             {

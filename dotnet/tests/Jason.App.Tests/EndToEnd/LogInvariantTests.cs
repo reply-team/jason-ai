@@ -409,6 +409,44 @@ public class LogInvariantTests
     }
 
     /// <summary>
+    /// A runtime ended by an exception nothing caught says so in its own log, as its last line: the exception's type and
+    /// the methods it was thrown through, never its message, which here carries a sentinel, a path and a sentence. The
+    /// process is the shipped executable's code with one thing added, a thread that throws once the runtime has published
+    /// its descriptor (<c>Jason.DyingRuntime</c>, built beside these tests and never shipped).
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_ended_by_an_unhandled_exception_logs_its_type_and_frames_and_never_its_message()
+    {
+        using var it = GoldenPath.Create("death-line");
+        var died = await GoldenPath.StandInAsync(it, Path.Combine(GoldenPath.TestTree, "Jason.DyingRuntime.dll"), "runtime", "run");
+
+        // Not an exit the runtime chose: 0 is a stop, 1 a refused start, 2 a usage error.
+        Assert.True(died.ExitCode is not (0 or 1 or 2), $"The runtime exited with {died.ExitCode}.{Environment.NewLine}stderr: {died.Error}");
+
+        var events = Events(it.Paths);
+        var line = Assert.Single(events, line => Template(DeathTemplate)(line));
+        Assert.Same(events[^1], line);
+        Assert.Equal("Fatal", (string?)line["@l"]);
+        Assert.Equal(typeof(Jason.DyingRuntime.PlantedFailureException).FullName, (string?)line["ExceptionType"]);
+        Assert.Empty(Assert.IsType<JsonArray>(line["InnerExceptionTypes"]));
+        Assert.Null(line["@x"]);
+
+        // Each frame is a type and a method, and the innermost is the method that threw: no file, no line, nothing else.
+        var frames = Assert.IsType<JsonArray>(line["Frames"]).Select(frame => frame!.GetValue<string>()).ToList();
+        Assert.Equal(Jason.DyingRuntime.Planted.Thrower, frames[0]);
+        Assert.All(frames, frame => Assert.Matches(@"^[A-Za-z0-9_.`<>$|+\[\],-]+\z", frame));
+
+        var written = string.Join('\n', Directory.GetFiles(it.Paths.LogsDirectory, "runtime-*.jsonl").Select(RuntimeLogs.ReadAllText));
+        Assert.DoesNotContain(SentinelPrefix, written, StringComparison.Ordinal);
+        Assert.DoesNotContain("made-up", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("somebody typed", written, StringComparison.Ordinal);
+        AssertEveryPropertyIsReviewed(events);
+    }
+
+    /// <summary>The line the runtime writes as an unhandled exception ends it.</summary>
+    private const string DeathTemplate = "The runtime is ending on an unhandled {ExceptionType}, wrapping {InnerExceptionTypes}; its stack, innermost frame first: {Frames}";
+
+    /// <summary>
     /// The settings of this run: the loudest log level the validator accepts, a dispatcher that ticks every second,
     /// one attempt per item, the package's grant and its configuration, and the route that sends provider work to it.
     /// </summary>

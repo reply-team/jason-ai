@@ -1,0 +1,44 @@
+{
+  "operation": "approval.set_standing",
+  "case": "allowance",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operations": [
+      "audience.search"
+    ],
+    "audience": 1,
+    "max_people": 500,
+    "max_per_search": 100,
+    "expires_at": "2026-12-01T00:00:00Z",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "the logistics heads answer, so top them up"
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "category": null,
+    "operations": [
+      "audience.search"
+    ],
+    "audience": {
+      "id": "aud_1",
+      "number": 1
+    },
+    "expires_at": "2026-12-01T00:00:00.000Z",
+    "max_releases": null,
+    "max_people": 500,
+    "max_per_search": 100,
+    "released": 0,
+    "people": 0,
+    "in_force": true,
+    "set_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "set_at": "2026-09-14T12:00:00.000Z",
+    "line_id": "jrn_2"
+  }
+}

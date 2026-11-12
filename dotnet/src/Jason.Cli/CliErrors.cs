@@ -12,6 +12,12 @@ public static class CliErrors
 {
     public const string NoDescriptor = "no_descriptor";
     public const string RuntimeUnreachable = "runtime_unreachable";
+
+    /// <summary>
+    /// The runtime took the request and did not answer within the operation's budget and a margin: it is reachable, and
+    /// may still be working, so asking again starts the work over.
+    /// </summary>
+    public const string RequestTimedOut = "request_timed_out";
     public const string Unauthorized = "unauthorized";
     public const string StaleDescriptor = "stale_descriptor";
     public const string ShutdownTimeout = "shutdown_timeout";

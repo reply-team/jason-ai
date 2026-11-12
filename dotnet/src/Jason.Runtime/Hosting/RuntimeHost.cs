@@ -5,6 +5,7 @@ using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Update;
 using Jason.Runtime.Api;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Execution;
@@ -36,7 +37,14 @@ namespace Jason.Runtime.Hosting;
 /// </summary>
 public static class RuntimeHost
 {
-    public static async Task<RunningRuntime> StartAsync(JasonPaths paths, RuntimeHostOptions? options = null, CancellationToken cancellationToken = default)
+    public static Task<RunningRuntime> StartAsync(JasonPaths paths, RuntimeHostOptions? options = null, CancellationToken cancellationToken = default) =>
+        StartAsync(paths, options, watchUnhandled: false, cancellationToken);
+
+    /// <param name="watchUnhandled">
+    /// Whether the runtime writes the line an unhandled exception ending the process leaves (<see cref="UnhandledExceptionLine"/>):
+    /// the runtime mode's own start, which owns its process, and never a runtime started inside another program's.
+    /// </param>
+    private static async Task<RunningRuntime> StartAsync(JasonPaths paths, RuntimeHostOptions? options, bool watchUnhandled, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(paths);
         options ??= new RuntimeHostOptions();
@@ -98,10 +106,19 @@ public static class RuntimeHost
         }
 
         WebApplication? app = null;
+        UnhandledExceptionLine? unhandled = null;
         var started = false;
         try
         {
             logger = JasonLogging.Create(paths, settings.Logging, options.ConsoleLogging);
+
+            // From the moment there is a log until it is closed: an exception nothing catches, on any thread, ends the
+            // process, and the log is where a person looks for why.
+            if (watchUnhandled)
+            {
+                unhandled = UnhandledExceptionLine.Watch(logger);
+            }
+
             var info = RuntimeInfo.Create();
             logger.Information("Jason runtime {Version} starting as {InstanceId} (pid {Pid}) with data directory {DataDir}", info.RuntimeVersion, info.InstanceId, info.Pid, paths.Root);
             if (options.ConsoleAtStart is { } console)
@@ -244,7 +261,7 @@ public static class RuntimeHost
 
             logger.Information("Runtime API listening on {BaseUrl}; descriptor published at {Descriptor}", descriptor.BaseUrl, paths.DescriptorFile);
 
-            return new RunningRuntime(app, descriptor, paths, publisher, instanceLock, configuration, logger);
+            return new RunningRuntime(app, descriptor, paths, publisher, instanceLock, configuration, logger, unhandled);
         }
         catch
         {
@@ -273,6 +290,7 @@ public static class RuntimeHost
 
             configuration.Dispose();
             instanceLock.Dispose();
+            unhandled?.Dispose();
             if (logger is not null)
             {
                 await logger.DisposeAsync().ConfigureAwait(false);
@@ -384,7 +402,7 @@ public static class RuntimeHost
         RunningRuntime runtime;
         try
         {
-            runtime = await StartAsync(paths, options, cancellationToken).ConfigureAwait(false);
+            runtime = await StartAsync(paths, options, watchUnhandled: true, cancellationToken).ConfigureAwait(false);
         }
         // A stored value the start could not read is a refusal too: its sentence names the column and says what to do,
         // and it quotes nothing, so it can be said where a person will read it — found however the host wrapped it, inside
@@ -508,8 +526,9 @@ public static class RuntimeHost
         builder.Services.AddScoped<JournalWriter>();
         builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddScoped<SentFacts>();
+        builder.Services.AddScoped<SearchLanding>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
-        builder.Services.AddSystemModule().AddCampaignModule().AddProjectModule().AddPreferenceModule().AddContactModule();
+        builder.Services.AddSystemModule().AddCampaignModule().AddProjectModule().AddPreferenceModule().AddContactModule().AddAudienceModule();
         builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddEventsModule().AddSubscriptionModule().AddNotificationsModule().AddCommandModule().AddUiModule();
         builder.Services.AddApprovalModule().AddBlockModule().AddDecisionModule().AddReplyModule().AddReportModule().AddProfileModule().AddRoleNoteModule();
         builder.Services.AddUpdateModule(options.FeedHandler);
@@ -546,6 +565,7 @@ public static class RuntimeHost
         app.MapProjectOperations();
         app.MapPreferenceOperations();
         app.MapContactOperations();
+        app.MapAudienceOperations();
         app.MapWorkItemOperations();
         app.MapExecutorOperations();
         app.MapRoleOperations();

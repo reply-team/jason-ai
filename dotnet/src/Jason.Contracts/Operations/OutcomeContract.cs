@@ -80,6 +80,23 @@ public static class OutcomeContract
     }
 
     /// <summary>
+    /// Whether a repeat of <paramref name="contract"/> after an attempt that may have acted is held to that attempt — its
+    /// plugin (and, for an operation the work item's key settles, the package's digest), its account and the request it
+    /// was composed with: an operation the work item's key settles, and one whose
+    /// cost is metered and whose contract asks for a recovery read before a repeat, since its blind repeat would spend
+    /// again.
+    /// </summary>
+    public static bool HeldToTheUnsettledAttempt(OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        return SettlesByKey(contract)
+            || (string.Equals(contract.Cost.Value, Metered, StringComparison.Ordinal) && contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.AfterRecoveryRead);
+    }
+
+    /// <summary>The cost an operation's provider charges for by use.</summary>
+    private const string Metered = "metered";
+
+    /// <summary>
     /// The class a failure is recorded under: the plugin's own, except that a block outside its published contract is
     /// recorded <see cref="FailureClass.Permanent"/>, with what is wrong with it in <paramref name="blockProblems"/>.
     /// An answer that does not satisfy the contract is a refused answer, so a malformed block never stands for a real

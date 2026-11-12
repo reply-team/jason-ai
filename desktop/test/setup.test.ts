@@ -674,8 +674,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], linkedinPending: [],
-        linkedinBelowFloor: 'Connecting LinkedIn accounts here needs the Reply CLI 0.20.0 or later: update the Reply CLI.' });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.21.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [], absent: [], unread: [], pending: [], belowMinimum: null });
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.ok(asked.includes('account list --channel email --json') && asked.includes('account list --channel linkedin --json'));
     assert.equal(asked.includes('account list --json'), false, 'one read per channel, never the unsplit list');
@@ -733,6 +732,7 @@ test('a Reply CLI older than the one Jason’s Reply plugin requires is offered 
     const { reply } = await setupOn(b).status();
     assert.deepEqual(reply.cli, { found: true, version: '0.11.0', install: 'reply' });
     assert.deepEqual(reply.accounts, []);
+    assert.equal(reply.belowMinimum, 'Managing Reply accounts here needs the Reply CLI 0.21.0 or later: update the Reply CLI.');
     const asked = b.record().filter((entry) => entry.name === 'reply').map((entry) => entry.args.join(' '));
     assert.equal(asked.some((said) => said.startsWith('account list')), false, 'that version has no account command');
 

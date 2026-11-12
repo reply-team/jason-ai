@@ -720,6 +720,98 @@ describe('the console', () => {
             expect(document.querySelector('.composer .host-held')).toBeNull();
         });
 
+        describe('held under a chat whose host it is, while another host drives the chat', () => {
+            const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.send');
+            const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+            const hostMenu = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'Agent host' });
+            const unreadable =
+                'The version of Claude Code could not be read, so the chat does not run on it. Run `claude --version` in a terminal to see it; the chat needs 2.1.257 or newer, and `claude update` updates it. Then check again.';
+
+            /** A chat whose first turn ran on Claude Code, with Codex found too, and then Claude Code held by `sentence`. */
+            async function heldAfterATurn(sentence: string): Promise<{ desktop: StubDesktop; id: string }> {
+                const desktop = chatDesktop(withClaude(null, true));
+                renderConsole(pending(new FakeApi()), desktop);
+                await waitFor(() => expect(hostMenu()).toHaveProperty('value', 'claude'));
+                fireEvent.change(box(), { target: { value: 'Go' } });
+                fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+                await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+                const id = sends(desktop)[0]!.args[0] as string;
+                expect(sends(desktop)[0]!.args.slice(1)).toEqual(['Go', { host: 'claude' }]);
+                flush(() => desktop.emit(id, { kind: 'done', error: null }));
+                await waitFor(() => expect(chats.value[id]!.running).toBe(false));
+                const held = withClaude(sentence, true);
+                desktop.status = held;
+                flush(() => {
+                    setup.value = { ...setup.value!, hosts: held.hosts.map((each) => ({ ...each })) };
+                });
+                return { desktop, id };
+            }
+
+            for (const [name, sentence, said] of [
+                [
+                    'below the floor',
+                    old(),
+                    'Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+                ],
+                [
+                    'with a version that could not be read',
+                    unreadable,
+                    'The version of Claude Code could not be read, so the chat does not run on it. Run claude --version in a terminal to see it; the chat needs 2.1.257 or newer, and claude update updates it. Then check again.',
+                ],
+            ] as const) {
+                it(`${name}: runs no turn on another host, and shows the note with Check again`, async () => {
+                    const { desktop } = await heldAfterATurn(sentence);
+                    const note = await waitFor(() => {
+                        const element = document.querySelector<HTMLElement>('.composer .host-held');
+                        expect(element).toBeTruthy();
+                        return element!;
+                    });
+                    expect(words(note)).toContain(said);
+                    expect(within(note).getByRole('button', { name: 'Check again' })).toBeTruthy();
+                    // The menu still names the chat's own host; nothing moved it to Codex.
+                    expect(hostMenu().value).toBe('claude');
+                    expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+                    fireEvent.change(box(), { target: { value: 'Next' } });
+                    fireEvent.keyDown(box(), { key: 'Enter' });
+                    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+                    expect(sends(desktop)).toHaveLength(1);
+                    expect(box().value).toBe('Next');
+                });
+            }
+
+            it("after Check again finds it updated, runs the turn on the chat's own host", async () => {
+                const { desktop } = await heldAfterATurn(old());
+                const note = await waitFor(() => {
+                    const element = document.querySelector<HTMLElement>('.composer .host-held');
+                    expect(element).toBeTruthy();
+                    return element!;
+                });
+                desktop.status = withClaude(null, true);
+                fireEvent.click(within(note).getByRole('button', { name: 'Check again' }));
+                await waitFor(() =>
+                    expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false),
+                );
+                expect(document.querySelector('.composer .host-held')).toBeNull();
+                expect(hostMenu().value).toBe('claude');
+                fireEvent.change(box(), { target: { value: 'Next' } });
+                fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+                await waitFor(() => expect(sends(desktop)).toHaveLength(2));
+                expect(sends(desktop)[1]!.args.slice(1)).toEqual(['Next', { host: 'claude' }]);
+            });
+
+            it('runs the turn on another host the person chooses', async () => {
+                const { desktop } = await heldAfterATurn(old());
+                await waitFor(() => expect(document.querySelector('.composer .host-held')).toBeTruthy());
+                fireEvent.change(hostMenu(), { target: { value: 'codex' } });
+                await waitFor(() => expect(hostMenu().value).toBe('codex'));
+                expect(document.querySelector('.composer .host-held')).toBeNull();
+                fireEvent.change(box(), { target: { value: 'Next' } });
+                fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+                await waitFor(() => expect(sends(desktop)).toHaveLength(2));
+                expect(sends(desktop)[1]!.args.slice(1)).toEqual(['Next', { host: 'codex' }]);
+            });
+        });
+
         it('is marked on the Connect card with the same sentence, its command as code', async () => {
             const fake = pending(new FakeApi());
             renderConsole(fake, chatDesktop(withClaude(old(), false)));

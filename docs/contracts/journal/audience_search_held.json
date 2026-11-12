@@ -1,0 +1,39 @@
+{
+  "kind": "audience_search_held",
+  "version": 1,
+  "since": "0.36.0",
+  "summary": "A search for a campaign's audience is held at the provider — paused, out of credits or at the plan's limit — with what it was asked for, found and landed; said when a read first reports the hold, and again only after the search moves and holds again; a default manager trigger.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^wi_", "description": "The read that first said the search is held, by its work item: one line per hold." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["audience", "plugin", "state", "asked", "found", "landed"],
+        "properties": {
+          "audience": { "type": "string", "pattern": "^aud_", "description": "The audience the search runs under." },
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the search runs at." },
+          "state": {
+            "type": "string",
+            "enum": ["paused", "paused_for_credits", "paused_for_limit"],
+            "description": "What holds it: a person paused it at the provider, the account's credits ran out, or the account's plan holds no more contacts. Each holds the search until a person acts at the provider, and the runtime goes on reading it on the slower cadence of a held search."
+          },
+          "asked": { "type": "integer", "minimum": 1, "description": "How many people the search was asked for." },
+          "found": { "type": ["null", "integer"], "minimum": 0, "description": "How many the provider said it found, or null where it never said." },
+          "landed": { "type": "integer", "minimum": 0, "description": "How many members of the campaign the search made so far." }
+        }
+      }
+    }
+  }
+}

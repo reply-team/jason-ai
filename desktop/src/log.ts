@@ -26,6 +26,7 @@ export const templates = {
     navigation_refused: 'A navigation off {Origin} was refused',
     link_opened: 'An https link was handed to the system browser',
     link_refused: 'A link that is not https was refused',
+    link_open_failed: 'The system browser was asked to open a link and did not',
     ipc_refused: 'A call on {Channel} from outside {Origin} was refused',
     cli_exited: 'jason {Verb} exited {Exit} after {ElapsedMs} ms',
     program_exited: '{Program} {Verb} exited {Exit} after {ElapsedMs} ms',
@@ -37,7 +38,7 @@ export const templates = {
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',
     reply_wired: 'Jason’s Reply plugin was placed and granted reply; global default written {RouteWritten}; jason plugin reload exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
-    reply_api_answered: 'reply api {Act} answered status {Status}, exit {Exit}',
+    reply_account_act: 'reply account {Act} on {Channel} exited {Exit} with code {Code}; a usage error {Usage}',
     // The desk: the tray, its notifications.
     tray_state: 'The tray shows the state {State}',
     attention_notified: 'A notification said that {Approvals} approvals and {Questions} questions wait on the person',

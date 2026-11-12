@@ -147,6 +147,42 @@ export const COMMANDS = {
   "contact linkedin-voice": {
     "kind": "write",
     "note": "Sends the contact one voice message from the account named, outside any sequence, which Reply speaks from the script on stdin; the contact has to be a connection of the account. Given a person Reply holds nobody for by their fields, it imports them first, as an add would, and goes only to the contact it made: one Reply already held it names, sending nothing. Made under the work item's key, and at the moment it goes out after where the arguments name one still ahead: a lost answer is repeated under the same key, which Reply answers with the send it took and sends nothing twice."
+  },
+  "contact-list create": {
+    "kind": "write",
+    "note": "Makes the empty, private contact list one Live Data search fills, named on stdin after the work item and the attempt: what audience.search makes before it starts the search."
+  },
+  "contact-list delete": {
+    "kind": "write",
+    "note": "Deletes a search's list once the search has ended and its last person is read, or once it is cancelled; the contacts on it stay in the account. Run again after a lost answer, it answers that Reply holds the list no longer."
+  },
+  "contact-list contacts": {
+    "kind": "read",
+    "note": "One page of the people Live Data put on a search's list, oldest first, from the number already read: what audience.search_status answers its people from."
+  },
+  "live-data preview": {
+    "kind": "read",
+    "note": "How many people and companies a definition matches and up to ten of them, waited for inside the invocation's budget: what audience.preview answers from. Reply saves and charges nothing, so a lost answer is asked again."
+  },
+  "live-data start": {
+    "kind": "write",
+    "note": "Starts the Live Data search that puts the people it finds on the search's list, the definition on stdin: the spending act of audience.search. A lost answer may have started one, so a repeat reads the searches first."
+  },
+  "live-data get": {
+    "kind": "read",
+    "note": "One search's status and Reply's count of the people it found, never the people: what audience.search_status reads first, and the read audience.search_cancel makes before it stops anything."
+  },
+  "live-data list": {
+    "kind": "read",
+    "note": "One page of the team's searches, newest first, each with its lists: the read a repeat of audience.search makes for the search an earlier attempt may have started."
+  },
+  "live-data delete": {
+    "kind": "write",
+    "note": "Deletes a search, whatever its status, which stops it: what audience.search_cancel does to a search running or paused. Run again after a lost answer, it answers that Reply holds the search no longer."
+  },
+  "live-data filter-values": {
+    "kind": "read",
+    "note": "The values Reply suggests for one of its five typeaheads, those that contain the text given: what audience.filter_values answers from."
   }
 };
 
@@ -385,6 +421,31 @@ export const CODES = {
       "access.feature_unavailable": "feature_not_included",
       "idempotency_key.in_use": "key_in_use",
       "repeat:reply.refused:404": "send_not_settled"
+    },
+    "audience.search": {
+      "live_data.search_in_progress": "search_in_progress",
+      "live_data.insufficient_credits": "insufficient_credits",
+      "access.feature_unavailable": "feature_unavailable",
+      "live_data.invalid_filters": "definition_rejected",
+      "live_data.service_failed": "search_service_failed",
+      "contact-list.not_found": "list_gone_before_the_start",
+      "contact-list.name_taken": "list_name_taken",
+      "live_data.contact_limit_reached": "contact_limit_reached"
+    },
+    "audience.search_cancel": {
+      "live_data.service_failed": "search_service_failed"
+    },
+    "audience.preview": {
+      "live_data.invalid_filters": "definition_rejected",
+      "access.feature_unavailable": "feature_unavailable",
+      "live_data.preview_failed": "preview_not_answered",
+      "live_data.preview_not_found": "preview_not_answered",
+      "live_data.service_failed": "preview_not_answered",
+      "live_data.search_in_progress": "preview_not_answered"
+    },
+    "audience.filter_values": {
+      "access.feature_unavailable": "feature_unavailable",
+      "live_data.service_failed": "values_not_answered"
     }
   }
 };
@@ -446,7 +507,7 @@ export const ROWS = {
       "note": "Reply asked for this call to be made later. The runtime waits and repeats the attempt."
     },
     "refusal_this_version_has_no_word_for": {
-      "when": "The CLI answered `reply.refused`, `reply.invalid_request` about a field this operation has no row for, or a code this version does not know. That holds for `reply.refused` at status 404 and no code of Reply's own, which means Reply's API changed under this package version: the CLI passes such a 404 through as it is on every command but `contact get`, `contact delete`, `inbox get`, `inbox reply`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`.",
+      "when": "The CLI answered `reply.refused`, `reply.invalid_request` about a field this operation has no row for, or a code this version does not know. That holds for `reply.refused` at status 404 and no code of Reply's own, which means Reply's API changed under this package version: the CLI passes such a 404 through as it is on every command but `contact get`, `contact delete`, `contact-list delete`, `inbox get`, `inbox reply`, `live-data delete`, `live-data get`, `live-data start`, `sequence get`, `sequence contacts`, `sequence stats`, `sequence pause` and `sequence start`, which read every 404 as the thing they asked for not being found, and `auth whoami`, which never answers `reply.refused`.",
       "code": "provider_call_failed",
       "class": "permanent",
       "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table. Update the package (`jason update apply`) and, if the ending stays, report it."
@@ -1726,6 +1787,159 @@ export const ROWS = {
         "code": "events_unreachable",
         "class": "transient",
         "note": "Reply's change feed answered with a thread this package could not read, so the page was not taken and the cursor stays where it was. The runtime reads again later. Should the same thread come back on every read, the source stops being healthy, and the inbound sync reads the campaigns it covers again, so a stuck feed loses no reply."
+      }
+    },
+    "audience.search": {
+      "people_without_an_email_not_offered": {
+        "when": "`args.include_without_email` is true. reply-cli's `live-data start` has no flag for Reply's people without an email, so nothing is made or started. Decided before any call.",
+        "code": "capability_not_offered",
+        "class": "permanent",
+        "quotes": "reason",
+        "note": "Ask for the search without people who have no email, or with `include_without_email` left out; nothing was made or started."
+      },
+      "definition_rejected": {
+        "when": "The CLI answered `live_data.invalid_filters`: Reply refused the request at 400 for a rule of its own the declared schema cannot say, most often account lists included beside a company filter or a minimum revenue above the maximum. Nothing was started, and the list made for the search is deleted again.",
+        "code": "definition_rejected",
+        "class": "validation",
+        "quotes": "reply",
+        "note": "Reply refused the definition for a rule of its own, and nothing was started or spent. Change the definition as Reply's words say."
+      },
+      "search_in_progress": {
+        "when": "The CLI answered `live_data.search_in_progress` (409): an unfinished search of the team, running or paused, has the same filters. Nothing was started, and the list made for the search is deleted again.",
+        "code": "search_in_progress",
+        "class": "permanent",
+        "note": "Reply is already running a search of this definition for the team, running or paused, and starts no second one until that one ends. Nothing was started or spent. `reply live-data list` shows the team's searches with their lists: one Jason started fills a list named `Jason search` and the work item that started it, and is read or stopped by that work item."
+      },
+      "insufficient_credits": {
+        "when": "The CLI answered `live_data.insufficient_credits` (422): the team cannot afford a single contact. Nothing was started, and the list made for the search is deleted again. Credits that run out while a search runs are a state the status read reports, `paused_for_credits`, never this.",
+        "code": "insufficient_credits",
+        "class": "permanent",
+        "note": "The Reply account has no credits left for a single contact, so no search was started and nothing was spent. Add credits at Reply, then propose the search again."
+      },
+      "feature_unavailable": {
+        "when": "The CLI answered `access.feature_unavailable` (Reply's 403 `liveDataSearch.forbidden`): the user the profile signs in as lacks the permissions to add contacts. Nothing was started, and the list made for the search is deleted again.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "The Reply user this route signs in as does not have the permission to add contacts, which a search needs, so none was started. An owner or an admin of the team at Reply can grant it."
+      },
+      "search_service_failed": {
+        "when": "The CLI answered `live_data.service_failed`: Reply's search service failed and Reply saved no search. Nothing was started, and the list made for the search is deleted again.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply's search service failed, and Reply saved no search, so nothing was started or spent. The runtime repeats the attempt."
+      },
+      "list_gone_before_the_start": {
+        "when": "The CLI answered `contact-list.not_found` to the start: the list made for the search a moment before is gone. Nothing was started.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "The contact list made for this search was gone when the search was started, so nothing was started or spent. The runtime repeats the attempt, which makes a list of its own."
+      },
+      "contact_limit_reached": {
+        "when": "The CLI answered `live_data.contact_limit_reached` (Reply's 422 `liveDataSearch.contactLimitReached`): the plan of the user who starts the search has no room for another contact. Nothing was started, and the list made for the search is deleted again. A plan that fills up while a search runs is a state the status read reports, `paused_for_limit`, never this.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "The Reply plan this route searches under holds no more contacts, so no search was started and nothing was spent. Raise the plan's contact limit at Reply, or make room under it, then propose the search again."
+      },
+      "list_name_taken": {
+        "when": "The CLI answered `contact-list.name_taken`: the account already holds a list of the name made for this attempt, `Jason search`, the work item and the attempt's number, which this package never makes twice. Nothing was made or started.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The Reply account already holds a contact list of the name this search's list is given, so nothing was made or started. Rename or delete that list at Reply, then propose the search again."
+      }
+    },
+    "audience.search_status": {
+      "search_not_found": {
+        "when": "The CLI answered `live_data.not_found`: Reply holds no search under the reference, deleted at Reply or never the account's. Or the reference is not `search-<id>-list-<id>`, the only kind this package makes, decided before any call.",
+        "code": "search_not_found",
+        "class": "permanent",
+        "note": "Reply holds no search under this reference, so nothing was read. A search deleted at Reply cannot be read again; the people it already returned stay found."
+      },
+      "cursor_unreadable": {
+        "when": "The cursor is not a number of people already read, 0 to 1000000, the only kind this package writes. Decided before any call.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The cursor handed back is not one this version of the package wrote, so the search's people cannot be read from it."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The answer of `contact-list contacts` passed `Plugins:Exec:OutputBytes` and was cut off before it could be read whole.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program, `Plugins:Exec:OutputBytes`, so it was cut off and nothing was read from it. Asking again would cut it at the same place: raise the setting, or ask for less."
+      }
+    },
+    "audience.search_cancel": {
+      "search_not_found": {
+        "when": "A first attempt, and the CLI answered `live_data.not_found` to the read before the cancel: Reply holds no search under the reference. Or the reference is not `search-<id>-list-<id>`, the only kind this package makes, decided before any call. An attempt after the first answers `already_ended` instead, since an earlier attempt may have deleted the search.",
+        "code": "search_not_found",
+        "class": "permanent",
+        "note": "Reply holds no search under this reference, so there was nothing to stop."
+      },
+      "search_service_failed": {
+        "when": "The CLI answered `live_data.service_failed` to the delete: Reply's search service failed and the search is kept as it was.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply's search service failed, and the search was not stopped. The runtime repeats the attempt."
+      }
+    },
+    "audience.preview": {
+      "definition_rejected": {
+        "when": "The CLI answered `live_data.invalid_filters`: Reply refused the request at 400 for a rule of its own the declared schema cannot say, most often account lists included beside a company filter or a minimum revenue above the maximum.",
+        "code": "definition_rejected",
+        "class": "validation",
+        "quotes": "reply",
+        "note": "Reply refused the definition for a rule of its own, and nothing was counted. Change the definition as Reply's words say."
+      },
+      "feature_unavailable": {
+        "when": "The CLI answered `access.feature_unavailable`: Reply's 403, a key without the scope that reads Reply's background jobs, or a plan or role without the feature.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "The Reply account or the user this route signs in as may not look at Live Data, so nothing was counted."
+      },
+      "preview_not_answered": {
+        "when": "Reply's preview job did not answer within the wait this invocation leaves it (the CLI's `pending`), or ended `live_data.preview_failed`, `live_data.preview_not_found` (a newer preview of the same user replaced it), `live_data.service_failed` or `live_data.search_in_progress`.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply did not finish counting this definition in the time the read had, or its preview failed. Nothing was saved or spent; ask again."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The answer of `live-data preview` passed `Plugins:Exec:OutputBytes` and was cut off before it could be read whole.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program, `Plugins:Exec:OutputBytes`, so it was cut off and nothing was read from it. Asking again would cut it at the same place: raise the setting, or ask for less."
+      }
+    },
+    "audience.filter_values": {
+      "filter_unknown": {
+        "when": "`args.filter` is none of the five typeaheads the declaration names — `industries`, `departments`, `seniorities`, `locations`, `job-titles` — so Reply has no values to suggest for it. Decided before any call.",
+        "code": "filter_unknown",
+        "class": "validation",
+        "note": "This package lists values for Reply's five typeaheads, `industries`, `departments`, `seniorities`, `locations` and `job-titles`, and no other filter. `jason operation describe audience.search` names the typeahead each filter pairs with."
+      },
+      "feature_unavailable": {
+        "when": "The CLI answered `access.feature_unavailable`: Reply's 403, a plan or role without Live Data.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "The Reply account or the user this route signs in as may not use Live Data, so it offers no values to search by."
+      },
+      "values_not_answered": {
+        "when": "The CLI answered `live_data.service_failed`: Reply's search service failed.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "Reply's search service failed, so no values were read. Ask again."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The answer of `live-data filter-values` passed `Plugins:Exec:OutputBytes` and was cut off before it could be read whole.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program, `Plugins:Exec:OutputBytes`, so it was cut off and nothing was read from it. Asking again would cut it at the same place: raise the setting, or ask for less."
+      }
+    },
+    "audience.availability": {
+      "answer_too_large_on_a_read": {
+        "when": "Never reached: the package asks Reply nothing for this read, since Reply has no read of what an account may spend. The row is the read's own ending for an answer too large, written for the day it asks.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program, `Plugins:Exec:OutputBytes`, so it was cut off and nothing was read from it. Asking again would cut it at the same place: raise the setting."
       }
     }
   }

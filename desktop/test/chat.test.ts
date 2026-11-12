@@ -604,6 +604,24 @@ test('a turn on a Codex older than the version that leaves the person\'s configu
     assert.ok(at.hosts()[0]?.args.includes('--ignore-user-config'));
 });
 
+test('a turn refused on a held Claude Code keeps the chat\'s session, and the turn after an update resumes it on that host', async (t) => {
+    let version = '2.1.300';
+    const { programs } = versionSaying(async () => ({ exit: 0, stdout: `${version} (Claude Code)\n`, stderr: '' }));
+    const r = rig(t, { chat: { programs } });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });
+
+    version = '2.1.200';
+    assert.deepEqual(await r.turn('c1', words, { host: 'claude' }), [{ kind: 'done', error: floorSentence('2.1.200') }]);
+    assert.equal(r.hosts().length, 1, 'the held turn started nothing');
+
+    version = '2.1.300';
+    const after = await r.turn('c1', words, { host: 'claude' });
+    assert.deepEqual(doneOf(after), { kind: 'done', error: null });
+    assert.ok(!kinds(after).includes('fresh'), JSON.stringify(after));
+    assert.equal(flagValue(r.hosts()[1]?.args ?? [], '--resume'), 'stub-session-1');
+    assert.deepEqual(r.started.map((each) => each.resumed), [false, true]);
+});
+
 test('a Claude Code turn on a host that knows --no-chrome carries it', async (t) => {
     const r = rig(t);
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'claude' })), { kind: 'done', error: null });

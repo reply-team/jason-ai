@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -86,6 +87,7 @@ public partial class ReplyMessageSendTests
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             new ExternalIdStore(new JournalWriter(clock), clock),
             new SentFacts(new JournalWriter(clock)),
+            new SearchLanding(new JournalWriter(clock), new ExternalIdStore(new JournalWriter(clock), clock), clock),
             TestOptions.PluginSettings(_ => { }));
         await recorder.RecordAsync(db, item, attempt, OperationCatalog.Find(Operation)!, ReplyPlugins.PluginId, ReplyPlugins.SettlesByKey(Operation), result, Ct);
         await db.SaveChangesAsync(Ct);

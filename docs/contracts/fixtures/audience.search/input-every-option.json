@@ -1,0 +1,87 @@
+{
+  "operation": "audience.search",
+  "version": 1,
+  "case": "every option named: at most one person from any one company, phones asked for, people without an address taken too",
+  "input": {
+    "args": {
+      "definition": {
+        "industries": [
+          {
+            "value": "Logistics",
+            "type": "include"
+          },
+          {
+            "value": "Freight Brokerage",
+            "type": "exclude"
+          }
+        ],
+        "job_titles": [
+          {
+            "value": "Head of Operations",
+            "type": "include"
+          }
+        ],
+        "company_sizes": [
+          "51-200",
+          "201-500"
+        ],
+        "headcount_growth": {
+          "min": 5,
+          "max": 40
+        },
+        "locations": [
+          {
+            "value": "Portugal",
+            "type": "include"
+          }
+        ]
+      },
+      "count": 250,
+      "people_per_company": 1,
+      "include_without_email": true,
+      "find_phones": true
+    },
+    "definition": {
+      "industries": [
+        {
+          "value": "Logistics",
+          "type": "include"
+        },
+        {
+          "value": "Freight Brokerage",
+          "type": "exclude"
+        }
+      ],
+      "job_titles": [
+        {
+          "value": "Head of Operations",
+          "type": "include"
+        }
+      ],
+      "company_sizes": [
+        "51-200",
+        "201-500"
+      ],
+      "headcount_growth": {
+        "min": 5,
+        "max": 40
+      },
+      "locations": [
+        {
+          "value": "Portugal",
+          "type": "include"
+        }
+      ]
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": "valid"
+}

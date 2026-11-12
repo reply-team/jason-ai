@@ -97,7 +97,7 @@ if (process.env.STUB_HANG === name) {
     // What Codex says of its version, as `codex-cli <version>`.
     process.stdout.write(`codex-cli ${process.env.STUB_CODEX_VERSION}\n`);
 } else if (said === '--version') {
-    process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.19.0'}\n` :'10.9.2\n');
+    process.stdout.write(name === 'reply' ? `reply-cli ${process.env.STUB_REPLY_VERSION || '0.21.0'}\n` :'10.9.2\n');
 } else if (name === 'reply' && said === 'auth status --json') {
     // The shape reply-cli prints (src/auth/status.ts), and its exit code: 1 when no credential is there.
     const signedIn = process.env.STUB_REPLY_SIGNED_IN === 'yes';
@@ -126,27 +126,28 @@ if (process.env.STUB_HANG === name) {
     } else {
         process.stdout.write(JSON.stringify({ items: raw ? JSON.parse(raw) : [] }));
     }
-} else if (name === 'reply' && args[0] === 'api') {
-    // reply-cli 0.20.0's `reply api`: what Reply answered, printed as {"code":<status>,"data":<body>} on stdout, exit 1
-    // at a status of 400 or above, exit 3 when the connection broke. The answer is named per call by
-    // STUB_REPLY_API_<CALL> as JSON, {"status", "data"}, or {"exit", "stdout"} for an ending with no answer; the pending
-    // list answers an empty list when none is named.
-    const path = args[1] ?? '';
-    const call = path === '/v3/linkedin-accounts/connection-link' ? 'CONNECT'
-        : path === '/v3/linkedin-accounts/pending' ? 'PENDING'
-        : /^\/v3\/linkedin-accounts\/[^/]+\/reconnect$/.test(path) ? 'RECONNECT'
-        : path === '/v1/SharedPageUrl' ? 'MAILBOX' : null;
-    const named = call === null ? undefined : process.env[`STUB_REPLY_API_${call}`];
-    const answer = named ? JSON.parse(named) : call === 'PENDING' ? { status: 200, data: [] } : null;
+} else if (name === 'reply' && args[0] === 'account' && args[1] !== 'list') {
+    // The account verbs as the Reply CLI ends them under --json: the result on stdout and exit 0, a refusal as one line
+    // {"error":{...}} on stderr and exit 1 (2 for a usage.* code), exit 3 for a write whose outcome it does not know. The
+    // answer is named per verb by STUB_REPLY_ACCOUNT_<VERB>, with _SHARED where --allow-shared-page was passed and _FORCE
+    // where --force was: {"print": <result>}, {"code": <code>, "exit"?}, or {"exit", "stdout"?, "stderr"?} as it is.
+    // `pending` lists nothing when none is named.
+    const verb = (args[1] ?? '').toUpperCase();
+    const key = `STUB_REPLY_ACCOUNT_${verb}${args.includes('--allow-shared-page') ? '_SHARED' : ''}${args.includes('--force') ? '_FORCE' : ''}`;
+    const named = process.env[key];
+    const answer = named ? JSON.parse(named) : verb === 'PENDING' ? { print: { items: [], supported: true, unsupported_channels: [] } } : null;
     if (answer === null) {
         process.stderr.write(`the stub reply does not answer ${said}\n`);
         process.exitCode = 2;
-    } else if (answer.status === undefined) {
-        process.stdout.write(answer.stdout ?? '');
-        process.exitCode = answer.exit ?? 0;
+    } else if (answer.print !== undefined) {
+        process.stdout.write(JSON.stringify(answer.print) + String.fromCharCode(10));
+    } else if (answer.code !== undefined) {
+        process.stderr.write(JSON.stringify({ error: { code: answer.code, title: 'Words of the CLI that the desktop never shows.', ...(answer.error ?? {}) } }) + String.fromCharCode(10));
+        process.exitCode = answer.exit ?? (answer.code.startsWith('usage.') ? 2 : 1);
     } else {
-        process.stdout.write(JSON.stringify({ code: answer.status, data: answer.data ?? null }) + String.fromCharCode(10));
-        process.exitCode = answer.exit ?? (answer.status >= 400 ? 1 : 0);
+        process.stdout.write(answer.stdout ?? '');
+        process.stderr.write(answer.stderr ?? '');
+        process.exitCode = answer.exit ?? 0;
     }
 } else if (name === 'reply' && said === 'skills install adapter --project --agent codex') {
     // STUB_REPLY_SKILLS_FAIL=yes makes the install fail before it writes anything.

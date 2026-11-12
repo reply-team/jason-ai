@@ -55,7 +55,7 @@ public sealed class LogTemplateInventoryTests
     /// How many templates the scan finds. Exact on purpose: a template added, removed or no longer read changes it,
     /// and the failure lists every template found so the change can be seen and the number moved knowingly.
     /// </summary>
-    private const int TemplateCount = 123;
+    private const int TemplateCount = 136;
 
     private static readonly Regex Marker = new(
         @"LoggerMessage\.Define(?<scope>Scope)?(?:<[^<>()]*>)?\s*\(|\[\s*LoggerMessage\s*\(|new\s+(?:Serilog\.Events\.)?(?<property>LogEventProperty)\s*\(|\??\.\s*(?<method>LogTrace|LogDebug|LogInformation|LogWarning|LogError|LogCritical|Log|Verbose|Debug|Information|Warning|Error|Fatal|Write|BeginScope)\s*(?:<(?:[^<>()]|<[^<>()]*>)*>\s*)?\(",
@@ -169,6 +169,7 @@ public sealed class LogTemplateInventoryTests
         problems.AddRange(Missing(sites, "RuntimeHost.cs", "Console at start: {Console}"));
         problems.AddRange(Missing(sites, "RuntimeHost.cs", "The settings file could not be read ({ExceptionType} at line {LineNumber}, byte {BytePositionInLine}); the runtime keeps the settings it had"));
         problems.AddRange(Missing(sites, "RuntimeHost.cs", "The settings file could not be read ({ExceptionType} at line {LineNumber}, byte {BytePositionInLine}) while the runtime was starting, so any setting not yet in force starts on its default; restart it once the file can be read"));
+        problems.AddRange(Missing(sites, "UnhandledExceptionLine.cs", "The runtime is ending on an unhandled {ExceptionType}, wrapping {InnerExceptionTypes}; its stack, innermost frame first: {Frames}"));
         problems.AddRange(Missing(sites, "AttemptLogScope.cs", "{CampaignId} {WorkItemId} {AttemptId}"));
         problems.AddRange(Missing(sites, "RequestLine.cs", "{RequestPath}"));
 

@@ -1,15 +1,12 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
-using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
-using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Contacts;
@@ -168,48 +165,16 @@ public sealed class ContactThreadService(JasonDbContext db, PluginRegistry plugi
         }
     }
 
-    private async Task<JsonObject> ReadAsync(Target target, JsonObject args, CancellationToken ct)
-    {
-        var input = CanonicalInput.ComposeRead(target.Contract, target.Contact, target.Pins, args);
-        if (target.Contract.CheckInput(input, PatternTiming.Default) is { Count: > 0 } problems)
-        {
-            throw new InvalidOperationException($"The input composed for '{target.Contract.Id}' does not satisfy its schema: {problems.Count} problem(s).");
-        }
-
-        var request = new PluginInvocationRequest(
+    private Task<JsonObject> ReadAsync(Target target, JsonObject args, CancellationToken ct) =>
+        ProviderReadCall.InvokeAsync(
+            invoker,
             target.PluginId,
-            target.Contract.Id,
-            input,
-            target.Route.Binding?.DeepClone().AsObject(),
-            PublicId.New("ctr"),
-            Timeout: TimeSpan.FromMilliseconds(target.Contract.TimeoutMs),
-            Pinned: target.Plugin);
-        var invoked = await invoker.InvokeAsync(request, ct).ConfigureAwait(false);
-
-        switch (invoked.Outcome)
-        {
-            case InvocationOutcome.Succeeded { Result: JsonObject result }
-                when SchemaValidator.Verdicts(OutcomeContract.CheckResult(target.Contract, result)).Count == 0:
-                return result;
-            case InvocationOutcome.Succeeded:
-                throw Failed(AttemptErrors.ResultInvalid, $"The provider's answer to '{target.Contract.Id}' does not satisfy the schema that operation publishes.", FailureClass.Ambiguous);
-            case InvocationOutcome.Failed { Error: var error }:
-                // A blocked read is final, as a permanent one is, under the code the plugin gave. The block itself does
-                // not travel: an API error carries a code, a message and whether to retry, and nothing else. The code is
-                // held to the operation's list by the one check a work item's failure meets, host endings included.
-                throw OutcomeContract.CheckFailure(target.Contract, error) is null
-                    ? Failed(error.Code, error.Message, OutcomeContract.Recorded(error, out _))
-                    : Failed(AttemptErrors.ResultInvalid, $"The provider failed '{target.Contract.Id}' outside what that operation declares.", FailureClass.Ambiguous);
-            case InvocationOutcome.ProtocolFailure protocol:
-                throw Failed("provider_read_failed", protocol.Message, OutcomeClassification.ClassOf(protocol.Code));
-            default:
-                throw new InvalidOperationException($"An invocation of '{target.Contract.Id}' ended in an outcome nothing reads.");
-        }
-    }
-
-    /// <summary>The provider could not answer: the request is answered with what it said, and only a transient class says try again.</summary>
-    private static DomainException Failed(string code, string message, FailureClass failureClass) =>
-        new(StatusCodes.Status502BadGateway, code, message, retryable: failureClass == FailureClass.Transient);
+            target.Contract,
+            CanonicalInput.ComposeRead(target.Contract, target.Contact, target.Pins, args),
+            target.Route.Binding,
+            target.Plugin,
+            "ctr",
+            ct);
 
     private sealed record Target(
         string PluginId,

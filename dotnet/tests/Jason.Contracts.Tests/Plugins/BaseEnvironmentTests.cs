@@ -183,7 +183,7 @@ public class BaseEnvironmentTests
             ],
             BaseEnvironment.Windows);
         AssertSet(
-            ["HOME", "XDG_CONFIG_HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME", "SHELL", "TERM"],
+            ["HOME", "XDG_CONFIG_HOME", "TMPDIR", "TZ", "LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME", "SHELL", "TERM"],
             BaseEnvironment.Unix);
     }
 

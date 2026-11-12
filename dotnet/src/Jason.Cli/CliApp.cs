@@ -228,6 +228,7 @@ public static class CliApp
         root.Subcommands.Add(ProjectCommands.Build(env, actor));
         root.Subcommands.Add(PreferenceCommands.Build(env, actor));
         root.Subcommands.Add(ContactCommands.Build(env, actor));
+        root.Subcommands.Add(AudienceCommands.Build(env, actor));
         root.Subcommands.Add(WorkItemCommands.Build(env, actor));
         root.Subcommands.Add(RoleCommands.Build(env, actor));
         root.Subcommands.Add(RoleNoteCommands.Build(env, actor));
@@ -241,6 +242,7 @@ public static class CliApp
         root.Subcommands.Add(SuppressionCommands.Build(env, actor));
         root.Subcommands.Add(PluginCommands.Build(env, actor));
         root.Subcommands.Add(RouteCommands.Build(env, actor));
+        root.Subcommands.Add(OperationCommands.Build(env, actor));
         root.Subcommands.Add(EventsCommands.Build(env, actor));
         root.Subcommands.Add(SubscriptionCommands.Build(env, actor));
         root.Subcommands.Add(UiCommands.Build(env, actor));

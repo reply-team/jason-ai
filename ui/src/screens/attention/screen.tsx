@@ -46,6 +46,11 @@ export function AttentionScreen() {
     const approvals = shows === 'questions' ? [] : store.approvals.value;
     const questions = shows === 'approvals' ? [] : store.questions.value;
 
+    // A count is of what is loaded: where the runtime holds more pages of a kind, its option says so.
+    const moreApprovalsWait = !!store.approvalsCursor.value;
+    const moreQuestionsWait = !!store.questionsCursor.value;
+    const loadedNote = t('attention.filter.loaded');
+
     const now = new Date();
     const detail = store.detail.value;
     const remaining = selected ? remainingText(selected, only) : '';
@@ -92,16 +97,23 @@ export function AttentionScreen() {
                         <Segmented
                             label={t('attention.filter.label')}
                             options={[
-                                { value: 'all', label: t('attention.filter.all'), count },
+                                {
+                                    value: 'all',
+                                    label: t('attention.filter.all'),
+                                    count,
+                                    note: moreApprovalsWait || moreQuestionsWait ? loadedNote : undefined,
+                                },
                                 {
                                     value: 'approvals',
                                     label: t('attention.filter.approvals'),
                                     count: store.approvals.value.length,
+                                    note: moreApprovalsWait ? loadedNote : undefined,
                                 },
                                 {
                                     value: 'questions',
                                     label: t('attention.filter.questions'),
                                     count: store.questions.value.length,
+                                    note: moreQuestionsWait ? loadedNote : undefined,
                                 },
                             ]}
                             value={shows}

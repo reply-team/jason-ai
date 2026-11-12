@@ -28,6 +28,7 @@ public partial class ProviderOpPreflightTests
     private const string Stop = "enrollment.stop";
     private const string Delete = "contact.delete";
     private const string Pause = "campaign.pause";
+    private const string Activate = "campaign.activate";
     private const string Send = "message.send";
 
     /// <summary>
@@ -36,7 +37,7 @@ public partial class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the twenty checks' order")]
+    [Critical(Family.W3, "the twenty-six checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -97,13 +98,44 @@ public partial class ProviderOpPreflightTests
         scenario.Named = Made();
         met.Add(Refused(scenario, FailureClass.Permanent));
 
-        (scenario.Operation, scenario.Plugin, scenario.Arguments) = deleting;
+        // Fifteenth to seventeenth: the same three questions of a search a status read names, by the reference the search's
+        // own attempt returned — a search the campaign does not hold, then one that kept no reference, as one the provider
+        // finished inside its own call keeps none, then one made under another account than this route's.
         scenario.Named = null;
+        scenario.Operation = SearchStatus;
+        scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, SearchStatus], binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["search"] = SearchItem, ["limit"] = 25 };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Searched = Started() with { Reference = null };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.Searched = Started();
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        // Eighteenth: a search of an audience named by its number, which the campaign does not hold, before the input that
+        // would carry that audience's definition is composed.
+        scenario.Searched = null;
+        scenario.Operation = Search;
+        scenario.Plugin = Scenario.Searching(binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["audience"] = 3, ["count"] = 50 };
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        (scenario.Operation, scenario.Plugin, scenario.Arguments) = deleting;
         scenario.ContactPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "48211" };
         met.Add(Refused(scenario, FailureClass.Validation));
         Assert.Equal("/args/contact", Assert.Single(scenario.Check().Details!).Field);
 
-        // Sixteenth: an argument the operation's document names per channel, on a channel the routed plugin's manifest
+        // Twentieth: a definition that is not the routed plugin's shape, asked once the envelope around it satisfies the
+        // operation's own schema and before anybody is asked to approve a search the provider would refuse; it points into
+        // the definition as the envelope's refusals point into the input.
+        scenario.Operation = Search;
+        scenario.Plugin = Scenario.Searching(binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["definition"] = new JsonObject { ["industries"] = "Software" }, ["count"] = 50 };
+        met.Add(Refused(scenario, FailureClass.Validation));
+        Assert.Equal("/definition/industries", Assert.Single(scenario.Check().Details!).Field);
+
+        // Twenty-first: an argument the operation's document names per channel, on a channel the routed plugin's manifest
         // does not list it for. It is asked once the document satisfies its schema, so a moment that is no moment is the
         // planner's to fix first, and before anybody is asked to approve a send that could not go out as written.
         scenario.Operation = Send;
@@ -112,23 +144,40 @@ public partial class ProviderOpPreflightTests
         scenario.Arguments!["send_after"] = Later;
         met.Add(Refused(scenario, FailureClass.Permanent));
 
-        // Seventeenth: a message written as a template on a channel the routed plugin's manifest does not list under
-        // `templates`, asked beside the sixteenth and before anybody is asked to approve a message the plugin would not
+        // Twenty-second: a message written as a template on a channel the routed plugin's manifest does not list under
+        // `templates`, asked beside the twenty-first and before anybody is asked to approve a message the plugin would not
         // write.
         scenario.Arguments.Remove("send_after");
         scenario.Arguments["message"]!["compose"] = "template";
         met.Add(Refused(scenario, FailureClass.Permanent));
 
-        // Eighteenth: a repeat of a send an earlier attempt of which lost its answer, under a plugin whose manifest does
+        // Twenty-third: a repeat of a send an earlier attempt of which lost its answer, under a plugin whose manifest does
         // not say it settles the send by the work item's key. The refusal keeps the class of the attempt that may have
         // acted, and it is asked before anybody is asked to approve a repeat that could reach the person twice.
         scenario.Arguments["message"]!["compose"] = "text";
         scenario.Unsettled = true;
         met.Add(Refused(scenario, FailureClass.Ambiguous));
 
-        // Nineteenth, and the first that is not a refusal: an operation a person has to confirm is parked rather than
-        // failed, and it is asked here — after the input it would be approved for has been composed and held to its own
-        // schema — rather than before any of that was known.
+        // Twenty-fourth, and the first that is not a refusal: a search while another of its campaign has not ended waits
+        // behind it, and it is asked before the approval, so nobody is asked to approve a spend that cannot start now.
+        scenario.Unsettled = false;
+        scenario.Operation = Search;
+        scenario.Plugin = Scenario.Searching(binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["definition"] = new JsonObject { ["industries"] = new JsonArray("Software") }, ["count"] = 50 };
+        scenario.SearchInTheWay = SearchItem;
+        var behind = scenario.Check();
+        Assert.True(behind.Parks);
+        Assert.False(behind.Refused);
+        Assert.NotNull(behind.Plan);
+        Assert.Null(behind.Class);
+        Assert.Contains(SearchItem, behind.Message, StringComparison.Ordinal);
+        met.Add(behind.Code!);
+        scenario.SearchInTheWay = null;
+
+        // Twenty-fifth: an operation a person has to confirm is parked rather than failed, and it is asked here — after the
+        // input it would be approved for has been composed and held to its own schema — rather than before any of that was
+        // known.
+        scenario.Unsettled = true;
         scenario.Operation = Enroll;
         scenario.Arguments = Scenario.CompleteEnrollment;
         var parked = scenario.Check();
@@ -139,7 +188,7 @@ public partial class ProviderOpPreflightTests
         met.Add(parked.Code!);
 
         // The unsettled attempt stays, and asks nothing of an operation whose repeat does not rest on the key.
-        // Twentieth, and last: work nobody has to confirm, which a block the provider holds on this account still
+        // Twenty-sixth, and last: work nobody has to confirm, which a block the provider holds on this account still
         // parks. It is asked after the approval because it says nothing about the work, so the block travels on the
         // approval's park as well, and work a person releases still waits for it.
         var block = Scenario.Block(binding: "sha256:west");
@@ -211,7 +260,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the twenty is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the twenty-six is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -222,12 +271,13 @@ public partial class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
-    /// The one answer two of the checks give that is not a refusal is named beside the twenty rather than among them:
-    /// the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
-    /// What both checks answer when their pattern does not finish is that named outcome, and nothing else.
+    /// The one answer three of the checks give that is not a refusal is named beside the twenty-six rather than among
+    /// them: the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
+    /// What the binding's, the input's and the definition's checks answer when their pattern does not finish is that named
+    /// outcome, and nothing else.
     /// </summary>
     [Fact]
-    public void The_claim_s_transient_outcome_is_what_checks_7_and_15_answer_and_is_not_among_the_twenty()
+    public void The_claim_s_transient_outcome_is_what_checks_7_19_and_20_answer_and_is_not_among_the_twenty_five()
     {
         var schema = Scenario.BindingSchema;
         schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
@@ -245,7 +295,20 @@ public partial class ProviderOpPreflightTests
             Timing = TimingOut.Always(),
         }.Check();
 
-        Assert.Equal([ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.TransientOutcome], [atTheBinding.Code, atTheInput.Code]);
+        var definition = Scenario.Definition;
+        definition.Schema["properties"]!["industries"]!["items"]!["pattern"] = "^[A-Za-z ]+$";
+        var atTheDefinition = new Scenario
+        {
+            Operation = Search,
+            Route = Scenario.ToTheInstalledPackage,
+            Plugin = Scenario.Searching(definition: definition),
+            Arguments = new JsonObject { ["definition"] = new JsonObject { ["industries"] = new JsonArray("Software") }, ["count"] = 50 },
+            Timing = TimingOut.Always(value => value == "Software"),
+        }.Check();
+
+        Assert.Equal(
+            [ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.TransientOutcome],
+            [atTheBinding.Code, atTheInput.Code, atTheDefinition.Code]);
         Assert.DoesNotContain(ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.Codes);
     }
 
@@ -445,6 +508,90 @@ public partial class ProviderOpPreflightTests
             Assert.Equal(FailureClass.Ambiguous, verdict.Class);
             Assert.Null(verdict.Plan);
             Assert.Contains("other arguments than the work item carries now", verdict.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A search spends per person found and a blind repeat would start a second that spends again, so a repeat after a lost
+    /// answer is held to the attempt that may have started it: the plugin by its id, the account, and the arguments and the
+    /// input that attempt ran with. A route moved to another account, a count or a definition edited while the item
+    /// waited: each ends the repeat ambiguous and final rather than start a second search that nothing could find, read or
+    /// stop; a route gone since keeps that class too. The same request goes on to the person, and so does one after the
+    /// package was updated in between: a metered operation's recovery read finds what the earlier attempt did at the
+    /// account, whichever version of the package made it, unlike a send's key, which only the version that kept it reads.
+    /// An enrollment and an activation are metered too, and their contracts ask for a recovery read before a repeat, so the
+    /// same hold keeps them from enrolling the person, or starting the campaign, a second time at another account or for
+    /// another request.
+    /// </summary>
+    [Theory]
+    [InlineData(Search, "the same request", null)]
+    [InlineData(Search, "another account", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "another package version", null)]
+    [InlineData(Search, "another count", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "another definition", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "no route", AttemptErrors.NoRoute)]
+    [InlineData(Enroll, "the same request", null)]
+    [InlineData(Enroll, "another account", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Enroll, "another package version", null)]
+    [InlineData(Enroll, "another start", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Activate, "the same request", null)]
+    [InlineData(Activate, "another account", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Activate, "another package version", null)]
+    [InlineData(Activate, "another population", AttemptErrors.ProviderAnswerLost)]
+    public void A_metered_repeat_after_a_lost_answer_goes_only_where_and_as_that_attempt_acted(string operation, string since, string? expected)
+    {
+        var searching = operation == Search;
+        var enrolling = operation == Enroll;
+        var scenario = new Scenario
+        {
+            Operation = operation,
+            Route = Scenario.ToTheInstalledPackage,
+            Plugin = searching ? Scenario.Searching() : Scenario.Package(operations: [Add, Enroll, Get, Delete, Activate]),
+            Contact = enrolling ? Scenario.Person(("email", "ada@example.test")) : null,
+            Arguments = operation switch
+            {
+                Search => new JsonObject { ["definition"] = new JsonObject { ["industries"] = new JsonArray("Software") }, ["count"] = 50 },
+                Enroll => Scenario.CompleteEnrollment,
+                _ => new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "sq-1129" }, ["expected"] = new JsonObject { ["enrolled"] = 12 } },
+            },
+            Unsettled = true,
+        };
+        var ran = scenario.Arguments.DeepClone().AsObject();
+        switch (since)
+        {
+            case "another account":
+                scenario.UnsettledUnder = (Scenario.PluginId, Scenario.RoutedDigest, "sha256:east");
+                break;
+            case "another package version":
+                scenario.UnsettledUnder = (Scenario.PluginId, "sha256:1", null);
+                break;
+            case "another count":
+                ran["count"] = 25;
+                break;
+            case "another definition":
+                ran["definition"] = new JsonObject { ["industries"] = new JsonArray("Logistics") };
+                break;
+            case "another start":
+                ran["start"] = new JsonObject { ["position"] = "step", ["step"] = 2 };
+                break;
+            case "another population":
+                ran["expected"] = new JsonObject { ["enrolled"] = 11 };
+                break;
+            case "no route":
+                scenario.Route = null;
+                break;
+        }
+
+        scenario.UnsettledArguments = new JsonObject { [WorkItemService.InputKey] = ran };
+
+        var verdict = scenario.Check();
+
+        Assert.Equal(expected ?? AttemptErrors.ApprovalRequired, verdict.Code);
+        if (expected is not null)
+        {
+            Assert.Equal(FailureClass.Ambiguous, verdict.Class);
+            Assert.True(verdict.Refused);
+            Assert.Null(verdict.Plan);
         }
     }
 
@@ -997,7 +1144,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// Check 11 asks whether the composed input satisfies the operation's schema, and a pattern that did not finish
+    /// Check 19 asks whether the composed input satisfies the operation's schema, and a pattern that did not finish
     /// matching, twice, leaves that unanswered. Nothing has happened — no child exists — so it is not
     /// <c>input_invalid</c>, which would tell a planner to edit an item that may be right: the attempt ends
     /// <c>transient</c>, under a code of its own, and the next scan asks again.
@@ -1237,6 +1384,12 @@ public partial class ProviderOpPreflightTests
         /// <summary>The send the arguments name under <c>args.send</c>, as the claim would have read it; null where it found none.</summary>
         public NamedSend? Named { get; set; }
 
+        /// <summary>The search the arguments name under <c>args.search</c>, as the claim would have read it; null where it found none.</summary>
+        public NamedSearch? Searched { get; set; }
+
+        /// <summary>Another search of the campaign that has not ended, as the claim would have read it for a search; null where none.</summary>
+        public string? SearchInTheWay { get; set; }
+
         /// <summary>
         /// The package, by its id and digest, and the account that attempt ran under, as its provenance kept them; null
         /// where it ran under the route and the package this claim resolves, and <see cref="NoProvenance"/> where the
@@ -1271,6 +1424,35 @@ public partial class ProviderOpPreflightTests
             JsonObject? binding = null,
             PluginStatus status = PluginStatus.Valid) =>
             TestPlugins.Loaded(id, operations ?? [Add, Enroll, Get, Delete], kind, contractVersions, binding, status);
+
+        /// <summary>
+        /// What a provider's audience carries, as a manifest declares it: industries, a list of the provider's own words.
+        /// A fresh copy each time, so a test may change it.
+        /// </summary>
+        public static AudienceDefinition Definition => new(
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = false,
+                ["properties"] = new JsonObject
+                {
+                    ["industries"] = new JsonObject
+                    {
+                        ["description"] = "Industries the company is in, as the provider names them.",
+                        ["type"] = "array",
+                        ["maxItems"] = 25,
+                        ["items"] = new JsonObject { ["type"] = "string", ["maxLength"] = 200 },
+                    },
+                },
+            },
+            new Dictionary<string, DefinitionKey>(StringComparer.Ordinal));
+
+        /// <summary>The installed package performing the search and its status read, declaring <paramref name="definition"/> or <see cref="Definition"/>.</summary>
+        public static LoadedPlugin Searching(JsonObject? binding = null, AudienceDefinition? definition = null)
+        {
+            var plugin = Package(operations: [Add, Enroll, Get, Delete, Search, SearchStatus], binding: binding);
+            return plugin with { Manifest = plugin.Manifest with { AudienceDefinition = definition ?? Definition } };
+        }
 
         /// <summary>The installed package performing the send, its manifest listing <c>send_after</c> on <paramref name="channels"/> and nothing where they are none.</summary>
         public static LoadedPlugin Taking(IReadOnlyList<string> channels)
@@ -1337,7 +1519,7 @@ public partial class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);

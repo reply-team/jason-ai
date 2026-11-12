@@ -91,6 +91,7 @@ of the provider's campaigns the person leaves, on a first link as well as after 
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `not_applicable`, provider contact `find_only` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `runs` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | A person the provider does not hold takes part in nothing, which is a completed stop. |

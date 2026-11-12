@@ -112,6 +112,14 @@ public static class AttemptErrors
     /// </summary>
     public const string ResponderLaunchesSpent = "responder_launches_spent";
 
+    /// <summary>
+    /// Another search of the item's campaign has not ended — the provider still runs or holds it, another search of the
+    /// campaign is running, or one is open again after a start whose answer was lost — and a campaign runs one search at a
+    /// time. Not a refusal of the work: the claim keeps the item waiting, with no attempt and nobody asked to approve it,
+    /// and asks again a search cadence later.
+    /// </summary>
+    public const string SearchUnfinished = "search_unfinished";
+
     /// <summary>Whether a code is a hold at a daily limit, under either word.</summary>
     public static bool IsDailyHold(string? code) => code is LaunchesSpent or ResponderLaunchesSpent;
 
@@ -147,8 +155,38 @@ public static class AttemptErrors
     /// </summary>
     public const string SendRouteMismatch = "send_route_mismatch";
 
+    /// <summary>
+    /// The work names a search under <c>args.search</c> that its campaign does not hold: no work item of the campaign under
+    /// that id, or one that makes no search.
+    /// </summary>
+    public const string SearchUnknown = "search_unknown";
+
+    /// <summary>
+    /// The search the work names has not succeeded, or came back with no reference: it answered <c>finished</c> inside its
+    /// own call, or the provider kept nothing to find it by, so there is nothing to read or to stop.
+    /// </summary>
+    public const string SearchReferenceAbsent = "search_reference_absent";
+
+    /// <summary>
+    /// The work is routed to another plugin, or under another binding, than the search it names was made with: the
+    /// reference is that provider account's, so it is read and stopped there or not at all.
+    /// </summary>
+    public const string SearchRouteMismatch = "search_route_mismatch";
+
+    /// <summary>
+    /// The work names an audience by its number under <c>args.audience</c> that its campaign does not hold: a campaign's
+    /// audiences are numbered from 1, in the order the claim made them.
+    /// </summary>
+    public const string AudienceUnknown = "audience_unknown";
+
     /// <summary>The composed input does not satisfy the operation's own schema.</summary>
     public const string InputInvalid = "input_invalid";
+
+    /// <summary>
+    /// The composed <c>definition</c> does not satisfy the schema the routed plugin's manifest declares under
+    /// <c>audience_definition</c>: the envelope is the contract's, the definition is the provider's.
+    /// </summary>
+    public const string DefinitionInvalid = "definition_invalid";
 
     /// <summary>
     /// The input carries an argument its operation's document names per channel, on a channel the routed plugin's

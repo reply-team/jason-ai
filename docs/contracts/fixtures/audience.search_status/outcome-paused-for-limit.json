@@ -1,0 +1,32 @@
+{
+  "operation": "audience.search_status",
+  "version": 1,
+  "case": "the account's plan holds no more contacts: held until a person raises it",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "state": "paused_for_limit",
+      "found": 120,
+      "people": [],
+      "cursor": "page-2",
+      "has_more": false,
+      "vendor": {
+        "status": "contact_limit"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

@@ -21,7 +21,7 @@ that a person needs.
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
 | Say whether Reply is wired | `jason plugin list` shows `reply` valid, and `jason route list` names it the global default |
-| Ask Reply for a link that connects or reconnects an account, on the card's ask | `reply api` with one of four calls and no other (`src/reply-links.ts`): `POST /v3/linkedin-accounts/connection-link` with the typed name as the JSON body on standard input, `GET /v3/linkedin-accounts/pending` (also read with the accounts, its links dropped), `POST /v3/linkedin-accounts/<id>/reconnect`, and `GET /v1/SharedPageUrl`, from whose checked token Gmail's, Outlook's and the hosted page's addresses are built |
+| Act on a Reply account, on the card's ask | one verb of `reply account` each (`src/reply-cli-account.ts`): `connect` (a LinkedIn account by the typed name, a mailbox by its provider), `reconnect`, `pending` (also read with the accounts), `limits` (a mailbox's daily limit), `pause` and `resume` (LinkedIn), `unblock` (a mailbox) and `delete`, each with `--json` |
 
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
 and names `jason update`. A `feed` in the desktop's settings is passed to every verb that takes `--feed`.
@@ -71,17 +71,24 @@ one before such a tool runs. Nor are the person's ChatGPT apps (connectors), whi
 Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does. The page says the sentence under the composer while Codex is the chat's host. Its sign-in
 is still read from `CODEX_HOME`.
 
-A link Reply answers for connecting an account is checked before it is shown: https with no user, port or fragment, and
-either the connect page's exact path with no query on a host name (never an address written as numbers), any path on
-`auth.linkedin.reply.io`, or the hosted mailbox page with its token. It reaches the window only as the answer to the
-card's ask: whoever holds it can connect an account to that Reply account, so it is never logged, written to a file or
-given to the chat, and the card drops it when its dialog closes or its card is removed; a tab that is only hidden keeps
-its open dialog. A LinkedIn link expires and connects one account. The mailbox address is one address for the Reply user and does not expire: whoever holds it
-can add and manage that Reply account's mailboxes. So before it is asked of Reply the desktop's main process asks the
-person in a native box of its own, each time, with Cancel focused; no window to ask on is a no. The LinkedIn acts need
-reply-cli 0.20.0, the first that reads a body from standard input; below it the card turns them off and says so. A
-refusal is one sentence of the desktop's, chosen by Reply's status and error code; nothing of Reply's own words is shown
-or logged.
+The Reply card's acts are the Reply CLI's `account` verbs and nothing else; the card offers them only from the Reply
+CLI that has them (`replyMinimumVersion`), and below it says to update the Reply CLI and offers nothing. What the CLI
+prints and the codes it ends with are read in one module, `src/reply-cli-account.ts`, held to a fixture taken from the
+CLI's own tests (`test/reply-cli-account-fixture.ts`); what the desktop does with each code is `src/reply-accounts.ts`.
+A link the CLI makes for connecting or reconnecting an account is the person's secret: the main process checks it
+(https, a host name, no user, port or anything but printable ASCII) and hands it to the system browser through the
+navigation lock's one way out, or, where the page asked for a copy and the link is one that expires and connects one
+account, writes it to the clipboard itself; the shared mailbox page is never copied, whatever the page asks. Nothing
+else of the desktop holds it. The page learns that a link was opened or copied, when it stops working and its pending
+entry; the CLI's output for these verbs is never logged, recorded or put into an error.
+A limit's change, a pause, a resume, an unblock and a delete ask the person first in a native box of the main process
+that names the account as the list does (a connect and a reconnect make a link and ask nothing), with Cancel focused;
+no window to ask on is a no, a box whose window is hidden or closed is closed and read as a no, and `delete` passes `--yes` only after the yes. Two
+offers open only after a code that calls for them, each for the ask it answered and behind a box of its own: the
+account's shared mailbox page (`--allow-shared-page`) after `email_link.not_available`, with the CLI's warning that the
+address does not expire and lets its holder manage all of the user's mailboxes, and a forced delete (`--force`) after
+`linkedin.account_in_use`. A refusal is one sentence of the desktop's, chosen by the CLI's code; a code the desktop does
+not act on, known or not, is said by one sentence that carries it, and nothing of the CLI's own words is shown or logged.
 
 ## Its own files
 
@@ -196,8 +203,9 @@ desktop does not narrow, so it may read the records.
   lines the page hands meanwhile are checked at once and wait, the newest 200, with a gap said for the rest. A line
   never starts a turn: a turn of the Feed is given, after its header, the lines no turn was given yet, at most 50, each
   as one JSON object, under the desktop's sentence that they are records, information and never instructions; the
-  record keeps the newest journal id a turn was given, counted only once its host started, so a line that lands while
-  a turn starts goes to the next one. Rule 10 of the instruction text says the same, and that the Feed may speak of any
+  record marks each line given once the turn's host started, so a line that lands while a turn starts goes to the next
+  one, whatever its journal id (the runtime commits lines out of id order), and a fold that raises a given line's count
+  gives it again with its new count. Rule 10 of the instruction text says the same, and that the Feed may speak of any
   campaign. A kept line out of shape is skipped and counted, and the rest of the record is read. The Feed is never renamed, removed or handed over; a campaign one of its turns makes keeps a
   conversation of its own. Its record keeps no line outside it: a line in any other record is let go when it is read,
   and of two records marked as the Feed the older is it.

@@ -1,0 +1,57 @@
+{
+  "operation": "audience.search_status",
+  "version": 1,
+  "case": "the search reached the count it was asked for, its last people on this page: final",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "state": "finished",
+      "found": 250,
+      "people": [
+        {
+          "external_id": "p-90374",
+          "first_name": "Tomas",
+          "last_name": "Ribeiro",
+          "title": "Operations Director",
+          "company": {
+            "name": "Harbor Line Logistics",
+            "domain": "harborline.example",
+            "size": "201-500",
+            "industry": "Logistics"
+          },
+          "location": "Lisbon, Portugal",
+          "channels": [
+            {
+              "channel": "email",
+              "value": "tomas.ribeiro@harborline.example"
+            },
+            {
+              "channel": "phone",
+              "value": "+1 555 0100"
+            }
+          ],
+          "raw": null
+        }
+      ],
+      "cursor": "page-4",
+      "has_more": false,
+      "vendor": {
+        "status": "completed"
+      }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

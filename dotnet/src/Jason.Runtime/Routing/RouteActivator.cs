@@ -4,10 +4,12 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Routing;
@@ -58,8 +60,14 @@ public sealed class RouteActivator(
     IOptionsMonitor<RoutesOptions> options,
     RouteRegistry registry,
     TimeProvider clock,
-    PatternTiming? timing = null)
+    PatternTiming? timing = null,
+    ILogger<RouteActivator>? logger = null)
 {
+    private static readonly Action<ILogger, string, string, string, Exception?> SearchUnrouted = LoggerMessage.Define<string, string, string>(
+        LogLevel.Warning,
+        new EventId(1, nameof(SearchUnrouted)),
+        "Search {WorkItemId} of campaign {CampaignId} ran at {PluginId} under an account no route names: its reads and its stop are refused until a route names that account again. Put such a route back, then stop the search or let it end");
+
     /// <summary>How a binding is matched against its plugin's patterns: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
@@ -84,13 +92,79 @@ public sealed class RouteActivator(
             : Rechecked(registry.Snapshot.Global, snapshot, _timing, problems);
 
         var campaigns = await CampaignsAsync(snapshot, problems, cancellationToken).ConfigureAwait(false);
+        if (problems.Count > 0)
+        {
+            return new RouteCandidate(null, problems);
+        }
 
-        return problems.Count > 0
-            ? new RouteCandidate(null, problems)
-            : new RouteCandidate(
-                new RouteSnapshot(PublicId.New(RouteSnapshot.IdPrefix), clock.GetUtcNow(), snapshot.Id, global, campaigns),
-                []);
+        var built = new RouteSnapshot(PublicId.New(RouteSnapshot.IdPrefix), clock.GetUtcNow(), snapshot.Id, global, campaigns);
+        await KeepSearchesAsync(built, problems, cancellationToken).ConfigureAwait(false);
+        return problems.Count > 0 ? new RouteCandidate(null, problems) : new RouteCandidate(built, []);
     }
+
+    /// <summary>
+    /// A route is where a binding is kept, and a search is read and stopped only at the plugin and account it ran under
+    /// (<see cref="RouteResolver.ForSearch"/>). So a search still followed — running, held at the provider, or of an
+    /// archived campaign whose stop has not ended it yet — that the routes active now reach and <paramref name="candidate"/>
+    /// would not is a problem of the set: its reads and its stop would have nowhere to go while it goes on at the
+    /// provider. A search the active routes do not reach either is not this change's doing — the start, which has no
+    /// active routes, or an edit made while the runtime was stopped — so it refuses nothing, and is said in the log at
+    /// every build while it lasts.
+    /// </summary>
+    private async Task KeepSearchesAsync(RouteSnapshot candidate, List<ErrorDetail> problems, CancellationToken cancellationToken)
+    {
+        var active = registry.Snapshot;
+        var searches = await AudienceSearches.Followed(db).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var search in searches)
+        {
+            var plugin = search.Ran?.PluginId ?? search.PluginId;
+            var identity = search.Ran?.BindingIdentity;
+            if (Reaches(candidate, search.Campaign, plugin, identity))
+            {
+                continue;
+            }
+
+            if (!Reaches(active, search.Campaign, plugin, identity))
+            {
+                if (logger is not null)
+                {
+                    SearchUnrouted(logger, search.WorkItem, search.Campaign, plugin, null);
+                }
+
+                continue;
+            }
+
+            problems.Add(new ErrorDetail(SearchField(search.Campaign, search.WorkItem), RouteProblemCodes.OrphansSearch, Stranded(search, plugin)));
+        }
+    }
+
+    /// <summary>
+    /// What a search a change would leave without its account is told as, and the way out its campaign's state leaves: a
+    /// paused campaign's searches are not read, so one ends only once the campaign runs again, and an archived campaign's
+    /// is ended only by a stop, the one the archive made or, where that one failed and is not made again, one a person
+    /// makes.
+    /// </summary>
+    private static string Stranded(FollowedSearch search, string plugin)
+    {
+        var account = $"which ran at '{plugin}' under an account neither the campaign's other routes nor the global ones would name";
+        return search.Status switch
+        {
+            CampaignStatus.Archived =>
+                $"campaign '{search.Campaign}' is archived, and the stop it made of search {search.WorkItem}, {account}, has not ended the search yet, so a stop would have nowhere to go while the search goes on at the provider. Let that stop end it or, if it failed, stop the search with audience.search_cancel; then change the route.",
+            CampaignStatus.Paused =>
+                $"campaign '{search.Campaign}' is paused and still follows search {search.WorkItem}, {account}, so its reads and its stop would have nowhere to go while it goes on at the provider. Stop it with audience.search_cancel, or start the campaign and let the search end, then change the route.",
+            _ =>
+                $"campaign '{search.Campaign}' still follows search {search.WorkItem}, {account}, so its reads and its stop would have nowhere to go while it goes on at the provider. Stop it with audience.search_cancel, or let it end, then change the route.",
+        };
+    }
+
+    /// <summary>Whether a read and a stop of the search would both find the very plugin and binding it ran under.</summary>
+    private static bool Reaches(RouteSnapshot routes, string campaign, string plugin, string? identity) =>
+        new[] { SearchLanding.Status, SearchLanding.Stop }.All(operation =>
+            RouteResolver.ForSearch(routes, campaign, operation, SearchLanding.Search, plugin, identity) is { } found
+            && string.Equals(found.Route.PluginId, plugin, StringComparison.Ordinal)
+            && string.Equals(found.Route.BindingIdentity, identity, StringComparison.Ordinal));
 
     /// <summary>
     /// Makes the candidate the active route snapshot. Called under the reload gate, after the plugin registry it
@@ -221,6 +295,9 @@ public sealed class RouteActivator(
     /// <summary>How a global operation override is named in a problem: the setting, exactly as it is spelled.</summary>
     public static string GlobalOperationField(string operation) => $"{RoutesOptions.Section}:Operations:{operation}";
 
+    /// <summary>How a search a change would leave without a route is named in a problem: its campaign and its work item.</summary>
+    public static string SearchField(string campaignId, string searchWorkItem) => $"campaign:{campaignId}/searches/{searchWorkItem}";
+
     private RouteSet FromSettings(PluginSnapshot plugins, List<ErrorDetail> problems)
     {
         RoutesOptions settings;
@@ -288,20 +365,30 @@ public sealed class RouteActivator(
         CancellationToken cancellationToken)
     {
         // An archived campaign's routes are history, and history must never stand between an operator and an
-        // uninstall: the campaign will never dispatch again, so what its route named no longer has to exist.
+        // uninstall: the campaign will never dispatch again, so what its route named no longer has to exist. Until a search
+        // of it ends, though, its stop still runs and goes where the search ran, so its routes stay in the set while one is
+        // followed — each one that no longer holds left out, and refusing nothing.
         var rows = await db.CampaignRoutes
             .AsNoTracking()
-            .Where(route => route.Campaign!.ArchivedAt == null)
+            .Where(route => route.Campaign!.ArchivedAt == null
+                || db.AudienceSearches.Any(search => search.CampaignId == route.CampaignId && search.EndedAs == null && search.Reference != null))
             .OrderBy(route => route.CampaignId)
             .ThenBy(route => route.Operation)
-            .Select(route => new { Campaign = route.Campaign!.PublicId, route.Operation, route.PluginId, route.Binding })
+            .Select(route => new
+            {
+                Campaign = route.Campaign!.PublicId,
+                Archived = route.Campaign.ArchivedAt != null,
+                route.Operation,
+                route.PluginId,
+                route.Binding,
+            })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         var campaigns = new Dictionary<string, CampaignRoutes>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
-            var route = Accept(plugins, CampaignField(row.Campaign, row.Operation), row.Operation, row.PluginId, row.Binding, _timing, problems);
+            var route = Accept(plugins, CampaignField(row.Campaign, row.Operation), row.Operation, row.PluginId, row.Binding, _timing, row.Archived ? [] : problems);
             if (route is null)
             {
                 continue;

@@ -1,0 +1,30 @@
+{
+  "operation": "audience.preview",
+  "version": 1,
+  "case": "a provider whose API has no free look: the reserved code, never a charged one",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "capability_not_offered",
+      "message": "The provider offers no preview of a search.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": {
+      "duration_ms": 400,
+      "exec_calls": 0,
+      "http_calls": 1,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "class": "permanent",
+    "retriable": false
+  }
+}

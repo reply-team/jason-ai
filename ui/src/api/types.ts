@@ -125,6 +125,15 @@ export type Routes = {
     global: { default: { plugin_id: string } | null; operations: Record<string, { plugin_id: string }> };
     campaigns: { campaign_id: string }[];
 };
+export type RouteResolveRequest = { campaign_id: string; operation: string };
+/** Where one operation of one campaign would go: the plugin the active routes name, and whether it could run it. */
+export type RouteResolution = {
+    operation: string;
+    campaign_id: string;
+    plugin_id: string | null;
+    scope: string | null;
+    usable: boolean;
+};
 export type UiToken = { id: string; issued_to: string; issued_at: string; last_used_at: string | null };
 export type UiTokens = { items: UiToken[] };
 export type UiRevokeRequest = { token_id?: string; all?: boolean };

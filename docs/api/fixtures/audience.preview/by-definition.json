@@ -1,0 +1,48 @@
+{
+  "operation": "audience.preview",
+  "case": "by-definition",
+  "request": {
+    "campaign_id": "cmp_1",
+    "definition": {
+      "industries": [
+        "Software"
+      ]
+    }
+  },
+  "status": 200,
+  "response": {
+    "plugin_id": "stand-in-search",
+    "count": 1840,
+    "companies": 412,
+    "sample": [
+      {
+        "external_id": null,
+        "first_name": "Person",
+        "last_name": "1",
+        "title": "Head of Sales",
+        "company": {
+          "name": "Northwind",
+          "domain": "northwind.example",
+          "size": "51-200",
+          "industry": "Software"
+        },
+        "location": "Lisbon",
+        "raw": "{\"id\":1}"
+      },
+      {
+        "external_id": null,
+        "first_name": "Person",
+        "last_name": "2",
+        "title": "Head of Sales",
+        "company": {
+          "name": "Northwind",
+          "domain": "northwind.example",
+          "size": "51-200",
+          "industry": "Software"
+        },
+        "location": "Lisbon",
+        "raw": "{\"id\":2}"
+      }
+    ]
+  }
+}

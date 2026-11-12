@@ -45,6 +45,18 @@ public sealed class Campaign
     public int? ManagerReviewSeconds { get; set; }
 
     /// <summary>
+    /// How few untouched members the campaign keeps before its manager is told the reserve is low; null means nobody
+    /// counts them. A row and not the context for the reason the review pace is one: the dispatcher reads it.
+    /// </summary>
+    public int? AudienceThreshold { get; set; }
+
+    /// <summary>
+    /// The highest journal entry the reserve step has checked this campaign's count against. It reads only the lines
+    /// above it, so a tick with nothing new to look at costs one read and counts nobody.
+    /// </summary>
+    public int AudienceWatermark { get; set; }
+
+    /// <summary>
     /// The highest journal entry this campaign has been reviewed against. The summon reads the chronicle above
     /// it, so an entry that has been accounted for is never accounted for twice.
     /// </summary>
