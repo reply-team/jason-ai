@@ -267,7 +267,7 @@ change something; changing back to Ask first lets a running turn finish in the m
 **Full access**, chosen only after a confirmation shown each time, with Cancel focused. In Full access the agent runs
 commands and changes files on this computer without asking, except a command Jason cannot read plainly or one that
 changes what an agent loads: that is a card titled "Full access asks about this one", which waits thirty minutes and
-then is not run, and the turn goes on. A deletion on a critical path and a tool Jason never saw are cards too. Whatever
+then is not run, and the turn goes on. A held card offers no "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever
 Ask first refuses is refused in Full access, with no card, and every `reply` command is among them but its exact no-card
 forms. Every PowerShell command is a card; only the Bash tool's plainly read commands run unasked. Jason does not read a
 program the agent writes to a file and runs, nor your own shell configuration (aliases, shell options), so such a

@@ -273,7 +273,7 @@ applies to the turns a person starts by sending, from the next one on.
 - **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
   confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
   answering Cancel. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
-  2.1.295 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
+  2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
   page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the agent runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the agent can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the agent's commands that approve, reject, answer or clear for you while a program the agent writes and runs can still act as you, that every PowerShell command asks first, that the risk is the person's, and where the agent works. Full access is
   held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
   never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart.
@@ -298,7 +298,8 @@ applies to the turns a person starts by sending, from the next one on.
     the folders.
 - **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what an agent loads, is
   a card titled "Full access asks about this one"; it waits thirty minutes, then is not run and the turn goes on. A
-  deletion on a critical path, and a tool the hook never saw, are cards too.
+  deletion on a critical path, and a tool the hook never saw, are cards too. A held card offers no "Always", and an
+  earlier "Always" grant from Ask first never lets a held command through: each hold is the person's to answer every time.
 - **What Ask first refuses is refused in Full access, with no card.** Every `reply` command is refused there but its exact
   no-card forms.
 - **PowerShell is held.** Every command of the PowerShell tool in Full access is a card (`powerShellRunsInFullAccess`
