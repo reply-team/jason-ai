@@ -438,9 +438,16 @@ public static class ProviderOpPreflight
     }
 
     /// <summary>
-    /// Where the work is routed: by its campaign's route for its operation, except a read or a stop of a search the
-    /// campaign made with a reference, which goes where that search ran (<see cref="RouteResolver.ForSearch"/>), whatever
-    /// its own operation resolves to now. The claim reads its facts by the same answer.
+    /// Where the work is routed: by its campaign's route for its operation and the channel its call names, except a read
+    /// or a stop of a search the campaign made with a reference, which goes where that search ran
+    /// (<see cref="RouteResolver.ForSearch"/>), whatever its own operation resolves to now. The claim reads its facts by
+    /// the same answer.
+    /// <para>
+    /// The channel is the value of the argument the operation's document names for its route
+    /// (<see cref="OperationContract.RouteChannel"/>), read from <c>context.input</c> as the item holds it before a child
+    /// exists — not the channel the operation consumes, which a filter such as <c>sender.list</c>'s is not. A call that
+    /// names none, or an operation whose document names no such argument, resolves without a channel, by its operation.
+    /// </para>
     /// </summary>
     public static Resolution? Resolve(OperationContract contract, PreflightFacts facts, RouteSnapshot routes)
     {
@@ -451,7 +458,7 @@ public static class ProviderOpPreflight
             && facts.Search is { Status: WorkItemStatus.Succeeded, Reference: not null, PluginId: { } ranAt } search
             && CanonicalInput.MakesASearch(search.Operation)
             ? RouteResolver.ForSearch(routes, facts.Campaign.PublicId, contract.Id, search.Operation!, ranAt, search.BindingIdentity)
-            : RouteResolver.Resolve(routes, facts.Campaign.PublicId, contract.Id);
+            : RouteResolver.Resolve(routes, facts.Campaign.PublicId, contract.Id, contract.RouteChannel(facts.Item.Context[WorkItemService.InputKey]));
     }
 
     /// <summary>

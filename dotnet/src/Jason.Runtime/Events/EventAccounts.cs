@@ -37,7 +37,7 @@ public sealed record EventRead(
 
 /// <summary>
 /// Which accounts are read: every distinct plugin and binding identity a route names — the global routes and every
-/// campaign's alike — whose plugin is loaded, valid here and declares the events contract. A pure function of the two
+/// campaign's alike, channel routes included — whose plugin is loaded, valid here and declares the events contract. A pure function of the two
 /// active snapshots, so an account's events are held before any campaign links there, and an account no route names any
 /// more is not read.
 /// </summary>
@@ -66,7 +66,11 @@ public static class EventAccounts
         return bound;
     }
 
-    /// <summary>Every route of the snapshot: the global default and overrides, then each campaign's, in a fixed order.</summary>
+    /// <summary>
+    /// Every route of the snapshot: the global default, operation overrides and channel routes, then each campaign's, in a
+    /// fixed order. A channel route binds an account like any other, and a reply to a send that went out on it reaches a
+    /// campaign only through the events of that account, so it is walked too.
+    /// </summary>
     private static IEnumerable<Route> Named(RouteSnapshot routes)
     {
         foreach (var set in new[] { routes.Global }.Concat(routes.Campaigns.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => entry.Value)))
@@ -77,6 +81,11 @@ public static class EventAccounts
             }
 
             foreach (var (_, route) in set.Operations.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+            {
+                yield return route;
+            }
+
+            foreach (var (_, _, route) in set.ChannelRoutes)
             {
                 yield return route;
             }

@@ -179,15 +179,19 @@ public enum ActivityPeriod
 }
 
 /// <summary>
-/// Which of the four levels decided where an operation's work goes, most specific first. A campaign default
-/// hides every global operation override for that campaign: bringing one back takes an explicit campaign
-/// operation override, because a campaign that named its provider must not still be sending one operation
-/// somewhere else.
+/// Which of the six levels decided where an operation's work goes, most specific first: at each scope, the route
+/// a channel has under the operation, the operation's route, then the default. A channel level answers only a call
+/// that names a channel, under an operation whose document names the argument the channel is read from. Any answer at
+/// campaign scope hides every global route for that campaign, the channel routes included: bringing one back takes an
+/// explicit campaign route, because a campaign that named its provider must not still be sending one operation, or one
+/// channel of it, somewhere else.
 /// </summary>
 public enum RouteScope
 {
+    CampaignChannel,
     CampaignOperation,
     CampaignDefault,
+    GlobalChannel,
     GlobalOperation,
     GlobalDefault,
 }
