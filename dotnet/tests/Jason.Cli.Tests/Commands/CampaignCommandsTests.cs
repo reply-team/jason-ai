@@ -296,10 +296,14 @@ public class CampaignCommandsTests
         every.AssertPosted(Operations.CampaignSummary, "{}");
     }
 
-    /// <summary>Archived contacts are counted unless the flag leaves them out; it is sent only when given.</summary>
+    /// <summary>
+    /// Archived contacts are counted unless the flag leaves them out; it is sent only when given, and beside an audience as
+    /// on its own.
+    /// </summary>
     [Theory]
     [InlineData(new[] { "--exclude-archived-contacts" }, "{\"exclude_archived_contacts\":true}")]
     [InlineData(new[] { "cmp_A", "--exclude-archived-contacts" }, "{\"campaign_ids\":[\"cmp_A\"],\"exclude_archived_contacts\":true}")]
+    [InlineData(new[] { "cmp_A", "--audience", "1", "--exclude-archived-contacts" }, "{\"campaign_ids\":[\"cmp_A\"],\"audience\":1,\"exclude_archived_contacts\":true}")]
     public async Task Summary_leaves_out_archived_contacts_when_asked(string[] options, string posted)
     {
         using var cli = new CliRun();

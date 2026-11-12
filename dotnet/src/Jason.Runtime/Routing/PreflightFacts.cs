@@ -39,8 +39,9 @@ namespace Jason.Runtime.Routing;
 /// The audience the work names by its number under <c>args.audience</c>, and null where the campaign holds none under it.
 /// </param>
 /// <param name="SearchInTheWay">
-/// For a search, the work item of another search of its campaign that has not ended — a row still followed, or a search
-/// running now — and null where none has, or for any other operation.
+/// For a search, the work item of another search of its campaign that has not ended — a row still followed, a search
+/// running now, or an open one whose start may have acted although its answer was lost — and null where none has, or for
+/// any other operation.
 /// </param>
 /// <param name="Learned">
 /// The kinds of the routed plugin's pins of the person and of the campaign that <paramref name="Unsettled"/> recorded

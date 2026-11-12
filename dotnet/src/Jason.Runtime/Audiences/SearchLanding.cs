@@ -19,7 +19,8 @@ namespace Jason.Runtime.Audiences;
 /// <c>succeeded</c>, so the people, the row and the lines commit with the answer or not at all. A search the provider took
 /// gets its row; a search it finished inside its call gets its row ended, and its people land from its result; a read of
 /// a search lands its page and moves the row; a stop ends the row. Whoever made the read or the stop, a role or the
-/// dispatcher, it lands the same: a page a read consumed at the provider is never one nobody lands.
+/// dispatcher, it lands the same: a page a read consumed at the provider is never one nobody lands. A read or a stop that
+/// fails finding no search under the reference ends the row too, in the change set that ends it failed.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -55,6 +56,9 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
     public const string Status = "audience.search_status";
 
     public const string Stop = "audience.search_cancel";
+
+    /// <summary>What a read or a stop fails with where the provider holds no search under the reference.</summary>
+    public const string NotFound = "search_not_found";
 
     /// <summary>The kind a person is pinned under: what every operation that names a person pins.</summary>
     public const string ContactPin = "contact";
@@ -121,6 +125,31 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
         else if (item.Operation == Stop && result?["items"]?[0] is JsonObject stopped)
         {
             await StoppedAsync(db, row, item, stopped, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Adds to the change set that ends <paramref name="item"/> failed (not saved here) what its failure does to its
+    /// search: a read or a stop that found no search under the reference ends it <c>cancelled</c>, by that item. The search
+    /// is gone at the provider, so nothing would read or stop it again, and a row left followed would keep its account's
+    /// last route from changing and an archived campaign's stop from ever being settled. Any other failure leaves the
+    /// search as it stands.
+    /// </summary>
+    /// <param name="input">The input the claim composed, which names the search's work item.</param>
+    /// <param name="code">The code the item failed with, as the operation's contract declares it.</param>
+    public async Task FailedAsync(JasonDbContext db, WorkItem item, JsonObject? input, string code, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (item.Operation is not (Status or Stop) || !string.Equals(code, NotFound, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (await RowAsync(db, item, input, ct).ConfigureAwait(false) is { EndedAs: null } row)
+        {
+            End(db, row, "cancelled", item);
         }
     }
 

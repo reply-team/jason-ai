@@ -15,6 +15,10 @@ public class AudienceFilterEndpointTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// The summary of an audience counts its people alone; and once Quinn, its one new person, is archived, the same summary
+    /// asked to leave archived people out counts one person and one new fewer, as the People page asks it by default.
+    /// </summary>
     [Fact]
     public async Task The_summary_of_an_audience_counts_its_people_alone()
     {
@@ -23,9 +27,14 @@ public class AudienceFilterEndpointTests
         var spring = world.Spring.PublicId;
 
         var summary = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "audience", new { campaign_ids = new[] { spring }, audience = 1 }, Ct);
+        await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = world.People["Quinn"].PublicId }, Ct);
+        var withoutArchived = await api.RecordAsync<CampaignSummaryResponse>(
+            Operations.CampaignSummary, "audience-without-archived", new { campaign_ids = new[] { spring }, audience = 1, exclude_archived_contacts = true }, Ct);
 
         Assert.Equal([new CampaignSummaryRow(spring, 5, 2, 1, 0, 1, 1, 0, 1, Removed: 1, SequenceLinked: true)], summary.Campaigns);
         Assert.Equal(new CampaignSummaryTotal(5, 2, 1, 0, 1, 1, 0, 1, Removed: 1), summary.Total);
+        Assert.Equal([new CampaignSummaryRow(spring, 4, 2, 1, 0, 0, 1, 0, 1, Removed: 1, SequenceLinked: true)], withoutArchived.Campaigns);
+        Assert.Equal(new CampaignSummaryTotal(4, 2, 1, 0, 0, 1, 0, 1, Removed: 1), withoutArchived.Total);
     }
 
     /// <summary>

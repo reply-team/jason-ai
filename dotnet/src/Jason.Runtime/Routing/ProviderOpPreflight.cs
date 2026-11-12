@@ -341,9 +341,12 @@ public static class ProviderOpPreflight
         // Twenty-third: a repeat of a send whose lost answer only the work item's key settles is made only under a plugin
         // whose manifest says it settles the send so, and only under the package, by its id and digest, and the binding
         // the attempt that lost it ran under: the key settles a send only at the provider and account that took it, and
-        // another version of the package may keep its keys otherwise. And only with the input that attempt was composed
-        // with: a provider holding the key answers a repeat with the send the first request made, so an item edited since,
-        // or a person whose address changed since, would be answered for a message the person never got. Its arguments are
+        // another version of the package may keep its keys otherwise. A metered operation whose repeat waits on a
+        // recovery read is held the same way but for the digest: its recovery read finds what the earlier attempt did at
+        // the account, whichever version of the package made it, so an update in between does not refuse it for good.
+        // And only with the input that attempt was composed with: a provider holding the key answers a repeat with the
+        // send the first request made, so an item edited since, or a person whose address changed since, would be
+        // answered for a message the person never got. Its arguments are
         // compared with the snapshot, and the whole document with the digest its claim recorded where it recorded one; the
         // campaign's status is not in the digest, and a pin that attempt or a later attempt of the item learned from its
         // answer is not a change of the request. That attempt may have reached the person, and a repeat anywhere else could reach them again; the work is
@@ -384,7 +387,7 @@ public static class ProviderOpPreflight
         {
             return new PreflightVerdict(
                 AttemptErrors.SearchUnfinished,
-                $"This campaign's search '{inTheWay}' has not ended, and a campaign runs one search at a time, so this one waits for it and is claimed again a search cadence later, or the held cadence where the provider holds it. Let that search end, or stop it with audience.search_cancel.",
+                $"This campaign's search '{inTheWay}' has not ended, or may have started at the provider although its answer was lost, and a campaign runs one search at a time, so this one waits for it and is claimed again a search cadence later, or the held cadence where the provider holds it. Let that search end, or stop it with audience.search_cancel; one whose answer was lost settles at its own next attempt.",
                 Class: null,
                 Details: null,
                 plan,
@@ -724,13 +727,15 @@ public static class ProviderOpPreflight
     private const string DefinitionPointer = "/definition";
 
     /// <summary>
-    /// Why a repeat after an attempt that lost its answer cannot be settled by the work item's key under this route, or
-    /// null where it can: the routed plugin lists the operation under <c>settles_by_key</c>, and its id, its digest and the
-    /// binding are the ones the attempt's provenance names, the arguments of <paramref name="input"/> are the ones its
-    /// snapshot kept, in any order of their keys, and the whole of <paramref name="input"/> has the name its claim recorded
-    /// once the pins that attempt <paramref name="learned"/> itself are left out. An attempt whose provenance does not name
-    /// the package leaves nothing to compare. One claimed before attempts named their input names none, and is held to its
-    /// arguments alone, as it was when it lost its answer.
+    /// Why a repeat after an attempt that lost its answer cannot be settled under this route, or null where it can. For an
+    /// operation the work item's key settles, the routed plugin lists it under <c>settles_by_key</c> and its digest is the
+    /// one the attempt's provenance names, since another version of the package may keep its keys otherwise. For every
+    /// operation held here, the plugin's id and the binding are the ones that provenance names — a metered operation's
+    /// recovery read finds the earlier attempt's act at the account, whichever version of the package made it — the
+    /// arguments of <paramref name="input"/> are the ones its snapshot kept, in any order of their keys, and the whole of
+    /// <paramref name="input"/> has the name its claim recorded once the pins that attempt <paramref name="learned"/>
+    /// itself are left out. An attempt whose provenance does not name the package leaves nothing to compare. One claimed
+    /// before attempts named their input names none, and is held to its arguments alone, as it was when it lost its answer.
     /// </summary>
     private static string? Unsettled(Attempt earlier, PinsLearned? learned, LoadedPlugin plugin, Route route, string operation, JsonObject input, bool byKey)
     {
@@ -750,10 +755,11 @@ public static class ProviderOpPreflight
         }
 
         if (!string.Equals(ranUnder, route.PluginId, StringComparison.Ordinal)
-            || !string.Equals(provenance.PluginDigest, plugin.Digest, StringComparison.Ordinal)
+            || (byKey && !string.Equals(provenance.PluginDigest, plugin.Digest, StringComparison.Ordinal))
             || !string.Equals(provenance.BindingIdentity, route.BindingIdentity, StringComparison.Ordinal))
         {
-            return $"An earlier attempt of this '{operation}' lost its answer under another plugin, package version or account than '{route.PluginId}' is routed to now, and {settles}, {Ask}";
+            var where = byKey ? "another plugin, package version or account" : "another plugin or account";
+            return $"An earlier attempt of this '{operation}' lost its answer under {where} than '{route.PluginId}' is routed to now, and {settles}, {Ask}";
         }
 
         if (!JsonNode.DeepEquals(earlier.ContextSnapshot[WorkItemService.InputKey], input["args"]))

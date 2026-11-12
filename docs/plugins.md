@@ -1123,6 +1123,16 @@ channel it consumes, the person's and the campaign's pins, and the campaign but 
 pins that attempt and every later attempt of the item learned from their answers — since the key settles only the
 request it went with: a provider holding it answers a repeat with the earlier send.
 
+A metered operation whose recovery read does not rest on the key — `audience.search`, `campaign.enroll` and
+`campaign.activate` — is held at the claim to the plugin by its id, the binding and the input the unsettled attempt was
+composed with, but not to the package's digest: an update between a lost answer and its repeat replaces an unedited
+package, and a repeat refused for it would leave the work final for good. So **the recovery read must find what an
+earlier attempt did whichever version of the same package made it**: whatever it matches by — a name or a mark your
+package gives what it makes at the provider — is part of your package's contract with its own earlier versions, and
+never changes between them. The same holds for the references your package answers: a later version keeps reading
+every reference an earlier one gave, since a search's read or stop that fails `search_not_found` ends that search
+`cancelled` while it may still run at the provider.
+
 ### What to return
 
 ```json
