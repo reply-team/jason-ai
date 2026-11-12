@@ -15,6 +15,8 @@ export interface DesktopPaths {
     chatFull: string;
     /** `<data>/desktop/chat-full-ended/`: the grants' folders after Full access ended, kept seven days and then removed (`chat-full-folder.ts`). */
     chatFullEnded: string;
+    /** `<data>/desktop/chat-full-records/`: one file per grant naming its conversation, the desktop's alone: no turn reads or writes it. */
+    chatFullRecords: string;
     /** `<data>/desktop/conversations/`: one record per conversation of the chat, the desktop's alone. */
     conversations: string;
     /** `<data>/desktop/provider-keys`: the AI providers' keys, encrypted by the operating system. */
@@ -70,6 +72,7 @@ export function desktopPaths(data: string): DesktopPaths {
         chat: join(desktop, 'chat'),
         chatFull: join(desktop, 'chat-full'),
         chatFullEnded: join(desktop, 'chat-full-ended'),
+        chatFullRecords: join(desktop, 'chat-full-records'),
         conversations: join(desktop, 'conversations'),
         providerKeys: join(desktop, 'provider-keys'),
         claudeKeyed: join(desktop, 'claude-keyed'),

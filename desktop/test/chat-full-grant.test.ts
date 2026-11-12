@@ -245,6 +245,10 @@ test('a folder a host still holds is left in place and a code is said; the next 
     assert.equal(r.codes.length, 1);
     assert.match(r.codes[0] ?? '', /^E[A-Z]+$/);
     assert.deepEqual(notices(r.events.get(id)), [], 'nothing is said of a folder that did not move');
+    // A file the agent wrote into the folder names nothing: only the desktop's own record, outside it, is read.
+    const bystander = await r.chat.create();
+    await r.turn(bystander.id, 'hello', claude);
+    writeFileSync(join(r.b.paths.chatFull, readdirSync(r.b.paths.chatFull)[0] ?? '', '.grant-conversation'), bystander.id);
     rmSync(r.b.paths.chatFullEnded);
     const next = r.again();
     await settled(() => readdirSync(r.b.paths.chatFull).length === 0);
@@ -259,6 +263,23 @@ test('a folder a host still holds is left in place and a code is said; the next 
     next.open(id);
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(notices(r.events.get(id)).length, 1, 'said once');
+    next.open(bystander.id);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.deepEqual(notices(r.events.get(bystander.id)), [], 'a forged marker in the folder tells nothing to another conversation');
+});
+
+test('the record of whom a grant was for is removed with its folder after the seven days', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    const grant = readdirSync(r.b.paths.chatFull)[0] ?? '';
+    assert.equal(readFileSync(join(r.b.paths.chatFullRecords, grant), 'utf8'), id);
+    assert.ok(!existsSync(join(r.b.paths.chatFull, grant, '.grant-conversation')), 'nothing about it is written inside the folder');
+    await r.chat.setMode(id, 'ask_first');
+    r.clock.now += 8 * day;
+    r.again();
+    await settled(() => readdirSync(r.b.paths.chatFullEnded).length === 0);
+    await settled(() => !existsSync(join(r.b.paths.chatFullRecords, grant)));
 });
 
 test('the ended place is kept for exactly seven days', () => {

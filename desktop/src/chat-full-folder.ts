@@ -32,6 +32,8 @@ export interface FullFolders {
     full: string;
     /** `<data>/desktop/chat-full-ended/`. */
     ended: string;
+    /** `<data>/desktop/chat-full-records/`: the grant-to-conversation records, which no turn reads or writes. */
+    records: string;
 }
 
 /** A grant's folder could not be made: the system's error code, never its text or a path. */
@@ -70,7 +72,10 @@ export function makeGrantFolder(folders: FullFolders, id: string, chat: string, 
     try {
         mkdirSync(folders.full, { recursive: true, mode: 0o700 });
         mkdirSync(folder);
-        if (conversation !== undefined) writeFileSync(join(folder, conversationMarker), conversation);
+        if (conversation !== undefined) {
+            mkdirSync(folders.records, { recursive: true, mode: 0o700 });
+            writeFileSync(recordOf(folders, id), conversation, { mode: 0o600 });
+        }
         for (const host of skillsFolders) {
             const skills = join(chat, host.folder, 'skills');
             let stat;
@@ -94,8 +99,11 @@ export function makeGrantFolder(folders: FullFolders, id: string, chat: string, 
 /** The name an ended folder has: the grant's id and the moment it moved. */
 export const endedName = (id: string, now: number): string => `${id}-${now}`;
 
-/** The file at a grant folder's top that names the conversation it was made for, so a later start can say where it went. */
-export const conversationMarker = '.grant-conversation';
+/**
+ * The desktop's own record of the conversation a grant was made for, `<records>/<grant id>`, outside every folder a turn
+ * works in, so a later start can say where a folder went. A file in the grant's folder is never read for it.
+ */
+const recordOf = (folders: FullFolders, id: string): string => join(folders.records, id);
 
 /**
  * Moves a grant's folder to the ended place, named with the moment it moved. Returns the name it has there; null when
@@ -138,10 +146,9 @@ export function moveLeftovers(folders: FullFolders, now: number, said: (code: st
         if (ended === null) continue;
         let conversation: string | null = null;
         try {
-            const marker = join(folders.ended, ended, conversationMarker);
-            if (lstatSync(marker).isFile()) conversation = readFileSync(marker, 'utf8').slice(0, 64);
+            conversation = readFileSync(recordOf(folders, name), 'utf8').slice(0, 64);
         } catch {
-            // No marker: the move is not said to any conversation.
+            // No record: the move is not said to any conversation.
         }
         moved.push({ name: ended, conversation });
     }
@@ -248,6 +255,12 @@ export function sweepEnded(folders: FullFolders, options: SweepOptions): Swept {
         try {
             remove(path, ops.lstat(path));
             swept.removed++;
+            // The folder is gone, and with it the desktop's record of whom it was for.
+            try {
+                unlinkSync(recordOf(folders, parts[1] ?? ''));
+            } catch {
+                // Nothing recorded, or left for the next sweep's folder-less pass.
+            }
         } catch (error) {
             if (error instanceof Capped) {
                 swept.capped = true;

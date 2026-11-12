@@ -30,7 +30,7 @@ const t0 = Date.UTC(2026, 10, 12, 8, 0, 0);
 function rig(t: { after(fn: () => void): void }) {
     const root = mkdtempSync(join(tmpdir(), 'jason-full-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
-    const folders: FullFolders = { full: join(root, 'chat-full'), ended: join(root, 'chat-full-ended') };
+    const folders: FullFolders = { full: join(root, 'chat-full'), ended: join(root, 'chat-full-ended'), records: join(root, 'chat-full-records') };
     const chat = join(root, 'chat');
     const records = join(root, 'skills-records');
     mkdirSync(chat);

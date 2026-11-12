@@ -472,8 +472,8 @@ export class Chat {
     }
 
     #fullFolders() {
-        const { chatFull, chatFullEnded } = this.#options.paths;
-        return { full: chatFull, ended: chatFullEnded };
+        const { chatFull, chatFullEnded, chatFullRecords } = this.#options.paths;
+        return { full: chatFull, ended: chatFullEnded, records: chatFullRecords };
     }
 
     /**
