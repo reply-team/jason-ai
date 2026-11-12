@@ -1,0 +1,10 @@
+{
+  "name": "jason-download-address",
+  "private": true,
+  "type": "module",
+  "description": "The short paths of the product's download address, and their counts.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  }
+}
