@@ -47,7 +47,7 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
 test('every Claude Code turn blocks reads outside its working folders, so a read-only command on such a path asks', () => {
     for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] })]) {
         assert.equal(args.filter((arg) => arg === '--settings').length, 1);
-        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}');
+        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]},"disableSkillShellExecution":true}');
     }
 });
 

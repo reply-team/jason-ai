@@ -83,8 +83,12 @@ export interface ClaudeTurn {
  * `allow` takes precedence over the preapproved set, so you can block a preapproved domain or require a prompt for it.";
  * https://code.claude.com/docs/en/permissions#webfetch: "`WebFetch(domain:*)` matches every domain", and "Wildcards in
  * `WebFetch` rules require Claude Code v2.1.172 or later to match fetches.", below the floor.
+ *
+ * Every turn's settings also carry `"disableSkillShellExecution": true`, so the shell commands a skill carries are not
+ * run. Anthropic, https://code.claude.com/docs/en/skills (read 2026-11-12): with it set, "each command is replaced with
+ * `[shell command execution disabled by policy]`".
  */
-export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}';
+export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]},"disableSkillShellExecution":true}';
 
 /**
  * The settings of a turn in Plan only: those of every turn, and no classifier in planning, so a command outside Claude
@@ -93,7 +97,7 @@ export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDire
  * https://code.claude.com/docs/en/permission-modes: with auto mode not available, or `useAutoModeDuringPlan` off,
  * "commands outside the built-in read-only set prompt for approval".
  */
-export const planTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true},"useAutoModeDuringPlan":false}';
+export const planTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true},"useAutoModeDuringPlan":false,"disableSkillShellExecution":true}';
 
 /**
  * The settings of a turn in Full access, written to the turn's own file: those of every turn, and a `PreToolUse` hook on
@@ -106,6 +110,7 @@ export const planTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirect
 export function fullAccessSettings(hookUrl: string, secret: string) {
     return {
         permissions: { blockReadsOutsideWorkingDirectories: true },
+        disableSkillShellExecution: true,
         // No project file can switch the hook off or filter it out. Anthropic, https://code.claude.com/docs/en/settings
         // (read 2026-11-12), of command-line settings: "A key you set there overrides the same key in your project and
         // user settings files", and "Lists merge instead of overriding", so the hook's address is always on the list.
