@@ -261,7 +261,9 @@ applies to the turns a person starts by sending, from the next one on.
   - a message the person sends while a turn runs waits in the page and goes as the next turn once that one ends well, in
     the mode of the moment it goes;
   - a resumed host session is the same send started again with a recap, in the same mode, and stops with it;
-  - a set-up chat's naming run is no turn: it has no tool at all, no hook and no permission mode, in every mode.
+  - a set-up chat's naming run is no turn: it has no tool at all, no hook and no permission mode, in every mode;
+  - a line the Feed takes never starts a turn: it reaches the agent with the person's next message, in the mode of that
+    turn. The Feed takes the modes as any chat does.
 - The log says each change of mode by its two modes (`chat_mode_changed`), the mode of each turn started and of each
   request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in Full access), and a turn
   stopped because a tool ran unchecked (`chat_turn_stopped`, `unchecked_tool`); never a conversation's id or title, a

@@ -86,7 +86,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 22);
+    assert.equal(refusals.length, 24);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 
