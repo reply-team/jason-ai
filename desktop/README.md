@@ -17,6 +17,7 @@ person would edit.
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
 | Say whether Reply is wired | `jason plugin list` shows `reply` valid, and `jason route list` names it the global default |
+| Ask Reply for a link that connects or reconnects an account, on the card's ask | `reply api` with one of four calls and no other (`src/reply-links.ts`): `POST /v3/linkedin-accounts/connection-link` with the typed name as the JSON body on standard input, `GET /v3/linkedin-accounts/pending` (also read with the accounts, its links dropped), `POST /v3/linkedin-accounts/<id>/reconnect`, and `GET /v1/SharedPageUrl`, from whose checked token Gmail's, Outlook's and the hosted page's addresses are built |
 
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
 and names `jason update`. A `feed` in the desktop's settings is passed to every verb that takes `--feed`.
@@ -25,6 +26,18 @@ Claude Code's version is read with `claude --version` at each listing of the hos
 remembered: a Claude Code older than 2.1.257 (`src/host-version.ts`), or one whose version cannot be read, is listed on
 the Connect card and in the chat's host list with a sentence naming the version found, that floor and how to update it,
 cannot be chosen there, and has every chat turn sent to it refused before the host starts, a key provider's included.
+
+A link Reply answers for connecting an account is checked before it is shown: https with no user, port or fragment, and
+either the connect page's exact path with no query on a host name (never an address written as numbers), any path on
+`auth.linkedin.reply.io`, or the hosted mailbox page with its token. It reaches the window only as the answer to the
+card's ask: whoever holds it can connect an account to that Reply account, so it is never logged, written to a file or
+given to the chat, and the card drops it when its dialog closes or its card is removed; a tab that is only hidden keeps
+its open dialog. A LinkedIn link expires and connects one account. The mailbox address is one address for the Reply user and does not expire: whoever holds it
+can add and manage that Reply account's mailboxes. So before it is asked of Reply the desktop's main process asks the
+person in a native box of its own, each time, with Cancel focused; no window to ask on is a no. The LinkedIn acts need
+reply-cli 0.20.0, the first that reads a body from standard input; below it the card turns them off and says so. A
+refusal is one sentence of the desktop's, chosen by Reply's status and error code; nothing of Reply's own words is shown
+or logged.
 
 ## Its own files
 

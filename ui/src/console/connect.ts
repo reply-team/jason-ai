@@ -1,5 +1,14 @@
 import { effect, signal } from '@preact/signals-react';
-import type { DesktopHost, DesktopPlugin, DesktopReplyAccount, DesktopSetup } from '../platform/desktop';
+import type {
+    DesktopHost,
+    DesktopMailboxPage,
+    DesktopPlugin,
+    DesktopRefusal,
+    DesktopReplyAccount,
+    DesktopReplyLink,
+    DesktopReplyPending,
+    DesktopSetup,
+} from '../platform/desktop';
 import { act, argsOf, define } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
@@ -22,8 +31,8 @@ effect(() => {
 });
 
 /**
- * Reply's web app, where an account's limits, signature, pauses and connection are managed. The desktop manages none of
- * them; the card links there instead.
+ * Reply's web app, where an account's limits, signature and pauses are managed. The desktop manages none of them; the
+ * card links there instead.
  */
 export const replyAccountsAddress = 'https://run.reply.io/';
 
@@ -78,17 +87,385 @@ function stateOf(account: DesktopReplyAccount): readonly [string, Tone] {
     return Object.hasOwn(known, account.status) ? known[account.status]! : [cap(account.status), 'gray'];
 }
 
-/** The accounts by channel: the known channels in their order, then any other under its own name, as it first comes. */
-function grouped(accounts: readonly DesktopReplyAccount[]): [string, DesktopReplyAccount[]][] {
+/**
+ * The accounts by channel: the known channels in their order, then any other under its own name, as it first comes;
+ * LinkedIn with the connections that wait, which make its heading even with no account.
+ */
+function grouped(
+    accounts: readonly DesktopReplyAccount[],
+    pending: readonly DesktopReplyPending[],
+): [string, string, DesktopReplyAccount[], readonly DesktopReplyPending[]][] {
     const others = [...new Set(accounts.map((each) => each.channel))].filter(
         (channel) => !channels.some(([known]) => known === channel),
     );
     return [...channels, ...others.map((channel) => [channel, cap(channel)] as const)]
-        .map(([channel, heading]): [string, DesktopReplyAccount[]] => [
+        .map(([channel, heading]): [string, string, DesktopReplyAccount[], readonly DesktopReplyPending[]] => [
+            channel,
             heading,
             accounts.filter((each) => each.channel === channel),
+            channel === 'linkedin' ? pending : [],
         ])
-        .filter(([, members]) => members.length > 0);
+        .filter(([, , members, waiting]) => members.length > 0 || waiting.length > 0);
+}
+
+/**
+ * The states a reconnect does not change, by channel: a mailbox connected, a LinkedIn account enabled, disabled by its
+ * owner or at its daily limit. Every other state of these two channels, an unknown one included, offers Reconnect.
+ */
+const good: Record<string, readonly string[]> = {
+    email: ['connected'],
+    linkedin: ['enabled', 'disabled', 'dailyLimitReached'],
+};
+
+const needsReconnect = (account: DesktopReplyAccount): boolean =>
+    Object.hasOwn(good, account.channel) && !good[account.channel]!.includes(account.status);
+
+// ---- Links: connecting and reconnecting an account by Reply's external link ------------------------------------------
+//
+// Reply answers the address of a page where an account is connected with no sign-in to Reply, so whoever owns the
+// mailbox or the LinkedIn account can open it in any browser. Whoever holds the address can connect an account to this
+// Reply account: it is asked of the desktop on the person's click, shown in this dialog alone, and dropped when the
+// dialog closes. It is never kept anywhere else.
+
+/** Which of the card's places a dialog or a choice belongs to: the Connect panel's card, or the chat's. */
+type Place = string;
+
+interface LinkDialog {
+    place: Place;
+    title: string;
+    kind: 'linkedin' | 'mailbox';
+    /** A mailbox's reconnect, whose provider the person picks before anything is asked. */
+    choosing: boolean;
+    asking: boolean;
+    link: DesktopReplyLink | null;
+    refused: string | null;
+    copied: 'copied' | 'failed' | null;
+}
+
+const linkDialog = signal<LinkDialog | null>(null);
+/** The place whose Add account choices are open; null when none is. */
+const adding = signal<Place | null>(null);
+/** The place whose LinkedIn name field is open; null when none is. */
+const naming = signal<Place | null>(null);
+/** Moves on at each ask and each close, so an answer that comes after its dialog was closed or replaced is dropped. */
+let asked = 0;
+
+const mailboxTitles: Record<DesktopMailboxPage, string> = {
+    gmail: 'Connect a Gmail mailbox',
+    outlook: 'Connect an Outlook mailbox',
+    hosted: 'Add another mailbox on Reply’s page',
+};
+
+const pageNames: readonly (readonly [DesktopMailboxPage, string])[] = [
+    ['gmail', 'Gmail'],
+    ['outlook', 'Outlook'],
+    ['hosted', 'Another mailbox'],
+];
+
+const isPage = (value: unknown): value is DesktopMailboxPage => pageNames.some(([page]) => page === value);
+
+function closeDialog(): void {
+    asked += 1;
+    linkDialog.value = null;
+}
+
+/**
+ * Drops the link, the choices and the name field a card at `place` has open: called when that card is removed, so a
+ * link the person can no longer reach is not held; a tab that is only hidden keeps its open dialog.
+ */
+export function dropLinks(place: Place): void {
+    if (linkDialog.peek()?.place === place) closeDialog();
+    if (adding.peek() === place) adding.value = null;
+    if (naming.peek() === place) naming.value = null;
+}
+
+/** The link the card holds, in its open dialog; null once the dialog is closed. */
+export const heldLink = (): string | null => linkDialog.peek()?.link?.link ?? null;
+
+/** Drops every link, choice and name field the card has open: what a console that goes away leaves behind. */
+export function resetLinks(): void {
+    closeDialog();
+    adding.value = null;
+    naming.value = null;
+}
+
+async function copyLink(): Promise<void> {
+    const shown = linkDialog.value;
+    if (shown?.link == null) return;
+    let copied: 'copied' | 'failed' = 'copied';
+    try {
+        await navigator.clipboard.writeText(shown.link.link);
+    } catch {
+        copied = 'failed';
+    }
+    const now = linkDialog.value;
+    if (now !== null && now.link === shown.link) linkDialog.value = { ...now, copied };
+}
+
+/**
+ * Opens a dialog that asks the desktop for one link. `then` copies it or opens it once it comes, for a waiting
+ * connection's row; `reread` reads the card again afterwards, for an ask that makes a waiting connection in Reply.
+ */
+async function askLink(
+    place: Place,
+    title: string,
+    kind: 'linkedin' | 'mailbox',
+    run: () => Promise<DesktopReplyLink | DesktopRefusal>,
+    options: { then?: 'copy' | 'open'; reread?: boolean } = {},
+): Promise<void> {
+    asked += 1;
+    const mine = asked;
+    adding.value = null;
+    naming.value = null;
+    linkDialog.value = { place, title, kind, choosing: false, asking: true, link: null, refused: null, copied: null };
+    let answer: DesktopReplyLink | DesktopRefusal;
+    try {
+        answer = await run();
+    } catch (error) {
+        answer = { refused: messageOf(error) };
+    }
+    if (mine !== asked || linkDialog.value === null) return;
+    if ('refused' in answer) {
+        linkDialog.value = { ...linkDialog.value, asking: false, refused: answer.refused };
+    } else {
+        linkDialog.value = { ...linkDialog.value, asking: false, link: answer };
+        if (options.then === 'copy') await copyLink();
+        // The desktop hands an https link from the window to the system browser, and refuses any other.
+        if (options.then === 'open' && answer.link.startsWith('https://'))
+            window.open(answer.link, '_blank', 'noopener,noreferrer');
+    }
+    if (options.reread === true) void reload();
+}
+
+const askMailbox = (place: Place, page: DesktopMailboxPage, title = mailboxTitles[page]): Promise<void> =>
+    askLink(place, title, 'mailbox', () => here().desktop.setup.replyMailboxLink(page));
+
+define('connect.addAccount', ([place]) => {
+    if (typeof place !== 'string') return;
+    adding.value = adding.value === place ? null : place;
+    naming.value = null;
+});
+
+define('connect.addCancel', () => {
+    adding.value = null;
+    naming.value = null;
+});
+
+define('connect.addMailbox', ([place, page]) => {
+    if (typeof place === 'string' && isPage(page)) void askMailbox(place, page);
+});
+
+define('connect.addLinkedIn', ([place]) => {
+    if (typeof place === 'string') naming.value = place;
+});
+
+define('connect.makeLinkedIn', ([place]) => {
+    const name = typedOf('linkedin-name');
+    if (typeof place !== 'string' || !name) return;
+    void askLink(
+        place,
+        'Connect a LinkedIn account',
+        'linkedin',
+        async () => {
+            const answer = await here().desktop.setup.replyLinkedInConnect(name);
+            if (!('refused' in answer)) forget('linkedin-name');
+            return answer;
+        },
+        { reread: true },
+    );
+});
+
+define('connect.reconnect', ([place, channel, id]) => {
+    if (typeof place !== 'string' || typeof id !== 'string') return;
+    const account = setup.value?.reply.accounts.find((each) => each.channel === channel && each.id === id);
+    if (!account) return;
+    const title = `Reconnect ${cap(account.name || account.address || 'the account')}`;
+    if (channel === 'linkedin') {
+        void askLink(place, title, 'linkedin', () => here().desktop.setup.replyLinkedInReconnect(id));
+    } else if (channel === 'email') {
+        asked += 1;
+        adding.value = null;
+        naming.value = null;
+        linkDialog.value = {
+            place,
+            title,
+            kind: 'mailbox',
+            choosing: true,
+            asking: false,
+            link: null,
+            refused: null,
+            copied: null,
+        };
+    }
+});
+
+define('connect.reconnectMailbox', ([page]) => {
+    const shown = linkDialog.value;
+    if (shown?.choosing === true && isPage(page)) void askMailbox(shown.place, page, shown.title);
+});
+
+define('connect.pendingLink', ([place, id, then]) => {
+    if (typeof place !== 'string' || typeof id !== 'string' || (then !== 'copy' && then !== 'open')) return;
+    const row = setup.value?.reply.linkedinPending.find((each) => each.id === id);
+    if (!row) return;
+    void askLink(
+        place,
+        `Finish ${cap(row.name || 'the LinkedIn account')}`,
+        'linkedin',
+        () => here().desktop.setup.replyLinkedInPendingLink(id),
+        { then },
+    );
+});
+
+define('connect.copyLink', () => void copyLink());
+define('connect.closeLink', () => closeDialog());
+define('connect.checkNow', () => void reload());
+
+// A dialog is dropped with the sign-in it was asked under.
+effect(() => {
+    if (setup.value !== null && !setup.value.reply.signedIn) {
+        if (linkDialog.peek() !== null) closeDialog();
+        adding.value = null;
+        naming.value = null;
+    }
+});
+
+/** A moment Reply wrote, as a person reads it: `2026-11-19 04:59 UTC`; null for one that is not a moment. */
+function momentOf(text: string | null): string | null {
+    if (text === null) return null;
+    const at = new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(text) ? text : `${text}Z`);
+    return Number.isNaN(at.getTime()) ? null : `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
+
+const linkedinNote =
+    'No Reply sign-in is needed, so you can send this link to whoever owns the account. Anyone who has it can connect an account to this Reply account: send it only to them.';
+const mailboxNote =
+    "No Reply sign-in is needed, so you can send this link to whoever owns the mailbox. Anyone who has it can add and manage this Reply account's mailboxes, and it does not expire: send it only to someone you trust.";
+
+function dialogView(shown: LinkDialog, busy: Html | null): Html {
+    const link = shown.link;
+    const until = momentOf(link?.expiresAtUtc ?? null);
+    return html`<div class="note link-dialog" role="dialog" aria-label="${shown.title}">
+        <b>${shown.title}</b>
+        ${
+            shown.choosing
+                ? html`<div class="meta">
+                          Going through Gmail’s or Outlook’s page again with the same address reconnects that mailbox
+                          and makes no second one; a mailbox by SMTP or IMAP is put right on Reply’s page.
+                      </div>
+                      <div class="setrow">
+                          ${pageNames.map(
+                              ([page, name]) =>
+                                  html`<button
+                                      class="btn sm"
+                                      type="button"
+                                      ${busy}
+                                      ${act('connect.reconnectMailbox', page)}
+                                  >
+                                      ${name}
+                                  </button>`,
+                          )}
+                      </div>`
+                : null
+        }
+        ${shown.asking ? html`<div class="meta" role="status"><span class="spin"></span>Asking Reply for the link…</div>` : null}
+        ${shown.refused !== null ? html`<div class="note am" role="alert">${shown.refused}</div>` : null}
+        ${
+            link !== null && link.link.startsWith('https://')
+                ? html`<div class="meta">Opens on <b class="link-host">${link.host}</b></div>
+                      <input class="inp link-text" type="text" readonly aria-label="Link" value="${link.link}" />
+                      <div class="setrow">
+                          <button class="btn sm" type="button" ${act('connect.copyLink')}>Copy link</button>
+                          <a class="btn sm" href="${link.link}" target="_blank" rel="noreferrer">Open in the browser</a>
+                          ${
+                              shown.copied === 'copied'
+                                  ? html`<span class="meta" role="status">Copied.</span>`
+                                  : shown.copied === 'failed'
+                                    ? html`<span class="meta" role="status"
+                                          >The clipboard did not take it; select the link and copy it.</span
+                                      >`
+                                    : null
+                          }
+                      </div>
+                      <p class="meta link-note">${link.kind === 'mailbox' ? mailboxNote : linkedinNote}</p>
+                      ${
+                          link.kind === 'linkedin'
+                              ? html`<p class="meta">
+                                    Valid for a limited time; if it stopped working, make a new
+                                    one.${until ? ` Valid until ${until}.` : ''}
+                                </p>`
+                              : null
+                      }`
+                : null
+        }
+        <div class="setrow">
+            <div class="grow meta">The account appears in the list when they finish.</div>
+            <button class="btn sm" type="button" ${act('connect.checkNow')}>Check now</button>
+            <button class="btn sm" type="button" ${act('connect.closeLink')}>Close</button>
+        </div>
+    </div>`;
+}
+
+/** Add account's choices: a mailbox's three pages where email is not absent, LinkedIn where it is not, and Cancel. */
+function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null, linkedinOff: Html | null): Html {
+    const absent = Array.isArray(state.absent) ? state.absent : [];
+    return html`<div class="setrow add-account">
+            ${
+                absent.includes('email')
+                    ? null
+                    : pageNames.map(
+                          ([page, name]) =>
+                              html`<button
+                                  class="btn sm"
+                                  type="button"
+                                  ${busy}
+                                  ${act('connect.addMailbox', place, page)}
+                              >
+                                  ${name}
+                              </button>`,
+                      )
+            }
+            ${
+                absent.includes('linkedin')
+                    ? null
+                    : html`<button
+                          class="btn sm"
+                          type="button"
+                          ${busy ?? linkedinOff}
+                          ${act('connect.addLinkedIn', place)}
+                      >
+                          LinkedIn
+                      </button>`
+            }
+            <button class="btn sm" type="button" ${act('connect.addCancel')}>Cancel</button>
+        </div>
+        ${
+            naming.value === place
+                ? html`<div class="setrow">
+                      ${field('linkedin-name', 'Name for the LinkedIn account', 'text')}
+                      <button class="btn sm" type="button" ${busy ?? linkedinOff} ${act('connect.makeLinkedIn', place)}>
+                          Make the link
+                      </button>
+                  </div>`
+                : null
+        }`;
+}
+
+function pendingView(row: DesktopReplyPending, place: Place, busy: Html | null): Html {
+    const until = momentOf(row.expiresAtUtc);
+    return html`<div class="setrow acct-pending">
+        <div class="grow">
+            <b>${cap(row.name)}</b>
+            <span class="meta"
+                >${row.isExpired ? 'Its link expired' : until ? `Link valid until ${until}` : 'Waiting to be finished'}</span
+            >
+        </div>
+        <span class="pillc ${row.isExpired ? 'gray' : 'amber'}">${row.isExpired ? 'Expired' : 'Waiting'}</span>
+        <button class="btn sm" type="button" ${busy} ${act('connect.pendingLink', place, row.id, 'copy')}>
+            Copy link
+        </button>
+        <button class="btn sm" type="button" ${busy} ${act('connect.pendingLink', place, row.id, 'open')}>Open</button>
+    </div>`;
 }
 
 /** How many reads of the setup are going, and when the last one began. */
@@ -273,7 +650,13 @@ function provider(host: DesktopHost, busy: Html | null): Html {
     </div>`;
 }
 
-function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string): Html {
+function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, place: Place = 'connect'): Html {
+    const shown = linkDialog.value?.place === place ? linkDialog.value : null;
+    const pending = Array.isArray(state.linkedinPending) ? state.linkedinPending : [];
+    // Every ask is off while a link is being asked for, and LinkedIn's below the Reply CLI that can make one.
+    const asks = busy ?? (linkDialog.value?.asking === true ? html`disabled` : null);
+    const floor = typeof state.linkedinBelowFloor === 'string' ? state.linkedinBelowFloor : null;
+    const linkedinOff = floor === null ? null : html`disabled`;
     const cli = state.cli.found
         ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
         : html`<span class="meta">The Reply CLI was not found.</span> ${
@@ -303,8 +686,8 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string):
                       </div>`
                     : null
             }
-            ${grouped(state.accounts).map(
-                ([heading, members]) =>
+            ${grouped(state.accounts, pending).map(
+                ([, heading, members, waiting]) =>
                     html`<div class="acct-group">
                         <div class="setrow meta acct-hd">${heading}</div>
                         ${members.map((account) => {
@@ -314,22 +697,43 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string):
                                     <b>${account.name}</b> <span class="meta">${account.address}</span>
                                 </div>
                                 <span class="pillc ${tone}">${words}</span>
+                                ${
+                                    state.signedIn && needsReconnect(account)
+                                        ? html`<button
+                                              class="btn sm"
+                                              type="button"
+                                              ${asks ?? (account.channel === 'linkedin' ? linkedinOff : null)}
+                                              ${act('connect.reconnect', place, account.channel, account.id)}
+                                          >
+                                              Reconnect
+                                          </button>`
+                                        : null
+                                }
                             </div>`;
                         })}
+                        ${waiting.map((row) => pendingView(row, place, asks ?? linkedinOff))}
                     </div>`,
             )}
             ${unlisted(state).map((line) => html`<div class="setrow meta acct-none">${line}</div>`)}
             ${
                 state.signedIn && state.cli.found
                     ? html`<div class="setrow">
-                          <div class="grow meta">Accounts are read again when this window takes the focus back.</div>
-                          <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
-                      </div>`
+                              <div class="grow meta">
+                                  Accounts are read again when this window takes the focus back.
+                              </div>
+                              <button class="btn sm" type="button" ${asks} ${act('connect.addAccount', place)}>
+                                  Add account
+                              </button>
+                              <button class="btn sm" type="button" ${act('connect.check')}>Check again</button>
+                          </div>
+                          ${floor !== null ? html`<div class="setrow meta link-floor">${floor}</div>` : null}
+                          ${adding.value === place ? addView(state, place, asks, linkedinOff) : null}
+                          ${shown !== null ? dialogView(shown, asks) : null}`
                     : null
             }
             <div class="setrow">
                 <div class="grow meta">
-                    Limits, signatures, pauses and an account's connection are set in Reply.
+                    Limits, signatures and pauses are set in Reply.
                     <a href="${replyAccountsAddress}" target="_blank" rel="noreferrer">Manage accounts in Reply</a>
                 </div>
             </div>
@@ -449,11 +853,31 @@ export function aiCardView(): Html {
     </div>`;
 }
 
-/** The Reply card alone, for the moment the work needs a way to send. */
-export function replyCardView(): Html {
-    const state = setup.value;
-    if (!state) return html``;
-    return reply(state.reply, setupBusy.value === null ? null : html`disabled`, 'Connect Reply');
+/** The place of a chat's Reply card: its own, so a link asked in one chat never shows in another. */
+export const chatPlace = (chatId: string): Place => `chat:${chatId}`;
+
+const chatCards = new Map<string, () => Html>();
+
+/**
+ * The Reply card alone, for the moment a chat's work needs a way to send: one view per chat, the same each time it is
+ * asked for, so a region painting it is painted once.
+ */
+export function replyCardFor(chatId: string): () => Html {
+    let view = chatCards.get(chatId);
+    if (view === undefined) {
+        view = () => {
+            const state = setup.value;
+            if (!state) return html``;
+            return reply(
+                state.reply,
+                setupBusy.value === null ? null : html`disabled`,
+                'Connect Reply',
+                chatPlace(chatId),
+            );
+        };
+        chatCards.set(chatId, view);
+    }
+    return view;
 }
 
 export function connectView(): Html {

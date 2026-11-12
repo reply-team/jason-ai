@@ -49,6 +49,10 @@ const desktop = {
         installProgram: (programId: string) => ipcRenderer.invoke('jason:setup.installProgram', programId),
         configurePlugin: (pluginId: string, values: unknown) => ipcRenderer.invoke('jason:setup.configurePlugin', pluginId, values),
         disconnectPlugin: (pluginId: string) => ipcRenderer.invoke('jason:setup.disconnectPlugin', pluginId),
+        replyLinkedInConnect: (name: string) => ipcRenderer.invoke('jason:setup.replyLinkedInConnect', name),
+        replyLinkedInPendingLink: (pendingId: string) => ipcRenderer.invoke('jason:setup.replyLinkedInPendingLink', pendingId),
+        replyLinkedInReconnect: (accountId: string) => ipcRenderer.invoke('jason:setup.replyLinkedInReconnect', accountId),
+        replyMailboxLink: (page: 'gmail' | 'outlook' | 'hosted') => ipcRenderer.invoke('jason:setup.replyMailboxLink', page),
         onChanged: (handler: Handler) => subscribe('jason:setup.changed', handler),
     },
 };

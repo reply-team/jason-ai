@@ -131,6 +131,10 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             installProgram: 'function',
             configurePlugin: 'function',
             disconnectPlugin: 'function',
+            replyLinkedInConnect: 'function',
+            replyLinkedInPendingLink: 'function',
+            replyLinkedInReconnect: 'function',
+            replyMailboxLink: 'function',
             onChanged: 'function',
         },
     });
@@ -161,6 +165,10 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['setup.installProgram', ['claude']],
         ['setup.configurePlugin', ['slack', { token: 't', target: 'C1' }]],
         ['setup.disconnectPlugin', ['slack']],
+        ['setup.replyLinkedInConnect', ['Made-up name']],
+        ['setup.replyLinkedInPendingLink', ['41']],
+        ['setup.replyLinkedInReconnect', ['77']],
+        ['setup.replyMailboxLink', ['gmail']],
     ];
     for (const [member, args] of calls) {
         const [group, name] = member.split('.') as [string, string];
