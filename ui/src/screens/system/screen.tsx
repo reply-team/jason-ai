@@ -35,8 +35,9 @@ function FullAccessCard() {
             ) : (
                 <>
                     <p>
-                        Chats on this computer enter Full access without asking, since{' '}
-                        {when(new Date(standing.givenAt), new Date(), zone)}.
+                        {Number.isNaN(new Date(standing.givenAt).getTime())
+                            ? 'Chats on this computer enter Full access without asking.'
+                            : `Chats on this computer enter Full access without asking, since ${when(new Date(standing.givenAt), new Date(), zone)}.`}
                     </p>
                     {standing.newChats && <p>New chats start in Full access.</p>}
                     <div className="btn-row">

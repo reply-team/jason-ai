@@ -4,14 +4,15 @@
 // itself. Out of the box nothing changes.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import fs, { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { codexFullAccess, feedFullAccess, fullAccessConsent, fullAccessSentence, standingUnkeptSentence, unguardedSentence, unguardedStandingSentence, type FullAccessAnswer } from '../src/chat-modes.ts';
-import { readStanding, writeStanding } from '../src/full-access-standing.ts';
+import { codexFullAccess, feedFullAccess, fullAccessConsent, fullAccessSentence, newChatAskFirstSentence, standingUnkeptSentence, standingUnremovedSentence, unguardedSentence, unguardedStandingSentence, type FullAccessAnswer } from '../src/chat-modes.ts';
+import { readStanding, takenBackMark, writeStanding } from '../src/full-access-standing.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -109,6 +110,30 @@ const plan = (r: Rig, steps: unknown[]) => {
 const stand = (r: Rig, newChats: boolean, consent = fullAccessConsent) => writeStanding(r.b.paths.fullAccess, 'claude', { consent, givenAt: given, newChats });
 const grants = (r: Rig) => (existsSync(r.b.paths.chatFull) ? readdirSync(r.b.paths.chatFull) : []);
 const done = (events: ChatEvent[]) => events.at(-1);
+const notices = (events: ChatEvent[]) => events.flatMap((event) => (event.kind === 'notice' ? [event.text] : []));
+const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+/**
+ * The file of the standing choice will not be removed, as when another program holds it open on Windows: removing it
+ * throws EBUSY until the function returned is called. Every other path is removed as before.
+ */
+function holdOpen(t: { after(fn: () => void): void }, file: string): () => void {
+    const original = fs.rmSync;
+    fs.rmSync = ((path: fs.PathLike, options?: fs.RmOptions) => {
+        if (String(path) === file) throw Object.assign(new Error(`EBUSY: resource busy or locked, unlink '${file}'`), { code: 'EBUSY' });
+        original(path, options);
+    }) as typeof fs.rmSync;
+    syncBuiltinESMExports();
+    let held = true;
+    const release = () => {
+        if (!held) return;
+        held = false;
+        fs.rmSync = original;
+        syncBuiltinESMExports();
+    };
+    t.after(release);
+    return release;
+}
 const modes = (events: ChatEvent[]) => events.flatMap((event) => (event.kind === 'mode' ? [event.mode] : []));
 
 test('out of the box there is no standing choice: no file, Ask first, and the box each time', async (t) => {
@@ -263,6 +288,92 @@ test('a tool that ran unchecked takes Always back as well, and says so; without 
     plan(plain, [{ unhooked: { tool: 'Bash', input: { command: 'git status' } } }]);
     assert.deepEqual(done(await plain.turn(made.id, 'go')), { kind: 'done', error: unguardedSentence });
     assert.deepEqual(plain.standings, []);
+});
+
+test('an unchecked tool whose take-back the file will not take: Always is out of force for this run, the chat says so in one line, and the next start removes it', async (t) => {
+    const unwritten: string[] = [];
+    const r = rig(t, { answer: { always: false, newChats: false }, chat: { standingUnwritten: (code) => void unwritten.push(code) } });
+    stand(r, true);
+    const { id } = await r.chat.create(undefined, 'claude');
+    const release = holdOpen(t, r.b.paths.fullAccess);
+    plan(r, [{ unhooked: { tool: 'Bash', input: { command: 'git status' } } }]);
+    const said = await r.turn(id, 'go');
+    assert.deepEqual(done(said), { kind: 'done', error: unguardedStandingSentence });
+    assert.deepEqual(notices(said).filter((text) => !text.startsWith('Full access has ended.')), [standingUnremovedSentence], 'one line, beside the line of the grant folder');
+    assert.deepEqual(unwritten, ['EBUSY']);
+    assert.ok(readStanding(r.b.paths.fullAccess, 'claude') !== null, 'the file still says Always');
+    assert.ok(existsSync(takenBackMark(r.b.paths.fullAccess)), 'the take-back is marked for the next start');
+    assert.equal(r.chat.fullAccessStanding(), null, 'the menu and the System screen hear none');
+    assert.deepEqual(r.standings, ['unchecked:none']);
+    // The box comes back, and a new chat with "start new chats" in the file stays in Ask first.
+    assert.equal((await r.chat.create(undefined, 'claude')).mode, 'ask_first');
+    const other = await r.chat.create();
+    await r.chat.setMode(other.id, 'full_access', 'claude');
+    assert.equal(r.confirms, 1);
+
+    // A start while the file is still held keeps it out of force; the next one that can remove it does, before any chat.
+    const still = r.again();
+    assert.equal(still.fullAccessStanding(), null);
+    assert.equal((await still.create(undefined, 'claude')).mode, 'ask_first');
+    release();
+    const next = r.again();
+    assert.ok(!existsSync(r.b.paths.fullAccess), 'removed at the start');
+    assert.ok(!existsSync(takenBackMark(r.b.paths.fullAccess)));
+    assert.equal(next.fullAccessStanding(), null);
+});
+
+test('Always given again after a take-back was owed clears the mark first, so the next start keeps it', async (t) => {
+    const r = rig(t);
+    stand(r, false);
+    writeFileSync(takenBackMark(r.b.paths.fullAccess), '');
+    const held = r.again();
+    assert.equal(held.fullAccessStanding(), null, 'the start removed it');
+    assert.ok(!existsSync(r.b.paths.fullAccess));
+    const { id } = await held.create();
+    writeFileSync(takenBackMark(r.b.paths.fullAccess), '');
+    await held.setMode(id, 'full_access', 'claude');
+    assert.ok(!existsSync(takenBackMark(r.b.paths.fullAccess)));
+    assert.notEqual(r.again().fullAccessStanding(), null, 'Always given after the mark stands at the next start');
+});
+
+test('the menu\'s take-back the file will not take is refused with what to do, and Always still stands', async (t) => {
+    const r = rig(t);
+    stand(r, false);
+    holdOpen(t, r.b.paths.fullAccess);
+    assert.throws(() => r.chat.takeBackFullAccess(), { message: 'Always could not be taken back: its file could not be changed. Close anything that has it open, then try again.' });
+    assert.notEqual(r.chat.fullAccessStanding(), null);
+    assert.deepEqual(r.standings, []);
+});
+
+test('a take-back while a new chat waits for the version read reaches that chat: it starts in Ask first', async (t) => {
+    const r = rig(t);
+    stand(r, true);
+    const made = r.chat.create(undefined, 'claude');
+    r.chat.takeBackFullAccess();
+    assert.equal((await made).mode, 'ask_first');
+    assert.equal(grants(r).length, 0);
+});
+
+test('a new chat whose Full access folder cannot be made starts in Ask first and says why in one line, once the page can draw it', async (t) => {
+    const r = rig(t);
+    stand(r, true);
+    mkdirSync(dirname(r.b.paths.chatFull), { recursive: true });
+    writeFileSync(r.b.paths.chatFull, 'not a folder');
+    const setUp = await r.chat.create(undefined, 'claude');
+    assert.equal(setUp.mode, 'ask_first');
+    assert.deepEqual(notices(r.events.get(setUp.id) ?? []), [], 'nothing before the page has the chat');
+    await tick();
+    assert.deepEqual(notices(r.events.get(setUp.id) ?? []), [newChatAskFirstSentence]);
+    const campaign = await r.chat.create('cmp_01GHI', 'claude');
+    assert.equal(campaign.mode, 'ask_first');
+    await tick();
+    assert.deepEqual(notices(r.events.get(campaign.id) ?? []), [], 'a campaign\'s chat is told when the page opens it');
+    r.chat.open(campaign.id);
+    await tick();
+    assert.deepEqual(notices(r.events.get(campaign.id) ?? []), [newChatAskFirstSentence]);
+    r.chat.open(campaign.id);
+    await tick();
+    assert.equal(notices(r.events.get(campaign.id) ?? []).length, 1, 'once');
 });
 
 test('with Always and "start new chats" standing, a held card in Full access still offers no Always', async (t) => {

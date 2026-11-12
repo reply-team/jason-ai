@@ -37,6 +37,21 @@ export function followStanding(desktop: JasonDesktop): () => void {
     });
 }
 
+/**
+ * Reads the standing choice again where the page is about to offer or show it, the mode menu as it opens, since a file
+ * changed by anything but the desktop's own acts is said to no one. A read that fails changes nothing.
+ */
+export function readStandingAgain(desktop: JasonDesktop): void {
+    const part = partOf(desktop);
+    if (part === undefined) return;
+    void part
+        .standing()
+        .then((standing) => {
+            fullAccessStanding.value = standing;
+        })
+        .catch(() => undefined);
+}
+
 /** Settles once the desktop's first answer about the standing choice is in. */
 export const standingKnown = (): Promise<void> => known;
 

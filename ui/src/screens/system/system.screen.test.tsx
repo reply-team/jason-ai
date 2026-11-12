@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
@@ -164,6 +164,30 @@ describe('System, the standing choice of Full access', () => {
         await waitFor(() => expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy());
         expect(desktop.calls.filter((each) => each.name === 'fullAccess.takeBack')).toHaveLength(1);
         expect(screen.queryByText('New chats start in Full access.')).toBeNull();
+    });
+
+    it('reads the choice again each time it shows, so one the desktop never said is shown', async () => {
+        const desktop = stubDesktop();
+        window.jasonDesktop = desktop;
+        systemFake();
+        await waitFor(() => expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy());
+        cleanup();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
+        systemFake();
+        await waitFor(() =>
+            expect(screen.getByText(/Chats on this computer enter Full access without asking, since /)).toBeTruthy(),
+        );
+    });
+
+    it('a moment that is no date is shown without it, and the screen still draws', async () => {
+        const desktop = stubDesktop();
+        desktop.standing = { givenAt: '2026-99-99T99:99:99Z', newChats: false };
+        window.jasonDesktop = desktop;
+        systemFake();
+        await waitFor(() =>
+            expect(screen.getByText('Chats on this computer enter Full access without asking.')).toBeTruthy(),
+        );
+        expect(screen.getByRole('button', { name: 'Ask each time again' })).toBeTruthy();
     });
 
     it('in a desktop of an earlier version, with no standing choice to read, shows no card', async () => {

@@ -77,7 +77,9 @@ import {
     fullAccessOffered,
     fullAccessSentence,
     isChatMode,
+    newChatAskFirstSentence,
     standingUnkeptSentence,
+    standingUnremovedSentence,
     unguardedSentence,
     unguardedStandingSentence,
     type ChatMode,
@@ -86,7 +88,7 @@ import {
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
-import { readStanding, writeStanding, type Standing } from './full-access-standing.ts';
+import { oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
@@ -529,6 +531,13 @@ export class Chat {
     #leftOut = new Set<string>();
     /** Folders this start moved that an earlier move had failed on, by conversation: said once, when it is opened. */
     #movedAtStart = new Map<string, string>();
+    /** A line for a campaign's new conversation, said once the page opens it. */
+    #unsaid = new Map<string, string>();
+    /**
+     * The standing choice held as taken back for this run although its file would not let it be removed; the mark beside
+     * the file (`takeBackOwed`) holds it the same way across a restart.
+     */
+    #takenBack = false;
     /**
      * What the Windows check of Codex's sandbox found, for this run of the desktop, by Codex's file, its version and the
      * Codex home the turn names: true where the sandbox held, false where a command in it read the run file. A check
@@ -551,6 +560,9 @@ export class Chat {
         this.#options = options;
         this.#platform = options.platform ?? currentPlatform();
         sweepTurnFiles(options.paths.turns);
+        // A take-back the last run owed is done before any chat is made; one the file still will not take keeps the
+        // choice taken back for this run too.
+        if (takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
         // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
         // never stops for either.
@@ -830,7 +842,7 @@ export class Chat {
                     const answer = answerOf(await this.#options.confirmFullAccess?.());
                     // A yes for a conversation removed meanwhile, or after the window closed, gives nothing.
                     if (answer === null || this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
-                    if (answer.always) unkept = !this.#writeStanding({ consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats: answer.newChats }, 'given');
+                    if (answer.always) unkept = !this.#giveStanding(answer.newChats);
                 }
                 this.#openGrant(conversation);
             } finally {
@@ -875,6 +887,11 @@ export class Chat {
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
     open(id: unknown): ConversationOpened {
         const conversation = this.#own(id);
+        const unsaid = this.#unsaid.get(conversation.id);
+        if (unsaid !== undefined) {
+            this.#unsaid.delete(conversation.id);
+            queueMicrotask(() => this.#options.emit(conversation.id, { kind: 'notice', text: unsaid }));
+        }
         const moved = this.#movedAtStart.get(conversation.id);
         if (moved !== undefined) {
             this.#movedAtStart.delete(conversation.id);
@@ -916,11 +933,15 @@ export class Chat {
         if (!this.#fullAccessOffered() || this.#closed || this.#standingFor('full_access', program)?.newChats !== true) return conversation;
         if (fullAccessSentence(await this.#claudeVersion()) !== null) return conversation;
         if (this.#closed || this.#conversations.get(conversation.id) !== conversation) return conversation;
+        // Read again after the last wait: a take-back meanwhile reaches this chat too.
+        if (this.#standingFor('full_access', program)?.newChats !== true) return conversation;
         try {
             this.#openGrant(conversation);
         } catch (error) {
-            if (error instanceof ChatRefused) return conversation;
-            throw error;
+            if (!(error instanceof ChatRefused)) throw error;
+            // The person asked for new chats in Full access, so the chat says why this one is not.
+            this.#sayWhenShown(conversation, newChatAskFirstSentence);
+            return conversation;
         }
         this.#changeMode(conversation, 'full_access', true);
         return conversation;
@@ -932,7 +953,52 @@ export class Chat {
      */
     #standingFor(mode: ChatMode, program: string | undefined): Standing | null {
         if (mode !== 'full_access' || program !== 'claude') return null;
+        if (this.#takenBack || takeBackOwed(this.#options.paths.fullAccess)) return null;
         return readStanding(this.#options.paths.fullAccess, 'claude');
+    }
+
+    /**
+     * A line a new conversation is told as soon as the page can draw it: a set-up chat's page holds it once `create` has
+     * answered, a campaign's once it has opened it.
+     */
+    #sayWhenShown(conversation: Conversation, text: string): void {
+        if (conversation.campaign_id !== null) {
+            this.#unsaid.set(conversation.id, text);
+            return;
+        }
+        setTimeout(() => {
+            if (!this.#closed) this.#options.emit(conversation.id, { kind: 'notice', text });
+        }, 0);
+    }
+
+    /** Gives the standing choice: the mark of a take-back owed goes first, so the next start never removes this one. */
+    #giveStanding(newChats: boolean): boolean {
+        const file = this.#options.paths.fullAccess;
+        if (takeBackOwed(file)) {
+            try {
+                settleTakeBack(file);
+            } catch (error) {
+                this.#options.standingUnwritten?.((error as NodeJS.ErrnoException).code ?? 'unknown');
+                return false;
+            }
+        }
+        if (!this.#writeStanding({ consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats }, 'given')) return false;
+        this.#takenBack = false;
+        return true;
+    }
+
+    /** The take-back the last run owed, done at the start; held for this run where the file still will not take it. */
+    #settleOwed(): void {
+        const file = this.#options.paths.fullAccess;
+        if (!this.#writeStanding(null, 'unchecked')) {
+            this.#takenBack = true;
+            return;
+        }
+        try {
+            settleTakeBack(file);
+        } catch {
+            // The mark left keeps the choice taken back, and the next start tries again.
+        }
     }
 
     /** The standing choice of Full access, for the menu and the System screen; null when none stands. */
@@ -1761,9 +1827,17 @@ export class Chat {
                     if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
                     this.#options.unchecked?.();
-                    // A check a policy filtered out would miss every later turn too: the standing choice goes with it.
-                    const takenBack = this.#standingFor('full_access', 'claude') !== null && this.#writeStanding(null, 'unchecked');
-                    stopFor(takenBack ? unguardedStandingSentence : unguardedSentence);
+                    // A check a policy filtered out would miss every later turn too: the standing choice goes with it. A file
+                    // that will not let it go leaves it taken back for this run, and marked for the next start to remove.
+                    const stood = this.#standingFor('full_access', 'claude') !== null;
+                    const unremoved = stood && !this.#writeStanding(null, 'unchecked');
+                    if (unremoved) {
+                        this.#takenBack = true;
+                        oweTakeBack(this.#options.paths.fullAccess);
+                        this.#options.standingChanged?.(null, 'unchecked');
+                    }
+                    stopFor(stood ? unguardedStandingSentence : unguardedSentence);
+                    if (unremoved) this.#options.emit(conversation.id, { kind: 'notice', text: standingUnremovedSentence });
                     this.#changeMode(conversation, 'ask_first', false);
                     return;
                 }
