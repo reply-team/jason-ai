@@ -575,7 +575,7 @@ test('a word with more brace expansions than the second look reads is refused, n
     assert.equal(judge('Bash', { command: 'echo {a,b}{c,d}{e,f}{g,h}{i,j}{k,l}' }, scope).verdict, 'ask', 'sixty-four are read, and a card');
 });
 
-test('Full access is offered, and the PowerShell tool still runs nothing unasked in it', () => {
-    assert.equal(fullAccessOffered, true);
+test('Full access is not offered yet, and the PowerShell tool still runs nothing unasked in it', () => {
+    assert.equal(fullAccessOffered, false);
     assert.equal(powerShellRunsInFullAccess, false);
 });

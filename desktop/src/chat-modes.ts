@@ -12,7 +12,7 @@ export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
  * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
  * refuses it before any confirmation. Everything else of Full access stays, behind this one switch.
  */
-export const fullAccessOffered = true;
+export const fullAccessOffered = false;
 
 /**
  * Whether Full access runs the PowerShell tool's literal commands unasked. Off: in Full access every command of the
