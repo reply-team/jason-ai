@@ -1,0 +1,13 @@
+{
+  "operation": "contact.list",
+  "case": "by-activity-empty",
+  "request": {
+    "order": "activity",
+    "limit": 200
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

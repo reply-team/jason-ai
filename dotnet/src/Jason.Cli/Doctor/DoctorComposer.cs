@@ -364,6 +364,7 @@ public static partial class DoctorComposer
         "work-item results",
         "the database",
         "work/",
+        "the desktop's conversations under desktop/conversations/ in the data directory, and the transcripts the agent hosts keep of the desktop's chat",
         "plugin packages",
         "a route's account and its identity",
         "the envelopes subscription chains carried, and any member of a handler's record besides its plugin, start, outcome, code and duration",

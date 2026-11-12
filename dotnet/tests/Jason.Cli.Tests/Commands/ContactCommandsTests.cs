@@ -146,6 +146,18 @@ public class ContactCommandsTests
             "{\"channel\":\"email\",\"value\":\"ada@example.com\",\"query\":\"ada@\",\"campaign_id\":\"cmp_A\",\"order\":\"activity\",\"include_archived\":true,\"limit\":5,\"cursor\":\"Y250X0E\"}");
     }
 
+    /// <summary>A count of campaign summary lists the people it counts, in the order asked.</summary>
+    [Fact]
+    public async Task List_passes_a_count()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("contact", "list", "--summary", "waiting", "--order", "activity", "--limit", "200");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.ContactList, "{\"summary\":\"waiting\",\"order\":\"activity\",\"limit\":200}");
+    }
+
     [Fact]
     public async Task List_leaves_out_the_archive_flag_when_it_was_not_asked_for()
     {
@@ -221,7 +233,11 @@ public class ContactCommandsTests
                 Moment,
                 Moment,
                 null,
-                [new ContactCampaignDto("cmp_A", "LatAm pilot", MembershipState.Enrolled, Moment, Moment), new ContactCampaignDto("cmp_B", "Re-engage", MembershipState.Excluded, Moment, Moment)]),
+                [
+                    new ContactCampaignDto("cmp_A", "LatAm pilot", MembershipState.Enrolled, Moment, Moment, [CampaignSummaryFilter.Waiting, CampaignSummaryFilter.Working]),
+                    new ContactCampaignDto("cmp_B", "Re-engage", MembershipState.Excluded, Moment, Moment, [CampaignSummaryFilter.Removed]),
+                    new ContactCampaignDto("cmp_C", "Autumn", MembershipState.Enrolled, Moment, Moment, []),
+                ]),
             JasonJson.Options);
         using var cli = new CliRun(contact);
 
@@ -237,6 +253,10 @@ public class ContactCommandsTests
         Assert.Contains("source", cli.Text, StringComparison.Ordinal);
         Assert.Contains("LatAm pilot", cli.Text, StringComparison.Ordinal);
         Assert.Contains("excluded", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("STANDING", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("waiting, working", cli.Text, StringComparison.Ordinal);
+        Assert.Matches(@"Re-engage\s+excluded\s+removed", cli.Text);
+        Assert.Matches(@"Autumn\s+enrolled\s+-", cli.Text);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
@@ -252,7 +272,7 @@ public class ContactCommandsTests
     {
         var contact = new ContactDto(
             "cnt_A", "Ada\u001b]0;owned\u0007", "Love\blace‮", null, null, null, [], [], [], Moment, Moment, null,
-            [new ContactCampaignDto("cmp_A", "Lat\u001b[2JAm", MembershipState.Enrolled, Moment, Moment)]);
+            [new ContactCampaignDto("cmp_A", "Lat\u001b[2JAm", MembershipState.Enrolled, Moment, Moment, [CampaignSummaryFilter.Waiting])]);
         using var cli = new CliRun(verb == "get"
             ? JsonSerializer.Serialize(contact, JasonJson.Options)
             : JsonSerializer.Serialize(new Page<ContactDto>([contact], null), JasonJson.Options));
@@ -266,10 +286,7 @@ public class ContactCommandsTests
         }
 
         Assert.Contains("Ada�]0;owned� Love�lace�", cli.Text, StringComparison.Ordinal);
-        if (verb == "get")
-        {
-            Assert.Contains("Lat�[2JAm", cli.Text, StringComparison.Ordinal);
-        }
+        Assert.Contains(verb == "get" ? "Lat�[2JAm" : "Lat�[2JAm: waiting", cli.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -291,6 +308,11 @@ public class ContactCommandsTests
                         Moment,
                         Moment,
                         null,
+                        [
+                            new ContactCampaignDto("cmp_A", "LatAm pilot", MembershipState.Enrolled, Moment, Moment, [CampaignSummaryFilter.Waiting, CampaignSummaryFilter.Working]),
+                            new ContactCampaignDto("cmp_B", "Re-engage", MembershipState.Excluded, Moment, Moment, [CampaignSummaryFilter.Removed]),
+                            new ContactCampaignDto("cmp_C", "Autumn", MembershipState.Enrolled, Moment, Moment, []),
+                        ],
                         LastActivity: new JournalEntryDto("jrn_A", Moment, new ActorRef(ActorType.System, "dispatcher"), "inbound_reply_observed", null, null, null, null, null, null, null)),
                 ],
                 "Y250X0E"),
@@ -305,6 +327,8 @@ public class ContactCommandsTests
         Assert.Contains("ada@example.com", cli.Text, StringComparison.Ordinal);
         Assert.Contains("LAST", cli.Text, StringComparison.Ordinal);
         Assert.Contains("inbound_reply_observed", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("CAMPAIGNS", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("LatAm pilot: waiting, working; Re-engage: removed; Autumn", cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: Y250X0E", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }

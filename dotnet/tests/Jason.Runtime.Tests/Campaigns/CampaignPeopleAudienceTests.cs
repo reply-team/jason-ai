@@ -32,10 +32,10 @@ public class CampaignPeopleAudienceTests
 
         Assert.Equal(
             new SummaryCounts(world.Spring.Id, People: 5, Waiting: 2, Failed: 1, Working: 0, New: 1, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
-            Assert.Single(await CampaignPeople.SummaryCountsAsync(db, spring, first.Id, Ct)).Value);
+            Assert.Single(await CampaignPeople.SummaryCountsAsync(db, spring, first.Id, withoutArchived: false, Ct)).Value);
         Assert.Equal(
             new SummaryCounts(0, People: 5, Waiting: 2, Failed: 1, Working: 0, New: 1, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
-            await CampaignPeople.SummaryTotalAsync(db, spring, first.Id, Ct));
+            await CampaignPeople.SummaryTotalAsync(db, spring, first.Id, withoutArchived: false, Ct));
     }
 
     [Fact]
@@ -77,8 +77,8 @@ public class CampaignPeopleAudienceTests
         var (world, _, empty) = await AudiencesAsync(db);
         int[] spring = [world.Spring.Id];
 
-        Assert.Empty(await CampaignPeople.SummaryCountsAsync(db, spring, empty.Id, Ct));
-        Assert.Equal(new SummaryCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.SummaryTotalAsync(db, spring, empty.Id, Ct));
+        Assert.Empty(await CampaignPeople.SummaryCountsAsync(db, spring, empty.Id, withoutArchived: false, Ct));
+        Assert.Equal(new SummaryCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.SummaryTotalAsync(db, spring, empty.Id, withoutArchived: false, Ct));
         Assert.Empty(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, Ct));
         Assert.Equal(new ActivityCounts(0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, Ct));
         Assert.Empty(await CampaignPeople.MomentsAsync(db, spring, CampaignActivityFilter.People, CampaignWorld.Since, CampaignWorld.Until, empty.Id, Ct));

@@ -186,10 +186,22 @@ export function toActivity(line: JournalEntry, now: number): ActivityLine {
     };
 }
 
-/** The hosts the chat can run on, and the ones found that run campaign work but not the chat yet. */
-export function chatHosts(hosts: readonly DesktopHost[]): { drive: DesktopHost[]; other: DesktopHost[] } {
+/**
+ * The hosts the chat can run on; the ones that would drive it but run on a Claude Code the desktop marks below the
+ * floor, held aside with its sentence; and the ones found that run campaign work but not the chat yet.
+ */
+export function chatHosts(hosts: readonly DesktopHost[]): {
+    drive: DesktopHost[];
+    held: DesktopHost[];
+    other: DesktopHost[];
+} {
     const found = hosts.filter((each) => each.found);
-    return { drive: found.filter((each) => each.drivesChat), other: found.filter((each) => !each.drivesChat) };
+    const driving = found.filter((each) => each.drivesChat);
+    return {
+        drive: driving.filter((each) => each.belowFloor === null),
+        held: driving.filter((each) => each.belowFloor !== null),
+        other: found.filter((each) => !each.drivesChat),
+    };
 }
 
 /** How a program found on this machine is signed in to: once, in a terminal, by its own command. */

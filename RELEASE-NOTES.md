@@ -251,8 +251,6 @@ The Mac executable built for Intel is signed and notarized like the Apple silico
 on an Intel Mac, so that package is covered by what was built and signed and not by a run. Its `jason` moves only with
 the desktop's own update, because `jason update` publishes no build for it.
 
-There is no desktop package for Linux: the desktop is published for Windows x64 and for Macs only.
-
 The Windows installer ends the run, and installs nothing, when a process from the carried `jason.exe` still runs after
 the stop; the next start of the application says nothing of it. Where PowerShell is not available the installer looks
 for no process: a person is asked to stop the runtime, and an update goes on without a look.
@@ -262,10 +260,6 @@ System and WinShell) carry no signature of ours. The installer's builder cannot 
 
 The desktop's chat has been run in tests against stand-ins for Claude Code and Codex; no turn with a real host has been
 watched through the desktop yet.
-
-Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only, with no network.
-Claude Code's chat asks for a card before it reads a path outside its working folders only from 2.1.257 on; an older
-version skips that setting without a word.
 
 Work the desktop's chat queues for a role runs under that role's own execution profile, not behind the chat's cards.
 

@@ -357,13 +357,57 @@ public class AutostartCommandTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>Elsewhere nothing carries a search path, and the body says so with a null rather than leaving the field out.</summary>
-    [Theory]
-    [InlineData(AutostartPlatform.Windows)]
-    [InlineData(AutostartPlatform.Linux)]
-    public async Task Elsewhere_the_body_s_path_is_null(AutostartPlatform platform)
+    /// <summary>
+    /// On Linux the user unit carries the search path of the process that made it too, since the user manager's own
+    /// environment reads no shell profile; the body says which it carries, and the human line says it.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_the_registration_carries_the_search_path_it_was_made_with()
     {
-        using var machine = new Machine(new RecordingRegistrar(platform), "/opt/homebrew/bin:/usr/bin");
+        const string Searched = "/home/ada/.local/bin:/home/ada/.npm-global/bin:/usr/bin:/bin";
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.Linux), Searched);
+
+        await machine.RunAsync(["runtime", "autostart", "enable"], Ct);
+
+        Assert.Equal(Searched, Assert.Single(machine.Registrar.Applied).SearchPath);
+        Assert.Equal(Searched, machine.Answer().Path);
+
+        machine.Clear();
+        await machine.RunAsync(["runtime", "autostart", "status", "--human"], Ct);
+
+        Assert.StartsWith(
+            $"The runtime starts at logon from {Installed}, on the data directory {machine.Paths.Root}, with the search path {Searched}. ",
+            Assert.Single(machine.Lines()),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A user unit that carries no search path, one an earlier version registered, starts the runtime with the user
+    /// manager's environment, and the human line says so, which is what tells the person to register again.
+    /// </summary>
+    [Fact]
+    public async Task A_user_unit_with_no_search_path_is_said_to_start_with_the_user_manager_s()
+    {
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.Linux));
+        machine.Registrar.State = new AutostartState(true, [Installed, "runtime", "run", "--detached", "--data-dir", machine.Paths.Root], null);
+
+        await machine.RunAsync(["runtime", "autostart", "status"], Ct);
+        Assert.Null(machine.Answer().Path);
+
+        machine.Clear();
+        await machine.RunAsync(["runtime", "autostart", "status", "--human"], Ct);
+
+        Assert.Contains(
+            $", on the data directory {machine.Paths.Root}, with the systemd user manager's search path.",
+            Assert.Single(machine.Lines()),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>On Windows nothing carries a search path, and the body says so with a null rather than leaving the field out.</summary>
+    [Fact]
+    public async Task On_windows_the_body_s_path_is_null()
+    {
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.Windows), "/opt/homebrew/bin:/usr/bin");
 
         await machine.RunAsync(["runtime", "autostart", "enable"], Ct);
 
@@ -376,11 +420,11 @@ public class AutostartCommandTests
         Assert.DoesNotContain("search path", Assert.Single(machine.Lines()), StringComparison.Ordinal);
     }
 
-    /// <summary>The help of the two verbs that print a registration says what the macOS one carries.</summary>
+    /// <summary>The help of the two verbs that print a registration says what the macOS and Linux ones carry.</summary>
     [Theory]
-    [InlineData("enable", "and on macOS the search path (PATH) this command runs with, since launchd's own is /usr/bin:/bin:/usr/sbin:/sbin.")]
-    [InlineData("status", "and on macOS the search path it carries, under path.")]
-    public async Task The_help_says_what_a_macos_registration_carries(string verb, string said)
+    [InlineData("enable", "and on macOS and Linux the search path (PATH) this command runs with, since launchd's own is /usr/bin:/bin:/usr/sbin:/sbin and the systemd user manager's reads no shell profile.")]
+    [InlineData("status", "and on macOS and Linux the search path it carries, under path.")]
+    public async Task The_help_says_what_a_macos_or_linux_registration_carries(string verb, string said)
     {
         using var machine = new Machine();
 
@@ -390,6 +434,33 @@ public class AutostartCommandTests
     }
 
     /// <summary>An installation with a recording machine behind it, and its own temporary data directory.</summary>
+    /// <summary>
+    /// A PATH the unit cannot carry refuses `enable` only. A registration is known by its file, not by what a new one
+    /// would hold, so `disable` composes it with no search path and takes away what is there, or says nothing is,
+    /// whatever the terminal's PATH holds: the advice an uninstall gives on a refusal is `disable`, and it must work.
+    /// </summary>
+    [Theory]
+    [InlineData("/home/ada/\"q\"/bin:/usr/bin", true)]
+    [InlineData("/home/ada/\"q\"/bin:/usr/bin", false)]
+    [InlineData("/home/ada/a\\b/bin:/usr/bin", true)]
+    [InlineData("/home/ada/a\\b/bin:/usr/bin", false)]
+    public async Task On_linux_disable_takes_the_unit_away_whatever_the_search_path_holds(string searched, bool registered)
+    {
+        using var machine = new Machine(new RecordingRegistrar(AutostartPlatform.Linux), searched);
+        if (registered)
+        {
+            machine.Registrar.State = new AutostartState(true, [Installed, "runtime", "run", "--detached", "--data-dir", machine.Paths.Root], null);
+        }
+
+        Assert.Equal(ExitCodes.Success, await machine.RunAsync(["runtime", "autostart", "disable"], Ct));
+        Assert.False(machine.Answer().Registered);
+        Assert.Equal(1, machine.Registrar.Removals);
+
+        machine.Clear();
+        Assert.Equal(ExitCodes.ApiError, await machine.RunAsync(["runtime", "autostart", "enable"], Ct));
+        Assert.Empty(machine.Registrar.Applied);
+    }
+
     private sealed class Machine : IDisposable
     {
         private readonly TempPaths _directory = new();

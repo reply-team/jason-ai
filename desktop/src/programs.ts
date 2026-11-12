@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import { endProgram } from './chat-process.ts';
 import { findOnPath, launchOf, type Launch } from './program-path.ts';
+import { withReplyClient } from './reply-client.ts';
 import { withoutSessionMarkers } from './session-markers.ts';
 
 /**
@@ -26,6 +28,8 @@ export interface RunOptions {
     stdin?: string;
     timeoutMs?: number;
     cwd?: string;
+    /** Stops the program before its time limit: answered at once, and the program ended as at the limit. */
+    signal?: AbortSignal;
 }
 
 export interface Programs {
@@ -76,18 +80,39 @@ function readText(file: string): string | null {
 
 const defaultLimit = 30_000;
 
-/** Runs a file with arguments and no shell, and reads what it said. Never rejects: a failure to start is an answer too. */
+/**
+ * Runs a file with arguments and no shell, and reads what it said. Never rejects: a failure to start is an answer too.
+ * At its time limit the answer is given at once, as stopped there, whether or not the program has gone, and the program
+ * is ended as a stop ends a chat turn's host (`endProgram`), so one that ignores the first signal cannot hold a caller.
+ * An abort of `signal` does the same before the limit.
+ */
 export function runFile(file: string, args: readonly string[], env: Record<string, string>, options: RunOptions = {}): Promise<RunResult> {
     return new Promise((resolve) => {
+        const limit = options.timeoutMs ?? defaultLimit;
+        let bound: ReturnType<typeof setTimeout> | undefined;
+        let stop: (() => void) | undefined;
+        const answer = (result: RunResult) => {
+            clearTimeout(bound);
+            if (stop !== undefined) options.signal?.removeEventListener('abort', stop);
+            resolve(result);
+        };
         const child = execFile(
             file,
             [...args],
-            { env, cwd: options.cwd, timeout: options.timeoutMs ?? defaultLimit, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' },
+            { env, cwd: options.cwd, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' },
             (error, stdout, stderr) => {
                 const code = error && typeof (error as { code?: unknown }).code === 'number' ? ((error as { code: number }).code) : error ? -1 : 0;
-                resolve({ exit: code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') || (error && code === -1 ? error.message : '') });
+                answer({ exit: code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') || (error && code === -1 ? error.message : '') });
             },
         );
+        const end = (why: string) => {
+            answer({ exit: -1, stdout: '', stderr: why });
+            if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) endProgram(child.pid);
+        };
+        bound = setTimeout(() => end(`It was stopped at its time limit of ${limit} ms.`), limit);
+        stop = () => end('It was stopped before it answered.');
+        if (options.signal?.aborted) stop();
+        else options.signal?.addEventListener('abort', stop, { once: true });
         child.stdin?.on('error', () => undefined);
         child.stdin?.end(options.stdin ?? '');
     });
@@ -107,11 +132,13 @@ export function programLaunch(env: Readonly<Record<string, string | undefined>>,
 
 /**
  * The programs on a PATH. The environment is the desktop's own with that PATH, less a parent Claude Code session's
- * markers (`sessionMarkers`); nothing is added to it.
+ * markers (`sessionMarkers`); nothing is added to it, except that `reply` is given the harness's label built from the
+ * bundle's version (`withReplyClient`) in place of any `REPLY_CLIENT` the desktop inherited.
  */
-export function programsOn(env: Readonly<Record<string, string | undefined>>): Programs {
+export function programsOn(env: Readonly<Record<string, string | undefined>>, bundleVersion: string | null): Programs {
     const path = pathOf(env);
     const childEnv = withPath(withoutSessionMarkers(env), path);
+    const replyEnv = withReplyClient(childEnv, bundleVersion);
     const lookup = { platform: process.platform, path, pathext: env.PATHEXT ?? env.PathExt, isProgram };
     const find = (name: ProgramName) => findOnPath(name, lookup);
     return {
@@ -122,7 +149,7 @@ export function programsOn(env: Readonly<Record<string, string | undefined>>): P
             if (found === null) return { exit: -1, stdout: '', stderr: `${name} is not on the PATH.` };
             const launch = launchOf(found, process.platform, readText, findOnPath('node', lookup), isFile);
             if ('refused' in launch) return { exit: -1, stdout: '', stderr: launch.refused };
-            return runFile(launch.file, [...launch.prefix, ...args], childEnv, options);
+            return runFile(launch.file, [...launch.prefix, ...args], name === 'reply' ? replyEnv : childEnv, options);
         },
     };
 }

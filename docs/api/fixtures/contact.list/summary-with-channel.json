@@ -1,0 +1,25 @@
+{
+  "operation": "contact.list",
+  "case": "summary-with-channel",
+  "request": {
+    "order": "activity",
+    "summary": "waiting",
+    "channel": "email",
+    "limit": 200
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: summary: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "summary",
+          "code": "invalid",
+          "message": "summary lists people by where they stand; send it without channel and value."
+        }
+      ]
+    }
+  }
+}

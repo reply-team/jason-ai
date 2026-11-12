@@ -82,7 +82,12 @@ public static class ContactCommands
         var channel = new Option<string?>("--channel") { Description = "Only contacts having this channel, for example email." };
         var value = new Option<string?>("--value") { Description = "Only contacts whose channel value is this one; needs --channel." };
         var query = new Option<string?>("--query") { Description = "Only people whose name, company, title or any channel value contains this text; case and accents do not matter, a phone number matches however it is spaced, and a pasted LinkedIn link finds its profile." };
-        var campaign = new Option<string?>("--campaign") { Description = "Only people on this campaign, as cmp_...; excluded members are left out." };
+        var campaign = new Option<string?>("--campaign") { Description = "Only people on this campaign, as cmp_...; excluded members are left out, except under --summary removed." };
+        var summary = Choice<CampaignSummaryFilter>.Only(new Option<string?>("--summary")
+        {
+            Description = "Only the people one count of campaign summary counts in at least one campaign not archived, or in the one --campaign names: "
+                + "waiting, failed, working, new, idle, sequence, out or removed. Not with --channel or --value.",
+        });
         var order = Choice<ContactListOrder>.Only(new Option<string?>("--order") { Description = "created (the default, oldest first) or activity (the person something last happened to first; people with nothing yet come last)." });
         var includeArchived = new Option<bool>("--include-archived") { Description = "Include archived contacts, which are hidden by default." };
         var limit = VerbOptions.Limit();
@@ -92,6 +97,7 @@ public static class ContactCommands
         command.Options.Add(value);
         command.Options.Add(query);
         command.Options.Add(campaign);
+        command.Options.Add(summary);
         command.Options.Add(order);
         command.Options.Add(includeArchived);
         command.Options.Add(limit);
@@ -106,6 +112,7 @@ public static class ContactCommands
                 .Set("value", parseResult.GetValue(value))
                 .Set("query", parseResult.GetValue(query))
                 .Set("campaign_id", parseResult.GetValue(campaign))
+                .Set("summary", parseResult.GetValue(summary))
                 .Set("order", parseResult.GetValue(order))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));

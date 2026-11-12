@@ -8,18 +8,18 @@ import { browserPlugins } from '../plugins';
 import { navigate, parseRoute, route } from '../router';
 import * as classicAttention from '../screens/attention/store';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
+import { journalLine, setupFound, chatDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, lines, setup, setupBusy, streamState } from './state';
+import { chats, clock, conversations, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
-function renderConsole(fake: FakeApi, desktop: StubDesktop = stubDesktop(), journal: StubStream = stubStream()) {
+function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop(), journal: StubStream = stubStream()) {
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -52,6 +52,7 @@ const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).
 
 beforeEach(() => {
     chats.value = {};
+    conversations.value = [];
     lines.value = [];
     attention.loaded.value = false;
     attention.detail.value = null;
@@ -81,16 +82,19 @@ afterEach(() => {
 });
 
 describe('the console', () => {
-    it('opens on a chat beside what needs the person, the campaigns and the activity, read from the runtime', async () => {
+    it('opens a chat, when New chat is chosen, beside what needs the person, the campaigns and the activity, read from the runtime', async () => {
         const fake = pending(new FakeApi());
         renderConsole(fake);
-        await waitFor(() => expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0));
-        expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
-        expect(screen.getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
-        const operations = fake.calls.map((each) => each.operation).sort();
-        expect(operations).toEqual(
-            ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
-        );
+        // Each read answers when it answers: the approvals, the questions and the campaigns arrive in no fixed order, so the
+        // screen is read once every one of them has been asked and has landed.
+        await waitFor(() => {
+            expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+            expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
+            expect(screen.getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
+            expect(fake.calls.map((each) => each.operation).sort()).toEqual(
+                ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
+            );
+        });
     });
 
     it('approves and rejects with a reason through the runtime, and reads the list again', async () => {
@@ -147,13 +151,35 @@ describe('the console', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
     });
 
+    it('says a Campaigns panel with nothing in it and how a campaign starts, and opens a new chat from it', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/pending')
+            .answer('decision.list', 'decision.list/pending')
+            .answer('campaign.list', 'campaign.list/screen-empty');
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
+        show('Campaigns');
+        await waitFor(() =>
+            expect(words(panel('Campaigns'))).toContain(
+                'No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you.',
+            ),
+        );
+        expect(asked(fake, 'campaign.summary')).toBe(0);
+        const made = () => desktop.calls.filter((each) => each.name === 'chat.create');
+        await waitFor(() => expect(made()).toHaveLength(1), { timeout: 2000 });
+        fireEvent.click(within(panel('Campaigns')).getByRole('button', { name: 'New chat' }));
+        await waitFor(() => expect(made()).toHaveLength(2));
+        expect(made()[1]!.args).toEqual([]);
+    });
+
     it('draws a hostile campaign name as text, in the list and in a chat about it', async () => {
         const fake = pending(new FakeApi());
-        renderConsole(fake);
+        const { desktop } = renderConsole(fake);
         await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
         show('Campaigns');
         await waitFor(() => within(panel('Campaigns')).getByText('Spring'));
-        // A person may name a campaign anything; the next read brings that name back.
+        // A person may name a campaign anything; the next read brings that name back, to the desktop as well.
+        desktop.names.set('cmp_1', hostile);
         flush(() => {
             consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.map((each) =>
                 each.id === 'cmp_1' ? { ...each, name: hostile } : each,
@@ -162,7 +188,8 @@ describe('the console', () => {
         const row = within(panel('Campaigns')).getByText(hostile).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         await waitFor(() => screen.getByRole('heading', { name: `What should Jason do in ${hostile}?` }));
-        expect(document.querySelector('img')).toBeNull();
+        // The only images of the page are the brand's own, at the head of the sidebar.
+        expect(Array.from(document.querySelectorAll('img')).filter((img) => !img.closest('.brand'))).toEqual([]);
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
@@ -183,6 +210,125 @@ describe('the console', () => {
         await waitFor(() => expect(within(activity).getAllByText(hostile)).toHaveLength(2));
         expect(activity.querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    it('picks a model and, where the model takes one, an effort beside the host, and sends both with the turn', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
+        expect(model).toHaveProperty('value', '');
+        expect(
+            within(model)
+                .getAllByRole('option')
+                .map((each) => each.textContent),
+        ).toEqual(['Default model', 'Opus', 'Sonnet', 'Haiku', 'Another model…']);
+        // The host's own model takes no effort the desktop knows of: none is offered.
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        fireEvent.change(model, { target: { value: 'opus' } });
+        const effort = await waitFor(() => screen.getByRole('combobox', { name: 'Effort' }));
+        expect(
+            within(effort)
+                .getAllByRole('option')
+                .map((each) => each.textContent),
+        ).toEqual(['Default effort', 'Low', 'Medium', 'High', 'Extra high', 'Max']);
+        fireEvent.change(effort, { target: { value: 'xhigh' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Think hard.' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Think hard.',
+            { host: 'claude', model: 'opus', effort: 'xhigh' },
+        ]);
+        // A model that takes no effort hides the menu, and the next turn names none.
+        fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'haiku' } });
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+    });
+
+    it('takes a model’s full name typed on Claude Code, with no effort', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
+        fireEvent.change(model, { target: { value: 'opus' } });
+        fireEvent.change(await waitFor(() => screen.getByRole('combobox', { name: 'Effort' })), {
+            target: { value: 'high' },
+        });
+        fireEvent.change(model, { target: { value: '-another' } });
+        const name = await waitFor(() => screen.getByRole('textbox', { name: 'Model name' }));
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        // With the name empty the turn is not sent, and Enter sends nothing either.
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Your message' }), { key: 'Enter' });
+        expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(false);
+        fireEvent.change(name, { target: { value: ' claude-opus-5-5 ' } });
+        expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false);
+        expect(screen.getByRole('combobox', { name: 'Model' })).toHaveProperty('value', '-another');
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Go',
+            { host: 'claude', model: 'claude-opus-5-5' },
+        ]);
+    });
+
+    it('shows no model menu for a host that offers none here, and sends the turn with the host alone', async () => {
+        const fake = pending(new FakeApi());
+        const desktop = chatDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, found: false }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.80.0', install: null, models: [] }
+                      : each,
+            ),
+        });
+        renderConsole(fake, desktop);
+        await waitFor(() =>
+            expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
+        );
+        expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Go',
+            { host: 'codex' },
+        ]);
+    });
+
+    it('keeps Codex’s model control where its models could not be read, says so in one line, and sends the turn with the host alone', async () => {
+        const fake = pending(new FakeApi());
+        const sentence = "Codex's models could not be read, so the turn uses its own default model.";
+        const desktop = chatDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, found: false }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.80.0', install: null, models: [], modelsUnread: sentence }
+                      : each,
+            ),
+        });
+        renderConsole(fake, desktop);
+        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
+        expect(model).toHaveProperty('disabled', true);
+        expect(
+            within(model)
+                .getAllByRole('option')
+                .map((each) => each.textContent),
+        ).toEqual(['Default model']);
+        expect(document.querySelector('.composer .model-unread')?.textContent).toBe(sentence);
+        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+            'Go',
+            { host: 'codex' },
+        ]);
     });
 
     it('sends a turn to the host that drives the chat, and draws what the agent says as text', async () => {
@@ -397,6 +543,26 @@ describe('the console', () => {
             ]);
         });
 
+        it('ends with the desktop sentence that holds the host when the only host that drives the chat is held', async () => {
+            const { desktop, id } = await running();
+            type('Later');
+            enter();
+            await waitFor(() => expect(waiting()).toBeTruthy());
+            const unreadable = `The version of Claude Code could not be read, so the chat does not run on it. Run \`claude --version\` in a terminal to see it. ${hostile}`;
+            setup.value = {
+                ...setup.value!,
+                hosts: setup.value!.hosts.map((each) =>
+                    each.id === 'claude' ? { ...each, version: null, belowFloor: unreadable } : each,
+                ),
+            };
+            flush(() => desktop.emit(id, { kind: 'done', error: null }));
+            await waitFor(() => expect(document.querySelector('.chat-error')?.textContent).toContain(unreadable));
+            expect(document.querySelector('.chat-error')?.textContent).not.toContain('No agent host');
+            expect(document.querySelector('.chat-error img')).toBeNull();
+            expect(sends(desktop)).toHaveLength(1);
+            expect(box().value).toBe('Later');
+        });
+
         it('stays in sight, not sent, when the turn stops or fails while the box holds other words', async () => {
             const { desktop, id } = await running();
             type('Later');
@@ -487,9 +653,90 @@ describe('the console', () => {
         );
     });
 
+    describe('a Claude Code below the floor', () => {
+        const old = (extra = '') =>
+            `Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running \`claude update\` in a terminal, then check again.${extra}`;
+        const withClaude = (belowFloor: string | null, codexFound: boolean) => ({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, version: belowFloor === null ? '2.1.300' : '2.1.200', belowFloor }
+                    : each.id === 'codex'
+                      ? { ...each, found: codexFound, version: codexFound ? '0.80.0' : null, install: null }
+                      : each,
+            ),
+        });
+
+        it('is listed with the desktop sentence and cannot be chosen, and the turn goes to a host that drives the chat', async () => {
+            const fake = pending(new FakeApi());
+            const desktop = chatDesktop(withClaude(old(), true));
+            renderConsole(fake, desktop);
+            await waitFor(() =>
+                expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
+            );
+            const host = screen.getByRole('combobox', { name: 'Agent host' });
+            const option = within(host).getByRole('option', {
+                name: 'Claude Code: Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+            });
+            expect(option).toHaveProperty('disabled', true);
+            // The sentence is long; the closed list keeps to the composer's row.
+            expect(rules().find((rule) => rule.selector === '.jc-console .composer select')?.body).toMatch(
+                /max-width:\s*60%/,
+            );
+            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+            expect(desktop.calls.find((each) => each.name === 'chat.send')!.args.slice(1)).toEqual([
+                'Go',
+                { host: 'codex' },
+            ]);
+        });
+
+        it('as the only host that drives the chat, says why no turn starts, as text, and checks again on a click', async () => {
+            const fake = pending(new FakeApi());
+            const desktop = chatDesktop(withClaude(old(` ${hostile}`), false));
+            renderConsole(fake, desktop);
+            await waitFor(() => expect(document.querySelector('.composer .host-held')).toBeTruthy());
+            const note = document.querySelector<HTMLElement>('.composer .host-held')!;
+            expect(words(note)).toContain(
+                'Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+            );
+            expect(note.querySelector('code')?.textContent).toBe('claude update');
+            expect(note.textContent).toContain(hostile);
+            expect(note.querySelector('img')).toBeNull();
+            expect(document.querySelector('.composer')?.textContent).not.toContain(
+                'No agent host that drives the chat was found',
+            );
+            expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+
+            const read = desktop.calls.filter((each) => each.name === 'setup.status').length;
+            desktop.status = withClaude(null, false);
+            fireEvent.click(within(note).getByRole('button', { name: 'Check again' }));
+            await waitFor(() =>
+                expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1),
+            );
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false));
+            expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'claude');
+            expect(document.querySelector('.composer .host-held')).toBeNull();
+        });
+
+        it('is marked on the Connect card with the same sentence, its command as code', async () => {
+            const fake = pending(new FakeApi());
+            renderConsole(fake, chatDesktop(withClaude(old(), false)));
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            show('Connect');
+            const connect = await waitFor(() => panel('Connect'));
+            const row = within(connect).getByText('Claude Code', { selector: 'b' }).closest<HTMLElement>('.setrow')!;
+            expect(words(row)).toContain(
+                'Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+            );
+            expect(Array.from(row.querySelectorAll('code'), (each) => each.textContent)).toContain('claude update');
+        });
+    });
+
     it('connects: lists the hosts found or not, installs one, and configures a plugin through the desktop', async () => {
         const fake = pending(new FakeApi());
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         renderConsole(fake, desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -535,7 +782,7 @@ describe('the console', () => {
         const sentence = `The runtime is 0.33.0 and this desktop carries 0.34.0: run jason update. ${hostile}`;
         renderConsole(
             pending(new FakeApi()),
-            stubDesktop({ ...setupFound, runtimeVersion: '0.33.0', versionsDiffer: sentence }),
+            chatDesktop({ ...setupFound, runtimeVersion: '0.33.0', versionsDiffer: sentence }),
         );
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -560,7 +807,7 @@ describe('the console', () => {
     it('refuses to configure a plugin over a settings file it cannot read, and reloads with no values on Reload', async () => {
         const fake = pending(new FakeApi());
         const reason = `The settings file is not valid JSON at line 3. ${hostile}`;
-        const desktop = stubDesktop({ ...setupFound, settingsRefused: reason });
+        const desktop = chatDesktop({ ...setupFound, settingsRefused: reason });
         renderConsole(fake, desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -580,7 +827,7 @@ describe('the console', () => {
 
     it('draws a server field for ntfy alone, sends it only when filled, and removes it by an act of its own', async () => {
         const fake = pending(new FakeApi());
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         renderConsole(fake, desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -703,12 +950,14 @@ describe('the console', () => {
     it('draws a hostile question and a hostile contact name in Needs you as text', async () => {
         renderConsole(pending(new FakeApi()));
         await waitFor(() => expect(attention.loaded.value).toBe(true));
+        // The dock draws its panels in a render of its own once it is ready, which the runtime's answer can come before:
+        // the read having ended says nothing of the panel being there yet.
+        const needs = await waitFor(() => panel('Needs you'));
         // A prospect may be called anything, and an agent may ask anything; the next read brings it back.
         flush(() => {
             attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: hostile }));
             attention.questions.value = attention.questions.value.map((each) => ({ ...each, question: hostile }));
         });
-        const needs = panel('Needs you');
         await waitFor(() => expect(within(needs).getAllByText(hostile).length).toBeGreaterThanOrEqual(2));
         expect(needs.querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
@@ -825,7 +1074,7 @@ describe('the console', () => {
     });
 
     it('gives the sidebar room for the macOS window buttons, and every control the console draws a focus ring', async () => {
-        const desktop = Object.assign(stubDesktop(), { platform: 'darwin' as const });
+        const desktop = Object.assign(chatDesktop(), { platform: 'darwin' as const });
         renderConsole(pending(new FakeApi()), desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         const side = document.querySelector('.jc-console .side')!;
@@ -837,6 +1086,51 @@ describe('the console', () => {
         expect(focus.map((rule) => /outline:\s*(?!none|0)[^;]+;/.test(rule.body))).toContain(true);
         const send = screen.getByRole('button', { name: 'Send' });
         expect(send.matches('.jc-console *')).toBe(true);
+    });
+
+    it('puts the mark and the wordmark at the head of the sidebar, the dark wordmark shown only on a dark ground', async () => {
+        renderConsole(pending(new FakeApi()));
+        const brand = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.jc-console .side .brand');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        const [mark, light, dark] = Array.from(brand.querySelectorAll('img'));
+        expect(mark!.getAttribute('src')).toMatch(/favicon[.]svg$/);
+        expect(mark!.getAttribute('alt')).toBe('');
+        expect(light!.getAttribute('src')).toMatch(/brand-wordmark[.]svg$/);
+        expect(light!.getAttribute('alt')).toBe('Jason AI, GTM Harness');
+        expect(dark!.getAttribute('src')).toMatch(/brand-wordmark-dark[.]svg$/);
+        expect(dark!.getAttribute('alt')).toBe('Jason AI, GTM Harness');
+        expect(brand.querySelector('.glyph')).toBeNull();
+        const shown = (selector: string) =>
+            rules()
+                .filter((rule) => rule.selector === selector)
+                .map((rule) => rule.body)
+                .join(';');
+        expect(shown('.jc-console .brand .wordmark.dark')).toContain('display: none');
+        expect(shown(":root:not([data-theme='light']) .jc-console .brand .wordmark.dark")).toContain('display: inline');
+        expect(shown(":root[data-theme='dark'] .jc-console .brand .wordmark.light")).toContain('display: none');
+    });
+
+    it("cuts the sidebar's version line with an ellipsis rather than scrolling, and keeps its whole text in the title", async () => {
+        renderConsole(pending(new FakeApi()));
+        const version = `Jason ${fixtures['system.info/with-ui'].response.runtime_version}`;
+        const foot = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
+            expect(words(found).trim()).toBe(version);
+            return found;
+        });
+        expect(foot.title).toBe(version);
+        // The sidebar is drawn again as what it lists arrives, so the foot is read where it stands now.
+        const now = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
+        const body = rules()
+            .filter((rule) => rule.selector.includes('sfoot') && now.matches(rule.selector))
+            .map((rule) => rule.body)
+            .join(';');
+        expect(body).toMatch(/white-space:\s*nowrap/);
+        expect(body).toMatch(/overflow:\s*hidden/);
+        expect(body).toMatch(/text-overflow:\s*ellipsis/);
     });
 
     it('says after a fresh start that lines written in between are not shown, and keeps the lines it has', async () => {

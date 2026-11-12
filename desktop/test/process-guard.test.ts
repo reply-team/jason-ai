@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, processModules, processViolations, signalLines } from './process-rules.ts';
+import { ipcModule, listingCallers, processModules, processViolations, runFileCalls, signalLines } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -51,14 +51,17 @@ test('the shell-starting functions and a whole-module import are refused in a na
     assert.deepEqual(processViolations('src/cli.ts', "import { execFile, spawn } from 'node:child_process';"), []);
 });
 
-test('a shell is named only by the macOS login-shell lookup', () => {
+test('a shell is named only by the login-shell lookup, which returns before it anywhere but macOS and Linux', () => {
     assert.notDeepEqual(processViolations('src/programs.ts', "execFile('cmd.exe', ['/c', 'reply']);"), []);
     assert.notDeepEqual(processViolations('src/cli.ts', 'execFile(process.env.SHELL ?? "", []);'), []);
     assert.notDeepEqual(processViolations('src/shell-path.ts', "execFile(process.env.SHELL ?? '/bin/zsh', ['-ilc', '']);"), []);
     assert.deepEqual(
-        processViolations('src/shell-path.ts', "if (process.platform !== 'darwin') return x;\nexecFile(process.env.SHELL ?? '/bin/zsh', ['-ilc', '']);"),
+        processViolations('src/shell-path.ts', "if (process.platform !== 'darwin' && process.platform !== 'linux') return x;\nexecFile(process.env.SHELL ?? '/bin/sh', ['-ilc', '']);"),
         [],
     );
+    assert.notDeepEqual(processViolations('src/shell-path.ts', "if (process.platform === 'win32') return x;\nexecFile(process.env.SHELL ?? '/bin/sh', ['-ilc', '']);"), []);
+    // The rule names both systems, so a change to either one's side of it is read here first.
+    assert.notDeepEqual(processViolations('src/shell-path.ts', "if (process.platform !== 'darwin') return x;\nexecFile(process.env.SHELL ?? '/bin/zsh', ['-ilc', '']);"), []);
 });
 
 test('a require of child_process is refused even in a named module, destructured or whole, since only an import names what it takes', () => {
@@ -101,6 +104,18 @@ test('the chat\'s host module is named, and the shell and whole-module rules hol
     assert.notDeepEqual(processViolations('src/chat.ts', "import { spawn } from 'node:child_process';"), []);
 });
 
+test("an agent host's model listing is one call: codex app-server, started only by the module that keeps the lists", () => {
+    assert.match(processModules['src/chat-process.ts'] ?? '', /an agent host's model listing/);
+    const text = readFileSync(join(root, 'src/chat-process.ts'), 'utf8');
+    assert.ok(text.includes("export const listingArguments: readonly string[] = ['app-server'];"), 'the listing names its one call');
+    assert.ok(/spawnHost\(launch, listingArguments, options\)/.test(text), 'the listing starts with those arguments and no others');
+    assert.deepEqual(Object.keys(listingCallers), ['src/model-lists.ts']);
+    assert.deepEqual(processViolations('src/model-lists.ts', 'startListing(launch, { cwd, env, onLine });'), []);
+    for (const path of ['src/chat.ts', 'src/setup.ts', 'src/main.ts']) {
+        assert.notDeepEqual(processViolations(path, "import { startListing } from './chat-process.ts';"), [], path);
+    }
+});
+
 test('a process is signalled only on two lines: a look whether a process runs, with signal 0, and the end of a chat turn', () => {
     for (const [path, line] of Object.entries(signalLines)) {
         assert.ok(statSync(join(root, path)).isFile(), `${path} is named by the guard and missing`);
@@ -116,4 +131,34 @@ test('a process is signalled only on two lines: a look whether a process runs, w
         assert.match(found[0] ?? '', /signals a process/);
     }
     assert.notDeepEqual(processViolations('src/chat-process.ts', '(target) => process.kill(target, 0),'), []);
+});
+
+test('the program runner is called with a command line of a module\'s own only by the runner itself and by a set-up chat\'s one naming run', () => {
+    assert.deepEqual(runFileCalls, { 'src/programs.ts': 1, 'src/chat-naming.ts': 1 });
+    assert.match(processModules['src/programs.ts'] ?? '', /an agent host's one naming run of a set-up chat/);
+    for (const [path, calls] of Object.entries(runFileCalls)) {
+        const text = readFileSync(join(root, path), 'utf8');
+        assert.equal([...text.matchAll(/\brunFile\s*\(/g)].length - [...text.matchAll(/function\s+runFile\s*\(/g)].length, calls, `${path} no longer makes its ${calls} call`);
+    }
+    const planted = processViolations('src/chat.ts', "import { runFile } from './programs.ts';\nawait runFile(file, ['--yes'], env);\n");
+    assert.deepEqual(planted.map((line) => line.replace(/^src\/chat\.ts /, '').split(';')[0]), ['calls the program runner 1 times', 'imports the program runner']);
+    assert.notDeepEqual(processViolations('src/chat-naming.ts', 'await runFile(a, b, c);\nawait runFile(a, b, c);\n'), [], 'a second run in the naming module');
+    assert.deepEqual(processViolations('src/chat-naming.ts', 'await runFile(a, b, c);\n'), []);
+    assert.deepEqual(processViolations('src/chat.ts', 'const at = paths.runFile;\nreadRunFile(x);\n'), [], 'the run file is no call of the runner');
+});
+
+test('the runner is imported only by the two modules that call it: no other module takes runFile, under any name, or programs.ts whole', () => {
+    for (const planted of [
+        "import { runFile as start } from './programs.ts';\nawait start(file, [], env);\n",
+        "import { programLaunch, runFile } from './programs';",
+        "import * as programs from './programs.ts';\nawait programs['run' + 'File'](file, [], env);\n",
+        "const { runFile: start } = await import('./programs.ts');",
+        "const programs = require('./programs.ts');",
+        "export { runFile } from './programs.ts';",
+    ]) {
+        assert.notDeepEqual(processViolations('src/chat.ts', planted), [], planted);
+    }
+    assert.deepEqual(processViolations('src/chat.ts', "import { programLaunch, type Programs } from './programs.ts';"), []);
+    assert.deepEqual(processViolations('src/setup.ts', "import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';"), []);
+    assert.deepEqual(processViolations('src/chat-naming.ts', "import { runFile, type RunResult } from './programs.ts';\nawait runFile(a, b, c);\n"), []);
 });

@@ -7,22 +7,48 @@
  */
 export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
-    'src/programs.ts': 'the programs a Connect card runs: reply, npm, and the version of an agent host or of node',
-    'src/chat-process.ts': "an agent host for one turn of the chat, streamed, and on Windows taskkill from the system folder to end that turn's process tree",
-    'src/shell-path.ts': "the login shell, on macOS only, for the PATH a program started from the Finder lacks",
+    'src/programs.ts': "the programs a Connect card runs: reply, npm, and the version of an agent host or of node; and an agent host's one naming run of a set-up chat, which src/chat-naming.ts gives its command line",
+    'src/chat-process.ts': "an agent host for one turn of the chat, streamed, or an agent host's model listing (`codex app-server`, `startListing`), and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
+    'src/shell-path.ts': "the login shell, on macOS and Linux only, for the PATH a program started from the Finder or a session's menu lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
     'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
 };
 
 /**
  * The two lines that may signal a process, each in its one module: the look whether the process a run file names is
- * running, with signal 0, which delivers nothing, and the end of a chat turn's process group. Anything else that
- * reaches `process.kill` could stop whatever program holds a pid read from a file.
+ * running, with signal 0, which delivers nothing, and the end of a chat turn's process group or of a program run past
+ * its limit. Anything else that reaches `process.kill` could stop whatever program holds a pid read from a file.
  */
 export const signalLines: Readonly<Record<string, string>> = {
     'src/own-runtime.ts': 'process.kill(pid, 0);',
     'src/chat-process.ts': '(target, signal) => process.kill(target, signal),',
 };
+
+/**
+ * The one module that may start an agent host's model listing (`startListing` in src/chat-process.ts, which starts
+ * `codex app-server` and nothing else), with what it starts it for.
+ */
+export const listingCallers: Readonly<Record<string, string>> = {
+    'src/model-lists.ts': "the models Codex offers, asked at most once a day per host id, one ask at a time",
+};
+
+const listingStart = /\bstartListing\b/;
+
+/**
+ * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
+ * the runner's own run of a program the PATH finds, and a set-up chat's one naming run. Anything else starts a program
+ * through `Programs.run`, by a name the desktop knows.
+ */
+export const runFileCalls: Readonly<Record<string, number>> = { 'src/programs.ts': 1, 'src/chat-naming.ts': 1 };
+
+const runFileCall = /\brunFile\s*\(/g;
+const runFileDefinition = /function\s+runFile\s*\(/g;
+/** The program runner's module, by its specifier: `./programs.ts` or `./programs`. */
+const programsModule = String.raw`['"]\.\/programs(?:\.ts)?['"]`;
+/** An import or re-export that names `runFile`, under any name it is given. */
+const runFileNamed = new RegExp(String.raw`(?:import|export)\s*(?:type\s+)?\{[^}]*\brunFile\b[^}]*\}\s*from\s*${programsModule}`);
+/** The runner's module taken whole, so what it holds is reached by a name the guard cannot read. */
+const programsWhole = new RegExp(String.raw`import\s*\*\s*as\s+\w+\s*from\s*${programsModule}|\b(?:require|import)\s*\(\s*${programsModule}`);
 
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */
 export const ipcModule = 'src/ipc.ts';
@@ -75,10 +101,10 @@ export function processViolations(path: string, text: string): string[] {
     }
     if (shellOption.test(text)) found.push(`${path} sets a shell option, which nothing in the desktop may`);
     if (path !== 'src/shell-path.ts' && (shellName.test(text) || shellVariable.test(text))) {
-        found.push(`${path} names a shell, which only the macOS login-shell lookup in src/shell-path.ts may`);
+        found.push(`${path} names a shell, which only the login-shell lookup of macOS and Linux in src/shell-path.ts may`);
     }
-    if (path === 'src/shell-path.ts' && !/process\.platform\s*!==\s*'darwin'/.test(text)) {
-        found.push(`${path} must return before the login shell anywhere but macOS`);
+    if (path === 'src/shell-path.ts' && !/process\.platform\s*!==\s*'darwin'\s*&&\s*process\.platform\s*!==\s*'linux'\)\s*return/.test(text)) {
+        found.push(`${path} must return before the login shell anywhere but macOS and Linux`);
     }
     if (named && (childProcessRequire.test(text) || childProcessDynamicImport.test(text))) {
         found.push(`${path} requires child_process; a named module imports it by name, so what it starts is read`);
@@ -90,6 +116,14 @@ export function processViolations(path: string, text: string): string[] {
         const end = text.indexOf('\n', match.index);
         const line = text.slice(text.lastIndexOf('\n', match.index) + 1, end < 0 ? text.length : end).trim();
         if (signalLines[path] !== line) found.push(`${path} signals a process with ${line}; only the two lines the guard names may`);
+    }
+    if (listingStart.test(text) && path !== 'src/chat-process.ts' && !(path in listingCallers)) {
+        found.push(`${path} starts an agent host's model listing; only ${Object.keys(listingCallers).join(', ')} may`);
+    }
+    const runs = [...text.matchAll(runFileCall)].length - [...text.matchAll(runFileDefinition)].length;
+    if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);
+    if (!(path in runFileCalls) && (runFileNamed.test(text) || programsWhole.test(text))) {
+        found.push(`${path} imports the program runner; only the runner itself and a set-up chat's naming run may`);
     }
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);

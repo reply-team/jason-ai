@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { judge } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { PermissionBroker } from '../src/chat-permission-broker.ts';
-import { hostCallLimitMs, newSecret, newTurnId, removeTurnFiles, turnConfig, turnConfigPath, writeTurnConfig } from '../src/chat-turn-files.ts';
+import { hostCallLimitMs, namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnConfig, turnConfigPath, writeTurnConfig } from '../src/chat-turn-files.ts';
 import { desktopPaths } from '../src/paths.ts';
 
 function data(): string {
@@ -76,4 +76,20 @@ test('the turn\'s file is removed when the turn ends, and removing it twice is n
     removeTurnFiles(desktop, id);
     assert.equal(existsSync(file), false);
     removeTurnFiles(desktop, id);
+});
+
+test('the start removes a turn file and a naming run\'s folder left behind, with what is in it, and nothing else there', (t) => {
+    const root = data();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const turns = desktopPaths(root).turns;
+    const id = newTurnId();
+    writeTurnConfig(turns, id, 'http://127.0.0.1:1/mcp', newSecret());
+    const folder = namingFolderPath(turns, newTurnId());
+    mkdirSync(join(folder, '.claude'), { recursive: true });
+    writeFileSync(join(folder, '.claude', 'left.json'), '{}');
+    mkdirSync(join(turns, 'naming-other'));
+    writeFileSync(join(turns, 'kept.txt'), 'x');
+    sweepTurnFiles(turns);
+    assert.deepEqual(readdirSync(turns).sort(), ['kept.txt', 'naming-other']);
+    assert.throws(() => namingFolderPath(turns, '../x'), /not a turn id/);
 });

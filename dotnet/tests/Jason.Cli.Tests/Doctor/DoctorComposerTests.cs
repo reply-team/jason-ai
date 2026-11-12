@@ -1125,6 +1125,69 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// The desktop keeps each conversation of its chat as a record under <c>desktop/conversations/</c> in the data
+    /// directory: what the person and the agent said, the hosts' session ids, a campaign's name as the title. No bundle
+    /// carries any of it, its count or its size included, the journal asked for or not, and the list of what a bundle
+    /// never holds names it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task No_bundle_carries_a_conversation_of_the_desktop_s_chat(bool includeJournal)
+    {
+        using var dir = new TempPaths();
+        const string id = "conv_01JD7Q6V2N0000000000000000";
+        var folder = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop", "conversations")).FullName;
+        File.WriteAllText(
+            Path.Combine(folder, id + ".json"),
+            """{"id":"conv_01JD7Q6V2N0000000000000000","campaign_id":"cmp_01SENTINELCONVERSATION","title":"SENTINEL_TITLE","created_at":"2026-11-11T10:00:00.000Z","updated_at":"2026-11-11T10:00:00.000Z","sessions":{"claude":"SENTINEL_SESSION"},"entries":[{"kind":"user","text":"SENTINEL_WORDS"}],"dropped":0}""");
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "desktop-20261004.jsonl", Event(At(0), "desktop line"));
+
+        var file = (await ComposeAsync(dir, Running(dir), includeJournal)).Serialize();
+
+        foreach (var withheld in (string[])[id, "conversations", "cmp_01SENTINELCONVERSATION", "SENTINEL_TITLE", "SENTINEL_SESSION", "SENTINEL_WORDS"])
+        {
+            Assert.DoesNotContain(withheld, file.Replace(ConversationsNeverCarried, string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+        }
+
+        Assert.Contains(ConversationsNeverCarried, DoctorComposer.NeverCarried);
+    }
+
+    /// <summary>
+    /// A chat turn on a provider's key runs its host in a folder of the desktop's own, <c>desktop/claude-keyed/</c> or
+    /// <c>desktop/codex-keyed/</c> in the data directory, which keeps that host's transcripts of the turn: no bundle
+    /// carries any of it, the folders' names included, the journal asked for or not. A file named as the desktop's log is
+    /// there too, so a bundle that read logs from the wrong folder would carry it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task No_bundle_carries_a_transcript_of_a_chat_turn_on_a_provider_s_key(bool includeJournal)
+    {
+        using var dir = new TempPaths();
+        var claude = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop", "claude-keyed", "claude-api-key", "projects", "chat")).FullName;
+        File.WriteAllText(
+            Path.Combine(claude, "4f1c2b3a-0000-4000-8000-000000000001.jsonl"),
+            """{"type":"user","message":{"role":"user","content":"SENTINEL_KEYED_WORDS"},"sessionId":"SENTINEL_KEYED_SESSION"}""");
+        Write(claude, "desktop-20261004.jsonl", Event(At(0), "SENTINEL_KEYED_LOG_LINE"));
+        var codex = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "desktop", "codex-keyed", "sessions", "2026", "11", "11")).FullName;
+        File.WriteAllText(Path.Combine(codex, "rollout-2026-11-11T10-00-00-SENTINEL_CODEX_THREAD.jsonl"), """{"type":"message","content":"SENTINEL_CODEX_WORDS"}""");
+        var logs = Directory.CreateDirectory(dir.Paths.LogsDirectory).FullName;
+        Write(logs, "desktop-20261004.jsonl", Event(At(0), "desktop line"));
+
+        var file = (await ComposeAsync(dir, Running(dir), includeJournal)).Serialize();
+
+        foreach (var withheld in (string[])["claude-keyed", "codex-keyed", "SENTINEL_KEYED_WORDS", "SENTINEL_KEYED_SESSION", "SENTINEL_KEYED_LOG_LINE", "SENTINEL_CODEX_THREAD", "SENTINEL_CODEX_WORDS"])
+        {
+            Assert.DoesNotContain(withheld, file, StringComparison.Ordinal);
+        }
+    }
+
+    private const string ConversationsNeverCarried =
+        "the desktop's conversations under desktop/conversations/ in the data directory, and the transcripts the agent hosts keep of the desktop's chat";
+
+    /// <summary>
     /// An id is written only when it is well formed. A campaign id or a snapshot id the runtime sent in any other shape is
     /// a value nobody vouched for, and it is written as the settings write a key nobody chose.
     /// </summary>

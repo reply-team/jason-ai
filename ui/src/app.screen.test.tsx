@@ -25,6 +25,29 @@ describe('the shell', () => {
         await waitFor(() => expect(screen.getByText(/ada · Jason/)).toBeTruthy());
     });
 
+    it('heads the sidebar with the mark and the wordmark, not the word, and the pairing page with them too', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/empty')
+            .answer('decision.list', 'decision.list/empty');
+        const { unmount } = renderApp(fake);
+        const head = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.sidebar .brand');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(Array.from(head.querySelectorAll('img'), (img) => img.getAttribute('src')?.split('/').pop())).toEqual([
+            'favicon.svg',
+            'brand-wordmark.svg',
+            'brand-wordmark-dark.svg',
+        ]);
+        expect(screen.getAllByRole('img', { name: 'Jason AI, GTM Harness' })).toHaveLength(2);
+        expect(head.querySelector('.glyph')).toBeNull();
+        unmount();
+        renderApp(new FakeApi(), { paired: false });
+        await waitFor(() => expect(screen.getByText(/jason ui open/)).toBeTruthy());
+        expect(screen.getAllByRole('img', { name: 'Jason AI, GTM Harness' })).toHaveLength(2);
+    });
+
     it('shows pair-again when the runtime answers 401, and clears the stored pairing', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/unauthorized')

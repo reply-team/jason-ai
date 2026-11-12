@@ -56,12 +56,15 @@ means today.
 - **What you don't need:** `git`, a build, a server, a mock provider, a hosted account or an onboarding call.
 - **How you take it off:** `jason uninstall`. It removes only the skills it recorded installing, so anything you copied in
   by hand stays. Your data stays too unless you add `--purge-data`, and your `~/Jason` folder is never touched.
+- **If you would rather have a window:** [Jason Desktop](#jason-desktop) installs from one download, a signed installer
+  for Windows, a dmg for macOS, or a deb or an AppImage for Linux, and comes off with Remove What Jason Placed… in its
+  menu (macOS and Linux) or Windows's own uninstaller, and then the application itself. It keeps your data too.
 
 **1. Paste this into your agent.** It installs Jason, checks it's ready and guides you to your first campaign.
 
 ```text
 Install Jason on this machine. The instructions are
-<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>: read the whole file
+<https://get.jasonharness.ai/install>: read the whole file
 first, then follow it in order from section 2, installing from a release and building nothing. Before
 you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
 again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
@@ -136,9 +139,9 @@ to.
 | **Human in the loop** | Every operation that reaches a real person waits for a person's approval, in the chat or the browser UI. It is written into the operation's contract, not left to a setting, and there is no autopilot switch. Two things to know: enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps; and a named person can pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Every such release is logged under that person's name. | [Nothing reaches a person without you](#nothing-reaches-a-person-without-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
-| **Documentation** | 19 guides, 30 operation contracts in Markdown and JSON with 905 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
+| **Documentation** | 20 guides, 30 operation contracts in Markdown and JSON with 905 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries 1038 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 1 of the 25 skills is `verified`, meaning an agent host was recorded reading that exact text; the other 24 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Maturity** | Alpha, and young. The runtime's source and the public history opened with 0.24.0 on 1 November 2026, so the community is still small. The repository carries 1040 C# test files and a UI test suite, with CI on macOS, Linux and Windows. 1 of the 25 skills is `verified`, meaning an agent host was recorded reading that exact text; the other 24 are still `draft`. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -151,6 +154,7 @@ to.
 - [What you get](#what-you-get)
 - [How it works](#how-it-works)
 - [Just ask](#just-ask)
+- [Jason Desktop](#jason-desktop)
 - [The team](#the-team)
 - [Nothing reaches a person without you](#nothing-reaches-a-person-without-you)
 - [Your outbound stack](#your-outbound-stack)
@@ -272,6 +276,28 @@ No forms, no sequence builder. You say what you want the way you'd brief a great
 - *"Draft answers to today's replies. I'll approve them after lunch."*
 - *"What's working in the agency campaign, and what should we stop?"*
 - *"Before anything goes to a bank, check it against our compliance rules."*
+
+---
+
+## Jason Desktop
+
+Jason Desktop is a window onto the same installation your agent and the `jason` command use, for the moments you want
+to see a screen. It is one more client of the runtime, not a second Jason: it works on the data directory the CLI
+uses, starts the runtime through `jason runtime start`, and changes the installation only through the CLI's verbs. It
+adds a chat that starts your own agent (Claude Code, or Codex to read and advise) on your computer and asks you before
+the agent acts, a tray that counts what waits for you, and one-step setup of Reply, your notification channels and your
+AI provider's key. The full experience is still a session with your agent, by text or by voice, with the skills
+loaded; the desktop never replaces it, and what a screen shows is never all there is.
+
+It is published with every release, from the [releases page](https://github.com/reply-team/jason-ai/releases), as
+`jason-desktop-windows-x64-setup.exe` for Windows on x64, `jason-desktop-macos-arm64.dmg` and
+`jason-desktop-macos-x64.dmg` for macOS, and for Linux on x64 `jason-desktop-linux-x64.deb` (Debian and Ubuntu, and the
+one to take on Ubuntu 24.04 and later) and `jason-desktop-linux-x64.AppImage`, or from the short addresses `get.jasonharness.ai/desktop/windows`, `/desktop/mac`,
+`/desktop/mac-intel`, `/desktop/linux-deb` and `/desktop/linux-appimage`. The Windows and macOS packages are
+signed; the Linux ones are not, and are built so, started once under a virtual display, and not yet seen on a real
+machine. To take it off, choose Remove What Jason Placed… in its menu on macOS and Linux (Windows's uninstaller does the same) and then
+remove the application; your data stays. [Jason Desktop](https://github.com/reply-team/jason-ai/blob/main/docs/desktop.md)
+says what it does, what its chat may run, how it updates and how it comes off.
 
 ---
 
@@ -615,14 +641,14 @@ yourself. Nothing else. No telemetry.
 
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
-**In numbers:** 19 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 905 contract fixtures and
-366 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 7 runtime skills and 9 role
+**In numbers:** 20 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 905 contract fixtures and
+381 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 7 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |
 |---|---|
 | Understand why Jason exists, and who it isn't for | [Philosophy](https://github.com/reply-team/jason-ai/blob/main/docs/philosophy.md) |
-| Install it, update it or take it off | [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) · [Release and update](https://github.com/reply-team/jason-ai/blob/main/docs/release-and-update.md) |
+| Install it, update it or take it off | [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) · [Release and update](https://github.com/reply-team/jason-ai/blob/main/docs/release-and-update.md) · [Jason Desktop](https://github.com/reply-team/jason-ai/blob/main/docs/desktop.md) |
 | Run the installation day to day: the runtime, the CLI, the plugins, the ecosystem | [Handbook](https://github.com/reply-team/jason-ai/blob/main/docs/handbook.md) |
 | Walk the whole path once, from empty to one approved operation | [The wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) |
 | See how the pieces fit | [Architecture](https://github.com/reply-team/jason-ai/blob/main/docs/architecture.md) · [Work execution](https://github.com/reply-team/jason-ai/blob/main/docs/work-execution.md) · [Campaign manager](https://github.com/reply-team/jason-ai/blob/main/docs/campaign-manager.md) · [Projects](https://github.com/reply-team/jason-ai/blob/main/docs/projects.md) |

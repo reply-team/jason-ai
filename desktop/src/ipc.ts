@@ -13,9 +13,25 @@ export const invokeChannels = {
     'setup.installProgram': 'jason:setup.installProgram',
     'setup.configurePlugin': 'jason:setup.configurePlugin',
     'setup.disconnectPlugin': 'jason:setup.disconnectPlugin',
+    'setup.replyLinkedInConnect': 'jason:setup.replyLinkedInConnect',
+    'setup.replyLinkedInPendingLink': 'jason:setup.replyLinkedInPendingLink',
+    'setup.replyLinkedInReconnect': 'jason:setup.replyLinkedInReconnect',
+    'setup.replyMailboxLink': 'jason:setup.replyMailboxLink',
+    'theme.get': 'jason:theme.get',
+    'theme.set': 'jason:theme.set',
     'chat.send': 'jason:chat.send',
     'chat.stop': 'jason:chat.stop',
     'chat.answer': 'jason:chat.answer',
+    'chat.list': 'jason:chat.list',
+    'chat.open': 'jason:chat.open',
+    'chat.create': 'jason:chat.create',
+    'chat.remove': 'jason:chat.remove',
+    'chat.restart': 'jason:chat.restart',
+    'chat.attach': 'jason:chat.attach',
+    'chat.rename': 'jason:chat.rename',
+    'chat.setMode': 'jason:chat.setMode',
+    'chat.feed': 'jason:chat.feed',
+    'links.take': 'jason:links.take',
 } as const;
 
 /** What the desktop sends the page. */
@@ -23,6 +39,7 @@ export const eventChannels = {
     command: 'jason:command',
     'chat.event': 'jason:chat.event',
     'setup.changed': 'jason:setup.changed',
+    'links.open': 'jason:links.open',
 } as const;
 
 export type InvokeMember = keyof typeof invokeChannels;

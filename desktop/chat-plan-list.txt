@@ -1,0 +1,46 @@
+# The jason commands the desktop's chat runs in Plan only, one per line: the verbs of chat-allow-list.txt that change
+# nothing. In Plan only every other jason command is refused.
+#
+# Written from chat-allow-list.txt by DesktopDenyListTests, where each verb of the allow list is declared a read or a
+# change; a verb added to the CLI is red there until it is declared and JASON_UPDATE_FIXTURES=1 writes this file
+# again. Do not edit it by hand.
+approval get
+approval list
+approval list-standing
+block get
+block list
+campaign activity
+campaign activity-by-period
+campaign get
+campaign list
+campaign list-contacts
+campaign summary
+contact get
+contact list
+contact thread
+contact threads
+decision get
+decision list
+events sources
+journal kinds
+journal list
+logs
+plugin list
+preference list
+project get
+project list
+report get
+report list
+role list
+rolenote get
+rolenote list
+route list
+route resolve
+status
+subscription list
+subscription runs
+suppression list
+workitem count
+workitem get
+workitem list
+workitem wait

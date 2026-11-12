@@ -96,28 +96,29 @@ export function attentionStore() {
         }
     }
 
-    /** Every pending item in the list's order: approvals, then questions. */
-    function pendingInOrder(): { kind: Kind; id: string }[] {
+    /** Every pending item in the list's order, approvals then questions, or of the one kind a filter shows. */
+    function pendingInOrder(only?: Kind): { kind: Kind; id: string }[] {
         return [
-            ...approvals.value.map((a) => ({ kind: 'approvals' as const, id: a.id })),
-            ...questions.value.map((q) => ({ kind: 'questions' as const, id: q.id })),
+            ...(only === 'questions' ? [] : approvals.value.map((a) => ({ kind: 'approvals' as const, id: a.id }))),
+            ...(only === 'approvals' ? [] : questions.value.map((q) => ({ kind: 'questions' as const, id: q.id }))),
         ];
     }
 
     /**
      * The item after this one in the list's order, wrapping round to the first; null when it is the only one. Computed
-     * before an action, so that after the reload the person lands where the list goes on.
+     * before an action, so that after the reload the person lands where the list goes on; under a filter, among the
+     * items it shows.
      */
-    function nextPending(after: { kind: Kind; id: string }): { kind: Kind; id: string } | null {
-        const all = pendingInOrder();
+    function nextPending(after: { kind: Kind; id: string }, only?: Kind): { kind: Kind; id: string } | null {
+        const all = pendingInOrder(only);
         const at = all.findIndex((x) => x.kind === after.kind && x.id === after.id);
         const rest = at < 0 ? all : [...all.slice(at + 1), ...all.slice(0, at)];
         return rest[0] ?? null;
     }
 
     /** The planned item if the reloaded list still holds it, else the first one left, else null. */
-    function stillPending(planned: { kind: Kind; id: string } | null): { kind: Kind; id: string } | null {
-        const all = pendingInOrder();
+    function stillPending(planned: { kind: Kind; id: string } | null, only?: Kind): { kind: Kind; id: string } | null {
+        const all = pendingInOrder(only);
         if (planned && all.some((x) => x.kind === planned.kind && x.id === planned.id)) return planned;
         return all[0] ?? null;
     }

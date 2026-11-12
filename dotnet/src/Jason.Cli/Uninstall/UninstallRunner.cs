@@ -165,9 +165,9 @@ public static class UninstallRunner
         AutostartRemoval removed;
         try
         {
-            // Composed the one way this product composes it. A second place that knew how this machine
-            // registers things would be a second place to be wrong about how it unregisters them.
-            removed = registrar.Remove(RuntimeAutostartCommands.Registration(env, registrar.Platform));
+            // Composed the one way this product composes a removal, the way `disable` does. A second place that knew
+            // how this machine registers things would be a second place to be wrong about how it unregisters them.
+            removed = registrar.Remove(RuntimeAutostartCommands.Removal(env, registrar.Platform));
         }
         catch (AutostartException refusal)
         {

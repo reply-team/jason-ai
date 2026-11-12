@@ -6,6 +6,63 @@
  */
 export {};
 
+/**
+ * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, a campaign created, started or
+ * paused, and work that stopped. Each is a kind the runtime writes itself.
+ */
+export type DesktopFeedKind =
+    | 'inbound_reply_observed'
+    | 'approval_requested'
+    | 'decision_raised'
+    | 'campaign_created'
+    | 'campaign_started'
+    | 'campaign_paused'
+    | 'workitem_failed'
+    | 'workitem_expired'
+    | 'provider_blocked';
+
+/**
+ * A journal line as the page hands it to the Feed: its id, moment, kind, campaign and work item, as `journal.list` and
+ * the journal's stream carry them, and nothing else of it.
+ */
+export interface DesktopFeedLine {
+    id: string;
+    ts: string;
+    kind: DesktopFeedKind;
+    campaign_id: string;
+    work_item_id: string | null;
+}
+
+/**
+ * One line of the Feed as the desktop keeps it: identifiers, a kind, a moment and a count, never a person's text.
+ * `journal_id` and `at` are the newest journal line's it stands for; `count` how many lines of its kind and campaign
+ * followed one another into it.
+ */
+export interface DesktopLineEntry {
+    kind: 'line';
+    journal_kind: DesktopFeedKind;
+    journal_id: string;
+    at: string;
+    campaign_id: string;
+    work_item_id?: string;
+    count: number;
+}
+
+/**
+ * A page a `jason-desktop://` link opens, as the desktop parsed it from a closed table of addresses: the Feed, one of the
+ * console's panels, or a screen at one entity whose id the desktop held to its shape. A link opens that page and does
+ * nothing else.
+ */
+export type DesktopLink =
+    | { page: 'feed' }
+    | { page: 'needs' }
+    | { page: 'campaigns' }
+    | { page: 'campaign'; id: string }
+    | { page: 'approval'; id: string }
+    | { page: 'question'; id: string }
+    | { page: 'workitem'; id: string }
+    | { page: 'person'; id: string };
+
 /** A command from the desktop's menu, tray or keybindings. The page ignores one it does not know. */
 export type DesktopCommand =
     | 'chat.new'
@@ -20,14 +77,110 @@ export type DesktopCommand =
     | 'navigate.settings'
     | 'navigate.connect';
 
-/** What `chat.send` takes besides the text. */
+/**
+ * How hard the model thinks, as the host's own flag: one of five levels, the same words on every host. The desktop
+ * passes no other word, `ultracode` and `ultra` among them.
+ */
+export type DesktopEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/** What `chat.send` takes besides the text: never a campaign, which the conversation the desktop keeps decides. */
 export interface DesktopChatOptions {
     /** The agent host the turn runs on: the `id` of one of `setup.status().hosts` whose `drivesChat` is true. */
     host: string;
     /** A model the host offers, by the name the host takes; absent, the host's own default. */
     model?: string;
-    /** The campaign the chat is about, when it was opened from one: `cmp_` and its ULID. */
-    campaignId?: string;
+    /**
+     * An effort the model named takes, one of its `DesktopModel.efforts`; absent, the host's own. The desktop refuses a
+     * send whose effort the model does not take, and one with an effort and no model, before any host starts.
+     */
+    effort?: DesktopEffort;
+}
+
+/**
+ * A chat's access mode, chosen per conversation from the menu beside the composer. `ask_first`, the default of every new
+ * chat: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads and proposes,
+ * and changes nothing. `full_access`: it acts on this computer without asking; the desktop asks the person to confirm,
+ * each time it is chosen, and holds it for that conversation only until the window closes. Codex has no Full access.
+ */
+export type DesktopChatMode = 'ask_first' | 'plan_only' | 'full_access';
+
+/** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
+export interface DesktopModel {
+    id: string;
+    label: string;
+    /** The effort levels it takes; empty when it takes none, and then the box shows no effort for it. */
+    efforts: DesktopEffort[];
+}
+
+/** What a conversation's last turn was sent with: its host, its model (null: the host's own) and its effort. */
+export interface DesktopChosen {
+    host: string;
+    model: string | null;
+    effort: DesktopEffort | null;
+}
+
+/**
+ * One conversation the desktop keeps under its data directory: a campaign's, one per campaign, or a set-up chat about
+ * no campaign yet, any number of them. Its id is the `chatId` every other chat call takes.
+ */
+export interface DesktopConversation {
+    /** `conv_` and 26 Crockford base-32 characters, made by the desktop. */
+    id: string;
+    /** The campaign it is about: `cmp_` and its ULID; null for a set-up chat and for the Feed. */
+    campaignId: string | null;
+    /**
+     * Present, and true, for the Feed: the person's main chat, one per desktop, into which the journal's lines come. It is
+     * never renamed, removed or handed over to a campaign.
+     */
+    main?: true;
+    /**
+     * The name a person gave it, one line within sixty characters, which nothing replaces afterwards; else the
+     * campaign's name, one line; else for a set-up chat a name of two to five words the desktop asked its model for
+     * after the first turn, or the first sixty characters of the person's first message, or "New chat". A person's or a
+     * model's text, shown as text.
+     */
+    title: string;
+    /** When it last changed, ISO-8601 UTC. */
+    updatedAt: string;
+    /** Whether a turn of it runs now, so a page loaded again shows it running, with Stop. */
+    running: boolean;
+    /**
+     * Its mode as the desktop holds it now. The line under the composer that says Full access is on is drawn from this,
+     * from `chat.setMode`'s answer and from `mode` events, never from what the page asked for.
+     */
+    mode: DesktopChatMode;
+}
+
+/**
+ * A call the desktop refused, answered as a value: `refused` is the desktop's sentence alone, for the page to show as
+ * it is. A promise of the seam rejects only for what is no refusal.
+ */
+export interface DesktopRefusal {
+    refused: string;
+}
+
+/**
+ * One thing the page drew, as the desktop kept it: text only, never markup, drawn by the same code as the live event it
+ * stands for. A card keeps the answer it was given: `gone` when it no longer waited, null when it was never answered.
+ */
+export type DesktopKeptEntry =
+    | { kind: 'user'; text: string }
+    | { kind: 'text'; text: string }
+    | { kind: 'step'; text: string; detail?: string }
+    | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
+    | { kind: 'error'; text: string }
+    | { kind: 'pick'; campaignIds: string[] }
+    /** A line of the Feed, which only the Feed keeps. */
+    | DesktopLineEntry
+    /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
+    | { kind: 'gap' };
+
+/** A conversation with what the page drew, oldest first, within 2 MB: `dropped` counts the oldest entries let go. */
+export interface DesktopConversationRecord extends DesktopConversation {
+    entries: DesktopKeptEntry[];
+    dropped: number;
+    /** What its last turn was sent with, for the box to show again; null before its first. */
+    chosen: DesktopChosen | null;
 }
 
 /** One thing a running turn says, in the order the host says it. The chat id it belongs to comes beside it. */
@@ -50,6 +203,39 @@ export type DesktopChatEvent =
      * it after this changes nothing.
      */
     | { kind: 'permission_gone'; request: string }
+    /**
+     * The set-up chat became the conversation of `campaignId`, named `title`: its turn made exactly that one campaign,
+     * or the person picked it (`chat.attach`). Said before the turn's `done`.
+     */
+    | { kind: 'attached'; campaignId: string; title: string }
+    /**
+     * The turn starts a fresh session of the host, given a recap of the conversation's earlier messages: the host has
+     * not seen this conversation (`host_changed`), or its session could not be resumed (`not_found`).
+     */
+    | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
+    /**
+     * The set-up chat's turn made campaigns the desktop does not hand over by itself: more than one, or while another
+     * set-up chat's turn ran. The person picks one of `campaignIds` (`chat.attach`), or none. Said before `done`.
+     */
+    | { kind: 'pick'; campaignIds: string[] }
+    /**
+     * The conversation's title changed: a person renamed it (`chat.rename`), or the desktop named a set-up chat by what it
+     * is about once its first turn ended well, which may come after that turn's `done`.
+     */
+    | { kind: 'renamed'; title: string }
+    /**
+     * The conversation's mode changed: a person chose it (`chat.setMode`), or the desktop put the chat back to Ask first,
+     * because its turn ran on Codex, on a Claude Code too old for Full access, or showed a tool the desktop's check never
+     * saw.
+     */
+    | { kind: 'mode'; mode: DesktopChatMode }
+    /**
+     * The Feed took a line: at its end, or, when `folded`, in place of its last line, which was of the same kind and
+     * campaign. A line never starts a turn.
+     */
+    | { kind: 'line'; line: DesktopLineEntry; folded: boolean }
+    /** The Feed's catch-up read back fewer lines than were written while the window was closed; newer ones follow. */
+    | { kind: 'gap' }
     /** The turn is over: `error` is null when it ended well, else the host's own words for why it did not. */
     | { kind: 'done'; error: string | null };
 
@@ -71,6 +257,29 @@ export interface DesktopHost {
     drivesChat: boolean;
     /** The `programId` for `setup.installProgram` when the program is not found and npm is there to install it. */
     install: string | null;
+    /**
+     * When the Claude Code the host runs on is older than the oldest version the chat runs on, or its version could not
+     * be read, the desktop's sentence that says so and how to update it; null otherwise. The chat lists such a host and
+     * runs no turn on it, and the desktop refuses a turn sent to it whatever the page asked.
+     */
+    belowFloor: string | null;
+    /**
+     * Why Full access cannot be chosen for a chat on it, in the desktop's words: "Full access runs on Claude Code only."
+     * on Codex, or the version Claude Code needs for it; null where it can be. The menu shows the item disabled with this.
+     */
+    fullAccess: string | null;
+    /**
+     * The models the chat's box offers on it: Claude Code's aliases, the models Codex offered when last asked (kept by
+     * the desktop and asked again at most once a day), or a key provider's own; empty for a host that offers none here.
+     */
+    models: DesktopModel[];
+    /** Whether the box also takes a model's full name the person types, with no effort: Claude Code and Anthropic's key. */
+    typedModel: boolean;
+    /**
+     * Where the host's models are asked of it (Codex) and no list was ever read, the desktop's one line saying so, and
+     * that the turn uses the host's own default model; null otherwise. The box then offers the host's default alone.
+     */
+    modelsUnread: string | null;
 }
 
 /** An account Reply holds, as the Reply CLI lists it. */
@@ -86,6 +295,9 @@ export interface DesktopReplyAccount {
     status: string;
 }
 
+/** A channel Reply lists accounts for. */
+export type DesktopReplyChannel = 'email' | 'linkedin';
+
 /** The Reply connection: the Reply CLI, its sign-in, and whether Jason's Reply plugin is set up to use it. */
 export interface DesktopReply {
     /** Whether the Reply CLI was found, its version, and the `programId` that installs it when it was not. */
@@ -96,7 +308,46 @@ export interface DesktopReply {
     /** Whether the runtime has the Reply plugin set up with this sign-in. */
     wired: boolean;
     accounts: DesktopReplyAccount[];
+    /** The channels the Reply CLI says are not in this account's plan or role. */
+    absent: DesktopReplyChannel[];
+    /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
+    unread: DesktopReplyChannel[];
+    /**
+     * The LinkedIn connections started from a link and not finished yet, read only where LinkedIn was listed; empty when
+     * the list could not be read. Never with their link: `setup.replyLinkedInPendingLink` asks it again.
+     */
+    linkedinPending: DesktopReplyPending[];
+    /**
+     * Why the LinkedIn link acts are off: the Reply CLI is signed in but older than the one that reads a body from
+     * standard input. The desktop's one sentence, naming the update; null otherwise. The mailbox act is not affected.
+     */
+    linkedinBelowFloor: string | null;
 }
+
+/** A LinkedIn connection that waits to be finished by whoever owns the account. */
+export interface DesktopReplyPending {
+    id: string;
+    /** The name typed for the account when its link was made. */
+    name: string;
+    /** When its link stops working, an ISO-8601 moment as Reply wrote it; null where Reply gave none. */
+    expiresAtUtc: string | null;
+    isExpired: boolean;
+}
+
+/**
+ * A link that connects or reconnects an account with no sign-in to Reply, checked by the desktop: `link` is https,
+ * `host` the host it leads to, drawn beside it; `expiresAtUtc` when it stops working, where Reply said. Whoever holds it
+ * can connect an account to this Reply account: the page shows it in its dialog alone and keeps it no longer.
+ */
+export interface DesktopReplyLink {
+    kind: 'linkedin' | 'mailbox';
+    link: string;
+    host: string;
+    expiresAtUtc: string | null;
+}
+
+/** The mailbox pages a mailbox link opens on: Gmail's, Outlook's, and Reply's hosted page for any other mailbox. */
+export type DesktopMailboxPage = 'gmail' | 'outlook' | 'hosted';
 
 /**
  * A plugin the release carries that the desktop can configure: the three notification channels (slack, telegram, ntfy)
@@ -158,9 +409,22 @@ export interface JasonDesktop {
     platform: 'darwin' | 'win32' | 'linux';
     /** Calls `handler` with each command; the function it returns stops that. */
     onCommand(handler: (command: DesktopCommand) => void): () => void;
+    theme: {
+        /** The theme the desktop keeps, or null when the person never told it one; the page reads it before its first paint. */
+        get(): Promise<'system' | 'light' | 'dark' | null>;
+        /**
+         * Tells the desktop the theme the person chose, `system`, `light` or `dark`, which it keeps and shows in its own
+         * window and starting page. The page calls it as it starts and whenever the choice changes.
+         */
+        set(choice: 'system' | 'light' | 'dark'): Promise<void>;
+    };
     chat: {
-        /** Starts a turn of the chat `chatId`, an id the page makes up and keeps for every turn of one chat. */
-        send(chatId: string, text: string, options: DesktopChatOptions): Promise<void>;
+        /**
+         * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; null once started, or a
+         * refusal for a conversation the desktop does not keep. Every other end of a turn, a refused one included, is a
+         * `done` event.
+         */
+        send(chatId: string, text: string, options: DesktopChatOptions): Promise<DesktopRefusal | null>;
         /** Stops the chat's running turn; a `done` event follows. Nothing running is nothing to stop. */
         stop(chatId: string): Promise<void>;
         /**
@@ -171,6 +435,60 @@ export interface JasonDesktop {
         answer(chatId: string, requestId: string, decision: { allow: boolean; always: boolean }): Promise<void>;
         /** Calls `handler` with every event of every chat; the function it returns stops that. */
         onEvent(handler: (chatId: string, event: DesktopChatEvent) => void): () => void;
+        /** The conversations the desktop keeps, the one changed last first; one never sent to is not kept. */
+        list(): Promise<DesktopConversation[]>;
+        /** One conversation with what the page drew; an id the desktop does not keep is refused. */
+        open(chatId: string): Promise<DesktopConversationRecord | DesktopRefusal>;
+        /**
+         * A conversation to start in: with a campaign, that campaign's own conversation, found or made with its name;
+         * without one, a new set-up chat.
+         */
+        create(campaignId?: string): Promise<DesktopConversation | DesktopRefusal>;
+        /** Removes a conversation and its record: null once done. Refused while its turn runs. */
+        remove(chatId: string): Promise<DesktopRefusal | null>;
+        /**
+         * "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept; null once done. Refused
+         * while its turn runs.
+         */
+        restart(chatId: string): Promise<DesktopRefusal | null>;
+        /**
+         * Makes a set-up chat the conversation of a campaign its last `pick` named; its `attached` event comes before
+         * this answers. Refused while its turn runs, for a conversation already about a campaign, for a campaign that has
+         * a conversation, and for one the pick did not name.
+         */
+        attach(chatId: string, campaignId: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * Renames a conversation, a set-up chat's or a campaign's, to a person's name: one line, with nothing unseen,
+         * within sixty characters. Nothing replaces that name afterwards, and the campaign's own name is not changed. Its
+         * `renamed` event comes before this answers. Refused for a conversation never sent to, and for a name with
+         * nothing that shows.
+         */
+        rename(chatId: string, title: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on. `full_access` is refused
+         * before anything is asked where it cannot apply (Codex, a host that does not drive the chat, a Claude Code too old
+         * for it), in the desktop's words; otherwise the desktop asks the person to confirm, every time, and their no
+         * answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
+         * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
+         */
+        setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * The Feed, made on the first ask, with the journal lines the page hands it: each line of a kind the Feed takes,
+         * about a campaign, with every id in its shape, and not taken before, goes at its end and is said as a `line`
+         * event; any other is left out. No turn starts. An ask with `catchUp`, which the page makes at each load and when
+         * its stream started afresh, also reads back the lines written since a few seconds before the Feed's newest. At
+         * most 200 lines a call; more is refused.
+         */
+        feed(lines: DesktopFeedLine[], options?: { catchUp: true }): Promise<DesktopConversation | DesktopRefusal>;
+    };
+    links: {
+        /**
+         * The link the desktop holds for the page, a cold start's or one that came while no page took links; null when
+         * none waits. From this call on, while this page is loaded, links come by `onOpen`.
+         */
+        take(): Promise<DesktopLink | null>;
+        /** Calls `handler` with each link that comes while this page is loaded; the function it returns stops that. */
+        onOpen(handler: (link: DesktopLink) => void): () => void;
     };
     setup: {
         status(): Promise<DesktopSetup>;
@@ -215,6 +533,23 @@ export interface JasonDesktop {
          * cannot parse or keep is refused, never overwritten.
          */
         disconnectPlugin(pluginId: string): Promise<void>;
+        /**
+         * Asks Reply for a link that adds a LinkedIn account under `name` (one line, 1 to 100 characters), which also
+         * lists it in `linkedinPending` until it is finished. Answers the link, or a refusal in one of the desktop's
+         * sentences; nothing of Reply's own words.
+         */
+        replyLinkedInConnect(name: string): Promise<DesktopReplyLink | DesktopRefusal>;
+        /** Asks Reply again for the link of one of `linkedinPending` by its id, with its expiry. */
+        replyLinkedInPendingLink(pendingId: string): Promise<DesktopReplyLink | DesktopRefusal>;
+        /** Asks Reply for a link that signs a LinkedIn account it holds in again, by the account's id. */
+        replyLinkedInReconnect(accountId: string): Promise<DesktopReplyLink | DesktopRefusal>;
+        /**
+         * Asks Reply for the account's hosted mailbox page and answers one of its addresses: Gmail's or Outlook's, which
+         * connect a mailbox or reconnect the one with the same address, or the hosted page, where any other mailbox is
+         * added or put right. The address does not expire, and whoever holds it can add and manage this Reply account's
+         * mailboxes.
+         */
+        replyMailboxLink(page: DesktopMailboxPage): Promise<DesktopReplyLink | DesktopRefusal>;
         /** Calls `handler` whenever what `status()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };

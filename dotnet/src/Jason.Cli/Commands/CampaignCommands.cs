@@ -422,15 +422,25 @@ public static class CampaignCommands
             + "A person may be in several counts; campaign list-contacts --summary lists who.");
         var ids = CampaignIds();
         var audience = AudienceOption();
+        var withoutArchived = new Option<bool>("--exclude-archived-contacts")
+        {
+            Description = "Leave out archived contacts, whom contact list shows only with --include-archived; by default they are counted.",
+        };
         var human = VerbOptions.Human();
         command.Arguments.Add(ids);
         command.Options.Add(audience);
+        command.Options.Add(withoutArchived);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("campaign_ids", Ids(parseResult.GetValue(ids))).Set("audience", parseResult.GetValue(audience));
+            if (parseResult.GetValue(withoutArchived))
+            {
+                body.Set("exclude_archived_contacts", true);
+            }
+
             return OperationRunner.RunAsync(env, Operations.CampaignSummary, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Summary), cancellationToken);
         });
 

@@ -11,6 +11,7 @@
  */
 
 import { app, dialog } from 'electron';
+import { linkRegistration } from './deep-link.ts';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -44,6 +45,18 @@ function carried() {
     return { home, paths, log, executable, cli, own };
 }
 
+/** The link scheme's registration this application wrote, read and taken off as it was written (`linkRegistration`). */
+function linkStep(): { link?: { registered(): boolean; remove(): boolean } } {
+    const written = linkRegistration(process.platform, app.isPackaged, process.execPath);
+    if (written === null) return {};
+    return {
+        link: {
+            registered: () => app.isDefaultProtocolClient(written.scheme, written.path, written.args),
+            remove: () => app.removeAsDefaultProtocolClient(written.scheme, written.path, written.args),
+        },
+    };
+}
+
 /** Returns the start's exit code (`stopRuntimeCode`). */
 export async function runStopRuntime(): Promise<number> {
     return stopRuntimeCode(() => stopOwnRuntime(carried().own));
@@ -71,9 +84,14 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         login: new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead: Promise.resolve(), log }),
         autostart: { status: () => autostart.registration(), disable: () => autostart.set(false) },
         application: applicationFolder(process.platform, process.execPath),
+        // Windows carries its jason inside the installed folder: there is no copy of it to take off.
+        bundles: null,
+        jason: executable,
         dataDirectory: paths.data,
         harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
-        updaterCache: updaterCache(process.env, home),
+        updaterCache: updaterCache(process.env, home, process.platform),
+        log,
+        ...linkStep(),
     });
     if (!quiet) {
         const { message, detail } = uninstallText(report);

@@ -78,7 +78,7 @@ preamble, no repository tour:
 
 ```text
 Install Jason on this machine. The instructions are
-<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>: read the whole file
+<https://get.jasonharness.ai/install>: read the whole file
 first, then follow it in order from section 2, installing from a release and building nothing. Before
 you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
 again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
@@ -412,6 +412,9 @@ instead of making it twice, and a different request under a key already used is 
 Every verb prints the exact API response as compact JSON on stdout (add `--human` for a readable
 rendering). The runtime keeps its data under `~/.jason` (override with the `JASON_DATA_DIR`
 environment variable).
+
+The CLI expands no response file: an argument that starts with an at sign is a word like any other, so `jason @args.txt`
+is a usage error and exits 2, and a script that relied on it passes the arguments itself.
 
 `JASON_CONFINED`, set to any value but empty, confines the one call of the CLI it is set on, for a host that checks
 what a command reads and runs. An option that reads a file's content into a request (`--file`, `--value-file`,

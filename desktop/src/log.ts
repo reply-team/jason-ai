@@ -37,6 +37,7 @@ export const templates = {
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',
     reply_wired: 'Jason’s Reply plugin was placed and granted reply; global default written {RouteWritten}; jason plugin reload exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
+    reply_api_answered: 'reply api {Act} answered status {Status}, exit {Exit}',
     // The desk: the tray, its notifications.
     tray_state: 'The tray shows the state {State}',
     attention_notified: 'A notification said that {Approvals} approvals and {Questions} questions wait on the person',
@@ -46,9 +47,13 @@ export const templates = {
     repair_failed: 'Pairing the window again at {Origin} failed: jason ui open exited {Exit}',
     // The login items.
     login_item_set: 'Open Jason at login was set to {On} on {Platform}',
+    login_item_moved: 'Open Jason at login was moved to the file an update installed on {Platform}',
     autostart_set: 'Start the runtime at logon was set to {On}: jason runtime autostart exited {Exit}',
     // The PATH command.
     path_command_set: 'The {Name} command on the PATH was set to {On} on {Platform}',
+    // Taking off what the desktop placed: the menu's Remove What Jason Placed, and the Windows uninstaller's start.
+    removal_asked: 'Remove What Jason Placed was answered with {Answer}',
+    removal_step: 'Taking off what Jason placed: the step {Step} ended {Outcome}',
     // The updater.
     update_checked: 'The releases were read; a newer one to offer: {Available}',
     update_offered: 'Jason {Version} is offered',
@@ -56,12 +61,36 @@ export const templates = {
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
+    bundle_copy_failed: 'The jason an AppImage carries was not copied out of it; the copy there differs: {Differs}',
+    autostart_repointed: 'Start the runtime at logon named another version’s copy and was registered again from this one: jason runtime autostart exited {Exit}',
+    path_command_repointed: 'The {Name} command on the PATH ran another version’s copy and was placed again over this one on {Platform}',
+    repoint_failed: 'What named another version’s copy could not be re-pointed: {What}, exit {Exit}',
+    bundle_copies_removed: 'The copies of other versions an AppImage carried were removed: {Count}',
+    bundle_copies_kept: 'The copies of other versions an AppImage carried were kept at this start: {Why}',
+    bundle_copy_removal_failed: 'A copy of another version an AppImage carried could not be removed',
+    // The links: the page a link opened, or why it opened nothing, never the address.
+    deep_link_opened: 'A link opened the page {Page}',
+    deep_link_refused: 'A link opened nothing: {Code}',
+    deep_link_registration_failed: 'The jason link scheme could not be registered for this application',
+    // The sandbox.
+    sandbox_refused: 'The start carried --no-sandbox and was refused, running as {Form}; the desktop does not run without its sandbox',
     // The chat.
-    chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}',
+    chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}; mode {Mode}',
     chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',
-    chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}',
+    chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}; mode {Mode}',
     chat_instructions_missing: 'The chat instruction text {File} is not in the application; turns run without it',
     chat_instructions_unwritten: 'The chat instruction file {File} could not be written ({Code}); turns are refused until it is',
+    chat_conversations_read: 'The chat read {Conversations} conversations; {Unreadable} files of its folder were not records and were left as they were',
+    chat_conversation_unwritten: 'A chat conversation could not be written or removed ({Code})',
+    chat_setup_ended: 'A set-up chat turn ended: the campaign list read {ListRead}, {Found} new campaigns, handed over {HandedOver}',
+    chat_turn_fresh: 'A chat turn started a fresh session of its host ({Cause})',
+    chat_key_source: 'A chat turn on a provider key started, and its host named the key source by a value read as {Source}; the turn went on',
+    chat_models_listed: 'The models {Host} offers were asked for: {Models} kept',
+    chat_models_unlisted: 'The models {Host} offers were asked for and the last list was kept ({Kind})',
+    chat_named: 'A set-up chat was asked a name by its host; the run ended {Outcome}',
+    chat_mode_changed: 'A chat went from mode {From} to mode {To}',
+    chat_turn_stopped: 'A chat turn was stopped by the desktop: {Cause}',
+    agent_folder_unowned: 'The chat folder\'s agent settings could not be put right at the start ({Code})',
 } as const;
 
 export type TemplateName = keyof typeof templates;

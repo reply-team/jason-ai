@@ -4,36 +4,132 @@
  * said with a `done`. Claude Code asks what its rules leave open through the permission endpoint the turn opens; the
  * broker decides what the permission model settles and puts the rest on the page as a card. A host that cannot drive
  * the chat is never swapped for one that can, and the desktop never signs in to a host.
+ *
+ * A chat is a conversation the desktop keeps (`chat-conversations.ts`): one per campaign, and any number of set-up chats
+ * about no campaign yet. The conversation's record decides which campaign a turn is about, and a header in the
+ * desktop's words says so before the person's words, every turn. The record keeps what the page drew and the session
+ * each host named, so a conversation reopens after a restart and its host resumes it; a host that has not seen it, or
+ * whose session is gone, starts afresh with a recap of the earlier messages. A set-up chat whose turn made exactly one
+ * new campaign becomes that campaign's conversation. A conversation is how the work is ordered, not a fence: a turn
+ * acts for the person across the installation, as the permission model and the allow list let it.
+ *
+ * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn: Ask first, the
+ * default; Plan only, kept on the record; and Full access, chosen through a confirmation each time, held in memory only,
+ * so a restart opens every chat in Ask first, and so does Start afresh. Leaving Full access stops the turn that runs in
+ * it. The first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes
+ * back to Ask first. Before every turn the chat folder's agent settings are put right (`chat-agent-folder.ts`). No turn starts without a person's
+ * send; the naming run of a set-up chat (`chat-naming.ts`) is no turn: it runs with no tool at all, in any mode.
+ *
+ * One conversation is of its own kind, the Feed (`feed.ts`): the person's main chat, about no campaign, made on the
+ * page's first ask, into which the page hands the journal's lines of a closed table of kinds. It is never renamed,
+ * removed or handed over; a campaign one of its turns makes keeps its own conversation. A line never starts a turn: the
+ * lines reach the agent only with the person's next message, after the header, set apart as records.
  */
 
-import { mkdirSync, readdirSync, statSync } from 'node:fs';
+import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute } from 'node:path';
-import { claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type Step } from './chat-hosts.ts';
+import { AgentFolderUnowned, ownAgentFolder } from './chat-agent-folder.ts';
+import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, dataRules, hostEnvironment, type HostLine, type KeySource, type Step } from './chat-hosts.ts';
+import {
+    bounded,
+    conversationIdShape,
+    takenLimit,
+    ConversationUnwritten,
+    type Chosen,
+    newConversationId,
+    readConversations,
+    removeConversation,
+    writeConversation,
+    type Conversation,
+    type KeptEntry,
+} from './chat-conversations.ts';
+import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
+import { currentModel, effortRefusal, haikuEffortFrom, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
+import {
+    claudeNamingArguments,
+    codexNamingArguments,
+    codexNamingModel,
+    namingInput,
+    namingLimitMs,
+    namingModelOf,
+    runNaming,
+    type NamingOutcome,
+} from './chat-naming.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
-import { startHost, type HostProcess } from './chat-process.ts';
+import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
-import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
+import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
+import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
+import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
+import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
-import { programLaunch } from './programs.ts';
-import { hosts, keyProvider, providerEnvironment } from './providers-model.ts';
+import { programLaunch, type Programs } from './programs.ts';
+import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
+
+/** Why a turn starts a fresh session of a conversation that had one. */
+export type FreshReason = 'host_changed' | 'not_found';
 
 /** What the page is told, by the chat it belongs to: U2's `DesktopChatEvent`. */
 export type ChatEvent =
     | ({ kind: 'step' } & Step)
     | { kind: 'text'; text: string }
     | BrokerEvent
+    | { kind: 'attached'; campaignId: string; title: string }
+    | { kind: 'fresh'; reason: FreshReason }
+    | { kind: 'pick'; campaignIds: string[] }
+    /** The conversation's title changed: a person renamed it, or the desktop named a set-up chat by what it is about. */
+    | { kind: 'renamed'; title: string }
+    /** The conversation's mode changed: a person chose it, or the desktop put the chat back to Ask first. */
+    | { kind: 'mode'; mode: ChatMode }
+    /** A line the Feed took: at its end, or folded into its last line, which it then stands in for. */
+    | { kind: 'line'; line: LineEntry; folded: boolean }
+    /** The lines written while the window was closed were more than one read brings back: the older ones are not shown. */
+    | { kind: 'gap' }
     | { kind: 'done'; error: string | null };
 
+/** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
 export interface ChatSendOptions {
     host: string;
     model?: string;
-    campaignId?: string;
+    /** One of the five levels, which the model named must take (`effortRefusal`); absent, the host keeps its own. */
+    effort?: Effort;
+}
+
+/** A conversation as `chat.list` lists it: `running` whether a turn of it runs now. */
+export interface ConversationSummary {
+    id: string;
+    campaignId: string | null;
+    /** Present, and true, for the Feed. */
+    main?: true;
+    title: string;
+    updatedAt: string;
+    running: boolean;
+    /** The conversation's access mode, as the desktop holds it now. */
+    mode: ChatMode;
+}
+
+/**
+ * A call the chat refuses, in the desktop's own sentence for the page to show. It is answered to the page as a value
+ * (`chat-ipc.ts`), never thrown across the seam; a throw of anything else is no refusal and stays a throw.
+ */
+export class ChatRefused extends Error {
+    constructor(sentence: string) {
+        super(sentence);
+        this.name = 'ChatRefused';
+    }
+}
+
+/** A conversation as `chat.open` answers it: what the page drew, kept as text, and what its last turn was sent with. */
+export interface ConversationOpened extends ConversationSummary {
+    entries: KeptEntry[];
+    dropped: number;
+    chosen: Chosen | null;
 }
 
 /** What one turn did, for the log: counts and a duration, never its words. */
@@ -53,18 +149,54 @@ export interface ChatOptions {
     bundle: string;
     /** Whether the desktop runs with a data directory `JASON_DATA_DIR` names, which the host is then given too. */
     dataNamed: boolean;
+    /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
+    bundleVersion: string | null;
     cli: Cli;
+    /** The program runner, which reads Claude Code's version before each turn on it. */
+    programs: Pick<Programs, 'run'>;
+    /** The models Codex offered when last asked, by host id (`model-lists.ts`); none when not given. */
+    models?(): KeptLists;
     keyFor(providerId: string): string | undefined;
     /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
     fence(): ChatFence;
     emit(chatId: string, event: ChatEvent): void;
-    started?(host: string, resumed: boolean): void;
+    /**
+     * Asks the person, every time Full access is chosen, whether this chat may act without asking (`fullAccessDialog`);
+     * true only for their yes. Absent, Full access is never given.
+     */
+    confirmFullAccess?(): Promise<boolean>;
+    /** Said each time a conversation's mode changes, by the two modes alone. */
+    modeChanged?(from: ChatMode, to: ChatMode): void;
+    /** Said when a Full access turn is stopped because a tool ran that its hook never saw. */
+    unchecked?(): void;
+    /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
+    fullAccessOffered?: boolean;
+    started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
     /** Said once, the first time the application is found to carry no instruction text; the turns run without it. */
     instructionsMissing?(): void;
     /** Said each time a memory file cannot be written, at the start or before a turn, which is then refused. */
     instructionsUnwritten?(file: string, code: string): void;
+    /** Said once at the start: how many conversations were read, and how many files there were not records. */
+    conversationsRead?(kept: number, unreadable: number): void;
+    /** Said each time a conversation's record could not be written or removed, by the system's error code. */
+    conversationUnwritten?(code: string): void;
+    /** Said at the end of a set-up chat's turn: how many new campaigns it found, and whether it handed over. */
+    setupEnded?(found: number | null, handedOver: boolean): void;
+    /** Said when a turn starts a fresh session of a conversation that had one. */
+    fresh?(reason: FreshReason): void;
+    /**
+     * Said when a turn on Anthropic's key starts and Claude Code names where its key came from by a value that does not
+     * say it is the environment's, nor that it is not: the word only (`KeySource`), never what the host printed.
+     */
+    keySource?(source: Exclude<KeySource, 'environment' | 'elsewhere'>): void;
+    /** Said at the end of each naming run of a set-up chat, or when one is held: how it ended, as a closed word only. */
+    named?(outcome: NamingOutcome): void;
+    /** How long a naming run may take; thirty seconds unless a test shortens it. */
+    namingLimitMs?: number;
+    /** How long the Feed's catch-up read may take; thirty seconds unless a test shortens it. */
+    feedReadLimitMs?: number;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
     platform?: Platform;
@@ -75,6 +207,12 @@ interface Running {
     process: HostProcess | null;
     /** The turn's id while it has a file under `<data>/desktop`; a Codex turn has none. */
     turnId: string | null;
+    /** The chat id the turn's events go to: the one its send named. */
+    replyTo: string;
+    /** The cards of this turn the page holds, by request id, so the answer is kept with the card. */
+    cards: Map<string, Extract<KeptEntry, { kind: 'permission' }>>;
+    /** The mode the turn runs in, read when the person's send started it. */
+    mode: ChatMode;
 }
 
 interface Resolved {
@@ -86,16 +224,106 @@ interface Resolved {
     keyed: boolean;
     /** The model named on the command line; an Anthropic-compatible endpoint is given its model by the environment instead. */
     model: string | undefined;
+    /** The model the send named, by the name the vendor gives it now (`currentModel`), wherever it goes. */
+    named: string | undefined;
+    /** The effort the send named, which the model named takes. */
+    effort: Effort | undefined;
+    /** A key provider's host folder of the desktop's own (`keyedFolder`), made before the turn; null on a plain turn. */
+    folder: string | null;
+    /** Whether the host's word on where its key came from is read: on Anthropic's own key alone, whose variable the page names. */
+    checksKeySource: boolean;
+    /** The key a keyed turn runs on, which no error text of the host reaches the page or the record with (`withoutKey`). */
+    key: string | null;
 }
+
+/** The turn's end when a provider refused its key: one sentence naming where the key is changed. */
+function refusedSentence(label: string): string {
+    return `${label} refused the key. Change it on the ${label} card in Connect, then send again.`;
+}
+
+/** The turn's end when the provider answered 403 alone, which a proxy or a denied resource answers as well. */
+function forbiddenSentence(label: string): string {
+    return `${label} refused the key or the request (403). Check the key on the ${label} card in Connect, then send again.`;
+}
+
+/** The turn's end when Claude Code said the key it uses is not the one in its environment. */
+function notTakenSentence(label: string): string {
+    return `Claude Code did not use the ${label} key, so the turn was stopped before it ran on another account. Check the key on the ${label} card in Connect, then send again.`;
+}
+
+/**
+ * Makes a key provider's host folder, and its parent of the desktop's own, closed to every account but this one where
+ * the system has modes: the folder keeps the transcripts of that provider's turns.
+ */
+export function makePrivate(label: string, parent: string, folder: string): void {
+    try {
+        mkdirSync(folder, { recursive: true, mode: 0o700 });
+        if (process.platform === 'win32') return;
+        for (const each of new Set([parent, folder])) chmodSync(each, 0o700);
+    } catch (error) {
+        // The system's code, never its text, which names the path; the turn is refused and no host starts.
+        const code = (error as NodeJS.ErrnoException | null)?.code;
+        throw new Error(`the folder for ${label} turns could not be made (${typeof code === 'string' ? code : 'unknown'}).`);
+    }
+}
+
+/** A campaign as a turn reads it: what the header says, and the folders a Claude Code turn adds. */
+interface CampaignRead {
+    about: About;
+    added: string[];
+}
+
+/** A campaign in `jason campaign list`: when it was created, in milliseconds, and its name. */
+type Listed = Map<string, { created: number; name: string }>;
 
 const chatIdShape = /^[A-Za-z0-9_.:-]{1,200}$/;
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
-const modelShape = /^[A-Za-z0-9][A-Za-z0-9._:[\]/-]{0,99}$/;
 const textLimit = 1_000_000;
+/** The most lines one `feed` call takes: as many as the runtime's stream sends at one look. */
+const feedBatch = 200;
+/** How many lines a catch-up reads back, in one page; more than that leaves a gap. */
+const catchUpLimit = 100;
+/** How many lines handed while the catch-up reads wait for it; the older ones beyond are let go and said as a gap. */
+const feedWaitingLimit = 200;
+/** How long the catch-up's read may take: a slow runtime keeps the Feed waiting no longer. */
+const feedReadLimitMs = 30_000;
+/** How far before the newest kept line the catch-up reads, since lines are committed out of the order of their moments. */
+const catchUpLookbackMs = 5_000;
+const notAFeedBatch = 'That is not a list of journal lines the desktop takes.';
+const feedKept = 'The Feed is always kept; it cannot be removed or renamed.';
+/** The longest text a rename reads before it makes it one line and cuts it to the title's cap. */
+const renameLimit = 10_000;
 const wordsKept = 600;
+/** One page of `campaign list` at the runtime's largest, and how many pages a hand-over reads before it gives up. */
+const listPage = 1000;
+const listPages = 100;
+
+/** What a set-up turn's end says of the campaigns it made: the one it handed over to, or the ones to pick from. */
+type HandOver = Extract<ChatEvent, { kind: 'attached' | 'pick' }>;
+
+/** How one start of the host ended; `host` null when it could not be started, `again` when a fresh session follows. */
+interface Attempted {
+    exit: HostExit;
+    result: string | null | undefined;
+    host: HostProcess | null;
+    again: boolean;
+    /** Whether the result is the desktop's own sentence for a refused key, which no scrub touches. */
+    ours?: boolean;
+}
+
+/** The campaigns the conversation's last pick named. */
+const candidatesOf = (conversation: Conversation): string[] => {
+    for (let i = conversation.entries.length - 1; i >= 0; i--) {
+        const entry = conversation.entries[i];
+        if (entry?.kind === 'pick') return entry.campaignIds;
+    }
+    return [];
+};
 
 const busy = 'This chat is still answering. Wait for it to finish, or stop it, then send again.';
 const notAHost = 'That is not an agent host this desktop knows. Choose Claude Code or Codex for the chat.';
+const notAConversation = 'That conversation is not one this desktop keeps.';
+const stillAnswering = (act: string) => `This conversation is still answering. Wait for it to finish, or stop it, then ${act}.`;
 
 function currentPlatform(): Platform {
     return process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
@@ -139,15 +367,51 @@ function entriesOf(folder: string): string[] {
     }
 }
 
+function objectOf(text: string): Record<string, unknown> | null {
+    try {
+        const value: unknown = JSON.parse(text);
+        return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+    } catch {
+        return null;
+    }
+}
+
+
 export class Chat {
     #options: ChatOptions;
     #platform: Platform;
     #broker: PermissionBroker;
+    /** By conversation id, the turn that runs. */
     #running = new Map<string, Running>();
-    /** Per chat id, the host it last ran on and the session that host named; in memory only. */
-    #sessions = new Map<string, { host: string; session: string }>();
+    #conversations = new Map<string, Conversation>();
+    /** The conversations kept: read from a record, or sent to. One made and never sent to is not listed or written. */
+    #kept = new Set<string>();
+    /**
+     * A chat id the page made up, before the page knew the desktop's conversations, and the conversation its first send
+     * found or made: that campaign's for a send that named one, a new set-up chat for one that named none.
+     */
+    /** The set-up turns that run, by conversation id, and whether another set-up turn ran beside each. */
+    #setupTurns = new Map<string, { overlapped: boolean }>();
     /** Whether the missing instruction text was said already. */
     #missingSaid = false;
+    /** The naming runs of set-up chats, one after another across the desktop: the last one asked for, or none. */
+    #naming: Promise<void> = Promise.resolve();
+    /** Whether the window closed: a naming run that waits is then not started. */
+    #closed = false;
+    /** The naming run that runs now, its stop and its folder; null while none runs. */
+    #namingNow: { stop: AbortController; folder: string } | null = null;
+    /** The conversations in Full access, by id. In memory only: never on a record, gone with the window. */
+    #fullAccess = new Set<string>();
+    /** The Feed's id, once it is made or read. */
+    #feedId: string | null = null;
+    /** The journal ids the Feed took, oldest first, at most `takenLimit`, kept on its record too (`taken`). */
+    #feedSeen = new Set<string>();
+    /** The lines handed while a catch-up reads, checked already, which wait for it; null while none runs. */
+    #feedWaiting: LineEntry[] | null = null;
+    /** Whether lines waiting for the catch-up were let go for want of room, which the catch-up then says as a gap. */
+    #feedOverflow = false;
+    /** The catch-up's read, settled once it has put its lines in. */
+    #feedRead: Promise<void> = Promise.resolve();
 
     constructor(options: ChatOptions) {
         this.#options = options;
@@ -161,8 +425,18 @@ export class Chat {
         } catch {
             // Nothing more to do until a turn starts.
         }
+        const read = readConversations(options.paths.conversations);
+        for (const conversation of read.kept) {
+            this.#conversations.set(conversation.id, conversation);
+            this.#kept.add(conversation.id);
+        }
+        this.#settleFeed();
+        options.conversationsRead?.(read.kept.length, read.unreadable);
         this.#broker = new PermissionBroker({
-            emit: (chatId, event) => options.emit(chatId, event),
+            emit: (chatId, event) => {
+                this.#cardSaid(chatId, event);
+                options.emit(chatId, event);
+            },
             ...(options.decided ? { decided: options.decided } : {}),
             ...(options.answerWindowMs !== undefined ? { timeoutMs: options.answerWindowMs } : {}),
         });
@@ -170,35 +444,385 @@ export class Chat {
 
     /** Whether a turn of this chat is running. */
     isRunning(chatId: string): boolean {
-        return this.#running.has(chatId);
+        const conversation = this.#conversationOf(chatId);
+        return conversation !== undefined && this.#running.has(conversation.id);
+    }
+
+    /**
+     * The conversations kept, newest first: one read from its record, or one whose first turn has started. One made
+     * and never sent to is the window's that made it, and is not listed.
+     */
+    list(): ConversationSummary[] {
+        return [...this.#conversations.values()]
+            .filter((conversation) => this.#kept.has(conversation.id))
+            .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : a.id < b.id ? 1 : -1))
+            .map((conversation) => this.#summaryOf(conversation));
+    }
+
+    #summaryOf(conversation: Conversation): ConversationSummary {
+        return {
+            id: conversation.id,
+            campaignId: conversation.campaign_id,
+            ...(conversation.main === true ? { main: true as const } : {}),
+            title: conversation.title,
+            updatedAt: conversation.updated_at,
+            running: this.#running.has(conversation.id),
+            mode: this.#modeOf(conversation),
+        };
+    }
+
+    #fullAccessOffered(): boolean {
+        return this.#options.fullAccessOffered ?? fullAccessOffered;
+    }
+
+    #modeOf(conversation: Conversation): ChatMode {
+        return this.#fullAccess.has(conversation.id) ? 'full_access' : (conversation.mode ?? 'ask_first');
+    }
+
+    /**
+     * A person's choice of a conversation's mode, from the menu beside the composer, on the host the page will send to.
+     * Full access is refused before any confirmation where it cannot apply: on Codex, on a host that does not drive the
+     * chat, and on a Claude Code older than its floor or whose version cannot be read, read now as a turn reads it.
+     * Otherwise it is given only once the person said yes to the confirmation, asked again each time it is chosen; a no
+     * leaves the mode as it was. Leaving Full access stops a turn that runs in it. Plan only is kept on the record; Full
+     * access never is.
+     */
+    async setMode(id: unknown, mode: unknown, host?: unknown): Promise<ConversationSummary> {
+        const conversation = this.#own(id);
+        if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
+        if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
+        if (mode === 'full_access') {
+            if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
+            const program = keyProvider(host)?.program ?? hosts.find((each) => each.id === host && each.drivesChat)?.program;
+            if (program === 'codex') throw new ChatRefused(codexFullAccess);
+            if (program !== 'claude') throw new ChatRefused(notAHost);
+            const below = fullAccessSentence(await this.#claudeVersion());
+            if (below !== null) throw new ChatRefused(below);
+            if (this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+            const yes = (await this.#options.confirmFullAccess?.()) === true;
+            if (!yes || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+        }
+        this.#changeMode(conversation, mode, true);
+        return this.#summaryOf(conversation);
+    }
+
+    /**
+     * Puts a conversation in a mode, says so to its page and to the log, and keeps Plan only on its record. Leaving Full
+     * access stops the turn that runs in it, unless the caller stops it in its own words (`stopTurn` false).
+     */
+    #changeMode(conversation: Conversation, to: ChatMode, stopTurn: boolean): void {
+        const from = this.#modeOf(conversation);
+        if (from === to) return;
+        if (to === 'full_access') this.#fullAccess.add(conversation.id);
+        else this.#fullAccess.delete(conversation.id);
+        if (to !== 'full_access') {
+            const before = conversation.mode;
+            if (to === 'plan_only') conversation.mode = 'plan_only';
+            else delete conversation.mode;
+            if (before !== conversation.mode && this.#kept.has(conversation.id)) this.#keep(conversation);
+        }
+        this.#options.modeChanged?.(from, to);
+        this.#options.emit(conversation.id, { kind: 'mode', mode: to });
+        const running = this.#running.get(conversation.id);
+        // Leaving Full access stops the turn that runs in it, and so does a change to Plan only: the menu never says Plan
+        // only while the running turn could still ask to change something.
+        const stops = (from === 'full_access' && running?.mode === 'full_access') || (to === 'plan_only' && running !== undefined && running.mode !== 'plan_only');
+        if (stopTurn && stops && running !== undefined) {
+            running.stopped = true;
+            running.process?.stop();
+        }
+    }
+
+    /** A conversation with what the page drew; an id the desktop does not keep is refused. */
+    open(id: unknown): ConversationOpened {
+        const conversation = this.#own(id);
+        return { ...this.#summaryOf(conversation), entries: structuredClone(conversation.entries), dropped: conversation.dropped, chosen: conversation.chosen === undefined ? null : { ...conversation.chosen } };
+    }
+
+    /**
+     * A conversation to start in: a new set-up chat when no campaign is named, else the campaign's conversation, the
+     * one it has or a new one named after it. A new conversation is kept once its first turn has started.
+     */
+    async create(campaignId?: unknown): Promise<ConversationSummary> {
+        if (campaignId === undefined || campaignId === null) return this.#summaryOf(this.#made(null, 'New chat'));
+        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
+        const existing = this.#ofCampaign(campaignId);
+        if (existing !== undefined) return this.#summaryOf(existing);
+        const read = await this.#readCampaign(campaignId, false);
+        const name = read.about.campaign?.name;
+        return this.#summaryOf(this.#ofCampaign(campaignId) ?? this.#made(campaignId, name ? nameOf(name) || campaignId : campaignId));
+    }
+
+    /** Removes a conversation's record; the host's own transcript stays the host's. One whose turn runs is refused. */
+    remove(id: unknown): void {
+        const conversation = this.#own(id);
+        if (conversation.main === true) throw new ChatRefused(feedKept);
+        if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('remove it'));
+        try {
+            removeConversation(this.#options.paths.conversations, conversation.id);
+        } catch (error) {
+            if (error instanceof ConversationUnwritten) this.#options.conversationUnwritten?.(error.code);
+            throw new ChatRefused('The conversation could not be removed. Close anything that has its file open, then try again.');
+        }
+        this.#conversations.delete(conversation.id);
+        this.#kept.delete(conversation.id);
+        this.#fullAccess.delete(conversation.id);
+    }
+
+    /** "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept. One whose turn runs is refused. */
+    restart(id: unknown): void {
+        const conversation = this.#own(id);
+        if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it afresh'));
+        conversation.sessions = {};
+        // A chat in Full access started afresh goes back to Ask first; Plan only stays, as on its record.
+        if (this.#fullAccess.has(conversation.id)) this.#changeMode(conversation, 'ask_first', true);
+        // One never sent to has no session to drop, and no record to write.
+        if (this.#kept.has(conversation.id)) this.#keep(conversation);
+    }
+
+    /**
+     * A person's name for a conversation, a set-up chat's or a campaign's: one line, with nothing unseen, within the
+     * title's cap. It is kept with the mark that a person gave it, and nothing replaces it afterwards: not a hand-over,
+     * not the campaign's name, not a name the desktop asks a model for. The campaign's own name in the runtime is not
+     * changed. Refused while nothing is kept of the conversation, and for a name with nothing that shows. A turn that
+     * runs goes on; its end keeps the name.
+     */
+    rename(id: unknown, title: unknown): ConversationSummary {
+        const conversation = this.#own(id);
+        if (conversation.main === true) throw new ChatRefused(feedKept);
+        if (!this.#kept.has(conversation.id)) throw new ChatRefused('Send this chat a message first; then it can be renamed.');
+        if (typeof title === 'string' && title.length > renameLimit) throw new ChatRefused('That name is too long. Keep it to a short line.');
+        const name = givenTitle(title);
+        if (name === '') throw new ChatRefused('A name needs at least one character that shows.');
+        conversation.title = name;
+        conversation.named_by_person = true;
+        this.#keep(conversation);
+        this.#options.emit(conversation.id, { kind: 'renamed', title: name });
+        return this.#summaryOf(conversation);
+    }
+
+    /** Resolves once no naming run of a set-up chat runs or waits, and the Feed's catch-up has put its lines in. */
+    idle(): Promise<void> {
+        return Promise.all([this.#naming, this.#feedRead]).then(() => undefined);
+    }
+
+    /**
+     * The Feed, made and written on the first ask, then listed with the others. Each of `lines` is made a Feed line
+     * (`lineOf`) or left out, a journal line it took already is left out, and the rest go at its end (`take`), each said
+     * as a `line` event. Nothing else happens: no turn starts, in any mode, and a turn that runs goes on; the lines reach
+     * the agent with the person's next message. An ask that carries `catchUp`, which the page makes at each load and when
+     * its stream started afresh, also reads back one page of the lines written since a few seconds before the newest kept
+     * one (`jason journal list`), when the Feed kept one and no read runs already; those go in before the lines handed
+     * while it reads, which are checked at once and wait, the newest two hundred of them, with a gap for the rest. A page
+     * that was not all of them leaves a gap before them too.
+     */
+    feed(lines: unknown, options?: unknown): ConversationSummary {
+        if (!Array.isArray(lines) || lines.length > feedBatch) throw new ChatRefused(notAFeedBatch);
+        const feed = this.#feedConversation();
+        const catchUp = options !== null && typeof options === 'object' && (options as { catchUp?: unknown }).catchUp === true;
+        if (catchUp && this.#feedWaiting === null) {
+            const newest = feed.entries.reduce<string | null>((found, entry) => (entry.kind === 'line' && (found === null || entry.at > found) ? entry.at : found), null);
+            if (newest !== null) {
+                this.#feedWaiting = [];
+                this.#feedOverflow = false;
+                this.#feedRead = this.#catchUp(feed, new Date(Date.parse(newest) - catchUpLookbackMs).toISOString());
+            }
+        }
+        const checked = lines.map(lineOf).filter((line): line is LineEntry => line !== null);
+        if (this.#feedWaiting === null) this.#takeLines(feed, checked, false);
+        else {
+            this.#feedWaiting.push(...checked);
+            const over = this.#feedWaiting.length - feedWaitingLimit;
+            if (over > 0) {
+                this.#feedWaiting.splice(0, over);
+                this.#feedOverflow = true;
+            }
+        }
+        return this.#summaryOf(feed);
+    }
+
+    /** The Feed, as read, or made now and written at once. */
+    #feedConversation(): Conversation {
+        const known = this.#feedId === null ? undefined : this.#conversations.get(this.#feedId);
+        if (known !== undefined) return known;
+        const feed = this.#made(null, feedTitle);
+        feed.main = true;
+        this.#feedId = feed.id;
+        this.#kept.add(feed.id);
+        this.#keep(feed);
+        return feed;
+    }
+
+    /**
+     * The one Feed among the records read: the oldest marked main. Any other so marked is read as a set-up chat, its
+     * lines and gaps let go and counted, and is written so when it is next kept.
+     */
+    #settleFeed(): void {
+        const marked = [...this.#conversations.values()]
+            .filter((each) => each.main === true)
+            .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id < b.id ? -1 : 1));
+        const [feed, ...others] = marked;
+        for (const other of others) {
+            delete other.main;
+            const kept = other.entries.filter((entry) => entry.kind !== 'line' && entry.kind !== 'gap');
+            other.dropped += other.entries.length - kept.length;
+            other.entries = kept;
+        }
+        if (feed === undefined) return;
+        this.#feedId = feed.id;
+        for (const id of feed.taken ?? []) this.#remember(id);
+        for (const entry of feed.entries) if (entry.kind === 'line') this.#remember(entry.journal_id);
+    }
+
+    #remember(id: string): void {
+        this.#feedSeen.delete(id);
+        this.#feedSeen.add(id);
+        if (this.#feedSeen.size > takenLimit) {
+            const oldest = this.#feedSeen.values().next();
+            if (!oldest.done) this.#feedSeen.delete(oldest.value);
+        }
+    }
+
+    /** Puts the lines new to the Feed at its end, says each, and keeps the record, with the ids taken, when any went in. */
+    #takeLines(feed: Conversation, lines: readonly LineEntry[], gap: boolean): void {
+        let changed = false;
+        if (gap) {
+            feed.entries.push({ kind: 'gap' });
+            this.#options.emit(feed.id, { kind: 'gap' });
+            changed = true;
+        }
+        for (const line of lines) {
+            if (this.#feedSeen.has(line.journal_id)) continue;
+            this.#remember(line.journal_id);
+            const taken = take(feed.entries, line);
+            this.#options.emit(feed.id, { kind: 'line', line: { ...taken.line }, folded: taken.folded });
+            changed = true;
+        }
+        if (!changed) return;
+        feed.dropped += trimmed(feed.entries);
+        feed.taken = [...this.#feedSeen];
+        this.#keep(feed);
+    }
+
+    /**
+     * Reads back the lines written since `since`, a few seconds before the newest kept line's moment, at or after which
+     * the runtime answers (the lines already taken among them, left out as such): one page, newest first, put in oldest
+     * first, within its own time limit. Then the lines handed meanwhile go in, after a gap when some of them were let go.
+     * A read that fails or runs out of time puts nothing in and leaves no gap of its own.
+     */
+    async #catchUp(feed: Conversation, since: string): Promise<void> {
+        try {
+            const args = ['journal', 'list', ...feedKinds.flatMap((kind) => ['--kind', kind]), '--since', since, '--limit', String(catchUpLimit)];
+            const answer = await this.#readJson(args, this.#options.feedReadLimitMs ?? feedReadLimitMs);
+            if (answer !== null && Array.isArray(answer.items)) {
+                const more = typeof answer.next_cursor === 'string' && answer.next_cursor !== '';
+                // Each line read is made a Feed line by the same check as a line the page hands, or left out.
+                const read = (answer.items as unknown[]).map(lineOf).filter((line): line is LineEntry => line !== null);
+                this.#takeLines(feed, read.reverse(), more);
+            }
+        } catch {
+            // Nothing read is nothing put in.
+        } finally {
+            const waiting = this.#feedWaiting ?? [];
+            const overflow = this.#feedOverflow;
+            this.#feedWaiting = null;
+            this.#feedOverflow = false;
+            this.#takeLines(feed, waiting, overflow);
+        }
+    }
+
+    /**
+     * Makes a set-up chat the conversation of a campaign the person picked from the ones its last pick named. Refused for
+     * a conversation already about a campaign, one whose turn runs, a campaign that has a conversation, and a campaign
+     * the pick did not name.
+     */
+    async attach(id: unknown, campaignId: unknown): Promise<ConversationSummary> {
+        const conversation = this.#own(id);
+        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
+        const refusal = () => {
+            if (conversation.main === true) return "The Feed is about no campaign. Open the campaign's own conversation from the campaign.";
+            if (this.#running.has(conversation.id)) return stillAnswering('choose its campaign');
+            if (conversation.campaign_id !== null) return 'This conversation is already about a campaign.';
+            if (this.#ofCampaign(campaignId) !== undefined) return 'That campaign has its conversation already. Open it from the campaign.';
+            if (!candidatesOf(conversation).includes(campaignId)) return 'That campaign is not one this chat made. Open it from the campaign.';
+            return null;
+        };
+        const before = refusal();
+        if (before !== null) throw new ChatRefused(before);
+        const read = await this.#readCampaign(campaignId, false);
+        const name = read.about.campaign?.name;
+        if (name === null || name === undefined) throw new ChatRefused('That campaign could not be read. Check that Jason is running, then try again.');
+        const after = refusal();
+        if (after !== null) throw new ChatRefused(after);
+        conversation.campaign_id = campaignId;
+        if (conversation.named_by_person !== true) conversation.title = nameOf(name) || campaignId;
+        this.#keep(conversation);
+        this.#options.emit(conversation.id, { kind: 'attached', campaignId, title: conversation.title });
+        return this.#summaryOf(conversation);
     }
 
     /**
      * Starts a turn. It resolves once the host has started, or once the send was refused; a refusal, like every end, is
-     * a `done` with an error in plain words, and nothing was started. A chat id the desktop does not take has no chat to
-     * say `done` to, so that send rejects with an Error the page shows.
+     * a `done` with an error in plain words, and no host was started: on Claude Code, one below the floor
+     * (`claudeFloor`) or whose version cannot be read is refused after `claude --version` and before anything else, and
+     * so is an effort the model named does not take at that version. An effort that is not one of the five words, or one
+     * the model named does not take by the table or the list kept, is refused the same way, and so is a model the host
+     * does not offer (`modelRefusal`). A chat id the desktop does
+     * not take, or a conversation it does not keep, has no chat to say `done` to, so that send rejects with an Error the
+     * page shows.
      */
     async send(chatId: unknown, text: unknown, options: unknown): Promise<void> {
-        if (typeof chatId !== 'string' || !chatIdShape.test(chatId)) throw new Error('That is not a chat id the desktop takes.');
+        if (typeof chatId !== 'string' || !chatIdShape.test(chatId)) throw new ChatRefused('That is not a chat id the desktop takes.');
+        const conversation = this.#conversationOf(chatId);
+        if (conversation === undefined) throw new ChatRefused(notAConversation);
         const refuse = (error: string) => this.#options.emit(chatId, { kind: 'done', error });
-        if (this.#running.has(chatId)) return refuse(busy);
+        if (this.#running.has(conversation.id)) return refuse(busy);
         if (typeof text !== 'string' || text.trim() === '') return refuse('There is nothing to send.');
         if (text.length > textLimit) return refuse('That message is too long to send in one turn.');
         const given = (options ?? {}) as Partial<Record<keyof ChatSendOptions, unknown>>;
         if (given.model !== undefined && (typeof given.model !== 'string' || !modelShape.test(given.model))) return refuse('That model name is not one the desktop passes to a host.');
-        if (given.campaignId !== undefined && (typeof given.campaignId !== 'string' || !campaignIdShape.test(given.campaignId))) return refuse('That is not a campaign id.');
-        const resolved = this.#resolve(given.host, given.model as string | undefined);
+        if (given.effort !== undefined && !isEffort(given.effort)) return refuse('That effort is not one the desktop passes to a host.');
+        const resolved = this.#resolve(given.host, given.model as string | undefined, given.effort as Effort | undefined);
         if (typeof resolved === 'string') return refuse(resolved);
+        const notOffered = modelRefusal(resolved.host, resolved.named, this.#options.models?.() ?? new Map());
+        if (notOffered !== null) return refuse(notOffered);
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
+        // Codex has no Full access, nor does a version that does not offer it: a chat in it goes back to Ask first, and its
+        // turn runs there.
+        if ((resolved.program === 'codex' || !this.#fullAccessOffered()) && this.#modeOf(conversation) === 'full_access') this.#changeMode(conversation, 'ask_first', true);
+        const mode = this.#modeOf(conversation);
 
-        const running: Running = { stopped: false, process: null, turnId: null };
-        this.#running.set(chatId, running);
+        const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode };
+        this.#running.set(conversation.id, running);
+        this.#kept.add(conversation.id);
+        // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
+        for (const [id, each] of this.#setupTurns) if (id !== conversation.id) each.overlapped = true;
         try {
-            await this.#turn(chatId, text, resolved, launch, given.campaignId as string | undefined, running);
+            // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
+            // answering while the version is read, so a second send is refused as busy. The version read also says
+            // whether the model named takes the effort named.
+            const version = resolved.program === 'claude' ? await this.#claudeVersion() : null;
+            const below = resolved.program === 'claude' ? floorSentence(version) : null;
+            // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the chat goes
+            // back to Ask first and the send is refused, saying why.
+            const unhooked = below === null && mode === 'full_access' ? fullAccessSentence(version) : null;
+            const held = below ?? unhooked ?? (resolved.effort === undefined ? null : effortRefusal(resolved.host, resolved.named, resolved.effort, this.#options.models?.() ?? new Map(), version));
+            // A stop or a window close while the version was read: its answer is dropped and nothing of the turn is built.
+            if (running.stopped) {
+                this.#running.delete(conversation.id);
+                return this.#options.emit(chatId, { kind: 'done', error: null });
+            }
+            if (held !== null) {
+                this.#running.delete(conversation.id);
+                if (unhooked !== null) this.#changeMode(conversation, 'ask_first', false);
+                return refuse(held);
+            }
+            await this.#turn(conversation, text, resolved, launch, running);
         } catch (error) {
-            this.#running.delete(chatId);
-            if (error instanceof InstructionsUnwritten) refuse(error.message);
+            this.#running.delete(conversation.id);
+            this.#setupTurns.delete(conversation.id);
+            if (error instanceof InstructionsUnwritten || error instanceof AgentFolderUnowned) refuse(error.message);
             else refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -206,7 +830,8 @@ export class Chat {
     /** Ends the chat's running turn and everything its host started; its `done` follows. */
     stop(chatId: unknown): void {
         if (typeof chatId !== 'string') return;
-        const running = this.#running.get(chatId);
+        const conversation = this.#conversationOf(chatId);
+        const running = conversation === undefined ? undefined : this.#running.get(conversation.id);
         if (running === undefined) return;
         running.stopped = true;
         running.process?.stop();
@@ -216,61 +841,211 @@ export class Chat {
     answer(chatId: unknown, requestId: unknown, decision: unknown): void {
         if (typeof chatId !== 'string' || typeof requestId !== 'string') return;
         const given = (decision ?? {}) as { allow?: unknown; always?: unknown };
-        this.#broker.answer(chatId, requestId, { allow: given.allow === true, always: given.always === true });
+        const allow = given.allow === true;
+        const always = given.always === true;
+        const conversation = this.#conversationOf(chatId);
+        const running = conversation === undefined ? undefined : this.#running.get(conversation.id);
+        // Only the chat the card was put to answers it (the broker's rule): another page chat of the conversation keeps nothing.
+        const card = running?.replyTo === chatId ? running.cards.get(requestId) : undefined;
+        if (card !== undefined && card.answer === null) card.answer = !allow ? 'deny' : always ? 'always' : 'allow';
+        this.#broker.answer(chatId, requestId, { allow, always });
     }
 
     /**
      * The window closed: every turn is stopped, every waiting request refused, every "always" forgotten, and every
-     * running turn's file removed before this returns, since the desktop may quit before a host's exit is seen.
+     * running turn's file removed before this returns, since the desktop may quit before a host's exit is seen. A naming
+     * run that runs is ended as a stop ends a turn's host and its folder removed when it can be now (else when its host
+     * has let go of it, or at the next start); one that waits never starts.
      */
     closeAll(): void {
-        for (const [chatId, running] of [...this.#running.entries()]) {
-            this.stop(chatId);
+        this.#closed = true;
+        // Full access is gone with the window, as every "always" is.
+        this.#fullAccess.clear();
+        for (const running of [...this.#running.values()]) {
+            running.stopped = true;
+            running.process?.stop();
             if (running.turnId !== null) removeQuietly(this.#options.paths.turns, running.turnId);
+        }
+        const naming = this.#namingNow;
+        if (naming !== null) {
+            naming.stop.abort();
+            try {
+                rmSync(naming.folder, { recursive: true, force: true });
+            } catch {
+                // The host still holds it: removed once it lets go (`runNaming`), or at the next start.
+            }
         }
         this.#broker.endAll();
     }
 
-    #resolve(host: unknown, model: string | undefined): Resolved | string {
+    /** Claude Code's version, read before each turn on it and never remembered; null when it cannot be read. */
+    async #claudeVersion(): Promise<string | null> {
+        return printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs }));
+    }
+
+    #conversationOf(chatId: string): Conversation | undefined {
+        return this.#conversations.get(chatId);
+    }
+
+    #own(id: unknown): Conversation {
+        const conversation = typeof id === 'string' && conversationIdShape.test(id) ? this.#conversations.get(id) : undefined;
+        if (conversation === undefined) throw new ChatRefused(notAConversation);
+        return conversation;
+    }
+
+    #ofCampaign(campaignId: string): Conversation | undefined {
+        for (const conversation of this.#conversations.values()) if (conversation.campaign_id === campaignId) return conversation;
+        return undefined;
+    }
+
+    #made(campaignId: string | null, title: string): Conversation {
+        const now = new Date().toISOString();
+        const conversation: Conversation = { id: newConversationId(), campaign_id: campaignId, title, created_at: now, updated_at: now, sessions: {}, entries: [], dropped: 0 };
+        this.#conversations.set(conversation.id, conversation);
+        return conversation;
+    }
+
+    /** Writes the record within its bound; one that cannot be written is said, and the conversation goes on in memory. */
+    #keep(conversation: Conversation): void {
+        const within = bounded(conversation);
+        conversation.entries = within.entries;
+        conversation.dropped = within.dropped;
+        conversation.updated_at = new Date().toISOString();
+        try {
+            writeConversation(this.#options.paths.conversations, conversation);
+        } catch (error) {
+            this.#options.conversationUnwritten?.(error instanceof ConversationUnwritten ? error.code : 'unknown');
+        }
+    }
+
+    /** A card the broker put on the page, or took off it, kept in its conversation's record. */
+    #cardSaid(chatId: string, event: BrokerEvent): void {
+        const conversation = this.#conversationOf(chatId);
+        const running = conversation === undefined ? undefined : this.#running.get(conversation.id);
+        // What the broker tells another page chat of the conversation (a card it may not answer is gone for it) is not the card's.
+        if (conversation === undefined || running === undefined || running.replyTo !== chatId) return;
+        if (event.kind === 'permission') {
+            const card: Extract<KeptEntry, { kind: 'permission' }> = { kind: 'permission', title: event.title, detail: event.detail, answer: null };
+            conversation.entries.push(card);
+            running.cards.set(event.request, card);
+        } else {
+            const card = running.cards.get(event.request);
+            if (card !== undefined && card.answer === null) card.answer = 'gone';
+            running.cards.delete(event.request);
+        }
+    }
+
+    #resolve(host: unknown, given: string | undefined, effort: Effort | undefined): Resolved | string {
         const provider = keyProvider(host);
         if (provider !== undefined) {
             const key = this.#options.keyFor(provider.id);
             if (!key) return `No key is stored for ${provider.label}. Add it on the Connect card, then send again.`;
-            const provided = providerEnvironment(provider, key, model ?? '');
-            return { host: provider.id, label: provider.label, program: provider.program, provider: provided, keyed: true, model: provider.baseUrl ? undefined : model };
+            const folder = keyedFolder(this.#options.paths, provider);
+            const model = currentModel(provider.id, given);
+            const provided = providerEnvironment(provider, key, model ?? '', folder);
+            return {
+                host: provider.id,
+                label: provider.label,
+                program: provider.program,
+                provider: provided,
+                keyed: true,
+                model: provider.baseUrl ? undefined : model,
+                named: model,
+                effort,
+                folder,
+                checksKeySource: provider.keyVariable === 'ANTHROPIC_API_KEY',
+                key,
+            };
         }
         const known = hosts.find((each) => each.id === host);
         if (known === undefined) return notAHost;
         if (!known.drivesChat || (known.program !== 'claude' && known.program !== 'codex')) {
             return `${known.label} runs campaign work, not the chat yet. Choose Claude Code or Codex for the chat.`;
         }
-        return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model };
+        const model = currentModel(known.id, given);
+        return { host: known.id, label: known.label, program: known.program, provider: {}, keyed: false, model, named: model, effort, folder: null, checksKeySource: false, key: null };
     }
 
-    /** The campaign's folder and its project's, as the runtime recorded them and only when they are on this disk. */
-    async #addedFolders(campaignId: string | undefined): Promise<string[]> {
-        if (campaignId === undefined) return [];
-        const read = async (args: string[]): Promise<Record<string, unknown> | null> => {
-            const answer = await this.#options.cli.run(args);
-            if (answer.exit !== 0) return null;
-            try {
-                const value: unknown = JSON.parse(answer.stdout);
-                return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
-            } catch {
-                return null;
-            }
-        };
-        const campaign = await read(['campaign', 'get', campaignId]);
-        if (campaign === null) return [];
-        const folders: string[] = [];
+    async #readJson(args: string[], timeoutMs?: number): Promise<Record<string, unknown> | null> {
+        const answer = await this.#options.cli.run(args, timeoutMs === undefined ? undefined : { timeoutMs });
+        return answer.exit === 0 ? objectOf(answer.stdout) : null;
+    }
+
+    /**
+     * The campaign as the runtime answers it: its name and status for the header, its folder and its project's, as
+     * the runtime recorded them and only when they are on this disk, for a Claude Code turn to add.
+     */
+    async #readCampaign(campaignId: string, withProject: boolean): Promise<CampaignRead> {
+        const campaign = await this.#readJson(['campaign', 'get', campaignId]);
+        if (campaign === null) return { about: { campaign: { id: campaignId, name: null, status: null, folder: null } }, added: [] };
         const own = folderThere(campaign.folder_path);
-        if (own !== null) folders.push(own);
-        if (typeof campaign.project_id === 'string' && /^prj_[0-9A-Za-z]{1,64}$/.test(campaign.project_id)) {
-            const project = await read(['project', 'get', campaign.project_id]);
+        const added: string[] = own === null ? [] : [own];
+        if (withProject && typeof campaign.project_id === 'string' && /^prj_[0-9A-Za-z]{1,64}$/.test(campaign.project_id)) {
+            const project = await this.#readJson(['project', 'get', campaign.project_id]);
             const theirs = folderThere(project?.folder_path);
-            if (theirs !== null && !folders.includes(theirs)) folders.push(theirs);
+            if (theirs !== null && !added.includes(theirs)) added.push(theirs);
         }
-        return folders;
+        const name = typeof campaign.name === 'string' ? campaign.name : '';
+        const status = typeof campaign.status === 'string' ? campaign.status : null;
+        return { about: { campaign: { id: campaignId, name, status, folder: own } }, added: withProject ? added : [] };
+    }
+
+    /** Every campaign of the installation, archived ones included, read page by page; null when any page was not. */
+    async #listCampaigns(): Promise<Listed | null> {
+        const found: Listed = new Map();
+        let cursor: string | null = null;
+        for (let page = 0; page < listPages; page++) {
+            const args = ['campaign', 'list', '--all-projects', '--include-archived', '--limit', String(listPage)];
+            if (cursor !== null) args.push('--cursor', cursor);
+            const answer = await this.#readJson(args);
+            if (answer === null || !Array.isArray(answer.items)) return null;
+            for (const item of answer.items as unknown[]) {
+                const each = (item ?? {}) as Record<string, unknown>;
+                const created = typeof each.created_at === 'string' ? Date.parse(each.created_at) : Number.NaN;
+                if (typeof each.id !== 'string' || !campaignIdShape.test(each.id) || Number.isNaN(created)) return null;
+                found.set(each.id, { created, name: typeof each.name === 'string' ? each.name : '' });
+            }
+            if (answer.next_cursor === null || answer.next_cursor === undefined) return found;
+            if (typeof answer.next_cursor !== 'string') return null;
+            cursor = answer.next_cursor;
+        }
+        return null;
+    }
+
+    /**
+     * At the end of a set-up chat's turn: the campaign the turn made, when it made exactly one and no other turn, of any
+     * conversation, ran beside it; otherwise the campaigns it made, for the person to pick from. A campaign counts when it was absent before the turn, is present after it, was created at or after
+     * the turn's start, and has no conversation of its own. Every page is read, or nothing is handed over.
+     */
+    async #handOver(conversation: Conversation, before: Listed | null, since: number): Promise<HandOver | null> {
+        const after = before === null ? null : await this.#listCampaigns();
+        const overlapped = this.#setupTurns.get(conversation.id)?.overlapped ?? true;
+        if (before === null || after === null) {
+            this.#options.setupEnded?.(null, false);
+            return null;
+        }
+        const taken = new Set([...this.#conversations.values()].map((each) => each.campaign_id));
+        const made = [...after].filter(([id, campaign]) => !before.has(id) && campaign.created >= since && !taken.has(id));
+        const only = made.length === 1 ? made[0] : undefined;
+        if (only === undefined || overlapped || conversation.campaign_id !== null) {
+            this.#options.setupEnded?.(made.length, false);
+            // More than one, or a turn that ran beside another: the person picks from what this turn made.
+            return made.length === 0 || conversation.campaign_id !== null ? null : { kind: 'pick', campaignIds: made.map(([id]) => id).sort() };
+        }
+        const [campaignId, campaign] = only;
+        conversation.campaign_id = campaignId;
+        if (conversation.named_by_person !== true) conversation.title = nameOf(campaign.name) || campaignId;
+        this.#options.setupEnded?.(1, true);
+        return { kind: 'attached', campaignId, title: conversation.title };
+    }
+
+    /**
+     * A set-up turn begins: it ran beside another when any other turn runs, of any conversation; a turn that begins
+     * later marks it too (`send`). A campaign a person makes by hand meanwhile cannot be told apart this way.
+     */
+    #setupBegun(id: string): void {
+        const beside = [...this.#running.keys()].some((each) => each !== id);
+        this.#setupTurns.set(id, { overlapped: beside });
     }
 
     /**
@@ -292,23 +1067,41 @@ export class Chat {
         }
     }
 
-    async #turn(
-        chatId: string,
-        text: string,
-        resolved: Resolved,
-        launch: { file: string; prefix: string[] },
-        campaignId: string | undefined,
-        running: Running,
-    ): Promise<void> {
+    async #turn(conversation: Conversation, text: string, resolved: Resolved, launch: { file: string; prefix: string[] }, running: Running): Promise<void> {
         const { paths } = this.#options;
-        const added = resolved.program === 'claude' ? await this.#addedFolders(campaignId) : [];
-        const previous = this.#sessions.get(chatId);
-        const resume = previous !== undefined && previous.host === resolved.host ? previous.session : undefined;
+        const replyTo = running.replyTo;
+        const main = conversation.main === true;
+        const setup = conversation.campaign_id === null && !main;
+        let about: About = main ? { main: true, campaign: null } : { campaign: null };
+        let added: string[] = [];
+        let before: Listed | null = null;
+        let since = 0;
+        if (conversation.campaign_id !== null) {
+            const read = await this.#readCampaign(conversation.campaign_id, resolved.program === 'claude');
+            about = read.about;
+            added = read.added;
+            const name = read.about.campaign?.name;
+            if (name && conversation.named_by_person !== true) conversation.title = nameOf(name) || conversation.title;
+        } else if (setup) {
+            since = Date.now();
+            this.#setupBegun(conversation.id);
+            before = await this.#listCampaigns();
+        }
+        // A turn of the Feed is given the lines no turn was given yet, after the header, set apart as records. They count as
+        // given once its host ran (`delivered`); a line that lands from here on is newer, and the next turn's.
+        const given = main ? linesSince(conversation.entries, conversation.delivered) : null;
+        const handing = given === null ? null : newestId(given.lines);
+        const block = given === null ? null : feedBlock(given.lines, given.more);
+        const head = block === null ? header(about) : `${header(about)}\n\n${block}`;
+        // The recap is of what came before this turn; the person's words of this turn follow it.
+        const earlier = recap(conversation.entries);
+        const resume = conversation.sessions[resolved.host];
+        const hostChanged = resume === undefined && Object.keys(conversation.sessions).length > 0;
         mkdirSync(paths.chat, { recursive: true });
 
         let turnId: string | null = null;
         let endpoint: Endpoint | null = null;
-        let args: string[];
+        let argsFor: (resume: string | undefined) => string[];
         let requests = 0;
         // Closes what the turn opened. The file's removal runs whatever came before it, and a removal that fails (a scanner
         // holding the file on Windows) leaves the file for the next start to remove.
@@ -325,6 +1118,9 @@ export class Chat {
             // First of all a turn does: the chat folder is found to be the desktop's own, and its memory files written,
             // before the turn's file, its endpoint or the host that starts in that folder.
             this.#placeInstructions(fence);
+            // The chat folder's agent settings hold only what the desktop placed (`chat-agent-folder.ts`).
+            ownAgentFolder(paths.chat, paths.skillsRecords);
+            if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
                 const id = newTurnId();
                 turnId = id;
@@ -341,20 +1137,24 @@ export class Chat {
                     deniedOperations: fence.operations,
                     real: realPathOf,
                 };
-                this.#broker.openTurn(chatId, id, scope);
+                this.#broker.openTurn(replyTo, id, scope, running.mode);
                 const secret = newSecret();
+                const full = running.mode === 'full_access';
                 endpoint = await openEndpoint({
                     secret,
                     decide: (tool, input, signal) => {
                         requests++;
                         return this.#broker.ask(id, tool, input, signal);
                     },
+                    ...(full ? { hook: (tool: string, input: Record<string, unknown>, use: string | null) => this.#broker.hook(id, tool, input, use) } : {}),
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
-                const rules = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop));
-                args = claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, dataRules: rules, model: resolved.model, resume });
+                const settingsFile = full ? writeTurnSettings(paths.turns, id, endpoint.hookUrl, secret) : undefined;
+                const rules = [...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop)), ...chatRules(this.#platform, paths.chat)];
+                argsFor = (resumed) =>
+                    claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed });
             } else {
-                args = codexArguments({ model: resolved.model, resume });
+                argsFor = (resumed) => codexArguments({ model: resolved.model, effort: resolved.effort, resume: resumed });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.
@@ -364,8 +1164,9 @@ export class Chat {
 
         if (running.stopped) {
             await finishFiles();
-            this.#running.delete(chatId);
-            this.#options.emit(chatId, { kind: 'done', error: null });
+            this.#setupTurns.delete(conversation.id);
+            this.#running.delete(conversation.id);
+            this.#options.emit(replyTo, { kind: 'done', error: null });
             return;
         }
 
@@ -376,48 +1177,284 @@ export class Chat {
             program: resolved.program,
             keyed: resolved.keyed,
             provider: resolved.provider,
+            bundleVersion: this.#options.bundleVersion,
+            effortNamed: resolved.effort !== undefined,
         });
         let steps = 0;
-        let result: string | null | undefined;
-        const seen = new Set<string>();
-        const said = (line: HostLine) => {
-            if (line.kind === 'session') this.#sessions.set(chatId, { host: resolved.host, session: line.id });
-            else if (line.kind === 'result') result = line.error;
-            else {
-                if (line.kind === 'step') steps++;
-                this.#options.emit(chatId, line);
-            }
-        };
         const begun = Date.now();
-        const host = startHost(launch, args, {
-            cwd: paths.chat,
-            env,
-            stdin: text,
-            onLine: (line) => {
-                for (const each of resolved.program === 'claude' ? claudeLine(line) : codexLine(line, seen)) said(each);
-            },
-        });
-        running.process = host;
-        this.#options.started?.(resolved.host, resume !== undefined);
-        if (running.stopped) host.stop();
+        // A set-up chat is named by the first sixty characters of its first message, until a campaign names it; after its
+        // first turn ends well the desktop asks its model for a better name (`#nameLater`).
+        const firstTurn = setup && !conversation.entries.some((entry) => entry.kind === 'user');
+        if (firstTurn && conversation.title === 'New chat') conversation.title = titleOf(text);
+        conversation.entries.push({ kind: 'user', text });
+        conversation.chosen = { host: resolved.host, model: resolved.named ?? null, effort: resolved.effort ?? null };
+        if (hostChanged) this.#fresh(replyTo, 'host_changed');
 
-        void host.exited.then(async (exit) => {
+        /**
+         * One start of the host. A resume the host answers with another session, or one that ends in a failure before
+         * anything was said, falls to a fresh session with the recap: the host is started again, once. A session that
+         * differs is stopped the moment its id is read, and nothing after it is shown. The record gives up the session
+         * it had only once the fresh session has done something; a fresh session that also ends with nothing said
+         * leaves the record's session as it was, since such a failure (an account signed out, a limit, no network) is
+         * not the session's.
+         *
+         * What the vendors state, and all this leans on:
+         * - Claude Code, https://code.claude.com/docs/en/headless: "json: structured JSON with result, session ID, and
+         *   metadata", and its example resumes a captured id: `claude -p "Continue that review" --resume "$session_id"`.
+         * - Claude Code, https://code.claude.com/docs/en/sessions: "If the session depended on --mcp-config, --settings,
+         *   --plugin-dir, --fallback-model, or directories added with --add-dir, pass them again when you resume", so
+         *   every turn passes them, resumed or not; and "If no stored session matches the ID, Claude Code reports
+         *   `No conversation found with session ID: <session-id>`."
+         * - Codex, https://developers.openai.com/codex/noninteractive (served as
+         *   https://learn.chatgpt.com/docs/non-interactive-mode): "You can also target a specific session ID with codex
+         *   exec resume <SESSION_ID>." and "Event types include thread.started, turn.started, turn.completed,
+         *   turn.failed, item.*, and error."
+         * The Codex page does not say what a resume of a session that is not found does, nor that the id to resume is the
+         * `thread_id` of `thread.started`; so a resume that fails, is not found or answers with another id is never
+         * trusted, on either host, and falls to a fresh session with the recap.
+         *
+         * A start that throws, before any child exists, is an attempt that could not be started: it never rejects.
+         */
+        const attempt = async (resumed: string | undefined, recapped: boolean, fallback: boolean): Promise<Attempted> => {
+            let result: string | null | undefined;
+            let shown = 0;
+            let other = false;
+            // The sentence the turn ends with when the desktop stopped the host for its key; nothing it says after counts.
+            let stoppedFor: string | null = null;
+            // Whether the turn ended on a key the provider refused, in the desktop's own sentence.
+            let keyRefused = false;
+            // The fallback's session, kept aside until the fallback has done something.
+            let pending: string | null = null;
+            const seen = new Set<string>();
+            // The tools this start used, by the id Claude Code gave each use.
+            const uses = new Map<string, string>();
+            let host: HostProcess | null = null;
+            const name = (session: string) => {
+                if (conversation.sessions[resolved.host] === session) return;
+                conversation.sessions[resolved.host] = session;
+                this.#keep(conversation);
+            };
+            const stopFor = (sentence: string) => {
+                stoppedFor = sentence;
+                result = sentence;
+                host?.stop();
+            };
+            const said = (line: HostLine) => {
+                if (other || stoppedFor !== null) return;
+                if (line.kind === 'key_source') {
+                    if (!resolved.checksKeySource || line.source === 'environment') return;
+                    if (line.source === 'elsewhere') stopFor(notTakenSentence(resolved.label));
+                    else this.#options.keySource?.(line.source);
+                    return;
+                }
+                if (line.kind === 'refused') {
+                    // On a plain turn the host's own sign-in is the person's, and so are its retries and its words.
+                    if (resolved.keyed) stopFor(line.forbidden === true ? forbiddenSentence(resolved.label) : refusedSentence(resolved.label));
+                    return;
+                }
+                if (line.kind === 'tool_use') {
+                    uses.set(line.id, line.name);
+                    return;
+                }
+                if (line.kind === 'tool_result') {
+                    // In Full access every tool use passes the turn's hook first. One whose result comes back unseen by
+                    // it ran, or was refused, without the hook: the first tool that runs unchecked ends the turn, and the
+                    // chat goes back to Ask first. EndConversation is the one tool Claude Code fires no hook for.
+                    if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
+                    if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
+                    this.#options.unchecked?.();
+                    this.#changeMode(conversation, 'ask_first', false);
+                    stopFor(unguardedSentence);
+                    return;
+                }
+                if (line.kind === 'session') {
+                    if (resumed !== undefined && line.id !== resumed) {
+                        other = true;
+                        host?.stop();
+                        return;
+                    }
+                    if (fallback && shown === 0) pending = line.id;
+                    else name(line.id);
+                } else if (line.kind === 'result') {
+                    keyRefused = resolved.keyed && line.refused === true;
+                    result = !keyRefused ? line.error : line.forbidden === true ? forbiddenSentence(resolved.label) : refusedSentence(resolved.label);
+                } else {
+                    if (pending !== null) {
+                        name(pending);
+                        pending = null;
+                    }
+                    shown++;
+                    // On a keyed turn the whole key, exactly as it is, never reaches the page or the record in what the
+                    // host says while it runs; only the exact key, since an answer's long ids and hashes are its own.
+                    const key = resolved.key;
+                    const clean = key === null ? (text: string) => text : (text: string) => withoutWholeKey(text, key);
+                    if (line.kind === 'step') {
+                        steps++;
+                        const step: Extract<ChatEvent, { kind: 'step' }> =
+                            line.detail === undefined ? { kind: 'step', text: clean(line.text) } : { kind: 'step', text: clean(line.text), detail: clean(line.detail) };
+                        conversation.entries.push({ ...step });
+                        this.#options.emit(replyTo, step);
+                    } else {
+                        const said: Extract<ChatEvent, { kind: 'text' }> = { kind: 'text', text: clean(line.text) };
+                        conversation.entries.push({ ...said });
+                        this.#options.emit(replyTo, said);
+                    }
+                }
+            };
+            let started: HostProcess;
+            try {
+                started = startHost(launch, argsFor(resumed), {
+                    cwd: paths.chat,
+                    env,
+                    stdin: turnInput(head, recapped ? earlier : null, text),
+                    onLine: (line) => {
+                        for (const each of resolved.program === 'claude' ? claudeLine(line) : codexLine(line, seen)) said(each);
+                    },
+                });
+            } catch (error) {
+                // The system's code when it gave one, never its text, which may carry what the start was given.
+                const code = (error as NodeJS.ErrnoException | null)?.code;
+                const why = typeof code === 'string' ? code : error instanceof Error ? error.message : 'unknown';
+                return { exit: { code: null, startError: why }, result: undefined, host: null, again: false };
+            }
+            host = started;
+            running.process = started;
+            this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
+            if (running.stopped || stoppedFor !== null) started.stop();
+            const exit = await started.exited;
+            // The lines this turn was given count as given once its host ran: a start the system refused gave none.
+            if (exit.startError === null && handing !== null && (conversation.delivered === undefined || handing > conversation.delivered)) conversation.delivered = handing;
+            // Every tool use is said as a step before it runs, so a host that said nothing did nothing.
+            const failedSilently = shown === 0 && (exit.code !== 0 || typeof result === 'string');
+            // A key that was refused or not taken is the key's, not the session's: a fresh session would fail the same way.
+            const refusedKey = stoppedFor !== null || keyRefused;
+            const again = resumed !== undefined && !running.stopped && exit.startError === null && !refusedKey && (other || failedSilently);
+            return { exit, result, host: started, again, ours: refusedKey };
+        };
+
+        void (async () => {
+            let last: Attempted = { exit: { code: null, startError: 'unknown' }, result: undefined, host: null, again: false };
+            let handed: HandOver | null = null;
+            try {
+                last = await attempt(resume, hostChanged, false);
+                if (last.again) {
+                    this.#fresh(replyTo, 'not_found');
+                    if (!running.stopped) last = await attempt(undefined, true, true);
+                }
+            } catch {
+                // An attempt never rejects; were one to, the turn still ends below, as one that could not be started.
+            }
             try {
                 await finishFiles();
+                if (setup) handed = await this.#handOver(conversation, before, since);
+            } catch {
+                // The turn ends whatever closing its files or reading the campaigns did.
             } finally {
-                // The turn ends whatever closing its files did: it is no longer running, its end is told, and its done sent.
-                this.#running.delete(chatId);
-                this.#options.ended?.({ host: resolved.host, exit: exit.code ?? -1, durationMs: Date.now() - begun, steps, requests });
-                this.#options.emit(chatId, { kind: 'done', error: this.#ending(resolved.label, exit, result, running.stopped, host) });
+                // The turn ends: its record kept, it is no longer running, its end is told, and its done sent.
+                // On a keyed turn the host's own words pass `withoutKey` before the page or the record has them.
+                const key = resolved.key;
+                const scrub = key === null || last.ours ? (text: string) => text : (text: string) => withoutKey(text, key);
+                const error = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
+                if (error !== null) conversation.entries.push({ kind: 'error', text: error });
+                if (handed?.kind === 'pick') conversation.entries.push({ kind: 'pick', campaignIds: [...handed.campaignIds] });
+                this.#keep(conversation);
+                this.#setupTurns.delete(conversation.id);
+                this.#running.delete(conversation.id);
+                this.#options.ended?.({ host: resolved.host, exit: last.exit.code ?? -1, durationMs: Date.now() - begun, steps, requests });
+                if (handed !== null) this.#options.emit(replyTo, handed);
+                this.#options.emit(replyTo, { kind: 'done', error });
+                if (firstTurn && error === null && !running.stopped) this.#nameLater(conversation, text, resolved);
             }
-        }).catch(() => undefined);
+        })().catch(() => undefined);
     }
 
-    #ending(label: string, exit: { code: number | null; startError: string | null }, result: string | null | undefined, stopped: boolean, host: HostProcess): string | null {
+    /** Whether a set-up chat is still named by the first words of its first message, and still kept: what a naming run may replace. */
+    #namedByFirstWords(conversation: Conversation, firstWords: string): boolean {
+        return (
+            !this.#closed &&
+            this.#conversations.get(conversation.id) === conversation &&
+            this.#kept.has(conversation.id) &&
+            conversation.campaign_id === null &&
+            conversation.named_by_person !== true &&
+            conversation.title === firstWords
+        );
+    }
+
+    /**
+     * Asks, once, after a set-up chat's first turn ended without an error, for a name by what it is about: one naming run
+     * on the conversation's own host or provider (`chat-naming.ts`), after every naming run asked for before it, so one
+     * runs at a time across the desktop. Never for a chat a person named or a campaign's.
+     */
+    #nameLater(conversation: Conversation, first: string, resolved: Resolved): void {
+        const firstWords = titleOf(first);
+        if (!this.#namedByFirstWords(conversation, firstWords)) return;
+        this.#naming = this.#naming.then(() => this.#nameNow(conversation, first, firstWords, resolved)).catch(() => undefined);
+    }
+
+    async #nameNow(conversation: Conversation, first: string, firstWords: string, resolved: Resolved): Promise<void> {
+        const model = namingModelOf(resolved.host);
+        if (model === null || !this.#namedByFirstWords(conversation, firstWords)) return;
+        const said = (outcome: NamingOutcome) => this.#options.named?.(outcome);
+        let effort = model.effort === 'always';
+        if (resolved.program === 'claude') {
+            // The floor holds a naming run as it holds a turn: read again now, never remembered.
+            const version = printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs }));
+            if (version === null || floorSentence(version) !== null) return said('held');
+            if (model.effort === 'haiku') effort = compareVersions(version, haikuEffortFrom) >= 0;
+        }
+        if (!this.#namedByFirstWords(conversation, firstWords)) return;
+        const launch = programLaunch(this.#options.env, resolved.program);
+        if ('refused' in launch) return said('not_started');
+        const provider = keyProvider(resolved.host);
+        // A keyed run has its provider's environment as a turn has it, with the fast model in place of the turn's.
+        const provided = provider !== undefined && resolved.key !== null && resolved.folder !== null ? providerEnvironment(provider, resolved.key, model.model ?? '', resolved.folder) : {};
+        const env = hostEnvironment(this.#options.env, {
+            platform: this.#platform,
+            bundle: this.#options.bundle,
+            data: this.#options.dataNamed ? this.#options.paths.data : null,
+            program: resolved.program,
+            keyed: resolved.keyed,
+            provider: provided,
+            bundleVersion: this.#options.bundleVersion,
+        });
+        // An inherited effort would stand over the run's own (Claude Code reads the variable over `--effort`).
+        for (const name of Object.keys(env)) if (name.toUpperCase() === 'CLAUDE_CODE_EFFORT_LEVEL') delete env[name];
+        const onCommandLine = provider?.baseUrl ? null : model.model;
+        const now = { stop: new AbortController(), folder: namingFolderPath(this.#options.paths.turns, newTurnId()) };
+        this.#namingNow = now;
+        const answer = await runNaming({
+            program: resolved.program,
+            launch,
+            args: resolved.program === 'claude' ? claudeNamingArguments(onCommandLine, effort) : codexNamingArguments(codexNamingModel(this.#options.models?.().get(resolved.host)?.models ?? null)),
+            env,
+            stdin: namingInput(resolved.program, first),
+            folder: now.folder,
+            checksKeySource: resolved.checksKeySource,
+            limitMs: this.#options.namingLimitMs ?? namingLimitMs,
+            signal: now.stop.signal,
+        }).finally(() => {
+            this.#namingNow = null;
+        });
+        if ('outcome' in answer) return said(answer.outcome);
+        // A person who renamed the chat, a hand-over or a removal while the run ran: their name stands.
+        if (!this.#namedByFirstWords(conversation, firstWords)) return said('overtaken');
+        conversation.title = answer.name;
+        this.#keep(conversation);
+        this.#options.emit(conversation.id, { kind: 'renamed', title: answer.name });
+        said('named');
+    }
+
+    #fresh(replyTo: string, reason: FreshReason): void {
+        this.#options.fresh?.(reason);
+        this.#options.emit(replyTo, { kind: 'fresh', reason });
+    }
+
+    /** The turn's end in words: the host's own (its result, or the tail of its standard error) through `scrub`, else the desktop's. */
+    #ending(label: string, exit: HostExit, result: string | null | undefined, stopped: boolean, host: HostProcess | null, scrub: (text: string) => string): string | null {
         if (stopped) return null;
         if (exit.startError !== null) return `${label} could not be started: ${exit.startError}`;
-        if (typeof result === 'string') return result;
-        const words = lastWords(host.stderrTail());
+        if (typeof result === 'string') return scrub(result);
+        const words = scrub(lastWords(host?.stderrTail() ?? ''));
         if (result === null && exit.code === 0) return null;
         if (result === null) return words || `${label} stopped with exit code ${exit.code ?? 'none'}.`;
         if (exit.code === 0) return words || `${label} ended without an answer.`;

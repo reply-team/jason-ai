@@ -82,7 +82,38 @@ if (args[0] === 'status') {
         print({ error: { code: 'campaign_not_found', message: 'No campaign has that id.', retryable: false } });
         process.exit(1);
     }
-    print({ id: args[2], name: 'Spring', status: 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
+    print({ id: args[2], name: process.env.STUB_CAMPAIGN_NAME || 'Spring', status: process.env.STUB_CAMPAIGN_STATUS || 'active', project_id: 'prj_01STUB', project_slug: 'default', folder_path: process.env.STUB_CAMPAIGN_FOLDER || null });
+} else if (verb === 'campaign list') {
+    // Every campaign STUB_CAMPAIGNS_FILE holds, in pages of STUB_PAGE_SIZE (else --limit), the cursor the index of the
+    // next page; STUB_LIST_FAIL_PAGE names a page (from 1) that is refused, 'all' every page.
+    let items = [];
+    try {
+        items = JSON.parse(readFileSync(process.env.STUB_CAMPAIGNS_FILE, 'utf8'));
+    } catch {}
+    const size = Number(process.env.STUB_PAGE_SIZE || args[args.indexOf('--limit') + 1] || 1000);
+    const from = args.includes('--cursor') ? Number(args[args.indexOf('--cursor') + 1]) : 0;
+    const page = from / size + 1;
+    if (process.env.STUB_LIST_FAIL_PAGE === 'all' || process.env.STUB_LIST_FAIL_PAGE === String(page)) {
+        process.stderr.write('No runtime answered.\n');
+        process.exit(3);
+    }
+    const next = from + size < items.length ? String(from + size) : null;
+    print({ items: items.slice(from, from + size), next_cursor: next });
+} else if (verb === 'journal list') {
+    // The lines STUB_JOURNAL_FILE holds, as one page: newest first, as the runtime answers; STUB_JOURNAL_MORE=yes says
+    // there is a next page, and STUB_JOURNAL_FAILS=yes answers as an unreachable runtime does.
+    if (process.env.STUB_JOURNAL_FAILS === 'yes') {
+        process.stderr.write('No runtime answered.\n');
+        process.exit(3);
+    }
+    let items = [];
+    try {
+        items = JSON.parse(readFileSync(process.env.STUB_JOURNAL_FILE, 'utf8'));
+    } catch {}
+    // STUB_JOURNAL_SLEEP holds the answer back that many milliseconds, as a slow runtime does.
+    const answer = () => print({ items, next_cursor: process.env.STUB_JOURNAL_MORE === 'yes' ? 'jrn_next' : null });
+    if (process.env.STUB_JOURNAL_SLEEP) setTimeout(answer, Number(process.env.STUB_JOURNAL_SLEEP));
+    else answer();
 } else if (verb === 'project get') {
     print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {
@@ -94,8 +125,12 @@ if (args[0] === 'status') {
     }
     const root = args[args.indexOf('--root') + 1];
     mkdirSync(join(root, 'campaign-launch'), { recursive: true });
-    writeFileSync(join(root, 'campaign-launch', 'SKILL.md'), '# campaign-launch\n');
-    writeFileSync(join(root, '.jason-skills.json'), '{}\n');
+    const skill = '# campaign-launch\n';
+    writeFileSync(join(root, 'campaign-launch', 'SKILL.md'), skill);
+    // The record as the CLI writes it (SkillsRecord): every file written, relative, with the digest of what was written.
+    const sha256 = require('node:crypto').createHash('sha256').update(skill).digest('hex');
+    const deployment = { pack: 'business', source: 'bundle', ref: 'stub', ref_overridden: false, commit: null, installed_at: '2026-11-12T00:00:00Z', files: [{ path: 'campaign-launch/SKILL.md', sha256 }] };
+    writeFileSync(join(root, '.jason-skills.json'), `${JSON.stringify({ version: 1, packs: [deployment] })}\n`);
     print({});
 } else if (['ui install', 'skills install', 'plugin install', 'plugin reload'].includes(verb)) {
     print({});

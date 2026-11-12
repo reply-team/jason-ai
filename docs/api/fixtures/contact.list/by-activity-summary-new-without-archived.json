@@ -1,0 +1,216 @@
+{
+  "operation": "contact.list",
+  "case": "by-activity-summary-new-without-archived",
+  "request": {
+    "order": "activity",
+    "summary": "new",
+    "limit": 200
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cnt_1",
+        "first_name": "Ada",
+        "last_name": "Example",
+        "company": "Ada Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "ada@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_2",
+            "campaign_name": "Autumn",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z",
+            "standing": [
+              "new"
+            ]
+          },
+          {
+            "campaign_id": "cmp_3",
+            "campaign_name": "Summer referrals",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z",
+            "standing": [
+              "new"
+            ]
+          },
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-12T09:00:00.000Z",
+            "updated_at": "2026-10-12T09:00:00.000Z",
+            "standing": [
+              "waiting"
+            ]
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_1",
+          "ts": "2026-10-15T16:00:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": "dispatcher"
+          },
+          "kind": "approval_requested",
+          "campaign_id": "cmp_1",
+          "work_item_id": "wi_1",
+          "attempt_id": null,
+          "key": "approval",
+          "old": null,
+          "new": {
+            "id": "apr_1",
+            "operation": "campaign.enroll",
+            "subject_hash": "sha256:recorded-1"
+          },
+          "reason": null,
+          "contact_id": "cnt_1",
+          "campaign_name": "Spring",
+          "contact_name": "Ada Example",
+          "work_item_kind": "provider_op",
+          "work_item_role": null,
+          "work_item_operation": "campaign.enroll",
+          "actor_role": null
+        }
+      },
+      {
+        "id": "cnt_2",
+        "first_name": "Jon",
+        "last_name": "Example",
+        "company": "Jon Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "jon@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z",
+            "standing": [
+              "out"
+            ]
+          },
+          {
+            "campaign_id": "cmp_3",
+            "campaign_name": "Summer referrals",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z",
+            "standing": [
+              "new"
+            ]
+          }
+        ],
+        "last_activity": {
+          "id": "jrn_2",
+          "ts": "2026-10-14T10:00:00.000Z",
+          "actor": {
+            "type": "system",
+            "id": null
+          },
+          "kind": "inbound_reply_observed",
+          "campaign_id": "cmp_1",
+          "work_item_id": null,
+          "attempt_id": null,
+          "key": "sha256:recorded-2",
+          "old": null,
+          "new": {
+            "plugin": "reply",
+            "thread": "t-Jon",
+            "channel": "email",
+            "last_activity_at": "2026-10-14T08:00:00.000Z",
+            "unread": true,
+            "has_meeting_intent": null,
+            "contact_id": "cnt_2"
+          },
+          "reason": null,
+          "contact_id": "cnt_2",
+          "campaign_name": "Spring",
+          "contact_name": "Jon Example",
+          "work_item_kind": null,
+          "work_item_role": null,
+          "work_item_operation": null,
+          "actor_role": null
+        }
+      },
+      {
+        "id": "cnt_3",
+        "first_name": "Hal",
+        "last_name": "Example",
+        "company": "Hal Labs",
+        "title": null,
+        "time_zone": null,
+        "channels": [
+          {
+            "channel": "email",
+            "value": "hal@example.test",
+            "label": null,
+            "primary": true,
+            "data": null
+          }
+        ],
+        "custom": {},
+        "external_ids": [],
+        "created_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "archived_at": null,
+        "campaigns": [
+          {
+            "campaign_id": "cmp_1",
+            "campaign_name": "Spring",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z",
+            "standing": [
+              "new"
+            ]
+          },
+          {
+            "campaign_id": "cmp_2",
+            "campaign_name": "Autumn",
+            "state": "enrolled",
+            "added_at": "2026-10-01T10:00:00.000Z",
+            "updated_at": "2026-10-01T10:00:00.000Z",
+            "standing": [
+              "idle"
+            ]
+          }
+        ],
+        "last_activity": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

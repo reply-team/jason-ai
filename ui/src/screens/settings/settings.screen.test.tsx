@@ -57,3 +57,21 @@ describe('Settings', () => {
         expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('true');
     });
 });
+
+describe('Appearance', () => {
+    it('offers Light, Dark and the system in that order, and marks the one in force', async () => {
+        setTheme('dark');
+        renderApp(new FakeApi());
+        route.value = { screen: 'settings' };
+        await waitFor(() => screen.getByRole('heading', { name: 'Appearance', level: 2 }));
+        const buttons = ['Light', 'Dark', 'Same as the system'].map((name) => screen.getByRole('button', { name }));
+        const pressed = () => buttons.map((each) => each.getAttribute('aria-pressed'));
+        expect(pressed()).toEqual(['false', 'true', 'false']);
+        const before = (a: HTMLElement, b: HTMLElement) =>
+            a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+        expect(before(buttons[0]!, buttons[1]!)).toBeTruthy();
+        expect(before(buttons[1]!, buttons[2]!)).toBeTruthy();
+        fireEvent.click(buttons[0]!);
+        expect(pressed()).toEqual(['true', 'false', 'false']);
+    });
+});

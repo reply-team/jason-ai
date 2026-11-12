@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures, type FixtureName } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
+import { App } from '../../app';
+import { CampaignChat } from '../campaigns/campaign-chat';
 import { href, route, type PeopleFilters, type PersonTab } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock.
@@ -17,8 +19,14 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-/** Opens the screen the way an address does: renderApp clears the address, and its late change event must agree with ours. */
+/**
+ * Opens the screen the way an address does: renderApp clears the address, and its late change event must agree with ours.
+ * Beside a list with no search the page asks for its chips' numbers: archived people left out until Archived is ticked.
+ */
 function open(api: FakeApi, filters: PeopleFilters = {}, id?: string, tab: PersonTab = 'timeline') {
+    if (!api.offers('campaign.summary')) {
+        api.answer('campaign.summary', 'campaign.summary/everyone-without-archived', 'campaign.summary/everyone');
+    }
     renderApp(api);
     const to = id ? { screen: 'people' as const, id, tab, filters } : { screen: 'people' as const, tab, filters };
     location.hash = href(to);
@@ -46,30 +54,102 @@ function timeline(
     return api.answer('workitem.list', work).answer('journal.list', journal);
 }
 
+/** The row of the people table that names this person, and its cells' text. */
+const rowOf = (name: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>('.ptable tbody tr')).find(
+        (tr) => tr.querySelector('td.name')?.textContent === name,
+    )!;
+const cells = (row: HTMLElement) => Array.from(row.querySelectorAll('td')).map((td) => td.textContent);
+
+/**
+ * Presses Refresh once it can be pressed. The list's state outlives a row, and a refresh an earlier row started keeps the
+ * button turning, and pressed in vain, for its half second.
+ */
+async function pressRefresh() {
+    const button = screen.getByTitle<HTMLButtonElement>('Refresh');
+    await waitFor(() => expect(button.disabled).toBe(false));
+    fireEvent.click(button);
+}
+
+/** The timeline's reply rows, once the person's own lines have come: lines an earlier row read for them show until then. */
+async function replyRows(count: number) {
+    return waitFor(() => {
+        const rows = screen.getAllByRole('button', { name: /show the thread/ });
+        expect(rows).toHaveLength(count);
+        return rows;
+    });
+}
+
 const rowTitles = () =>
     Array.from(document.querySelectorAll('.panel .rows .row .name')).map((n) => n.textContent?.trim());
 
 describe('People', () => {
-    it('lists people by what last happened to them, by day, the one with no first name by last name, nobody-yet last', async () => {
-        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity');
+    it('says a People list with nothing in it and how people come in: the sentence alone in a browser, a New chat inside the desktop', async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity-empty')
+            .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
+        open(api);
+        await screen.findByText(
+            'Nobody yet. People come in when a campaign finds or imports them: start with a campaign, set up in a chat with Jason.',
+        );
+        expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
+        expect(sentLists(api)).toEqual([fixtures['contact.list/by-activity-empty'].request]);
+
+        const inside = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity-empty')
+            .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
+        const chat = vi.fn();
+        const { rerender } = renderApp(inside);
+        rerender(
+            <CampaignChat.Provider value={chat}>
+                <App api={inside} uiApiVersion="v1" />
+            </CampaignChat.Provider>,
+        );
+        location.hash = href({ screen: 'people', tab: 'timeline', filters: {} });
+        route.value = { screen: 'people', tab: 'timeline', filters: {} };
+        fireEvent.click(await screen.findByRole('button', { name: 'New chat' }));
+        expect(chat).toHaveBeenCalledTimes(1);
+        expect(chat).toHaveBeenCalledWith();
+    });
+
+    it('lists people in a table, one row each, newest activity first as the runtime ordered them', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-several');
         open(api);
 
-        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
-        expect(sentLists(api)[0]).toEqual({ order: 'activity', limit: 50 });
-        const today = screen.getByText('Today');
-        expect(today.className).toContain('group');
-        const mateoRow = screen.getByText('Mateo Ruiz').closest('a')!;
-        expect(within(mateoRow).getByText('Head of Sales, Soluna · LatAm pilot')).toBeTruthy();
-        expect(within(mateoRow).getByText(/replied by email/)).toBeTruthy();
-        expect(within(mateoRow).getByText('08:41')).toBeTruthy();
-        const aguilarRow = screen.getByText('Aguilar').closest('a')!;
-        expect(within(aguilarRow).getByText(/enrollment failed/)).toBeTruthy();
-        const paulaRow = screen.getByText('Paula Mendes').closest('a')!;
-        expect(within(paulaRow).getByText('researcher started')).toBeTruthy();
-        expect(screen.getByText('6 October')).toBeTruthy();
-        const grace = screen.getByText('Grace Hopper').closest('.rows')!;
-        const groups = Array.from(grace.querySelectorAll('.group')).map((g) => g.textContent);
-        expect(groups.at(-1)).toBe('No activity yet');
+        await waitFor(() => expect(screen.getByText('Ada Example')).toBeTruthy());
+        expect(sentLists(api)[0]).toEqual({ order: 'activity', limit: 200 });
+        expect(Array.from(document.querySelectorAll('.ptable thead th')).map((th) => th.textContent)).toEqual([
+            'Name',
+            'Company',
+            'Channels',
+            'Stage',
+            'Campaign',
+            'Last activity',
+        ]);
+        const names = Array.from(document.querySelectorAll('.ptable td.name')).map((td) => td.textContent);
+        expect(names).toHaveLength(24);
+        expect(names.slice(0, 3)).toEqual(['Ada Example', 'Cleo Example', 'Ivy Example']);
+
+        // Stage, then the campaign it is read in, then the latest line with its moment.
+        expect(cells(rowOf('Ada Example'))).toEqual([
+            'Ada Example',
+            'Ada Labs',
+            'Email',
+            'Waiting',
+            'Spring+2',
+            'enrollment waiting for you 15 Oct, 16:00',
+        ]);
+        expect(rowOf('Ada Example').querySelector('.also')!.getAttribute('title')).toBe(
+            'Also on: Autumn, Summer referrals',
+        );
+        expect(rowOf('Ada Example').querySelector('.stage')!.getAttribute('title')).toBe(
+            'An approval or a question about their work is waiting for you.',
+        );
+        // A person in two counts of one campaign shows both; an excluded membership stands in Removed alone.
+        expect(cells(rowOf('Ben Example'))[3]).toBe('WaitingIdle');
+        expect(cells(rowOf('Oli Example'))[3]).toBe('Removed');
+        // A person in no campaign, and one nothing has happened to, show no stage, no campaign and no moment.
+        expect(cells(rowOf('Zoe Example')).slice(3)).toEqual(['—', '—', '—']);
     });
 
     it('a list that fails to load keeps the rows of the same list, and drops the rows of a search the person has left', async () => {
@@ -79,7 +159,7 @@ describe('People', () => {
 
         // The runtime does not answer a refresh: what the person was reading stays, under the failure.
         const reachable = api.unreachable('contact.list');
-        fireEvent.click(screen.getByTitle('Refresh'));
+        await pressRefresh();
         expect((await screen.findByRole('alert')).textContent).toContain('Failed to fetch');
         expect(screen.getByText('Mateo Ruiz')).toBeTruthy();
         reachable();
@@ -100,9 +180,14 @@ describe('People', () => {
         const api = new FakeApi().answer('contact.list', 'contact.list/many', 'contact.list/many-next');
         open(api);
 
-        await waitFor(() => expect(document.querySelectorAll('.list .rows .row')).toHaveLength(50));
+        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(200));
         fireEvent.click(screen.getByRole('button', { name: /loading/ }));
-        await waitFor(() => expect(screen.getByText('Person 51 Example')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Extra 150 Example')).toBeTruthy());
+        // The page and the one past it are one list: every person once, in the order the runtime gave.
+        const names = Array.from(document.querySelectorAll('.ptable td.name')).map((td) => td.textContent);
+        expect(names).toHaveLength(201);
+        expect(new Set(names).size).toBe(201);
+        expect(names.at(-1)).toBe('Extra 150 Example');
         expect(sentLists(api)[1]).toEqual(fixtures['contact.list/many-next'].request);
     });
 
@@ -122,7 +207,7 @@ describe('People', () => {
 
         fireEvent.input(screen.getByRole('searchbox', { name: 'Search people' }), { target: { value: 'mat' } });
         await waitFor(() => expect(sentLists(api)).toHaveLength(2));
-        expect(sentLists(api)[1]).toEqual({ order: 'activity', limit: 50, query: 'mat' });
+        expect(sentLists(api)[1]).toEqual({ order: 'activity', limit: 200, query: 'mat' });
         expect(route.value).toMatchObject({ screen: 'people', filters: { q: 'mat' } });
 
         fireEvent.click(screen.getByRole('button', { name: /All campaigns/ }));
@@ -135,7 +220,7 @@ describe('People', () => {
         const campaignId = fixtures['campaign.list/for-picker'].response.items.find(
             (c) => c.name === 'LatAm pilot',
         )!.id;
-        expect(sentLists(api)[2]).toEqual({ order: 'activity', limit: 50, query: 'mat', campaign_id: campaignId });
+        expect(sentLists(api)[2]).toEqual({ order: 'activity', limit: 200, query: 'mat', campaign_id: campaignId });
 
         fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
         await waitFor(() => expect(sentLists(api)).toHaveLength(4));
@@ -156,10 +241,11 @@ describe('People', () => {
         open(api, { q: 'mat' });
         await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
 
-        fireEvent.click(screen.getByText('Mateo Ruiz').closest('a')!);
+        fireEvent.click(rowOf('Mateo Ruiz'));
 
         expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'timeline', filters: { q: 'mat' } });
-        await waitFor(() => expect(screen.getByText('Mateo Ruiz').closest('a')!.className).toContain('selected'));
+        await waitFor(() => expect(rowOf('Mateo Ruiz').className).toContain('sel'));
+        expect(rowOf('Mateo Ruiz').getAttribute('aria-current')).toBe('true');
 
         const details = { screen: 'people' as const, id: mateo.id, tab: 'details' as const, filters: { q: 'mat' } };
         location.hash = href(details);
@@ -169,7 +255,7 @@ describe('People', () => {
         expect(route.value).toEqual({ screen: 'people', id: mateo.id, tab: 'details', filters: { q: 'aguilar' } });
 
         const aguilar = fixtures['contact.list/by-activity-query-aguilar'].response.items[0]!;
-        fireEvent.click((await screen.findByText('Aguilar')).closest('a')!);
+        fireEvent.click(await waitFor(() => rowOf('Aguilar') ?? Promise.reject(new Error('no row'))));
         expect(route.value).toEqual({ screen: 'people', id: aguilar.id, tab: 'details', filters: { q: 'aguilar' } });
     });
     it("a person's card shows where they are, their local time and their campaigns, active first, excluded outlined; it closes as Work items' panel does", async () => {
@@ -596,7 +682,7 @@ describe('People', () => {
             'journal.list/by-contact-replied-twice',
         ).answer('contact.thread', 'contact.thread/messages');
         open(api, {}, mateo.id);
-        const [newer, older] = await screen.findAllByRole('button', { name: /show the thread/ });
+        const [newer, older] = await replyRows(2);
 
         // The older row's read is still on its way when the newer row takes its place.
         const release = api.hold('contact.thread');
@@ -620,7 +706,7 @@ describe('People', () => {
         );
         open(api, {}, mateo.id);
 
-        const rows = await screen.findAllByRole('button', { name: /show the thread/ });
+        const rows = await replyRows(2);
         expect(rows.map((row) => row.querySelector('.in')?.textContent)).toEqual([
             'LatAm pilot, Re-engage Q2 no-replies',
             'LatAm pilot · mentions a meeting',
@@ -690,6 +776,8 @@ describe('People', () => {
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/gone-campaign', 'contact.list/by-activity')
             .answer('campaign.get', 'campaign.get/gone');
+        // The gone campaign's numbers never come: the address has left it before they could.
+        api.hold('campaign.summary', (body) => (body as { campaign_ids?: string[] }).campaign_ids?.[0] === gone);
         open(api, { campaign: gone });
 
         await waitFor(() => expect(route.value).toEqual({ screen: 'people', tab: 'timeline', filters: {} }));
@@ -711,5 +799,203 @@ describe('People', () => {
         const card = await screen.findByRole('heading', { level: 2, name: 'Grace Hopper' });
         const header = card.closest('.panel-header') as HTMLElement;
         expect(header.querySelector('.sub')!.textContent).toBe('Rear Admiral at Navy');
+    });
+});
+
+describe('People: the stage chips', () => {
+    const chipLabels = () =>
+        Array.from(document.querySelectorAll('.stage-filter .chip')).map((c) =>
+            c.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+    const plain = ['All', 'Waiting', 'Failed', 'Working', 'New', 'Idle', 'Sequence', 'Out'];
+    const chip = (name: RegExp) =>
+        within(document.querySelector('.stage-filter') as HTMLElement).getByRole('button', { name });
+
+    it('ask for one count when chosen, and All asks for everyone; the row is read in the campaign that holds it', async () => {
+        const api = new FakeApi().answer(
+            'contact.list',
+            'contact.list/by-activity-several',
+            'contact.list/by-activity-summary-waiting',
+            'contact.list/by-activity-several',
+        );
+        open(api);
+        await waitFor(() => expect(screen.getByText('Ada Example')).toBeTruthy());
+        expect(screen.getByRole('group', { name: 'Stage' })).toBeTruthy();
+        expect(chip(/^Waiting/).getAttribute('title')).toBe(
+            'An approval or a question about their work is waiting for you.',
+        );
+
+        fireEvent.click(chip(/^Waiting/));
+        await waitFor(() => expect(sentLists(api)).toHaveLength(2));
+        expect(sentLists(api)[1]).toEqual(fixtures['contact.list/by-activity-summary-waiting'].request);
+        expect(route.value).toMatchObject({ screen: 'people', filters: { stage: 'waiting' } });
+        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(3));
+        expect(chip(/^Waiting/).getAttribute('aria-pressed')).toBe('true');
+        expect(cells(rowOf('Pia Example'))[3]).toBe('WaitingFailed');
+        expect(rowOf('Pia Example').getAttribute('aria-current')).toBeNull();
+
+        fireEvent.click(chip(/^All/));
+        await waitFor(() => expect(sentLists(api)).toHaveLength(3));
+        expect(sentLists(api)[2]).toEqual({ order: 'activity', limit: 200 });
+    });
+
+    it('under a chip the campaign shown is the first one that holds the count', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-summary-waiting');
+        open(api, { stage: 'waiting' });
+        await waitFor(() => expect(screen.getByText('Ada Example')).toBeTruthy());
+        expect(cells(rowOf('Ada Example')).slice(3, 5)).toEqual(['Waiting', 'Spring+2']);
+    });
+
+    const withoutArchived = ['All', 'Waiting 3', 'Failed 3', 'Working 2', 'New 3', 'Idle 7', 'Sequence 2', 'Out 6'];
+    const withArchived = ['All', 'Waiting 3', 'Failed 3', 'Working 2', 'New 4', 'Idle 7', 'Sequence 2', 'Out 6'];
+    const summaries = (api: FakeApi) => api.calls.filter((c) => c.operation === 'campaign.summary').map((c) => c.body);
+
+    it('in the default view a chip shows the number of people it lists, archived people left out as the list leaves them', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-summary-new-without-archived');
+        open(api, { stage: 'new' });
+        await waitFor(() => expect(chipLabels()).toEqual(withoutArchived));
+        expect(api.sent('campaign.summary')).toEqual(fixtures['campaign.summary/everyone-without-archived'].request);
+        expect(sentLists(api)[0]).toEqual(fixtures['contact.list/by-activity-summary-new-without-archived'].request);
+        // The number on New and the rows drawn under New are the same people.
+        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(3));
+        const rows = document.querySelectorAll('.ptable tbody tr').length;
+        expect(chip(/^New/).textContent?.replace(/\s+/g, ' ').trim()).toBe(`New ${rows}`);
+    });
+
+    it("narrowed to a campaign in the default view, the chips show that campaign's own numbers, archived people left out", async () => {
+        const spring = fixtures['campaign.summary/some-without-archived'].request.campaign_ids[0]!;
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-campaign-without-archived')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.summary', 'campaign.summary/some-without-archived');
+        open(api, { campaign: spring });
+        await waitFor(() =>
+            expect(chipLabels()).toEqual([
+                'All',
+                'Waiting 3',
+                'Failed 3',
+                'Working 2',
+                'New 1',
+                'Idle 6',
+                'Sequence 2',
+                'Out 6',
+            ]),
+        );
+        expect(api.sent('campaign.summary')).toEqual(fixtures['campaign.summary/some-without-archived'].request);
+        // Everyone the list shows is one of the campaign's people, and every one of them is shown.
+        const people = fixtures['campaign.summary/some-without-archived'].response.campaigns[0]!.people;
+        await waitFor(() => expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(people));
+    });
+
+    it('beside a search no chip shows a number, and none is asked for, because a count knows no search', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity-query');
+        open(api, { q: 'mat' });
+        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
+        expect(chipLabels()).toEqual(plain);
+        expect(summaries(api)).toEqual([]);
+    });
+
+    it('ticking Archived asks for the numbers again and shows the ones that count archived people; unticking asks again', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity', 'contact.list/archived');
+        open(api);
+        await waitFor(() => expect(chipLabels()).toEqual(withoutArchived));
+
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
+        await waitFor(() => expect(chipLabels()).toEqual(withArchived));
+        expect(summaries(api)).toEqual([
+            fixtures['campaign.summary/everyone-without-archived'].request,
+            fixtures['campaign.summary/everyone'].request,
+        ]);
+
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
+        await waitFor(() => expect(chipLabels()).toEqual(withoutArchived));
+        expect(summaries(api)).toHaveLength(3);
+    });
+
+    it('numbers asked before Archived was ticked that arrive after it are dropped', async () => {
+        const api = new FakeApi().answer('contact.list', 'contact.list/by-activity', 'contact.list/archived');
+        const release = api.hold(
+            'campaign.summary',
+            (body) => (body as { exclude_archived_contacts?: boolean }).exclude_archived_contacts === true,
+        );
+        open(api);
+        await waitFor(() => expect(summaries(api)).toHaveLength(1));
+        // The numbers go as soon as the box changes, before anything answers.
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Archived' }));
+        await waitFor(() => expect(chipLabels()).toEqual(withArchived));
+
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(chipLabels()).toEqual(withArchived);
+    });
+
+    it('a count that fails to read leaves the list and says so', async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/archived')
+            .answer('campaign.summary', 'campaign.summary/everyone');
+        open(api, { archived: true });
+        await waitFor(() => expect(chipLabels()).toContain('Waiting 3'));
+        const reachable = api.unreachable('campaign.summary');
+        await pressRefresh();
+        expect((await screen.findByRole('alert')).textContent).toContain('Failed to fetch');
+        expect(chipLabels()).toEqual(plain);
+        expect(document.querySelectorAll('.ptable tbody tr').length).toBeGreaterThan(0);
+        reachable();
+    });
+
+    it("read a campaign's rows in that campaign when the list is narrowed to it", async () => {
+        const unlinked = fixtures['campaign.get/unlinked'].request.campaign_id;
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-campaign')
+            .answer('campaign.get', 'campaign.get/unlinked');
+        // This list's own numbers are not what the test reads: they stay on their way.
+        api.hold('campaign.summary');
+        open(api, { campaign: unlinked });
+        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
+        // Mateo is in two campaigns; the list is of the one, so the row says where they stand there.
+        expect(cells(rowOf('Mateo Ruiz')).slice(3, 5)).toEqual(['WorkingOut', 'LatAm pilot+1']);
+    });
+
+    it("show a campaign's own numbers when Archived is ticked and the list is narrowed to it, and ask again on a refresh", async () => {
+        const unlinked = fixtures['campaign.get/unlinked'].request.campaign_id;
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-campaign-archived')
+            .answer('campaign.get', 'campaign.get/unlinked')
+            .answer('campaign.summary', 'campaign.summary/unlinked');
+        open(api, { campaign: unlinked, archived: true });
+        await waitFor(() => expect(chipLabels()).toContain('New 1'));
+        expect(api.sent('campaign.summary')).toEqual({ campaign_ids: [unlinked] });
+        expect(chipLabels()).toContain('Idle 1');
+        expect(chipLabels()).toContain('Waiting 0');
+
+        await pressRefresh();
+        await waitFor(() => expect(api.calls.filter((c) => c.operation === 'campaign.summary')).toHaveLength(2));
+        await waitFor(() => expect(chipLabels()).toContain('New 1'));
+    });
+
+    it('keep drawing the rows with the filters they were fetched with while the next list is on its way', async () => {
+        const api = new FakeApi().answer(
+            'contact.list',
+            'contact.list/by-activity-several',
+            'contact.list/by-activity-summary-waiting',
+            'contact.list/by-activity-several',
+        );
+        open(api);
+        await waitFor(() => expect(screen.getByText('Cleo Example')).toBeTruthy());
+        const release = api.hold('contact.list', (body) => (body as { summary?: string }).summary === 'waiting');
+
+        fireEvent.click(chip(/^Waiting/));
+        await waitFor(() => expect(sentLists(api)).toHaveLength(2));
+        // Cleo stands in Failed: with the new chip's rule her row would read as nothing at all.
+        expect(cells(rowOf('Cleo Example'))[3]).toBe('Failed');
+        expect(cells(rowOf('Cleo Example'))[4]).toBe('Spring');
+
+        // The person changes their mind before the answer comes: the late answer is dropped.
+        fireEvent.click(chip(/^All/));
+        await waitFor(() => expect(sentLists(api)).toHaveLength(3));
+        await waitFor(() => expect(route.value).toMatchObject({ filters: {} }));
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(document.querySelectorAll('.ptable tbody tr')).toHaveLength(24);
     });
 });

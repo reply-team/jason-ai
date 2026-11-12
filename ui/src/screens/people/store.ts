@@ -1,9 +1,19 @@
 import { signal } from '@preact/signals-react';
 import { ApiError, Unpaired, type Api } from '../../api/client';
 import { session } from '../../api/session';
-import type { AddContactsResult, CampaignSummary, Contact, JournalEntry, Page, WorkItemSummary } from '../../api/types';
+import type {
+    AddContactsResult,
+    CampaignSummary,
+    CampaignSummaryRequest,
+    CampaignSummaryResponse,
+    Contact,
+    JournalEntry,
+    Page,
+    WorkItemSummary,
+} from '../../api/types';
 import { mergePage } from '../../lists/paging';
 import type { PeopleFilters } from '../../router';
+import { stages, type Stage } from './standing';
 
 export const people = signal<Contact[]>([]);
 export const cursor = signal<string | null>(null);
@@ -11,10 +21,14 @@ export const loaded = signal(false);
 export const failure = signal<string | null>(null);
 /** True while a refresh the person asked for is under way: long enough to be seen, even when the answer is instant. */
 export const refreshing = signal(false);
+/** The filters the rows on show were fetched with: the table is drawn with these, never with the ones just chosen. */
+export const drawn = signal<PeopleFilters>({});
+/** How many people each stage counts, as campaign.summary says it; null while unread, or when the list would not match them. */
+export const counts = signal<Record<Stage, number> | null>(null);
 /** The campaign the filter names, with the name to show for it. */
 export const campaign = signal<{ id: string; name: string } | null>(null);
 
-const pageSize = 50;
+const pageSize = 200;
 let generation = 0;
 let loadingMore = false;
 /** The request whose rows are on show: a failed read of that same list leaves them where they are. */
@@ -24,6 +38,7 @@ export function listBody(filters: PeopleFilters): Record<string, unknown> {
     const body: Record<string, unknown> = { order: 'activity', limit: pageSize };
     if (filters.q) body['query'] = filters.q;
     if (filters.campaign) body['campaign_id'] = filters.campaign;
+    if (filters.stage) body['summary'] = filters.stage;
     if (filters.archived) body['include_archived'] = true;
     return body;
 }
@@ -36,18 +51,62 @@ export function fail(error: unknown, into = failure): void {
     into.value = error instanceof ApiError ? error.message : String(error);
 }
 
+/** Whether the chips can show their numbers: a count knows no search, so none beside one. */
+export function showsCounts(filters: PeopleFilters): boolean {
+    return !filters.q;
+}
+
+/**
+ * What the chips' numbers are asked with: the campaign the list is narrowed to, and, while Archived is not ticked,
+ * archived people left out, as the list leaves them out, so a number is the people its chip lists.
+ */
+export function countsBody(filters: PeopleFilters): CampaignSummaryRequest {
+    const body: CampaignSummaryRequest = filters.campaign ? { campaign_ids: [filters.campaign] } : {};
+    if (!filters.archived) body.exclude_archived_contacts = true;
+    return body;
+}
+
+let countsGeneration = 0;
+let countsFor: string | null = null;
+
+/** The chips' numbers: the campaign's own row, or every campaign's total; none beside a search. */
+async function loadCounts(api: Api, filters: PeopleFilters): Promise<void> {
+    const mine = ++countsGeneration;
+    const body = countsBody(filters);
+    const key = showsCounts(filters) ? JSON.stringify(body) : null;
+    // Numbers of another request are never left beside this list: another campaign, or Archived ticked or not.
+    if (key !== countsFor) counts.value = null;
+    countsFor = key;
+    if (key === null) return;
+    try {
+        const answer = await api.call<CampaignSummaryResponse>('campaign.summary', body);
+        if (mine !== countsGeneration) return;
+        const row = filters.campaign ? answer.campaigns[0] : answer.total;
+        counts.value = row
+            ? (Object.fromEntries(stages.map((stage) => [stage, row[stage]])) as Record<Stage, number>)
+            : null;
+    } catch (error) {
+        if (mine !== countsGeneration) return;
+        counts.value = null;
+        fail(error);
+    }
+}
+
 /** The first page for these filters; an answer to filters the person has already left is dropped. */
 export async function load(api: Api, filters: PeopleFilters): Promise<void> {
+    void loadCounts(api, filters);
     const mine = ++generation;
     const body = listBody(filters);
     const asked = JSON.stringify(body);
     const before = cursor.value;
+    loadingMore = false;
     failure.value = null;
     cursor.value = null;
     try {
         const page = await api.call<Page<Contact>>('contact.list', body);
         if (mine !== generation) return;
         people.value = page.items;
+        drawn.value = filters;
         cursor.value = page.next_cursor;
         loaded.value = true;
         shown = asked;

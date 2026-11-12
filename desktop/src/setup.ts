@@ -8,13 +8,40 @@ import { cp, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { deployReplySkills } from './reply-skills.ts';
+import { AgentFolderUnowned } from './chat-agent-folder.ts';
+import { offeredModels, type KeptLists, type ModelOffer } from './chat-models.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
+import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
+import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import type { DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import type { ProviderKeys } from './providers.ts';
+import {
+    answeredWell,
+    checkedLinkedInLink,
+    isMailboxPage,
+    isReplyId,
+    linkedInFloorVersion,
+    linkedInNameProblem,
+    linkedInRefusal,
+    mailboxAddress,
+    mailboxAnswer,
+    mailboxRefusal,
+    mailboxToken,
+    pendingRows,
+    readReplyApi,
+    replyApiArguments,
+    replyApiLimitMs,
+    replyLinkSentences,
+    withoutLink,
+    type ReplyApiAct,
+    type ReplyApiAnswer,
+    type ReplyPending,
+} from './reply-links.ts';
 import type { DesktopSettings } from './settings.ts';
 import {
     bundledPlugin,
@@ -24,6 +51,9 @@ import {
     isConfigured,
     parseInstallationSettings,
     parseReplyAccounts,
+    readReplyChannel,
+    replyChannels,
+    type ReplyChannel,
     parseReplyAuth,
     pluginRuntimes,
     programInstalls,
@@ -48,6 +78,30 @@ export interface HostState {
     drivesChat: boolean;
     /** The `installProgram` id when the program is missing and npm is there to install it. */
     install: string | null;
+    /**
+     * When the Claude Code the host runs on is older than the oldest version the chat runs on, or its version could not
+     * be read, the sentence that says so, names the floor and the cure: the chat starts no turn on the host. Null
+     * otherwise, and for a host that is not Claude Code or a key provider on it.
+     */
+    belowFloor: string | null;
+    /**
+     * Why Full access cannot be chosen for a chat on this host, in the desktop's words: Codex has none, and a Claude Code
+     * older than the oldest version a Full access turn runs on, or whose version could not be read, says so
+     * (`fullAccessSentence`). Null where it can be chosen, and for a host that does not drive the chat.
+     */
+    fullAccess: string | null;
+    /**
+     * The models the chat's box offers on this host, each with the effort levels it takes: Claude Code's aliases at the
+     * version read now, the list kept of what Codex offered, or a key provider's table (`offeredModels`).
+     */
+    models: ModelOffer[];
+    /** Whether the box also takes a model's full name typed by the person: on Claude Code and on Anthropic's key. */
+    typedModel: boolean;
+    /**
+     * Where the host's models are asked of it and no list was ever read, the desktop's one line saying so and that the
+     * turn uses the host's own default model; null otherwise.
+     */
+    modelsUnread: string | null;
 }
 
 export interface ReplyState {
@@ -56,6 +110,36 @@ export interface ReplyState {
     user: string | null;
     wired: boolean;
     accounts: ReplyAccount[];
+    /** The channels the CLI says are not in this account's plan or role (`email`, `linkedin`). */
+    absent: ReplyChannel[];
+    /** The channels whose list could not be read, for any other reason. The other channel's rows stay in both cases. */
+    unread: ReplyChannel[];
+    /**
+     * The LinkedIn connections started from a link and not finished yet, read where LinkedIn was listed; never with their
+     * link, which `replyLinkedInPendingLink` asks again on the person's click.
+     */
+    linkedinPending: ReplyPending[];
+    /**
+     * Why the LinkedIn link acts are off, where the Reply CLI is signed in but older than the one that reads a body from
+     * standard input; null otherwise.
+     */
+    linkedinBelowFloor: string | null;
+}
+
+/**
+ * A link Reply answered for connecting or reconnecting an account, checked: what the person opens or sends to whoever
+ * owns the account, the host it leads to, and when it stops working where Reply said.
+ */
+export interface ReplyLink {
+    kind: 'linkedin' | 'mailbox';
+    link: string;
+    host: string;
+    expiresAtUtc: string | null;
+}
+
+/** A link's ask that ended without one, in one sentence of the desktop's. */
+export interface LinkRefusal {
+    refused: string;
 }
 
 export interface PluginState {
@@ -103,6 +187,17 @@ export interface SetupDeps {
     runtimeIsOurs?(): boolean;
     settings(): DesktopSettings;
     clock?: () => number;
+    /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
+    fullAccessOffered?: boolean;
+    /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
+    ownChatFolder?: (chat: string, records: string) => void;
+    /**
+     * The person's yes, asked by the main process in a native box before the mailbox page is asked of Reply; absent, the
+     * answer is no.
+     */
+    confirmMailboxLink?(): Promise<boolean>;
+    /** The models Codex offered when last asked, and the background ask of the ones a day old (`model-lists.ts`). */
+    models?: { lists(): KeptLists; refresh(hostIds: readonly string[]): void; unread(hostId: string): 'waiting' | 'failed' | null };
 }
 
 const signInLimit = 5 * 60_000;
@@ -168,6 +263,23 @@ export function versionsDifferSentence(runtimeVersion: string | null, bundleVers
     return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. ${way} to bring them to one version.`;
 }
 
+/** The line a host whose models were never read shows instead of its list. */
+export function unreadSentence(label: string, unread: 'waiting' | 'failed' | null): string | null {
+    if (unread === 'failed') return `${label}'s models could not be read, so the turn uses its own default model.`;
+    if (unread === 'waiting') return `${label}'s models are being read; until then the turn uses its own default model.`;
+    return null;
+}
+
+function field(data: unknown, name: string): unknown {
+    return typeof data === 'object' && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>)[name] : undefined;
+}
+
+/** A LinkedIn link answered, checked; refused in one sentence where it is not of Reply's forms. */
+function linkedIn(value: unknown, expiresAtUtc: string | null): ReplyLink | LinkRefusal {
+    const checked = checkedLinkedInLink(value);
+    return checked === null ? { refused: replyLinkSentences.badLink } : { kind: 'linkedin', link: checked.link, host: checked.host, expiresAtUtc };
+}
+
 export class Setup {
     #deps: SetupDeps;
     #listeners = new Set<() => void>();
@@ -175,6 +287,8 @@ export class Setup {
     #queue: Promise<unknown> = Promise.resolve();
     /** What the last reload said about the settings file, when it could not read it. */
     #reloadRefusal: string | null = null;
+    /** Whether a link is being asked of Reply: one at a time, and a second click meanwhile is refused. */
+    #linking = false;
 
     constructor(deps: SetupDeps) {
         this.#deps = deps;
@@ -216,20 +330,44 @@ export class Setup {
         return programInstalls[program]?.npmPackage && this.#deps.programs.find('npm') !== null ? program : null;
     }
 
+    /**
+     * Claude Code's version, read at each listing and never remembered, and the sentences when it is below the floor and
+     * below the floor of Full access.
+     */
+    async #claude(): Promise<{ version: string | null; belowFloor: string | null; fullAccess: string | null }> {
+        const version = printedVersion(await this.#run('claude', '--version', ['--version'], { timeoutMs: versionLimitMs }));
+        return { version, belowFloor: floorSentence(version), fullAccess: fullAccessSentence(version) };
+    }
+
     async status(): Promise<SetupState> {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
+        const claude = programs.find('claude') !== null ? await this.#claude() : null;
+        const kept = this.#deps.models?.lists() ?? new Map();
+        const offered = (id: string, label: string) => {
+            const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
+            return { models, typedModel: typed, modelsUnread: unreadSentence(label, this.#deps.models?.unread(id) ?? null) };
+        };
+        // Codex has no Full access; Claude Code has it from its floor of Full access. A Claude Code not found offers nothing yet.
+        // While this version does not offer it, every host that drives the chat says so.
+        const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
+        const fullAccessOn = (program: string, drives: boolean) =>
+            !drives ? null : !offeredHere ? fullAccessNotYet : program === 'codex' ? codexFullAccess : program === 'claude' ? (claude === null ? null : claude.fullAccess) : null;
         const programHosts: HostState[] = [];
         for (const host of hosts) {
             const found = programs.find(host.program) !== null;
+            const own = host.program === 'claude' ? claude : null;
             programHosts.push({
                 id: host.id,
                 label: host.label,
                 kind: 'program',
                 found,
-                version: found ? await this.#version(host.program) : null,
+                version: !found ? null : own !== null ? own.version : await this.#version(host.program),
                 drivesChat: host.drivesChat,
                 install: found ? null : this.#installable(host.program),
+                belowFloor: own?.belowFloor ?? null,
+                fullAccess: fullAccessOn(host.program, host.drivesChat),
+                ...offered(host.id, host.label),
             });
         }
         const providerHosts: HostState[] = keyProviders.map((provider) => ({
@@ -240,7 +378,15 @@ export class Setup {
             version: null,
             drivesChat: hosts.find((host) => host.program === provider.program)?.drivesChat ?? false,
             install: null,
+            belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
+            fullAccess: fullAccessOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
+            ...offered(provider.id, provider.label),
         }));
+        // Shown from what is kept; Codex is asked again in the background where it is on the PATH or its key is stored.
+        this.#deps.models?.refresh([
+            ...(programs.find('codex') !== null ? ['codex'] : []),
+            ...(stored.has('codex-api-key') ? ['codex-api-key'] : []),
+        ]);
 
         let settings: unknown = {};
         let settingsRefused = this.#reloadRefusal;
@@ -282,7 +428,7 @@ export class Setup {
     async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
         if (!found) {
-            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [] };
+            return { cli: { found, version: null, install: this.#installable('reply') }, signedIn: false, user: null, wired: false, accounts: [], absent: [], unread: [], linkedinPending: [], linkedinBelowFloor: null };
         }
         const routes = valid ? await this.#deps.cli.run(['route', 'list']) : null;
         const wired = routes !== null && routes.exit === 0 && defaultRoutePlugin(routes.stdout) === 'reply';
@@ -291,8 +437,114 @@ export class Setup {
         // which it has no command for.
         const current = version !== null && versionAtLeast(version, replyMinimumVersion);
         const auth = parseReplyAuth((await this.#run('reply', 'auth status', ['auth', 'status', '--json'])).stdout);
-        const accounts = auth.signedIn && current ? parseReplyAccounts((await this.#run('reply', 'account list', ['account', 'list', '--json'])).stdout) : [];
-        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts };
+        const accounts: ReplyAccount[] = [];
+        const absent: ReplyChannel[] = [];
+        const unread: ReplyChannel[] = [];
+        let linkedinPending: ReplyPending[] = [];
+        if (auth.signedIn && current) {
+            // One read per channel: without --channel a channel the plan or role lacks fails the whole command.
+            for (const channel of replyChannels) {
+                const read = readReplyChannel(await this.#run('reply', 'account list', ['account', 'list', '--channel', channel, '--json']));
+                if (read.kind === 'listed') accounts.push(...read.accounts);
+                else (read.kind === 'absent' ? absent : unread).push(channel);
+            }
+            // The connections under way, read where LinkedIn was listed; their links are dropped here, in main.
+            if (!absent.includes('linkedin') && !unread.includes('linkedin')) {
+                const answer = await this.#replyApi('linkedin_pending');
+                linkedinPending = answeredWell(answer) ? (pendingRows(answer.data) ?? []).map(withoutLink) : [];
+            }
+        }
+        const linkedinBelowFloor = auth.signedIn && current && !versionAtLeast(version, linkedInFloorVersion) ? replyLinkSentences.linkedInFloor : null;
+        return { cli: { found, version, install: current ? null : this.#installable('reply') }, signedIn: auth.signedIn, user: auth.user, wired, accounts, absent, unread, linkedinPending, linkedinBelowFloor };
+    }
+
+    /**
+     * One call of the closed table through `reply api`, with the body on standard input for the one call that has one.
+     * Logged by the call's name, Reply's status and the exit code only: never the path's id, the body or what was printed.
+     */
+    async #replyApi(act: ReplyApiAct, options: { id?: string; body?: string } = {}): Promise<ReplyApiAnswer | null> {
+        const args = replyApiArguments(act, options.id);
+        const result = await this.#run('reply', `api ${act}`, args, { stdin: options.body, timeoutMs: replyApiLimitMs });
+        const answer = readReplyApi(result);
+        this.#deps.log.info('reply_api_answered', { Act: act, Status: answer?.status ?? 0, Exit: result.exit });
+        return answer;
+    }
+
+    /** Whether the Reply CLI reads a body from standard input, which the LinkedIn acts need. */
+    async #linkedInReady(): Promise<boolean> {
+        const version = await this.#version('reply');
+        return version !== null && versionAtLeast(version, linkedInFloorVersion);
+    }
+
+    /** One link asked at a time; the answer is the link, or the sentence it ended with. */
+    async #asking(work: () => Promise<ReplyLink | LinkRefusal>): Promise<ReplyLink | LinkRefusal> {
+        if (this.#linking) return { refused: replyLinkSentences.busy };
+        this.#linking = true;
+        try {
+            return await work();
+        } finally {
+            this.#linking = false;
+        }
+    }
+
+    /**
+     * Adds a LinkedIn account by a link Reply makes for it (`connection-link`), which also lists it as waiting until it
+     * is finished. The name the person typed goes to Reply as the JSON body on standard input, never on a command line.
+     */
+    replyLinkedInConnect(name: unknown): Promise<ReplyLink | LinkRefusal> {
+        const problem = linkedInNameProblem(name);
+        if (problem !== null) return Promise.resolve({ refused: problem });
+        return this.#asking(async () => {
+            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
+            const answer = await this.#replyApi('linkedin_connect', { body: JSON.stringify({ name: (name as string).trim() }) });
+            if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_connect') };
+            return linkedIn(field(answer.data, 'connectionLink'), null);
+        });
+    }
+
+    /** The link of a LinkedIn connection that waits, asked again from the pending list by its id, never kept. */
+    replyLinkedInPendingLink(pendingId: unknown): Promise<ReplyLink | LinkRefusal> {
+        if (!isReplyId(pendingId)) return Promise.resolve({ refused: replyLinkSentences.badId });
+        return this.#asking(async () => {
+            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
+            const answer = await this.#replyApi('linkedin_pending');
+            if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_pending') };
+            const rows = pendingRows(answer.data);
+            if (rows === null) return { refused: replyLinkSentences.unreached };
+            const row = rows.find((each) => each.id === pendingId);
+            if (row === undefined) return { refused: replyLinkSentences.pendingGone };
+            return linkedIn(row.connectionLink, row.expiresAtUtc);
+        });
+    }
+
+    /** A link that signs a LinkedIn account Reply holds in again, by the account's id. */
+    replyLinkedInReconnect(accountId: unknown): Promise<ReplyLink | LinkRefusal> {
+        if (!isReplyId(accountId)) return Promise.resolve({ refused: replyLinkSentences.badId });
+        return this.#asking(async () => {
+            if (!(await this.#linkedInReady())) return { refused: replyLinkSentences.linkedInFloor };
+            const answer = await this.#replyApi('linkedin_reconnect', { id: accountId });
+            if (!answeredWell(answer)) return { refused: linkedInRefusal(answer, 'linkedin_reconnect') };
+            return linkedIn(field(answer.data, 'connectionLink'), null);
+        });
+    }
+
+    /**
+     * One of the account's mailbox pages: Gmail's or Outlook's, which connect a mailbox or reconnect the one with the
+     * same address, or the hosted page itself, where any other mailbox is added or put right. Each is built from the
+     * checked token of the address Reply answers, and nothing else of the answer.
+     */
+    replyMailboxLink(page: unknown): Promise<ReplyLink | LinkRefusal> {
+        if (!isMailboxPage(page)) return Promise.resolve({ refused: replyLinkSentences.badPage });
+        return this.#asking(async () => {
+            // The one link that never expires is asked only on the person's yes in the main process's own box.
+            const confirmed = (await this.#deps.confirmMailboxLink?.()) ?? false;
+            if (!confirmed) return { refused: replyLinkSentences.mailboxNotConfirmed };
+            const answer = await this.#replyApi('mailbox_page');
+            if (!answeredWell(answer)) return { refused: mailboxRefusal(answer) };
+            const checked = mailboxToken(mailboxAnswer(answer.data));
+            if (checked === null) return { refused: replyLinkSentences.badLink };
+            return { kind: 'mailbox', link: mailboxAddress(checked.host, checked.token, page), host: checked.host, expiresAtUtc: null };
+        });
     }
 
     connectReply(): Promise<void> {
@@ -371,21 +623,13 @@ export class Setup {
      * are left out.
      */
     async #deployReplySkills(): Promise<void> {
-        const targets = [join(this.#deps.paths.chat, '.claude', 'skills'), join(this.#deps.paths.chat, '.agents', 'skills')];
-        const place = await mkdtemp(join(tmpdir(), 'jason-reply-skills-'));
+        // The routine the start uses too (`reply-skills.ts`); what it copies is recorded outside the chat folder. A chat
+        // folder that cannot be put right is said by its code, and the sign-in's own result stands.
         try {
-            const answer = await this.#run('reply', 'skills install', ['skills', 'install', 'adapter', '--project', '--agent', 'codex'], { cwd: place, timeoutMs: installLimit });
-            if (answer.exit !== 0) return;
-            const source = join(place, '.agents', 'skills');
-            for (const name of await readdir(source).catch(() => [] as string[])) {
-                if (!name.startsWith('reply-')) continue;
-                for (const target of targets) {
-                    await rm(join(target, name), { recursive: true, force: true });
-                    await cp(join(source, name), join(target, name), { recursive: true });
-                }
-            }
-        } finally {
-            await rm(place, { recursive: true, force: true });
+            await deployReplySkills((verb, args, options) => this.#run('reply', verb, args, options), this.#deps.paths, this.#deps.ownChatFolder);
+        } catch (error) {
+            if (!(error instanceof AgentFolderUnowned)) throw error;
+            this.#deps.log.warn('agent_folder_unowned', { Code: error.code });
         }
     }
 

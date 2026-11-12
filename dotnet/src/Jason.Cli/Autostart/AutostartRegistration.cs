@@ -35,8 +35,8 @@ public enum AutostartPlatform
 /// <param name="Query">The command that says whether it is registered.</param>
 /// <param name="Run">The command line that gets registered: the runtime itself, and never something that starts one.</param>
 /// <param name="SearchPath">
-/// The search path the registered runtime starts with, where the registration carries one: on macOS, the PATH of the
-/// process that registered it. Null where the registration carries none, and on the two platforms that never do.
+/// The search path the registered runtime starts with, where the registration carries one: on macOS and Linux, the PATH
+/// of the process that registered it. Null where the registration carries none, and on Windows, where it never does.
 /// </param>
 public sealed record AutostartRegistration(
     AutostartPlatform Platform,

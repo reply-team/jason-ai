@@ -607,6 +607,32 @@ public class UninstallOrderTests
     /// </param>
     /// <param name="running">Whether the pid the descriptor names is in the process table.</param>
     /// <param name="errors">The verb's standard error, for a test that reads it on its own.</param>
+    /// <summary>
+    /// On Linux a PATH with an entry the unit cannot carry, a double quote or a backslash, does not stop the uninstall at
+    /// its first step: the unit is removed by its file, registered or not, and the steps after it run.
+    /// </summary>
+    [Theory]
+    [InlineData("/home/ada/\"q\"/bin:/usr/bin", true)]
+    [InlineData("/home/ada/\"q\"/bin:/usr/bin", false)]
+    [InlineData("/home/ada/a\\b/bin:/usr/bin", true)]
+    [InlineData("/home/ada/a\\b/bin:/usr/bin", false)]
+    public async Task On_linux_a_search_path_the_unit_cannot_carry_does_not_stop_the_first_step(string searched, bool registered)
+    {
+        using var dir = new TempPaths();
+        var registrar = new RecordingRegistrar(Cli.Autostart.AutostartPlatform.Linux);
+        if (registered)
+        {
+            registrar.State = new Cli.Autostart.AutostartState(true, ["/home/ada/.local/bin/jason", "runtime", "run", "--detached", "--data-dir", dir.Paths.Root], null);
+        }
+
+        var (exit, output, _) = await RunAsync(dir, new StepLog(), RuntimeVerbs.NeverCalled(), registrar, running: false, searchPath: searched);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(1, registrar.Removals);
+        Assert.False(registrar.State.Registered);
+        Assert.Contains(registered ? "Removed the logon registration." : "No logon registration was registered for this account.", output.ToString(), StringComparison.Ordinal);
+    }
+
     private static async Task<(int Exit, StringWriter Output, RecordingRemover Remover)> RunAsync(
         TempPaths dir,
         StepLog log,
@@ -615,7 +641,8 @@ public class UninstallOrderTests
         FakeProcessControl? processes = null,
         bool everything = false,
         bool running = true,
-        StringWriter? errors = null)
+        StringWriter? errors = null,
+        string? searchPath = null)
     {
         var output = new StringWriter();
         var error = errors ?? new StringWriter();
@@ -649,7 +676,8 @@ public class UninstallOrderTests
             InstallPath: install,
             Autostart: (Cli.Autostart.IAutostartRegistrar?)registrar ?? new LoggingRegistrar(log),
             Harnesses: HarnessLocators.At(harness),
-            Removes: remover);
+            Removes: remover,
+            SearchPath: searchPath);
 
         var exit = await UninstallCommand.RunAsync(
             env,

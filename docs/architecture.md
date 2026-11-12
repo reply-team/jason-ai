@@ -435,6 +435,16 @@ browser pairs once: `ui.open` mints a single-use one-minute ticket, the page tra
 token the runtime keeps as a hash and accepts as a bearer until `ui.revoke`; a request carrying a foreign `Origin` is
 refused. The UI is one more consumer of the API and the runtime keeps nothing for it; see the `DEC-UI` decisions.
 
+**Jason Desktop** (`desktop/`, described in [desktop.md](desktop.md)) is the same kind of client in an application window
+for Windows, macOS and Linux. It carries the release's `jason` executable, works on the one installation the CLI uses
+(the same data directory, harness root and settings file; never a second one) and drives it only through the CLI's
+verbs and the settings file a person would edit. It loads the UI the runtime serves at its loopback address, in a second
+shell with the chat as its home, and reaches the page through one object, `window.jasonDesktop`. What it adds is what a
+browser tab cannot be trusted with: a chat that starts the person's own agent host (Claude Code, or Codex to read) as a
+child of the desktop and asks the person before the agent acts, a tray, and the setup of the connections that are a
+person's alone. The runtime starts no process for a screen and knows no desktop: nothing in it, no route, state or file,
+exists for the application, and a runtime with no desktop is unchanged.
+
 ### 6.9 Dispatcher
 
 Dispatcher is deterministic Runtime code, not an AI role. It evaluates explicit state and

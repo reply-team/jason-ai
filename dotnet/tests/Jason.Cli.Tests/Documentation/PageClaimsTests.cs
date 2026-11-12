@@ -1210,12 +1210,13 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The prompt sends the agent to the install page as a single plain file: the raw address at <c>main</c>, which is
-    /// the latest release, because the public <c>main</c> moves only when a release is published.
+    /// The prompt sends the agent to the install page as a single plain file: the download address's short path, which
+    /// serves the page of <c>main</c> as plain text, the latest release's, because the public <c>main</c> moves only when
+    /// a release is published.
     /// </summary>
     [Fact]
     public void The_install_prompt_points_at_the_install_page_at_main() =>
-        Assert.Contains("<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>", Prompt(), StringComparison.Ordinal);
+        Assert.Contains("<https://get.jasonharness.ai/install>", Prompt(), StringComparison.Ordinal);
 
     /// <summary>
     /// The steps live on the install page alone. The prompt names no command and no option, so steps cannot creep back
@@ -2335,10 +2336,10 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:c6ecdd106e93baad9633528ce2cfb7baad97d48242b048875446585f09890456";
+    private const string PromptDigest = "sha256:dfe911f97419b9e6fbf54ffbf641ad338de6ef6b797b905e9059fa5dfd33167c";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:f8d405aa9cc2ac6e6ab11efceacd0a831831c916dfc07a862190f4382916cc7c";
+    private const string AgentSectionDigest = "sha256:a2d9a1e07b5a0869c3baccc6af1200f03b879ef5f72491eab6614131ee3f4fa5";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

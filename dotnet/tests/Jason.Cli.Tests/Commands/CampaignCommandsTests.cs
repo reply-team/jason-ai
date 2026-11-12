@@ -296,6 +296,19 @@ public class CampaignCommandsTests
         every.AssertPosted(Operations.CampaignSummary, "{}");
     }
 
+    /// <summary>Archived contacts are counted unless the flag leaves them out; it is sent only when given.</summary>
+    [Theory]
+    [InlineData(new[] { "--exclude-archived-contacts" }, "{\"exclude_archived_contacts\":true}")]
+    [InlineData(new[] { "cmp_A", "--exclude-archived-contacts" }, "{\"campaign_ids\":[\"cmp_A\"],\"exclude_archived_contacts\":true}")]
+    public async Task Summary_leaves_out_archived_contacts_when_asked(string[] options, string posted)
+    {
+        using var cli = new CliRun();
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync(["campaign", "summary", .. options]));
+
+        cli.AssertPosted(Operations.CampaignSummary, posted);
+    }
+
     [Fact]
     public async Task Activity_sends_its_period_and_the_campaigns_named()
     {
@@ -835,7 +848,7 @@ public class CampaignCommandsTests
             Moment,
             Moment,
             null,
-            Campaigns: [new ContactCampaignDto("cmp_A", "Spring", MembershipState.Enrolled, Moment, Moment), new ContactCampaignDto("cmp_B", "Autumn", MembershipState.Enrolled, Moment, Moment)]);
+            Campaigns: [new ContactCampaignDto("cmp_A", "Spring", MembershipState.Enrolled, Moment, Moment, [CampaignSummaryFilter.New]), new ContactCampaignDto("cmp_B", "Autumn", MembershipState.Enrolled, Moment, Moment, [CampaignSummaryFilter.Idle])]);
         var worked = new MembershipWhy("activity", null, "researcher", Moment, null, null);
         var page = JsonSerializer.Serialize(
             new Page<MembershipItemDto>(

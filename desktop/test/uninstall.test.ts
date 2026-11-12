@@ -72,6 +72,11 @@ function bench(
         dataDirectory: 'C:\\Users\\someone\\.jason',
         harnessRoot: 'C:\\Users\\someone\\Jason',
         updaterCache: 'C:\\Users\\someone\\AppData\\Local\\jason-desktop-updater',
+        bundles: null,
+        jason: executable,
+        log: memoryLog(),
+        // The made-up folders are not on this machine: each path resolves to itself.
+        resolve: (path) => path,
     };
     return { folder, deps, acts };
 }
@@ -114,7 +119,7 @@ test('the start that stops the carried runtime exits 0 when none of its own runs
     // The packaged executable makes this start without a window, a lock or a dialog, and a rejection anywhere exits 2.
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
-    const branch = main.slice(main.indexOf('const uninstalling = uninstallStart('), main.indexOf('} else if (!app.requestSingleInstanceLock()) {'));
+    const branch = main.slice(main.indexOf('const uninstalling = uninstallStart('), main.indexOf('} else if (!app.requestSingleInstanceLock('));
     assert.ok(branch.includes('} else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {'));
     assert.ok(branch.includes('void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));'));
     const from = start.indexOf('export async function runStopRuntime(');
@@ -206,7 +211,7 @@ test('the runtime’s logon registration is taken off only when it starts this a
     assert.ok(report.left.some((line) => line.includes('starts C:\\Users\\someone\\.jason\\bin\\jason.exe, not this application’s')));
 
     const failed = bench(t, { registration: { registered: true, executable }, disabled: null });
-    assert.ok((await uninstall(failed.deps)).left.some((line) => line.includes('could not be taken off')));
+    assert.ok((await uninstall(failed.deps)).failed.some((line) => line.includes('could not be taken off')));
 
     const none = bench(t, { registration: null });
     await uninstall(none.deps);
@@ -224,7 +229,8 @@ test('what stays is said by name: the data directory, the harness root, the upda
         'The data directory, C:\\Users\\someone\\.jason',
         'The harness root, C:\\Users\\someone\\Jason',
         'The updater’s cache, C:\\Users\\someone\\AppData\\Local\\jason-desktop-updater',
-        'A runtime is running that this application could not confirm as its own: it was not stopped; jason runtime stop stops it',
+        // The uninstaller removes the carried jason next, so the hand act names the jason the runtime was started from.
+        'A runtime is running that this application could not confirm as its own: it was not stopped; the jason it was started from stops it with runtime stop',
     ]) {
         assert.ok(detail.includes(named), named);
     }
@@ -268,13 +274,13 @@ test('when the runtime this application carries does not stop, or a runtime did 
         assert.deepEqual(acts, asked, 'nothing else was done');
         assert.deepEqual(readdirSync(folder).sort(), ['jason', 'jason.cmd'], 'the PATH command stays');
         assert.equal(deps.login.isOn(), true, 'Open Jason at login stays');
-        assert.deepEqual([report.removed, report.left], [[], []]);
+        assert.deepEqual([report.removed, report.untouched, report.failed, report.left], [[], [], [], []]);
         assert.equal(uninstallExit(report), 1, 'the uninstaller is told to go no further');
         const { message, detail } = uninstallText(report);
         assert.equal(message, 'Jason was not removed.');
         assert.match(
             detail,
-            /^Nothing was removed, because (the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with jason runtime stop, then uninstall Jason again|a runtime may be running( that did not answer(: its run file names process 4242, which is running|, and its run file names no process)|: its run file, [^,]+, is there and could not be read)\. jason runtime status answers once the runtime does[^]*\. Then uninstall Jason again)\.$/,
+            /^Nothing was removed, because (the runtime this application carries is running and did not stop \(jason runtime stop (exited 1|did not finish)\)\. Stop it with C:\\Users\\someone\\AppData\\Local\\Programs\\Jason\\resources\\bundle\\jason\.exe runtime stop, then uninstall Jason again|a runtime may be running( that did not answer(: its run file names process 4242, which is running|, and its run file names no process)|: its run file, [^,]+, is there and could not be read)\. C:\\Users\\someone\\AppData\\Local\\Programs\\Jason\\resources\\bundle\\jason\.exe runtime status answers once the runtime does[^]*\. Then uninstall Jason again)\.$/,
         );
         assert.doesNotMatch(detail, /planted/);
     }
@@ -288,7 +294,7 @@ test('when the runtime this application carries does not stop, or a runtime did 
     );
 });
 
-test('a removal that fails is named among what is left with its act, the others still run, and the uninstall still exits 0', async (t) => {
+test('a removal that fails is named with its act among what could not be taken off, said first among what is left, the others still run, and the uninstall still exits 0', async (t) => {
     const { folder, deps, acts } = bench(t, { loginOn: true, registration: { registered: true, executable } });
     writeFileSync(join(folder, 'jason.cmd'), windowsShim(executable));
     deps.command = { status: deps.command.status.bind(deps.command), remove: () => { throw new Error('planted-remove-error'); } };
@@ -300,10 +306,15 @@ test('a removal that fails is named among what is left with its act, the others 
     for (const named of [
         `${join(folder, 'jason.cmd')}, which could not be taken off: deleting the file takes it off`,
         'Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it',
-        'The runtime’s start at logon, which could not be taken off: jason runtime autostart disable takes it off',
+        // The uninstaller removes the carried jason next, so the hand act names the registration itself.
+        'The runtime’s start at logon, which could not be taken off: Task Scheduler holds it as the task named Jason- followed by your account’s SID; deleting that task takes it off',
     ]) {
-        assert.ok(report.left.includes(named), named);
+        assert.ok(report.failed.includes(named), named);
+        assert.ok(!report.left.includes(named), named);
     }
+    const shown = uninstallText(report).detail;
+    assert.match(shown, /\n\nLeft in place:\n• Open Jason at login, which could not be turned off/);
+    assert.ok(shown.indexOf('jason.cmd, which could not be taken off') < shown.indexOf('• The data directory'));
     assert.equal(report.refused, null);
     assert.equal(uninstallExit(report), 0);
     assert.doesNotMatch(uninstallText(report).detail, /planted/);
@@ -313,7 +324,7 @@ test('a removal that fails is named among what is left with its act, the others 
     unknown.deps.login = { isOn: () => { throw new Error('planted-login-read-error'); }, set: async () => void unknown.acts.push('login false') };
     const after = await uninstall(unknown.deps);
     assert.deepEqual(unknown.acts, ['autostart disable']);
-    assert.ok(after.left.includes('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it'));
+    assert.ok(after.failed.includes('Open Jason at login, which could not be turned off: the system’s list of apps that open at login holds it'));
     assert.equal(uninstallExit(after), 0);
     assert.doesNotMatch(uninstallText(after).detail, /planted/);
 
@@ -322,8 +333,15 @@ test('a removal that fails is named among what is left with its act, the others 
     unread.deps.autostart = { status: async () => Promise.reject(new Error('planted-status-error')), disable: async () => (unread.acts.push('autostart disable'), false) };
     const read = await uninstall(unread.deps);
     assert.deepEqual(unread.acts, []);
-    assert.ok(read.left.includes('The runtime’s start at logon, which could not be read: jason runtime autostart status says whether it is there'));
+    assert.ok(read.failed.includes('The runtime’s start at logon, which could not be read: Task Scheduler holds it as the task named Jason- followed by your account’s SID; deleting that task takes it off'));
     assert.equal(uninstallExit(read), 0);
+
+    // A status the CLI did not answer is one that could not be read, too, and nothing is disabled.
+    const silent = bench(t);
+    silent.deps.autostart = { status: async () => null, disable: async () => (silent.acts.push('autostart disable'), false) };
+    const quiet = await uninstall(silent.deps);
+    assert.deepEqual(silent.acts, []);
+    assert.ok(quiet.failed.includes('The runtime’s start at logon, which could not be read: Task Scheduler holds it as the task named Jason- followed by your account’s SID; deleting that task takes it off'));
 });
 
 test('the harness root is read from the settings without regard to the case of its keys, as the runtime reads them', (t) => {
@@ -347,7 +365,12 @@ test('the harness root and the updater’s cache are found as the runtime and el
     writeFileSync(settings, JSON.stringify({ Harness: { Root: 'D:\\Work\\Jason' } }));
     assert.equal(harnessRoot({}, home, settings), 'D:\\Work\\Jason');
     assert.equal(harnessRoot({ JASON_Harness__Root: 'E:\\Mine' }, home, settings), 'E:\\Mine');
-    assert.equal(updaterCache({ LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }, home), win32.join('C:\\Users\\someone\\AppData\\Local', 'jason-desktop-updater'));
+    assert.equal(updaterCache({ LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }, home, 'win32'), win32.join('C:\\Users\\someone\\AppData\\Local', 'jason-desktop-updater'));
+    // On macOS and Linux as the pinned electron-updater's AppAdapter.getAppCacheDir reads it: ~/Library/Caches; XDG_CACHE_HOME, else ~/.cache.
+    assert.equal(updaterCache({ XDG_CACHE_HOME: '/Users/someone/cache' }, '/Users/someone', 'darwin'), '/Users/someone/Library/Caches/jason-desktop-updater');
+    assert.equal(updaterCache({ XDG_CACHE_HOME: '/home/someone/cache' }, '/home/someone', 'linux'), '/home/someone/cache/jason-desktop-updater');
+    assert.equal(updaterCache({ XDG_CACHE_HOME: '' }, '/home/someone', 'linux'), '/home/someone/.cache/jason-desktop-updater');
+    assert.equal(updaterCache({}, '/home/someone', 'linux'), '/home/someone/.cache/jason-desktop-updater');
     // electron-updater names the cache after the package's name.
     assert.equal(JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8')).name, 'jason-desktop');
 });
@@ -426,4 +449,38 @@ test('the logon registration is read from what jason runtime autostart status sa
     assert.equal(await autostart.registration(), null);
     assert.equal(await autostart.registration(), null);
     assert.deepEqual(asked, Array(4).fill(['runtime', 'autostart', 'status']));
+});
+
+test('the jason-desktop link registration is taken off when it names this application, left when it does not, and named when it cannot be', async (t) => {
+    const ours = bench(t);
+    let registered = true;
+    const removals: string[] = [];
+    ours.deps.link = { registered: () => registered, remove: () => (removals.push('remove'), (registered = false), true) };
+    const taken = await uninstall(ours.deps);
+    assert.ok(taken.removed.includes('The registration of jason-desktop links to this application'));
+    assert.deepEqual(removals, ['remove']);
+    assert.deepEqual(taken.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'removed' });
+
+    const another = bench(t);
+    another.deps.link = { registered: () => false, remove: () => assert.fail('a registration that is not this application\'s is never removed') };
+    const left = await uninstall(another.deps);
+    assert.ok(left.untouched.includes('jason-desktop links were not registered to this application'));
+    assert.deepEqual(left.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'was_off' });
+
+    const stuck = bench(t);
+    stuck.deps.link = { registered: () => true, remove: () => false };
+    const failed = await uninstall(stuck.deps);
+    assert.ok(failed.failed.some((line) => line.includes(String.raw`deleting HKEY_CURRENT_USER\Software\Classes\jason-desktop takes it off`)), failed.failed.join('\n'));
+    assert.deepEqual(failed.steps.find((each) => each.step === 'link'), { step: 'link', outcome: 'failed' });
+    assert.equal(uninstallExit(failed), 0, 'a step that fails is named, and the uninstall still goes on');
+
+    // Elsewhere there is no registration of the application's own, and no step.
+    assert.equal((await uninstall(bench(t).deps)).steps.some((each) => each.step === 'link'), false);
+});
+
+test('the uninstall start reads and takes off the registration as the start wrote it, with "--" before the address', () => {
+    const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
+    assert.ok(start.includes('const written = linkRegistration(process.platform, app.isPackaged, process.execPath);'));
+    assert.ok(start.includes('registered: () => app.isDefaultProtocolClient(written.scheme, written.path, written.args),'));
+    assert.ok(start.includes('remove: () => app.removeAsDefaultProtocolClient(written.scheme, written.path, written.args),'));
 });

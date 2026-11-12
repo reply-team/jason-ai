@@ -1712,8 +1712,12 @@ jobs:
           JASON_EXE: ${{ github.workspace }}/dotnet/src/Jason.App/bin/Release/net10.0/jason
         run: npm run e2e
 
-  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so
-  # Electron's own binary is never downloaded; the tests run their TypeScript as it is, on node 22 or later.
+  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so the
+  # electron package's own download never runs; the tests run their TypeScript as it is, on node 22 or later. Then the
+  # Linux packages, the one platform's whose packages need no signature: the package action builds a deb and an
+  # AppImage as a release does, around a jason this job publishes at a candidate's version, reads them back and starts
+  # each once under a virtual display, with Electron's Linux distribution held to the sha256 the lockfile's electron
+  # package names.
   desktop:
     name: The desktop on ubuntu
     needs: version
@@ -1744,6 +1748,29 @@ jobs:
 
       - name: Node tests
         run: npm test
+
+      # The download address's short paths (get/) on Node's own runner, with the node this job already set up: get/ has
+      # no dependencies, so nothing is installed for it.
+      - name: The download address's tests
+        working-directory: get
+        run: node --test
+
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
+
+      # A package is built at a release's or a candidate's version and never at the -dev one the tree carries, so this
+      # run's packages carry the release this tree is on the way to with a ci word and the run's number. The artifact is
+      # named for this job, so the archive it also makes and the packages, under that name and -desktop, are never taken
+      # for a release's by a download of jason-*.
+      - name: Package the Linux desktop as a release does
+        uses: ./.github/actions/package
+        with:
+          rid: linux-x64
+          version: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}
+          artifact: ci-desktop-linux-x64
+          retention-days: 3
+          desktop: true
 
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not

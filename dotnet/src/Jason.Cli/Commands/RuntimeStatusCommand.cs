@@ -91,6 +91,7 @@ public static class RuntimeStatusCommand
     {
         output.WriteLine($"Runtime:    running (pid {info.Pid})");
         output.WriteLine($"Version:    {info.RuntimeVersion}");
+        output.WriteLine($"Executable: {descriptor.InstalledImage ?? "none recorded: a build run from source, or a runtime older than this CLI"}");
         output.WriteLine($"API:        {info.ApiVersion} at {descriptor.BaseUrl}");
         output.WriteLine($"Port:       {Port(info.Listening)}");
         output.WriteLine($"Instance:   {info.InstanceId}");

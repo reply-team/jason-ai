@@ -16,20 +16,21 @@
   gap: var(--space-4);
 }
 
-.wordmark {
+.brand {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-2);
-  font-size: var(--text-md);
-  font-weight: 600;
-  letter-spacing: -0.01em;
 }
-.wordmark .glyph {
-  width: 18px; height: 18px;
-  border: 2px solid var(--text);
-  border-radius: 5px 5px 5px 1px;
+.brand .mark { width: 24px; height: 24px; flex: none; }
+.brand .wordmark { height: 14px; width: auto; max-width: 100%; min-width: 0; }
+.brand .wordmark.dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand .wordmark.light { display: none; }
+  :root:not([data-theme="light"]) .brand .wordmark.dark { display: inline; }
 }
+:root[data-theme="dark"] .brand .wordmark.light { display: none; }
+:root[data-theme="dark"] .brand .wordmark.dark { display: inline; }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a {
@@ -277,6 +278,7 @@ details.fold pre {
 
 .empty { padding: var(--space-8) var(--space-5); color: var(--text-secondary); }
 .empty strong { display: block; color: var(--text); font-weight: 500; margin-bottom: 4px; }
+.empty-start p { margin: 0 0 var(--space-3); }
 
 .dialog {
   width: 420px; max-width: 100%;
@@ -347,6 +349,8 @@ details.fold pre {
 /* Work items: the counts in the tabs, the filter bar, a list to pick from, the person's chip. */
 .segmented .count { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .segmented button.on .count { color: var(--text-secondary); }
+.segmented .tick { font-weight: 600; }
+.filters .shown { color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .filters {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border);
@@ -456,7 +460,6 @@ details.fold pre {
 .campaign-tabs-chat + .tabs { padding-left: var(--space-4); }
 .campaign-tabs .tabs a { flex: none; white-space: nowrap; }
 .campaign-tabs-happened > .group:first-child { color: var(--text); font-weight: 600; }
-.campaign-tabs-settings { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-5) 0; }
 .campaign-tabs-inbox { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-4) var(--space-5); }
 .campaign-tabs-inbox-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .campaign-tabs-inbox-head .hint, .campaign-tabs-inbox-untied .s { color: var(--text-muted); font-size: var(--text-sm); }
@@ -466,6 +469,26 @@ details.fold pre {
 .campaign-tabs-results .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }
 @media (max-width: 640px) { .campaign-tabs-results .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* People: one row per person, the stage chips under the search. */
+.stage-filter { padding: var(--space-2) var(--space-4) 0; }
+.ptable { width: 100%; border-collapse: collapse; }
+.ptable th { position: sticky; top: 0; background: var(--bg); text-align: left; font-weight: 500; font-size: var(--text-sm); color: var(--text-secondary); padding: 8px var(--space-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ptable td { height: var(--row-h); padding: 0 var(--space-2); border-left: 2px solid transparent; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ptable th:first-child, .ptable td:first-child { padding-left: var(--space-4); }
+.ptable tr:hover td { background: var(--bg-hover); }
+.ptable tr.sel td { background: var(--accent-bg); }
+.ptable tr.sel td:first-child { border-left-color: var(--accent); }
+.ptable td.name a { color: var(--text); font-weight: 500; }
+.ptable td.name a:hover { text-decoration: none; }
+.ptable tr.quiet td.name a { font-weight: 400; color: var(--text-secondary); }
+.ptable .stage, .row .meta .stage { display: inline-block; margin-right: var(--space-1); padding: 0 6px; border-radius: 4px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--text-sm); cursor: help; }
+.ptable .stage.waiting, .row .meta .stage.waiting { background: var(--warning-bg); color: var(--warning); }
+.ptable .stage.failed, .row .meta .stage.failed { background: var(--danger-bg); color: var(--danger); }
+.ptable .also { margin-left: 6px; color: var(--text-muted); font-size: var(--text-sm); cursor: help; }
+.ptable td.activity { color: var(--text-secondary); font-size: var(--text-sm); }
+.ptable td.activity time { margin-left: var(--space-2); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .ptable .wide { display: none; } }
 
 /* The people an Add people dialog will add, each with its way out. */
 .picked { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
