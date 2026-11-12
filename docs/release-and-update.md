@@ -120,7 +120,7 @@ job built, and signed where that job signs, at the release's version, with `LICE
 Windows job builds the installer while its sign-in holds: the installer, its
 uninstaller and `Jason.exe` are signed there, and verified with the `jason.exe` they carry. The macOS job builds an
 osx-x64 executable for the Intel package alone, signed, notarized and assessed as the osx-arm64 one is, and never
-published as an archive, so on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason`
+published as an archive, so on an Intel Mac `jason update apply` refuses with `update_carried_by_desktop` and the `jason`
 the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.
 The Linux job, which signs nothing, builds the deb and the AppImage around the linux-x64 executable it archives, reads
 each back, and starts each once under a virtual display, sandboxed. The desktop never runs without Chromium's sandbox,
@@ -157,6 +157,16 @@ it back by itself, so going back is quitting Jason and putting that folder back 
 application by hand, which leaves the data directory as the newer version left it. On Linux what an AppImage update
 keeps there is the AppImage file itself, and a deb update keeps nothing: going back from a deb is installing the
 previous release's `jason-desktop-linux-x64.deb` with `sudo apt install`.
+
+**Taking the desktop off** is in two steps, what it placed and then the application, and the data directory, the
+harness root and the updater's cache stay either way. On Windows the uninstaller does both: it stops the runtime the
+application carries, removes nothing when that runtime does not stop, and takes off the PATH command's files that are
+its own, Open Jason at Login and the runtime's logon start when that start names the application's own `jason`. On
+macOS and on Linux no installer starts the application to clean up, so choose Remove What Jason Placed… in the Jason menu
+(or the tray's) first: it takes the same steps, stops a runtime started from any copy of an AppImage's `jason`, removes
+those copies once nothing runs from them, says what came of each step and what to do by hand for one that failed, and
+says what removes the application itself: moving Jason.app to the Trash, `sudo apt remove jason-desktop` for the deb, or
+deleting the AppImage file. [desktop.md](desktop.md) lists the same steps for a Jason that will not start.
 
 ## 3. The manifest
 

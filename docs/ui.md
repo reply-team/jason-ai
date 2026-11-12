@@ -63,6 +63,18 @@ The runtime listens on `127.0.0.1:52766` by default, so the bookmark is stable. 
 next free one above it and `jason runtime status --human` says so; `Runtime:Port` in `settings.json` picks another, and
 `0` lets the OS choose, as before.
 
+## Attention
+
+What waits for you: approvals and questions, **Pending** or **Decided** (`jason approval list`, `jason decision list`).
+Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
+which account and on which channel, and through which provider. A row above the list narrows it to **All**, **Approvals**
+or **Questions**, each option with how many of its kind are listed, the chosen one ticked so that it is told apart by
+more than its colour, and "Shown: N" saying how many the list shows. The filter belongs to the screen alone: it is never
+stored, never part of the page's address and never sent to the runtime, and it goes back to All when nothing at all is
+listed, so whatever arrives next is shown. After a decision, the next item opened is chosen among the items the filter
+shows. Approving, rejecting and answering are the person's, here as on the command line, and so are the two buttons that
+brief an agent on one item, [Copy prompt](#copy-prompt) and [Open an AI session](#open-an-ai-session).
+
 ## Campaigns
 
 Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
@@ -87,13 +99,15 @@ channel and moment. It is read when the tab opens and when you refresh it, by it
 it is loading, empty or failed, or by the toolbar's while the tab is open. Its **Results** are four figures as the runtime counts them,
 its people now and who was contacted, replied and opted out in the period (`jason campaign summary`, `jason campaign
 activity`), with nothing divided on the page. A read of the Inbox or the Results that failed says so over that
-tab of that campaign alone, never as loading, and is gone once you leave the tab. Its **Settings** are its record, its context as the roles read
-it and what each provider calls it, with the moves its status allows. **Pause** stops Jason releasing an active
+tab of that campaign alone, never as loading, and is gone once you leave the tab. Its **Settings** are its record, its
+context as the roles read it and what each provider calls it, and nothing else: the campaign's moves are in its header,
+beside **Add people**, so they are within reach from every tab, each offered only where its status allows it and each
+opening a dialog with an optional reason. **Pause** stops Jason releasing an active
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
-`jason campaign start`, with your reason). An address naming a campaign's Details opens its Settings, and one naming
+`jason campaign start`, which resumes a paused one, with your reason). An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
-opens the campaign's one conversation, made the first time and kept by the desktop with what it showed, and moves
+opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Campaigns list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
 to reach; what you send there starts a set-up chat, about no campaign yet, and no chat is made before you send. The
 sidebar's first item is the **Feed**, the desktop's main chat; below **New chat** it lists the other conversations it
@@ -209,6 +223,31 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
 and prints the whole command, the brief included, and on macOS the script. Each host's own form for a first message is in
 [execution-profiles.md](execution-profiles.md), §12.
+
+## Settings and Chat in the browser
+
+**Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
+system's, in the order Light, Dark, System. A new installation meets Light; a browser that already kept a choice, or
+never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
+follows it.
+
+**Chat** says that the chat with an agent is part of Jason Desktop and links to the releases page where it is
+downloaded, and says that everything here also works from a session with your agent in a terminal, with the skills Jason
+deployed. The browser has no chat and starts no agent: the runtime starts no process for a screen, and a browser tab cannot ask you
+before the agent acts.
+
+## Inside Jason Desktop
+
+[Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
+object the desktop puts on the page, `window.jasonDesktop`. In it the chat is home, in a dock with panels beside it:
+**Needs you** (this page's Attention), **Campaigns** and **Activity**, which follow the journal as it is written, and
+**Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
+channels are set up. An empty Needs you card says you are caught up and offers **Open your campaigns**. The browser's
+other screens, People, Performance, Work items, System and Settings, open in a page panel of the same dock, and every
+screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
+desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
+(`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on
+[its own page](desktop.md).
 
 ## What the page may do
 

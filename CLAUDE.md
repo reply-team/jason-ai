@@ -16,9 +16,10 @@ repository is for changing Jason.
   maintained documentation only.
 - `ui/` — the browser UI: a React client of the Runtime API, built into the release asset `jason-ui.zip`;
   `ui/README.md` says how it is built and tested.
-- `desktop/` — the desktop application: one more client of the installation, through the CLI and the Runtime API. A
-  release publishes from it the Windows installer, a disk image and an update archive for each Mac architecture, the
-  two update feeds and the block maps, ten files in all; `desktop/README.md` says how it is built and tested.
+- `desktop/` — Jason Desktop, an Electron window onto the installation the CLI uses. A release publishes from it the
+  Windows installer, a disk image and an update archive for each Mac architecture, a deb and an AppImage for Linux on x64,
+  the update feeds and the block maps; `desktop/README.md` says how it is built and tested, and `docs/desktop.md` is its
+  page for a person.
 - `get/` — the Cloudflare Worker that answers the short paths of `get.jasonharness.ai` (`/install`, `/desktop/*`,
   `/stats`); `get/README.md` says how it is tested and deployed.
 - `LICENSE` — MIT, for everything in the repository, the runtime included; every archive carries it as `LICENSE`, beside
@@ -267,7 +268,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   guard over every message template the runtime writes and by a run of the real executable that reads
   its own log back; the paths the installation runs from do, and a bundle rewrites them. `jason logs`
   reads them without the runtime; `jason doctor` carries a bounded slice of them.
-- Everything in the repository is written in English.
+- Everything in the repository is written in English, with one exception: the translations of the browser UI's words
+  under `ui/src/locale/`, each language beside the English file it translates.
 
 ## Working style
 

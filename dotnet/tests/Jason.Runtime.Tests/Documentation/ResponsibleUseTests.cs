@@ -125,7 +125,7 @@ public sealed partial class ResponsibleUseTests
     /// Jason Runtime Licence and differ from them only in framing, so a change of one word in either is a change to text
     /// legal read. Have the new wording read again first, then put its digest here.
     /// </summary>
-    private const string ReadSections = "c69a471ef4cebea676655e8d1e73de4ffed66430df98580d645d217a680dbbf5";
+    private const string ReadSections = "56c23ef3025ee24481f2203257ada5fa6c7b4cbcfb18e79d5334be8c6259985a";
 
     /// <summary>The two sections that carry the earlier licence's words are held whole, not by the sentences quoted above.</summary>
     [Fact]

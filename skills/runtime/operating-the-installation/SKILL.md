@@ -209,7 +209,8 @@ folder as an absolute path; `jason runtime status` says which root is in force. 
 move the folder, set `Harness:Root` to where it is now, and then link each project whose folder moved with it:
 `jason project link` run inside that project's folder, or given the folder's absolute path with `--path`, finds the
 project by the marker there. Nothing moves by itself, and a campaign created in a project not linked again is
-refused until it is.
+refused until it is. In the chat of Jason Desktop the person types `jason project link`, like `jason role add`, in a
+terminal: the chat refuses both, so say which command to run and in which folder rather than run it.
 
 ## The plugins it has loaded and where work goes
 
