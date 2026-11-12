@@ -870,5 +870,11 @@ function changesServers(words: readonly string[]): boolean {
         return at < 0 ? [] : folded.slice(at + 1);
     };
     if (after(['mcp']).some((word) => word.startsWith('add') || serverVerbs.has(word))) return true;
+    // Claude Code's and Codex's own `mcp` command, any verb, by any folder or package name: Ask first cards it each time.
+    const host = words.findIndex((word) => serverHosts.has(programName(word)));
+    if (host >= 0 && folded.slice(host + 1).includes('mcp')) return true;
     return after(['plugin', 'plugins']).some((word) => word.startsWith('add') || pluginVerbs.has(word));
 }
+
+/** The agent hosts whose `mcp` command adds, removes, lists or signs in the MCP servers they load. */
+const serverHosts: ReadonlySet<string> = new Set(['claude', 'claude-code', 'codex']);

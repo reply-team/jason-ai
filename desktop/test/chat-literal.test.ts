@@ -397,6 +397,17 @@ test('a tool of an MCP server is held in Full access whatever its input', () => 
     }
 });
 
+test('a person\'s MCP tool whose input has a command is held by the person\'s-tool hold, never read as a shell command', () => {
+    // Claude Code's and Codex's mcp command, any verb: Ask first cards it, so Full access holds it too.
+    for (const command of ['claude mcp list', '/usr/local/bin/codex mcp get crm', '/opt/tools/claude-code --debug mcp list']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('servers'), command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'grep -r mcp notes' }, scope), runs);
+    // The person's-tool hold carries no shell reason; a shell reading of the input would give one, or run it.
+    assert.deepEqual(fullAccessJudgement('mcp__s__run', { command: 'ls' }, scope), { outcome: 'held', message: heldSentence });
+    assert.equal(fullAccessJudgement('mcp__s__run', { command: 'jason approval approve apr_1' }, scope).outcome, 'refused', 'its input is still read for a refusal');
+});
+
 // The fix round, POSIX first: what the module called the program was not always the program that runs.
 
 test('POSIX: a reserved word in first position is held, bash\'s and zsh\'s, since the program that runs is a later word', () => {

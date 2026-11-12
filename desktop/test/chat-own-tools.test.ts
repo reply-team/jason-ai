@@ -142,7 +142,9 @@ test('claude mcp and codex mcp are a card each time, never "always", and held in
         'claude m\\cp add crm -- node crm.js',
     ]) {
         assert.deepEqual(judge('Bash', { command }, scope), { verdict: 'ask', title: serversTitle, detail: command, remember: null }, command);
-        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), held, command);
+        // A shell command's hold also says why (`reason`); what it is, held with the held sentence, is what matters here.
+        const full = fullAccessJudgement('Bash', { command }, scope);
+        assert.deepEqual({ outcome: full.outcome, message: full.outcome === 'runs' ? '' : full.message }, held, command);
     }
     const plain = judge('Bash', { command: 'claude --version' }, scope);
     assert.equal(plain.verdict === 'ask' ? plain.title : '', 'Run a command', 'another word of claude is a command like any');
