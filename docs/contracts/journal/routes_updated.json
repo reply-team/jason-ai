@@ -8,7 +8,7 @@
     "campaign": { "at": "/campaign_id", "presence": "always" },
     "plugin": { "at": ["/new/plugin", "/old/plugin"], "presence": "sometimes" }
   },
-  "field_since": {},
+  "field_since": { "/new/channel": "0.38.0", "/old/channel": "0.38.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -17,7 +17,7 @@
       "key": {
         "type": "string",
         "minLength": 1,
-        "description": "The operation the route is for, or `default` for the campaign's default route."
+        "description": "The operation the route is for, or `default` for the campaign's default route. A route of one channel of an operation is keyed by that operation, and names its channel in `old` and `new`."
       },
       "old": {
         "type": ["object", "null"],
@@ -29,6 +29,11 @@
           "binding": {
             "type": ["object", "null"],
             "description": "The binding the route carried, or null. Its shape is the plugin's own; it names an account and never a credential."
+          },
+          "channel": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The channel the route was for under the operation; absent where the route was the operation's own or the default."
           }
         }
       },
@@ -42,6 +47,11 @@
           "binding": {
             "type": ["object", "null"],
             "description": "The binding the route carries, or null. Its shape is the plugin's own; it names an account and never a credential."
+          },
+          "channel": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The channel the route is for under the operation; absent where the route is the operation's own or the default."
           }
         }
       }

@@ -142,6 +142,61 @@ public class RoutingSchemaTests
     }
 
     [Fact]
+    public async Task A_campaign_routes_one_channel_of_an_operation_once()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (_, campaignId) = await SeedAsync(db);
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "one", channel: "linkedin"));
+        await db.SaveChangesAsync(Ct);
+
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "two", channel: "linkedin"));
+
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
+        Assert.Contains("UNIQUE", failure.InnerException!.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An operation's own route and a route for each of its channels are separate rows, and the operation's own route is
+    /// still one per campaign beside them: a channel route never takes the place the unique index keeps for it.
+    /// </summary>
+    [Fact]
+    public async Task An_operation_route_and_one_route_per_channel_live_side_by_side()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (_, campaignId) = await SeedAsync(db);
+
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, operation: null, plugin: "one"));
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "one"));
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "two", channel: "linkedin"));
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "three", channel: "email"));
+        await db.SaveChangesAsync(Ct);
+        Assert.Equal(4, await db.Set<CampaignRoute>().CountAsync(Ct));
+
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "four"));
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
+        Assert.Contains("UNIQUE", failure.InnerException!.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A channel is a channel of an operation: the default route names none, so the database refuses one there.</summary>
+    [Fact]
+    public async Task A_default_route_never_names_a_channel()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedAsync(db);
+        using var connection = Connect(database);
+
+        var failure = Assert.Throws<SqliteException>(() => Execute(
+            connection,
+            "INSERT INTO campaign_routes (campaign_id, operation, channel, plugin_id, updated_at) VALUES (1, NULL, 'email', 'one', '2026-01-01')"));
+        Execute(connection, "INSERT INTO campaign_routes (campaign_id, operation, channel, plugin_id, updated_at) VALUES (1, 'message.send', 'email', 'one', '2026-01-01')");
+
+        Assert.Contains("ck_campaign_routes_channel_on_an_operation", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_route_binding_must_be_json()
     {
         using var database = new TestDatabase();
@@ -221,11 +276,12 @@ public class RoutingSchemaTests
             RecordedByAttemptId = PublicId.New("att"),
         };
 
-    private static CampaignRoute NewRoute(int campaignId, string? operation, string plugin) =>
+    private static CampaignRoute NewRoute(int campaignId, string? operation, string plugin, string? channel = null) =>
         new()
         {
             CampaignId = campaignId,
             Operation = operation,
+            Channel = channel,
             PluginId = plugin,
             Binding = new JsonObject { ["account"] = "main" },
             UpdatedAt = Noon,

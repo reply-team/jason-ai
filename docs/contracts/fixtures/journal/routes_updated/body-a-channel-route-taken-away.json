@@ -1,0 +1,7 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "case": "a campaign's route for one channel of an operation taken away",
+  "body": { "key": "message.send", "old": { "plugin": "other-provider", "binding": null, "channel": "linkedin" }, "new": null },
+  "expect": "valid"
+}

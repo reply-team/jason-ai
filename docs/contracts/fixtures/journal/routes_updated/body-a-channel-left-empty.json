@@ -1,0 +1,7 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "case": "a channel is named, never left empty",
+  "body": { "key": "message.send", "old": null, "new": { "plugin": "other-provider", "binding": null, "channel": "" } },
+  "expect": { "invalid": [{ "pointer": "/new/channel", "reason": "min_length" }] }
+}

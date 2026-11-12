@@ -1,0 +1,11 @@
+{
+  "kind": "routes_updated",
+  "version": 1,
+  "case": "a campaign's route for one channel of an operation, moved to another plugin",
+  "body": {
+    "key": "message.send",
+    "old": { "plugin": "example-provider", "binding": { "account": "sender@example.com" }, "channel": "linkedin" },
+    "new": { "plugin": "other-provider", "binding": null, "channel": "linkedin" }
+  },
+  "expect": "valid"
+}

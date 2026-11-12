@@ -663,10 +663,22 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             route.Property(r => r.Operation).HasMaxLength(200);
             route.Property(r => r.PluginId).HasMaxLength(64);
             route.Property(r => r.Binding).HasColumnName("binding_json");
-            route.ToTable(t => t.HasCheckConstraint("ck_campaign_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)"));
-            route.HasIndex(r => new { r.CampaignId, r.Operation }).IsUnique();
+            route.Property(r => r.Channel).HasMaxLength(32);
+            route.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_campaign_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)");
 
-            // The default route is the row with no operation, and nulls are distinct in the index above: only a
+                // A channel is a channel of an operation: the default route names no operation, so it names no channel.
+                t.HasCheckConstraint("ck_campaign_routes_channel_on_an_operation", "channel IS NULL OR operation IS NOT NULL");
+            });
+
+            // One route per operation, and one per channel of an operation. Two filtered indexes rather than one over the
+            // three columns, because nulls are distinct in an index: the operation's own route, whose channel is null,
+            // would be unique against nothing.
+            route.HasIndex(r => new { r.CampaignId, r.Operation }).IsUnique().HasFilter("channel IS NULL").HasDatabaseName("ix_campaign_routes_one_per_operation");
+            route.HasIndex(r => new { r.CampaignId, r.Operation, r.Channel }).IsUnique().HasFilter("channel IS NOT NULL").HasDatabaseName("ix_campaign_routes_one_per_channel");
+
+            // The default route is the row with no operation, and nulls are distinct in the indexes above: only a
             // filtered index can say "at most one of those per campaign".
             route.HasIndex(r => r.CampaignId).IsUnique().HasFilter("operation IS NULL").HasDatabaseName("ix_campaign_routes_one_default_per_campaign");
             route.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Cascade);

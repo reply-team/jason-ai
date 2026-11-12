@@ -682,6 +682,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("campaign_id");
 
+                    b.Property<string>("Channel")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("channel");
+
                     b.Property<string>("Operation")
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
@@ -707,11 +712,19 @@ namespace Jason.Runtime.Persistence.Migrations
 
                     b.HasIndex("CampaignId", "Operation")
                         .IsUnique()
-                        .HasDatabaseName("ix_campaign_routes_campaign_id_operation");
+                        .HasDatabaseName("ix_campaign_routes_one_per_operation")
+                        .HasFilter("channel IS NULL");
+
+                    b.HasIndex("CampaignId", "Operation", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_routes_one_per_channel")
+                        .HasFilter("channel IS NOT NULL");
 
                     b.ToTable("campaign_routes", t =>
                         {
                             t.HasCheckConstraint("ck_campaign_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)");
+
+                            t.HasCheckConstraint("ck_campaign_routes_channel_on_an_operation", "channel IS NULL OR operation IS NOT NULL");
                         });
                 });
 

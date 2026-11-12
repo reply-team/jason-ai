@@ -425,27 +425,29 @@ send is created only once the provider has said the earlier attempt did not act.
 disagrees with a pin is refused rather than resolved either way: the rule is to work by the pin, so the
 message names the pinned value.
 
-### At activation — eight route problems, plus one for the section and one for the searches
+### At activation — ten route problems, plus one for the section and one for the searches
 
 | Code | When |
 |---|---|
 | `route_plugin_unknown` | the route names a plugin the candidate set does not contain |
 | `route_plugin_kind_not_invocable` | the plugin is a notification plugin, which performs no canonical operation; it is reached through the `Notifications` settings instead |
-| `route_operation_unknown` | a *campaign* route names an operation this build does not publish. A global override keyed by such a name never reaches this check: the section validator refuses it first, as the eighth code below |
+| `route_operation_unknown` | a *campaign* route names an operation this build does not publish. A global override keyed by such a name never reaches this check: the section validator refuses it first, as `routes_settings_invalid` below |
+| `route_channel_not_routable` | the route names a channel under an operation whose document names no argument a route reads its channel from — or under no operation, the default. Asked only of a route that names a channel |
+| `route_channel_unknown` | the route names a channel the argument the operation's document names for routes does not allow |
 | `route_operation_unsupported` | the plugin does not list the operation the route sends it |
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
 | `route_binding_secret_like` | the binding carries a field named like a credential, at any depth |
 | `route_binding_too_large` | the binding's canonical JSON is larger than the 64 KiB the protocol carries |
 | `route_binding_invalid` | the binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin whose schema refuses `{}` |
 
-The ninth is not a problem with a route but with the **section**: `routes_settings_invalid` is the
+The eleventh is not a problem with a route but with the **section**: `routes_settings_invalid` is the
 `Routes` section itself failing the validator that reads it, which happens when the file is edited into
 something no route could be built from. The options system reports that as prose rather than as
 structure, so the runtime carries the validator's own sentence through verbatim and names the setting it
 came from. It arrives as the same rejected reload, because an operator who mistypes a route must get one
 answer — and never a 500, which would say the runtime broke rather than the edit.
 
-The tenth is not a problem with one route either, but with the whole set: `route_orphans_search`, a set that would take
+The twelfth is not a problem with one route either, but with the whole set: `route_orphans_search`, a set that would take
 the last route naming the plugin and account a search still followed ran under away from it (§6). It is asked only
 when no route in the set is wrong, and `route.set` and `route.unset` answer it under its own code rather than as a
 rejected reload.
