@@ -1028,6 +1028,15 @@ body,
 .jc-console .chat-pick .ask-a {
     flex-wrap: wrap;
 }
+.jc-console .feed-line {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 13px;
+    margin: 0 0 10px;
+    overflow-wrap: anywhere;
+}
 .jc-console .side-note {
     margin: 0 8px 10px;
     font-size: 12.5px;

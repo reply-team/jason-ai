@@ -25,6 +25,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             restart: (...args) => void calls.push(['restart', ...args]),
             attach: async (...args) => (calls.push(['attach', ...args]), { id: 'conv_1', campaignId: 'cmp_1', title: 'Spring', updatedAt: '', running: false }),
             rename: (...args) => (calls.push(['rename', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false }),
+            feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false }),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -32,12 +33,13 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
     return { listeners, calls, refusals };
 }
 
-test('the chat registers its ten calls, and each reaches the chat from the runtime\'s page', async () => {
+test('the chat registers its eleven calls, and each reaches the chat from the runtime\'s page', async () => {
     const { listeners, calls } = registered();
     assert.deepEqual([...listeners.keys()].sort(), [
         'jason:chat.answer',
         'jason:chat.attach',
         'jason:chat.create',
+        'jason:chat.feed',
         'jason:chat.list',
         'jason:chat.open',
         'jason:chat.remove',
@@ -57,6 +59,7 @@ test('the chat registers its ten calls, and each reaches the chat from the runti
     listeners.get('jason:chat.restart')?.(page, 'conv_1');
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
     await listeners.get('jason:chat.rename')?.(page, 'conv_1', 'Mine');
+    await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
         ['stop', 'c1'],
@@ -68,6 +71,7 @@ test('the chat registers its ten calls, and each reaches the chat from the runti
         ['restart', 'conv_1'],
         ['attach', 'conv_1', 'cmp_1'],
         ['rename', 'conv_1', 'Mine'],
+        ['feed', [], { catchUp: true }],
     ]);
 });
 
@@ -78,7 +82,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 20);
+    assert.equal(refusals.length, 22);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 

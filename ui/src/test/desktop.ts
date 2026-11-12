@@ -16,7 +16,9 @@ import { fixtures } from './fixtures';
 // A stand-in for Jason Desktop's seam, and for the journal stream, as the console's screen tests want them: every call
 // recorded, every event the test's to send. Its conversations behave as the desktop's do: one per campaign, kept from
 // their first turn, listed newest first, refused in the desktop's sentences and answered as a value, a turn running
-// from its send to its `done`, and a pick taken only from the conversation's last one.
+// from its send to its `done`, and a pick taken only from the conversation's last one. The Feed is made on the first
+// `chat.feed` and listed from then on; the lines handed to it are recorded, and what the desktop says of them is the
+// test's to send (`emit` a `line`), as the desktop holds every line to shapes a recorded fixture's ids do not have.
 
 /** Every effort level, as Claude Code's aliases take them. */
 const every = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -223,12 +225,14 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const summaryOf = ({
         id,
         campaignId,
+        main,
         title,
         updatedAt,
         running,
     }: DesktopConversationRecord): DesktopConversation => ({
         id,
         campaignId,
+        ...(main === true ? { main } : {}),
         title,
         updatedAt,
         running,
@@ -374,6 +378,12 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 stub.emit(record.id, { kind: 'renamed', title: name });
                 return summaryOf(record);
             }),
+            feed: answering('chat.feed', (): DesktopConversation => {
+                const feed =
+                    [...kept.values()].find((each) => each.main === true) ??
+                    keep({ id: 'conv_01JDFEED000000000000000000', main: true, title: 'Feed', updatedAt: now() });
+                return summaryOf(feed);
+            }),
         },
         setup: {
             status: () => {
@@ -414,6 +424,8 @@ export interface StubStream {
     opened: { url: string; protocols: string[] }[];
     open(): void;
     send(line: JournalEntry): void;
+    /** Closes the connection as a runtime that went away does. */
+    close(): void;
 }
 
 export function stubStream(): StubStream {
@@ -436,6 +448,7 @@ export function stubStream(): StubStream {
         opened,
         open: () => socket?.onopen?.(),
         send: (line) => socket?.onmessage?.({ data: JSON.stringify(line) }),
+        close: () => socket?.onclose?.(),
     };
 }
 
