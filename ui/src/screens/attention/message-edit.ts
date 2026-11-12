@@ -29,19 +29,37 @@ export const approvedArgs = (approval: Approval): unknown => record(record(appro
 /** What would be sent now: the arguments the work item holds. */
 export const heldArgs = (item: WorkItem): unknown => item.context['input'];
 
+/** The same JSON value: objects by their members whatever the order of the keys, arrays by position. */
+export function sameDocument(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (Array.isArray(a) || Array.isArray(b)) {
+        return (
+            Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameDocument(x, b[i]))
+        );
+    }
+    const left = record(a);
+    const right = record(b);
+    if (!left || !right) return false;
+    const keys = Object.keys(left);
+    return (
+        keys.length === Object.keys(right).length && keys.every((k) => k in right && sameDocument(left[k], right[k]))
+    );
+}
+
 /**
- * Whether the work item message no longer says what the approval was asked about. The approval subject carries the
- * arguments exactly as the item held them when it was parked, and the item holds them as they are now; the fields
- * that make the text (subject, body, compose for a first message, the body for a reply) are compared as strings,
- * character for character, with no trimming or other reading, and an absent field equals a null one. Two equal texts
- * are the same string in both documents, so they cannot compare as different; any other difference is a change of
- * what a person would send.
+ * Whether the work item no longer holds what the approval was asked about. The approval is of the whole call: its
+ * subject carries the arguments the runtime composed from the item (it copies the item input as it stands, adding
+ * nothing to it and leaving nothing out), so the two documents are compared whole, deep and without regard to the order
+ * of keys; any difference, in the text, the sender, the channel, the time it may go or a reply's thread, is a change
+ * of what a person would send. Two equal documents are the same JSON in both places, so they cannot compare as
+ * different. The person is the item's own contact, which the arguments do not hold, and is compared by its identifier.
  */
 export function isStale(approval: Approval, item: WorkItem): boolean {
     if (!isMessage(approval.operation)) return false;
-    const asked = wordsOf(approvedArgs(approval), approval.operation);
-    const now = wordsOf(heldArgs(item), approval.operation);
-    return asked.subject !== now.subject || asked.body !== now.body || asked.compose !== now.compose;
+    if (!sameDocument(approvedArgs(approval) ?? {}, heldArgs(item) ?? {})) return true;
+    const contacts = record(approval.subject['input'])?.['contacts'];
+    const asked = Array.isArray(contacts) ? text(record(contacts[0])?.['id']) : null;
+    return asked !== null && item.contact_id !== undefined && item.contact_id !== asked;
 }
 
 /** A pending message written as text can be edited; a template cannot, and neither can an approval already decided. */

@@ -82,8 +82,8 @@ again with the new text when it next takes this work" and shows the new approval
 to that one; if it does not arrive while the page waits, the sentence stays true and the next refresh shows it. If the
 text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
 box. A card is checked against its work item before it offers **Approve**, and again at the press: the approval's
-subject, the arguments the runtime parked, is compared with the arguments the work item holds now, on the message's
-subject, body and compose, as exact strings. Where they differ, whether the text was changed by the AI in a chat or in
+subject, the arguments the runtime parked, is compared, as whole documents and whatever the order of their keys, with the
+arguments the work item holds now, and the person with the item's own. Where they differ, whether the text was changed by the AI in a chat or in
 some other way, Approve is not offered and one sentence says the text changed and Jason will ask again. The AI in a
 chat may go on editing a parked message when you ask it to, and nothing is sent without a new approval. The runtime's
 own sentence is shown for a refused edit, and what you typed stays in the box.

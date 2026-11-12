@@ -14,27 +14,43 @@ const item = (args: unknown): WorkItem => ({ context: { input: args } }) as unkn
 const message = (a: Approval) => argsOf(a)['message'] as Record<string, unknown>;
 
 describe('the stale card comparison', () => {
-    it('does not call two equal texts different, whatever else the arguments hold or leave out', () => {
+    it('does not call an untouched item different, whatever the order of its keys', () => {
         const asked = approval();
-        const held = structuredClone(argsOf(asked));
-        held['send_after'] = '2026-12-01T09:00:00+00:00';
-        expect(isStale(asked, item(held))).toBe(false);
-        const nulls = approval((a) => (message(a)['compose'] = null));
-        expect(isStale(asked, item(argsOf(nulls)))).toBe(false);
+        const reordered = Object.fromEntries(Object.entries(structuredClone(argsOf(asked))).reverse());
+        expect(isStale(asked, item(reordered))).toBe(false);
+        expect(isStale(asked, { ...item(argsOf(asked)), contact_id: 'cnt_1' })).toBe(false);
     });
 
-    it('calls a changed subject, body or compose different, and so a message the item no longer holds', () => {
+    it('calls a change anywhere in the arguments different, and a message the item no longer holds', () => {
         const asked = approval();
-        for (const [field, value] of [
-            ['subject', 'Another subject'],
-            ['body', 'Hi Ines, thanks for the talk at the meetup. '],
-            ['compose', 'template'],
-        ] as const) {
+        const changes: [string, (held: Record<string, unknown>) => void][] = [
+            ['subject', (h) => ((h['message'] as Record<string, unknown>)['subject'] = 'Another subject')],
+            ['body', (h) => ((h['message'] as Record<string, unknown>)['body'] = 'Hi Ines, thanks. ')],
+            ['compose', (h) => ((h['message'] as Record<string, unknown>)['compose'] = 'template')],
+            ['send time', (h) => (h['send_after'] = '2026-12-01T09:00:00+00:00')],
+            ['channel', (h) => (h['channel'] = 'linkedin')],
+            ['sender', (h) => (h['sender'] = { external_id: 's_99', address: 'other@example.test' })],
+        ];
+        for (const [name, change] of changes) {
             const held = structuredClone(argsOf(asked));
-            (held['message'] as Record<string, unknown>)[field] = value;
-            expect(isStale(asked, item(held)), field).toBe(true);
+            change(held);
+            expect(isStale(asked, item(held)), name).toBe(true);
         }
         expect(isStale(asked, item({}))).toBe(true);
+    });
+
+    it('calls a changed recipient different', () => {
+        const asked = approval();
+        expect(isStale(asked, { ...item(argsOf(asked)), contact_id: 'cnt_2' })).toBe(true);
+    });
+
+    it('calls a reply with another thread, channel or body different, and an untouched one not', () => {
+        const held = { channel: 'email', thread: { external_id: 't_1' }, body: 'Thanks' };
+        const asked = reply('Thanks');
+        expect(isStale(asked, item(held))).toBe(false);
+        expect(isStale(asked, item({ ...held, thread: { external_id: 't_2' } }))).toBe(true);
+        expect(isStale(asked, item({ ...held, channel: 'linkedin' }))).toBe(true);
+        expect(isStale(asked, item({ ...held, body: 'Thanks!' }))).toBe(true);
     });
 
     it('asks nothing of an approval for another operation', () => {

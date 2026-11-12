@@ -95,6 +95,43 @@ describe('approving a message', () => {
         expect(approveButton()?.hasAttribute('disabled')).toBe(true);
     });
 
+    it('is not offered when anything but the text changed: the send time, or a reply thread', async () => {
+        const approval = email();
+        const input = structuredClone(argsOf(approval));
+        input['send_after'] = '2026-12-01T09:00:00+00:00';
+        const view = render(
+            <ApiProvider api={new Held(input)}>
+                <ApprovalPanel
+                    approval={approval}
+                    now={new Date()}
+                    zone="UTC"
+                    busy={false}
+                    remaining=""
+                    onApprove={() => {}}
+                    onReject={() => {}}
+                    onSkip={() => {}}
+                    onClose={() => {}}
+                />
+            </ApiProvider>,
+        );
+        await waitFor(() => expect(screen.getByText(stale)).toBeTruthy());
+        expect(approveButton()?.hasAttribute('disabled')).toBe(true);
+        view.unmount();
+        const answer = reply();
+        const moved = structuredClone(argsOf(answer));
+        moved['thread'] = { external_id: 't_2' };
+        mount(new Held(moved), answer);
+        await waitFor(() => expect(screen.getByText(stale)).toBeTruthy());
+        expect(approveButton()?.hasAttribute('disabled')).toBe(true);
+    });
+
+    it('keeps Approve for a reply nobody touched', async () => {
+        const answer = reply();
+        mount(new Held(structuredClone(argsOf(answer))), answer);
+        await waitFor(() => expect(approveButton()?.hasAttribute('disabled')).toBe(false));
+        expect(screen.queryByText(stale)).toBeNull();
+    });
+
     it('is refused at the press when the text was changed between the render and the press', async () => {
         const approval = email();
         const held = new Held(structuredClone(argsOf(approval)));
