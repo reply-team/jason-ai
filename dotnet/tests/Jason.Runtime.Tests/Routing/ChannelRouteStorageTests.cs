@@ -255,6 +255,19 @@ public class ChannelRouteStorageTests
         Assert.Equal(field, RouteService.Field("cmp_A", Send, "linkedin", scope));
     }
 
+    /// <summary>
+    /// Every scope there is has a name of its own: none falls through to another route's name, so a scope added later
+    /// without one is refused here rather than reported as the global default.
+    /// </summary>
+    [Fact]
+    public void Every_scope_has_a_name_of_its_own()
+    {
+        var names = Enum.GetValues<RouteScope>().Select(scope => RouteService.Field("cmp_A", Send, "linkedin", scope)).ToList();
+
+        Assert.Equal(Enum.GetValues<RouteScope>().Length, names.Distinct(StringComparer.Ordinal).Count());
+        Assert.Throws<ArgumentOutOfRangeException>(() => RouteService.Field("cmp_A", Send, "linkedin", (RouteScope)99));
+    }
+
     private static (string Plugin, RouteScope Scope) Won(RouteSnapshot routes, string campaign, string? channel)
     {
         var resolution = RouteResolver.Resolve(routes, campaign, Send, channel)!;
