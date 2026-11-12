@@ -115,11 +115,14 @@ export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsid
 
 /**
  * The settings of a turn in Full access, written to the turn's own file: those of every turn, and a `PreToolUse` hook on
- * every tool that posts the tool use to the turn's endpoint, which answers with the permission model's refusals alone.
- * Claude Code's deny rules hold under bypass but match a command as written only, so the hook reads what they cannot.
- * Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"` "prevents the tool call"; a matcher of
- * `"*"` "fires on every occurrence of the event"; "To block the action instead, set `"onFailure": "block"` on a
- * `command` or `http` hook. Requires Claude Code v2.1.295 or later." (`fullAccessFloor`).
+ * every tool that posts the tool use to the turn's endpoint, which answers allow, ask or deny by Full access's judgement.
+ * Claude Code's deny rules match a command as written only, so the hook reads what they cannot. Anthropic,
+ * https://code.claude.com/docs/en/hooks (read 2026-11-11): `"allow"` "skips the permission prompt, except for actions no
+ * mode auto-approves", `"deny"` "prevents the tool call", `"ask"` "prompts the user to confirm", and "Deny and ask rules
+ * are still evaluated regardless of what the hook returns"; a matcher of `"*"` "fires on every occurrence of the event";
+ * "To block the action instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295
+ * or later." (`fullAccessFloor`). Under `-p` in the default mode a hook's `ask` reaches the permission prompt tool and
+ * the turn waits for its answer: seen on Claude Code 2.1.322, which no page states in one sentence.
  */
 export function fullAccessSettings(hookUrl: string, secret: string) {
     return {
@@ -181,10 +184,11 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
 /**
  * The command line of one Claude Code turn, in the chat's mode. Ask first: no permission mode, the host's default. Plan
  * only: `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. Full
- * access: `--permission-mode bypassPermissions` and the turn's settings file; Anthropic,
- * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode, including
- * `bypassPermissions`." and "Allow rules have no effect in `bypassPermissions`.", so every deny rule is passed as in Ask
- * first. Never `--bare`, which drops the subscription sign-in and the skills; always
+ * access: no permission mode either, the host's default, with the turn's settings file, whose hook answers each tool use
+ * (`fullAccessSettings`); what the hook asks about, and what the host asks about whatever the hook said, reaches the
+ * prompt tool as in Ask first. Every deny rule is passed in every mode; Anthropic,
+ * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
+ * `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat, and from `noChromeFrom` on `--no-chrome`, so
  * the browser's tools do not either (the settings' `serverDefences` hold below it); reads outside the working folders blocked
  * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
@@ -198,7 +202,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     args.push('--disallowedTools', ...claudeRemovedTools, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'full_access' ? (turn.settingsFile as string) : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings);
-    if (mode !== 'ask_first') args.push('--permission-mode', mode === 'plan_only' ? 'plan' : 'bypassPermissions');
+    if (mode === 'plan_only') args.push('--permission-mode', 'plan');
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName, '--mcp-config', turn.mcpConfig, '--strict-mcp-config');
     if (compareVersions(turn.version, noChromeFrom) >= 0) args.push('--no-chrome');
@@ -353,8 +357,8 @@ export function dataRules(platform: Platform, data: string, dataEntries: readonl
 
 /**
  * The host's own refusal of an edit of the chat's own names directly in the chat folder: its instructions, and its agent
- * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold under bypass and in
- * every mode, beside the permission model's refusal of the same places by every route.
+ * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold in every mode,
+ * beside the permission model's refusal of the same places by every route.
  */
 export function chatRules(platform: Platform, chat: string): string[] {
     const paths = platform === 'win32' ? win32 : posix;
