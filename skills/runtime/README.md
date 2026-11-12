@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.35.0**.
+this pack ships with Jason **0.36.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -25,7 +25,7 @@ description that promises everything matches nothing.
   Turning an objective into durable campaign work and following it: the provider check, what the person has
   already written down, the campaign and its goals, the people it is about, provider operations and AI role work, what the
   runtime does with them afterwards, answering a conversation after the responder has been at it, and stopping or holding work.
-- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.**
+- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **draft.**
   What Jason is waiting for a person to decide: the approvals parked at a claim and the questions a running role
   raised — including when a notification brought the person — presented in their own words and recorded as their
   decision, and the standing approval a person sets in advance for one category of reply in a campaign.
@@ -185,6 +185,5 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
-| `approvals-and-questions` | Claude Code 2.1.318 | 0.27.0 | `sha256:ab486ffddeeeab9d668c42519a88ecd5e7274a47d887ae37073bf8c0b8e313b0` |
 | `managed-campaign-work` | Claude Code 2.1.318 | 0.27.0 | `sha256:1952b08363d464eb00a00a5f5d6bfaa3bbf908cb17f2083e01458a170061ea30` |
 | `planner-in-session` | Claude Code 2.1.318 | 0.27.0 | `sha256:e17f4601e5a33040e188a639fdcbfe4f9c5dfafa7e4aa936d85150fcf7bcf3d9` |

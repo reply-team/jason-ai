@@ -5,9 +5,15 @@
 //   { "use": { "tool": "Read", "input": { ... } } }  use a tool without asking, as one the allowed tools let through, and
 //                                                    say its result; with a Full access settings file (--settings naming a
 //                                                    file with a PreToolUse hook), the hook is asked first, as Claude Code
-//                                                    asks it, and a refusal, or a hook that fails, says the result refused
+//                                                    asks it in its default mode: a deny, or a hook that fails, says the
+//                                                    result refused; an ask goes to the permission prompt tool, whose
+//                                                    deny says the result refused; an allow runs it. "prompt": true asks
+//                                                    the prompt tool whatever the hook allowed, as Claude Code does for an
+//                                                    act no mode approves on its own (a deletion on a critical path)
 //   { "unhooked": { "tool": "Bash", "input": {...} } } use a tool and say its result without asking any hook, as a hook
-//                                                    filtered out by a managed policy would let it
+//                                                    filtered out by a managed policy would let it; "prompt": true asks
+//                                                    the permission prompt tool first, as the default mode does for a
+//                                                    tool no rule allows, and its deny says the result refused
 //   { "wait": "<file>" }                              start a process of its own, write that process's id to the file, and hang
 //   { "fail": { "stderr": "words", "code": 3 } }      write to stderr and exit with the code, with no result
 //   { "end": "no_result" }                            exit 0 with no result
@@ -94,18 +100,37 @@ function hookOf(args) {
     }
 }
 
-/** What the hook decided, as Claude Code reads it: a refusal's reason, null for no decision, or 'failed'. */
-async function askHook(hook, session, tool, input, id) {
+/** The permission mode the turn was started in: the flag's value, or Claude Code's default. */
+function permissionMode(args) {
+    const at = args.indexOf('--permission-mode');
+    return at < 0 ? 'default' : args[at + 1];
+}
+
+/**
+ * What the hook decided, as Claude Code reads it: its decision (allow, ask or deny) and reason, no decision for an empty
+ * body, or 'failed'.
+ */
+async function askHook(hook, session, mode, tool, input, id) {
     try {
-        const body = JSON.stringify({ session_id: session, hook_event_name: 'PreToolUse', permission_mode: 'bypassPermissions', tool_name: tool, tool_input: input, tool_use_id: id });
+        const body = JSON.stringify({ session_id: session, hook_event_name: 'PreToolUse', permission_mode: mode, tool_name: tool, tool_input: input, tool_use_id: id });
         const response = await fetch(hook.url, { method: 'POST', headers: { 'content-type': 'application/json', ...hook.headers }, body });
         if (response.status < 200 || response.status > 299) return { failed: true };
         const text = await response.text();
-        if (text === '') return { reason: null };
-        const output = JSON.parse(text).hookSpecificOutput;
-        return { reason: output && output.permissionDecision === 'deny' ? output.permissionDecisionReason : null };
+        if (text === '') return { decision: null };
+        const output = JSON.parse(text).hookSpecificOutput || {};
+        return { decision: output.permissionDecision || null, reason: output.permissionDecisionReason };
     } catch {
         return { failed: true };
+    }
+}
+
+/** Asks the permission prompt tool, as Claude Code does under -p: the tool result's content and whether it is an error. */
+async function prompted(config, tool, input) {
+    try {
+        const decision = await decide(config, 'jason_desktop', 'decide', tool, input);
+        return decision.behavior === 'allow' ? ['ran', false] : [`refused: ${decision.message}`, true];
+    } catch (error) {
+        return [`refused: the prompt tool failed: ${error.message}`, true];
     }
 }
 
@@ -139,17 +164,19 @@ async function claude(args, stdin) {
             let content = 'ran';
             let error = false;
             if (hook !== null) {
-                const decided = await askHook(hook, session, step.use.tool, step.use.input, id);
+                const decided = await askHook(hook, session, permissionMode(args), step.use.tool, step.use.input, id);
                 if (decided.failed && hook.onFailure === 'block') [content, error] = ['blocked: the hook failed', true];
-                else if (decided.reason) [content, error] = [`refused: ${decided.reason}`, true];
-            }
+                else if (decided.decision === 'deny') [content, error] = [`refused: ${decided.reason}`, true];
+                else if (decided.decision === 'ask' || step.use.prompt) [content, error] = await prompted(config, step.use.tool, step.use.input);
+            } else if (step.use.prompt) [content, error] = await prompted(config, step.use.tool, step.use.input);
             print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
             if (hook !== null) print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content}` }] } });
         } else if (step.unhooked !== undefined) {
             const id = `toolu_unhooked_${++n}`;
             print({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: step.unhooked.tool, input: step.unhooked.input }] } });
-            print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ran' }] } });
-            print({ type: 'assistant', message: { content: [{ type: 'text', text: 'tool ran unhooked' }] } });
+            const [content, error] = step.unhooked.prompt ? await prompted(config, step.unhooked.tool, step.unhooked.input) : ['ran', false];
+            print({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: error }] } });
+            print({ type: 'assistant', message: { content: [{ type: 'text', text: `tool ${content} unhooked` }] } });
         }
         else if (step.ask !== undefined) {
             n++;

@@ -189,6 +189,14 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
 /** What the line under the composer says while the desktop holds the chat in Full access. */
 export const fullAccessLine = 'Full access: the agent acts on this computer without asking you.';
 
+/**
+ * What the line under the composer says while the chat's host is Codex on the person's sign-in: every Codex turn leaves
+ * the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
+ * named there.
+ */
+export const codexConfigLine =
+    'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.';
+
 /** Why Full access cannot be chosen on a host a desktop of an earlier version listed, which offers no modes. */
 export const olderDesktop = 'This version of Jason Desktop does not offer Full access.';
 

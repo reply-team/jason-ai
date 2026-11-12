@@ -17,6 +17,10 @@ namespace Jason.PluginHost.Sdk;
 /// <remarks>
 /// Several hosts write one file at the same moment, so each line takes its own open, and the open keeps every other writer
 /// out for as long as the line takes: <c>FileShare.Read</c> on Windows and <c>FileShare.None</c> elsewhere, an advisory lock.
+/// A writer that finds the file held waits while the others are appending, since a file whose length moves is passed from
+/// line to line rather than kept; ten seconds in which nobody appended is a file kept, and so is the end of what the
+/// invocation leaves it. Writing nothing is what keeps a file: a holder that keeps it open and adds no byte, the reader below
+/// included, fails the append at ten seconds however long the invocation has left.
 /// A reader that takes no lock, as <c>tail -f</c> and a log shipper do, is not in the way, nor is one that closes between
 /// reads, as PowerShell's <c>Get-Content -Wait</c> does; on Linux and macOS a .NET program that keeps the file open holds a
 /// shared lock for as long as it does, and an append then waits up to ten seconds and fails <c>file_write_failed</c>. Four
@@ -49,12 +53,18 @@ public sealed class FilesService(HostServices services)
 
     private static readonly TimeSpan SharingPause = TimeSpan.FromMilliseconds(2);
 
+    /// <summary>
+    /// The most of what is left of the invocation a wait leaves unspent, half of it when less is left, so a plugin told its
+    /// line failed still has the time to answer for itself and is never cut off in the append's place.
+    /// </summary>
+    private static readonly TimeSpan AnswerTime = TimeSpan.FromSeconds(1);
+
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>Every failure this door built, each an object the plugin may hold on to: a plugin's own word is another object.</summary>
     private readonly HashSet<object> _failures = new(ReferenceEqualityComparer.Instance);
 
-    /// <summary>How long a file another writer holds is waited for, inside what is left of the invocation.</summary>
+    /// <summary>How long a file another writer holds is waited for while nobody appends to it, inside what is left of the invocation.</summary>
     internal TimeSpan SharingWait { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>How a line goes to the open file: a write that stops part of the way is something no test can ask of a disk.</summary>
@@ -258,15 +268,17 @@ public sealed class FilesService(HostServices services)
     }
 
     /// <summary>
-    /// The file to this writer alone, waiting for another that holds it for as long as a line takes, within the wait and what
-    /// is left of the invocation; a deadline that has passed answers at once, so the pause is then a sleep and never a spin.
-    /// The open is no append on Windows either, since a stream opened to append cannot be cut back to where it began.
+    /// The file to this writer alone, waiting for others that hold it a line at a time. The wait lasts while the file's length
+    /// keeps moving, and ends after the sharing wait in which it did not move, or once what is left of the invocation, less
+    /// the time kept back for the plugin to answer, is spent; a deadline that has passed answers at once, so the pause is
+    /// then a sleep and never a spin. The open is no append on Windows either, since a stream opened to append cannot be
+    /// cut back to where it began.
     /// </summary>
     private FileStream Open(string file)
     {
-        var wait = services.Remaining();
-        wait = wait < SharingWait ? wait : SharingWait;
-        var started = Stopwatch.GetTimestamp();
+        var left = services.Remaining();
+        var kept = left / 2 < AnswerTime ? left / 2 : AnswerTime;
+        var wait = new SharingWaitClock(SharingWait, left - kept);
         while (true)
         {
             try
@@ -275,13 +287,30 @@ public sealed class FilesService(HostServices services)
                     ? new FileStream(file, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1, FileOptions.WriteThrough)
                     : new FileStream(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.WriteThrough);
             }
-            catch (IOException held) when (IsHeld(held) && Stopwatch.GetElapsedTime(started) < wait)
+            catch (IOException held) when (IsHeld(held) && wait.Goes(Length(file)))
             {
                 if (services.Deadline.WaitHandle.WaitOne(SharingPause))
                 {
                     Thread.Sleep(SharingPause);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// The file's length as its metadata says it, or nothing when it cannot be read: the read opens nothing for writing, so
+    /// it keeps no writer out.
+    /// </summary>
+    private static long? Length(string file)
+    {
+        try
+        {
+            var info = new FileInfo(file);
+            return info.Exists ? info.Length : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
@@ -300,4 +329,33 @@ public sealed class FilesService(HostServices services)
         new(
             HostOutcomeCodes.FilePathNotAllowed,
             $"{Function} writes a plain file, under a name of letters, digits, dots, dashes and underscores, directly in a granted directory.");
+
+    /// <summary>
+    /// Whether a held file is waited for once more: within the whole of what the invocation lets the wait spend, and
+    /// within the sharing wait of the last moment the file's length moved. The first length read counts as a move, a moment
+    /// after the open began; one that cannot be read moves nothing.
+    /// </summary>
+    private sealed class SharingWaitClock(TimeSpan quiet, TimeSpan whole)
+    {
+        private readonly long _started = Stopwatch.GetTimestamp();
+        private long _moved = Stopwatch.GetTimestamp();
+        private long? _length;
+
+        public bool Goes(long? length)
+        {
+            if (Stopwatch.GetElapsedTime(_started) >= whole)
+            {
+                return false;
+            }
+
+            if (length is not null && length != _length)
+            {
+                _length = length;
+                _moved = Stopwatch.GetTimestamp();
+                return true;
+            }
+
+            return Stopwatch.GetElapsedTime(_moved) < quiet;
+        }
+    }
 }

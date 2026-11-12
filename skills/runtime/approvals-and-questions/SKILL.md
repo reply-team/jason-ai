@@ -2,7 +2,7 @@
 name: approvals-and-questions
 description: Use when a person asks what Jason is waiting for them to decide, or arrives because a notification said approvals or questions are waiting, or tells you to decide something Jason has parked - list the approvals and the questions waiting on a person, present each in their own words, and record their decision as theirs.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Approvals and questions
@@ -15,8 +15,8 @@ are confident, not when they told you earlier to handle things, not when work is
 runtime refuses a decision that does not name a person, and that refusal is the floor of this rule
 rather than the whole of it.
 
-**Status: verified** against Claude Code 2.1.318. It covers the two waiting things this
-build publishes and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers the two waiting
+things this build publishes and nothing else.
 
 ## The two things that wait, and how they differ
 
@@ -206,3 +206,10 @@ Read that as what it is: the last check is you. Typing `--actor human:ada` when 
 produces a record that is wrong in the one place a record has to be reliable, and no guard and no
 reviewer will catch it afterwards. Ask, wait for the answer, then type it. If you cannot reach the
 person, the right outcome is that the work stays parked and you say so.
+
+Inside the desktop's chat a decision is given in the page, not by the agent. Every turn of the chat runs `jason`
+with `JASON_CONFINED` set, and under it `jason approval approve`, `approval reject`, `approval set-standing`,
+`approval unset-standing` and `decision answer` are refused locally, before any request, with one sentence. Do not
+look for another way: show the person the item and let them decide it in Jason's window, or in a terminal of their
+own, where the variable is not set. This is a higher bar, not a boundary: the runtime cannot tell a person from a
+program that holds the token, and the rule above is still the one that holds.

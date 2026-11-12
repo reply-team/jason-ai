@@ -52,7 +52,7 @@ public class ConfinedFileOptionsTests
     /// <summary>
     /// Options that name a path and are not under the rule, each for its own reason: <c>project link --path</c> names a
     /// folder the runtime adopts and sends no file's content; <c>doctor --output</c> writes, and is asked each time;
-    /// export and import run under the variable as without it, and the desktop's chat never runs them; <c>logs</c>
+    /// export and import are refused whole under the variable (<see cref="ConfinedVerbs"/>); <c>logs</c>
     /// takes no path.
     /// </summary>
     private static readonly string[] NotUnderTheRule = ["project link --path", "doctor --output"];
@@ -101,6 +101,12 @@ public class ConfinedFileOptionsTests
         Assert.Equal(ExitCodes.ApiError, run.Exit);
         Assert.Equal(0, run.Requests);
         Assert.Equal(string.Empty, run.Output);
+        if (RefusedByTheBar(key))
+        {
+            Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+            return;
+        }
+
         var option = Option(key);
         Assert.Contains($"{option} - < ", run.Error, StringComparison.Ordinal);
         Assert.Contains("here-document", run.Error, StringComparison.Ordinal);
@@ -113,6 +119,13 @@ public class ConfinedFileOptionsTests
     public async Task Confined_a_dash_reads_standard_input_as_before(string key)
     {
         var run = await RunAsync(key, "-", new Dictionary<string, string> { [Variable] = "yes" }, standardInput: "{}");
+
+        if (RefusedByTheBar(key))
+        {
+            Assert.Equal(ExitCodes.ApiError, run.Exit);
+            Assert.Equal(0, run.Requests);
+            return;
+        }
 
         Assert.True(run.Exit == ExitCodes.Success && run.Requests == 1, $"exit {run.Exit}, {run.Requests} requests: {run.Error}");
     }
@@ -146,6 +159,12 @@ public class ConfinedFileOptionsTests
             Assert.Equal($"--result-file: no such file: '{missing}'.{Environment.NewLine}Run 'jason --help' for usage.{Environment.NewLine}", result.Error);
         }
     }
+
+    /// <summary>
+    /// A verb in <see cref="ConfinedVerbs"/> is refused whole under the variable, before its file option is looked at: the
+    /// file rule is for the verbs the bar leaves.
+    /// </summary>
+    private static bool RefusedByTheBar(string key) => ConfinedVerbs.Covering(string.Join(' ', Rows[key].Take(2))) is not null;
 
     internal static string Option(string key) => key[(key.LastIndexOf(' ') + 1)..];
 

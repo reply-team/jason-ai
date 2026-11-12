@@ -118,6 +118,22 @@ describe('a chat’s access mode', () => {
         expect(full.text).toBe('Full access: Full access runs on Claude Code only.');
     });
 
+    it('says under the composer, on Codex alone, that the chat does not read the person’s Codex config.toml', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        const note = () => screen.queryByRole('note', { name: 'What Codex reads' });
+        expect(note()).toBeNull();
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        await waitFor(() => expect(note()).not.toBeNull());
+        expect(note()!.textContent).toBe(
+            'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.',
+        );
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+        await waitFor(() => expect(note()).toBeNull());
+    });
+
     it('says a mode the desktop refused in its own words, and keeps the mode it holds', async () => {
         const desktop = chatDesktop();
         desktop.refuse.set('chat.setMode', 'That conversation is not one this desktop keeps.');

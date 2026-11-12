@@ -179,6 +179,58 @@ public class DesktopDenyListTests
         }
     }
 
+    private const string DenyListHeader =
+        "# The jason commands the desktop's chat never runs, one per line.\n" +
+        "#\n" +
+        "# The listed commands are refused by the host's tool fence, and a command that names a listed operation is refused by\n" +
+        "# the desktop. A person runs them, in the page or in a terminal. An operation is told from a command by its dot.\n" +
+        "#\n" +
+        "# The command lines below are written from ConfinedVerbs.Table by DesktopDenyListTests, the table the CLI refuses under\n" +
+        "# JASON_CONFINED; a line taken out or added here by hand is red there until JASON_UPDATE_FIXTURES=1 writes the file\n" +
+        "# again. The operation lines are checked against the Runtime API and the verbs, and are edited by hand.\n";
+
+    private static readonly Dictionary<ConfinedVerbs.Kind, string> DenyListGroups = new()
+    {
+        [ConfinedVerbs.Kind.PersonsWord] =
+            "#\n# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a\n" +
+            "# preference, a block cleared, work resumed, a report and a subscription rewound. The CLI gives them no default actor,\n" +
+            "# and gives none to four verbs further down either.\n",
+        [ConfinedVerbs.Kind.Installation] =
+            "#\n# The verbs that change the installation, follow it without end, or carry it off the machine:\n",
+        [ConfinedVerbs.Kind.Acts] =
+            "#\n# The verbs the CLI gives no default actor that change who is reached or what runs: taking someone off the\n" +
+            "# do-not-contact register, changing which plugin performs an operation, and changing which profile a role runs on.\n",
+        [ConfinedVerbs.Kind.ChatsOwn] =
+            "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
+            "# work names the role, and linking a project's folder, which then becomes a working folder of every chat on the\n" +
+            "# project's campaigns.\n",
+    };
+
+    /// <summary>
+    /// The deny list's command half is the CLI's table of refused commands, written from it: the file holds exactly the
+    /// table's commands in its order, and its operation lines are the ones the file already holds.
+    /// </summary>
+    [Fact]
+    public void The_deny_list_s_command_half_is_written_from_the_confined_verbs()
+    {
+        var text = DenyListHeader;
+        foreach (var group in ConfinedVerbs.Table.GroupBy(entry => entry.Kind))
+        {
+            text += DenyListGroups[group.Key] + string.Concat(group.Select(entry => entry.Command + "\n"));
+        }
+
+        text += "#\n# The Runtime API operations the verbs above call, so that a command naming one is refused by the desktop:\n" +
+            string.Concat(DeniedOperations().Select(operation => operation + "\n"));
+        var file = Path.Combine(RepositoryRoot(), "desktop", "chat-deny-list.txt");
+        if (Environment.GetEnvironmentVariable(UpdateVariable) == "1")
+        {
+            File.WriteAllText(file, text);
+            return;
+        }
+
+        Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void The_allow_list_names_no_verb_that_takes_no_default_actor_and_not_doctor()
     {
@@ -259,12 +311,19 @@ public class DesktopDenyListTests
     private static readonly string[] HostFilesTheTableDoesNotName = [".cursorrules", ".github/copilot-instructions.md"];
 
     /// <summary>
+    /// The files Claude Code reads the MCP servers it starts from: a project's <c>.mcp.json</c> at the folder it runs in,
+    /// and the user's and local scopes in <c>.claude.json</c>. A write of either could add a server under a name the
+    /// person chose.
+    /// </summary>
+    private static readonly string[] ServerFiles = [".mcp.json", ".claude.json"];
+
+    /// <summary>
     /// The desktop's permission model guards, as one declaration, the names whose files act on what runs next: a write
     /// under one is a card each time. It holds the names the runtime and the hosts use, read here from their own tables:
     /// the folder a marker lives in, the person's memory file, every instruction file a harness folder holds beside it, the
     /// first folder of every place a host reads a work directory's skills from, the first folder of every host's own
-    /// settings, and the files the table has no column for. A host or a file added to those tables is red here until the
-    /// model guards it too.
+    /// settings, the files the table has no column for, and the files Claude Code reads its MCP servers from. A host or a
+    /// file added to those tables is red here until the model guards it too.
     /// </summary>
     [Fact]
     public void The_desktop_s_guarded_names_hold_the_runtime_s_and_the_hosts_own_names()
@@ -286,6 +345,7 @@ public class DesktopDenyListTests
             .. AgentHosts.All.Select(facts => facts.WorkSkills.Split('/')[0]),
             .. AgentHosts.All.Select(facts => facts.HomeMarker.Split('/')[0]),
             .. HostFilesTheTableDoesNotName,
+            .. ServerFiles,
         ];
         var missing = expected.Distinct(StringComparer.Ordinal).Where(name => !guarded.Contains(name)).Order(StringComparer.Ordinal).ToList();
 
@@ -381,8 +441,8 @@ public class DesktopDenyListTests
     private static HashSet<string> DenyList() =>
         Lines().Where(line => !line.Contains('.')).ToHashSet(StringComparer.Ordinal);
 
-    private static HashSet<string> DeniedOperations() =>
-        Lines().Where(line => line.Contains('.')).ToHashSet(StringComparer.Ordinal);
+    private static List<string> DeniedOperations() =>
+        [.. Lines().Where(line => line.Contains('.'))];
 
     private static IEnumerable<string> Lines() =>
         File.ReadAllLines(Path.Combine(RepositoryRoot(), "desktop", "chat-deny-list.txt"))

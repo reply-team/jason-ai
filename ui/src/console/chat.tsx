@@ -7,6 +7,7 @@ import {
     afresh,
     anotherModel,
     answered,
+    codexConfigLine,
     effortChosen,
     failed,
     fromRecord,
@@ -910,6 +911,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </button>
                     )}
                 </div>
+                {host?.id === 'codex' && (
+                    <div className="note codex-config" role="note" aria-label="What Codex reads">
+                        {codexConfigLine}
+                    </div>
+                )}
                 {chat.mode === 'full_access' && (
                     <div className="note am full-access" role="status" aria-label="Full access is on">
                         {fullAccessLine}{' '}

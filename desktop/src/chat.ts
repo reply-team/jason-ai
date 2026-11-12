@@ -26,7 +26,7 @@
  * lines reach the agent only with the person's next message, after the header, set apart as records.
  */
 
-import { chmodSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { AgentFolderUnowned, ownAgentFolder } from './chat-agent-folder.ts';
@@ -69,9 +69,24 @@ import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts
 import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
-import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
+import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
-import { programLaunch, type Programs } from './programs.ts';
+import { programLaunch, type Programs, type RunResult } from './programs.ts';
+import {
+    checkingSandbox,
+    checkRuns,
+    runSandboxCheck,
+    sandboxCheck,
+    sandboxKey,
+    sandboxKeyedSentence,
+    sandboxLimitMs,
+    sandboxNoSettingsSentence,
+    sandboxPathSentence,
+    sandboxSentence,
+    sandboxUncheckedSentence,
+    SandboxUnproven,
+    type SandboxCheck,
+} from './codex-sandbox.ts';
 import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
 
 /** Why a turn starts a fresh session of a conversation that had one. */
@@ -217,6 +232,13 @@ export interface ChatOptions {
     feedReadLimitMs?: number;
     /** How long a card waits for the person; thirty minutes unless a test shortens it. */
     answerWindowMs?: number;
+    /** How long the Windows check of Codex's sandbox may take; thirty seconds unless a test shortens it. */
+    sandboxLimitMs?: number;
+    /**
+     * How the Windows check runs its line outside any sandbox, its control: cmd by its full path (`checkRuns`) unless a
+     * test gives a stand-in, since a test may run where there is no cmd.
+     */
+    sandboxOutside?: (check: SandboxCheck) => Promise<RunResult>;
     platform?: Platform;
 }
 
@@ -231,6 +253,8 @@ interface Running {
     cards: Map<string, Extract<KeptEntry, { kind: 'permission' }>>;
     /** The mode the turn runs in, read when the person's send started it. */
     mode: ChatMode;
+    /** Stops the Windows check of Codex's sandbox while it runs. */
+    checking?: AbortController;
 }
 
 interface Resolved {
@@ -426,6 +450,13 @@ export class Chat {
     #leftOut = new Set<string>();
     /** Folders this start moved that an earlier move had failed on, by conversation: said once, when it is opened. */
     #movedAtStart = new Map<string, string>();
+    /**
+     * What the Windows check of Codex's sandbox found, for this run of the desktop, by Codex's file, its version and the
+     * Codex home the turn names: true where the sandbox held, false where a command in it read the run file. A check
+     * that proved neither is not kept, and runs again at the next send. A setup taken away while the desktop runs is
+     * found at its next start.
+     */
+    #sandboxChecked = new Map<string, boolean>();
     /** The Feed's id, once it is made or read. */
     #feedId: string | null = null;
     /** The journal ids the Feed took, oldest first, at most `takenLimit`, kept on its record too (`taken`). */
@@ -684,6 +715,7 @@ export class Chat {
         if (stopTurn && stops && running !== undefined) {
             running.stopped = true;
             running.process?.stop();
+            running.checking?.abort();
         }
     }
 
@@ -971,8 +1003,10 @@ export class Chat {
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
             // answering while the version is read, so a second send is refused as busy. The version read also says
             // whether the model named takes the effort named.
-            const version = resolved.program === 'claude' ? await this.#claudeVersion() : null;
-            const below = resolved.program === 'claude' ? floorSentence(version) : null;
+            // Codex has a floor of its own, the first version that leaves the person's configuration unread.
+            const hostVersion = resolved.program === 'claude' ? await this.#claudeVersion() : await this.#codexVersion();
+            const version = resolved.program === 'claude' ? hostVersion : null;
+            const below = resolved.program === 'claude' ? floorSentence(hostVersion) : codexFloorSentence(hostVersion);
             // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the chat goes
             // back to Ask first and the send is refused, saying why.
             const unhooked = below === null && mode === 'full_access' ? fullAccessSentence(version) : null;
@@ -987,11 +1021,11 @@ export class Chat {
                 if (unhooked !== null) this.#changeMode(conversation, 'ask_first', false);
                 return refuse(held);
             }
-            await this.#turn(conversation, text, resolved, launch, running);
+            await this.#turn(conversation, text, resolved, launch, running, hostVersion ?? '');
         } catch (error) {
             this.#running.delete(conversation.id);
             this.#setupTurns.delete(conversation.id);
-            if (error instanceof InstructionsUnwritten || error instanceof AgentFolderUnowned) refuse(error.message);
+            if (error instanceof InstructionsUnwritten || error instanceof AgentFolderUnowned || error instanceof SandboxUnproven) refuse(error.message);
             else refuse(`The turn could not be started: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -1004,6 +1038,7 @@ export class Chat {
         if (running === undefined) return;
         running.stopped = true;
         running.process?.stop();
+        running.checking?.abort();
     }
 
     /** A person's answer to a card; anything but the asking chat's first answer to a request it holds changes nothing. */
@@ -1035,6 +1070,7 @@ export class Chat {
         for (const running of [...this.#running.values()]) {
             running.stopped = true;
             running.process?.stop();
+            running.checking?.abort();
             if (running.turnId !== null) removeQuietly(this.#options.paths.turns, running.turnId);
         }
         const naming = this.#namingNow;
@@ -1052,6 +1088,48 @@ export class Chat {
     /** Claude Code's version, read before each turn on it and never remembered; null when it cannot be read. */
     async #claudeVersion(): Promise<string | null> {
         return printedVersion(await this.#options.programs.run('claude', ['--version'], { timeoutMs: versionLimitMs }));
+    }
+
+    /** Codex's version, read before each turn on it and never remembered; null when it cannot be read. */
+    async #codexVersion(): Promise<string | null> {
+        return printedCodexVersion(await this.#options.programs.run('codex', ['--version'], { timeoutMs: versionLimitMs }));
+    }
+
+    /**
+     * Returns when Codex's sandbox on Windows has been seen to hold for this Codex, or the turn was stopped meanwhile;
+     * throws `SandboxUnproven` with the sentence the person reads otherwise (`codex-sandbox.ts`). The check runs at the
+     * first send to a Codex in this run of the desktop, never at the Connect card, since naming the elevated sandbox may
+     * ask an administrator; it is started as the turn's host would be, with the turn's environment, in the chat folder.
+     */
+    async #codexSandboxHolds(launch: { file: string; prefix: string[] }, version: string, env: Record<string, string>, running: Running, keyed: boolean): Promise<void> {
+        const named = (wanted: string) => Object.entries(env).find(([name]) => name.toUpperCase() === wanted)?.[1] ?? '';
+        const key = sandboxKey(launch, version, named('CODEX_HOME'));
+        // A keyed turn runs under a Codex home of the desktop's own, which the setup command may not reach.
+        const refused = keyed ? sandboxKeyedSentence : sandboxSentence;
+        const known = this.#sandboxChecked.get(key);
+        if (known === true) return;
+        if (known === false) throw new SandboxUnproven(refused);
+        const { paths } = this.#options;
+        // Nothing to read is nothing proven: checked again at the next send.
+        if (!existsSync(paths.runFile)) throw new SandboxUnproven(sandboxUncheckedSentence);
+        if (!existsSync(paths.settings)) throw new SandboxUnproven(sandboxNoSettingsSentence);
+        const check = sandboxCheck([paths.runFile, paths.settings], named('SYSTEMROOT'));
+        if (check === 'path') throw new SandboxUnproven(sandboxPathSentence);
+        if (check === 'root') throw new SandboxUnproven(refused);
+        this.#options.emit(running.replyTo, { kind: 'step', text: checkingSandbox });
+        const checking = new AbortController();
+        running.checking = checking;
+        let answer: 'holds' | 'reads' | 'unproven';
+        try {
+            const runs = checkRuns(launch, check, { env, cwd: paths.chat, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
+            const outside = this.#options.sandboxOutside;
+            answer = await runSandboxCheck(check, outside === undefined ? runs : { ...runs, cmd: () => outside(check) }, checking.signal);
+        } finally {
+            delete running.checking;
+        }
+        if (running.stopped) return;
+        if (answer !== 'unproven') this.#sandboxChecked.set(key, answer === 'holds');
+        if (answer !== 'holds') throw new SandboxUnproven(refused);
     }
 
     #conversationOf(chatId: string): Conversation | undefined {
@@ -1238,7 +1316,7 @@ export class Chat {
         }
     }
 
-    async #turn(conversation: Conversation, text: string, resolved: Resolved, launch: { file: string; prefix: string[] }, running: Running): Promise<void> {
+    async #turn(conversation: Conversation, text: string, resolved: Resolved, launch: { file: string; prefix: string[] }, running: Running, version: string): Promise<void> {
         const { paths } = this.#options;
         const replyTo = running.replyTo;
         const main = conversation.main === true;
@@ -1275,6 +1353,8 @@ export class Chat {
         mkdirSync(paths.chat, { recursive: true });
 
         let turnId: string | null = null;
+        /** A Claude Code turn: the folder its judgement reads a `~` against, which a Full access turn names to its host as HOME. */
+        let turnHome: string | undefined;
         let endpoint: Endpoint | null = null;
         let argsFor: (resume: string | undefined) => string[];
         let requests = 0;
@@ -1302,6 +1382,7 @@ export class Chat {
             }
             if (resolved.folder !== null) makePrivate(resolved.label, resolved.program === 'claude' ? paths.claudeKeyed : paths.codexKeyed, resolved.folder);
             if (resolved.program === 'claude') {
+                turnHome = Object.entries(this.#options.env).find(([name, value]) => (this.#platform === 'win32' ? name.toUpperCase() : name) === 'HOME' && value !== undefined && value !== '')?.[1] ?? homedir();
                 const id = newTurnId();
                 turnId = id;
                 running.turnId = id;
@@ -1312,6 +1393,9 @@ export class Chat {
                     added,
                     data: paths.data,
                     home: homedir(),
+                    // The host's environment is built from this one (`hostEnvironment`), so its shell's `~` is this HOME;
+                    // a Full access turn names it to the host explicitly (`turnHome`), so the two cannot differ.
+                    shellHome: turnHome,
                     protectedFiles: [paths.installationSettings, paths.runFile],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
@@ -1335,9 +1419,9 @@ export class Chat {
                     ...chatRules(this.#platform, folder),
                 ];
                 argsFor = (resumed) =>
-                    claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed });
+                    claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed, version });
             } else {
-                argsFor = (resumed) => codexArguments({ model: resolved.model, effort: resolved.effort, resume: resumed });
+                argsFor = (resumed) => codexArguments({ platform: this.#platform, model: resolved.model, effort: resolved.effort, resume: resumed });
             }
         } catch (error) {
             // Whatever the turn had opened is closed again: its endpoint, its broker turn and its file.
@@ -1362,7 +1446,18 @@ export class Chat {
             provider: resolved.provider,
             bundleVersion: this.#options.bundleVersion,
             effortNamed: resolved.effort !== undefined,
+            ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
+        // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the data directory.
+        if (resolved.program === 'codex' && this.#platform === 'win32') {
+            await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed);
+            if (running.stopped) {
+                this.#setupTurns.delete(conversation.id);
+                this.#running.delete(conversation.id);
+                this.#options.emit(replyTo, { kind: 'done', error: null });
+                return;
+            }
+        }
         let steps = 0;
         const begun = Date.now();
         // A set-up chat is named by the first sixty characters of its first message, until a campaign names it; after its

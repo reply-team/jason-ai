@@ -12,7 +12,7 @@ import { readFence } from '../src/chat-deny.ts';
 import { readConversations } from '../src/chat-conversations.ts';
 import { quoted } from '../src/chat-header.ts';
 import { namingInstruction, type NamingOutcome } from '../src/chat-naming.ts';
-import { bench, type Bench, type Recorded } from './harness.ts';
+import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 
@@ -38,6 +38,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partia
     const removals: (() => void)[] = [];
     // The program runner reads Claude Code's version with the bench's environment as it is made.
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'], env });
+    placeSandboxFiles(b);
     const campaigns = join(b.root, 'campaigns.json');
     writeFileSync(campaigns, '[]');
     b.env.STUB_CAMPAIGNS_FILE = campaigns;
@@ -57,6 +58,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partia
             programs: b.programs,
             keyFor: (id) => keys[id],
             fence: () => fence,
+            sandboxOutside: outsideStandIn,
             emit(chatId, event) {
                 events.set(chatId, [...(events.get(chatId) ?? []), event]);
                 for (const waiter of [...waiters]) {
