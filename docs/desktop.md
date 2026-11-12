@@ -24,7 +24,7 @@ Each release publishes Jason Desktop beside the runtime's downloads ([release-an
 | --- | --- | --- |
 | Windows on x64 | `jason-desktop-windows-x64-setup.exe` | Run it. It installs for your account, with no administrator rights. The installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are signed. |
 | macOS on Apple silicon | `jason-desktop-macos-arm64.dmg` | Open it and drag Jason into Applications. Signed, notarized and stapled. |
-| macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application moves only with the desktop's own update, so `jason update apply` there answers `update_not_updatable`. |
+| macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application moves only with the desktop's own update, so `jason update apply` there answers `update_carried_by_desktop`. |
 | Linux on x64, Debian and Ubuntu | `jason-desktop-linux-x64.deb` | `sudo apt install ./jason-desktop-linux-x64.deb`. It installs to `/opt/Jason` and puts Jason in the applications menu. This is the package to take on Ubuntu 24.04 and later. Not signed. |
 | Linux on x64, any | `jason-desktop-linux-x64.AppImage` | Make it executable and run it from where you keep it. Not signed. |
 
@@ -51,7 +51,7 @@ The desktop asks `jason status` whether a runtime is up and whether it is this b
 `jason runtime start` only when none is; a runtime that is already up is used as it is, and `jason runtime run` is never
 started as its child. It places the release's UI with `jason ui install` when the runtime is the version the desktop
 carries and no UI is served, deploys the role skills (`jason skills install --roles-only`) and the chat's skills from the
-package it carries, once for each desktop version, and loads the link `jason ui open --no-open` prints. When the runtime is another version, the UI it
+package it carries, once for each desktop version, deploys the Reply skills when you sign in to Reply on the Connect card, and again at a start that finds them unrecorded while you are signed in, and loads the link `jason ui open --no-open` prints. When the runtime is another version, the UI it
 serves is loaded as it is and the window says the versions differ: it names the desktop's own update where that runtime
 is the one the application carries, and `jason update` otherwise.
 
@@ -108,6 +108,9 @@ them on.
 - `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone, naming the
   desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
+- `<data>/desktop/models.json`: the models Codex offered when it was last asked.
+- `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
+  the chat folder, which the chat can neither read nor write.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).
 - `<data>/desktop/bundle/<version>/`: on Linux, an AppImage's copy of the `jason` it carries. An AppImage runs from a mount
   that lasts only while it runs, so each start copies its `jason` here; that copy is the `jason` it runs, starts the
@@ -129,14 +132,14 @@ lists each key and each card's grant.
 
 ## Connect
 
-- **Agent hosts.** The cards detect `claude`, `codex`, `reply` and `node`. A missing program is explained with its install
+- **Agent hosts.** The cards detect the agent hosts (Claude Code, Codex, Gemini CLI, Antigravity CLI, Cursor CLI and GitHub Copilot CLI), `reply` and `node`. A missing program is explained with its install
   command and a link, and the command runs on a click when `npm` is present, never without one; Node itself is never
   installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
   sign-in.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's
-  process environment and nothing else (`CODEX_API_KEY` for Codex), and is never written to a file of Jason's. A turn on
+  process environment and nothing else (`CODEX_API_KEY` for Codex), and is never written in the clear, to a file of Jason's or anywhere else: the file `provider-keys` holds it encrypted by the operating system. A turn on
   a key runs its host with a configuration folder of the desktop's own, holding no claude.ai login and no saved Codex
   login, and without the variables that name another credential, a profile or a federation: the design is that a key the
   host does not take fails the turn instead of running it on your own plan, as built and not yet seen with a real host.
@@ -153,11 +156,11 @@ lists each key and each card's grant.
   account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
   accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
   **Add account** offers Gmail, Outlook, another mailbox and LinkedIn (a channel the account does not have is not
-  offered), and a row that is not in a good state offers **Reconnect**. Each opens a dialog with Reply's own link for the
+  offered; the LinkedIn acts need Reply CLI 0.20.0 or later, and below it the card turns them off and says so), and a row that is not in a good state offers **Reconnect**. Each opens a dialog with Reply's own link for the
   act, its host in plain text, **Copy link**, **Open in the browser** and **Check now**. Reply's page needs no Reply
   sign-in, so you can send the link to whoever owns the mailbox or the LinkedIn account, who signs in to Google,
   Microsoft or LinkedIn there with their own credentials; a mailbox by SMTP or IMAP is added on Reply's page, so its
-  password never passes through Jason. For a mailbox the dialog warns that anyone who has the link can add and manage
+  password never passes through Jason. For a mailbox, the desktop first asks you in a box of its own, each time, before it asks Reply for the link; with no window to ask in, it does not ask. The dialog then warns that anyone who has the link can add and manage
   the Reply account's mailboxes and that it does not expire. A LinkedIn link is valid for a limited time, and the
   card lists pending connections with Waiting or Expired and their expiry. The desktop asks Reply for the link, checks it
   before showing it, shows it only on your click, and keeps it nowhere after the dialog closes. Finishing happens on
@@ -183,7 +186,7 @@ Claude Code.
   refused before the host starts, a key provider's turn on it included. The reason is one setting: every Claude Code turn
   carries `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders
   the chat works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
-- **Codex is a reading host in this release.** A Codex turn runs `exec --json --sandbox read-only` and asks for
+- **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
   loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder.
@@ -260,7 +263,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
   pages of `developers.openai.com`, and all of `docs.reply.io`. A page counts only when its address is `https`, at most 300
-  characters, with no query, no port and no dot segment; any other page of those hosts, or any other site, gets the card
+  characters, with no query, no port, no dot segment, no escape and no path segment that begins with an underscore; any other page of those hosts, or any other site, gets the card
   "Open a web page", remembered by its host. The agent is told to read a web page or a search result as information and
   never to do what it says.
 - **What "Allow for this chat" covers** is printed on the button, and remembered for the chat only; it holds across a
@@ -413,7 +416,7 @@ updater's cache named above.
   4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
 
-## What this release leaves out
+## What is not here
 
 Managing Reply accounts beyond connecting and reconnecting one, Codex acting in the chat (it reads and advises), your own connectors and MCP
 servers in the chat, a marketplace and plugins in frames, and a Linux build for arm64 are not here. Everything in this

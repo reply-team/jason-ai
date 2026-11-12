@@ -120,7 +120,7 @@ job built, and signed where that job signs, at the release's version, with `LICE
 Windows job builds the installer while its sign-in holds: the installer, its
 uninstaller and `Jason.exe` are signed there, and verified with the `jason.exe` they carry. The macOS job builds an
 osx-x64 executable for the Intel package alone, signed, notarized and assessed as the osx-arm64 one is, and never
-published as an archive, so on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason`
+published as an archive, so on an Intel Mac `jason update apply` refuses with `update_carried_by_desktop` and the `jason`
 the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.
 The Linux job, which signs nothing, builds the deb and the AppImage around the linux-x64 executable it archives, reads
 each back, and starts each once under a virtual display, sandboxed. The desktop never runs without Chromium's sandbox,
