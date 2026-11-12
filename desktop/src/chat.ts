@@ -874,9 +874,9 @@ export class Chat {
         this.#options.modeChanged?.(from, to);
         this.#options.emit(conversation.id, { kind: 'mode', mode: to });
         const running = this.#running.get(conversation.id);
-        // A change to a narrower mode than the running turn's stops it: leaving Full access or Auto-edit stops the turn that
-        // runs in it, and a change to Plan only stops any other, so the menu never says a mode while the running turn could
-        // still do more than it lets.
+        // A change to a narrower mode than the running turn's stops it: leaving Full access, or leaving Auto-edit for Ask
+        // first or Plan only, stops the turn that runs in it, while Auto-edit to Full access lets it finish; a change to
+        // Plan only stops any other, so the menu never says a mode while the running turn could still do more than it lets.
         const stops = running !== undefined && breadth[to] < breadth[running.mode];
         if (stopTurn && stops && running !== undefined) {
             running.stopped = true;

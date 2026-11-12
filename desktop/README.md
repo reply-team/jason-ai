@@ -415,9 +415,10 @@ applies to the turns a person starts by sending, from the next one on.
   link put into the folder by something else between the two is the same limit Ask first's Write has.
 - A change to a mode narrower than the running turn's stops that turn, narrow to wide being Plan only, Ask first,
   Auto-edit, Full access, and the page gives the waiting message back as Stop does: no turn follows by itself. So
-  leaving Full access or Auto-edit stops the turn that runs in it, and a change to Plan only stops any running turn, so
-  the menu never says a mode while the running turn could still do more than it lets; a change to a wider mode lets
-  the running turn finish in the mode it started in.
+  leaving Full access, or leaving Auto-edit for a narrower mode (Ask first or Plan only), stops the turn that runs in
+  it, and a change to Plan only stops any running turn, so the menu never says a mode while the running turn could
+  still do more than it lets; a change to a wider mode, Auto-edit to Full access included, lets the running turn finish
+  in the mode it started in.
 - **No turn starts by itself.** Every turn is a person's send:
   - a message the person sends while a turn runs waits in the page and goes as the next turn once that one ends well, in
     the mode of the moment it goes;

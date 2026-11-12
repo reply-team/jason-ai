@@ -289,8 +289,8 @@ for it, with no pipe, redirection, pattern, variable, `~` or `..`, and every pat
 links are followed and outside the names an agent loads. A recursive or forced removal (`rm -r`, `rm -f`), a copy of a
 folder, and anything in a campaign's or a project's folder, in the data directory or elsewhere is Ask first's card, and
 whatever Ask first refuses stays refused. Auto-edit runs on Claude Code only and is not offered for the Feed; it has no
-confirmation and no Always, is never a default, and is gone when you close Jason. Leaving it while a turn runs stops
-that turn.
+confirmation and no Always, is never a default, and is gone when you close Jason. Leaving it for Ask first or Plan only
+while a turn runs stops that turn; a change to Full access lets the turn finish in the mode it started in.
 
 Three limits come with it. The chat folder is shared by the chats that are not in Full access, so a chat in Auto-edit
 can remove a file another chat left there. A hard link already in the folder is not told by its path, so a command that

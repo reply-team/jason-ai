@@ -236,8 +236,9 @@ export function renameChat(id: string, title: string): void {
 export function chooseMode(id: string, mode: DesktopChatMode): void {
     const chat = chats.value[id];
     if (!chat) return;
-    // A change to a narrower mode while a turn runs stops that turn, as Stop does: leaving Full access or Auto-edit, or a
-    // change to Plan only. The waiting message is given back, and no turn follows by itself.
+    // A change to a narrower mode while a turn runs stops that turn, as Stop does: leaving Full access, leaving Auto-edit
+    // for Ask first or Plan only, or a change to Plan only; Auto-edit to Full access lets it finish. The waiting message is
+    // given back, and no turn follows by itself.
     const stops = breadth[mode] < breadth[chat.mode];
     if (chat.running && stops) changeChat(id, stopAsked);
     here()
