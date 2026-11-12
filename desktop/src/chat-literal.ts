@@ -113,14 +113,33 @@ interface Parsed {
 
 /**
  * Git Bash's own layer rewrites a word that looks like a POSIX path when it starts a Windows program (`/tmp/x`,
- * `--out=/x`, `/a:/b`), so the program receives another word than the one read; a drive's own path (`/c`, `/c/...`) is
+ * `--out=/x`, `/a:/b`, `x:/y`, `-X/y`), so the program receives another word than the one read; a drive's own path
+ * (`/c`, `/c/...`) is
  * the one form read as the drive's. A redirection's target is opened by the shell itself, so only `/dev/null` and a
  * drive's own path are read there.
  */
 function rewrittenByMsys(command: Parsed): void {
     const drive = /^\/[A-Za-z](\/|$)/;
-    if (command.words.some((word) => (word.startsWith('/') && !drive.test(word)) || word.includes('=/'))) throw new Held('character');
+    if (command.words.some((word) => (word.startsWith('/') && !drive.test(word)) || word.includes('=/') || pathList(word) || (word.startsWith('-') && word.includes('/')))) {
+        throw new Held('character');
+    }
+    // Git Bash quotes for a Windows program only a word holding whitespace or a quote, and a program's start-up code may
+    // expand a `*`, `?` or `[` in any other word to the names of files, so a quoted pattern is not the word it receives.
+    if (command.words.some((word) => /[*?[]/.test(word) && !/\s/.test(word))) throw new Held('character');
     if (command.targets.some((target) => target.startsWith('/') && !drive.test(target) && target !== '/dev/null')) throw new Held('character');
+}
+
+/**
+ * True when a word holds `:/` other than a URL's `://` and other than a drive's `X:/` at its start: a path list such as
+ * `x:/y` that Git Bash may rewrite as a list of Windows paths.
+ */
+function pathList(word: string): boolean {
+    for (let at = word.indexOf(':/'); at >= 0; at = word.indexOf(':/', at + 1)) {
+        if (word.startsWith('://', at)) continue;
+        if (at === 1 && /^[A-Za-z]$/.test(word[0] as string)) continue;
+        return true;
+    }
+    return false;
 }
 
 type Separator = 'and' | 'or' | 'semicolon' | 'pipe' | 'newline' | 'end';
@@ -608,6 +627,8 @@ function withDirectories(parsed: readonly Parsed[], powerShell: boolean, context
 // Names to recognise, never to run: written as one string each, as the process guard expects of every module but the
 // login-shell lookup.
 const shellPrograms = new Set('sh bash zsh dash ksh mksh ash fish csh tcsh'.split(' '));
+/** The shell whose -C and --init-command run their text before anything else. */
+const initCommandShell = /^fish$/;
 const [windowsPowerShell, powerShellCore, commandPrompt] = 'powershell pwsh cmd'.split(' ') as [string, string, string];
 const powerShellPrograms = new Set([windowsPowerShell, powerShellCore]);
 const pythonStem = /^(python|pythonw|py)[0-9.]*$/;
@@ -615,28 +636,33 @@ const nodeStem = /^(node|nodejs|bun)[0-9.]*$/;
 const awkPrograms = new Set(['awk', 'gawk', 'mawk', 'nawk']);
 const eInterpreters = /^(ruby|lua|luajit|julia|rscript|osascript|groovy)[0-9.]*$/;
 
-/** The programs that start a later or another command they are given. A closed list: a program it misses runs. */
+/**
+ * The programs that start a later or another command they are given, the package runners that fetch and run a
+ * registry's code among them. A closed list: a program it misses runs.
+ */
 const runners = new Set(
     ('. source eval exec xargs env sudo doas su pkexec runuser nohup setsid at batch crontab schtasks ssh wsl start '
         + 'start-process saps invoke-expression iex invoke-command icm start-job sajb start-threadjob invoke-item ii '
         + 'register-scheduledtask timeout nice ionice stdbuf time command builtin watch flock script caffeinate chroot '
         + 'taskset strace ltrace unbuffer parallel systemd-run busybox chronic runas psexec winrs wscript cscript mshta '
         + 'rundll32 regsvr32 forfiles conhost fc r let mapfile readarray compgen complete add-type % foreach-object foreach '
-        + 'invoke-wmimethod iwmi wmic').split(' '),
+        + 'invoke-wmimethod iwmi wmic npx pnpx bunx uvx hyperfine valgrind').split(' '),
 );
 
-/** The builtins that change how a later word or program is read. */
+/** The builtins that change how a later word or program is read, bash's and zsh's. */
 const builtins = new Set(
     ('alias unalias set shopt enable export unset trap declare typeset readonly local hash set-alias sal new-alias nal '
-        + 'remove-alias set-variable sv new-variable nv remove-variable rv import-module ipmo').split(' '),
+        + 'remove-alias set-variable sv new-variable nv remove-variable rv import-module ipmo setopt unsetopt emulate '
+        + 'zmodload disable').split(' '),
 );
 
 /**
- * True when a single-dash option word's letters, read up to the first character that is not a letter, hold one of the
- * code letters before any letter that takes the rest of the word as its value: `-c`, `-lc`, `-c'...'` glued, `-Bc"..."`.
+ * True when a single-dash option word's letters and digits, read up to the first other character, hold one of the code
+ * letters before any letter that takes the rest of the word as its value: `-c`, `-lc`, `-c'...'` glued, `-Bc"..."`,
+ * `-0ne`.
  */
 function shortOption(word: string, letters: string, valued = ''): boolean {
-    const cluster = /^-([A-Za-z]+)/.exec(word)?.[1];
+    const cluster = /^-([A-Za-z0-9]+)/.exec(word)?.[1];
     if (cluster === undefined) return false;
     for (const letter of cluster) {
         if (letters.includes(letter)) return true;
@@ -645,52 +671,111 @@ function shortOption(word: string, letters: string, valued = ''): boolean {
     return false;
 }
 
+/**
+ * True when a `--` word names one of the long options by any prefix of three or more of its characters, as git's, GNU's
+ * getopt_long and npm's parsers accept one: `--upload-p=...` is `--upload-pack`.
+ */
+function longOption(word: string, names: readonly string[]): boolean {
+    const name = /^--([A-Za-z0-9-]+)(=|$)/.exec(word)?.[1]?.toLowerCase();
+    return name !== undefined && name.length >= 3 && names.some((each) => each.startsWith(name));
+}
+
 function prefixOf(word: string, names: readonly string[]): boolean {
     if (!/^[-/][A-Za-z]+$/.test(word)) return false;
     const name = word.slice(1).toLowerCase();
     return names.some((each) => each.startsWith(name)) || ['ec', 'enc', 'cwa'].includes(name);
 }
 
-const editors = new Set(['vi', 'vim', 'nvim', 'gvim', 'view', 'vimdiff', 'ex']);
+const editors = new Set(['vi', 'vim', 'nvim', 'gvim', 'view', 'vimdiff', 'ex', 'ed']);
 const packageManagers = new Set(['npm', 'pnpm', 'yarn']);
 
 /** True when a package runner is given shell code to run (`npx -c`, `npm exec -c`, `pnpm exec -c`). */
 function packageCode(program: string, args: readonly string[]): boolean {
-    const call = (word: string) => word === '-c' || /^--(call|shell-mode)(=|$)/.test(word);
+    const call = (word: string) => word === '-c' || longOption(word, ['call', 'shell-mode']);
     if (program === 'npx' || program === 'pnpx') return args.some(call);
     return packageManagers.has(program) && args.some((word) => word === 'exec' || word === 'x' || word === 'dlx') && args.some(call);
+}
+
+/** A sed script that only prints, deletes or quits, at lines and ranges: `1,5p`, `$d`, `10q`, `1!d`. */
+const plainSed = /^[0-9,$!]*[pdq]$/;
+
+/**
+ * True when sed is given a script that is not a plain print, delete or quit: GNU sed's `e` command and flag run text as a
+ * shell command and its `w` writes a file, so any other script is held, and so is a script file.
+ */
+function sedCode(args: readonly string[]): boolean {
+    const scripts: string[] = [];
+    let named = false;
+    for (let at = 0; at < args.length; at++) {
+        const word = args[at] as string;
+        if (word === '--') break;
+        if (longOption(word, ['file'])) return true;
+        if (longOption(word, ['expression'])) {
+            named = true;
+            const glued = word.indexOf('=');
+            scripts.push(glued >= 0 ? word.slice(glued + 1) : (args[++at] ?? ''));
+            continue;
+        }
+        if (/^-[A-Za-z]+/.test(word)) {
+            const cluster = /^-([A-Za-z]+)/.exec(word)?.[1] ?? '';
+            if (cluster.includes('f')) return true;
+            const e = cluster.indexOf('e');
+            if (e >= 0) {
+                named = true;
+                const rest = word.slice(2 + e);
+                scripts.push(rest !== '' ? rest : (args[++at] ?? ''));
+            } else if (cluster.endsWith('l')) {
+                at++;
+            }
+            continue;
+        }
+        if (word.startsWith('-')) continue;
+        if (!named) {
+            scripts.push(word);
+            named = true;
+        }
+    }
+    return scripts.some((script) => !plainSed.test(script));
 }
 
 /** True when the command is a shell or an interpreter handed code as text, or code through its standard input. */
 function takesCode(command: LiteralCommand): boolean {
     const program = programName(command.words[0] ?? '');
     const args = command.words.slice(1);
+    const fed = command.input === 'pipe' || command.input === 'here_document';
     if (packageCode(program, args)) return true;
-    if (editors.has(program)) return args.some((word) => word === '-c' || word === '--cmd' || word.startsWith('+'));
-    if (program === 'gdb') return args.some((word) => /^-{1,2}(ex|iex|eval-command|init-eval-command)(=|$)/.test(word));
+    if (program === 'sed' || program === 'gsed') return sedCode(args);
+    // An editor or a debugger runs the commands it is fed, and an editor's `!` runs a shell command.
+    if (editors.has(program)) return fed || args.some((word) => word === '-c' || word === '--cmd' || word.startsWith('+'));
+    if (program === 'gdb') return fed || args.some((word) => /^-(ex|iex)$/.test(word) || longOption(word, ['eval-command', 'init-eval-command']));
     const interpreter = shellPrograms.has(program) || powerShellPrograms.has(program) || pythonStem.test(program) || nodeStem.test(program)
         || program === 'deno' || program === 'perl' || program === 'php' || awkPrograms.has(program) || eInterpreters.test(program);
     if (!interpreter) return false;
-    if (command.input === 'pipe' || command.input === 'here_document') return true;
-    if (shellPrograms.has(program)) return args.some((word) => shortOption(word, 'c') || /^--command(=|$)/.test(word));
+    if (fed) return true;
+    if (shellPrograms.has(program)) {
+        const init = initCommandShell.test(program);
+        return args.some((word) => shortOption(word, init ? 'cC' : 'c') || longOption(word, init ? ['command', 'init-command'] : ['command']));
+    }
     if (powerShellPrograms.has(program)) {
         if (args.some((word) => prefixOf(word, ['command', 'encodedcommand', 'commandwithargs']))) return true;
         // Windows PowerShell reads a word with no option before it as a command, pwsh as a file.
         return program === windowsPowerShell && args.length > 0 && !args.some((word) => /^[-/]f(i(le?)?)?$/i.test(word));
     }
     if (pythonStem.test(program)) return args.some((word) => shortOption(word, 'c', 'mWXQ') || word === '-');
-    if (nodeStem.test(program)) return args.some((word) => shortOption(word, 'ep', 'r') || /^--(eval|print)(=|$)/.test(word) || word === '-');
-    if (program === 'deno') return args[0] === 'eval' || args[0] === 'repl';
-    // perl's -M and -m take a module's name, and text after a `;` there is code.
-    if (program === 'perl') return args.some((word) => shortOption(word, 'eE', 'MmIx') || (/^-[Mm]/.test(word) && word.includes(';')));
+    // A `data:` URL is code carried in the word itself.
+    const carried = args.some((word) => /^data:|=data:/i.test(word));
+    if (nodeStem.test(program)) return carried || args.some((word) => shortOption(word, 'ep', 'r') || longOption(word, ['eval', 'print']) || word === '-');
+    if (program === 'deno') return carried || args[0] === 'eval' || args[0] === 'repl';
+    // perl's -M and -m take a module's name and an import list; anything else there is evaluated as code.
+    if (program === 'perl') return args.some((word) => shortOption(word, 'eE', 'MmIx') || (/^-[Mm]/.test(word) && /[^A-Za-z0-9_:=,]/.test(word.slice(2).replace(/^-/, ''))));
     if (program === 'php') return args.some((word) => shortOption(word, 'rRBEa', 'cdfzt'));
     // awk's program is its first word unless a file names it; gawk's -e and --source add program text beside a file.
-    if (awkPrograms.has(program)) return args.some((word) => shortOption(word, 'e', 'fvF') || /^--source(=|$)/.test(word)) || !args.some((word) => word.startsWith('-f') || word === '--file');
+    if (awkPrograms.has(program)) return args.some((word) => shortOption(word, 'e', 'fvF') || longOption(word, ['source'])) || !args.some((word) => word.startsWith('-f') || longOption(word, ['file']));
     return args.some((word) => shortOption(word, 'eE'));
 }
 
-/** git's options that name a program it runs, wherever the verb takes them. */
-const gitExecuting = /^--(upload-pack|receive-pack|exec|open-files-in-pager|config)(=|$)|^--[a-z-]*-cmd(=|$)/;
+/** git's options that name a program it runs, wherever the verb takes them, by any prefix git accepts. */
+const gitExecuting = ['upload-pack', 'receive-pack', 'exec', 'open-files-in-pager', 'config', 'sendmail-cmd', 'to-cmd', 'cc-cmd', 'header-cmd', 'smtp-server'];
 
 /** True when git is given configuration before its verb, or a verb or an option that runs a command it is given. */
 function gitRuns(args: readonly string[]): boolean {
@@ -702,7 +787,7 @@ function gitRuns(args: readonly string[]): boolean {
     }
     const verb = args[at];
     const rest = args.slice(at + 1);
-    if (rest.some((word) => gitExecuting.test(word))) return true;
+    if (rest.some((word) => longOption(word, gitExecuting) || /^--[a-z-]*-cmd(=|$)/.test(word))) return true;
     if (verb === 'clone') return rest.some((word) => shortOption(word, 'uc', 'bo'));
     if (verb === 'grep') return rest.some((word) => shortOption(word, 'O', 'efABCm'));
     if (verb === 'config') return !rest.some((word) => /^--(get|get-all|get-regexp|list)$|^-l$/.test(word));
@@ -717,17 +802,26 @@ function gitRuns(args: readonly string[]): boolean {
 const containerPrograms = new Set(['docker', 'podman', 'nerdctl']);
 const clusterPrograms = new Set(['kubectl', 'oc']);
 const tarPrograms = new Set(['tar', 'bsdtar', 'gtar']);
+const tarExecuting = ['to-command', 'use-compress-program', 'checkpoint-action', 'info-script', 'new-volume-script', 'rsh-command'];
+const secureCopies = new Set(['scp', 'sftp']);
 
 /** True when a program is given a command, or a program of the agent's choosing, that it starts. */
 function startsGiven(program: string, args: readonly string[]): boolean {
     if (containerPrograms.has(program)) return args.some((word) => word === 'run' || word === 'exec' || word === 'create');
     if (clusterPrograms.has(program)) return args.some((word) => word === 'exec' || word === 'run' || word === 'debug');
-    if (program === 'rsync') return args.some((word) => shortOption(word, 'e') || /^--rsh(=|$)/.test(word));
+    if ((program === 'pnpm' || program === 'yarn') && args[0] === 'dlx') return true;
+    if (program === 'pipx' && args[0] === 'run') return true;
+    if (program === 'rsync') return args.some((word) => shortOption(word, 'e') || longOption(word, ['rsh']));
     if (tarPrograms.has(program)) {
-        return args.some((word) => /^--(to-command|use-compress-program|checkpoint-action|info-script|new-volume-script|rsh-command)(=|$)/.test(word)
-            || shortOption(word, 'IF', 'fCbHKLNTVX'));
+        // tar's old form: a first word with no dash is a cluster of options, each value taken from the words after it.
+        const old = args[0] !== undefined && !args[0].startsWith('-') && /[IF]/.test(args[0]);
+        return old || args.some((word) => longOption(word, tarExecuting) || shortOption(word, 'IF', 'fCbHKLNTVX'));
     }
-    if (program === 'sort') return args.some((word) => /^--compress-program(=|$)/.test(word));
+    if (program === 'sort') return args.some((word) => longOption(word, ['compress-program']));
+    if (program === 'make' || program === 'gmake') return args.some((word) => shortOption(word, 'E', 'CfIjlLoW') || longOption(word, ['eval']));
+    if (secureCopies.has(program)) return args.some((word) => shortOption(word, 'S', 'cFiJlopP') || /proxycommand|localcommand/i.test(word));
+    if (program === 'zip') return args.some((word) => word === '-TT' || longOption(word, ['unzip-command']));
+    if (program === 'nodemon') return args.some((word) => word === '-x' || longOption(word, ['exec']));
     return false;
 }
 

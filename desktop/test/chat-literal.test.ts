@@ -505,7 +505,7 @@ test('a package runner given shell code, git\'s execute options, and the runners
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
     }
     for (const command of ['vim -c q notes.md', 'vim +q notes.md', 'gdb -ex run frobnicate']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
-    for (const command of ['git push -u origin main', 'git grep -n x', 'git clone repo', 'npx frobnicate', 'tar -xf a.tar', 'sort notes.md']) {
+    for (const command of ['git push -u origin main', 'git grep -n x', 'git clone repo', 'tar -xf a.tar', 'sort notes.md']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
     }
 });
@@ -623,4 +623,93 @@ test('PowerShell: a redirection to a stream and the other quotes and dashes outs
     for (const character of ['\u201C', '\u201D', '\u201E', '\u201A', '\u201B', '\u2014', '\u2015']) {
         assert.equal(reasonOf('PowerShell', `frobnicate ${character}a${character}`), 'non_ascii', character);
     }
+});
+
+// The delta read's classes: each holds more.
+
+test('delta F1: an option cluster is read with its digits, perl module text other than a name is code, fish -C, and a data: URL to node or deno', () => {
+    for (const command of [
+        "perl -0ne 'print' notes.md",
+        "ruby -0ne 'p 1' notes.md",
+        "perl -l0pe 'print' notes.md",
+        "perl -MList::Util=sum,max '-Mfrobnicate(1)' x.pl",
+        "perl '-Mstrict qw(x)' x.pl",
+        'fish -C frobnicate',
+        'fish --init-command=frobnicate',
+        'node --import=data:text/javascript,1 x.js',
+        'deno run data:text/javascript,1',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'perl -MList::Util=sum,max -Mstrict x.pl' }, scope), runs, 'module names and imports only');
+});
+
+test('delta F2: an editor or a debugger fed commands on its input is held, ed among the editors', () => {
+    for (const command of ['echo a | vim -es notes.md', "ex -s notes.md <<'EOF'\nq\nEOF", 'echo run | gdb frobnicate', 'echo q | ed notes.md']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), JSON.stringify(command));
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'ed -s notes.md < cmds.txt' }, scope), runs, 'commands from a file the agent wrote, as an interpreter given a file');
+});
+
+test('delta F3: a long execute option is matched by any prefix of three or more letters, and tar\'s dashless cluster is read', () => {
+    for (const command of [
+        'git fetch --upload-p=frobnicate',
+        'git grep --open-files=frobnicate x',
+        'tar --to-com=frobnicate -xf a.tar',
+        'sort --compress-prog=frobnicate notes.md',
+        'tar xIf frobnicate a.tar',
+        'tar xfI a.tar frobnicate',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+    }
+    for (const command of ["npx --cal='frobnicate a'", 'bash --comm=frobnicate', 'node --eva=1', 'gdb --eval-com=run frobnicate']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+    }
+    for (const command of ['tar xf a.tar', 'tar -tf a.tar', 'git log --oneline', 'tar --to-stdout -xf a.tar']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+});
+
+test('delta F4: package runners by name and the execute options the lists missed are held; sed runs only a plain print, delete or quit', () => {
+    for (const command of [
+        'npx frobnicate',
+        'bunx frobnicate',
+        'pnpm dlx frobnicate',
+        'yarn dlx frobnicate',
+        'uvx frobnicate',
+        'pipx run frobnicate',
+        'make --eval=x:',
+        'make -E x:',
+        'scp -S frobnicate a host:b',
+        'scp -o ProxyCommand=frobnicate a host:b',
+        'zip -TT frobnicate a.zip notes.md',
+        'zip --unzip-command=frobnicate a.zip notes.md',
+        'hyperfine frobnicate',
+        'valgrind frobnicate',
+        'nodemon --exec frobnicate',
+        'git send-email --smtp-server=frobnicate a.patch',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+    }
+    for (const command of ["sed 's/a/b/' notes.md", "sed -n 's/a/b/e' notes.md", "sed -e '1p' -e 'w out.txt' notes.md", "sed --expression='1e frobnicate' notes.md", 'sed -f prog.sed notes.md', "sed -ne '1e' notes.md"]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+    }
+    for (const command of ["sed -n '1,5p' notes.md", "sed '$d' notes.md", 'sed 10q notes.md', "sed -e '1!d' -e '2p' notes.md", "sed -n -e '$p' notes.md"]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+    }
+});
+
+test('delta F5: zsh\'s builtins that change how later words are read are held', () => {
+    for (const command of ['setopt rc_quotes', 'unsetopt glob', 'emulate sh', 'zmodload zsh/files', 'disable -r if']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('builtin'), command);
+    }
+});
+
+test('delta F6 and F7: on Windows a Bash word Git Bash may rewrite or a program may expand is held', () => {
+    const windows = homeScope('win32', 'C:\\Users\\someone');
+    for (const command of ['frobnicate lib:/y', 'frobnicate ./a:/b', 'frobnicate -X/y', 'frobnicate --out=./x', "frobnicate '*'", "frobnicate 'a?b'", "frobnicate '[ab]'"]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), heldAs('character'), command);
+    }
+    for (const command of ['frobnicate C:/Work/x', 'frobnicate x:/y', 'frobnicate https://example.com/x', "frobnicate 'a * b'", 'frobnicate -X y']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, windows), runs, command);
+    }
+    for (const command of ['frobnicate lib:/y', 'frobnicate -X/y', "frobnicate '*'"]) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, `not on Linux: ${command}`);
 });
