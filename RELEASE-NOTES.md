@@ -50,6 +50,10 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.35.0 took
 
 ## Known issues
 
+In Ask first, and in Plan only, the desktop's chat runs `jason audience preview`, `jason audience filter-values` and
+`jason audience availability` without a card, as in 0.36.0. Each one asks the provider, and nothing in Jason limits how
+often a chat makes them.
+
 Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only.
 
 The Windows check of Codex's sandbox has been proven against a stand-in, not on a real machine without the elevated setup. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
