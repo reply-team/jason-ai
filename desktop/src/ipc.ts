@@ -38,6 +38,7 @@ export const invokeChannels = {
     'fullAccess.standing': 'jason:fullAccess.standing',
     'fullAccess.takeBack': 'jason:fullAccess.takeBack',
     'links.take': 'jason:links.take',
+    'pairing.paired': 'jason:pairing.paired',
 } as const;
 
 /** What the desktop sends the page. */

@@ -471,6 +471,13 @@ export interface JasonDesktop {
          */
         set(choice: 'system' | 'light' | 'dark'): Promise<void>;
     };
+    pairing: {
+        /**
+         * Tells the desktop the id of the UI token the page holds now, once it has paired: never the token, which the
+         * desktop refuses. The desktop then revokes the one the window held before, so the window keeps one pairing.
+         */
+        paired(tokenId: string): Promise<void>;
+    };
     chat: {
         /**
          * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; null once started, or a
