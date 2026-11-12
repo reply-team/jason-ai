@@ -884,11 +884,17 @@ function judgePersonsTool(tool: string, input: Record<string, unknown>, scope: C
     return { verdict: 'ask', title: personsToolTitle, detail, remember: null };
 }
 
-/** The body of a Bash `$'...'` string as the shell reads it: its escapes decoded. */
+/**
+ * The body of a Bash `$'...'` string as the shell reads it: its escapes decoded. An `\x`, `\u` or `\U` with no digit after
+ * it, or one past the last code point, is kept as written, as the shell keeps it.
+ */
 function ansiC(body: string): string {
     const simple: Readonly<Record<string, string>> = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'", '"': '"', a: '', b: '', e: '', E: '', f: '', v: '' };
     return body.replace(/\\(x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|[0-7]{1,3}|.)/g, (_, escape: string) => {
-        if (/^[xuU]/.test(escape)) return String.fromCodePoint(Number.parseInt(escape.slice(1), 16));
+        if (/^[xuU]/.test(escape)) {
+            const point = Number.parseInt(escape.slice(1), 16);
+            return Number.isNaN(point) || point > 0x10ffff ? `\\${escape}` : String.fromCodePoint(point);
+        }
         if (/^[0-7]/.test(escape)) return String.fromCodePoint(Number.parseInt(escape, 8));
         return simple[escape] ?? escape;
     });
@@ -1002,14 +1008,15 @@ function chatsOwnPlace(places: readonly string[], scope: ChatScope): string | nu
 }
 
 /**
- * What Full access answers when the model cannot rule an act out, or the act would change what an agent loads: refused,
- * with the way to it. One sentence for every such act.
+ * Why Full access asks the person about an act, where Jason cannot read plainly what it would do or the act would change
+ * what an agent loads: the reason the turn's hook gives with its `ask`. One sentence for every such act; the card itself
+ * is the one Ask first shows.
  */
-export const heldSentence = 'Full access does not run this, because Jason cannot read plainly what it would do or it would change what an agent loads. Switch this chat to Ask first to be asked about it. Nothing was run.';
+export const heldSentence = 'Jason cannot read plainly what this would do, or it would change what an agent loads, so Full access asks you about it first.';
 
 /**
- * A Full access judgement: refused, runs with no question, or held (`heldSentence`). A held shell command says why, by
- * the literal reading's closed reason (`HeldReason`).
+ * A Full access judgement: refused, runs with no question, or held: the person is asked (`heldSentence`). A held shell
+ * command says why, by the literal reading's closed reason (`HeldReason`); a hold of any other tool carries none.
  */
 export type FullAccessJudgement = { outcome: 'refused'; message: string } | { outcome: 'runs' } | { outcome: 'held'; message: string; reason?: HeldReason };
 
@@ -1118,20 +1125,10 @@ export function unreadableCommand(command: string, scope: ChatScope): boolean {
     return false;
 }
 
-/** Whether a command deletes, by a program that removes files or folders, or `find` with `-delete`. */
-export function deletes(command: string, platform: Platform): boolean {
-    const removers = new Set(['rm', 'rmdir', 'unlink', 'shred', 'srm', 'del', 'erase', 'rd', 'remove-item', 'ri']);
-    for (const part of command.split(separators)) {
-        for (const token of part.trim().split(/\s+/).map(unquoted)) {
-            if (removers.has(programOf(platform, token).toLowerCase())) return true;
-        }
-        if (/(?<![A-Za-z0-9_.-])find\b[^]*\s-delete\b/.test(part)) return true;
-    }
-    return false;
-}
-
 /**
- * The one judgement of Full access, which the turn's hook and the broker share. A shell command is read literally
+ * The one judgement of Full access, which the turn's hook and the broker share. Full access is never weaker than Ask
+ * first: whatever Ask first refuses (`judge` over the input as written, with all the readings of its second look) is
+ * refused first, with the same sentence, and never becomes a card or a run. Then a shell command is read literally
  * (`literalJudgement`): refused by what its words say, held with a closed reason where a word is not literal or what it
  * runs is held all the same, and otherwise run. No MCP tool is read as a shell command. Any other tool: refused where the
  * model refuses, or where the file being written shows what it refuses; held (`heldSentence`) on every call of a tool of
@@ -1145,7 +1142,13 @@ export function fullAccessJudgement(tool: string, input: Record<string, unknown>
     // A shell command is read literally (`literalJudgement`), never through the second look's spellings. No MCP tool is:
     // the chat's own keeps its refusal and a person's own is held, whatever its input names.
     const literal = (shells.has(tool) || typeof command === 'string') && !tool.startsWith('mcp__');
-    const judged = literal ? allow : judge(tool, input, scope);
+    // What Ask first refuses is refused here, before anything else, by the same sentence; a judgement that failed holds.
+    let judged: Judgement;
+    try {
+        judged = judge(tool, input, scope);
+    } catch {
+        return literal ? heldFor('syntax') : { outcome: 'held', message: heldSentence };
+    }
     if (judged.verdict === 'deny') return { outcome: 'refused', message: judged.message };
     const written = writtenRefusal(tool, input, scope);
     if (written !== null) return { outcome: 'refused', message: written };

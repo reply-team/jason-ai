@@ -9,7 +9,7 @@
 // cancels it (notifications/cancelled), and the card it waited on goes.
 //
 // A turn in Full access is also served its `PreToolUse` hook on the same port, at `/hook`, behind the same checks: Claude
-// Code posts each tool use there before it runs, and the broker's answer is a refusal or nothing.
+// Code posts each tool use there before it runs, and the broker's answer is one of three: allow, ask, or deny.
 
 import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -24,6 +24,13 @@ export const toolName = 'decide';
 /** The tool's name as Claude Code's `--permission-prompt-tool` takes it. */
 export const promptToolName = `mcp__${serverName}__${toolName}`;
 
+/**
+ * What the turn's hook answers a tool use: `allow`, it runs with no question; `ask`, Claude Code puts it to the permission
+ * prompt tool, where the broker shows its card, and `reason` says why; `deny`, it does not run, and `reason` is what
+ * the agent is told.
+ */
+export type HookAnswer = { decision: 'allow' } | { decision: 'ask'; reason: string } | { decision: 'deny'; reason: string };
+
 export interface EndpointOptions {
     secret: string;
     /** `signal` is aborted when the client cancels the call. */
@@ -32,9 +39,9 @@ export interface EndpointOptions {
     keepAliveMs?: number;
     /**
      * A turn in Full access: what the turn's `PreToolUse` hook is answered for a tool use, by its tool, its input and the
-     * id Claude Code gave it: the refusal's reason, or null to say nothing. Absent, the hook's path is not served.
+     * id Claude Code gave it (`HookAnswer`). Absent, the hook's path is not served.
      */
-    hook?: (tool: string, input: Record<string, unknown>, toolUseId: string | null) => string | null;
+    hook?: (tool: string, input: Record<string, unknown>, toolUseId: string | null) => HookAnswer;
 }
 
 export interface Endpoint {
@@ -47,20 +54,19 @@ export interface Endpoint {
 
 const path = '/mcp';
 const hookPath = '/hook';
-/** What a hook call the endpoint cannot read is answered with: a refusal, never silence, since silence lets the tool run. */
-const unreadHook = 'The desktop could not read what this tool would do, so it was not run.';
+/** What a hook call the endpoint cannot read is answered with: a refusal, never silence, since silence decides nothing. */
+const unreadHook: HookAnswer = { decision: 'deny', reason: 'The desktop could not read what this tool would do, so it was not run.' };
 
 /**
  * The hook's answer, in the shape Anthropic gives (https://code.claude.com/docs/en/hooks, read 2026-11-11): a 2xx response
- * whose JSON body's `hookSpecificOutput` names the event, and `permissionDecision` `"deny"`, which "prevents the tool
- * call", with its reason; and "2xx with an empty body: success", which decides nothing.
+ * whose JSON body's `hookSpecificOutput` names the event and its `permissionDecision`: `"allow"` "skips the permission
+ * prompt", `"ask"` "prompts the user to confirm", which under `-p` is the permission prompt tool, and `"deny"`
+ * "prevents the tool call", each of the last two with its `permissionDecisionReason`. Every answer decides: none is the
+ * empty body, which decides nothing.
  */
-function hookAnswer(response: ServerResponse, reason: string | null): void {
-    if (reason === null) {
-        plain(response, 200);
-        return;
-    }
-    json(response, { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
+function hookAnswer(response: ServerResponse, answer: HookAnswer): void {
+    const output = answer.decision === 'allow' ? { permissionDecision: 'allow' } : { permissionDecision: answer.decision, permissionDecisionReason: answer.reason };
+    json(response, { hookSpecificOutput: { hookEventName: 'PreToolUse', ...output } });
 }
 const bodyLimit = 8 * 1024 * 1024;
 const inputSchema = {

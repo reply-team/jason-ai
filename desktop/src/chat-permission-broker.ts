@@ -4,13 +4,17 @@
 //
 // A turn runs in its chat's mode. Ask first is the above. Plan only refuses every request but a read, which the model
 // settles, and the two cards left to it: reading a file outside the chat's folders and opening a web page. Full access
-// shows no card: the turn's hook (`hook`) and the broker answer by one judgement (`fullAccessJudgement`): refused,
-// runs, or held (refused, saying to switch the chat to Ask first for it); and a deletion the host still asks about is
-// held. The tool uses the hook saw are kept by id, and each refusal is said to the log.
+// runs in the host's default mode: the turn's hook (`hook`) answers each tool use by one judgement
+// (`fullAccessJudgement`): allow what runs, deny what is refused, and ask about what is held, which Claude Code then puts
+// to the prompt tool. A request that reaches the prompt tool in Full access, held, one the host asks about whatever the
+// hook said, or one the hook never saw, is judged and carded as in Ask first, under its own title, after Full access's own
+// refusals. The tool uses the hook saw are kept by id; each refusal and each hold is said to the log.
 
 import { randomUUID } from 'node:crypto';
+import type { HeldReason } from './chat-literal.ts';
 import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
-import { deletes, fullAccessJudgement, heldSentence, judge, type ChatScope } from './chat-permission-model.ts';
+import type { HookAnswer } from './chat-permission-endpoint.ts';
+import { fullAccessJudgement, heldSentence, judge, type ChatScope } from './chat-permission-model.ts';
 
 /** What the permission prompt tool answers, in the shape Claude Code reads. */
 export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unknown> } | { behavior: 'deny'; message: string };
@@ -22,10 +26,13 @@ export type BrokerEvent =
 
 /** How one request was settled, for the log: never its tool, its input or its words. */
 export interface Decided {
-    outcome: 'allowed' | 'refused' | 'timed_out' | 'withdrawn';
+    /** `held`: Full access's hook asked, so the request goes on to a card. */
+    outcome: 'allowed' | 'refused' | 'held' | 'timed_out' | 'withdrawn';
     by: 'model' | 'person' | 'host';
     /** The mode of the turn that asked. */
     mode: ChatMode;
+    /** A held shell command's closed reason; a hold of any other tool carries none. */
+    reason?: HeldReason;
 }
 
 export interface BrokerOptions {
@@ -68,6 +75,8 @@ const unanswered = 'Nobody answered within thirty minutes, so nothing was run.';
 const ended = 'The chat stopped, so nothing was run.';
 const notRunning = 'This chat is not running, so nothing was run.';
 const withdrawn = 'The request was withdrawn, so nothing was run.';
+/** The title of a card in Full access: the card is the one Ask first shows, and this says why Full access shows it. */
+export const fullAccessCardTitle = 'Full access asks about this one';
 
 function allowed(input: Record<string, unknown>): ToolAnswer {
     return JSON.stringify(input).length >= copyLimit ? { behavior: 'allow' } : { behavior: 'allow', updatedInput: input };
@@ -91,17 +100,22 @@ export class PermissionBroker {
     }
 
     /**
-     * The turn's hook, asked by Claude Code before each tool use of a turn in Full access: the refusal's reason, or null.
-     * The use's id is kept, so a tool that ran without the hook is known (`hooked`). A turn that is not open is refused.
+     * The turn's hook, asked by Claude Code before each tool use of a turn in Full access: allow what runs, deny what is
+     * refused, ask about what is held (`HookAnswer`). The use's id is kept, so a tool that ran without the hook is known
+     * (`hooked`). A turn that is not open is refused.
      */
-    hook(turnId: string, tool: string, input: Record<string, unknown>, toolUseId: string | null): string | null {
+    hook(turnId: string, tool: string, input: Record<string, unknown>, toolUseId: string | null): HookAnswer {
         const turn = this.#turns.get(turnId);
-        if (turn === undefined) return notRunning;
+        if (turn === undefined) return { decision: 'deny', reason: notRunning };
         if (toolUseId !== null) turn.hooked.add(toolUseId);
         const judged = fullAccessJudgement(tool, input, turn.scope);
-        if (judged.outcome === 'runs') return null;
-        this.#options.decided?.({ outcome: 'refused', by: 'model', mode: turn.mode });
-        return judged.message;
+        if (judged.outcome === 'runs') return { decision: 'allow' };
+        if (judged.outcome === 'refused') {
+            this.#options.decided?.({ outcome: 'refused', by: 'model', mode: turn.mode });
+            return { decision: 'deny', reason: judged.message };
+        }
+        this.#options.decided?.({ outcome: 'held', by: 'model', mode: turn.mode, ...(judged.reason === undefined ? {} : { reason: judged.reason }) });
+        return { decision: 'ask', reason: heldSentence };
     }
 
     /** Whether the turn's hook was asked about this tool use. */
@@ -123,17 +137,17 @@ export class PermissionBroker {
         const judged = judge(tool, input, turn.scope);
         if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         if (judged.verdict === 'deny') return refused(judged.message);
+        // What Full access holds the person answers each time: no "Always" covers it, and its card offers none.
+        let remember = judged.remember;
         if (mode === 'full_access') {
-            // What the host still asks under bypass: the same judgement as the hook's, and a deletion it could not rule
-            // safe is held.
+            // What Full access refuses is refused here too, whichever way the request came; anything else is judged and
+            // carded as in Ask first.
             const full = fullAccessJudgement(tool, input, turn.scope);
-            if (full.outcome !== 'runs') return refused(full.message);
-            const command = input['command'];
-            if (typeof command === 'string' && deletes(command, turn.scope.platform)) return refused(heldSentence);
-            return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
+            if (full.outcome === 'refused') return refused(full.message);
+            if (full.outcome === 'held') remember = null;
         }
         if (mode === 'plan_only' && !planCards.has(tool)) return refused(planRefusal);
-        if (judged.remember !== null && this.#always.get(turn.chat)?.has(judged.remember) === true) {
+        if (remember !== null && this.#always.get(turn.chat)?.has(remember) === true) {
             return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'person', mode }));
         }
         if (signal?.aborted === true) return Promise.resolve(this.#decided({ behavior: 'deny', message: withdrawn }, { outcome: 'withdrawn', by: 'host', mode }));
@@ -147,8 +161,9 @@ export class PermissionBroker {
             };
             signal?.addEventListener('abort', withdraw, { once: true });
             const forget = () => signal?.removeEventListener('abort', withdraw);
-            this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember: judged.remember, timer, settle, forget });
-            this.#options.emit(turn.chat, { kind: 'permission', request, title: judged.title, detail: judged.detail, remember: judged.remember === null ? null : judged.covers });
+            this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember, timer, settle, forget });
+            const title = mode === 'full_access' ? fullAccessCardTitle : judged.title;
+            this.#options.emit(turn.chat, { kind: 'permission', request, title, detail: judged.detail, remember: remember === null || judged.remember === null ? null : judged.covers });
         });
     }
 
