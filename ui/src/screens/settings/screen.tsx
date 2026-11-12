@@ -4,7 +4,7 @@ import { Painted } from '../../console/painted';
 import { t } from '../../platform/i18n';
 import { setTheme, themeChoice, type ThemeChoice } from '../../platform/theme';
 
-const themes: readonly ThemeChoice[] = ['system', 'light', 'dark'];
+const themes: readonly ThemeChoice[] = ['light', 'dark', 'system'];
 
 // Each section's heading with its icon, drawn from the console's markup by a stable view, so it is painted again
 // when the words are drawn again.

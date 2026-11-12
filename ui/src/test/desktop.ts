@@ -246,6 +246,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         typeof id === 'string' ? kept.get(id) : undefined;
     const stub: StubDesktop = {
         platform: 'win32',
+        theme: { set: call('theme.set') },
         calls,
         refuse,
         status,

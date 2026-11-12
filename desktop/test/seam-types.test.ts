@@ -33,6 +33,7 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload, keyof JasonDesktop>>,
     Holds<Equal<keyof DesktopPreload['chat'], keyof JasonDesktop['chat']>>,
     Holds<Equal<keyof DesktopPreload['setup'], keyof JasonDesktop['setup']>>,
+    Holds<Equal<keyof DesktopPreload['theme'], keyof JasonDesktop['theme']>>,
     Holds<DesktopPreload extends JasonDesktop ? true : false>,
 ];
 
@@ -46,7 +47,7 @@ type Subscriptions<Part, Prefix extends string> = {
     [Name in keyof Part & string]: Part[Name] extends (handler: never) => () => void ? `${Prefix}${Name}` : never;
 }[keyof Part & string];
 
-type DeclaredCalls = Calls<JasonDesktop['chat'], 'chat'> | Calls<JasonDesktop['setup'], 'setup'>;
+type DeclaredCalls = Calls<JasonDesktop['chat'], 'chat'> | Calls<JasonDesktop['setup'], 'setup'> | Calls<JasonDesktop['theme'], 'theme'>;
 type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop, ''>
     | Subscriptions<JasonDesktop['chat'], 'chat.'>

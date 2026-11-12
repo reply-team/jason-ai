@@ -8,7 +8,7 @@ import { bench, memoryLog, type Bench } from './harness.ts';
 
 const bundleVersion = '0.34.0-rc.1';
 
-async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null }) {
+async function start(b: Bench, settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: 'light' }) {
     const log = memoryLog();
     const saved: DesktopSettings[] = [];
     const started = await startInstallation({
@@ -30,7 +30,7 @@ function runtimeAlreadyUp(b: Bench): void {
 
 test('with no runtime up, the desktop starts one through jason runtime start and loads the pairing link', async (t) => {
     const b = bench(t);
-    const { started, verbs, saved } = await start(b, { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null });
+    const { started, verbs, saved } = await start(b, { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null, theme: 'light' });
     const bundle = join(b.root, 'bundle');
     assert.deepEqual(verbs, [
         ['status'],
@@ -55,12 +55,12 @@ test('with no runtime up, the desktop starts one through jason runtime start and
         assert.deepEqual(readdirSync(join(b.paths.chat, host)), ['skills']);
         assert.deepEqual(readdirSync(join(b.paths.chat, host, 'skills')).sort(), ['.jason-skills.json', 'campaign-launch'], host);
     }
-    assert.deepEqual(saved, [{ feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: bundleVersion }]);
+    assert.deepEqual(saved, [{ feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: bundleVersion, theme: 'light' }]);
 });
 
 test('a chat folder whose Codex skills could not be deployed is deployed again at the next start', async (t) => {
     const b = bench(t, { env: { STUB_SKILLS_FAIL_HOST: 'codex' } });
-    const { saved } = await start(b, { feed: null, skillsDeployedFor: null });
+    const { saved } = await start(b, { feed: null, skillsDeployedFor: null, theme: 'light' });
     assert.deepEqual(saved, []);
 });
 
@@ -116,7 +116,7 @@ test('a UI that is served but not this runtime’s is installed again, and an in
 test('the skills are deployed once per bundle version', async (t) => {
     const b = bench(t);
     runtimeAlreadyUp(b);
-    const { verbs } = await start(b, { feed: null, skillsDeployedFor: bundleVersion });
+    const { verbs } = await start(b, { feed: null, skillsDeployedFor: bundleVersion, theme: 'light' });
     assert.equal(verbs.some((args) => args[0] === 'skills'), false);
 });
 
@@ -139,7 +139,7 @@ test('the desktop’s environment reaches the CLI as it is: the same data direct
 
 test('every CLI run is logged by its verb, exit and time, never by its arguments', async (t) => {
     const b = bench(t);
-    const { log } = await start(b, { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null });
+    const { log } = await start(b, { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null, theme: 'light' });
     const runs = log.lines.filter((line) => line.name === 'cli_exited');
     assert.equal(runs.length, 9);
     for (const run of runs) assert.deepEqual(Object.keys(run.fields).sort(), ['ElapsedMs', 'Exit', 'Verb']);

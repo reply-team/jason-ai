@@ -11,10 +11,11 @@ function read(): ThemeChoice {
     } catch {
         // No storage: the default below.
     }
-    return 'system';
+    // A new installation meets the light theme; a choice already stored is kept as it is.
+    return 'light';
 }
 
-export const themeChoice = signal<ThemeChoice>(typeof localStorage === 'undefined' ? 'system' : read());
+export const themeChoice = signal<ThemeChoice>(typeof localStorage === 'undefined' ? 'light' : read());
 export const resolvedTheme = signal<'light' | 'dark'>('light');
 
 function systemIsDark(): boolean {
@@ -26,8 +27,16 @@ function apply(): void {
     document.documentElement.dataset['theme'] = resolvedTheme.value;
 }
 
+/** Tells the desktop, when there is one, the choice to keep for its own window and starting page; nothing in a browser. */
+let tell: ((choice: ThemeChoice) => void) | null = null;
+
+export function bindDesktopTheme(send: ((choice: ThemeChoice) => Promise<void>) | null): void {
+    tell = send === null ? null : (choice) => void send(choice).catch(() => undefined);
+}
+
 export function setTheme(choice: ThemeChoice): void {
     themeChoice.value = choice;
+    tell?.(choice);
     try {
         localStorage.setItem(key, choice);
     } catch {
@@ -39,5 +48,6 @@ export function setTheme(choice: ThemeChoice): void {
 /** Applies the saved choice and follows the system while the choice is to. */
 export function startTheme(): void {
     apply();
+    tell?.(themeChoice.value);
     if (typeof matchMedia === 'function') matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply);
 }

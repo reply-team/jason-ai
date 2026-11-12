@@ -51,7 +51,7 @@ test('the bundled executable resolves its own candidate’s release directory fr
     const port = (server.address() as { port: number }).port;
 
     const feed = `http://127.0.0.1:${port}/releases/latest/download/manifest.json`;
-    const result = await cli(env).run(['ui', 'install', ...feedArguments({ feed, skillsDeployedFor: null })]);
+    const result = await cli(env).run(['ui', 'install', ...feedArguments({ feed, skillsDeployedFor: null, theme: 'light' })]);
     console.log(`candidate ${candidate}; asked ${asked.join(', ')}; exit ${result.exit}; ${result.stdout.trim() || result.stderr.trim()}`);
     assert.equal(result.exit, 0, result.stderr);
     assert.deepEqual(asked, [`/releases/download/v${candidate}/checksums.txt`, `/releases/download/v${candidate}/jason-ui.zip`]);

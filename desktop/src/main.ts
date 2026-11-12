@@ -5,7 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -34,7 +34,7 @@ import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { isTheme, readSettings, writeSettings, type DesktopSettings } from './settings.ts';
 import { Setup } from './setup.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
@@ -175,6 +175,8 @@ async function run(): Promise<void> {
 
     const conduct = windowConduct(process.platform);
     const atLogin = openedAtLogin(process.argv);
+    // The theme the person chose last, before any page is drawn: the window's first paint and the starting page follow it.
+    nativeTheme.themeSource = readSettings(paths.settings).theme;
     const window = new BrowserWindow({
         width: 1280,
         height: 860,
@@ -184,7 +186,7 @@ async function run(): Promise<void> {
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
-        backgroundColor: '#f7f7f5',
+        backgroundColor: nativeTheme.shouldUseDarkColors ? '#1b1b1a' : '#f7f7f5',
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -332,6 +334,15 @@ async function run(): Promise<void> {
         changed: () => current?.webContents.send(eventChannels['setup.changed']),
         ...loggedModels(log),
     });
+    handle(ipcMain, 'theme.set', origin, (choice) => {
+        if (!isTheme(choice)) throw new Error('That is not a theme.');
+        nativeTheme.themeSource = choice;
+        window.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#1b1b1a' : '#f7f7f5');
+        if (settings.theme !== choice) {
+            settings = { ...settings, theme: choice };
+            writeSettings(paths.settings, settings);
+        }
+    }, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     registerSetup(
         new Setup({
             paths,

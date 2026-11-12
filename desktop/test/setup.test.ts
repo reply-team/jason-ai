@@ -29,7 +29,7 @@ import {
 import { claudeCodeModels } from '../src/chat-models.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 
-function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }): SetupDeps {
+function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: 'light' }): SetupDeps {
     return {
         paths: b.paths,
         cli: loggedCli(b.cli, log),
@@ -42,7 +42,7 @@ function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSetting
     };
 }
 
-function setupOn(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null }) {
+function setupOn(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: 'light' }) {
     return new Setup(setupDeps(b, log, settings));
 }
 
@@ -485,7 +485,7 @@ test('the settings file is written whole or not at all, and a write that cannot 
 
 test('a plugin is placed with jason plugin install, its settings written, then jason plugin reload; its token on no command line and in no environment', async (t) => {
     const b = bench(t);
-    const settings: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null };
+    const settings: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null, theme: 'light' };
     const log = memoryLog();
     await setupOn(b, log, settings).configurePlugin('telegram', { token: 'planted-bot-token', target: '@team_room' });
     const runs = b.record().filter((entry) => entry.name === 'jason');
@@ -601,7 +601,7 @@ test('the Reply card’s browser sign-in runs reply auth login and nothing else 
 
 test('a sign-in wires Jason’s Reply plugin: placed, granted reply, named the global default, and reloaded', async (t) => {
     const b = bench(t, { programs: ['reply'] });
-    const settings: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null };
+    const settings: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: null, theme: 'light' };
     const log = memoryLog();
     await setupOn(b, log, settings).connectReplyWithKey('planted-reply-key');
     assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [
@@ -787,7 +787,7 @@ test('a Claude Code whose version cannot be read is held as below the floor: a n
         log: memoryLog(),
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => null,
-        settings: () => ({ feed: null, skillsDeployedFor: null }),
+        settings: () => ({ feed: null, skillsDeployedFor: null, theme: 'light' }),
     });
     assert.equal((await timedOut.status()).hosts.find((host) => host.id === 'claude')?.belowFloor, unreadable);
     assert.deepEqual(asked.filter((each) => each.name === 'claude'), [{ name: 'claude', args: ['--version'], timeoutMs: versionLimitMs }]);
