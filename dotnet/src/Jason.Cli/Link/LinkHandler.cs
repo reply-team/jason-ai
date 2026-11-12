@@ -12,12 +12,13 @@ namespace Jason.Cli.Link;
 /// it is read against <see cref="AttentionLinks"/>, the table the toast's links are written from. A mode of the
 /// executable, like <c>toast-host</c>, and never a verb: nothing is typed, and the runtime is asked only what
 /// <c>jason ui open</c> asks, for a prompt link what <c>approval get --prompt</c> and <c>decision get --prompt</c> ask,
-/// and for a session link what <c>jason session open</c> asks.
+/// and for a session link what <c>jason session open</c> asks. A link that opens a page opens the desktop instead where
+/// it is installed for this account (<see cref="DesktopLinks"/>), and then asks the runtime nothing.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Any web page can navigate to a <c>jason:</c> link after the browser's own confirmation. So every act is local and
-/// leaves nothing decided: it opens the person's own UI on an id they could have typed, or puts on the clipboard the
+/// leaves nothing decided: it opens the person's own UI, or desktop, on an id they could have typed, or puts on the clipboard the
 /// prompt <c>--prompt</c> prints for that id, which replaces what the clipboard held, or starts the person's own agent
 /// host on that id in a new terminal, in the host's own permission mode at the campaign's folder. Jason's brief asks the
 /// agent to propose only and not to approve, reject or answer; what it may run is the host's own permission settings' to
@@ -26,7 +27,7 @@ namespace Jason.Cli.Link;
 /// </para>
 /// <para>
 /// Exit codes are the CLI's: 0 done, 1 refused by the runtime or the clipboard, or nothing to start, 2 a link the table
-/// does not know, 3 no runtime to ask. Started by the shell, nobody reads what it prints; the person sees the browser open, a prompt to
+/// does not know, 3 no runtime to ask. Started by the shell, nobody reads what it prints; the person sees the desktop or the browser open, a prompt to
 /// paste, a terminal window, or nothing. A prompt link prints nothing on stdout when it succeeds; a session link prints
 /// what <c>jason session open</c> prints.
 /// </para>
