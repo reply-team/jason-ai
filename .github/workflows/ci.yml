@@ -1749,6 +1749,12 @@ jobs:
       - name: Node tests
         run: npm test
 
+      # The download address's short paths (get/) on Node's own runner, with the node this job already set up: get/ has
+      # no dependencies, so nothing is installed for it.
+      - name: The download address's tests
+        working-directory: get
+        run: node --test
+
       - uses: ./.github/actions/setup-dotnet
         with:
           sdk-version: ${{ needs.version.outputs.sdk }}

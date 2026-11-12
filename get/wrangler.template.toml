@@ -1,0 +1,22 @@
+# The deployment's configuration, without the identifiers. README.md, "Deployment", says how a copy outside the tree
+# gets the database's identifier, and how the account, the token and the two Access secrets reach the deployment.
+name = "jason-download-address"
+main = "src/index.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = false
+preview_urls = false
+
+# The three routes, and nothing else of the address: `/` and every path under `/releases/` stay with its redirect.
+routes = [
+  { pattern = "get.jasonharness.ai/install*", zone_name = "jasonharness.ai" },
+  { pattern = "get.jasonharness.ai/desktop/*", zone_name = "jasonharness.ai" },
+  { pattern = "get.jasonharness.ai/stats*", zone_name = "jasonharness.ai" },
+]
+
+# No request is logged.
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "COUNTS"
+database_name = "jason-download-counts"

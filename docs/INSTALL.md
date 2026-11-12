@@ -48,6 +48,8 @@ An act this page marks **Ask first.** needs the word of the person you install f
 yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
 ask.
 
+This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
+
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
   §7 takes the installation off again.
