@@ -1,9 +1,10 @@
 /**
  * The standing choice of Full access, `<data>/desktop/full-access.json`: one entry per host program, written by the main
- * process alone when the person answers the confirmation with Always, and removed when they take it back. A chat's turn
- * can neither read nor write it: it is in the data directory, outside the chat folder, which the permission model
- * refuses in every mode and the host's own rules name (`knownDesktopEntries`). A program the agent writes and runs in
- * Full access could write it, as it could anything the person can; the confirmation says so.
+ * process alone when the person answers the confirmation with Always, and removed when they take it back. A Claude Code
+ * turn can neither read nor write it, in any mode: it is in the data directory, outside the chat folder, which the
+ * permission model refuses in every mode and the host's own rules name (`knownDesktopEntries`). A Codex command can read
+ * it, as it can Jason's other files, and cannot change it. A program the agent writes and runs in Full access could
+ * change it, as it could any file of yours; the confirmation says so.
  *
  * A choice is read only when it was given under this build's consent number (`fullAccessConsent`): a lower or a higher
  * one, a file that does not parse, or an entry that says anything wrongly is no choice, and the confirmation is shown
