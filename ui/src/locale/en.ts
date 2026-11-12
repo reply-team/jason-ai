@@ -6,6 +6,7 @@ export const en = {
     'nav.workitems': 'Work items',
     'nav.people': 'People',
     'nav.system': 'System',
+    'nav.accounts': 'Accounts',
     'nav.settings': 'Settings',
     'nav.chat': 'Chat',
     'nav.aria': 'Screens',

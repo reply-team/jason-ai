@@ -20,6 +20,7 @@ describe('the shell', () => {
             'Work items',
             'People',
             'System',
+            'Accounts',
             'Settings',
         ]);
         await waitFor(() => expect(screen.getByText(/ada · Jason/)).toBeTruthy());

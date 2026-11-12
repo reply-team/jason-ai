@@ -17,6 +17,7 @@ import { registry } from '../platform/slots';
 import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
+import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -73,13 +74,18 @@ function chatAbout(campaign?: { id: string; name: string }): void {
     here().dock.chat(campaign);
 }
 
+/** What the Accounts page is handed to draw the provider's accounts: the Reply card, as the Connect panel acts on it. */
+const providerAccounts = { view: connect.accountsReplyView, gone: connect.accountsReplyGone };
+
 function PagePanel() {
     return (
         <div className="harness">
             <div className="app chromeless">
                 <div className="content">
                     <CampaignChat.Provider value={chatAbout}>
-                        <CurrentPage />
+                        <ProviderAccountsContext.Provider value={providerAccounts}>
+                            <CurrentPage />
+                        </ProviderAccountsContext.Provider>
                     </CampaignChat.Provider>
                 </div>
             </div>

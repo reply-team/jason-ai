@@ -238,6 +238,18 @@ downloaded, and says that everything here also works from a session with your ag
 deployed. The browser has no chat and starts no agent: the runtime starts no process for a screen, and a browser tab cannot ask you
 before the agent acts.
 
+## Accounts
+
+One screen for what you have connected. **Provider** is the Reply connection of the desktop's Connect panel, drawn by
+the same code and acting through the same confirmed acts of the desktop: add an account, reconnect, change a daily
+limit, pause and resume, unblock and delete, each behind a box of the desktop's own, and a link for connecting an account
+is opened by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
+acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
+notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
+with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
+The page says in one sentence where they are changed: under `Notifications:*` in the installation's settings file, or by
+asking your agent, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
+
 ## Inside Jason Desktop
 
 [Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
@@ -245,7 +257,7 @@ object the desktop puts on the page, `window.jasonDesktop`. In it the chat is ho
 **Needs you** (this page's Attention), **Campaigns** and **Activity**, which follow the journal as it is written, and
 **Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
 channels are set up. An empty Needs you card says you are caught up and offers **Open your campaigns**. The browser's
-other screens, People, Performance, Work items, System and Settings, open in a page panel of the same dock, and every
+other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same dock, and every
 screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
 (`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on

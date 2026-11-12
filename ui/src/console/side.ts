@@ -27,6 +27,7 @@ const icons: Readonly<Record<string, IconName>> = {
     performance: 'perf',
     workitems: 'work',
     system: 'ops',
+    accounts: 'plug',
     settings: 'gear',
 };
 
