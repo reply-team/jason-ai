@@ -1511,6 +1511,8 @@ export class Chat {
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
                 const settingsFile = full ? writeTurnSettings(paths.turns, id, endpoint.hookUrl, secret) : undefined;
+                // The host's data rules name the grants present at this turn's start; a grant opened later is refused by the
+                // permission model's data rule alone, since a deny wins over an allow and no rule says "all of chat-full but mine".
                 const rules = [
                     ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }),
                     ...chatRules(this.#platform, folder),
