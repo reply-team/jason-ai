@@ -74,6 +74,14 @@ written", before the raw request, which stays folded: an email's sender, recipie
 body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
 labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
 is made of. One sentence under it says what is not shown: the provider adds its signature and its tracking when it sends.
+A message written as text (not a template) can be edited there, its subject and its body and nothing else: **Edit message**,
+then **Save**, which is `jason workitem update` of the message's input with you as the actor and a reason the page words.
+Saving approves nothing, and the card says "Jason asks again with the new text". A card is checked against its work item
+before it offers **Approve**, and again at the press: the approval's subject, the arguments the runtime parked, is compared
+with the arguments the work item holds now, on the message's subject, body and compose, as exact strings. Where they
+differ, whether you just saved or an agent in a chat changed the text, Approve is not offered and one sentence says the text
+changed and Jason will ask again. An agent in a chat may go on editing a parked message when you ask it to, and nothing is
+sent without a new approval. The runtime's own sentence is shown for a refused edit, and what you typed stays in the box.
 A row above the list narrows it to **All**, **Approvals**
 or **Questions**, each option with how many of its kind are listed, the chosen one ticked so that it is told apart by
 more than its colour, and "Shown: N" saying how many the list shows. The filter belongs to the screen alone: it is never

@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import type { Approval } from '../../api/types';
+import { useEffect, useState } from 'react';
+import { Unpaired } from '../../api/client';
+import { useApi } from '../../api/context';
+import type { Approval, WorkItem } from '../../api/types';
 import { clock, relative } from '../../time/format';
 import { DecideDialog } from './decide-dialog';
 import { reasonLabel, title } from './labels';
@@ -9,6 +11,8 @@ import { SessionLink } from './session-link';
 import { PanelHeader } from '../../layout/panel-header';
 import { toApprovalDetail } from '../../console/live';
 import { MessageCard } from './message-card';
+import { MessageEditor } from './message-editor';
+import { SENDS, editable, isStale, readItem, sentence } from './message-edit';
 
 type Props = {
     approval: Approval;
@@ -36,7 +40,39 @@ export function ApprovalPanel({
     onSkip,
     onClose,
 }: Props) {
+    const api = useApi();
     const [rejecting, setRejecting] = useState(false);
+    // A message approval is checked against its work item before Approve is offered, and again at the press.
+    const watched = approval.status === 'pending' && approval.operation === SENDS;
+    const [item, setItem] = useState<WorkItem | null>(null);
+    const [unread, setUnread] = useState<string | null>(null);
+    const [savedHere, setSavedHere] = useState(false);
+    useEffect(() => {
+        setItem(null);
+        setUnread(null);
+        setSavedHere(false);
+        if (!watched) return;
+        let current = true;
+        readItem(api, approval.work_item_id).then(
+            (read) => current && setItem(read),
+            (error: unknown) => current && !(error instanceof Unpaired) && setUnread(sentence(error)),
+        );
+        return () => {
+            current = false;
+        };
+    }, [api, watched, approval.id, approval.work_item_id]);
+    const stale = watched && item !== null && isStale(approval, item);
+
+    async function approveChecked() {
+        if (!watched) return onApprove();
+        try {
+            const fresh = await readItem(api, approval.work_item_id);
+            setItem(fresh);
+            if (!isStale(approval, fresh)) onApprove();
+        } catch (error) {
+            if (!(error instanceof Unpaired)) setUnread(sentence(error));
+        }
+    }
     const preview = approval.preview as { intent?: unknown; contact?: { name?: string; value?: string } };
     const intent = typeof preview.intent === 'string' ? preview.intent : null;
     const person = preview.contact?.name ?? approval.contact_name;
@@ -59,7 +95,12 @@ export function ApprovalPanel({
             <ActionsRow>
                 {pending && (
                     <>
-                        <button className="btn primary" type="button" disabled={busy} onClick={() => onApprove()}>
+                        <button
+                            className="btn primary"
+                            type="button"
+                            disabled={busy || (watched && (item === null || stale))}
+                            onClick={() => void approveChecked()}
+                        >
                             Approve
                         </button>
                         <button className="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
@@ -76,6 +117,18 @@ export function ApprovalPanel({
                 )}
             </ActionsRow>
             <div className="panel-body">
+                {stale && (
+                    <p className="notice" role="status">
+                        {savedHere
+                            ? 'Jason asks again with the new text.'
+                            : 'The text of this message changed after this approval was asked, so Jason will ask again with the new text.'}
+                    </p>
+                )}
+                {unread && (
+                    <p className="notice" role="alert">
+                        The message could not be checked against its work item, so it cannot be approved now: {unread}
+                    </p>
+                )}
                 {intent && (
                     <div className="section">
                         <h3>What will happen</h3>
@@ -123,6 +176,17 @@ export function ApprovalPanel({
                     )}
                 </dl>
                 <MessageCard detail={detail} />
+                {watched && item && editable(approval) && (
+                    <MessageEditor
+                        approval={approval}
+                        item={item}
+                        busy={busy}
+                        onSaved={(saved) => {
+                            setItem(saved);
+                            setSavedHere(true);
+                        }}
+                    />
+                )}
                 <details className="fold">
                     <summary>Raw request</summary>
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>
