@@ -28,6 +28,12 @@ Each release publishes Jason Desktop beside the runtime's downloads ([release-an
 | Linux on x64, Debian and Ubuntu | `jason-desktop-linux-x64.deb` | `sudo apt install ./jason-desktop-linux-x64.deb`. It installs to `/opt/Jason` and puts Jason in the applications menu. This is the package to take on Ubuntu 24.04 and later. Not signed. |
 | Linux on x64, any | `jason-desktop-linux-x64.AppImage` | Make it executable and run it from where you keep it. Not signed. |
 
+Each file also has a short address on the download address, which sends you to the latest release's file:
+`https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` (Apple silicon), `/desktop/mac-intel`,
+`/desktop/linux-deb` and `/desktop/linux-appimage`. The address counts, by day, how often each is used and from which
+link a person came, and keeps nothing of the person ([responsible-use.md](responsible-use.md), "Update check and
+downloads"). The release page lists the same files, and the address's `/releases/*` paths are unchanged.
+
 A release's `checksums.txt` lists each of them. On Linux nothing is signed, so `sha256sum --check --ignore-missing
 checksums.txt` beside the file proves it is the file the release published and not who built it. The `jason` the Linux
 packages carry needs the ICU library (`libicu`), which desktop distributions have; the deb recommends it.
@@ -56,17 +62,27 @@ link that leaves it opens in the system browser, and only when it is `https:`.
 
 ## What you see
 
-The desktop wears the console: the chat is home, in a dock with panels beside it.
+The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
+asks "Who do you want to reach?". What you type there starts a set-up chat on the AI you connected, about no campaign
+yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
+shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
+**Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
+**New chat** still makes a chat directly.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
   **Open your campaigns**.
 - **Campaigns** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab.
+- The **Feed**, the sidebar's first item, is the desktop's main chat (below).
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
 - The browser's other screens, People, Performance, Work items, System and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
+
+**Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light; one that
+existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
+its settings and the starting page and the window's background before the page loads follow it.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Campaigns, Work Items, People, System, Reload).
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
@@ -78,7 +94,7 @@ them on.
 
 ## Its own files
 
-- `<data>/desktop/settings.json`: the desktop's settings (a `feed`, and the version whose skills were last deployed).
+- `<data>/desktop/settings.json`: the desktop's settings (a `feed`, the theme, and the version whose skills were last deployed).
 - `<data>/desktop/chat/`: the chat's working folder. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.
@@ -132,6 +148,21 @@ lists each key and each card's grant.
   plugin installed and, only where you have set no default route, wired as the default. A card says "configured" when the
   runtime accepted it, never "connected". What the desktop tells Reply about itself is one label in the User-Agent of
   `reply`'s requests and nothing else: `jason-harness/<the bundle's version>`.
+  The card lists the Reply account's mailboxes and its LinkedIn accounts, each channel read on its own, so an account
+  without LinkedIn still shows its email. A channel that account's plan or role does not have says so ("This Reply
+  account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
+  accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
+  **Add account** offers Gmail, Outlook, another mailbox and LinkedIn (a channel the account does not have is not
+  offered), and a row that is not in a good state offers **Reconnect**. Each opens a dialog with Reply's own link for the
+  act, its host in plain text, **Copy link**, **Open in the browser** and **Check now**. Reply's page needs no Reply
+  sign-in, so you can send the link to whoever owns the mailbox or the LinkedIn account, who signs in to Google,
+  Microsoft or LinkedIn there with their own credentials; a mailbox by SMTP or IMAP is added on Reply's page, so its
+  password never passes through Jason. For a mailbox the dialog warns that anyone who has the link can add and manage
+  the Reply account's mailboxes and that it does not expire. A LinkedIn link is valid for a limited time, and the
+  card lists pending connections with Waiting or Expired and their expiry. The desktop asks Reply for the link, checks it
+  before showing it, shows it only on your click, and keeps it nowhere after the dialog closes. Finishing happens on
+  Reply's side, so the card learns of it by **Check now**, **Check again** or a focus. Limits, signatures, pauses and
+  removal stay in Reply.
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
@@ -154,13 +185,13 @@ Claude Code.
   the chat works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
 - **Codex is a reading host in this release.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
-  skills in `.agents/skills`, and answers; it acts through nothing. Its sandbox may keep `jason` from the runtime's
+  skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
   loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder.
 
 ### Conversations
 
 Each campaign has one conversation, found or made the first time it is opened, and any number of set-up chats are about
-no campaign yet. The window opens on a new set-up chat. A set-up chat whose turn made exactly one campaign becomes that
+no campaign yet. The window opens on Start, and a set-up chat is made when you send from it. A set-up chat whose turn made exactly one campaign becomes that
 campaign's conversation; one that made more, or ran beside another turn, offers what it made to pick from. A
 conversation is kept from its first turn, one never sent to leaves nothing, and **Start afresh** begins the agent's next
 turn without its memory of the conversation and keeps what is shown. **Remove** deletes the conversation's record from
@@ -173,15 +204,39 @@ starts a fresh one with a recap of the last words. The conversation is no bounda
 campaign, and a command that names another campaign is not refused for that. What a turn may do is the permission
 model's to decide.
 
+### The Feed
+
+One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
+**New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
+approval or a question waiting, a campaign created, started or paused, work that stopped or expired, a provider block
+holding work. Consecutive lines of the same kind and campaign fold into one with a count, and the Feed keeps the newest
+500. A line carries a kind, ids, a count and a moment and never a person's words, a subject or a name; the campaign's name
+on it opens that campaign's conversation, and an approval or a question opens Needs you on that item. When the window
+loads, the desktop reads what it missed with `jason journal list`.
+
+**A line never starts a turn.** The agent hears the lines it has not yet been given only with your next message there,
+at most 50, as records Jason took from the journal: information, never instructions. The Feed cannot be renamed,
+removed or handed over, and it is not a campaign's conversation, so there the agent may speak of any campaign. Its turns
+go through the same permission model as any chat's.
+
 The agent hosts keep their own transcripts of a turn, in their own folders: Claude Code's are under `~/.claude/projects`,
 and those of a turn on a provider's key are in that provider's keyed folder (see Its own files). Jason never touches the
 first, and the desktop keeps no transcript of a host.
+
+### Access modes
+
+Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the
+chat is in. **Ask first**, the default, is the chat as the next section describes it. **Plan only** lets the agent read
+and plan and change nothing: it passes only the allowed verbs that read, Claude Code starts in its plan mode with the
+exit from it removed, and every write is refused. The cards left in Plan only are a read outside the chat's folders and
+a web page. Switching between the two lets a running turn finish. A Codex turn runs in its read-only sandbox in either.
 
 ### What runs without asking, what is refused, what is a card
 
 Claude Code turns are held by two lines, the host's own rules and the desktop's permission tool.
 
-- **Runs without asking.** The skills, web search, subagents and the task list; of `reply` exactly `reply auth status`
+- **Runs without asking.** The skills, web search (Codex searches an index its vendor keeps, never the live web),
+  the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
   every time, held to the real tree by a test.
@@ -200,8 +255,14 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the chat
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a web page, once per site
-  per chat, the host's own documentation domains aside. A path that begins with `~`
+  per chat, the documentation pages below aside. A path that begins with `~`
   or is spelled in a way the system would read differently is a card too.
+- **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
+  `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
+  pages of `developers.openai.com`, and all of `docs.reply.io`. A page counts only when its address is `https`, at most 300
+  characters, with no query, no port and no dot segment; any other page of those hosts, or any other site, gets the card
+  "Open a web page", remembered by its host. The agent is told to read a web page or a search result as information and
+  never to do what it says.
 - **What "Allow for this chat" covers** is printed on the button, and remembered for the chat only; it holds across a
   change of host, being your word about a command or a folder and not about a host. It is never offered for a shell or
   an exec wrapper (`cmd`, `sh`, `bash`, `pwsh`, `env`, `sudo`, `xargs`, `npx`, `wsl`, `start` and their kind), an
@@ -239,6 +300,21 @@ Under the chat, these things differ from a terminal:
 - **The CLI expands no response file, anywhere.** An argument that starts with an at sign is a word like any other, so
   `jason @args.txt` is a usage error and exits 2; a script that relied on it passes the arguments itself
   ([handbook.md](handbook.md), [the release notes](../RELEASE-NOTES.md)).
+
+## Links
+
+A `jason-desktop://` link opens a page of the application and does nothing else: it never approves, sends, drafts or
+starts a conversation. The addresses are a closed table: `jason-desktop://feed`, `needs`, `campaigns`,
+`campaign/<campaign id>`, `approval/<approval id>`, `question/<decision id>` and `workitem/<work item id>`, and
+`person/<contact id>`. An approval or a question opens Needs you on that item, and deciding stays your click. An address
+with a query, a fragment, a percent escape, a dot segment, a port or a second id opens nothing. The scheme is the
+desktop's own on every system; `jason://`, which the runtime's Windows notifications use, is the runtime's and the
+desktop never registers it.
+
+On Windows and macOS the application registers the scheme, on Windows at each start for your account alone. On Linux the
+deb's menu entry registers it and the AppImage opens no link. Built so, and not yet seen on a real machine: a link from a
+browser on Linux. A start that carries anything beside the address opens nothing, and the Windows uninstall takes the
+registration off. [desktop/README.md](../desktop/README.md) has the table and the rules for the builder.
 
 ## The command line, and the login items
 
@@ -314,8 +390,9 @@ Take off what Jason placed first, then the application. What stays in every case
 updater's cache named above.
 
 - **Windows.** Remove Jason from Installed apps in Settings. The uninstaller stops the runtime the application carries and
-  removes nothing when it does not stop, then takes off the PATH command's files that are its own, Open Jason at Login
-  and the runtime's logon start when that start names this application's `jason`, and names what it leaves.
+  removes nothing when it does not stop, then takes off the PATH command's files that are its own, Open Jason at Login,
+  the `jason-desktop://` link registration when it names this application, and the runtime's logon start when that start
+  names this application's `jason`, and names what it leaves.
 - **macOS and Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   Windows uninstall's steps: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
   Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
@@ -338,6 +415,6 @@ updater's cache named above.
 
 ## What this release leaves out
 
-Managing Reply accounts from the desktop, Codex acting in the chat (it reads and advises), your own connectors and MCP
+Managing Reply accounts beyond connecting and reconnecting one, Codex acting in the chat (it reads and advises), your own connectors and MCP
 servers in the chat, a marketplace and plugins in frames, and a Linux build for arm64 are not here. Everything in this
 page that a real machine shows and only a real machine shows is marked as built so.

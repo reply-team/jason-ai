@@ -292,7 +292,8 @@ loaded; the desktop never replaces it, and what a screen shows is never all ther
 It is published with every release, from the [releases page](https://github.com/reply-team/jason-ai/releases), as
 `jason-desktop-windows-x64-setup.exe` for Windows on x64, `jason-desktop-macos-arm64.dmg` and
 `jason-desktop-macos-x64.dmg` for macOS, and for Linux on x64 `jason-desktop-linux-x64.deb` (Debian and Ubuntu, and the
-one to take on Ubuntu 24.04 and later) and `jason-desktop-linux-x64.AppImage`. The Windows and macOS packages are
+one to take on Ubuntu 24.04 and later) and `jason-desktop-linux-x64.AppImage`, or from the short addresses `get.jasonharness.ai/desktop/windows`, `/desktop/mac`,
+`/desktop/mac-intel`, `/desktop/linux-deb` and `/desktop/linux-appimage`. The Windows and macOS packages are
 signed; the Linux ones are not, and are built so, started once under a virtual display, and not yet seen on a real
 machine. To take it off, choose Remove What Jason Placed… in its menu on macOS and Linux (Windows's uninstaller does the same) and then
 remove the application; your data stays. [Jason Desktop](https://github.com/reply-team/jason-ai/blob/main/docs/desktop.md)

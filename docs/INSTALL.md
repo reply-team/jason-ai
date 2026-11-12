@@ -268,7 +268,8 @@ A person who would rather have a window than a terminal can install [Jason Deskt
 executable above, from the latest release's downloads: `jason-desktop-windows-x64-setup.exe` for Windows on x64,
 `jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, and for Linux on x64
 `jason-desktop-linux-x64.deb` (`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later)
-or `jason-desktop-linux-x64.AppImage`. Each carries the release's own `jason` and works on this same installation. The
+or `jason-desktop-linux-x64.AppImage`; `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac`, `/desktop/mac-intel`,
+`/desktop/linux-deb` and `/desktop/linux-appimage` send you to the latest release's file. Each carries the release's own `jason` and works on this same installation. The
 Linux packages are not signed, and are built so, not yet seen on a real machine. Install it only when the person asks for
 it: the line in this section is the agent's way, and it never needs the desktop.
 

@@ -227,7 +227,9 @@ and prints the whole command, the brief included, and on macOS the script. Each 
 ## Settings and Chat in the browser
 
 **Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
-system's.
+system's, in the order Light, Dark, System. A new installation meets Light; a browser that already kept a choice, or
+never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
+follows it.
 
 **Chat** says that the chat with an agent is part of Jason Desktop and links to the releases page where it is
 downloaded, and says that everything here also works from a session with your agent in a terminal, with the skills Jason
