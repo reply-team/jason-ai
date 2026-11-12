@@ -575,7 +575,7 @@ const runners = new Set(
         + 'start-process saps invoke-expression iex invoke-command icm start-job sajb start-threadjob invoke-item ii '
         + 'register-scheduledtask timeout nice ionice stdbuf time command builtin watch flock script caffeinate chroot '
         + 'taskset strace ltrace unbuffer parallel systemd-run busybox chronic runas psexec winrs wscript cscript mshta '
-        + 'rundll32 regsvr32 forfiles conhost fc r').split(' '),
+        + 'rundll32 regsvr32 forfiles conhost fc r let mapfile readarray compgen complete').split(' '),
 );
 
 /** The builtins that change how a later word or program is read. */
@@ -584,9 +584,18 @@ const builtins = new Set(
         + 'remove-alias set-variable sv new-variable nv remove-variable rv import-module ipmo').split(' '),
 );
 
-/** True when a word is a single-dash cluster of short options holding one of the letters. */
-function shortOption(word: string, letters: string): boolean {
-    return /^-[A-Za-z]+$/.test(word) && [...word.slice(1)].some((letter) => letters.includes(letter));
+/**
+ * True when a single-dash option word's letters, read up to the first character that is not a letter, hold one of the
+ * code letters before any letter that takes the rest of the word as its value: `-c`, `-lc`, `-c'...'` glued, `-Bc"..."`.
+ */
+function shortOption(word: string, letters: string, valued = ''): boolean {
+    const cluster = /^-([A-Za-z]+)/.exec(word)?.[1];
+    if (cluster === undefined) return false;
+    for (const letter of cluster) {
+        if (letters.includes(letter)) return true;
+        if (valued.includes(letter)) return false;
+    }
+    return false;
 }
 
 function prefixOf(word: string, names: readonly string[]): boolean {
@@ -595,30 +604,48 @@ function prefixOf(word: string, names: readonly string[]): boolean {
     return names.some((each) => each.startsWith(name)) || ['ec', 'enc', 'cwa'].includes(name);
 }
 
+const editors = new Set(['vi', 'vim', 'nvim', 'gvim', 'view', 'vimdiff', 'ex']);
+const packageManagers = new Set(['npm', 'pnpm', 'yarn']);
+
+/** True when a package runner is given shell code to run (`npx -c`, `npm exec -c`, `pnpm exec -c`). */
+function packageCode(program: string, args: readonly string[]): boolean {
+    const call = (word: string) => word === '-c' || /^--(call|shell-mode)(=|$)/.test(word);
+    if (program === 'npx' || program === 'pnpx') return args.some(call);
+    return packageManagers.has(program) && args.some((word) => word === 'exec' || word === 'x' || word === 'dlx') && args.some(call);
+}
+
 /** True when the command is a shell or an interpreter handed code as text, or code through its standard input. */
 function takesCode(command: LiteralCommand): boolean {
     const program = programName(command.words[0] ?? '');
     const args = command.words.slice(1);
+    if (packageCode(program, args)) return true;
+    if (editors.has(program)) return args.some((word) => word === '-c' || word === '--cmd' || word.startsWith('+'));
+    if (program === 'gdb') return args.some((word) => /^-{1,2}(ex|iex|eval-command|init-eval-command)(=|$)/.test(word));
     const interpreter = shellPrograms.has(program) || powerShellPrograms.has(program) || pythonStem.test(program) || nodeStem.test(program)
         || program === 'deno' || program === 'perl' || program === 'php' || awkPrograms.has(program) || eInterpreters.test(program);
     if (!interpreter) return false;
     if (command.input === 'pipe' || command.input === 'here_document') return true;
-    if (shellPrograms.has(program)) return args.some((word) => shortOption(word, 'c') || word === '--command');
+    if (shellPrograms.has(program)) return args.some((word) => shortOption(word, 'c') || /^--command(=|$)/.test(word));
     if (powerShellPrograms.has(program)) {
         if (args.some((word) => prefixOf(word, ['command', 'encodedcommand', 'commandwithargs']))) return true;
         // Windows PowerShell reads a word with no option before it as a command, pwsh as a file.
         return program === windowsPowerShell && args.length > 0 && !args.some((word) => /^[-/]f(i(le?)?)?$/i.test(word));
     }
-    if (pythonStem.test(program)) return args.some((word) => shortOption(word, 'c') || word === '-');
-    if (nodeStem.test(program)) return args.some((word) => shortOption(word, 'ep') || /^--(eval|print)(=|$)/.test(word) || word === '-');
+    if (pythonStem.test(program)) return args.some((word) => shortOption(word, 'c', 'mWXQ') || word === '-');
+    if (nodeStem.test(program)) return args.some((word) => shortOption(word, 'ep', 'r') || /^--(eval|print)(=|$)/.test(word) || word === '-');
     if (program === 'deno') return args[0] === 'eval' || args[0] === 'repl';
-    if (program === 'perl') return args.some((word) => shortOption(word, 'eE'));
-    if (program === 'php') return args.some((word) => shortOption(word, 'rRBEa'));
-    if (awkPrograms.has(program)) return !args.some((word) => word.startsWith('-f') || word === '--file');
-    return args.some((word) => shortOption(word, 'e'));
+    // perl's -M and -m take a module's name, and text after a `;` there is code.
+    if (program === 'perl') return args.some((word) => shortOption(word, 'eE', 'MmIx') || (/^-[Mm]/.test(word) && word.includes(';')));
+    if (program === 'php') return args.some((word) => shortOption(word, 'rRBEa', 'cdfzt'));
+    // awk's program is its first word unless a file names it; gawk's -e and --source add program text beside a file.
+    if (awkPrograms.has(program)) return args.some((word) => shortOption(word, 'e', 'fvF') || /^--source(=|$)/.test(word)) || !args.some((word) => word.startsWith('-f') || word === '--file');
+    return args.some((word) => shortOption(word, 'eE'));
 }
 
-/** True when git is given configuration before its verb, or a verb that runs a command it is given. */
+/** git's options that name a program it runs, wherever the verb takes them. */
+const gitExecuting = /^--(upload-pack|receive-pack|exec|open-files-in-pager|config)(=|$)|^--[a-z-]*-cmd(=|$)/;
+
+/** True when git is given configuration before its verb, or a verb or an option that runs a command it is given. */
 function gitRuns(args: readonly string[]): boolean {
     let at = 0;
     while (at < args.length && (args[at] as string).startsWith('-')) {
@@ -628,6 +655,9 @@ function gitRuns(args: readonly string[]): boolean {
     }
     const verb = args[at];
     const rest = args.slice(at + 1);
+    if (rest.some((word) => gitExecuting.test(word))) return true;
+    if (verb === 'clone') return rest.some((word) => shortOption(word, 'uc', 'bo'));
+    if (verb === 'grep') return rest.some((word) => shortOption(word, 'O', 'efABCm'));
     if (verb === 'config') return !rest.some((word) => /^--(get|get-all|get-regexp|list)$|^-l$/.test(word));
     if (verb === 'rebase') return rest.some((word) => word === '-x' || word.startsWith('--exec'));
     if (verb === 'bisect') return rest[0] === 'run';
@@ -637,35 +667,66 @@ function gitRuns(args: readonly string[]): boolean {
     return false;
 }
 
+const containerPrograms = new Set(['docker', 'podman', 'nerdctl']);
+const clusterPrograms = new Set(['kubectl', 'oc']);
+const tarPrograms = new Set(['tar', 'bsdtar', 'gtar']);
+
+/** True when a program is given a command, or a program of the agent's choosing, that it starts. */
+function startsGiven(program: string, args: readonly string[]): boolean {
+    if (containerPrograms.has(program)) return args.some((word) => word === 'run' || word === 'exec' || word === 'create');
+    if (clusterPrograms.has(program)) return args.some((word) => word === 'exec' || word === 'run' || word === 'debug');
+    if (program === 'rsync') return args.some((word) => shortOption(word, 'e') || /^--rsh(=|$)/.test(word));
+    if (tarPrograms.has(program)) {
+        return args.some((word) => /^--(to-command|use-compress-program|checkpoint-action|info-script|new-volume-script|rsh-command)(=|$)/.test(word)
+            || shortOption(word, 'IF', 'fCbHKLNTVX'));
+    }
+    if (program === 'sort') return args.some((word) => /^--compress-program(=|$)/.test(word));
+    return false;
+}
+
+/** The builtins that evaluate an array subscript they are handed, which runs a command substitution inside it. */
+const evaluatesSubscript = new Set(['printf', 'read', 'test', '[', 'getopts', 'wait']);
+
 /**
  * What a literal command does that is held all the same, by what runs (the order of 1.3's held list): cmd and its batch
  * files, code given as text, a runner, a builtin that changes how later words are read; then a command that changes the
- * MCP servers an agent host loads. Null when none.
+ * MCP servers or plugins an agent host loads. Null when none.
  */
 export function heldByWhatRuns(commands: readonly LiteralCommand[]): HeldReason | null {
     for (const command of commands) {
         const first = command.words[0] ?? '';
         const program = programName(first);
+        const args = command.words.slice(1);
         if (program === commandPrompt || (/\.(bat|cmd)$/i.test(first) && command.words.length > 1)) return 'command_prompt';
         if (takesCode(command)) return 'inline_code';
         if (runners.has(program)) return 'runner';
-        if (program === 'git' && gitRuns(command.words.slice(1))) return 'runner';
+        if (program === 'git' && gitRuns(args)) return 'runner';
         if (program === 'find' && command.words.some((word) => /^-(exec|execdir|ok|okdir)$/.test(word))) return 'runner';
+        if (startsGiven(program, args)) return 'runner';
         if (builtins.has(program)) return 'builtin';
         if (command.words.some((word) => /^(alias|function|variable|env):/i.test(word))) return 'builtin';
+        if (evaluatesSubscript.has(program) && args.some((word) => /[[$`]/.test(word))) return 'expansion';
         if (changesServers(command.words)) return 'servers';
     }
     return null;
 }
 
-const serverVerbs = new Set(['add', 'remove', 'login']);
+const serverVerbs = new Set(['remove', 'login']);
+const pluginVerbs = new Set(['install', 'enable', 'update', 'marketplace']);
 
 /**
- * True when a command's words hold `mcp` with `add`, `remove` or `login` after it, whatever the program and whatever
- * stands between: the shape of an agent host's command that changes the MCP servers it loads, or signs one in. Any
- * program counts, since a host can be started by a name or a path the desktop does not know.
+ * True when a command's words hold `mcp` with a verb after it that starts with `add`, or is `remove` or `login`, or hold
+ * `plugin` or `plugins` with a verb after it that starts with `add` or is `install`, `enable`, `update` or
+ * `marketplace`, whatever the program and whatever stands between: the shape of an agent host's command that changes
+ * the MCP servers or the plugins it loads, or signs a server in. Any program counts, since a host can be started by a
+ * name or a path the desktop does not know.
  */
 function changesServers(words: readonly string[]): boolean {
-    const at = words.findIndex((word) => word.toLowerCase() === 'mcp');
-    return at >= 0 && words.slice(at + 1).some((word) => serverVerbs.has(word.toLowerCase()));
+    const folded = words.map((word) => word.toLowerCase());
+    const after = (names: readonly string[]) => {
+        const at = folded.findIndex((word) => names.includes(word));
+        return at < 0 ? [] : folded.slice(at + 1);
+    };
+    if (after(['mcp']).some((word) => word.startsWith('add') || serverVerbs.has(word))) return true;
+    return after(['plugin', 'plugins']).some((word) => word.startsWith('add') || pluginVerbs.has(word));
 }

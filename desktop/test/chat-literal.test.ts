@@ -440,3 +440,71 @@ test('POSIX: a redirection to a device the shell emulates is held; /dev/null is 
     }
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'frobnicate a > /dev/null 2>&1' }, scope), runs);
 });
+
+test('code glued to its option, given by --command=, beside a file, or in a module option is held', () => {
+    for (const command of [
+        "python3 -c'import os'",
+        'python3 -Bc"print(1)"',
+        "perl -e'print 1'",
+        "ruby -e'p 1'",
+        "php -r'echo 1;'",
+        "node -e'1'",
+        'bash --command=frobnicate',
+        "awk -f prog.awk -e 'BEGIN{}' notes.md",
+        'gawk -f prog.awk --source x notes.md',
+        'julia -E 1',
+        "perl -M'strict;print 1' x.pl",
+    ]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'perl -Mstrict x.pl' }, scope), runs, 'a module named, no code');
+});
+
+test('a builtin that evaluates text or runs a callback is held, and an array subscript handed to one that evaluates it', () => {
+    for (const command of ["let 'a[1]'", 'mapfile -C frobnicate a', 'readarray a', 'compgen -C frobnicate', 'complete -C frobnicate x']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+    }
+    for (const command of ["printf -v 'a[1]' x", "read 'a[1]'", "test -v 'a[1]'", "getopts ab 'a[1]'", "wait -p 'a[1]'", "printf '$x'", "printf '`x`'"]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('expansion'), command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: "printf '%s' a" }, scope), runs);
+});
+
+test('a package runner given shell code, git\'s execute options, and the runners that start a command they are given are held', () => {
+    for (const command of ["npx -c 'frobnicate a'", "npx --call='frobnicate a'", "npm exec -c 'frobnicate a'", "npm x --call='frobnicate a'", "pnpm exec -c 'frobnicate a'"]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+    }
+    for (const command of [
+        'git clone -u frobnicate repo',
+        'git clone --upload-pack=frobnicate repo',
+        'git fetch --upload-pack=frobnicate',
+        'git ls-remote --upload-pack frobnicate origin',
+        'git push --receive-pack=frobnicate',
+        'git archive --exec=frobnicate --remote=origin HEAD',
+        'git grep -O frobnicate',
+        'git grep --open-files-in-pager=frobnicate x',
+        'git clone -c core.x=y repo',
+        'git clone --config core.x=y repo',
+        'git send-email --sendmail-cmd=frobnicate a.patch',
+        'docker run img',
+        'podman run img',
+        'kubectl exec pod -- frobnicate',
+        'rsync -e frobnicate a b',
+        'tar --to-command=frobnicate -xf a.tar',
+        'tar -I frobnicate -xf a.tar',
+        'sort --compress-program=frobnicate notes.md',
+    ]) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('runner'), command);
+    }
+    for (const command of ['vim -c q notes.md', 'vim +q notes.md', 'gdb -ex run frobnicate']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('inline_code'), command);
+    for (const command of ['git push -u origin main', 'git grep -n x', 'git clone repo', 'npx frobnicate', 'tar -xf a.tar', 'sort notes.md']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+    }
+});
+
+test('a server verb that starts with add, and the plugin verbs, are held whatever the program', () => {
+    for (const command of ["frobnicate mcp add-json tools '{}'", 'frobnicate mcp add-from-claude-desktop', 'frobnicate plugin install tools', 'frobnicate plugin marketplace add tools', 'frobnicate plugins install tools', 'frobnicate plugin enable tools']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), heldAs('servers'), command);
+    }
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'frobnicate plugin list' }, scope), runs);
+});
