@@ -158,6 +158,13 @@ desktop does not narrow, so it may read the records.
 - **Not a boundary.** The instruction text asks the agent to keep to the conversation's campaign and to create at most
   one campaign in a set-up chat; a command that names another campaign is not refused for being in this conversation.
   What a turn may do is the permission model's to decide, as before.
+- **Web pages and searches.** On Claude Code a search needs no card, and neither does a documentation page of four
+  hosts: Claude Code's under `https://code.claude.com/docs/`, OpenAI's under `https://developers.openai.com/codex/`,
+  `/api/docs/` and `/api/reference/` and under `https://learn.chatgpt.com/docs/`, and Reply's on `https://docs.reply.io/`
+  (`documentationPages` in `src/chat-permission-model.ts`), over https, with no query string, no path segment that
+  begins with an underscore, and at most 300 characters. Every other page asks, a page of Claude Code's own preapproved
+  documentation set included. On Codex every turn searches OpenAI's cached index with no card and opens no page live;
+  the person's own search setting is set aside for the run, also when they had turned search off.
 - A conversation whose turn runs is not removed, started afresh or attached; each is refused with a sentence.
   "Start afresh" drops the hosts' sessions and keeps the record. `chat.list` and `chat.open` say whether a
   conversation's turn runs. When the page is loaded again while a turn runs, the turn shows running with Stop, and a
