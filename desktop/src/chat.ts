@@ -180,7 +180,7 @@ export interface ChatOptions {
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
     /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
-    skillsGate?: Pick<SkillsGate, 'wait'>;
+    skillsGate?: Pick<SkillsGate, 'held' | 'wait'>;
     /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
     now?(): number;
     /** How many entries one pass of the sweep of the ended grants' folders takes; absent, `sweepCap`. */
@@ -951,7 +951,7 @@ export class Chat {
         for (const [id, each] of this.#setupTurns) if (id !== conversation.id) each.overlapped = true;
         try {
             // A start that deploys skills into the chat folder holds the gate: the turn is built after it lets go.
-            await this.#options.skillsGate?.wait();
+            if (this.#options.skillsGate?.held) await this.#options.skillsGate.wait();
             // The page marks a host below the floor; this is the guard, whatever the page asked. The chat counts as
             // answering while the version is read, so a second send is refused as busy. The version read also says
             // whether the model named takes the effort named.

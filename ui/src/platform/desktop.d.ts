@@ -480,7 +480,7 @@ export interface JasonDesktop {
          */
         setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
         /**
-         * The Open folder button of a `notice` that carries a `folder`: opens that ended Full access folder in the system's
+         * The Open folder button of a `notice` that carries a `folder`: shows that ended Full access folder in the system's
          * file manager. Only a folder of that name the desktop keeps is opened; anything else is refused.
          */
         openFolder(name: string): Promise<DesktopRefusal | null>;

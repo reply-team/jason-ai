@@ -432,11 +432,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
         skillsGate,
-        // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager opens it.
-        openFolder: async (path) => {
-            const failed = await shell.openPath(path);
-            if (failed !== '') log.warn('chat_full_folder_open_failed', {});
-        },
+        // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
+        // folder where it stands. Nothing is run or opened with a program.
+        openFolder: (path) => shell.showItemInFolder(path),
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
         // The desktop asks the person itself, every time Full access is chosen: the page cannot answer for them. Only the
         // first button says yes; Cancel is the default and Escape answers it. With no window there is no one to ask.
