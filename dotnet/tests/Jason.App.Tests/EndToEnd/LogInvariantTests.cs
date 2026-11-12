@@ -428,6 +428,7 @@ public class LogInvariantTests
         Assert.Same(events[^1], line);
         Assert.Equal("Fatal", (string?)line["@l"]);
         Assert.Equal(typeof(Jason.DyingRuntime.PlantedFailureException).FullName, (string?)line["ExceptionType"]);
+        Assert.Empty(Assert.IsType<JsonArray>(line["InnerExceptionTypes"]));
         Assert.Null(line["@x"]);
 
         // Each frame is a type and a method, and the innermost is the method that threw: no file, no line, nothing else.
@@ -443,7 +444,7 @@ public class LogInvariantTests
     }
 
     /// <summary>The line the runtime writes as an unhandled exception ends it.</summary>
-    private const string DeathTemplate = "The runtime is ending on an unhandled {ExceptionType}; its stack, innermost frame first: {Frames}";
+    private const string DeathTemplate = "The runtime is ending on an unhandled {ExceptionType}, wrapping {InnerExceptionTypes}; its stack, innermost frame first: {Frames}";
 
     /// <summary>
     /// The settings of this run: the loudest log level the validator accepts, a dispatcher that ticks every second,

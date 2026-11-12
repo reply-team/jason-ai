@@ -88,6 +88,10 @@ internal static class ReviewedLogProperties
         // the framework compiled, never a frame's file or line, never anything the exception says (UnhandledExceptionLine).
         "Frames",
 
+        // The full type names of the exceptions that exception wraps, outermost first and at most eight: types only, never
+        // what any of them says (UnhandledExceptionLine).
+        "InnerExceptionTypes",
+
         // Versions and digests.
         "Version", "Digest",
 

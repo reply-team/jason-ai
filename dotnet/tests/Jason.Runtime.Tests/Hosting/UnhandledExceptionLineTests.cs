@@ -15,9 +15,10 @@ public sealed class UnhandledExceptionLineTests
     [Fact]
     public void A_frame_names_a_type_and_a_method_a_generic_type_by_its_definition_and_never_a_file_even_where_symbols_are_beside_it()
     {
-        var (type, frames) = UnhandledExceptionLine.Describe(Caught(() => new Holder<string>().Throw()));
+        var (type, inner, frames) = UnhandledExceptionLine.Describe(Caught(() => new Holder<string>().Throw()));
 
         Assert.Equal("System.InvalidOperationException", type);
+        Assert.Empty(inner);
         Assert.Equal(typeof(Holder<>).FullName + ".Throw", frames[0]);
         Assert.All(frames, frame => Assert.Matches(@"^[A-Za-z0-9_.`<>$|+\[\],-]+\z", frame));
     }
@@ -25,7 +26,7 @@ public sealed class UnhandledExceptionLineTests
     [Fact]
     public void A_deep_stack_is_cut_to_the_bound_innermost_first()
     {
-        var (_, frames) = UnhandledExceptionLine.Describe(Caught(() => Recurse(UnhandledExceptionLine.MaxFrames * 2)));
+        var (_, _, frames) = UnhandledExceptionLine.Describe(Caught(() => Recurse(UnhandledExceptionLine.MaxFrames * 2)));
 
         Assert.Equal(UnhandledExceptionLine.MaxFrames, frames.Length);
         Assert.All(frames, frame => Assert.Equal(typeof(UnhandledExceptionLineTests).FullName + "." + nameof(Recurse), frame));
@@ -34,8 +35,28 @@ public sealed class UnhandledExceptionLineTests
     [Fact]
     public void A_thrown_object_that_is_no_exception_is_named_by_its_type_alone()
     {
-        Assert.Equal(("System.String", Array.Empty<string>()), UnhandledExceptionLine.Describe("SENTINEL_NOT_AN_EXCEPTION"));
-        Assert.Equal(("unknown", Array.Empty<string>()), UnhandledExceptionLine.Describe(null));
+        Assert.Equal(("System.String", Array.Empty<string>(), Array.Empty<string>()), UnhandledExceptionLine.Describe("SENTINEL_NOT_AN_EXCEPTION"));
+        Assert.Equal(("unknown", Array.Empty<string>(), Array.Empty<string>()), UnhandledExceptionLine.Describe(null));
+    }
+
+    [Fact]
+    public void A_wrapper_names_the_types_it_wraps_outermost_first_at_most_eight_and_never_what_they_say()
+    {
+        Exception wrapped = new FormatException("SENTINEL_INNERMOST");
+        for (var depth = 0; depth < UnhandledExceptionLine.MaxInner + 2; depth++)
+        {
+            wrapped = new InvalidOperationException("SENTINEL_MIDDLE", wrapped);
+        }
+
+        var thrown = new TypeInitializationException("Made.Up.Type", new System.Reflection.TargetInvocationException(new AggregateException("SENTINEL_AGGREGATE", wrapped)));
+        var (type, inner, _) = UnhandledExceptionLine.Describe(thrown);
+
+        Assert.Equal("System.TypeInitializationException", type);
+        Assert.Equal(UnhandledExceptionLine.MaxInner, inner.Length);
+        Assert.Equal(
+            ["System.Reflection.TargetInvocationException", "System.AggregateException", .. Enumerable.Repeat("System.InvalidOperationException", UnhandledExceptionLine.MaxInner - 2)],
+            inner);
+        Assert.DoesNotContain(inner, name => name.Contains("SENTINEL_", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -55,6 +76,7 @@ public sealed class UnhandledExceptionLineTests
         Assert.Equal(UnhandledExceptionLine.Template, (string?)only["@mt"]);
         Assert.Equal("Fatal", (string?)only["@l"]);
         Assert.Equal("System.InvalidOperationException", (string?)only["ExceptionType"]);
+        Assert.Empty(Assert.IsType<JsonArray>(only["InnerExceptionTypes"]));
         Assert.NotEmpty(Assert.IsType<JsonArray>(only["Frames"]));
         Assert.Null(only["@x"]);
         Assert.DoesNotContain("SENTINEL_", written, StringComparison.Ordinal);

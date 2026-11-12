@@ -169,7 +169,7 @@ public sealed class LogTemplateInventoryTests
         problems.AddRange(Missing(sites, "RuntimeHost.cs", "Console at start: {Console}"));
         problems.AddRange(Missing(sites, "RuntimeHost.cs", "The settings file could not be read ({ExceptionType} at line {LineNumber}, byte {BytePositionInLine}); the runtime keeps the settings it had"));
         problems.AddRange(Missing(sites, "RuntimeHost.cs", "The settings file could not be read ({ExceptionType} at line {LineNumber}, byte {BytePositionInLine}) while the runtime was starting, so any setting not yet in force starts on its default; restart it once the file can be read"));
-        problems.AddRange(Missing(sites, "UnhandledExceptionLine.cs", "The runtime is ending on an unhandled {ExceptionType}; its stack, innermost frame first: {Frames}"));
+        problems.AddRange(Missing(sites, "UnhandledExceptionLine.cs", "The runtime is ending on an unhandled {ExceptionType}, wrapping {InnerExceptionTypes}; its stack, innermost frame first: {Frames}"));
         problems.AddRange(Missing(sites, "AttemptLogScope.cs", "{CampaignId} {WorkItemId} {AttemptId}"));
         problems.AddRange(Missing(sites, "RequestLine.cs", "{RequestPath}"));
 
