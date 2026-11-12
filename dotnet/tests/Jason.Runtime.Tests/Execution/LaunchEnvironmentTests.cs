@@ -243,6 +243,24 @@ public class LaunchEnvironmentTests
         }
     }
 
+    /// <summary>A certificate path is a trust store, never a secret: an agent keeps it even where a plugin is granted it.</summary>
+    [Fact]
+    public void A_granted_certificate_path_stays_with_the_agent()
+    {
+        Assert.DoesNotContain("NODE_EXTRA_CA_CERTS", BaseEnvironment.ForCurrentOs);
+
+        foreach (var environment in new[] { Existing(), ExistingExactly() })
+        {
+            environment["NODE_EXTRA_CA_CERTS"] = "/etc/ssl/corporate-ca.pem";
+            environment["ACME_TOKEN"] = "made-up-token";
+
+            LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason", grantedVariables: ["NODE_EXTRA_CA_CERTS", "ACME_TOKEN"]);
+
+            Assert.Equal("/etc/ssl/corporate-ca.pem", environment["NODE_EXTRA_CA_CERTS"]);
+            Assert.DoesNotContain("ACME_TOKEN", environment.Keys);
+        }
+    }
+
     [Fact]
     public void With_no_plugin_granted_anything_only_the_configuration_is_taken_out()
     {

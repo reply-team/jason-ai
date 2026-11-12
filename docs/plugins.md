@@ -196,6 +196,9 @@ starts: a plugin host is given no `JASON_*` variable (§6), and an AI role's age
 runtime's configuration ([work-execution.md](work-execution.md)), so it reaches this plugin through `host.config` alone.
 A variable granted for `host.env` is kept from every AI role's agent in the same way, unless it is one of the machine
 configuration names every plugin host is given (§6), a proxy say, which an agent keeps whether or not it is granted.
+So are the four certificate names `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS` and `REQUESTS_CA_BUNDLE`: each
+is the path to a trust store and never a secret, and an agent without it cannot reach its vendor inside a corporate
+network.
 This keeps a plugin's secret out of a dump of an agent's environment; it is not a wall, since a role's agent runs as the
 person and can read what the person can.
 

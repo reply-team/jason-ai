@@ -22,7 +22,7 @@ namespace Jason.Runtime.Execution.Hosts;
 /// So is every name a plugin of the active snapshot is granted under <c>Plugins:Grants:&lt;id&gt;:Env</c>: such a name is
 /// there to carry a plugin's credential to that plugin's host, and a role's agent is no plugin. A granted name the
 /// machine list every plugin host gets holds (<see cref="BaseEnvironment.ForCurrentOs"/>), a proxy say, is machine
-/// configuration and stays, granted or not. Everything else the runtime's environment holds is the person's machine and
+/// configuration and stays, granted or not, and so does one of the four <see cref="CertificateVariables"/>. Everything else the runtime's environment holds is the person's machine and
 /// stays too. This keeps those values out of a dump of the environment; it is not a wall, since a role's agent runs as
 /// the person and can read what the person can.
 /// </para>
@@ -34,6 +34,14 @@ public static class LaunchEnvironment
 
     /// <summary>What every variable of the runtime's own starts with, which a host's constant never does.</summary>
     private const string Prefix = "JASON_";
+
+    /// <summary>
+    /// The certificate names a role's agent keeps even where a plugin is granted one: each is the path to a trust store and
+    /// never a secret, and an agent without it cannot reach its vendor from inside a corporate network that inspects
+    /// TLS. Nothing else joins the machine list in being kept.
+    /// </summary>
+    public static IReadOnlyList<string> CertificateVariables { get; } =
+        ["SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE"];
 
     /// <summary>
     /// Whether <paramref name="name"/> sets a setting of the runtime: the <c>JASON_</c> prefix and the double underscore
@@ -92,7 +100,7 @@ public static class LaunchEnvironment
         // A plugin's granted names are that plugin's, never a role's, except where the machine list every plugin host
         // gets names one too. Names are compared as the operating system compares them, as the plugin host's are.
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var machine = new HashSet<string>(BaseEnvironment.ForCurrentOs, comparer);
+        var machine = new HashSet<string>(BaseEnvironment.ForCurrentOs.Concat(CertificateVariables), comparer);
         var granted = new HashSet<string>((grantedVariables ?? []).Where(name => !string.IsNullOrEmpty(name) && !machine.Contains(name)), comparer);
         foreach (var name in environment.Keys.Where(granted.Contains).ToList())
         {
