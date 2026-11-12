@@ -723,6 +723,31 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: `${tool}:${prefix}`, covers: `${prefix} \u2026` };
 }
 
+const contentRefusal = 'That file names a command or an operation that is a person\'s own act or changes the installation, the variable that confines jason, or the installation\'s own data: the chat never writes it. Nothing was written.';
+
+/** The text a writer tool would put in a file: a whole file's content, or each replacement of an edit. */
+function writtenText(tool: string, input: Record<string, unknown>): string[] {
+    const texts: unknown[] = [];
+    if (tool === 'Write') texts.push(input['content']);
+    if (tool === 'Edit') texts.push(input['new_string']);
+    if (tool === 'NotebookEdit') texts.push(input['new_source']);
+    if (tool === 'MultiEdit' && Array.isArray(input['edits'])) for (const edit of input['edits'] as unknown[]) texts.push((edit as { new_string?: unknown } | null)?.new_string);
+    return texts.filter((text): text is string => typeof text === 'string');
+}
+
+/**
+ * Under Full access, where no card is shown, what a writer tool would write is read as a command is read: a file whose
+ * text runs a command of the deny list, names a deny-list operation by its dot, names the confining variable, or names
+ * the installation's data is refused, so a script the agent writes to run later is refused where the attempt shows. What
+ * a program assembles at run time is not seen here. Null for any other tool, and for text that shows none of these.
+ */
+export function writtenRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
+    for (const text of writtenText(tool, input)) {
+        if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || jasonIn(text, scope) === 'deny') return contentRefusal;
+    }
+    return null;
+}
+
 function hostOf(url: string): string | null {
     try {
         return new URL(url).host || null;

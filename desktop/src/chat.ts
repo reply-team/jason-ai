@@ -12,6 +12,12 @@
  * whose session is gone, starts afresh with a recap of the earlier messages. A set-up chat whose turn made exactly one
  * new campaign becomes that campaign's conversation. A conversation is how the work is ordered, not a fence: a turn
  * acts for the person across the installation, as the permission model and the allow list let it.
+ *
+ * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn: Ask first, the
+ * default; Plan only, kept on the record; and Full access, chosen through a confirmation each time, held in memory only,
+ * so a restart opens every chat in Ask first. Leaving Full access stops the turn that runs in it. A turn in Full access
+ * that shows a tool its hook never saw is stopped, and its chat goes back to Ask first. No turn starts without a person's
+ * send; the naming run of a set-up chat (`chat-naming.ts`) is no turn: it runs with no tool at all, in any mode.
  */
 
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -47,9 +53,10 @@ import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
 import { realPathOf } from './chat-real-path.ts';
-import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig } from './chat-turn-files.ts';
+import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
+import { fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { compareVersions, floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
@@ -69,6 +76,8 @@ export type ChatEvent =
     | { kind: 'pick'; campaignIds: string[] }
     /** The conversation's title changed: a person renamed it, or the desktop named a set-up chat by what it is about. */
     | { kind: 'renamed'; title: string }
+    /** The conversation's mode changed: a person chose it, or the desktop put the chat back to Ask first. */
+    | { kind: 'mode'; mode: ChatMode }
     | { kind: 'done'; error: string | null };
 
 /** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
@@ -86,6 +95,8 @@ export interface ConversationSummary {
     title: string;
     updatedAt: string;
     running: boolean;
+    /** The conversation's access mode, as the desktop holds it now. */
+    mode: ChatMode;
 }
 
 /**
@@ -134,7 +145,14 @@ export interface ChatOptions {
     /** The deny list's commands and operations, the allow list's verbs and the instruction text, read at each turn. */
     fence(): ChatFence;
     emit(chatId: string, event: ChatEvent): void;
-    started?(host: string, resumed: boolean): void;
+    /**
+     * Asks the person, every time Full access is chosen, whether this chat may act without asking (`fullAccessDialog`);
+     * true only for their yes. Absent, Full access is never given.
+     */
+    confirmFullAccess?(): Promise<boolean>;
+    /** Said each time a conversation's mode changes, by the two modes alone. */
+    modeChanged?(from: ChatMode, to: ChatMode): void;
+    started?(host: string, resumed: boolean, mode: ChatMode): void;
     ended?(turn: TurnEnded): void;
     decided?(decided: Decided): void;
     /** Said once, the first time the application is found to carry no instruction text; the turns run without it. */
@@ -172,6 +190,8 @@ interface Running {
     replyTo: string;
     /** The cards of this turn the page holds, by request id, so the answer is kept with the card. */
     cards: Map<string, Extract<KeptEntry, { kind: 'permission' }>>;
+    /** The mode the turn runs in, read when the person's send started it. */
+    mode: ChatMode;
 }
 
 interface Resolved {
@@ -347,6 +367,8 @@ export class Chat {
     #closed = false;
     /** The naming run that runs now, its stop and its folder; null while none runs. */
     #namingNow: { stop: AbortController; folder: string } | null = null;
+    /** The conversations in Full access, by id. In memory only: never on a record, gone with the window. */
+    #fullAccess = new Set<string>();
 
     constructor(options: ChatOptions) {
         this.#options = options;
@@ -400,7 +422,53 @@ export class Chat {
             title: conversation.title,
             updatedAt: conversation.updated_at,
             running: this.#running.has(conversation.id),
+            mode: this.#modeOf(conversation),
         };
+    }
+
+    #modeOf(conversation: Conversation): ChatMode {
+        return this.#fullAccess.has(conversation.id) ? 'full_access' : (conversation.mode ?? 'ask_first');
+    }
+
+    /**
+     * A person's choice of a conversation's mode, from the menu beside the composer. Full access is given only once the
+     * person said yes to the confirmation, asked again each time it is chosen; a no leaves the mode as it was. Leaving
+     * Full access stops a turn that runs in it. Plan only is kept on the record; Full access never is.
+     */
+    async setMode(id: unknown, mode: unknown): Promise<ConversationSummary> {
+        const conversation = this.#own(id);
+        if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
+        if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
+        if (mode === 'full_access') {
+            const yes = (await this.#options.confirmFullAccess?.()) === true;
+            if (!yes || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+        }
+        this.#changeMode(conversation, mode, true);
+        return this.#summaryOf(conversation);
+    }
+
+    /**
+     * Puts a conversation in a mode, says so to its page and to the log, and keeps Plan only on its record. Leaving Full
+     * access stops the turn that runs in it, unless the caller stops it in its own words (`stopTurn` false).
+     */
+    #changeMode(conversation: Conversation, to: ChatMode, stopTurn: boolean): void {
+        const from = this.#modeOf(conversation);
+        if (from === to) return;
+        if (to === 'full_access') this.#fullAccess.add(conversation.id);
+        else this.#fullAccess.delete(conversation.id);
+        if (to !== 'full_access') {
+            const before = conversation.mode;
+            if (to === 'plan_only') conversation.mode = 'plan_only';
+            else delete conversation.mode;
+            if (before !== conversation.mode && this.#kept.has(conversation.id)) this.#keep(conversation);
+        }
+        this.#options.modeChanged?.(from, to);
+        this.#options.emit(conversation.id, { kind: 'mode', mode: to });
+        const running = this.#running.get(conversation.id);
+        if (stopTurn && from === 'full_access' && running?.mode === 'full_access') {
+            running.stopped = true;
+            running.process?.stop();
+        }
     }
 
     /** A conversation with what the page drew; an id the desktop does not keep is refused. */
@@ -435,6 +503,7 @@ export class Chat {
         }
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
+        this.#fullAccess.delete(conversation.id);
     }
 
     /** "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept. One whose turn runs is refused. */
@@ -527,8 +596,11 @@ export class Chat {
         if (notOffered !== null) return refuse(notOffered);
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
+        // Codex has no Full access: a chat in it goes back to Ask first, and its turn runs there.
+        if (resolved.program === 'codex' && this.#modeOf(conversation) === 'full_access') this.#changeMode(conversation, 'ask_first', true);
+        const mode = this.#modeOf(conversation);
 
-        const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map() };
+        const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode };
         this.#running.set(conversation.id, running);
         this.#kept.add(conversation.id);
         // Any turn that begins while a set-up turn runs could make the campaign that set-up turn would take for its own.
@@ -539,7 +611,10 @@ export class Chat {
             // whether the model named takes the effort named.
             const version = resolved.program === 'claude' ? await this.#claudeVersion() : null;
             const below = resolved.program === 'claude' ? floorSentence(version) : null;
-            const held = below ?? (resolved.effort === undefined ? null : effortRefusal(resolved.host, resolved.named, resolved.effort, this.#options.models?.() ?? new Map(), version));
+            // Full access holds only on a Claude Code whose hook blocks the tool when it fails: below that, the chat goes
+            // back to Ask first and the send is refused, saying why.
+            const unhooked = below === null && mode === 'full_access' ? fullAccessSentence(version) : null;
+            const held = below ?? unhooked ?? (resolved.effort === undefined ? null : effortRefusal(resolved.host, resolved.named, resolved.effort, this.#options.models?.() ?? new Map(), version));
             // A stop or a window close while the version was read: its answer is dropped and nothing of the turn is built.
             if (running.stopped) {
                 this.#running.delete(conversation.id);
@@ -547,6 +622,7 @@ export class Chat {
             }
             if (held !== null) {
                 this.#running.delete(conversation.id);
+                if (unhooked !== null) this.#changeMode(conversation, 'ask_first', false);
                 return refuse(held);
             }
             await this.#turn(conversation, text, resolved, launch, running);
@@ -590,6 +666,8 @@ export class Chat {
      */
     closeAll(): void {
         this.#closed = true;
+        // Full access is gone with the window, as every "always" is.
+        this.#fullAccess.clear();
         for (const running of [...this.#running.values()]) {
             running.stopped = true;
             running.process?.stop();
@@ -858,18 +936,22 @@ export class Chat {
                     deniedOperations: fence.operations,
                     real: realPathOf,
                 };
-                this.#broker.openTurn(replyTo, id, scope);
+                this.#broker.openTurn(replyTo, id, scope, running.mode);
                 const secret = newSecret();
+                const full = running.mode === 'full_access';
                 endpoint = await openEndpoint({
                     secret,
                     decide: (tool, input, signal) => {
                         requests++;
                         return this.#broker.ask(id, tool, input, signal);
                     },
+                    ...(full ? { hook: (tool: string, input: Record<string, unknown>, use: string | null) => this.#broker.hook(id, tool, input, use) } : {}),
                 });
                 const mcpConfig = writeTurnConfig(paths.turns, id, endpoint.url, secret);
+                const settingsFile = full ? writeTurnSettings(paths.turns, id, endpoint.hookUrl, secret) : undefined;
                 const rules = dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop));
-                argsFor = (resumed) => claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed });
+                argsFor = (resumed) =>
+                    claudeArguments({ mcpConfig, addDirs: added, denied: fence.commands, allowed: fence.allowed, reads: fence.reads, mode: running.mode, settingsFile, dataRules: rules, model: resolved.model, effort: resolved.effort, resume: resumed });
             } else {
                 argsFor = (resumed) => codexArguments({ model: resolved.model, effort: resolved.effort, resume: resumed });
             }
@@ -943,6 +1025,8 @@ export class Chat {
             // The fallback's session, kept aside until the fallback has done something.
             let pending: string | null = null;
             const seen = new Set<string>();
+            // The tools this start used, by the id Claude Code gave each use.
+            const uses = new Map<string, string>();
             let host: HostProcess | null = null;
             const name = (session: string) => {
                 if (conversation.sessions[resolved.host] === session) return;
@@ -965,6 +1049,20 @@ export class Chat {
                 if (line.kind === 'refused') {
                     // On a plain turn the host's own sign-in is the person's, and so are its retries and its words.
                     if (resolved.keyed) stopFor(line.forbidden === true ? forbiddenSentence(resolved.label) : refusedSentence(resolved.label));
+                    return;
+                }
+                if (line.kind === 'tool_use') {
+                    uses.set(line.id, line.name);
+                    return;
+                }
+                if (line.kind === 'tool_result') {
+                    // In Full access every tool use passes the turn's hook first. One whose result comes back unseen by
+                    // it ran, or was refused, with the hook filtered out: the turn stops and the chat goes back to Ask
+                    // first. EndConversation is the one tool Claude Code fires no hook for.
+                    if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
+                    if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
+                    this.#changeMode(conversation, 'ask_first', false);
+                    stopFor(unguardedSentence);
                     return;
                 }
                 if (line.kind === 'session') {
@@ -1019,7 +1117,7 @@ export class Chat {
             }
             host = started;
             running.process = started;
-            this.#options.started?.(resolved.host, resumed !== undefined);
+            this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
             if (running.stopped || stoppedFor !== null) started.stop();
             const exit = await started.exited;
             // Every tool use is said as a step before it runs, so a host that said nothing did nothing.

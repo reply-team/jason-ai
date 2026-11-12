@@ -1,9 +1,15 @@
 // Holds what the chat's agent waits on. The host asks through the permission endpoint; the model decides what it can;
 // everything else is a card on the asking chat's page, and the answer comes from that page by `answer` and from nowhere
 // else. Each request is answered once. "Always" is kept in memory for one chat and is gone with the window.
+//
+// A turn runs in its chat's mode. Ask first is the above. Plan only refuses every request but a read, which the model
+// settles, and the two cards left to it: reading a file outside the chat's folders and opening a web page. Full access
+// shows no card: the model's refusals stay refusals and the rest is allowed; and the turn's hook (`hook`) is answered with
+// the model's refusals and those of what a file would hold (`writtenRefusal`), the tool uses it saw kept by id.
 
 import { randomUUID } from 'node:crypto';
-import { judge, type ChatScope } from './chat-permission-model.ts';
+import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
+import { judge, writtenRefusal, type ChatScope } from './chat-permission-model.ts';
 
 /** What the permission prompt tool answers, in the shape Claude Code reads. */
 export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unknown> } | { behavior: 'deny'; message: string };
@@ -17,6 +23,8 @@ export type BrokerEvent =
 export interface Decided {
     outcome: 'allowed' | 'refused' | 'timed_out' | 'withdrawn';
     by: 'model' | 'person' | 'host';
+    /** The mode of the turn that asked. */
+    mode: ChatMode;
 }
 
 export interface BrokerOptions {
@@ -30,11 +38,20 @@ export interface BrokerOptions {
 interface Turn {
     chat: string;
     scope: ChatScope;
+    mode: ChatMode;
+    /** Full access: the ids of the tool uses the turn's hook was asked about. */
+    hooked: Set<string>;
 }
+
+/** The writer tools: in Plan only each is refused, whatever the model would have said. */
+const writers: ReadonlySet<string> = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+/** The tools whose cards Plan only keeps: reading a file, or a folder, outside the chat's folders, and opening a web page. */
+const planCards: ReadonlySet<string> = new Set(['Read', 'Glob', 'Grep', 'LS', 'WebFetch']);
 
 interface Pending {
     chat: string;
     turn: string;
+    mode: ChatMode;
     input: Record<string, unknown>;
     remember: string | null;
     timer: NodeJS.Timeout;
@@ -68,8 +85,26 @@ export class PermissionBroker {
         this.#options = options;
     }
 
-    openTurn(chatId: string, turnId: string, scope: ChatScope): void {
-        this.#turns.set(turnId, { chat: chatId, scope });
+    openTurn(chatId: string, turnId: string, scope: ChatScope, mode: ChatMode = 'ask_first'): void {
+        this.#turns.set(turnId, { chat: chatId, scope, mode, hooked: new Set() });
+    }
+
+    /**
+     * The turn's hook, asked by Claude Code before each tool use of a turn in Full access: the refusal's reason, or null.
+     * The use's id is kept, so a tool that ran without the hook is known (`hooked`). A turn that is not open is refused.
+     */
+    hook(turnId: string, tool: string, input: Record<string, unknown>, toolUseId: string | null): string | null {
+        const turn = this.#turns.get(turnId);
+        if (turn === undefined) return notRunning;
+        if (toolUseId !== null) turn.hooked.add(toolUseId);
+        const judged = judge(tool, input, turn.scope);
+        if (judged.verdict === 'deny') return judged.message;
+        return writtenRefusal(tool, input, turn.scope);
+    }
+
+    /** Whether the turn's hook was asked about this tool use. */
+    hooked(turnId: string, toolUseId: string): boolean {
+        return this.#turns.get(turnId)?.hooked.has(toolUseId) === true;
     }
 
     /**
@@ -79,24 +114,33 @@ export class PermissionBroker {
     ask(turnId: string, tool: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<ToolAnswer> {
         const turn = this.#turns.get(turnId);
         if (turn === undefined) return Promise.resolve({ behavior: 'deny', message: notRunning });
+        const mode = turn.mode;
+        const refused = (message: string) => Promise.resolve(this.#decided({ behavior: 'deny', message }, { outcome: 'refused', by: 'model', mode }));
+        if (mode === 'plan_only' && tool === 'ExitPlanMode') return refused(planExitRefusal);
+        if (mode === 'plan_only' && writers.has(tool)) return refused(planRefusal);
         const judged = judge(tool, input, turn.scope);
-        if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model' }));
-        if (judged.verdict === 'deny') return Promise.resolve(this.#decided({ behavior: 'deny', message: judged.message }, { outcome: 'refused', by: 'model' }));
-        if (judged.remember !== null && this.#always.get(turn.chat)?.has(judged.remember) === true) {
-            return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'person' }));
+        if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
+        if (judged.verdict === 'deny') return refused(judged.message);
+        if (mode === 'full_access') {
+            const written = writtenRefusal(tool, input, turn.scope);
+            return written !== null ? refused(written) : Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         }
-        if (signal?.aborted === true) return Promise.resolve(this.#decided({ behavior: 'deny', message: withdrawn }, { outcome: 'withdrawn', by: 'host' }));
+        if (mode === 'plan_only' && !planCards.has(tool)) return refused(planRefusal);
+        if (judged.remember !== null && this.#always.get(turn.chat)?.has(judged.remember) === true) {
+            return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'person', mode }));
+        }
+        if (signal?.aborted === true) return Promise.resolve(this.#decided({ behavior: 'deny', message: withdrawn }, { outcome: 'withdrawn', by: 'host', mode }));
         const request = (this.#options.newId ?? randomUUID)();
         return new Promise((settle) => {
             const timer = setTimeout(() => {
-                if (this.#settle(request, { behavior: 'deny', message: unanswered })) this.#options.decided?.({ outcome: 'timed_out', by: 'person' });
+                if (this.#settle(request, { behavior: 'deny', message: unanswered })) this.#options.decided?.({ outcome: 'timed_out', by: 'person', mode });
             }, this.#options.timeoutMs ?? PermissionBroker.unanswered);
             const withdraw = () => {
-                if (this.#settle(request, { behavior: 'deny', message: withdrawn })) this.#options.decided?.({ outcome: 'withdrawn', by: 'host' });
+                if (this.#settle(request, { behavior: 'deny', message: withdrawn })) this.#options.decided?.({ outcome: 'withdrawn', by: 'host', mode });
             };
             signal?.addEventListener('abort', withdraw, { once: true });
             const forget = () => signal?.removeEventListener('abort', withdraw);
-            this.#pending.set(request, { chat: turn.chat, turn: turnId, input, remember: judged.remember, timer, settle, forget });
+            this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember: judged.remember, timer, settle, forget });
             this.#options.emit(turn.chat, { kind: 'permission', request, title: judged.title, detail: judged.detail, remember: judged.remember === null ? null : judged.covers });
         });
     }
@@ -114,7 +158,7 @@ export class PermissionBroker {
             this.#always.set(chatId, kept);
         }
         const settled: ToolAnswer = answer.allow ? allowed(pending.input) : { behavior: 'deny', message: saidNo };
-        if (this.#settle(requestId, settled, false)) this.#options.decided?.({ outcome: answer.allow ? 'allowed' : 'refused', by: 'person' });
+        if (this.#settle(requestId, settled, false)) this.#options.decided?.({ outcome: answer.allow ? 'allowed' : 'refused', by: 'person', mode: pending.mode });
     }
 
     /** The turn is over: what it waits on is refused, its cards go, and later questions for it are refused. */

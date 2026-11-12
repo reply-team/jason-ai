@@ -32,6 +32,7 @@ export const setupFound: DesktopSetup = {
             drivesChat: true,
             install: null,
             belowFloor: null,
+            fullAccess: null,
             models: [
                 { id: 'opus', label: 'Opus', efforts: [...every] },
                 { id: 'sonnet', label: 'Sonnet', efforts: [...every] },
@@ -49,6 +50,7 @@ export const setupFound: DesktopSetup = {
             drivesChat: true,
             install: 'codex',
             belowFloor: null,
+            fullAccess: 'Full access runs on Claude Code only.',
             models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
             typedModel: false,
             modelsUnread: null,
@@ -62,6 +64,7 @@ export const setupFound: DesktopSetup = {
             drivesChat: false,
             install: null,
             belowFloor: null,
+            fullAccess: null,
             models: [],
             typedModel: false,
             modelsUnread: null,
@@ -75,6 +78,7 @@ export const setupFound: DesktopSetup = {
             drivesChat: true,
             install: null,
             belowFloor: null,
+            fullAccess: null,
             models: [
                 { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', efforts: ['low', 'high', 'max'] },
                 { id: 'deepseek-flash', label: 'deepseek-flash', efforts: ['low', 'high', 'max'] },
@@ -173,6 +177,8 @@ export interface StubDesktop extends JasonDesktop {
     names: Map<string, string>;
     /** Keeps a conversation as a desktop that kept it before this window opened. */
     keep(record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord;
+    /** What the person answers the desktop's own confirmation of Full access with; yes unless a test says no. */
+    confirmFullAccess: boolean;
 }
 
 export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
@@ -218,12 +224,14 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         title,
         updatedAt,
         running,
+        mode,
     }: DesktopConversationRecord): DesktopConversation => ({
         id,
         campaignId,
         title,
         updatedAt,
         running,
+        mode,
     });
     const keep = (record: Partial<DesktopConversationRecord> & { id: string }): DesktopConversationRecord => {
         const full: DesktopConversationRecord = {
@@ -231,6 +239,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
             title: 'New chat',
             updatedAt: '2026-11-11T00:00:00.000Z',
             running: false,
+            mode: 'ask_first',
             entries: [],
             dropped: 0,
             chosen: null,
@@ -252,6 +261,7 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         kept,
         names,
         keep,
+        confirmFullAccess: true,
         onCommand(handler) {
             commandHandlers.add(handler);
             return () => commandHandlers.delete(handler);
@@ -361,6 +371,19 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
                 record.updatedAt = now();
                 // The desktop says the new title before it answers.
                 stub.emit(record.id, { kind: 'renamed', title: name });
+                return summaryOf(record);
+            }),
+            setMode: answering('chat.setMode', (id, mode) => {
+                const record = own(id);
+                if (!record) return notKept;
+                if (mode !== 'ask_first' && mode !== 'plan_only' && mode !== 'full_access')
+                    return { refused: 'That is not a mode of the chat.' };
+                if (mode === record.mode) return summaryOf(record);
+                // Full access waits for the person's yes to the desktop's own box; a no answers the conversation as it was.
+                if (mode === 'full_access' && !stub.confirmFullAccess) return summaryOf(record);
+                record.mode = mode;
+                // The desktop says the change before it answers.
+                stub.emit(record.id, { kind: 'mode', mode });
                 return summaryOf(record);
             }),
         },

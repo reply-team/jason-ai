@@ -53,6 +53,11 @@ export interface Conversation {
     dropped: number;
     /** What the last turn was sent with; absent until a turn is, and in a record another version wrote. */
     chosen?: Chosen;
+    /**
+     * Present when the person chose Plan only for the conversation; absent, Ask first. Full access is never written: it is
+     * held in memory alone, so a record never opens a chat in it.
+     */
+    mode?: 'plan_only';
 }
 
 /** The most a record takes on disk; the oldest entries go first to keep within it. */
@@ -178,14 +183,20 @@ export function parseConversation(text: string, id: string): Conversation | null
         entries,
         dropped,
     };
-    return chosen === undefined ? read : { ...read, chosen };
+    // Only Plan only is read from a record; anything else there, Full access included, is Ask first.
+    const planned = raw.mode === 'plan_only' ? { mode: 'plan_only' as const } : {};
+    return chosen === undefined ? { ...read, ...planned } : { ...read, chosen, ...planned };
 }
 
-/** The record as it is written: its fields in a fixed order, the person's mark only when a person named it. */
+/**
+ * The record as it is written: its fields in a fixed order, the person's mark only when a person named it, and the mode
+ * only when it is Plan only.
+ */
 export function serialize(conversation: Conversation): string {
     const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, chosen } = conversation;
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
-    return JSON.stringify({ id, campaign_id, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }) });
+    const planned = conversation.mode === 'plan_only' ? { mode: 'plan_only' } : {};
+    return JSON.stringify({ id, campaign_id, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
 }
 
 const bytes = (value: string) => Buffer.byteLength(value, 'utf8');

@@ -4,10 +4,11 @@
  * memory file of the chat folder could not be written, by its name and the system's error code. Of the conversations:
  * how many were read at the start and how many files were not records, each record that could not be written by the
  * system's error code, how many new campaigns a set-up turn found and whether it handed over, and why a turn started a
- * fresh session; how each naming run of a set-up chat ended, as one closed word. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
+ * fresh session; how each naming run of a set-up chat ended, as one closed word; each change of a conversation's mode, by
+ * the two modes, and the mode of each turn started and of each request settled. Of a turn on Anthropic's key: the word the key source its host named was read as, when that word stops
  * nothing. Never the words of a turn, a tool's input, a command, a path, a session, a campaign, a conversation's
  * title or entries, or a key: the host is an id from the desktop's own tables, the file is the application's own name,
- * the code is the system's (`EPERM`, say), the reason one of two words, the key source one of three, a naming run's end one of eight, and everything else is a number, a boolean or an
+ * the code is the system's (`EPERM`, say), the reason one of two words, the key source one of three, a naming run's end one of eight, a mode one of three, and everything else is a number, a boolean or an
  * outcome.
  */
 
@@ -16,13 +17,13 @@ import type { ChatOptions } from './chat.ts';
 import type { Logger } from './log.ts';
 import type { ModelListsOptions } from './model-lists.ts';
 
-type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named';
+type Logged = 'started' | 'ended' | 'decided' | 'instructionsMissing' | 'instructionsUnwritten' | 'conversationsRead' | 'conversationUnwritten' | 'setupEnded' | 'fresh' | 'keySource' | 'named' | 'modeChanged';
 
 export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
     return {
-        started: (host, resumed) => log.info('chat_turn_started', { Host: host, Resumed: resumed }),
+        started: (host, resumed, mode) => log.info('chat_turn_started', { Host: host, Resumed: resumed, Mode: mode }),
         ended: (turn) => log.info('chat_turn_ended', { Host: turn.host, Exit: turn.exit, DurationMs: turn.durationMs, Steps: turn.steps, Requests: turn.requests }),
-        decided: (decided) => log.info('chat_request_decided', { Outcome: decided.outcome, By: decided.by }),
+        decided: (decided) => log.info('chat_request_decided', { Outcome: decided.outcome, By: decided.by, Mode: decided.mode }),
         instructionsMissing: () => log.warn('chat_instructions_missing', { File: instructionsFile }),
         instructionsUnwritten: (file, code) => log.warn('chat_instructions_unwritten', { File: file, Code: code }),
         conversationsRead: (kept, unreadable) => log.info('chat_conversations_read', { Conversations: kept, Unreadable: unreadable }),
@@ -31,6 +32,7 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
         fresh: (reason) => log.info('chat_turn_fresh', { Cause: reason }),
         keySource: (source) => log.warn('chat_key_source', { Source: source }),
         named: (outcome) => log.info('chat_named', { Outcome: outcome }),
+        modeChanged: (from, to) => log.info('chat_mode_changed', { From: from, To: to }),
     };
 }
 

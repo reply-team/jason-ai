@@ -70,9 +70,9 @@ export const templates = {
     // The sandbox.
     sandbox_refused: 'The start carried --no-sandbox and was refused, running as {Form}; the desktop does not run without its sandbox',
     // The chat.
-    chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}',
+    chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}; mode {Mode}',
     chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',
-    chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}',
+    chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}; mode {Mode}',
     chat_instructions_missing: 'The chat instruction text {File} is not in the application; turns run without it',
     chat_instructions_unwritten: 'The chat instruction file {File} could not be written ({Code}); turns are refused until it is',
     chat_conversations_read: 'The chat read {Conversations} conversations; {Unreadable} files of its folder were not records and were left as they were',
@@ -83,6 +83,7 @@ export const templates = {
     chat_models_listed: 'The models {Host} offers were asked for: {Models} kept',
     chat_models_unlisted: 'The models {Host} offers were asked for and the last list was kept ({Kind})',
     chat_named: 'A set-up chat was asked a name by its host; the run ended {Outcome}',
+    chat_mode_changed: 'A chat went from mode {From} to mode {To}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

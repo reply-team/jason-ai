@@ -13,6 +13,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
+import { codexFullAccess, fullAccessSentence } from './chat-modes.ts';
 import type { DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
@@ -56,6 +57,12 @@ export interface HostState {
      * otherwise, and for a host that is not Claude Code or a key provider on it.
      */
     belowFloor: string | null;
+    /**
+     * Why Full access cannot be chosen for a chat on this host, in the desktop's words: Codex has none, and a Claude Code
+     * older than the oldest version a Full access turn runs on, or whose version could not be read, says so
+     * (`fullAccessSentence`). Null where it can be chosen, and for a host that does not drive the chat.
+     */
+    fullAccess: string | null;
     /**
      * The models the chat's box offers on this host, each with the effort levels it takes: Claude Code's aliases at the
      * version read now, the list kept of what Codex offered, or a key provider's table (`offeredModels`).
@@ -245,10 +252,13 @@ export class Setup {
         return programInstalls[program]?.npmPackage && this.#deps.programs.find('npm') !== null ? program : null;
     }
 
-    /** Claude Code's version, read at each listing and never remembered, and the sentence when it is below the floor. */
-    async #claude(): Promise<{ version: string | null; belowFloor: string | null }> {
+    /**
+     * Claude Code's version, read at each listing and never remembered, and the sentences when it is below the floor and
+     * below the floor of Full access.
+     */
+    async #claude(): Promise<{ version: string | null; belowFloor: string | null; fullAccess: string | null }> {
         const version = printedVersion(await this.#run('claude', '--version', ['--version'], { timeoutMs: versionLimitMs }));
-        return { version, belowFloor: floorSentence(version) };
+        return { version, belowFloor: floorSentence(version), fullAccess: fullAccessSentence(version) };
     }
 
     async status(): Promise<SetupState> {
@@ -260,6 +270,9 @@ export class Setup {
             const { models, typed } = offeredModels(id, kept, claude?.version ?? null);
             return { models, typedModel: typed, modelsUnread: unreadSentence(label, this.#deps.models?.unread(id) ?? null) };
         };
+        // Codex has no Full access; Claude Code has it from its floor of Full access. A Claude Code not found offers nothing yet.
+        const fullAccessOn = (program: string, drives: boolean) =>
+            !drives ? null : program === 'codex' ? codexFullAccess : program === 'claude' ? (claude === null ? null : claude.fullAccess) : null;
         const programHosts: HostState[] = [];
         for (const host of hosts) {
             const found = programs.find(host.program) !== null;
@@ -273,6 +286,7 @@ export class Setup {
                 drivesChat: host.drivesChat,
                 install: found ? null : this.#installable(host.program),
                 belowFloor: own?.belowFloor ?? null,
+                fullAccess: fullAccessOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
             });
         }
@@ -285,6 +299,7 @@ export class Setup {
             drivesChat: hosts.find((host) => host.program === provider.program)?.drivesChat ?? false,
             install: null,
             belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
+            fullAccess: fullAccessOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             ...offered(provider.id, provider.label),
         }));
         // Shown from what is kept; Codex is asked again in the background where it is on the PATH or its key is stored.

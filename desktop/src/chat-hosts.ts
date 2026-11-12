@@ -6,6 +6,7 @@ import { posix, win32 } from 'node:path';
 import { sessionShape } from './chat-conversations.ts';
 import { isEffort, type Effort } from './chat-models.ts';
 import { allowRules, denyRules } from './chat-deny.ts';
+import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import { confinedVariable, searchVariables, type Platform } from './chat-permission-model.ts';
 import { withReplyClient } from './reply-client.ts';
@@ -50,6 +51,12 @@ export interface ClaudeTurn {
     denied: readonly string[];
     /** The allow list's verbs. */
     allowed: readonly string[];
+    /** The plan list's verbs: the allow list's reads, which take its place in Plan only. */
+    reads?: readonly string[] | undefined;
+    /** The chat's mode; absent, Ask first. */
+    mode?: ChatMode | undefined;
+    /** Full access only: the turn's settings file (`fullAccessSettings`), which carries the turn's secret, so never argv. */
+    settingsFile?: string | undefined;
     /** The host's file rules for the installation's data outside the chat folder (`dataRules`). */
     dataRules: readonly string[];
     model?: string | undefined;
@@ -67,6 +74,37 @@ export interface ClaudeTurn {
  * is read from Claude Code 2.1.257, the floor no turn starts below (`claudeFloor`); an older version would skip it.
  */
 export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}';
+
+/**
+ * The settings of a turn in Plan only: those of every turn, and no classifier in planning, so a command outside Claude
+ * Code's read-only set reaches the permission tool, which refuses it. Anthropic, https://code.claude.com/docs/en/settings
+ * (read 2026-11-11), `useAutoModeDuringPlan` is honored as "`false` from any managed source, `--settings`, ..."; and
+ * https://code.claude.com/docs/en/permission-modes: with auto mode not available, or `useAutoModeDuringPlan` off,
+ * "commands outside the built-in read-only set prompt for approval".
+ */
+export const planTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true},"useAutoModeDuringPlan":false}';
+
+/**
+ * The settings of a turn in Full access, written to the turn's own file: those of every turn, and a `PreToolUse` hook on
+ * every tool that posts the tool use to the turn's endpoint, which answers with the permission model's refusals alone.
+ * Claude Code's deny rules hold under bypass but match a command as written only, so the hook reads what they cannot.
+ * Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"` "prevents the tool call"; a matcher of
+ * `"*"` "fires on every occurrence of the event"; "To block the action instead, set `"onFailure": "block"` on a
+ * `command` or `http` hook. Requires Claude Code v2.1.295 or later." (`fullAccessFloor`).
+ */
+export function fullAccessSettings(hookUrl: string, secret: string) {
+    return {
+        permissions: { blockReadsOutsideWorkingDirectories: true },
+        hooks: {
+            PreToolUse: [
+                {
+                    matcher: '*',
+                    hooks: [{ type: 'http', url: hookUrl, headers: { Authorization: `Bearer ${secret}` }, timeout: 30, onFailure: 'block' }],
+                },
+            ],
+        },
+    };
+}
 
 /**
  * The host's own refusal of any Bash command that names `JASON_CONFINED`, anywhere in it: the variable confines the jason
@@ -99,17 +137,32 @@ function effortWord(effort: Effort): string {
 export const searchRules: readonly string[] = searchVariables.flatMap((name) => [`Bash(*${name}=*)`, `Bash(*${name}+=*)`]);
 
 /**
- * The command line of one Claude Code turn. Never `--bare`, which drops the subscription sign-in and the skills; always
+ * Taken out of a turn in Plan only by a bare rule: the host's own way out of planning, so only the person leaves Plan only.
+ * Anthropic, https://code.claude.com/docs/en/permission-modes (read 2026-11-11): approving a plan "switches the session to
+ * the permission mode each approve option describes".
+ */
+export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
+
+/**
+ * The command line of one Claude Code turn, in the chat's mode. Ask first: no permission mode, the host's default. Plan
+ * only: `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. Full
+ * access: `--permission-mode bypassPermissions` and the turn's settings file; Anthropic,
+ * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode, including
+ * `bypassPermissions`." and "Allow rules have no effect in `bypassPermissions`.", so every deny rule is passed as in Ask
+ * first. Never `--bare`, which drops the subscription sign-in and the skills; always
  * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; reads outside the working folders blocked
  * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
  * so a comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
 export function claudeArguments(turn: ClaudeTurn): string[] {
+    const mode = turn.mode ?? 'ask_first';
+    if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
-    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(turn.allowed));
-    args.push('--disallowedTools', ...claudeRemovedTools, ...denyRules(turn.denied), confinedRule, ...searchRules, ...turn.dataRules);
+    args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed));
+    args.push('--disallowedTools', ...claudeRemovedTools, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, ...turn.dataRules);
     args.push('--setting-sources', 'project');
-    args.push('--settings', claudeTurnSettings);
+    args.push('--settings', mode === 'full_access' ? (turn.settingsFile as string) : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings);
+    if (mode !== 'ask_first') args.push('--permission-mode', mode === 'plan_only' ? 'plan' : 'bypassPermissions');
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName, '--mcp-config', turn.mcpConfig, '--strict-mcp-config');
     if (turn.model) args.push('--model', turn.model);
@@ -348,6 +401,10 @@ export function hostEnvironment(
 /** What one line a host prints means. */
 export type HostLine =
     | { kind: 'session'; id: string }
+    /** Claude Code began to use a tool: its id and name, said before the step that shows it. */
+    | { kind: 'tool_use'; id: string; name: string }
+    /** A tool's result came back to Claude Code, by the id of its use: the tool ran, or was refused. */
+    | { kind: 'tool_result'; id: string }
     /** Where Claude Code says the turn's key came from (`keySourceOf`). */
     | { kind: 'key_source'; source: KeySource }
     /**
@@ -493,7 +550,7 @@ function parsed(line: string): Record<string, unknown> | null {
 /**
  * One line of Claude Code's `stream-json` output: the session it runs as and where its key came from (`system`/`init`),
  * a retry of a refused credential (`system`/`api_retry`), the agent's words and tool uses (`assistant`), and the end
- * (`result`). A tool's own output (`user`) and anything unreadable say nothing.
+ * (`result`). Of a tool's own output (`user`), only which tool use it answers, by its id; anything unreadable says nothing.
  *
  * What a refused credential looks like, as Anthropic states it (read 2026-11-11):
  * - https://code.claude.com/docs/en/headless#handle-api-retries: "When an API request fails with a retryable error,
@@ -520,9 +577,20 @@ export function claudeLine(line: string): HostLine[] {
         if (!Array.isArray(content)) return out;
         for (const block of content as { type?: unknown; text?: unknown; name?: unknown; input?: unknown }[]) {
             if (block?.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') out.push({ kind: 'text', text: block.text });
-            else if (block?.type === 'tool_use') out.push({ kind: 'step', ...claudeStep(block.name, block.input) });
+            else if (block?.type === 'tool_use') {
+                const id = (block as { id?: unknown }).id;
+                if (typeof id === 'string' && typeof block.name === 'string') out.push({ kind: 'tool_use', id, name: block.name });
+                out.push({ kind: 'step', ...claudeStep(block.name, block.input) });
+            }
         }
         return out;
+    }
+    if (event.type === 'user') {
+        const content = (event.message as { content?: unknown } | null)?.content;
+        if (!Array.isArray(content)) return [];
+        return (content as { type?: unknown; tool_use_id?: unknown }[]).flatMap((block) =>
+            block?.type === 'tool_result' && typeof block.tool_use_id === 'string' ? [{ kind: 'tool_result' as const, id: block.tool_use_id }] : [],
+        );
     }
     if (event.type === 'result') {
         const failed = event.is_error === true || (typeof event.subtype === 'string' && event.subtype !== 'success');

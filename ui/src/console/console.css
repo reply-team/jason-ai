@@ -728,8 +728,13 @@
 }
 /* The model, its typed name and its effort sit beside the host, each kept short so the row holds on a narrow window. */
 .jc-console .composer select.model,
-.jc-console .composer select.effort {
+.jc-console .composer select.effort,
+.jc-console .composer select.mode {
     max-width: 22%;
+}
+/* While the desktop holds the chat in Full access, the line under the composer says so; it is never dismissed. */
+.jc-console .composer .full-access {
+    margin-top: 6px;
 }
 .jc-console .composer .model-name {
     min-width: 0;

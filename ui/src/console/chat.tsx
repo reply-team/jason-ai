@@ -1,6 +1,6 @@
 import { computed, effect } from '@preact/signals-react';
 import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
-import type { DesktopEffort, DesktopHost, DesktopRefusal } from '../platform/desktop';
+import type { DesktopChatMode, DesktopEffort, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { act, define } from './actions';
 import {
     afresh,
@@ -9,10 +9,12 @@ import {
     effortChosen,
     failed,
     fromRecord,
+    fullAccessLine,
     handed,
     hostChosen,
     kept,
     lost,
+    modeChoices,
     modelChosen,
     modelTyped,
     modelView,
@@ -46,7 +48,8 @@ import { changeChat, chats, conversations, conversationsFailure, here, messageOf
 // while a turn runs waits in the page, and the page hands it to the desktop as the next turn when the turn ends well.
 // Every chat is a conversation the desktop keeps: a campaign's one, or a set-up chat about no campaign yet. The desktop
 // decides which campaign a turn is about, from its record; the page names the conversation, the host, and the model and
-// effort chosen in the box, nothing more.
+// effort chosen in the box, nothing more. The menu beside the composer asks the desktop for the conversation's access
+// mode; the desktop confirms Full access with the person itself, and the page shows the mode the desktop answers with.
 
 const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
 
@@ -155,6 +158,21 @@ export function renameChat(id: string, title: string): void {
             if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
             changeChat(id, (chat) => ({ ...chat, title: answer.title }));
             void reloadConversations();
+        })
+        .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
+}
+
+/**
+ * Asks the desktop for the conversation's access mode. The page changes nothing until the desktop answers: Full access
+ * waits for the person's yes to the desktop's own box, and a no answers the mode as it was. A refusal is said in the
+ * chat in the desktop's words.
+ */
+export function chooseMode(id: string, mode: DesktopChatMode): void {
+    here()
+        .desktop.chat.setMode(id, mode)
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
+            changeChat(id, (chat) => ({ ...chat, mode: answer.mode }));
         })
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
@@ -409,6 +427,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const removeButton = useRef<HTMLButtonElement>(null);
     const keepButton = useRef<HTMLButtonElement>(null);
     const nameBox = useRef<HTMLInputElement>(null);
+    const modeMenu = useRef<HTMLSelectElement>(null);
     const renameButton = useRef<HTMLButtonElement>(null);
     const wasRemoving = useRef(false);
     const wasRenaming = useRef(false);
@@ -628,7 +647,14 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         aria-label="Agent host"
                         disabled={chat.removing}
                         value={host?.id ?? ''}
-                        onChange={(event) => changeChat(chatId, (each) => hostChosen(each, event.target.value))}
+                        onChange={(event) => {
+                            const chosen = event.target.value;
+                            changeChat(chatId, (each) => hostChosen(each, chosen));
+                            // A host Full access cannot be chosen on takes the chat back to Ask first.
+                            const next = drive.find((each) => each.id === chosen);
+                            if (chat.mode === 'full_access' && next !== undefined && next.fullAccess !== null)
+                                chooseMode(chatId, 'ask_first');
+                        }}
                     >
                         {drive.map((each) => (
                             <option key={each.id} value={each.id}>
@@ -708,6 +734,22 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             ))}
                         </select>
                     )}
+                    <select
+                        ref={modeMenu}
+                        className="mode"
+                        aria-label="Access mode"
+                        disabled={chat.removing}
+                        value={chat.mode}
+                        onChange={(event) => chooseMode(chatId, event.target.value as DesktopChatMode)}
+                    >
+                        {modeChoices(host).map((each) => (
+                            <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
+                                {each.disabled === null
+                                    ? each.label
+                                    : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
+                            </option>
+                        ))}
+                    </select>
                     <span className="grow" />
                     {chat.running ? (
                         <>
@@ -748,6 +790,14 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </button>
                     )}
                 </div>
+                {chat.mode === 'full_access' && (
+                    <div className="note am full-access" role="status" aria-label="Full access is on">
+                        {fullAccessLine}{' '}
+                        <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
+                            Change
+                        </button>
+                    </div>
+                )}
             </form>
         </div>
     );

@@ -173,6 +173,49 @@ desktop does not narrow, so it may read the records.
   key. `jason uninstall --purge-data` removes both with the data directory; the transcripts the agent hosts keep of the
   chat's other turns are theirs, in their own folders, and are never touched.
 
+## The chat's access modes
+
+Each conversation has a mode, chosen from the menu beside the composer (`chat.setMode`, `src/chat-modes.ts`). The mode
+applies to the turns a person starts by sending, from the next one on.
+
+- **Ask first** is the mode of every new chat, and no setting changes that. Claude Code starts in its own default
+  mode; what the permission model does not settle is a card. Codex runs in its read-only sandbox, as always.
+- **Plan only** reads and proposes and changes nothing. Claude Code starts with `--permission-mode plan`, its settings
+  add `"useAutoModeDuringPlan": false` so no classifier runs a command, `ExitPlanMode` is taken away by a bare deny
+  rule, and the allow list is replaced by `chat-plan-list.txt`: the allow list's verbs that change nothing, written by
+  the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
+  request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
+  page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`).
+- **Full access** acts on this computer without asking. It is given only after the person says yes to the desktop's own
+  confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
+  answering Cancel, and the page draws a line under the composer from the mode the desktop holds, never from what it
+  asked for. It is held in memory alone, for that conversation, and gone when the window closes: a record never says
+  it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart. Claude Code starts
+  with `--permission-mode bypassPermissions`. Anthropic says "Deny rules block in every mode, including
+  `bypassPermissions`." and that a Bash rule "isn't a security boundary around the program", so every deny rule is
+  passed as in Ask first, and the turn's settings, in a file under `<data>/desktop/turns/` beside its MCP file and
+  removed with it, add a `PreToolUse` HTTP hook on every tool with `"onFailure": "block"`. The hook posts each tool use
+  to the turn's loopback endpoint, behind the turn's secret, and the desktop answers with the permission model's
+  refusals alone, and with a refusal of a file whose text runs a deny-list command, names a deny-list operation or the
+  confining variable, or names the installation's data. The few calls Claude Code still asks about under bypass reach
+  the broker, which refuses what the model refuses and allows the rest with no card. A tool whose result comes back
+  without the hook having seen its use stops the turn and puts the chat back to Ask first: a policy that filtered the
+  hook out fails closed. Full access needs Claude Code 2.1.295 or newer, the version from which a failing hook blocks
+  the tool; below it, or with a version that cannot be read, the menu shows it disabled with the reason, and a send is
+  refused and the chat put back to Ask first. **The limit:** these refusals read what a command's text and a tool's
+  input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
+  confirmation says so.
+- **Codex has no Full access.** Its own sandbox, hooks and rules hold none of the chat's refusals. The menu shows it
+  disabled on Codex with "Full access runs on Claude Code only.", and a chat in Full access sent to Codex goes back to
+  Ask first.
+- Leaving Full access while a turn runs in it stops that turn. Changing between Ask first and Plan only lets a running
+  turn finish in the mode it started in.
+- **No turn starts by itself.** Every turn is a person's send. A resumed host session is the same send started again
+  with a recap, in the same mode, and stops with it. A set-up chat's naming run is no turn: it has no tool at all, no
+  hook and no permission mode, in every mode.
+- The log says each change of mode by its two modes (`chat_mode_changed`), and the mode of each turn started and of each
+  request settled; never a conversation's id or title, a command, a path or a person's words.
+
 ## Models and effort
 
 The chat's box picks the host, a model the host offers, and where that model takes one an effort; each reaches the

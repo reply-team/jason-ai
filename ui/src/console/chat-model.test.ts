@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DesktopEffort, DesktopHost } from '../platform/desktop';
+import type { DesktopConversationRecord, DesktopEffort, DesktopHost } from '../platform/desktop';
 import {
     anotherModel,
     answered,
@@ -12,6 +12,9 @@ import {
     sendHeld,
     turnOptions,
     withModels,
+    fullAccessLine,
+    modeChoices,
+    olderDesktop,
     failed,
     fromRecord,
     handed,
@@ -116,6 +119,7 @@ describe('a chat as the page keeps it', () => {
             title: 'Winter',
             updatedAt: '2026-11-11T10:00:00.000Z',
             running: false,
+            mode: 'ask_first',
         });
         expect(picked).toMatchObject({ campaignId: 'cmp_2', title: 'Winter' });
         expect(said(picked, 'Next').title).toBe('Winter');
@@ -129,6 +133,7 @@ describe('a chat as the page keeps it', () => {
                 title: 'Spring',
                 updatedAt: '2026-11-11T10:00:00.000Z',
                 running: false,
+                mode: 'ask_first',
                 dropped: 3,
                 entries: [
                     { kind: 'user', text: 'How is it doing?' },
@@ -301,6 +306,7 @@ describe('the model and the effort a chat is sent with', () => {
         drivesChat: true,
         install: null,
         belowFloor: null,
+        fullAccess: null,
         models: [
             { id: 'opus', label: 'Opus', efforts: every },
             { id: 'haiku', label: 'Haiku', efforts: [] },
@@ -394,6 +400,7 @@ describe('the model and the effort a chat is sent with', () => {
             title: 'New chat',
             updatedAt: '2026-11-11T10:00:00.000Z',
             running: false,
+            mode: 'ask_first' as const,
             dropped: 0,
             entries: [],
         };
@@ -431,10 +438,75 @@ describe('the hosts as a desktop of another version answers them', () => {
         });
         const current: DesktopHost = {
             ...older,
+            fullAccess: null,
             models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
             typedModel: true,
             modelsUnread: null,
         };
         expect(withModels([current])[0]).toEqual(current);
+    });
+
+    it('reads a host listed without Full access as one on which Full access cannot be chosen, saying why', () => {
+        const older = {
+            id: 'claude',
+            label: 'Claude Code',
+            models: [],
+            typedModel: true,
+            modelsUnread: null,
+        } as unknown as DesktopHost;
+        expect(withModels([older])[0]?.fullAccess).toBe(olderDesktop);
+    });
+});
+
+describe("a chat's access mode", () => {
+    const claude = { id: 'claude', label: 'Claude Code', fullAccess: null } as unknown as DesktopHost;
+    const codex = {
+        id: 'codex',
+        label: 'Codex',
+        fullAccess: 'Full access runs on Claude Code only.',
+    } as unknown as DesktopHost;
+
+    it('is Ask first in a new chat, and is what the desktop says it is, never what the page asked for', () => {
+        const chat = newChat('conv_1', 'claude');
+        expect(chat.mode).toBe('ask_first');
+        expect(received(chat, { kind: 'mode', mode: 'full_access' }).mode).toBe('full_access');
+        expect(
+            received(received(chat, { kind: 'mode', mode: 'full_access' }), { kind: 'mode', mode: 'ask_first' }).mode,
+        ).toBe('ask_first');
+        expect(received(chat, { kind: 'mode', mode: 'plan_only' }).entries).toEqual([]);
+    });
+
+    it('opens a kept conversation in the mode the desktop holds, and one an older desktop kept in Ask first', () => {
+        const record = {
+            id: 'conv_1',
+            campaignId: null,
+            title: 'New chat',
+            updatedAt: '',
+            running: false,
+            dropped: 0,
+            entries: [],
+            chosen: null,
+        };
+        expect(fromRecord({ ...record, mode: 'plan_only' }, 'claude').mode).toBe('plan_only');
+        expect(fromRecord(record as unknown as DesktopConversationRecord, 'claude').mode).toBe('ask_first');
+    });
+
+    it("offers the three modes, Full access disabled with the desktop's reason on a host that has none", () => {
+        expect(modeChoices(claude)).toEqual([
+            { mode: 'ask_first', label: 'Ask first', disabled: null },
+            { mode: 'plan_only', label: 'Plan only', disabled: null },
+            { mode: 'full_access', label: 'Full access', disabled: null },
+        ]);
+        expect(modeChoices(codex)[2]).toEqual({
+            mode: 'full_access',
+            label: 'Full access',
+            disabled: 'Full access runs on Claude Code only.',
+        });
+        expect(modeChoices(null)[2]?.disabled).toBe('Full access runs on Claude Code only.');
+        expect(modeChoices(claude).map((each) => each.mode)).not.toContain('auto_edit');
+    });
+
+    it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {
+        expect(fullAccessLine).toBe('Full access: the agent acts on this computer without asking you.');
     });
 });
