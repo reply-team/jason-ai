@@ -31,7 +31,7 @@ export function SystemScreen() {
                         Jason {info.update.version} is available.{' '}
                         {window.jasonDesktop ? (
                             <>
-                                The desktop updates itself and the jason it carries. Choose Check for Updates… in the
+                                The desktop updates itself and the jason it carries. Choose Check for Updatesâ€¦ in the
                                 desktop&apos;s Jason menu, or in the menu of its icon in the tray.
                             </>
                         ) : (

@@ -123,7 +123,7 @@ describe('System, the update sentence', () => {
         window.jasonDesktop = {} as NonNullable<typeof window.jasonDesktop>;
         systemFake();
         await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
-        expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
+        expect(screen.getByText(/Check for Updatesâ€¦/)).toBeTruthy();
         expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
         expect(screen.queryByText(/jason update apply/)).toBeNull();
     });
