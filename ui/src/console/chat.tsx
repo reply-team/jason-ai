@@ -8,6 +8,8 @@ import {
     anotherModel,
     answered,
     codexConfigLine,
+    codexHosts,
+    codexReachLine,
     effortChosen,
     failed,
     fromRecord,
@@ -945,6 +947,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 {host?.id === 'codex' && (
                     <div className="note codex-config" role="note" aria-label="What Codex reads">
                         {codexConfigLine}
+                    </div>
+                )}
+                {host !== null && codexHosts.has(host.id) && (
+                    <div className="note codex-reach" role="note" aria-label="What a Codex command can reach">
+                        {codexReachLine}
                     </div>
                 )}
                 {chat.mode === 'full_access' && (

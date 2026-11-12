@@ -1559,7 +1559,7 @@ export class Chat {
             effortNamed: resolved.effort !== undefined,
             ...(running.mode === 'full_access' && turnHome !== undefined ? { home: turnHome } : {}),
         });
-        // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the data directory.
+        // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the runtime's run file.
         if (resolved.program === 'codex' && this.#platform === 'win32') {
             await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed);
             if (running.stopped) {

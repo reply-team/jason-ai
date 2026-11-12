@@ -237,11 +237,9 @@ test('the kept answer is told apart by the file Codex runs from, the script it i
 });
 
 test('the words the person reads: the check, the refusal naming the setup and Claude Code, and a keyed turn\'s own', () => {
-    // Said where the person chose Codex, before the check: the administrator prompt, the way out, and what a command reaches.
-    assert.equal(
-        checkingSandbox,
-        'Checking Codex\'s sandbox… Windows may ask once for an administrator; answering No means chatting on Claude Code instead. A Codex command can read files on this computer, Jason\'s own data and settings among them, but cannot change anything or act for you.',
-    );
+    // Said before the check, on Windows alone: the administrator prompt, and the way out of it. What a Codex command can
+    // reach is said where the person chooses Codex, on every system (the page's line under the composer).
+    assert.equal(checkingSandbox, 'Checking Codex\'s sandbox… Windows may ask once for an administrator; answering No means chatting on Claude Code instead.');
     assert.match(sandboxSentence, /elevated sandbox/);
     assert.ok(sandboxSentence.includes('`codex sandbox setup --elevated`'));
     assert.match(sandboxSentence, /Claude Code/);

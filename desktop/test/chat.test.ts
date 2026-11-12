@@ -474,6 +474,17 @@ test('on Windows the first Codex turn of the run checks the sandbox under the tu
     assert.equal(r.hosts().length, 2);
 });
 
+test('off Windows a Codex turn runs no check and says nothing of an administrator', async (t) => {
+    for (const platform of ['darwin', 'linux'] as const) {
+        const r = rig(t, { chat: { platform }, env: windowsEnv });
+        const said = await r.turn('c1', words, { host: 'codex' });
+        assert.deepEqual(doneOf(said), { kind: 'done', error: null }, platform);
+        assert.ok(!said.some((event) => event.kind === 'step' && (event.text === checkingSandbox || /administrator/.test(event.text))), platform);
+        assert.deepEqual(checks(r), [], platform);
+        assert.equal(r.hosts().length, 1, platform);
+    }
+});
+
 test('on Windows an older Codex that wants the platform word is checked in that form after the bare one gave no marker, and runs when it holds', async (t) => {
     const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_VERSION: '0.122.0' } });
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });

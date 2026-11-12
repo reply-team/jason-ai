@@ -23,10 +23,10 @@ replaces the title and the body together.
 
 ## What is new since 0.35.0
 
-The desktop's chat is fenced more tightly: it loads none of your own MCP servers or connectors, it runs Codex on Windows only where Codex's sandbox keeps Jason's data unreadable, and the CLI declines, inside a chat turn, the commands that give your word or change the installation.
+The desktop's chat is fenced more tightly: it loads none of your own MCP servers or connectors, it runs Codex on Windows only where Codex's sandbox keeps Jason's run token out of reach, and the CLI declines, inside a chat turn, the commands that give your word or change the installation.
 
 - **The chat loads none of your own MCP servers or connectors,** on Claude Code and on Codex. Every MCP tool call the chat does make goes through its permission model. What you give up: the chat no longer reads your Codex `config.toml`, so a provider or a profile set there is not used; connect a key on the Connect card instead.
-- **On Windows, a Codex chat runs only where Codex's elevated sandbox keeps Jason's data unreadable.** The desktop checks this itself, with no model, at the first Codex message of a run. Where the check fails, the chat says so and names `codex sandbox setup --elevated`, or Claude Code.
+- **What fences a command of a Codex chat, system by system.** On Windows, a Codex chat needs Codex's elevated sandbox, which keeps Jason's run token out of its reach; that was seen on a real machine, by the desktop's own check, with Codex 0.167.0-alpha.4.1. The desktop checks it itself, with no model, at the first Codex message of a run; Windows may ask for an administrator then, and answering No means chatting on Claude Code instead. Where the check fails, the chat says so and names `codex sandbox setup --elevated`, or Claude Code. On macOS and Linux, Codex's read-only mode has no network by the vendor's own description, while the run file is readable there; we have not probed that yet. On every system a Codex command can read the rest of the data directory, and the chat says so where you choose Codex.
 - **The CLI refuses a person's word and changes to the installation inside a chat turn.** Every desktop chat turn carries `JASON_CONFINED`, and under it the CLI refuses, before any request, the commands that give your word or change this installation, with one sentence and exit 1. This is a higher bar, not a boundary: a program that holds the run token can still act as you.
 - **A plugin's secret stays out of an AI role's agent.** A secret given through the runtime's environment, by either of the two ways the plugin guide offers, no longer reaches the agent a role starts.
 
@@ -52,7 +52,9 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.35.0 took
 
 Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only.
 
-The Windows check of Codex's sandbox has been proven against a stand-in, not on a real machine without the elevated setup. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
+In a Codex chat a command can read what you can, a plugin's secret written in settings.json included; chat on Claude Code where that matters.
+
+The Windows check of Codex's sandbox has been proven against a stand-in only where the elevated setup is missing.
 
 On a Mac and on Linux, a read-only Codex turn can read the runtime's run file, so if the loopback interface is reachable from it, a command in a Codex chat could reach Jason's runtime. That has not been probed.
 

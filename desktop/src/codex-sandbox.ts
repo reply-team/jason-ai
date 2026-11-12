@@ -51,11 +51,11 @@ import { runFile, type RunResult } from './programs.ts';
 export const sandboxLimitMs = 30_000;
 
 /**
- * What the chat shows while the check runs, where the person chose Codex: that Windows may ask for an administrator, as
- * naming the elevated sandbox can, the way out of that prompt, and what a command in the sandbox reaches.
+ * What the chat shows while the check runs, on Windows alone: that Windows may ask for an administrator, as naming the
+ * elevated sandbox can, and the way out of that prompt. What a Codex command can reach is said where the person chooses
+ * Codex, on every system, by the page.
  */
-export const checkingSandbox =
-    'Checking Codex\'s sandbox… Windows may ask once for an administrator; answering No means chatting on Claude Code instead. A Codex command can read files on this computer, Jason\'s own data and settings among them, but cannot change anything or act for you.';
+export const checkingSandbox = 'Checking Codex\'s sandbox… Windows may ask once for an administrator; answering No means chatting on Claude Code instead.';
 
 /** Why a Codex turn does not run on Windows where the check did not show the sandbox holds. */
 export const sandboxSentence =

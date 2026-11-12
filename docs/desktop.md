@@ -212,15 +212,20 @@ Claude Code.
   servers it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which
   every Codex turn turns off; its sign-in is still used.
 - **On Windows, Codex needs its elevated sandbox.** Every Windows Codex turn names it (`windows.sandbox="elevated"`),
-  since a command in Codex's other Windows sandbox can read Jason's data directory. Naming it does not prove it is set
-  up, so at the first send to Codex in each run of the desktop the chat checks first ("Checking Codex's sandbox…"): a
-  command tries to open two files of the data directory and says only whether it could, never what is in them. One is
-  the runtime's run file, which has an access list of its own; the other is the desktop's settings file, which keeps
-  the access list the rest of the data directory, the database and the logs among them, inherits. It also opens
-  Windows' own hosts file, which every account may read, to show that it can open a file at all. The same command
-  runs first outside any sandbox, where it must open all three, then in Codex's sandbox, where it must open the hosts
-  file and neither of the two, then outside again, where it must open all three once more. The chat runs on Codex only on exactly that; otherwise the turn is
-  refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
+  since a command in Codex's other Windows sandbox can read the runtime's run file, and with it the token that lets a
+  program act as you through Jason's API. Naming it does not prove it is set up, so at the first send to Codex in each
+  run of the desktop the chat checks first, saying so: **Checking Codex's sandbox… Windows may ask once for an
+  administrator; answering No means chatting on Claude Code instead.** That line is Windows' alone. A command tries to open two
+  files of the data directory and says only whether it could, never what is in them. One is the runtime's run file,
+  which has an access list of its own; the other is the desktop's settings file, which keeps the access list the rest
+  of the data directory, the database and the logs among them, inherits. It also opens Windows' own hosts file, which
+  every account may read, to show that it can open a file at all. The same command runs first outside any sandbox,
+  where it must open all three, then in Codex's sandbox, where it must open the hosts file and not the run file, then
+  outside again, where it must open all three once more. The verdict rests on the run file alone: the elevated sandbox
+  opens the settings file, as a Codex command can read the rest of the data directory on macOS and Linux too, and
+  whether it did is a fact the check reports and the desktop's log records (`chat_sandbox_checked`, a word for the
+  answer and one for the settings file, never a path), not a reason to refuse. The chat runs on Codex only on exactly
+  that; otherwise the turn is refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
   `codex sandbox setup --elevated` (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.**
   A turn on the OpenAI key is refused instead with **Codex on a key cannot be checked on Windows yet: sign in to Codex,
   or chat on Claude Code.** The answer is kept for that Codex until the desktop quits. With no runtime running there is
@@ -233,6 +238,10 @@ Claude Code.
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
   loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder.
+  While Codex is the chat's host, on your sign-in or on the OpenAI key, on every system, the line under the composer
+  says so: **A Codex command can read files on this computer, Jason's own data and settings among them, but cannot
+  change anything or act for you.** A plugin's secret written in `settings.json` is among what it can read
+  ([plugins.md](plugins.md#hostconfig)).
 
 ### Conversations
 
