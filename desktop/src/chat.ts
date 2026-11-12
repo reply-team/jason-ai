@@ -69,8 +69,22 @@ import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesSince, newestId, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import type { DesktopPaths } from './paths.ts';
-import { programLaunch, type Programs } from './programs.ts';
-import { checkingSandbox, runSandboxCheck, sandboxCheck, sandboxLimitMs, sandboxSentence, sandboxUncheckedSentence, SandboxUnproven } from './codex-sandbox.ts';
+import { programLaunch, type Programs, type RunResult } from './programs.ts';
+import {
+    checkingSandbox,
+    checkRuns,
+    runSandboxCheck,
+    sandboxCheck,
+    sandboxKey,
+    sandboxKeyedSentence,
+    sandboxLimitMs,
+    sandboxNoSettingsSentence,
+    sandboxPathSentence,
+    sandboxSentence,
+    sandboxUncheckedSentence,
+    SandboxUnproven,
+    type SandboxCheck,
+} from './codex-sandbox.ts';
 import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
 
 /** Why a turn starts a fresh session of a conversation that had one. */
@@ -202,6 +216,11 @@ export interface ChatOptions {
     answerWindowMs?: number;
     /** How long the Windows check of Codex's sandbox may take; thirty seconds unless a test shortens it. */
     sandboxLimitMs?: number;
+    /**
+     * How the Windows check runs its line outside any sandbox, its control: cmd by its full path (`checkRuns`) unless a
+     * test gives a stand-in, since a test may run where there is no cmd.
+     */
+    sandboxOutside?: (check: SandboxCheck) => Promise<RunResult>;
     platform?: Platform;
 }
 
@@ -911,29 +930,35 @@ export class Chat {
      * first send to a Codex in this run of the desktop, never at the Connect card, since naming the elevated sandbox may
      * ask an administrator; it is started as the turn's host would be, with the turn's environment, in the chat folder.
      */
-    async #codexSandboxHolds(launch: { file: string; prefix: string[] }, version: string, env: Record<string, string>, running: Running): Promise<void> {
+    async #codexSandboxHolds(launch: { file: string; prefix: string[] }, version: string, env: Record<string, string>, running: Running, keyed: boolean): Promise<void> {
         const named = (wanted: string) => Object.entries(env).find(([name]) => name.toUpperCase() === wanted)?.[1] ?? '';
-        const key = JSON.stringify([launch.file, version, named('CODEX_HOME')]);
+        const key = sandboxKey(launch, version, named('CODEX_HOME'));
+        // A keyed turn runs under a Codex home of the desktop's own, which the setup command may not reach.
+        const refused = keyed ? sandboxKeyedSentence : sandboxSentence;
         const known = this.#sandboxChecked.get(key);
         if (known === true) return;
-        if (known === false) throw new SandboxUnproven(sandboxSentence);
+        if (known === false) throw new SandboxUnproven(refused);
         const { paths } = this.#options;
         // Nothing to read is nothing proven: checked again at the next send.
         if (!existsSync(paths.runFile)) throw new SandboxUnproven(sandboxUncheckedSentence);
-        const check = sandboxCheck(paths.runFile, named('SYSTEMROOT'));
-        if (check === null) throw new SandboxUnproven(sandboxSentence);
+        if (!existsSync(paths.settings)) throw new SandboxUnproven(sandboxNoSettingsSentence);
+        const check = sandboxCheck([paths.runFile, paths.settings], named('SYSTEMROOT'));
+        if (check === 'path') throw new SandboxUnproven(sandboxPathSentence);
+        if (check === 'root') throw new SandboxUnproven(refused);
         this.#options.emit(running.replyTo, { kind: 'step', text: checkingSandbox });
         const checking = new AbortController();
         running.checking = checking;
         let answer: 'holds' | 'reads' | 'unproven';
         try {
-            answer = await runSandboxCheck(launch, check, { env, cwd: paths.chat, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
+            const runs = checkRuns(launch, check, { env, cwd: paths.chat, limitMs: this.#options.sandboxLimitMs ?? sandboxLimitMs, signal: checking.signal });
+            const outside = this.#options.sandboxOutside;
+            answer = await runSandboxCheck(check, outside === undefined ? runs : { ...runs, cmd: () => outside(check) }, checking.signal);
         } finally {
             delete running.checking;
         }
         if (running.stopped) return;
         if (answer !== 'unproven') this.#sandboxChecked.set(key, answer === 'holds');
-        if (answer !== 'holds') throw new SandboxUnproven(sandboxSentence);
+        if (answer !== 'holds') throw new SandboxUnproven(refused);
     }
 
     #conversationOf(chatId: string): Conversation | undefined {
@@ -1235,7 +1260,7 @@ export class Chat {
         });
         // On Windows a Codex turn runs only where its sandbox has been seen to keep a command from the data directory.
         if (resolved.program === 'codex' && this.#platform === 'win32') {
-            await this.#codexSandboxHolds(launch, version, env, running);
+            await this.#codexSandboxHolds(launch, version, env, running, resolved.keyed);
             if (running.stopped) {
                 this.#setupTurns.delete(conversation.id);
                 this.#running.delete(conversation.id);

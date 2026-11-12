@@ -11,7 +11,7 @@ import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox } from '../src/chat-hosts.ts';
 import { fullAccessOffered, fullAccessSentence, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
-import { bench, placeRunFile, type Bench, type Recorded } from './harness.ts';
+import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 
@@ -34,7 +34,7 @@ interface Rig {
 function rig(t: { after(fn: () => void | Promise<void>): void }, options: { confirm?: boolean | null; chat?: Partial<ChatOptions>; env?: Record<string, string> } = {}): Rig {
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'], ...(options.env ? { env: options.env } : {}) });
-    placeRunFile(b);
+    placeSandboxFiles(b);
     const bundle = join(b.root, 'bundle');
     mkdirSync(bundle, { recursive: true });
     const events = new Map<string, ChatEvent[]>();
@@ -74,6 +74,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: { conf
             programs: b.programs,
             keyFor: () => undefined,
             fence: () => fence,
+            sandboxOutside: outsideStandIn,
             emit(id, event) {
                 const said = events.get(id) ?? [];
                 said.push(event);

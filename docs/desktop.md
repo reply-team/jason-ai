@@ -188,20 +188,28 @@ Claude Code.
   the chat works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
   From 2.1.285 on a turn also passes `--no-chrome`, the first version whose changelog names the flag; below it the
   turn's settings alone keep the browser out.
-- **Codex's floor is 0.122.0**, read the same way before each turn on it: a Codex turn leaves your `config.toml` unread
+- **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn leaves your `config.toml` unread
   (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that cannot be read, the
   turn is refused before Codex starts, with a sentence that says to update Codex. **The chat does not read your Codex
   config.toml, so a provider or profile set there is not used; connect a key on the Connect card.** Nor are the MCP
-  servers it names loaded, since Codex asks no one before such a tool runs; its sign-in is still used.
+  servers it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which
+  every Codex turn turns off; its sign-in is still used.
 - **On Windows, Codex needs its elevated sandbox.** Every Windows Codex turn names it (`windows.sandbox="elevated"`),
   since a command in Codex's other Windows sandbox can read Jason's data directory. Naming it does not prove it is set
   up, so at the first send to Codex in each run of the desktop the chat checks first ("Checking Codex's sandbox…"): a
-  command in that sandbox tries to open the runtime's run file and says only whether it could. The chat runs on Codex
-  only when the command ran and could not open the file; otherwise the turn is refused with one sentence: **Codex on
-  Windows needs its elevated sandbox, set up once by an administrator with `codex sandbox setup --elevated`
-  (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.** The answer is kept for that Codex until the desktop quits; with no runtime running there is nothing to
-  open, and the turn is refused until there is. The check is not run at the Connect card, since naming the elevated
-  sandbox may ask for an administrator.
+  command tries to open two files of the data directory and says only whether it could, never what is in them. One is
+  the runtime's run file, which has an access list of its own; the other is the desktop's settings file, which keeps
+  the access list the rest of the data directory, the database and the logs among them, inherits. The same command
+  runs first outside any sandbox, where it must open both, then in Codex's sandbox, where it must open neither, then
+  outside again, where it must open both once more. The chat runs on Codex only on exactly that; otherwise the turn is
+  refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
+  `codex sandbox setup --elevated` (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.**
+  A turn on the OpenAI key is refused instead with **Codex on a key cannot be checked on Windows yet: sign in to Codex,
+  or chat on Claude Code.** The answer is kept for that Codex until the desktop quits. With no runtime running, or
+  before the desktop has saved its settings, there is nothing to open, and the turn is refused until there is; a data
+  directory whose path holds one of `, ; = % ^ & | < > !` or a quote is not checked, and Codex does not run there. The
+  check reads your Codex config.toml, which the turn does not, since Codex's sandbox command cannot leave it unread. It
+  is not run at the Connect card, since naming the elevated sandbox may ask for an administrator.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's

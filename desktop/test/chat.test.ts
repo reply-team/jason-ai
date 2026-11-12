@@ -13,9 +13,10 @@ import { header, turnInput } from '../src/chat-header.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { codexFloor, codexFloorSentence, floorSentence, versionLimitMs } from '../src/host-version.ts';
 import { codexWindowsSandbox } from '../src/chat-hosts.ts';
-import { checkingSandbox, sandboxSentence, sandboxUncheckedSentence } from '../src/codex-sandbox.ts';
+import { checkingSandbox, checkVariable, sandboxKeyedSentence, sandboxNoSettingsSentence, sandboxSentence, sandboxUncheckedSentence, type SandboxCheck } from '../src/codex-sandbox.ts';
+import { codexTurnSettings } from '../src/chat-hosts.ts';
 import type { RunResult } from '../src/programs.ts';
-import { bench, placeRunFile, type Bench, type Recorded } from './harness.ts';
+import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 import { NamedChat } from './named-chat.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -44,7 +45,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
     // The bench's folder is removed only after every turn has been stopped and its host has exited.
     const removals: (() => void)[] = [];
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: options.programs ?? ['claude', 'codex', 'gemini'], env: { JASON_Plugins__Grants__slack__Env__0: 'SLACK_PROXY', CLAUDE_AUTO_BACKGROUND_TASKS: '1', ...options.env } });
-    placeRunFile(b);
+    placeSandboxFiles(b);
     const bundle = join(b.root, 'bundle');
     mkdirSync(bundle, { recursive: true });
     mkdirSync(join(b.paths.data, 'config'), { recursive: true });
@@ -82,6 +83,7 @@ function rig(t: { after(fn: () => void): void }, options: { programs?: string[];
         started: (host, resumed) => void started.push({ host, resumed }),
         ended: (turn) => void ended.push(turn),
         decided: (each) => void decided.push(each),
+        sandboxOutside: outsideStandIn,
         ...options.chat,
     });
     t.after(async () => {
@@ -173,7 +175,7 @@ test('a turn with nothing to ask starts Claude Code in the chat folder with the 
     const config = flagValue(host.args, '--mcp-config');
     assert.ok(same(join(config, '..'), r.b.paths.turns), 'the turn file is in desktop/turns, outside the chat folder');
     assert.equal(existsSync(config), false, 'the turn file is gone once the turn is over');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'turns'], 'nothing of the turn is left beside the chat folder but the conversation it belongs to');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'settings.json', 'turns'], 'nothing of the turn is left beside the chat folder but the conversation it belongs to');
     assert.deepEqual(readdirSync(r.b.paths.turns), [], 'nothing of the turn is left in turns/');
     assert.deepEqual(readdirSync(r.b.paths.chat).sort(), ['AGENTS.md', 'CLAUDE.md'], 'the turn writes nothing into the chat folder but the instruction text');
     assert.equal(existsSync(join(r.b.root, 'harness')), false, 'nothing reaches the harness root');
@@ -321,13 +323,13 @@ test('a Codex turn runs read-only with the words on stdin, shows its steps, and 
     const [first, second] = r.hosts();
     // On Windows the turn names the elevated sandbox (`codexArguments`); elsewhere no kind.
     const kind = process.platform === 'win32' ? ['-c', codexWindowsSandbox] : [];
-    assert.deepEqual(first?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-']);
-    assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
+    assert.deepEqual(first?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
+    assert.deepEqual(second?.args, ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...kind, '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', 'resume', '0199a213-81c0-7800-8aa1-bbab2a035a53', '-']);
     assert.equal(first?.stdin, asked(words));
     assert.ok(same(first?.cwd ?? '', r.b.paths.chat));
     // The set-up chat's one naming run ran in a folder under turns/, removed after it: no turn file is there.
     await r.chat.idle();
-    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'turns'], 'a Codex turn writes no turn file');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'conversations', 'settings.json', 'turns'], 'a Codex turn writes no turn file');
     assert.deepEqual(readdirSync(r.b.paths.turns), []);
 });
 
@@ -438,11 +440,16 @@ test('a turn on a Claude Code below the floor is refused before any child starts
     assert.deepEqual(asked.slice(2), [{ name: 'codex', args: ['--version'], timeoutMs: versionLimitMs }]);
 });
 
-// The Windows check of Codex's sandbox, on a chat told it runs on Windows wherever the test runs; the stand-in answers
-// for the sandbox by STUB_CODEX_SANDBOX and never runs the command.
+// The Windows check of Codex's sandbox, on a chat told it runs on Windows wherever the test runs. The stand-in Codex
+// parses `codex sandbox` as the version it is told it is and answers for the sandbox by STUB_CODEX_SANDBOX, never running
+// the command; cmd outside the sandbox is `outsideStandIn`, unless a test gives its own.
 const onWindows = { platform: 'win32' as const };
 const windowsEnv = { SystemRoot: 'C:\\Windows' };
 const checks = (r: Rig) => r.b.record().filter((each) => each.name === 'codex-sandbox');
+const checkSettings = [...codexTurnSettings('win32'), 'sandbox_mode="read-only"'].flatMap((setting) => ['-c', setting]);
+const checkCommand = ['--', 'C:\\Windows\\System32\\cmd.exe', '/d', '/c', `%${checkVariable}%`];
+const bareForm = ['sandbox', ...checkSettings, ...checkCommand];
+const wordedForm = ['sandbox', 'windows', ...checkSettings, ...checkCommand];
 
 test('on Windows the first Codex turn of the run checks the sandbox under the turn\'s settings, says so, and runs when it holds; the next turn does not check again', async (t) => {
     const r = rig(t, { chat: onWindows, env: windowsEnv });
@@ -452,7 +459,12 @@ test('on Windows the first Codex turn of the run checks the sandbox under the tu
     assert.equal(r.hosts().length, 1);
     const [check] = checks(r);
     assert.ok(check !== undefined);
-    assert.ok(check.args.includes(codexWindowsSandbox), 'the turn\'s own kind');
+    assert.deepEqual(check.args, bareForm, 'the form 0.167.0-alpha.3.2 takes, under the turn\'s own settings');
+    assert.ok(check.args.includes(codexWindowsSandbox) && check.args.includes('features.apps=false'));
+    // The line reads both files, each by its quoted path, and nothing of either reaches a pipe.
+    const line = check.env?.[checkVariable] ?? '';
+    assert.match(line, /^echo ran-[0-9a-f]+ & type "[^"]+runtime\.json" >nul 2>nul && echo read-[0-9a-f]+ & type "[^"]+settings\.json" >nul 2>nul && echo read-[0-9a-f]+$/);
+    assert.ok(line.includes(`"${r.b.paths.runFile}"`) && line.includes(`"${r.b.paths.settings}"`));
     assert.ok(same(check.cwd ?? '', r.b.paths.chat));
     assert.ok(r.hosts()[0]?.args.includes(codexWindowsSandbox));
 
@@ -460,6 +472,17 @@ test('on Windows the first Codex turn of the run checks the sandbox under the tu
     assert.ok(!again.some((event) => event.kind === 'step' && event.text === checkingSandbox));
     assert.equal(checks(r).length, 1, 'remembered for the run');
     assert.equal(r.hosts().length, 2);
+});
+
+test('on Windows an older Codex that wants the platform word is checked in that form after the bare one gave no marker, and runs when it holds', async (t) => {
+    const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_VERSION: '0.122.0' } });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
+    assert.deepEqual(checks(r).map((each) => each.args), [bareForm, wordedForm]);
+    assert.equal(r.hosts().length, 1);
+
+    const reads = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_VERSION: '0.122.0', STUB_CODEX_SANDBOX: 'reads' } });
+    assert.deepEqual(doneOf(await reads.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(reads.hosts(), []);
 });
 
 test('on Windows a sandbox whose command read the run file refuses every Codex turn of the run, naming the setup and Claude Code', async (t) => {
@@ -471,12 +494,21 @@ test('on Windows a sandbox whose command read the run file refuses every Codex t
     assert.deepEqual(r.started, []);
 });
 
-test('on Windows a check that printed neither marker, or ran out of time, refuses the turn and checks again at the next send', async (t) => {
+test('on Windows a sandbox that keeps the run file but lets the settings file, with its inherited access, be read refuses the turn', async (t) => {
+    const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'reads-second' } });
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(r.hosts(), []);
+});
+
+test('on Windows a check that printed neither marker in either form, or ran out of time, refuses the turn and checks again at the next send', async (t) => {
     const silent = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'silent' } });
     assert.deepEqual(doneOf(await silent.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
     assert.deepEqual(doneOf(await silent.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
-    assert.equal(checks(silent).length, 2, 'proved nothing, so not remembered');
+    assert.deepEqual(checks(silent).map((each) => each.args), [bareForm, wordedForm, bareForm, wordedForm], 'both forms, and not remembered');
     assert.deepEqual(silent.hosts(), []);
+
+    const unknown = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_VERSION: '0.150.0' } });
+    assert.deepEqual(doneOf(await unknown.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence }, 'a grammar neither form fits proves nothing');
 
     const pidFile = join(realpathSync(tmpdir()), `jason-sandbox-check-${process.pid}-${Date.now()}.pid`);
     t.after(() => rmSync(pidFile, { force: true }));
@@ -487,13 +519,53 @@ test('on Windows a check that printed neither marker, or ran out of time, refuse
     assert.ok(await settle(() => existsSync(pidFile) && gone(Number(readFileSync(pidFile, 'utf8')))));
 });
 
-test('on Windows with no run file to read the check proves nothing: the turn is refused saying so, and nothing is remembered', async (t) => {
+test('on Windows a sandbox that held proves nothing unless the same line read both files outside it, before and after', async (t) => {
+    // The line could not read a file outside the sandbox either: nothing inside is run, and nothing is remembered.
+    const unreadable = rig(t, { chat: { ...onWindows, sandboxOutside: async (check) => ({ exit: 0, stdout: `${check.ran} \r\n${check.reads[0]}\r\n`, stderr: '' }) }, env: windowsEnv });
+    assert.deepEqual(doneOf(await unreadable.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(checks(unreadable), []);
+    assert.deepEqual(unreadable.hosts(), []);
+
+    // The run file went away while the check ran: the run after the sandbox's no longer reads it, so the hold is no proof.
+    let outside = 0;
+    const replaced = rig(t, {
+        chat: {
+            ...onWindows,
+            sandboxOutside: async (check) => {
+                outside += 1;
+                return outside === 2 ? { exit: 0, stdout: `${check.ran} \r\n${check.reads[1]}\r\n`, stderr: '' } : outsideStandIn(check);
+            },
+        },
+        env: windowsEnv,
+    });
+    assert.deepEqual(doneOf(await replaced.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.equal(outside, 2);
+    assert.deepEqual(replaced.hosts(), []);
+    assert.deepEqual(doneOf(await replaced.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null }, 'not remembered: checked again');
+    assert.equal(checks(replaced).length, 2);
+});
+
+test('on Windows a Codex turn on the OpenAI key that the check does not let run is told so in a sentence of its own, not the setup command', async (t) => {
+    for (const shape of ['reads', 'silent']) {
+        const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: shape } });
+        r.keys['codex-api-key'] = 'sk-made-up-0000';
+        assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex-api-key' })), { kind: 'done', error: sandboxKeyedSentence }, shape);
+        assert.deepEqual(r.hosts(), [], shape);
+    }
+    assert.ok(!sandboxKeyedSentence.includes('setup'));
+});
+
+test('on Windows with no run file, or no settings file, to read the check proves nothing: the turn is refused saying so, and nothing is remembered', async (t) => {
     const r = rig(t, { chat: onWindows, env: windowsEnv });
     rmSync(r.b.paths.runFile);
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxUncheckedSentence });
     assert.deepEqual(checks(r), []);
     assert.deepEqual(r.hosts(), []);
     writeFileSync(r.b.paths.runFile, '{}');
+    rmSync(r.b.paths.settings);
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxNoSettingsSentence });
+    assert.deepEqual(checks(r), []);
+    writeFileSync(r.b.paths.settings, '{}');
     assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
     assert.equal(checks(r).length, 1);
 });
@@ -629,8 +701,8 @@ test("a turn names its model and effort as each host's own flags, resumed or not
     assert.equal(flagValue(resumed?.args ?? [], '--effort'), 'low');
     assert.ok(resumed?.args.includes('--resume'));
     for (const each of [first, resumed]) assert.ok(!('CLAUDE_CODE_EFFORT_LEVEL' in (each?.env ?? {})), 'an inherited level would override the flag');
-    assert.deepEqual(codexSettings(codex?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'model_reasoning_effort=high']);
-    assert.deepEqual(codexSettings(codexResumed?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'model_reasoning_effort=low']);
+    assert.deepEqual(codexSettings(codex?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'features.apps=false', 'model_reasoning_effort=high']);
+    assert.deepEqual(codexSettings(codexResumed?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'features.apps=false', 'model_reasoning_effort=low']);
     assert.ok(codexResumed?.args.includes('resume'));
     assert.deepEqual(recordOf(r, 'c1').chosen, { host: 'claude', model: 'opus', effort: 'low' });
     assert.deepEqual(recordOf(r, 'c2').chosen, { host: 'codex', model: 'gpt-6.1-sol', effort: 'low' });
@@ -644,7 +716,7 @@ test('a turn that names no effort passes none, keeps the inherited level, and th
     assert.ok(!claude?.args.includes('--effort'));
     assert.equal(flagValue(claude?.args ?? [], '--model'), 'claude-opus-5-5', 'a full name typed by the person reaches the host');
     assert.equal(claude?.env.CLAUDE_CODE_EFFORT_LEVEL, 'max');
-    assert.deepEqual(codexSettings(codex?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false']);
+    assert.deepEqual(codexSettings(codex?.args ?? []), [...windowsKind, 'web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false', 'features.apps=false']);
     assert.ok(!codex?.args.includes('--model'));
     assert.deepEqual(recordOf(r, 'c1').chosen, { host: 'claude', model: 'claude-opus-5-5', effort: null });
     assert.deepEqual(recordOf(r, 'c2').chosen, { host: 'codex', model: null, effort: null });
@@ -1087,7 +1159,7 @@ test('a deny list that cannot be read starts no turn, and leaves nothing open', 
     assert.deepEqual(said, [{ kind: 'done', error: 'The turn could not be started: The deny list could not be read.' }]);
     assert.equal(r.chat.isRunning('c1'), false);
     assert.deepEqual(r.hosts(), []);
-    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat']);
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'settings.json']);
 });
 
 // The instruction text the application carries, written into the chat folder as both hosts' project memory file.
@@ -1106,7 +1178,7 @@ test('the chat folder carries the instruction text as CLAUDE.md and AGENTS.md, b
     rmSync(r.b.paths.chat, { recursive: true });
     await r.turn('c2', words, { host: 'codex' });
     assert.ok(sameBytes(r.b.paths.chat), 'after a Codex turn');
-    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns').sort(), ['chat', 'conversations'], 'nothing beside the chat folder but the conversations');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).filter((name) => name !== 'turns').sort(), ['chat', 'conversations', 'settings.json'], 'nothing beside the chat folder but the conversations and the settings');
 });
 
 test('an instruction file that was changed or deleted is written again before the next turn', async (t) => {
@@ -1195,7 +1267,7 @@ test('an instruction file that cannot be written refuses the turn on either host
         assert.equal(r.chat.isRunning('c1'), false);
     }
     assert.deepEqual(r.hosts(), []);
-    assert.deepEqual(readdirSync(r.b.paths.desktop), ['chat'], 'nothing a turn opens was left open');
+    assert.deepEqual(readdirSync(r.b.paths.desktop).sort(), ['chat', 'settings.json'], 'nothing a turn opens was left open');
     assert.equal(unwritten.length, 2, unwritten.join('\n'));
     for (const said of unwritten) assert.match(said, /^AGENTS\.md E[A-Z]+$/);
     rmSync(join(r.b.paths.chat, 'AGENTS.md'), { recursive: true });

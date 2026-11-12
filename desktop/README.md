@@ -40,20 +40,32 @@ refused before Codex starts, with a sentence that says to update Codex.
 On Windows every Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own choice of
 sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
 Naming it proves nothing (OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not
-set up), so the first Codex turn of each run of the desktop checks it (`codex-sandbox.ts`): `codex sandbox`, with the
-turn's own `-c` settings and its read-only mode, runs `cmd.exe` by its full path to print one random marker and a
-second only if `type` opens the run file, which it never prints. The turn runs only on the first marker alone, within
-thirty seconds; the second marker refuses it, and anything else proves nothing. The page says "Checking Codex's
-sandbox…" while it runs. The answer is kept by Codex's file, version and `CODEX_HOME` until the desktop quits; a check
-that proved nothing, or found no run file, runs again at the next send. `codex sandbox` has no `--ignore-user-config`
-and still reads the rest of the person's config.toml; only what `-c` sets is set over it.
+set up), so the first Codex turn of each run of the desktop checks it (`codex-sandbox.ts`). One cmd line prints a random
+marker, then a marker of each file's own only if `type` opens it, the file itself going to `nul`: the runtime's run
+file, which has an owner-only access list of its own, and the desktop's settings file, which keeps the access list the
+data directory inherits from the profile, as the database and the logs do. Each path is quoted, and a path holding
+`, ; = % ^ & | < > !` or a quote is not checked, with a sentence that says so. cmd reads the line from
+`JASON_SANDBOX_CHECK`, so every run sees the same bytes, and runs it three times, each within thirty seconds: by its
+full path outside any sandbox, where it must print every marker; inside `codex sandbox`, with the turn's own `-c`
+settings and its read-only mode, where it must print the first marker alone; and outside once more, every marker
+again. Anything else proves nothing, and a read marker standing as a line of its own inside refuses. `codex sandbox`
+is tried without a platform word, as the help of 0.167.0-alpha.3.2 shows it (`test/fixtures`), and, when that printed
+no marker, as `codex sandbox windows`, the shape the reference names for older versions. The page says "Checking
+Codex's sandbox…" while it runs. The answer is kept by Codex's file, the script it is handed, its version and
+`CODEX_HOME` until the desktop quits; a check that proved nothing, or found no run file or no settings file, runs again
+at the next send. A turn on the OpenAI key runs under a Codex home of the desktop's own, where the setup may not reach,
+so it is refused with a sentence of its own: sign in to Codex, or chat on Claude Code. The check runs with the person's
+config.toml plus `-c` while the turn leaves that file unread, since `codex sandbox` has no `--ignore-user-config`, and
+the desktop does not read the file to say what in it would differ. A set-up chat's naming run on Windows names no
+sandbox kind and gets no check: its shell tool is off, and it is held by the read-only sandbox and those settings alone.
 
 **Nothing of the person's own tools reaches a turn.** A Claude Code turn runs `--strict-mcp-config` with the turn's MCP
 file alone, `--no-chrome` as above, and settings that carry `disableClaudeAiConnectors: true` and deny the browser's
 server by name (`deniedMcpServers: [{ "serverName": "claude-in-chrome" }]`) in every mode. Every Codex turn, Plan only
 included, runs with `--ignore-user-config`: the chat does not read your Codex config.toml, so a provider or profile set
 there is not used; connect a key on the Connect card. Nor are the MCP servers it names loaded, since a Codex turn asks no
-one before such a tool runs. The page says the sentence under the composer while Codex is the chat's host. Its sign-in
+one before such a tool runs. Nor are the person's ChatGPT apps (connectors), which config.toml does not hold: every
+Codex turn sets `features.apps=false` (`codexConnectorsOff`), as the naming run does. The page says the sentence under the composer while Codex is the chat's host. Its sign-in
 is still read from `CODEX_HOME`.
 
 A link Reply answers for connecting an account is checked before it is shown: https with no user, port or fragment, and

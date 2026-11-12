@@ -37,17 +37,23 @@ const listingStart = /\bstartListing\b/;
 /**
  * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
  * the runner's own run of a program the PATH finds, a set-up chat's one naming run, and on Windows the check of Codex's
- * sandbox before a chat's first Codex turn. Anything else starts a program through `Programs.run`, by a name the
- * desktop knows.
+ * sandbox before a chat's first Codex turn, which runs cmd outside any sandbox and Codex. Anything else starts a program
+ * through `Programs.run`, by a name the desktop knows.
  */
-export const runFileCalls: Readonly<Record<string, number>> = { 'src/programs.ts': 1, 'src/chat-naming.ts': 1, 'src/codex-sandbox.ts': 1 };
+export const runFileCalls: Readonly<Record<string, number>> = { 'src/programs.ts': 1, 'src/chat-naming.ts': 1, 'src/codex-sandbox.ts': 2 };
 
 /**
- * The one module that may name a shell other than the login-shell lookup, and only cmd.exe: it is the command
- * `codex sandbox` runs inside Codex's Windows sandbox for the check, by its full path under the system folder. The
- * desktop starts Codex there, never cmd.
+ * The one module that may name a shell other than the login-shell lookup, and only cmd.exe, in this one expression: cmd
+ * by its full path under the system folder, given to `cmd`. The check runs its line with it outside any sandbox, and
+ * `codex sandbox` runs it inside.
  */
-export const sandboxedShell: Readonly<Record<string, string>> = { 'src/codex-sandbox.ts': "'cmd.exe'" };
+export const sandboxedShell: Readonly<Record<string, string>> = { 'src/codex-sandbox.ts': "const cmd = win32.join(systemRoot, 'System32', 'cmd.exe');" };
+
+/**
+ * What each runner call of the sandbox check's module begins with, each at most once: cmd by the path the check made,
+ * with the check's own arguments, and Codex as a turn's host is started.
+ */
+export const sandboxRuns: readonly string[] = ['runFile(check.cmd, check.inner, ', 'runFile(launch.file, [...launch.prefix, ...args], '];
 
 const runFileCall = /\brunFile\s*\(/g;
 const runFileDefinition = /function\s+runFile\s*\(/g;
@@ -110,6 +116,15 @@ export function processViolations(path: string, text: string): string[] {
     if (shellOption.test(text)) found.push(`${path} sets a shell option, which nothing in the desktop may`);
     const sandboxed = sandboxedShell[path];
     const shellText = sandboxed === undefined ? text : text.split(sandboxed).join("''");
+    if (sandboxed !== undefined && text.split(sandboxed).length > 2) found.push(`${path} names cmd.exe more than once`);
+    if (sandboxed !== undefined) {
+        const seen = new Set<string>();
+        for (const match of text.matchAll(runFileCall)) {
+            const begins = sandboxRuns.find((each) => text.startsWith(each, match.index));
+            if (begins === undefined || seen.has(begins)) found.push(`${path} calls the program runner other than to start cmd by the check's path and Codex as a turn's host, each once`);
+            else seen.add(begins);
+        }
+    }
     if (path !== 'src/shell-path.ts' && (shellName.test(shellText) || shellVariable.test(text))) {
         found.push(`${path} names a shell, which only the login-shell lookup of macOS and Linux in src/shell-path.ts may`);
     }

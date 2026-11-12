@@ -832,6 +832,19 @@ function stringsOf(input: unknown): string[] {
     return found;
 }
 
+/** Every string value of a tool's input, at any depth, in the order it stands; keys are not values. */
+function valuesInOrder(input: unknown): string[] {
+    const found: string[] = [];
+    const pending: unknown[] = [input];
+    while (pending.length > 0) {
+        const value = pending.shift();
+        if (typeof value === 'string') found.push(value);
+        else if (Array.isArray(value)) pending.unshift(...value);
+        else if (value !== null && typeof value === 'object') pending.unshift(...Object.values(value));
+    }
+    return found;
+}
+
 /**
  * A tool of an MCP server of the person's own, whatever its arguments are named: never read as a shell command or a
  * file tool, since the server, not a shell, does what it is sent. Its card's detail is the server and the tool, then the
@@ -846,6 +859,9 @@ function judgePersonsTool(tool: string, input: Record<string, unknown>, scope: C
     const detail = `${cut < 0 ? rest : rest.slice(0, cut)} · ${cut < 0 ? '' : rest.slice(cut + 2)}\n${JSON.stringify(input)}`;
     if (detail.length > detailLimit) return { verdict: 'deny', message: personsLongRefusal };
     if (stringsOf(input).some((text) => textRefused(text, scope))) return { verdict: 'deny', message: personsInputRefusal };
+    // A server may join what it was sent, an argv array or a program and its arguments in fields of their own, into one
+    // command: the input's string values are judged once more, joined by a space in the order they stand.
+    if (textRefused(valuesInOrder(input).join(' '), scope)) return { verdict: 'deny', message: personsInputRefusal };
     return { verdict: 'ask', title: personsToolTitle, detail, remember: null };
 }
 

@@ -60,7 +60,7 @@ test('the person\'s words are never on a host\'s command line: every argument is
         if (listFlags.has(arg)) i += valuesOf(claude.slice(i), arg).length;
         else if (flagsWithValue.has(arg)) i++;
     }
-    assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-']);
+    assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
 });
 
 test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, and each allowed jason verb', () => {
@@ -142,7 +142,7 @@ test('the campaign\'s and the project\'s folders are added one --add-dir each; a
 
 test('a Codex turn runs exec with JSON events in the read-only sandbox, resumed by its thread, the prompt from stdin', () => {
     assert.deepEqual(codexArguments({ platform: 'linux', model: 'gpt-5', resume: 'thr-1' }), [
-        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '--model', 'gpt-5', 'resume', 'thr-1', '-',
+        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '--model', 'gpt-5', 'resume', 'thr-1', '-',
     ]);
 });
 
@@ -188,7 +188,7 @@ test('an effort reaches each host as its own flag on every turn that names one, 
     }
     assert.ok(!claudeArguments({ ...turn, model: 'opus' }).includes('--effort'));
     assert.deepEqual(codexArguments({ platform: 'linux', model: 'gpt-6.1-sol', effort: 'high', resume: 'thr-1' }), [
-        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', 'resume', 'thr-1', '-',
+        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', 'resume', 'thr-1', '-',
     ]);
     assert.ok(!codexArguments({ platform: 'linux', model: 'gpt-6.1-sol' }).some((arg) => arg.startsWith('model_reasoning_effort')));
 });

@@ -69,6 +69,22 @@ test('every string of an MCP tool\'s input, at any depth, is held to the text ch
     assert.equal(judge('mcp__s__run', { path: posix.join(chat, 'notes.md') }, scope).verdict, 'ask', 'the chat folder is not the data');
 });
 
+test('an MCP tool\'s input that spreads one command over several strings is judged joined as well, in order', () => {
+    const spread: Record<string, unknown>[] = [
+        { argv: ['jason', 'approval', 'approve', 'x'] },
+        { program: 'jason', args: ['approval', 'approve', 'x'] },
+        { program: 'jason', args: ['decision', 'answer', 'y', '--option', 'a'] },
+        { steps: [{ run: 'jason' }, { run: 'approval approve x' }] },
+    ];
+    for (const input of spread) {
+        assert.equal(judge('mcp__s__run', input, scope).verdict, 'deny', JSON.stringify(input));
+        assert.equal(fullAccessJudgement('mcp__s__run', input, scope).outcome, 'refused', JSON.stringify(input));
+    }
+    // Joined in order, so the words a person reads in that order are the ones judged.
+    assert.equal(judge('mcp__s__run', { argv: ['jason', 'approval', 'list'] }, scope).verdict, 'ask');
+    assert.equal(judge('mcp__s__run', { argv: ['approve', 'approval', 'jason'] }, scope).verdict, 'ask');
+});
+
 test('an MCP tool\'s input longer than the card shows whole is refused, never cut', () => {
     const long = { text: 'a'.repeat(5000) };
     const judged = judge('mcp__s__run', long, scope);
@@ -184,6 +200,19 @@ test('every Codex turn leaves the person\'s config.toml unread, a resumed one to
             assert.ok(args.includes('--ignore-user-config'), JSON.stringify(shape));
             const resume = args.indexOf('resume');
             if (resume >= 0) assert.ok(args.indexOf('--ignore-user-config') < resume, 'before the resume');
+        }
+    }
+});
+
+test('every Codex turn turns the person\'s ChatGPT connectors off, as the naming run does, a resumed one too', () => {
+    for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }]) {
+        for (const platform of ['win32', 'darwin', 'linux'] as const) {
+            const args = codexArguments({ ...shape, platform });
+            const settings = args.flatMap((arg, i) => (args[i - 1] === '-c' ? [arg] : []));
+            assert.equal(settings.filter((setting) => setting === 'features.apps=false').length, 1, `${platform} ${JSON.stringify(shape)}`);
+            assert.ok(!settings.some((setting) => setting.startsWith('features.apps=') && setting !== 'features.apps=false'));
+            const resume = args.indexOf('resume');
+            if (resume >= 0) assert.ok(args.indexOf('features.apps=false') < resume, 'before the resume');
         }
     }
 });

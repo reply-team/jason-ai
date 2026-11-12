@@ -229,11 +229,21 @@ export const codexWindowsSandbox = 'windows.sandbox="elevated"';
 
 /**
  * The settings every Codex turn on a platform sets for the run by `-c`, before the model and the effort: on Windows the
- * sandbox's kind, then the search settings. The Windows sandbox check runs under the same set (`codex-sandbox.ts`).
+ * sandbox's kind, then the search settings, then the person's ChatGPT connectors off (`codexConnectorsOff`). The
+ * Windows sandbox check runs under the same set (`codex-sandbox.ts`).
  */
 export function codexTurnSettings(platform: Platform): string[] {
-    return [...(platform === 'win32' ? [codexWindowsSandbox] : []), ...codexSearchSettings];
+    return [...(platform === 'win32' ? [codexWindowsSandbox] : []), ...codexSearchSettings, codexConnectorsOff];
 }
+
+/**
+ * The person's ChatGPT apps (connectors) off for the run: they are no part of config.toml, so `--ignore-user-config`
+ * leaves them on, and a Codex turn asks no one before one acts. The Codex counterpart of Claude Code's
+ * `disableClaudeAiConnectors`, and what the naming run sets too (`codexToolsOff`). OpenAI,
+ * https://developers.openai.com/codex/config-reference: `features.apps` "Enable app (connector) integrations (stable;
+ * on by default)."
+ */
+export const codexConnectorsOff = 'features.apps=false';
 
 /**
  * The command line of one Codex turn: `codex exec` in its read-only sandbox, emitting JSON events, the prompt read from

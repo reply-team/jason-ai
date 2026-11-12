@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { cliAt, type Cli } from '../src/cli.ts';
 import type { Logger } from '../src/log.ts';
 import { desktopPaths, type DesktopPaths } from '../src/paths.ts';
-import { programsOn, type Programs } from '../src/programs.ts';
+import type { SandboxCheck } from '../src/codex-sandbox.ts';
+import { programsOn, type Programs, type RunResult } from '../src/programs.ts';
 import type { SecretBox } from '../src/providers.ts';
 
 const stubs = join(dirname(fileURLToPath(import.meta.url)), 'stubs');
@@ -168,10 +169,30 @@ export const fakeBox: SecretBox = {
 };
 
 /**
- * Writes a runtime's run file, naming no address, into the bench's data directory: what the Windows check of Codex's
- * sandbox reads before a chat's first Codex turn (`codex-sandbox.ts`), and finds nothing to read without.
+ * Writes a runtime's run file, naming no address, and the desktop's settings file into the bench's data directory: the
+ * two files the Windows check of Codex's sandbox reads before a chat's first Codex turn (`codex-sandbox.ts`), and finds
+ * nothing to read without.
  */
-export function placeRunFile(b: Bench): void {
+export function placeSandboxFiles(b: Bench): void {
     mkdirSync(dirname(b.paths.runFile), { recursive: true });
     writeFileSync(b.paths.runFile, '{}');
+    mkdirSync(b.paths.desktop, { recursive: true });
+    writeFileSync(b.paths.settings, '{}');
+}
+
+/**
+ * cmd outside any sandbox, as the Windows check runs its line, stood in for wherever the test runs: the ran marker, then
+ * the marker of each file the line names that opens here, in order.
+ */
+export async function outsideStandIn(check: SandboxCheck): Promise<RunResult> {
+    const files = [...check.line.matchAll(/type "([^"]+)"/g)].map((match) => match[1] ?? '');
+    const opened = files.flatMap((file, i) => {
+        try {
+            readFileSync(file);
+            return [check.reads[i]];
+        } catch {
+            return [];
+        }
+    });
+    return { exit: 0, stdout: [`${check.ran} `, ...opened].join('\r\n') + '\r\n', stderr: '' };
 }
