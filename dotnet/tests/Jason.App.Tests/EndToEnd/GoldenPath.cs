@@ -447,6 +447,12 @@ internal static class GoldenPath
         RunAsync(it, "dotnet", [Assembly, .. args], environment);
 
     /// <summary>
+    /// A step run by a stand-in built beside these tests in place of the shipped program — started the same way, through
+    /// the muxer, in this installation's environment.
+    /// </summary>
+    public static Task<CliResult> StandInAsync(Installation it, string assembly, params string[] args) => RunAsync(it, "dotnet", [assembly, .. args]);
+
+    /// <summary>
     /// The build's own launcher beside the assembly, which is what <c>dotnet run --project dotnet/src/Jason.App</c>
     /// starts: a process whose path is that launcher rather than the muxer.
     /// </summary>
