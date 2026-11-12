@@ -4,6 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { heldByWhatRuns, programName, readLiteral, type HeldReason, type LiteralCommand } from './chat-literal.ts';
+import { powerShellRunsInFullAccess } from './chat-modes.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
 export type Platform = 'win32' | 'darwin' | 'linux';
@@ -1170,14 +1171,17 @@ const heldFor = (reason: HeldReason): FullAccessJudgement => ({ outcome: 'held',
  * written, so that a command that is not literal is still refused where its plain words show a refusal, and never
  * becomes a card a person might allow. Then the literal reading (`readLiteral`): a command any of whose words is not
  * literal is held. The refusals are read again over the resolved words, then what is held all the same; anything else
- * runs. A held command too long for its card to show whole is refused, as in Ask first.
+ * runs, but for the PowerShell tool's, which is held while its switch is off (`powerShellRunsInFullAccess`). A held
+ * command too long for its card to show whole is refused, as in Ask first.
  */
 function literalJudgement(tool: string, command: string | null, scope: ChatScope): FullAccessJudgement {
     if (command === null) return heldFor('syntax');
     const asWritten = refusalOver(command, placesOf(command, scope), scope);
     if (asWritten !== null) return { outcome: 'refused', message: asWritten };
     if (command.split(/&&|\|\||[;|&\n\r]/).some((part) => clearsConfinement(part.trim().split(/\s+/).map(unquoted)))) return { outcome: 'refused', message: confinedRefusal };
-    const judged = literalOutcome(tool, command, scope);
+    const outcome = literalOutcome(tool, command, scope);
+    // The PowerShell tool runs nothing unasked while its switch is off (`powerShellRunsInFullAccess`).
+    const judged = outcome.outcome === 'runs' && tool === 'PowerShell' && !powerShellRunsInFullAccess ? heldFor('unknown_shell') : outcome;
     if (judged.outcome === 'held' && command.length > detailLimit) return { outcome: 'refused', message: longRefusal };
     return judged;
 }

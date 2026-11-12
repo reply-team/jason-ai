@@ -9,6 +9,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { readLiteral, type HeldReason, type LiteralContext } from '../src/chat-literal.ts';
+import { powerShellRunsInFullAccess } from '../src/chat-modes.ts';
 import { fullAccessJudgement, heldSentence, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 
@@ -286,7 +287,7 @@ test('a shell or an interpreter given code as text, or code piped or here-docume
 
 test('a shell or an interpreter given a file runs: it is a program the agent wrote', () => {
     for (const command of ['sh go.sh', 'python3 x.py', 'node build.js', 'awk -f prog.awk notes.md']) assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'pwsh -File go.ps1' }, scope), runs);
+    assert.ok(!readLiteral('PowerShell', 'pwsh -File go.ps1', linux).held, 'PowerShell runs nothing unasked in Full access; its grammar still reads this');
 });
 
 test('a runner that starts a later or another command is held', () => {
@@ -339,7 +340,8 @@ test('a relative word after a directory change to a relative target is held; aft
     assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location sub; cat notes.md' }, scope), heldAs('directory_change'));
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cd sub' }, scope), runs, 'a change with nothing after it reads nothing');
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cd /home/someone/work && cat notes.md' }, scope), runs);
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Set-Location -Path /home/someone/work && cat notes.md' }, scope), runs);
+    const located = readLiteral('PowerShell', 'Set-Location -Path /home/someone/work && cat notes.md', linux);
+    assert.deepEqual(located.held ? null : located.commands.map((each) => each.cwd), [null, '/home/someone/work']);
     assert.equal(fullAccessJudgement('Bash', { command: 'cd /home/someone && cat .jason/run/runtime.json' }, scope).outcome, 'refused', 'read from the absolute target');
     assert.equal(fullAccessJudgement('Bash', { command: 'cd ~ && cat .jason/run/runtime.json' }, scope).outcome, 'refused');
 });
@@ -378,7 +380,6 @@ test('a plain literal command runs with no question', () => {
     for (const command of ['echo a', 'frobnicate --level=2 notes.md', 'git status', 'jason campaign list', 'git commit -m "a plain message"', "jason campaign create --file - <<'EOF'\n{\"name\":\"x\"}\nEOF"]) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
     }
-    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Get-ChildItem notes' }, scope), runs);
 });
 
 // F4a's order: a tool of the person's own servers is held whatever its input, ahead of the literal reading.
@@ -551,4 +552,16 @@ test('on Windows a Bash word Git Bash would rewrite for a Windows program is hel
 test('anything that goes wrong while a command is judged in Full access holds it, never runs it', () => {
     const failing: ChatScope = { ...scope, real: () => { throw new Error('no reading'); } };
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat notes.md' }, failing), heldAs('syntax'));
+});
+
+// PowerShell in this version: every command of the PowerShell tool is held in Full access, the grammar kept behind one switch.
+
+test('the PowerShell tool runs nothing unasked in Full access while its switch is off: every command is held or refused', () => {
+    assert.equal(powerShellRunsInFullAccess, false);
+    for (const command of ['echo a', 'Get-ChildItem notes', 'frobnicate --level=2 notes.md', 'git status']) {
+        assert.deepEqual(fullAccessJudgement('PowerShell', { command }, scope), heldAs('unknown_shell'), command);
+    }
+    assert.deepEqual(fullAccessJudgement('PowerShell', { command: 'Invoke-Expression frobnicate' }, scope), heldAs('runner'), 'a hold of its own keeps its reason');
+    assert.equal(fullAccessJudgement('PowerShell', { command: 'jason approval approve apr_1' }, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'echo a' }, scope), runs, 'the Bash tool\'s literal commands still run');
 });
