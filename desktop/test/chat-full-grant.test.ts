@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { endedName, keptMs, newGrantId } from '../src/chat-full-folder.ts';
+import { startHost, type HostProcess } from '../src/chat-process.ts';
 import { SkillsGate } from '../src/skills-gate.ts';
 import { bench, type Bench, type Recorded } from './harness.ts';
 
@@ -426,4 +427,100 @@ test('a yes that arrives after the window closed opens nothing', async (t) => {
     assert.ok(!existsSync(r.b.paths.chatFull) || readdirSync(r.b.paths.chatFull).length === 0, 'no grant folder was made');
     assert.ok(!existsSync(r.b.paths.chatFullRecords) || readdirSync(r.b.paths.chatFullRecords).length === 0, 'no grant was recorded');
     assert.deepEqual(r.events.get(id)?.filter((event) => event.kind === 'mode') ?? [], []);
+});
+
+/**
+ * A host whose exit the row lets through: the real stub host runs and a stop ends it as ever, but the chat hears of its
+ * exit only once the row opens the gate.
+ */
+function gatedHosts() {
+    let open: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+        open = resolve;
+    });
+    let exited = false;
+    const start: typeof startHost = (launch, args, options) => {
+        const host = startHost(launch, args, options);
+        const gated: HostProcess = {
+            stop: () => host.stop(),
+            stderrTail: () => host.stderrTail(),
+            exited: Promise.all([host.exited, gate]).then(([exit]) => {
+                exited = true;
+                return exit;
+            }),
+        };
+        return gated;
+    };
+    return { start, open: () => open(), exited: () => exited };
+}
+
+/** Sends a Full access turn that runs until it is stopped, and resolves once its host has said its first words. */
+async function runningTurn(r: Rig, id: string): Promise<void> {
+    r.b.env.STUB_HOST_PLAN = JSON.stringify([{ say: 'working' }, { hold: join(r.b.root, 'never-made') }]);
+    await r.chat.send(id, 'go', claude);
+    await settled(() => (r.events.get(id) ?? []).some((event) => event.kind === 'text' && event.text === 'working'));
+}
+
+test('leaving Full access during a turn stops the turn first and moves its folder only once the host has exited, then says so once', async (t) => {
+    const hosts = gatedHosts();
+    const r = rig(t, { chat: { startHost: hosts.start, grantEndWaitMs: 60_000 } });
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    const grant = readdirSync(r.b.paths.chatFull)[0] ?? '';
+    await runningTurn(r, id);
+    await r.chat.setMode(id, 'ask_first');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(hosts.exited(), false);
+    assert.deepEqual(readdirSync(r.b.paths.chatFull), [grant], 'no rename before the host has exited');
+    assert.deepEqual(notices(r.events.get(id)), [], 'nothing is said of a folder that has not moved');
+    hosts.open();
+    await settled(() => notices(r.events.get(id)).length === 1);
+    assert.deepEqual(readdirSync(r.b.paths.chatFull), []);
+    const [name] = readdirSync(r.b.paths.chatFullEnded);
+    assert.equal(notices(r.events.get(id))[0]?.folder, name);
+    assert.ok(name?.startsWith(`${grant}-`));
+    await settled(() => (r.events.get(id) ?? []).some((event) => event.kind === 'done'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(notices(r.events.get(id)).length, 1, 'said once');
+    assert.deepEqual(r.codes, []);
+});
+
+test('a move that fails at the end of the wait is not forgotten: it is tried again when the host has exited, and said once when the folder moved', async (t) => {
+    const hosts = gatedHosts();
+    const r = rig(t, { chat: { startHost: hosts.start, grantEndWaitMs: 50 } });
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    const grant = readdirSync(r.b.paths.chatFull)[0] ?? '';
+    await runningTurn(r, id);
+    // A file where the ended place should be makes the first move fail.
+    writeFileSync(r.b.paths.chatFullEnded, 'in the way');
+    await r.chat.setMode(id, 'ask_first');
+    await settled(() => r.codes.length === 1);
+    assert.deepEqual(readdirSync(r.b.paths.chatFull), [grant]);
+    assert.deepEqual(notices(r.events.get(id)), []);
+    rmSync(r.b.paths.chatFullEnded);
+    hosts.open();
+    await settled(() => notices(r.events.get(id)).length === 1);
+    assert.deepEqual(readdirSync(r.b.paths.chatFull), []);
+    assert.equal(notices(r.events.get(id))[0]?.folder, readdirSync(r.b.paths.chatFullEnded)[0]);
+    await settled(() => (r.events.get(id) ?? []).some((event) => event.kind === 'done'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(notices(r.events.get(id)).length, 1, 'said once');
+    assert.equal(r.codes.length, 1);
+});
+
+test('closing the window during a Full access turn stops it first and moves the folder once its host has exited, saying nothing', async (t) => {
+    const hosts = gatedHosts();
+    const r = rig(t, { chat: { startHost: hosts.start, grantEndWaitMs: 60_000 } });
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    const grant = readdirSync(r.b.paths.chatFull)[0] ?? '';
+    await runningTurn(r, id);
+    r.chat.closeAll();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.deepEqual(readdirSync(r.b.paths.chatFull), [grant], 'no rename before the host has exited');
+    hosts.open();
+    await settled(() => readdirSync(r.b.paths.chatFull).length === 0);
+    assert.equal(readdirSync(r.b.paths.chatFullEnded).length, 1);
+    assert.deepEqual(notices(r.events.get(id)), []);
 });
