@@ -4,7 +4,7 @@
 // neutral one or a made-up program; every path is made up or a temporary one.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
@@ -34,8 +34,9 @@ function homeScope(platform: Platform, home: string): ChatScope {
 const scopes: readonly ChatScope[] = [homeScope('linux', '/home/someone'), homeScope('darwin', '/Users/someone'), homeScope('win32', 'C:\\Users\\someone')];
 
 /**
- * Every string the permission suites hold: the commands of their rows, and the rest of their words, which a judgement
- * reads as harmlessly as any other text. Read by the TypeScript parser, so a row's text is exactly what its row gives.
+ * Every string the chat's suites hold, every `test/chat-*.test.ts`: the commands and paths of their rows, and the rest
+ * of their words, which a judgement reads as harmlessly as any other text. Read by the TypeScript parser, so a row's text
+ * is exactly what its row gives.
  */
 function suiteStrings(): string[] {
     const found = new Set<string>();
@@ -43,7 +44,7 @@ function suiteStrings(): string[] {
         if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) found.add(node.text);
         ts.forEachChild(node, visit);
     };
-    for (const file of ['chat-permission-model.test.ts', 'chat-modes.test.ts', 'chat-literal.test.ts', 'chat-permission-broker.test.ts', 'chat-access-modes.test.ts', 'chat-full-access-hook.test.ts']) {
+    for (const file of readdirSync(import.meta.dirname).filter((name) => /^chat-.*\.test\.ts$/.test(name))) {
         visit(ts.createSourceFile(file, readFileSync(join(import.meta.dirname, file), 'utf8'), ts.ScriptTarget.Latest, true));
     }
     return [...found];
@@ -70,21 +71,43 @@ const spellings = [
 
 // Point 0: Full access is never weaker than Ask first.
 
-test('every command Ask first refuses is refused in Full access with the same sentence, never held and never run', () => {
+/**
+ * The inputs each string of the suites is given as: a shell command, a path read, written or walked, a pattern, a page,
+ * and a command sent to a person's own MCP tool, so a refusal of any of Ask first's routes is read.
+ */
+const shapes: readonly { tool: string; input: (text: string) => Record<string, unknown>; win32Only?: true }[] = [
+    { tool: 'Bash', input: (text) => ({ command: text }) },
+    { tool: 'PowerShell', input: (text) => ({ command: text }), win32Only: true },
+    { tool: 'Monitor', input: (text) => ({ command: text }) },
+    { tool: 'Read', input: (text) => ({ file_path: text }) },
+    { tool: 'Write', input: (text) => ({ file_path: text, content: 'a plan' }) },
+    { tool: 'Edit', input: (text) => ({ file_path: text, old_string: 'a', new_string: 'b' }) },
+    { tool: 'Glob', input: (text) => ({ pattern: text }) },
+    { tool: 'Grep', input: (text) => ({ pattern: 'x', path: text }) },
+    { tool: 'LS', input: (text) => ({ path: text }) },
+    { tool: 'WebFetch', input: (text) => ({ url: text, prompt: 'read' }) },
+    { tool: 'mcp__frobnicate__run', input: (text) => ({ command: text }) },
+    { tool: 'mcp__jason_desktop__decide', input: (text) => ({ tool_name: 'Bash', input: { command: text } }) },
+];
+
+test('every input Ask first refuses is refused by Full access\'s own judgement with the same sentence, never held and never run', () => {
+    // The table is every string the chat's suites hold, so a refusal row added to any of them joins it by itself.
     const strings = [...new Set([...suiteStrings(), ...spellings])];
     let refusals = 0;
     for (const scope of scopes) {
-        for (const tool of scope.platform === 'win32' ? ['Bash', 'PowerShell'] : ['Bash']) {
-            for (const command of strings) {
-                const asked = judge(tool, { command }, scope);
+        for (const shape of shapes) {
+            if (shape.win32Only === true && scope.platform !== 'win32') continue;
+            for (const text of strings) {
+                const input = shape.input(text);
+                const asked = judge(shape.tool, input, scope);
                 if (asked.verdict !== 'deny') continue;
                 refusals++;
-                assert.deepEqual(fullAccessJudgement(tool, { command }, scope), { outcome: 'refused', message: asked.message }, `${scope.platform} ${tool}: ${JSON.stringify(command)}`);
+                assert.deepEqual(fullAccessJudgement(shape.tool, input, scope), { outcome: 'refused', message: asked.message }, `${scope.platform} ${shape.tool}: ${JSON.stringify(text)}`);
             }
         }
     }
-    // The table is the suites' own: hundreds of refusals, not a handful.
-    assert.ok(refusals > 300, `only ${refusals} refusals were read`);
+    // The table is the suites' own: thousands of refusals, not a handful.
+    assert.ok(refusals > 1000, `only ${refusals} refusals were read`);
 });
 
 test('the named row: jason approval appro\\ve is refused in Full access, by the hook and by the prompt tool, with no card', async (t) => {
