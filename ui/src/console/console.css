@@ -732,8 +732,10 @@
 .jc-console .composer select.mode {
     max-width: 22%;
 }
-/* While the desktop holds the chat in Full access, the line under the composer says so; it is never dismissed. */
-.jc-console .composer .full-access {
+/* While the desktop holds the chat in Full access or Auto-edit, the line under the composer says so; it is never
+   dismissed. */
+.jc-console .composer .full-access,
+.jc-console .composer .auto-edit {
     margin-top: 6px;
 }
 .jc-console .composer .model-name {

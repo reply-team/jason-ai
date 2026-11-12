@@ -7,6 +7,7 @@ import {
     afresh,
     anotherModel,
     answered,
+    autoEditLine,
     codexConfigLine,
     effortChosen,
     failed,
@@ -235,10 +236,9 @@ export function renameChat(id: string, title: string): void {
 export function chooseMode(id: string, mode: DesktopChatMode): void {
     const chat = chats.value[id];
     if (!chat) return;
-    // Leaving Full access while its turn runs stops that turn, and so does a change to Plan only, as Stop does: the
-    // waiting message is given back, and no turn follows by itself.
-    const stops =
-        (chat.mode === 'full_access' && mode !== 'full_access') || (mode === 'plan_only' && chat.mode !== 'plan_only');
+    // A change to a narrower mode while a turn runs stops that turn, as Stop does: leaving Full access or Auto-edit, or a
+    // change to Plan only. The waiting message is given back, and no turn follows by itself.
+    const stops = breadth[mode] < breadth[chat.mode];
     if (chat.running && stops) changeChat(id, stopAsked);
     here()
         .desktop.chat.setMode(id, mode, hostOf(chat)?.id ?? '')
@@ -248,6 +248,9 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
         })
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
+
+/** How much each mode lets a turn do without asking, narrow to wide: the desktop's own order for stopping a turn. */
+const breadth: Readonly<Record<DesktopChatMode, number>> = { plan_only: 0, ask_first: 1, auto_edit: 2, full_access: 3 };
 
 /** The menu's value for the take-back of the standing choice: no mode, never sent to the desktop as one. */
 const takeBack = 'take_back';
@@ -833,9 +836,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         onChange={(event) => {
                             const chosen = event.target.value;
                             changeChat(chatId, (each) => hostChosen(each, chosen));
-                            // A host Full access cannot be chosen on takes the chat back to Ask first.
+                            // A host Full access or Auto-edit cannot be chosen on takes the chat back to Ask first.
                             const next = drive.find((each) => each.id === chosen);
                             if (chat.mode === 'full_access' && next !== undefined && next.fullAccess !== null)
+                                chooseMode(chatId, 'ask_first');
+                            if (chat.mode === 'auto_edit' && next !== undefined && next.autoEdit !== null)
                                 chooseMode(chatId, 'ask_first');
                         }}
                     >
@@ -987,6 +992,14 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 {chat.mode === 'full_access' && (
                     <div className="note am full-access" role="status" aria-label="Full access is on">
                         {fullAccessLine}{' '}
+                        <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
+                            Change
+                        </button>
+                    </div>
+                )}
+                {chat.mode === 'auto_edit' && (
+                    <div className="note auto-edit" role="status" aria-label="Auto-edit is on">
+                        {autoEditLine}{' '}
                         <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
                             Change
                         </button>
