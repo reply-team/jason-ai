@@ -551,7 +551,7 @@ export class Chat {
             makeGrantFolder(this.#fullFolders(), id, paths.chat, paths.skillsRecords, conversation.id);
         } catch (error) {
             if (error instanceof GrantFolderUnmade) {
-                this.#options.fullFolderFailed?.('move', error.code);
+                this.#options.fullFolderFailed?.('make', error.code);
                 throw new ChatRefused(error.message);
             }
             throw error;
