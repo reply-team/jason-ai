@@ -1,10 +1,12 @@
 // Pure: a chat's access mode, chosen per conversation from the menu beside the composer. Ask first is the default of every
-// new chat and no setting changes it. Plan only reads and proposes and changes nothing. Full access runs Claude Code in its
-// default mode with a hook that lets a command run with no card where Jason reads it plainly, refuses what Ask first
-// refuses, and puts anything else to the person as Ask first's card; the deny list, the chat's confinement and the keys
-// still hold wherever the desktop can see the attempt, and it is chosen only through a confirmation shown each time, held
-// in memory for that conversation alone, and never remembered past the window. Codex has no Full access, nor has the
-// Feed. Nothing here starts a process or reads a file.
+// new chat out of the box. Plan only reads and proposes and changes nothing. Full access runs Claude Code in its default
+// mode with a hook that lets a command run with no card where Jason reads it plainly, refuses what Ask first refuses, and
+// puts anything else to the person as Ask first's card; the deny list, the chat's confinement and the keys still hold
+// wherever the desktop can see the attempt. It is chosen through a confirmation that offers this time only or always on
+// this computer, the second with new chats starting in Full access as well; a conversation's Full access is held in
+// memory alone and never remembered past the window, and the standing choice is the main process's own file
+// (`full-access-standing.ts`), under a consent number. Codex has no Full access, nor has the Feed. Nothing here starts
+// a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
 
@@ -74,7 +76,21 @@ export const planExitRefusal = 'Plan only is on, and only the person leaves it, 
 export const unguardedSentence =
     'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';
 
-/** What the confirmation shows, as Electron's message box takes it: Cancel is focused, and Escape answers Cancel. */
+/** The same end where the standing choice stood: a check that a policy filtered out would miss every later turn too. */
+export const unguardedStandingSentence =
+    'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';
+
+/**
+ * The number the standing choice of Full access is given under (`full-access-standing.ts`): a choice kept under any
+ * other number, lower or higher, is no choice, and the confirmation is shown again. It is raised only by a release that
+ * widens what Full access reaches; a change of wording alone, the confirmation's or the page's, does not raise it.
+ */
+export const fullAccessConsent = 1;
+
+/**
+ * What the confirmation shows, as Electron's message box takes it: Cancel is focused, and Escape answers Cancel. The
+ * checkbox counts only with Always (`fullAccessAnswer`); Electron cannot grey it, so its label says so.
+ */
 export interface FullAccessDialog {
     type: 'warning';
     title: string;
@@ -83,10 +99,13 @@ export interface FullAccessDialog {
     buttons: string[];
     defaultId: number;
     cancelId: number;
+    checkboxLabel: string;
+    checkboxChecked: false;
     noLink: true;
 }
 
-export const fullAccessButton = 'Give full access';
+export const fullAccessButton = 'Give full access this time';
+export const fullAccessAlwaysButton = 'Always on this computer';
 
 export function fullAccessDialog(): FullAccessDialog {
     return {
@@ -98,11 +117,30 @@ export function fullAccessDialog(): FullAccessDialog {
             'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run.',
             "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving.",
             'The risk is yours.',
-            'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
+            'This time, Full access lasts until you change it or close Jason.',
+            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the agent writes and runs could choose it for you too.',
+            'The agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
         ].join(' '),
-        buttons: [fullAccessButton, 'Cancel'],
-        defaultId: 1,
-        cancelId: 1,
+        buttons: [fullAccessButton, fullAccessAlwaysButton, 'Cancel'],
+        defaultId: 2,
+        cancelId: 2,
+        checkboxLabel: 'With Always, also start new chats in Full access',
+        checkboxChecked: false,
         noLink: true,
     };
+}
+
+/**
+ * The person's answer to the confirmation, by the button pressed and the checkbox: null for Cancel or anything else;
+ * the checkbox is read only with Always.
+ */
+export interface FullAccessAnswer {
+    always: boolean;
+    newChats: boolean;
+}
+
+export function fullAccessAnswer(response: number, checkboxChecked: boolean): FullAccessAnswer | null {
+    if (response === 0) return { always: false, newChats: false };
+    if (response === 1) return { always: true, newChats: checkboxChecked === true };
+    return null;
 }

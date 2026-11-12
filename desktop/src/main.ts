@@ -14,7 +14,7 @@ import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
-import { fullAccessDialog } from './chat-modes.ts';
+import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
@@ -456,13 +456,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // folder where it stands. Nothing is run or opened with a program.
         openFolder: (path) => shell.showItemInFolder(path),
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
-        // The desktop asks the person itself, every time Full access is chosen: the page cannot answer for them. Only the
-        // first button says yes; Cancel is the default and Escape answers it. With no window there is no one to ask.
+        // The desktop asks the person itself whenever Full access is chosen with no standing choice: the page cannot answer
+        // for them, nor give the standing choice. This time and Always say yes; Cancel is the default and Escape answers
+        // it. With no window there is no one to ask.
         confirmFullAccess: async () => {
             const parent = current;
-            if (parent === null) return false;
-            const { response } = await dialog.showMessageBox(parent, fullAccessDialog());
-            return response === 0;
+            if (parent === null) return null;
+            const { response, checkboxChecked } = await dialog.showMessageBox(parent, fullAccessDialog());
+            return fullAccessAnswer(response, checkboxChecked);
         },
         ...loggedTurns(log),
     });

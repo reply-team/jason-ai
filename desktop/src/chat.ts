@@ -14,8 +14,11 @@
  * acts for the person across the installation, as the permission model and the allow list let it.
  *
  * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn: Ask first, the
- * default; Plan only, kept on the record; and Full access, chosen through a confirmation each time, held in memory only,
- * so a restart opens every chat in Ask first, and so does Start afresh. Leaving Full access stops the turn that runs in
+ * default; Plan only, kept on the record; and Full access, held in memory only, so a restart opens every chat in Ask
+ * first, and so does Start afresh. Full access is chosen through a confirmation, unless the person answered it with
+ * Always: that standing choice is the main process's own file (`full-access-standing.ts`), which no turn can read or
+ * write, and while it stands the menu enters Full access without the box and, if the person also asked for it, a new
+ * chat starts in Full access. Every other check of Full access runs all the same. Leaving Full access stops the turn that runs in
  * it. The first tool of a Full access turn that runs without its hook having seen it ends the turn, and the chat goes
  * back to Ask first. Before every turn the chat folder's agent settings are put right (`chat-agent-folder.ts`). No turn starts without a person's
  * send; the naming run of a set-up chat (`chat-naming.ts`) is no turn: it runs with no tool at all, in any mode.
@@ -66,10 +69,23 @@ import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
-import { codexFullAccess, feedFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence, isChatMode, unguardedSentence, type ChatMode } from './chat-modes.ts';
+import {
+    codexFullAccess,
+    feedFullAccess,
+    fullAccessConsent,
+    fullAccessNotYet,
+    fullAccessOffered,
+    fullAccessSentence,
+    isChatMode,
+    unguardedSentence,
+    unguardedStandingSentence,
+    type ChatMode,
+    type FullAccessAnswer,
+} from './chat-modes.ts';
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
+import { readStanding, writeStanding, type Standing } from './full-access-standing.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
@@ -115,6 +131,12 @@ export type ChatEvent =
      */
     | { kind: 'notice'; text: string; folder?: string }
     | { kind: 'done'; error: string | null };
+
+/** The standing choice of Full access as the page reads it: when Always was given, and whether new chats start in it. */
+export interface FullAccessStanding {
+    givenAt: string;
+    newChats: boolean;
+}
 
 /** What a send names besides its conversation and its words: never a campaign, which the conversation's record decides. */
 export interface ChatSendOptions {
@@ -184,10 +206,15 @@ export interface ChatOptions {
     fence(): ChatFence;
     emit(chatId: string, event: ChatEvent): void;
     /**
-     * Asks the person, every time Full access is chosen, whether this chat may act without asking (`fullAccessDialog`);
-     * true only for their yes. Absent, Full access is never given.
+     * Asks the person, each time Full access is chosen with no standing choice, whether this chat may act without asking
+     * (`fullAccessDialog`): their answer (`fullAccessAnswer`), true for "This time" alone, and false or null for no.
+     * Absent, Full access is never given by a box.
      */
-    confirmFullAccess?(): Promise<boolean>;
+    confirmFullAccess?(): Promise<boolean | FullAccessAnswer | null>;
+    /** Said each time the standing choice of Full access is given or taken back, with what stands after it. */
+    standingChanged?(standing: FullAccessStanding | null, why: 'given' | 'taken_back' | 'unchecked'): void;
+    /** Said when the standing choice could not be written or removed, by the system's error code. */
+    standingUnwritten?(code: string): void;
     /** Said each time a conversation's mode changes, by the two modes alone. */
     modeChanged?(from: ChatMode, to: ChatMode): void;
     /** Said when a Full access turn is stopped because a tool ran that its hook never saw. */
@@ -385,6 +412,21 @@ export const grantEndWaitMs = 5_000;
 export const sweepEveryMs = 24 * 60 * 60 * 1000;
 
 const notAHost = 'That is not an agent host this desktop knows. Choose Claude Code or Codex for the chat.';
+
+/** Why the standing choice of Full access could not be taken back. */
+const standingKept = 'Always could not be taken back: its file could not be changed. Close anything that has it open, then try again.';
+
+/** The program a host the page names runs: a key provider's, or a host that drives the chat; undefined for any other. */
+function programOf(host: unknown): string | undefined {
+    return keyProvider(host)?.program ?? hosts.find((each) => each.id === host && each.drivesChat)?.program;
+}
+
+/** The confirmation's answer as the chat reads it: true is "This time" alone; false, null or nothing is no. */
+function answerOf(answer: boolean | FullAccessAnswer | null | undefined): FullAccessAnswer | null {
+    if (answer === true) return { always: false, newChats: false };
+    if (answer === false || answer === null || answer === undefined) return null;
+    return answer;
+}
 const notAConversation = 'That conversation is not one this desktop keeps.';
 const stillAnswering = (act: string) => `This conversation is still answering. Wait for it to finish, or stop it, then ${act}.`;
 
@@ -753,9 +795,9 @@ export class Chat {
      * Full access is refused before any confirmation where it cannot apply: on Codex, on a host that does not drive the
      * chat, on a Claude Code older than its floor or whose version cannot be read, read now as a turn reads it, and for
      * the Feed.
-     * Otherwise it is given only once the person said yes to the confirmation, asked again each time it is chosen; a no
-     * leaves the mode as it was. Leaving Full access stops a turn that runs in it. Plan only is kept on the record; Full
-     * access never is.
+     * Otherwise it is given once the person said yes to the confirmation, asked again each time it is chosen unless they
+     * answered it with Always, which this then keeps (`full-access-standing.ts`); a no leaves the mode as it was. Leaving
+     * Full access stops a turn that runs in it. Plan only is kept on the record; Full access never is.
      */
     async setMode(id: unknown, mode: unknown, host?: unknown): Promise<ConversationSummary> {
         const conversation = this.#own(id);
@@ -763,7 +805,7 @@ export class Chat {
         if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
         if (mode === 'full_access') {
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
-            const program = keyProvider(host)?.program ?? hosts.find((each) => each.id === host && each.drivesChat)?.program;
+            const program = programOf(host);
             if (program === 'codex') throw new ChatRefused(codexFullAccess);
             if (program !== 'claude') throw new ChatRefused(notAHost);
             // One box at a time for a conversation: a request while one is open is answered with the mode as it is.
@@ -774,9 +816,13 @@ export class Chat {
                 if (below !== null) throw new ChatRefused(below);
                 if (conversation.main === true) throw new ChatRefused(feedFullAccess);
                 if (this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
-                const yes = (await this.#options.confirmFullAccess?.()) === true;
-                // A yes for a conversation removed meanwhile, or after the window closed, gives nothing.
-                if (!yes || this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+                // While the standing choice stands the box is not shown; every check above has run all the same.
+                if (this.#standingFor('full_access', program) === null) {
+                    const answer = answerOf(await this.#options.confirmFullAccess?.());
+                    // A yes for a conversation removed meanwhile, or after the window closed, gives nothing.
+                    if (answer === null || this.#closed || this.#conversations.get(conversation.id) !== conversation) return this.#summaryOf(conversation);
+                    if (answer.always) this.#writeStanding({ consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats: answer.newChats }, 'given');
+                }
                 this.#openGrant(conversation);
             } finally {
                 this.#asking.delete(conversation.id);
@@ -838,14 +884,73 @@ export class Chat {
      * A conversation to start in: a new set-up chat when no campaign is named, else the campaign's conversation, the
      * one it has or a new one named after it. A new conversation is kept once its first turn has started.
      */
-    async create(campaignId?: unknown): Promise<ConversationSummary> {
-        if (campaignId === undefined || campaignId === null) return this.#summaryOf(this.#made(null, 'New chat'));
+    async create(campaignId?: unknown, host?: unknown): Promise<ConversationSummary> {
+        if (campaignId === undefined || campaignId === null) return this.#summaryOf(await this.#startsNew(this.#made(null, 'New chat'), host));
         if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
         const existing = this.#ofCampaign(campaignId);
         if (existing !== undefined) return this.#summaryOf(existing);
         const read = await this.#readCampaign(campaignId, false);
         const name = read.about.campaign?.name;
-        return this.#summaryOf(this.#ofCampaign(campaignId) ?? this.#made(campaignId, name ? nameOf(name) || campaignId : campaignId));
+        const again = this.#ofCampaign(campaignId);
+        if (again !== undefined) return this.#summaryOf(again);
+        return this.#summaryOf(await this.#startsNew(this.#made(campaignId, name ? nameOf(name) || campaignId : campaignId), host));
+    }
+
+    /**
+     * A conversation just made, put in Full access when the standing choice says new chats start in it and the host the
+     * page will send to could take Full access now, with every check of a choice from the menu but the box; otherwise
+     * left in Ask first with no word said, since its menu shows the mode it has. Never the Feed, which is made elsewhere.
+     */
+    async #startsNew(conversation: Conversation, host: unknown): Promise<Conversation> {
+        const program = programOf(host);
+        if (!this.#fullAccessOffered() || this.#closed || this.#standingFor('full_access', program)?.newChats !== true) return conversation;
+        if (fullAccessSentence(await this.#claudeVersion()) !== null) return conversation;
+        if (this.#closed || this.#conversations.get(conversation.id) !== conversation) return conversation;
+        try {
+            this.#openGrant(conversation);
+        } catch (error) {
+            if (error instanceof ChatRefused) return conversation;
+            throw error;
+        }
+        this.#changeMode(conversation, 'full_access', true);
+        return conversation;
+    }
+
+    /**
+     * The standing choice that lets a mode be entered without its box on a host program: Full access on Claude Code
+     * alone, and null for every other mode and host. A mode added later has none unless it is named here.
+     */
+    #standingFor(mode: ChatMode, program: string | undefined): Standing | null {
+        if (mode !== 'full_access' || program !== 'claude') return null;
+        return readStanding(this.#options.paths.fullAccess, 'claude');
+    }
+
+    /** The standing choice of Full access, for the menu and the System screen; null when none stands. */
+    fullAccessStanding(): FullAccessStanding | null {
+        const standing = this.#standingFor('full_access', 'claude');
+        return standing === null ? null : { givenAt: standing.givenAt, newChats: standing.newChats };
+    }
+
+    /**
+     * The person takes the standing choice back, from the menu or the System screen: the box is shown at the next entry
+     * and new chats start in Ask first. A chat in Full access now stays in it, its line under the composer saying so.
+     */
+    takeBackFullAccess(): null {
+        if (this.#standingFor('full_access', 'claude') === null) return null;
+        if (!this.#writeStanding(null, 'taken_back')) throw new ChatRefused(standingKept);
+        return null;
+    }
+
+    /** Writes or removes the standing choice and says so; false, and said by its code, when the file would not take it. */
+    #writeStanding(standing: Standing | null, why: 'given' | 'taken_back' | 'unchecked'): boolean {
+        try {
+            writeStanding(this.#options.paths.fullAccess, 'claude', standing);
+        } catch (error) {
+            this.#options.standingUnwritten?.((error as NodeJS.ErrnoException).code ?? 'unknown');
+            return false;
+        }
+        this.#options.standingChanged?.(standing === null ? null : { givenAt: standing.givenAt, newChats: standing.newChats }, why);
+        return true;
     }
 
     /** Removes a conversation's record; the host's own transcript stays the host's. One whose turn runs is refused. */
@@ -1642,7 +1747,9 @@ export class Chat {
                     if (running.mode !== 'full_access' || uses.get(line.id) === 'EndConversation') return;
                     if (running.turnId !== null && this.#broker.hooked(running.turnId, line.id)) return;
                     this.#options.unchecked?.();
-                    stopFor(unguardedSentence);
+                    // A check a policy filtered out would miss every later turn too: the standing choice goes with it.
+                    const takenBack = this.#standingFor('full_access', 'claude') !== null && this.#writeStanding(null, 'unchecked');
+                    stopFor(takenBack ? unguardedStandingSentence : unguardedSentence);
                     this.#changeMode(conversation, 'ask_first', false);
                     return;
                 }
