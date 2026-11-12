@@ -582,12 +582,11 @@ public sealed class Claimer(
         {
             // A question nobody has answered yet, about this item. It is left exactly as it is: asking the same
             // person the same thing twice is not an improvement, and a second pending row is one the database
-            // would refuse anyway. Whether its subject still matches is not asked here, though it may have stopped
-            // matching: an item awaiting approval is never claimed, but `workitem.update` accepts a new `input` on
-            // it. That is caught when the question is answered — an approval of the subject the item no longer
-            // composes fails the hash comparison above at the next claim, and the park below supersedes it and asks
-            // again. Reaching here at all means something let the item back into the queue with the decision still
-            // open, and the honest answer to that is to put it back where it was waiting.
+            // would refuse anyway. Whether its subject still matches is not asked here, because it cannot have
+            // stopped matching — a pending row sits on an item that is awaiting_approval, and such an item is
+            // never claimed, so nothing could have edited the work since. Reaching here at all means something
+            // let the item back into the queue with the decision still open, and the honest answer to that is to
+            // put it back where it was waiting.
             ApprovalGate.Wait(db, journal, item, now);
             return null;
         }
