@@ -113,6 +113,20 @@ public class PersonTextShownTests
             {"plugin_id":"reply","available":false,"reason":"other","detail":"H","credits":{"balance":3,"price_per_person":0.5,"currency":"H"},
              "headroom":10}
             """),
+        ["approval get"] = (ApprovalRenderers.Approval, """
+            {"id":"apr_1","work_item_id":"wi_1","campaign_id":"cmp_1","operation":"audience.search","operation_version":1,"status":"pending",
+             "reason":"approval_required","subject_hash":"sha256:a","subject":{},"plugin_id":"reply","binding_identity":"sha256:b",
+             "requested_at":"T","preview":{"highlights":{"/args/count":10,"/definition":{"H":["H",{"value":"H","type":"H"}]}},
+             "standing_approval":{"standing":null,"audience":null,"expires_at":"H","max_people":null,"max_per_search":null,"people":null,
+             "count":10,"why":"expired"}}}
+            """),
+        ["campaign audience"] = (json => AudienceRenderers.CampaignAudience(json, DefinedBy(json)), """
+            {"campaign_id":"cmp_1","reserve":{"untouched":2,"threshold":3},"allowance":{"campaign_id":"cmp_1","category":null,
+             "operations":["audience.search"],"audience":{"id":"aud_1","number":2},"expires_at":null,"max_releases":null,"max_people":100,
+             "max_per_search":null,"released":1,"people":50,"in_force":true,"set_by":{"type":"human","id":"H"},"set_at":"T","line_id":"jrn_1"},
+             "audiences":[{"id":"aud_1","number":2,"created_at":"T","definition":{"H":["H"]},"landed":0,"search_count":0,"searches":[]}],
+             "next_cursor":null}
+            """),
         ["operation describe"] = (OperationRenderers.Description, """
             {"operation":"audience.search","version":1,"plugin_id":"reply","plugin_version":"H","arguments":{"description":"H"},
              "definition":{"schema":{"properties":{"industries":{"description":"H"}}},"keys":{}}}
@@ -144,6 +158,8 @@ public class PersonTextShownTests
         { "audience filter-values", 2 },
         { "audience availability", 2 },
         { "operation describe", 1 },
+        { "approval get", 5 },
+        { "campaign audience", 3 },
     };
 
     [Theory]
@@ -161,6 +177,17 @@ public class PersonTextShownTests
         }
 
         Assert.Equal(places, Count(text, Marked));
+    }
+
+    /// <summary>
+    /// The schema a plugin would declare for the definitions the view holds, a property for each of their keys, as the CLI
+    /// reads it from <c>operation.describe</c> to lay a definition out by key.
+    /// </summary>
+    private static System.Text.Json.Nodes.JsonObject DefinedBy(string json)
+    {
+        var keys = System.Text.Json.Nodes.JsonNode.Parse(json)!["audiences"]![0]!["definition"]!.AsObject().Select(member => member.Key).ToList();
+        var properties = new System.Text.Json.Nodes.JsonObject(keys.Select(key => KeyValuePair.Create(key, (System.Text.Json.Nodes.JsonNode?)new System.Text.Json.Nodes.JsonObject())));
+        return new System.Text.Json.Nodes.JsonObject { ["schema"] = new System.Text.Json.Nodes.JsonObject { ["properties"] = properties } };
     }
 
     /// <summary>A question is several lines more often than not: each of its lines is shown by the rule, and stays a line.</summary>

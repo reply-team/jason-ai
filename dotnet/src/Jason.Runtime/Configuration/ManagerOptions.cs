@@ -71,6 +71,12 @@ public sealed class ManagerOptions
         // trigger: the reserve counts it. An installation that narrowed this list before the kind existed is not woken
         // by it until it adds it.
         JournalKinds.AudienceSearchEnded,
+
+        // A search is held at the provider — paused, out of credits, at the plan's limit — and spends nothing until a person
+        // acts there: telling the person what holds it and what to do is the manager's, since the runtime tells nobody
+        // directly. Said once per hold. An installation that narrowed this list before the kind existed is not woken by it
+        // until it adds it.
+        JournalKinds.AudienceSearchHeld,
     ];
 
     /// <summary>

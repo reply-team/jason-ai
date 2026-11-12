@@ -262,8 +262,9 @@ replaces the other. How the runtime's six map onto the jobs named here:
 
 - `audience.preview` is `segment.preview` asked of the provider's database rather than of the people already held:
   free, and approved by nobody.
-- `audience.search` is `candidate.search` and `candidate.promote` as one act, because every person it finds is revealed
-  and charged; it is metered, and the first search under a definition waits for a person.
+- `audience.search` is `candidate.search` and `candidate.promote` as one act, because the provider makes every person it
+  finds ours, with no step between finding and taking; it is metered, at the provider's own price, and the first search
+  under a definition waits for a person.
 - `audience.search_status` and `audience.search_cancel` are `job.get` and `job.cancel` for one search running at the
   provider.
 - `audience.filter_values` lists the values one of the provider's filters takes. No operation here does that:

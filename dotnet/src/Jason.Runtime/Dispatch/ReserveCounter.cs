@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace Jason.Runtime.Dispatch;
 
 /// <summary>
-/// The sixth step of a scan: for each live campaign that set an <c>audience_threshold</c>, count its untouched members
+/// The seventh step of a scan: for each live campaign that set an <c>audience_threshold</c>, count its untouched members
 /// when something that can change the number was written since the last look, and say once per crossing that the reserve
 /// fell under the threshold or is back at or above it. It runs after the respond step and before the summon, so a line
 /// saying the reserve is low summons the manager's review in the same scan.
@@ -59,6 +60,11 @@ public sealed class ReserveCounter(JournalWriter journal, ILogger<ReserveCounter
         new EventId(3, nameof(Failed)),
         "The reserve count for campaign {CampaignId} failed; the rest of the scan continues without it");
 
+    private static readonly Action<ILogger, string, string, Exception?> FailedToParse = LoggerMessage.Define<string, string>(
+        LogLevel.Warning,
+        new EventId(3, nameof(Failed)),
+        "The reserve count for campaign {CampaignId} failed; the rest of the scan continues without it: {Failure}");
+
     /// <returns>How many lines the step wrote.</returns>
     public async Task<int> CountAsync(JasonDbContext db, CancellationToken ct)
     {
@@ -85,7 +91,7 @@ public sealed class ReserveCounter(JournalWriter journal, ILogger<ReserveCounter
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Failed(logger, candidate.PublicId, ex);
+                CountFailed(candidate.PublicId, ex);
                 db.ChangeTracker.Clear();
             }
         }
@@ -152,17 +158,34 @@ public sealed class ReserveCounter(JournalWriter journal, ILogger<ReserveCounter
             return false;
         }
 
-        var campaign = await db.Campaigns.FirstAsync(row => row.Id == candidate.Id, ct).ConfigureAwait(false);
+        // Keyed by the campaign's id alone: the line needs nothing else of it, and the campaign's own columns are never read.
         journal.Append(
             db,
             Actors.Dispatcher,
             kind,
-            campaign,
-            updated: new JsonObject { ["untouched"] = untouched, ["threshold"] = candidate.Threshold });
+            campaign: null,
+            updated: new JsonObject { ["untouched"] = untouched, ["threshold"] = candidate.Threshold },
+            campaignId: candidate.Id);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         Said(logger, candidate.PublicId, kind, null);
         return true;
+    }
+
+    /// <summary>
+    /// A failure said as every scan step says one: a parser's message can quote the input it could not read, so a parse
+    /// failure is said by where it stopped and never whole.
+    /// </summary>
+    private void CountFailed(string campaignId, Exception exception)
+    {
+        if (ParseFailure.Is(exception))
+        {
+            FailedToParse(logger, campaignId, ParseFailure.Describe(exception), null);
+        }
+        else
+        {
+            Failed(logger, campaignId, exception);
+        }
     }
 
     /// <summary>

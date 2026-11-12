@@ -69,7 +69,7 @@ public static class AudienceCommands
         var campaign = Campaign();
         var filter = new Option<string?>("--filter")
         {
-            Description = "The provider's filter, as its definition's keys name it, such as industries.",
+            Description = "The typeahead a key of the definition is paired with, which `jason operation describe audience.search --campaign <id>` prints under each key, such as job-titles; not the key itself.",
             Required = true,
         };
         var query = new Option<string?>("--query") { Description = "The text the values start with, at most 200 characters; every value when absent." };

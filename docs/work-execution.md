@@ -184,7 +184,10 @@ An item is **eligible** — the dispatcher would claim it right now — when all
    `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs`
    ([docs/contracts/README.md](contracts/README.md)): an operation whose not running is the harm, which must still
    reach the provider after somebody paused Jason's campaign first. Today those are `campaign.pause`,
-   `optout.record`, `message.cancel` and `audience.search_cancel`;
+   `optout.record`, `message.cancel` and `audience.search_cancel` — or `archived`, for one whose operation declares
+   `dispatch.in_archived_campaign: runs`, today `audience.search_cancel` alone: archiving is how a person stops a
+   campaign, so the archive cancels the campaign's open work but such a stop, and the next scan makes one stop for each
+   search of the campaign still in flight, which ends it `cancelled`;
 3. `not_before` is unset or already past;
 4. `due_at` is unset or still ahead;
 5. `retry_after` is unset or already past.
@@ -196,14 +199,17 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in eleven short steps: **expire**, **enforce**, **events**,
-**sync**, **poll**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**. Events hands one read of an account's events to a
+Each tick, the dispatcher runs one scan in twelve short steps: **expire**, **enforce**, **events**,
+**sync**, **poll**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**. Events hands one read of an account's events to a
 reader that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
 each live campaign's conversations and says, in the chronicle, each thread that moved
 ([docs/inbound-sync.md](inbound-sync.md) is the contract). Poll follows each search a live campaign's audience is filled
-by: one `audience.search_status` read of a search a cadence after its last, or at once where the last said more people
-are readable now, waiting longer after reads that failed, never while a read or a stop of it is under way, and once its
-reads have landed nobody for the stall bound it ends the search as stalled and reads it no more ([docs/campaign-manager.md](campaign-manager.md) §10). Respond reads those lines, whichever writer said them, and
+by: one `audience.search_status` read of a search a cadence after its last, or at once where the last page carried
+people and said more are readable now, waiting longer after reads that failed, never while a read or a stop of it is
+under way, and once its reads have landed nobody for the stall bound it ends the search as stalled and reads it no more.
+A search the provider holds is read on the slower cadence of a held search and stalls only at its own, longer bound; and
+for a search of a campaign archived while it ran, poll makes the one stop the archive owes it
+([docs/campaign-manager.md](campaign-manager.md) §10). Respond reads those lines, whichever writer said them, and
 for a thread the campaign holds by its own pin queues a `conversation.get` of the thread and a responder created
 waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
@@ -222,7 +228,9 @@ was written, or a deadline that passed while the runtime was down, release it at
 releases at most 500 waits a scan: a cleared block's waits are released over as many scans as the bound
 needs, oldest first. It runs after enforce, so an item whose last attempt was lost for good releases
 what waits on it in the same scan, and before the claim, so what it releases can be claimed in that
-scan. Notify comes last, after the dispatch ([docs/notifications.md](notifications.md) is the contract).
+scan. Notify comes after the dispatch ([docs/notifications.md](notifications.md) is the contract), and subscribe last:
+it offers the subscription runner the journal kinds whose chains have a line to take, so a chain sees what every step
+before it wrote, and starts nothing while the dispatcher drains ([docs/plugins.md](plugins.md)).
 
 Claiming happens inside an immediate transaction, so two scans — or two runtimes — cannot both take
 the same item; the second waits, finds it taken and moves on. Within one scan the dispatcher takes:
@@ -235,7 +243,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twenty-five pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the twenty-six pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -391,6 +399,11 @@ allowance names retires the allowance: an unset by the person, with the reason t
 Approving a search under the audience the allowance names leaves it as it is, and nothing else moves it: no role's act,
 no verdict, and no probe that waits for a person, so a top-up under the allowance while a new audience's probe waits is
 inside what the person allowed. An audience the allowance moved away from may be allowed again; none is the latest.
+The allowance is a permission, not an order: the runtime lets through any top-up it covers, whoever created it, and no
+role moves it. The manager's skill uses it only for an audience whose latest verdict is `working`; after the analyst's
+`replace` or `stop` it creates no top-up of that audience and leaves the reserve low until the person acts, and the person
+is asked at once. That rule is the manager's alone, kept in its skill: the runtime does not enforce it, since enforcing
+it would let a verdict move the allowance, and a person's own top-up under the allowance still goes.
 `allow` on a rejection, or on an approval of other work, is refused at `allow`, and in an archived campaign, whose
 standing approvals no longer change, with `campaign_archived`; an approval there moves no allowance.
 
@@ -572,7 +585,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twenty-five provider checks follow.
+existed. It is the same rule the twenty-six provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -876,7 +889,7 @@ settings at all and are never refused for this reason.
 | `workitem_terminal` | 409 | the item is finished; finished items are not changed |
 | `stale_attempt` | 409 | the attempt id is not the item's current running attempt |
 | `contact_not_member` | 409 | the contact is not an active member of the campaign |
-| `campaign_archived` | 409 | an archived campaign takes no new work |
+| `campaign_archived` | 409 | an archived campaign takes no new work, but a search's stop |
 | `idempotency_key_reused` | 409 | a different request already created something under this key; it is final, and the message names what the key belongs to |
 | `result_too_large` | 400 | the result exceeds 1 MiB |
 | `result_invalid` | 400 | the result does not satisfy the `result_format` the item declared |
@@ -901,7 +914,7 @@ settings at all and are never refused for this reason.
 | `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the twenty-five pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the twenty-six pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -924,7 +937,7 @@ declares for one. A plugin never sees a work item's context. A search the claim 
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
 ([campaign manager](campaign-manager.md) §10).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-five checks,
+**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-six checks,
 in this order, and the first that answers is the one that decides:
 
 ```text
@@ -932,20 +945,23 @@ operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → 
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
 contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
 search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
-argument_unsupported → template_not_offered → provider_answer_lost → approval_required →
-provider_blocked
+argument_unsupported → template_not_offered → provider_answer_lost → search_unfinished →
+approval_required → provider_blocked
 ```
 
 The first twenty-three are refusals and all of them are final: twenty are `permanent`, `input_invalid` and
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
-`ambiguous`, because it refuses to repeat a send whose earlier attempt lost its answer, either under a plugin whose
-manifest does not say it settles the send by the work item's key, or where the routed package, by its id and digest, or
-its binding is not the one the unsettled attempt ran under, or the input composed now is not the one it was composed
-with, and so keeps what that attempt left unknown. The attempt is kept with its
+`ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
+lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
+the routed package, by its id and digest, or its binding is not the one the unsettled attempt ran under, or the input
+composed now is not the one it was composed with, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
-nothing ever falls back to another plugin. The twenty-fourth is not a refusal: `approval_required` parks the
+nothing ever falls back to another plugin. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
+waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
+later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
+twenty-fifth is not a refusal either: `approval_required` parks the
 item for a person (§Approvals above), and it is asked after every refusal so that nobody is asked to approve work
-that would have been refused anyway. The twenty-fifth, `provider_blocked`, is not a refusal either: it parks work an
+that would have been refused anyway. The twenty-sixth, `provider_blocked`, is not a refusal either: it parks work an
 open provider block holds — the operations whose document says `dispatch.under_provider_block: waits`, nothing else —
 as `waiting`, with no attempt, until the block clears or a trial gets past it (§Provider blocks below). [docs/routing.md](routing.md) says what each one means and what to
 change.
@@ -1041,7 +1057,7 @@ sender parks alone, on that block.
 **Two ways in, one wait.** An attempt of held work that answers `blocked` ends `blocked` — over, and never counted
 toward `max_attempts` — and its item waits on the block the answer names, which that attempt opens where none of its
 grain is open and which is seen again where one is: counted, with the latest reason, link and `clears_at`. And the
-claim's twenty-fifth check parks held work an open block already holds, before an attempt exists
+claim's twenty-sixth check parks held work an open block already holds, before an attempt exists
 ([docs/routing.md](routing.md) §7). Either way the item moves to `waiting` on the same wait row a role's wait uses,
 naming the block with no `mode`, `until` or `deadline`; the item's `due_at` bounds it, an item past its due date
 expires, and cancelling the item closes the wait. A person's approval stays as they gave it: approved work the block
@@ -1166,7 +1182,9 @@ mistyped one.
 | `Dispatcher:ExitGraceSeconds` | `30` | 0..600 | how long a process may linger after its attempt was completed through the API before the dispatcher stops it |
 | `Dispatcher:EventsCadenceSeconds` | `600` | 60..86400 | how long after one read of an account's events starts the next is due ([docs/events.md](events.md)) |
 | `Dispatcher:SearchCadenceSeconds` | `300` | 60..86400 | how long after the dispatcher's last read of a search's people the next is due, and after the search began, its first; doubled for each of its reads in a row that failed, never past a day ([docs/campaign-manager.md](campaign-manager.md) §10) |
-| `Dispatcher:SearchStallSeconds` | `3600` | 60..604800 | how long the reads of a search may land nobody before the dispatcher calls it stalled and stops reading it ([docs/campaign-manager.md](campaign-manager.md) §10) |
+| `Dispatcher:SearchStallSeconds` | `3600` | 60..604800 | how long the reads of a search the provider does not hold may land nobody before the dispatcher calls it stalled and stops reading it; refused below `Dispatcher:SearchCadenceSeconds`, since every search whose first read lands nobody would be stalled at once ([docs/campaign-manager.md](campaign-manager.md) §10) |
+| `Dispatcher:SearchHeldCadenceSeconds` | `3600` | 60..86400 | how long after the dispatcher's last read of a search the provider holds — `paused`, `paused_for_credits`, `paused_for_limit` — the next is due: it spends nothing until a person acts at the provider, and the ordinary cadence comes back once it moves ([docs/campaign-manager.md](campaign-manager.md) §10) |
+| `Dispatcher:SearchHeldStallSeconds` | `604800` | 60..604800 | how long a search may stay held at the provider before the dispatcher calls it stalled, its state named, and stops reading it, so no search is read for ever; refused below `Dispatcher:SearchHeldCadenceSeconds` ([docs/campaign-manager.md](campaign-manager.md) §10) |
 | `Dispatcher:Blocks:TrialSeconds` | `900` | 60..86400 | how long after a provider block was opened or last seen, or after a trial that said nothing about it, its next trial is due (§Provider blocks) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |

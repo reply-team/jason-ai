@@ -397,7 +397,7 @@ export function versionAtLeast(found: string, wanted: string): boolean {
 
 // ---- Reply ---------------------------------------------------------------------------------------------------------
 
-export const replyMinimumVersion = '0.18.0';
+export const replyMinimumVersion = '0.20.0';
 
 export interface ReplyAccount {
     id: string;
@@ -412,7 +412,7 @@ export interface ReplyAccount {
     status: string;
 }
 
-// The two answers of the Reply CLI read here, in the shapes reply-cli 0.18.0 and 0.19.0 print (unchanged between them):
+// The two answers of the Reply CLI read here, in the shapes reply-cli 0.18.0 through 0.20.0 print (unchanged between them):
 //
 // `reply auth status --json` (src/commands/auth.ts, the object built in src/auth/status.ts) prints
 //   {"authenticated": bool, "profile": string, "source"?, "method"?, "user"?: {"id"?, "username"?, "team_id"?},

@@ -7,9 +7,9 @@
 // first and then the list's people from the cursor on — Reply moves a batch onto the list before it sets a final status,
 // so a status read as ended means every person is already on the list — and the cursor is the number of the list's people
 // already returned: Reply adds each batch at the end of an order that holds from page to page, and only that search fills
-// the list. The read that returns the last person of an ended search deletes the list, and so does a cancel that stops a
-// search; a cancel that comes after the search ended leaves the list for that read. A person Reply already holds is
-// skipped by the search, never put on the list.
+// the list. The read after the last person of an ended search, which finds nobody, deletes the list, and so does a cancel
+// that stops a search; a cancel that comes after the search ended leaves the list for that read. A person Reply already
+// holds is skipped by the search, never put on the list.
 //
 // Reply's statuses are the document's states: inProgress, finished, noMoreContacts, manuallyPaused,
 // pausedDueToInsufficientCredits and pausedDueToContactLimit. Reply's 409 is a refusal with its own code, never a block,
@@ -75,6 +75,9 @@ const LONGEST_WAIT_SECONDS = 600;
 
 const RAW = 16384;
 const SAMPLE = 25;
+
+// The keys of a sampled person Reply's record keeps beside them.
+const SHOWN = ["first_name", "last_name", "job_title", "location", "company_name", "company_domain"];
 
 export function audienceSearch(input, context) {
   const args = input.args;
@@ -162,9 +165,13 @@ export function audienceSearchStatus(input, context) {
   const rest = { state: state, found: found, people: [], cursor: String(LARGEST_OFFSET), has_more: true, vendor: vendor };
   const filled = fill(people, rest);
   const read = filled.items.length < people.length ? at[filled.items.length] : page.items.length;
-  const hasMore = filled.items.length < people.length || page.has_more;
+  const ended = state === "finished" || state === "exhausted";
 
-  if ((state === "finished" || state === "exhausted") && !hasMore) {
+  // An ended search's last people come with more to read, and the list is deleted only by the read after them, which
+  // starts at the end and finds nobody: a read that carries people never deletes them before the runtime has kept them,
+  // and a repeat of the read that deleted finds the same nothing.
+  const hasMore = filled.items.length < people.length || page.has_more || (ended && page.items.length > 0);
+  if (ended && !hasMore) {
     deleteList(context, named.list);
   }
 
@@ -293,13 +300,23 @@ function startedEarlier(context, workItem, since) {
       }
     }
 
-    const last = listed.items.length > 0 && isObject(listed.items[listed.items.length - 1]) ? Date.parse(listed.items[listed.items.length - 1].startedAt) : Number.NaN;
+    const last = listed.items.length > 0 && isObject(listed.items[listed.items.length - 1]) ? utcOf(listed.items[listed.items.length - 1].startedAt) : Number.NaN;
     if (listed.has_more !== true || (Number.isFinite(last) && last < floor)) {
       break;
     }
   }
 
   return null;
+}
+
+// Reply writes a search's start in UTC with no offset, and an ISO date-time without one is read as local time: so a time
+// that names no zone is read as UTC here, and one that names its zone keeps it.
+function utcOf(moment) {
+  if (typeof moment !== "string") {
+    return Number.NaN;
+  }
+
+  return Date.parse(/T.*(Z|[+-][0-9]{2}:?[0-9]{2})$/.test(moment) ? moment : moment + "Z");
 }
 
 // The search Reply holds under the id, or null where it holds none. An answer with no status is no answer.
@@ -393,11 +410,12 @@ function personOf(contact) {
 }
 
 // One person of a preview's sample: no identifier, since Reply's sample gives none, and no way to reach them — no
-// channels, and Reply's record beside them without the LinkedIn link it shows.
+// channels, and beside them only the keys of Reply's record meant to be shown. An address, a number, a profile link or a
+// key Reply adds later stays out: a preview is free and waits for nobody.
 function sampled(person) {
   const shown = {};
-  for (const key of Object.keys(person)) {
-    if (key !== "linkedin_url") {
+  for (const key of SHOWN) {
+    if (Object.prototype.hasOwnProperty.call(person, key)) {
       shown[key] = person[key];
     }
   }

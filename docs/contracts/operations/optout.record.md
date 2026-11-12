@@ -93,6 +93,7 @@ attempt may have made is found by a read first, never created again from the per
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `not_applicable`, provider contact `find_or_create` |
 | in a paused campaign | `runs` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | none |

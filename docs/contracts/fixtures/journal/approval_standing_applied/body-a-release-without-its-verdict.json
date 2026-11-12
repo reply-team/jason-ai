@@ -13,5 +13,5 @@
       "category": "interested"
     }
   },
-  "expect": { "invalid": [{ "pointer": "/new/verdict", "reason": "required" }] }
+  "expect": { "invalid": [{ "pointer": "/new", "reason": "any_of" }] }
 }

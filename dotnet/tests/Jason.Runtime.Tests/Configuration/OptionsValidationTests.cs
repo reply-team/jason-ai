@@ -223,24 +223,37 @@ public class OptionsValidationTests
     }
 
     /// <summary>
-    /// A search is read every five minutes and called stalled after an hour of reads that landed nobody, unless set: the
-    /// cadence is a minute to a day, as the other cadences, and the bound a minute to a week. Nothing outside is clamped.
+    /// A search is read every five minutes and called stalled after an hour of reads that landed nobody, unless set, and a
+    /// search the provider holds every hour, called stalled after a week of the hold: each cadence is a minute to a day, as
+    /// the other cadences, and each bound a minute to a week. A bound below its own cadence is refused, since every search
+    /// would be stalled at its first read. Nothing outside is clamped.
     /// </summary>
     [Theory]
-    [InlineData(59, 3_600, "Dispatcher:SearchCadenceSeconds must be between 60 and 86400; got 59.")]
-    [InlineData(86_401, 3_600, "Dispatcher:SearchCadenceSeconds must be between 60 and 86400; got 86401.")]
-    [InlineData(300, 59, "Dispatcher:SearchStallSeconds must be between 60 and 604800; got 59.")]
-    [InlineData(300, 604_801, "Dispatcher:SearchStallSeconds must be between 60 and 604800; got 604801.")]
-    public void A_search_is_read_on_a_cadence_and_stalls_after_a_bound(int cadence, int stall, string refusal)
+    [InlineData(59, 3_600, 3_600, 604_800, "Dispatcher:SearchCadenceSeconds must be between 60 and 86400; got 59.")]
+    [InlineData(86_401, 3_600, 3_600, 604_800, "Dispatcher:SearchCadenceSeconds must be between 60 and 86400; got 86401.")]
+    [InlineData(300, 59, 3_600, 604_800, "Dispatcher:SearchStallSeconds must be between 60 and 604800; got 59.")]
+    [InlineData(300, 604_801, 3_600, 604_800, "Dispatcher:SearchStallSeconds must be between 60 and 604800; got 604801.")]
+    [InlineData(300, 3_600, 59, 604_800, "Dispatcher:SearchHeldCadenceSeconds must be between 60 and 86400; got 59.")]
+    [InlineData(300, 3_600, 86_401, 604_800, "Dispatcher:SearchHeldCadenceSeconds must be between 60 and 86400; got 86401.")]
+    [InlineData(300, 3_600, 3_600, 59, "Dispatcher:SearchHeldStallSeconds must be between 60 and 604800; got 59.")]
+    [InlineData(300, 3_600, 3_600, 604_801, "Dispatcher:SearchHeldStallSeconds must be between 60 and 604800; got 604801.")]
+    [InlineData(600, 300, 3_600, 604_800, "Dispatcher:SearchStallSeconds (300) is below Dispatcher:SearchCadenceSeconds (600): every search whose first read lands nobody would be stalled at once.")]
+    [InlineData(300, 3_600, 7_200, 3_600, "Dispatcher:SearchHeldStallSeconds (3600) is below Dispatcher:SearchHeldCadenceSeconds (7200): every held search would be stalled at its first read.")]
+    public void A_search_is_read_on_a_cadence_and_stalls_after_a_bound(int cadence, int stall, int heldCadence, int heldStall, string refusal)
     {
-        Assert.Equal((300, 3_600), (new DispatcherOptions().SearchCadenceSeconds, new DispatcherOptions().SearchStallSeconds));
+        var defaults = new DispatcherOptions();
+        Assert.Equal((300, 3_600, 3_600, 604_800), (defaults.SearchCadenceSeconds, defaults.SearchStallSeconds, defaults.SearchHeldCadenceSeconds, defaults.SearchHeldStallSeconds));
 
-        var result = new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { SearchCadenceSeconds = cadence, SearchStallSeconds = stall });
+        var result = new DispatcherOptionsValidator().Validate(
+            null,
+            new DispatcherOptions { SearchCadenceSeconds = cadence, SearchStallSeconds = stall, SearchHeldCadenceSeconds = heldCadence, SearchHeldStallSeconds = heldStall });
 
         Assert.True(result.Failed);
         Assert.Equal([refusal], result.Failures!);
-        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { SearchCadenceSeconds = 60, SearchStallSeconds = 604_800 }).Succeeded);
-        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { SearchCadenceSeconds = 86_400, SearchStallSeconds = 60 }).Succeeded);
+        Assert.True(new DispatcherOptionsValidator().Validate(
+            null, new DispatcherOptions { SearchCadenceSeconds = 60, SearchStallSeconds = 604_800, SearchHeldCadenceSeconds = 60, SearchHeldStallSeconds = 604_800 }).Succeeded);
+        Assert.True(new DispatcherOptionsValidator().Validate(
+            null, new DispatcherOptions { SearchCadenceSeconds = 86_400, SearchStallSeconds = 86_400, SearchHeldCadenceSeconds = 86_400, SearchHeldStallSeconds = 86_400 }).Succeeded);
     }
 
     /// <summary>A block is tried again every fifteen minutes unless set, and a cadence is a minute to a day; nothing outside is clamped.</summary>

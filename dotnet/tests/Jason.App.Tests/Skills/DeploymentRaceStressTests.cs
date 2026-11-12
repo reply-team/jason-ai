@@ -35,12 +35,11 @@ public class DeploymentRaceStressTests
     private const string Role = "researcher";
 
     /// <summary>
-    /// Enough launches to meet the window every time: with the defect back, nine launches in ten met it (measured on Linux,
-    /// with the temporary directory in memory), so fifty miss it with odds of about one in 10^50; a platform whose renames
-    /// and deletes are slower meets it less often, and still almost surely within fifty. Each launch that meets a replacement waits for it to finish, about a second here, so
-    /// every launch more is time the whole suite spends on this one test.
+    /// Enough launches to meet the window on every platform the full matrix runs: the rate at which a launch meets it was
+    /// measured on one system alone, and a platform whose renames and deletes are slower meets it less often, so the
+    /// guard keeps the count it had before the copies moved aside were discarded.
     /// </summary>
-    private const int Launches = 50;
+    private const int Launches = 400;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

@@ -3,25 +3,6 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
-## 0.15.2
-
-- Nothing this package does has changed. The runtime this package is released with makes a search's people the
-  campaign's: it reads each page the status read answers and makes every person a member of the campaign, and a person
-  the campaign already has stays the one member they are, never a second contact. 0.15.1's line that a search's people
-  do not become a campaign's described the build before that. The README says so where it tells that a person the
-  campaign has and Reply does not hold can still be found, and charged for.
-
-## 0.15.1
-
-- The known break of the contract that 0.15.0 lists is gone, because the contract no longer asks for what broke it:
-  `audience.search` takes no `exclude`, and no provider is asked to leave people already known out of a search. A
-  provider whose search can take a list of people to skip takes it under `args.provider`; Reply's start takes none.
-  Nothing this package does has changed. The README's row for `audience.search` and "What it cannot do" no longer speak
-  of `exclude`, nor say that the runtime recognises the people a search finds when they land: in this build a search's
-  people do not become a campaign's. They still say that a person Reply already holds is never found, while
-  `audience.preview` counts and samples them, and that a person the campaign has and Reply does not hold can be found
-  and charged for.
-
 ## 0.15.0
 
 - The package performs the audience family over Reply's Live Data: `audience.preview`, `audience.search`,
@@ -31,29 +12,32 @@ absorbed by a release of this package alone.
   filters by Reply's own names, each described, with Reply's bounds — at most 25 values a filter, each at most 200
   characters, at least one filter that filters — so a definition Reply would refuse for them is refused at the claim and
   at the preview before Reply is asked, and the typeahead each filter pairs with among Reply's five lists of values.
+- `audience.preview` counts a definition and samples ten people with no way to reach them: Reply's record beside each
+  carries their name, title, location and company and nothing else, so no email, phone or profile link Reply returns
+  reaches the answer.
 - A search makes a private contact list of its own, named `Jason search`, the work item and the attempt's number,
-  starts Reply's search on it, and answers `accepted` with a reference holding both ids. A status read reads the
-  search's status, then the list's people from the cursor on, the cursor being how many it already returned, each with
-  Reply's contact id; the read that returns the last person of a search that ended deletes the list, and so does a
-  cancel that stops a search, while a cancel that comes after the search ended changes nothing. A repeat after a lost
-  start finds the search by its list among the team's searches and starts none.
+  starts Reply's search on it, and answers `accepted` with a reference holding both ids. A start Reply refused deletes
+  the list again; one whose answer was lost keeps it, since the search may have started on it. A repeat after a lost
+  start finds the search by its list among the team's searches, back as far as the earliest
+  attempt that may have acted, each search's start, which Reply writes with no zone, read as UTC; it starts none.
+- A status read reads the search's status, then the list's people from the cursor on, the cursor being how many it
+  already returned, each with Reply's contact id. The last people of a search that ended come with more to read, and
+  the read after them, which finds nobody, deletes the list, so the runtime always lands them; a cancel that stops a
+  search deletes it too, while a cancel that comes after the search ended changes nothing.
 - Reply's statuses are the documents' states, credits that run out mid-search among them, `paused_for_credits`, and the
   plan's contact limit, `paused_for_limit`; Reply's 409 is `search_in_progress`, a refusal and never a block, its 422
   `insufficient_credits`, or `feature_unavailable` where the plan has no room for another contact, and its 403
-  `feature_unavailable`. `audience.availability` answers that the account may search
-  and nothing more: Reply has no read of an account's credits.
-- **A known break of the contract: `audience.search` reads no `exclude`.** The contract says nobody `exclude` names
-  comes back. Reply's start takes no list of people to leave out, and the status read that returns the people is not
-  handed `exclude`. Reply skips every person the account already holds, free — every person an earlier search found
-  among them — so only a person `exclude` names and Reply does not hold can be found, charged for and returned. The
-  runtime recognises them when they land.
+  `feature_unavailable`. `audience.availability` answers that the account may search and nothing more: Reply has no
+  read of an account's credits.
 - A person Reply already holds is never found by a search, however well they match, while `audience.preview` counts and
-  samples them.
+  samples them. Reply's start takes no list of people to leave out, so a person the campaign has and Reply does not hold
+  can be found, added to Reply and charged for; the runtime keeps them the one member of the campaign they already are,
+  never a second contact.
 - What it cannot do: people without an email (`include_without_email`) are refused `capability_not_offered`, reply-cli
   having no flag for them.
 - Needs reply-cli 0.20.0 or newer, the release with `reply live-data` and `reply contact-list create`, `delete` and
-  `contacts`, and a Jason runtime that publishes the audience family: an older one refuses the package at the reload,
-  `unknown_field`, on `audience_definition`.
+  `contacts`, and Jason 0.35.0 or newer, the release that publishes the audience family: an older one refuses the
+  package at the reload, `unknown_field`, on `audience_definition`.
 
 ## 0.14.8
 

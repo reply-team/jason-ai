@@ -95,6 +95,29 @@ public class WorkItemContractTests
         Assert.Equal("founders of seed-stage startups", (string?)other.Context["audience"]);
     }
 
+    /// <summary>
+    /// A campaign's three reads on request — an audience's preview, a filter's values, whether the account may search — are
+    /// asked of the runtime and answered there, recorded nowhere. Written as work, a preview's sample of people would be
+    /// kept in the item's result for good, so each is refused at create, and its refusal names the verb to ask it with.
+    /// </summary>
+    [Theory]
+    [InlineData("audience.preview", """{"definition":{"industries":["Software"]}}""", "jason audience preview")]
+    [InlineData("audience.filter_values", """{"filter":"industries","query":"Soft","limit":5}""", "jason audience filter-values")]
+    [InlineData("audience.availability", "{}", "jason audience availability")]
+    public async Task A_campaign_s_read_on_request_is_never_work(string operation, string input, string verb)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+
+        var refused = await Assert.ThrowsAsync<ValidationException>(
+            () => NewService(db).CreateAsync(ProviderOp(campaign.PublicId, operation) with { Context = new JsonObject { ["input"] = JsonNode.Parse(input) } }, Ct));
+
+        var detail = Assert.Single(refused.Details!);
+        Assert.Equal(("operation", "on_request_only"), (detail.Field, detail.Code));
+        Assert.Contains(verb, detail.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task An_operation_whose_arguments_are_all_optional_needs_no_input()
     {

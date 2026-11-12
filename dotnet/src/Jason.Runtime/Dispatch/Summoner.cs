@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace Jason.Runtime.Dispatch;
 
 /// <summary>
-/// The seventh step of a scan: decide which campaigns want a manager looking at them, and put a check-in on the
+/// The eighth step of a scan: decide which campaigns want a manager looking at them, and put a check-in on the
 /// queue for each. It runs before the claim so that a check-in created this tick can be claimed this tick, after the
 /// lease enforcer so that a review of a lost attempt is summoned by the line that lost it, after the inbound read
 /// so that a reply it says summons a review in the same scan, after the respond step, so the responder that reply

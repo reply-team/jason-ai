@@ -3,19 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
-## 1.4.0
-
-The manifest declares the two kinds Jason 0.34.0 writes about the searches a campaign's audience is filled by,
-`audience_people_landed` and `audience_search_ended`, so a person can grant them. Nothing else changes.
-
-Jason 0.34.0 or newer: an earlier runtime rejects the reload, as every package problem does, over a kind it does not write.
-
 ## 1.3.0
 
-The manifest declares the two kinds Jason 0.34.0 writes about a campaign's reserve of untouched people,
-`audience_reserve_low` and `audience_reserve_recovered`, so a person can grant them. Nothing else changes.
+The manifest declares the five kinds Jason 0.35.0 writes about a campaign's audience: `audience_reserve_low` and
+`audience_reserve_recovered`, about its reserve of untouched people, and `audience_people_landed`,
+`audience_search_ended` and `audience_search_held`, about the searches it is filled by, so a person can grant them.
+Nothing else changes.
 
-Jason 0.34.0 or newer: an earlier runtime rejects the reload, as every package problem does, over a kind it does not write.
+Jason 0.35.0 or newer: an earlier runtime rejects the reload, as every package problem does, over a kind it does not write.
 
 ## 1.2.0
 

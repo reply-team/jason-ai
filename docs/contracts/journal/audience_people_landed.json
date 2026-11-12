@@ -1,7 +1,7 @@
 {
   "kind": "audience_people_landed",
   "version": 1,
-  "since": "0.34.0",
+  "since": "0.35.0",
   "summary": "One page of a search's people landed in its campaign: what the page held, whom it made members, and whom it made contacts of the directory; one line per page that carried anybody.",
   "subscribable": true,
   "entities": {

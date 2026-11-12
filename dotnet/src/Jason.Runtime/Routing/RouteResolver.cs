@@ -51,4 +51,43 @@ public static class RouteResolver
             ? new Resolution(globalDefault, RouteScope.GlobalDefault)
             : null;
     }
+
+    /// <summary>
+    /// The route of a read or a stop of one search: the route active now that names the plugin and the account the search
+    /// ran under, since its reference means something only there. The operation's own route where it does, then the
+    /// campaign's route for the search's own operation, then each of the campaign's routes and each global one, in the
+    /// order of precedence; and the operation's own route where none names them any more, which the claim then refuses as
+    /// made elsewhere. A binding is found by its identity, so the one found is the very binding the search ran under.
+    /// </summary>
+    public static Resolution? ForSearch(RouteSnapshot snapshot, string campaignId, string operation, string searchOperation, string pluginId, string? bindingIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(pluginId);
+
+        var own = Resolve(snapshot, campaignId, operation);
+        if (Names(own))
+        {
+            return own;
+        }
+
+        if (Resolve(snapshot, campaignId, searchOperation) is { } searched && Names(searched))
+        {
+            return searched;
+        }
+
+        var campaign = snapshot.Campaigns.TryGetValue(campaignId, out var held) ? held : RouteSet.Empty;
+        IEnumerable<Resolution> every =
+        [
+            .. campaign.Operations.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => new Resolution(entry.Value, RouteScope.CampaignOperation)),
+            .. campaign.Default is { } campaignDefault ? [new Resolution(campaignDefault, RouteScope.CampaignDefault)] : Array.Empty<Resolution>(),
+            .. snapshot.Global.Operations.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => new Resolution(entry.Value, RouteScope.GlobalOperation)),
+            .. snapshot.Global.Default is { } globalDefault ? [new Resolution(globalDefault, RouteScope.GlobalDefault)] : Array.Empty<Resolution>(),
+        ];
+        return every.FirstOrDefault(Names) ?? own;
+
+        bool Names(Resolution? candidate) =>
+            candidate is not null
+            && string.Equals(candidate.Route.PluginId, pluginId, StringComparison.Ordinal)
+            && string.Equals(candidate.Route.BindingIdentity, bindingIdentity, StringComparison.Ordinal);
+    }
 }

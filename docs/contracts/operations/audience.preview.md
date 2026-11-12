@@ -4,11 +4,11 @@
 explains it. Where the two seem to differ, the document is right and this page is a bug.
 
 > **This version runs it, as a read on request.** A person or an agent asks for it for a campaign —
-> `jason audience preview` — and the runtime routes it by the campaign's route for the operation, holds the route to
-> the claim's checks about the route, the plugin and its binding, performs it in a plugin-host process, and measures
-> the answer against the result schema. Nothing is recorded about it. A work item may name it too, and is then
-> measured against the argument schema when it is written, routed at the claim and answered the same way. Without a
-> route it is refused with `no_route`.
+> `jason audience preview` — and the runtime routes it by the campaign's route for `audience.search`, the search it serves, holds the
+> route to the claim's checks about the route, the plugin and its binding, performs it in a plugin-host process, and
+> measures the answer against the result schema. Nothing is recorded about it, and it is never work: `workitem.create`
+> refuses it, `on_request_only`, since a work item's result is kept for good. Without a route it is refused with
+> `no_route`.
 
 ## What it is for
 
@@ -110,6 +110,7 @@ fails `provider_unavailable`, transient. An answer longer than this installation
 |---|---|
 | pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

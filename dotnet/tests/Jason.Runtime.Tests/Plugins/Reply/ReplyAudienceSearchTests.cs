@@ -1,6 +1,11 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Tests.Dispatch;
+using Jason.Runtime.Tests.Routing;
 
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
@@ -80,19 +85,30 @@ public class ReplyAudienceSearchTests
     }
 
     /// <summary>
-    /// Reply's refusals of a start, each in the code the document gives it and none a provider block: an unfinished search
-    /// of the same definition (409) a permanent refusal that says how to find it; no credits for one contact (422); a user
-    /// without the contact permissions (403); a plan with no room for another contact (422); and a definition Reply refused
-    /// for a rule of its own, in Reply's words. The
-    /// list made for the search is deleted again: nothing is left standing at Reply.
+    /// Every ending of a start the package reads, in the code the document gives it and none a provider block. Reply's
+    /// refusals: an unfinished search of the same definition (409), a permanent refusal that says how to find it; no
+    /// credits for one contact (422); a user without the contact permissions (403); a plan with no room for another
+    /// contact (422); a definition Reply refused for a rule of its own, in Reply's words. The passing ones the runtime
+    /// repeats: Reply not reached, too many calls, its search service failed. Each started nothing, so the list made for
+    /// the search is deleted again and nothing is left standing at Reply. An ending that may have started the search keeps
+    /// the list, which is how the repeat's recovery read finds it: the CLI's word for a lost answer, <c>outcome.unknown</c>,
+    /// at exit 1 as at exit 3, and a start that timed out; and a list create whose answer was lost starts nothing on a list
+    /// nobody named.
     /// </summary>
     [Theory]
-    [InlineData("in_progress", "search_in_progress", FailureClass.Permanent, "live-data list")]
-    [InlineData("no_credits", "insufficient_credits", FailureClass.Permanent, "credits")]
-    [InlineData("forbidden", "feature_unavailable", FailureClass.Permanent, "permission")]
-    [InlineData("contact_limit", "feature_unavailable", FailureClass.Permanent, "holds no more contacts")]
-    [InlineData("rejected", "definition_rejected", FailureClass.Validation, "Company-level filters cannot be combined with accountListIds")]
-    public async Task A_start_reply_refuses_is_the_document_s_refusal_and_leaves_no_list_behind(string world, string code, FailureClass failure, string said)
+    [InlineData("in_progress", "search_in_progress", FailureClass.Permanent, "live-data list", false, 1)]
+    [InlineData("no_credits", "insufficient_credits", FailureClass.Permanent, "credits", false, 0)]
+    [InlineData("forbidden", "feature_unavailable", FailureClass.Permanent, "permission", false, 0)]
+    [InlineData("contact_limit", "feature_unavailable", FailureClass.Permanent, "holds no more contacts", false, 0)]
+    [InlineData("rejected", "definition_rejected", FailureClass.Validation, "Company-level filters cannot be combined with accountListIds", false, 0)]
+    [InlineData("unavailable", "provider_unavailable", FailureClass.Transient, null, false, 0)]
+    [InlineData("rate_limited", "rate_limited", FailureClass.Transient, null, false, 0)]
+    [InlineData("service_failed", "provider_unavailable", FailureClass.Transient, null, false, 0)]
+    [InlineData("outcome_unknown", "provider_answer_lost", FailureClass.Ambiguous, null, true, 0)]
+    [InlineData("timed_out", "provider_answer_lost", FailureClass.Ambiguous, null, true, 0)]
+    [InlineData("create_lost", "provider_answer_lost", FailureClass.Ambiguous, null, true, 0)]
+    public async Task A_start_s_ending_is_the_document_s_and_keeps_its_list_only_where_a_search_may_have_started(
+        string world, string code, FailureClass failure, string? said, bool kept, int searches)
     {
         using var account = new ReplyAccount().WithList(78, "Jason search wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRJ #1");
         _ = world switch
@@ -101,19 +117,31 @@ public class ReplyAudienceSearchTests
             "no_credits" => account.Without("liveDataCredits"),
             "forbidden" => account.Without("liveData"),
             "contact_limit" => account.Refuses("live-data start", "live_data.contact_limit_reached", status: 422, replyCode: "liveDataSearch.contactLimitReached"),
-            _ => account.Refuses("live-data start", "live_data.invalid_filters", status: 400, replyCode: "liveDataSearch.invalidParameter",
+            "rejected" => account.Refuses("live-data start", "live_data.invalid_filters", status: 400, replyCode: "liveDataSearch.invalidParameter",
                 detail: "Company-level filters cannot be combined with accountListIds; the account list defines the company set."),
+            "unavailable" => account.Refuses("live-data start", "reply.unavailable", status: 503),
+            "rate_limited" => account.Refuses("live-data start", "rate_limited", status: 429),
+            "service_failed" => account.Refuses("live-data start", "live_data.service_failed", status: 500),
+            "outcome_unknown" => account.Refuses("live-data start", "outcome.unknown", status: 502),
+            "timed_out" => account.Hangs("live-data start", 20_000),
+            _ => account.LosesTheOutcome("contact-list create"),
         };
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed("audience.search", await ReplyOperations.InvokeAsync(api, "audience.search", SearchInput(count: 10), Ct));
+        var error = ReplyOperations.Failed(
+            "audience.search",
+            await ReplyOperations.InvokeAsync(api, "audience.search", SearchInput(count: 10), Ct, timeout: world == "timed_out" ? TimeSpan.FromSeconds(16) : null));
 
         Assert.Equal((code, failure), (error.Code, error.Class));
         Assert.Null(error.Block);
-        Assert.Contains(said, error.Message, StringComparison.Ordinal);
-        Assert.Equal([78], account.Lists.Select(list => (int)list!["id"]!));
-        Assert.Equal(world == "in_progress" ? 1 : 0, account.Searches.Count);
+        if (said is not null)
+        {
+            Assert.Contains(said, error.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(kept ? [78, 3001] : [78], account.Lists.Select(list => (int)list!["id"]!).Order());
+        Assert.Equal(searches, account.Searches.Count);
     }
 
     /// <summary>
@@ -246,12 +274,16 @@ public class ReplyAudienceSearchTests
     /// <summary>
     /// A repeat reads the team's searches back, a page at a time, past newer searches of other work items, to the one its
     /// own earlier attempt started; and stops reading at a page that ends an hour before the earliest attempt that may have
-    /// acted, so a search of its own older than that is not found and a new one starts.
+    /// acted, so a search of its own older than that is not found and a new one starts. Reply writes <c>startedAt</c> in
+    /// UTC with no offset, and a repeat on a machine whose clock is east of UTC by more than that hour still reads it as
+    /// UTC, so a page of newer searches never looks older than it is. Asia/Tokyo is UTC+9 all year, with no daylight
+    /// saving to move it.
     /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task A_repeat_reads_the_team_s_searches_back_as_far_as_its_earliest_attempt(bool within)
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task A_repeat_reads_the_team_s_searches_back_as_far_as_its_earliest_attempt(bool within, bool offsetLessEastOfUtc)
     {
         var since = DateTimeOffset.UtcNow.AddMinutes(-30);
         using var account = new ReplyAccount();
@@ -260,17 +292,22 @@ public class ReplyAudienceSearchTests
         {
             var startedAt = at < 100 ? since.AddMinutes(1 + at) : since.AddHours(-2).AddMinutes(-at);
             account.WithList(6001 + at, "Jason search wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRJ #1")
-                .WithSearch(7001 + at, "inProgress", 6001 + at, startedAt: startedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+                .WithSearch(7001 + at, "inProgress", 6001 + at, startedAt: Written(startedAt));
         }
 
-        account.WithList(77, ListName).WithSearch(901, "finished", 77, Software, startedAt: (within ? since.AddSeconds(30) : since.AddHours(-10)).ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        account.WithList(77, ListName).WithSearch(901, "finished", 77, Software, startedAt: Written(within ? since.AddSeconds(30) : since.AddHours(-10)));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        using var zone = new ProcessVariable("TZ", offsetLessEastOfUtc ? "Asia/Tokyo" : "UTC");
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var result = ReplyOperations.Succeeded("audience.search", await ReplyOperations.InvokeAsync(api, "audience.search", SearchInput(count: 10), Ct, attempt: 2, unsettledSince: since));
 
         Assert.Equal(within ? "search-901-list-77" : "search-7201-list-6201", (string?)result["items"]![0]!["reference"]);
         Assert.Equal(within ? 101 : 202, account.Searches.Count);
+
+        string Written(DateTimeOffset moment) => offsetLessEastOfUtc
+            ? moment.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.ff", System.Globalization.CultureInfo.InvariantCulture)
+            : moment.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -318,28 +355,94 @@ public class ReplyAudienceSearchTests
     }
 
     /// <summary>
-    /// Once the search has ended — the count reached, or the source run dry — the read that returns the last of its people
-    /// deletes the list: Reply moves a batch onto the list before it sets the final status, so nothing lands after.
+    /// Once the search has ended — the count reached, or the source run dry — the read that returns its last people never
+    /// deletes the list: it answers them with more to read, so the runtime keeps them before anything is deleted. The read
+    /// after them starts at the end, finds nobody, answers the search ended with nothing more, and deletes the list; its
+    /// repeat finds the same nothing, since Reply reads a list it no longer holds as empty.
     /// </summary>
     [Theory]
     [InlineData("finished", "finished")]
     [InlineData("noMoreContacts", "exhausted")]
-    public async Task The_terminal_read_answers_the_last_people_and_deletes_the_list(string status, string state)
+    public async Task The_last_people_of_an_ended_search_come_with_more_and_the_empty_read_after_them_deletes_the_list(string status, string state)
     {
         using var account = new ReplyAccount().WithList(77, ListName).WithSearch(901, status, 77)
             .Finds(901, ReplyAccount.Person(5001, "Lena", "Novak"), ReplyAccount.Person(5002, "Ivo", "Marek"));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var read = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput("1", 50), Ct));
+        var last = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput("1", 50), Ct));
+        var kept = account.Lists.Count;
+        var after = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput("2", 50), Ct));
+        var deleted = account.Lists.Count;
+        var repeat = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput("2", 50), Ct));
 
-        Assert.Equal((state, "2", false), ((string?)read["state"], (string?)read["cursor"], (bool)read["has_more"]!));
-        Assert.Equal(["5002"], read["people"]!.AsArray().Select(person => (string?)person!["external_id"]));
-        Assert.Empty(account.Lists);
+        Assert.Equal((state, "2", true, 1), ((string?)last["state"], (string?)last["cursor"], (bool)last["has_more"]!, kept));
+        Assert.Equal(["5002"], last["people"]!.AsArray().Select(person => (string?)person!["external_id"]));
+        Assert.Equal((state, "2", false, 0, 0), ((string?)after["state"], (string?)after["cursor"], (bool)after["has_more"]!, after["people"]!.AsArray().Count, deleted));
+        Assert.Equal((state, "2", false, 0), ((string?)repeat["state"], (string?)repeat["cursor"], (bool)repeat["has_more"]!, repeat["people"]!.AsArray().Count));
         Assert.Equal(2, account.Contacts.Count);
     }
 
-    /// <summary>An ended search whose page is cut short keeps its list until the read that reaches the last person.</summary>
+    /// <summary>
+    /// The same through the dispatcher, as a search is really followed: a search a person approved runs, and the poll's
+    /// read of it once Reply has finished it lands its two people with the list still at Reply, so a read whose answer were
+    /// lost could be made again. The poll then makes the read after them at once, which finds nobody, deletes the list and
+    /// ends the search, said once.
+    /// </summary>
+    [Fact]
+    public async Task The_poll_lands_an_ended_search_s_last_people_and_then_makes_the_read_that_deletes_its_list()
+    {
+        using var account = new ReplyAccount();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        var clock = new FixedClock(new DateTimeOffset(2026, 11, 10, 12, 0, 0, TimeSpan.Zero));
+        await using var api = await DispatchHarness.ScannedOnceAsync(await ReplyPlugins.StartAsync(Ct, Idle, clock), Ct);
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Q3 LatAm founders" }, Ct)).Id;
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignStart, new { campaign_id = campaign }, Ct);
+        var search = (await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemCreate,
+            new { campaign_id = campaign, kind = "provider_op", operation = "audience.search", context = new JsonObject { ["input"] = new JsonObject { ["definition"] = Software, ["count"] = 2 } } },
+            Ct)).Id;
+        await ScanAsync(api);
+        var approval = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
+        await api.PostOkAsync<ApprovalDto>(Operations.ApprovalApprove, new { approval_id = approval.Id, actor = new { type = "human", id = "ada" } }, Ct);
+        await ScanAsync(api);
+        var started = Assert.Single(account.Searches.OfType<JsonObject>());
+        account.Finds((int)started["id"]!, ReplyAccount.Person(5001, "Lena", "Novak"), ReplyAccount.Person(5002, "Ivo", "Marek")).Moves((int)started["id"]!, "finished");
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await ScanAsync(api);
+        var landed = (await api.PostOkAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, new { campaign_id = campaign }, Ct)).Items.Count;
+        var listed = account.Lists.Count;
+        var endedFirst = await EndedAsync(api, search);
+        await ScanAsync(api);
+
+        Assert.Equal<(int, int, int)>((2, 1, 0), (landed, listed, endedFirst));
+        Assert.Empty(account.Lists);
+        Assert.Equal(1, await EndedAsync(api, search));
+        var reads = (await api.PostOkAsync<Page<WorkItemDto>>(Operations.WorkItemList, new { campaign_id = campaign }, Ct)).Items
+            .Where(item => item.Operation == "audience.search_status").ToList();
+        Assert.Equal(2, reads.Count);
+        Assert.All(reads, read => Assert.Equal(WorkItemStatus.Succeeded, read.Status));
+
+        static void Idle(JasonPaths paths)
+        {
+            var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
+            settings["Dispatcher"] = JsonNode.Parse("""{"TickSeconds":3600}""");
+            File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString());
+            TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(ReplyPlugins.PluginId));
+        }
+    }
+
+    private static async Task ScanAsync(RuntimeApiFixture api)
+    {
+        await api.Resolve<ScanRunner>().ScanOnceAsync(Ct);
+        Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(60)));
+    }
+
+    private static async Task<int> EndedAsync(RuntimeApiFixture api, string search) =>
+        (await api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { kind = "audience_search_ended" }, Ct)).Items.Count(line => line.Key == search);
+
+    /// <summary>An ended search whose page is cut short keeps its list through every read that carries people.</summary>
     [Fact]
     public async Task An_ended_search_keeps_its_list_until_the_last_page_is_read()
     {
@@ -349,32 +452,34 @@ public class ReplyAudienceSearchTests
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var first = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput(null, 1), Ct));
-        var listed = account.Lists.Count;
         var last = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput("1", 1), Ct));
 
-        Assert.Equal(("finished", true, 1), ((string?)first["state"], (bool)first["has_more"]!, listed));
-        Assert.Equal(("finished", false), ((string?)last["state"], (bool)last["has_more"]!));
-        Assert.Empty(account.Lists);
+        Assert.Equal(("finished", true), ((string?)first["state"], (bool)first["has_more"]!));
+        Assert.Equal(("finished", true), ((string?)last["state"], (bool)last["has_more"]!));
+        Assert.Single(account.Lists);
     }
 
     /// <summary>
-    /// A list Reply would not delete never holds back the people read: the read answers them, and the next read of the
-    /// ended search, which finds nobody new, deletes it.
+    /// A list Reply would not delete never holds back the answer: the empty read after the last people still answers the
+    /// search ended, with nothing more to read, and its repeat, finding the same nobody, deletes the list.
     /// </summary>
     [Fact]
     public async Task A_list_reply_would_not_delete_does_not_hold_back_the_people_read()
     {
         using var account = new ReplyAccount().WithList(77, ListName).WithSearch(901, "finished", 77)
-            .Finds(901, ReplyAccount.Person(5001, "Lena", "Novak"))
-            .Refuses("contact-list delete", "reply.unavailable", status: 503);
+            .Finds(901, ReplyAccount.Person(5001, "Lena", "Novak"));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var read = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput(null, 50), Ct));
+        account.Refuses("contact-list delete", "reply.unavailable", status: 503);
+        var empty = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput("1", 50), Ct));
+        var kept = account.Lists.Count;
         var again = ReplyOperations.Succeeded("audience.search_status", await ReplyOperations.InvokeAsync(api, "audience.search_status", StatusInput("1", 50), Ct));
 
-        Assert.Equal(("finished", "1"), ((string?)read["state"], (string?)read["cursor"]));
+        Assert.Equal(("finished", "1", true), ((string?)read["state"], (string?)read["cursor"], (bool)read["has_more"]!));
         Assert.Equal(["5001"], read["people"]!.AsArray().Select(person => (string?)person!["external_id"]));
+        Assert.Equal(("finished", "1", false, 1), ((string?)empty["state"], (string?)empty["cursor"], (bool)empty["has_more"]!, kept));
         Assert.Equal(("finished", "1", 0), ((string?)again["state"], (string?)again["cursor"], again["people"]!.AsArray().Count));
         Assert.Empty(account.Lists);
     }

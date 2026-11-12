@@ -190,14 +190,19 @@ export function runOrHeld(context, request) {
  * `run`, for a write that follows one of this package's own making: `undo` runs first wherever the command ended in a
  * refusal that says it did nothing — a program that never started, a refusal before anything was sent (exit 2), or a
  * failure the CLI explained (exit 1, the main effect not done) — and then the ending is `run`'s. A lost answer (exit 3, a
- * timeout, an exit nobody explained) may have done the write, which may need what came before it, so nothing is undone.
+ * timeout, an exit nobody explained) may have done the write, which may need what came before it, so nothing is undone;
+ * and the row is chosen before anything is undone, so an explained ending whose row is the lost answer — the CLI's
+ * `outcome.unknown` outside exit 3 — undoes nothing either.
  */
 export function runOrUndo(context, request, undo) {
   const answer = call(context, request);
   const said = answer.timed_out === true ? null : verdict(answer.stderr);
-  const nothingDone = answer.timed_out !== true
+  const refused = answer.timed_out !== true
     && (answer.exit_code === NEVER_STARTED || answer.exit_code === REFUSED_THE_CALL || (answer.exit_code === FAILED && said !== null));
-  if (nothingDone) {
+  const lost = typeof request.lost === "string" ? request.lost : lostAnswerRow(request.command);
+  const row = !refused || answer.exit_code === NEVER_STARTED ? null
+    : said === null ? unexplainedRefusalRow(request.operation) : rowOf(request.operation, said, request.variant, request.repeat === true);
+  if (refused && row !== lost) {
     undo();
   }
 

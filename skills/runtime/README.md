@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.34.0**.
+this pack ships with Jason **0.35.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -89,7 +89,7 @@ takes — held identical by a test. What
 differs between them is one paragraph of purpose and one of what this build can and cannot give that role — and,
 for a role that sits with a person, the judgement it shares with its session file (below).
 
-- [`roles/researcher`](roles/researcher/SKILL.md) — **verified.** What a brief asks about an account or a person,
+- [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** What a brief asks about an account or a person,
   found and verified: what counts as established, why anything from outside Jason is the host's doing and never
   the runtime's promise, an answer that says what was established and what was not, and what belongs in its note.
 - [`roles/manager`](roles/manager/SKILL.md) — **draft.** The review a manager
@@ -104,13 +104,13 @@ for a role that sits with a person, the judgement it shares with its session fil
   another tone of voice, the goals a campaign is made with, an audience formed from a search with its probe sized by the
   look's count and the threshold and allowance it proposes, what this build stores of a plan and what it does not, and
   how a horizon becomes work items a dispatcher will claim.
-- [`roles/copywriter`](roles/copywriter/SKILL.md) — **verified.** The campaign-level messaging: what the campaign
+- [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
   written, when one text may be a template for a whole audience, and why writing it is not sending it.
-- [`roles/personalizer`](roles/personalizer/SKILL.md) — **verified.** The messaging adapted to one person: what
+- [`roles/personalizer`](roles/personalizer/SKILL.md) — **draft.** The messaging adapted to one person: what
   this runtime knows about them and where to read it, the tone and the sender's forms it writes in, where the
   wording goes afterwards, and why a contact record is not the place for it.
-- [`roles/critic`](roles/critic/SKILL.md) — **verified.** The review of a draft against the brief and the
+- [`roles/critic`](roles/critic/SKILL.md) — **draft.** The review of a draft against the brief and the
   guardrails: what to read before judging it, what a verdict is worth here, and why saying plainly what fails
   is the whole of the job.
 - [`roles/responder`](roles/responder/SKILL.md) — **draft.** What a reply means and what should happen
@@ -122,7 +122,7 @@ for a role that sits with a person, the judgement it shares with its session fil
   this runtime keeps — the work items, the chronicle, the reports and the campaign's activity, with the replies counted by category over a window — and honest about
   where the record runs out; and whether one audience works, judged on its own people over equal time since they landed,
   answered working, replace or stop.
-- [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **verified.** What the
+- [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **draft.** What the
   do-not-contact register and the failed items say about whether anything is arriving, and what somebody
   would have to do outside Jason about it.
 
@@ -134,13 +134,13 @@ SHA-256 of the text it read.
 |---|---|---|---|---|
 | `manager` | draft | — | — | — |
 | `planner` | draft | — | — | — |
-| `researcher` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:767f398c45154333ba92825004f302571fa1b0e31e2c4080a538ab8e067692dd` |
-| `copywriter` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:2e39996997d944484db6a8a08169be0ba543901c2a7094bec23e27bc6a1aa7b4` |
-| `personalizer` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:1b322d94a7d22e9bace3d0a139c87d47bab5e6c1f78d22d38a01b35dee38c3dd` |
-| `critic` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:049652d75c7460fd7520cb9352735e272736cc2ef8873cc7736d61427aed526c` |
+| `researcher` | draft | — | — | — |
+| `copywriter` | draft | — | — | — |
+| `personalizer` | draft | — | — | — |
+| `critic` | draft | — | — | — |
 | `responder` | draft | — | — | — |
 | `analyst` | draft | — | — | — |
-| `deliverability-specialist` | verified | Claude Code 2.1.318 | 0.27.0 | `sha256:d1ce3497f7b5420c8a465e9471598461bf64ff7f7409f142b77fb76983756585` |
+| `deliverability-specialist` | draft | — | — | — |
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it

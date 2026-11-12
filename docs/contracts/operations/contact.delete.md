@@ -107,6 +107,7 @@ such a delete before it is parked, so nobody is shown that preview to decide on.
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `pinned_only` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `runs` |
 | contact projection | `id`; channels: `consumed` |
 | precondition | The provider does not hold the person as opted out, because deleting them would erase its only record of that stop. |

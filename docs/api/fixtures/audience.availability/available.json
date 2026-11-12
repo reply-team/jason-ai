@@ -11,6 +11,9 @@
     "reason": null,
     "detail": null,
     "credits": null,
-    "headroom": null
+    "headroom": null,
+    "vendor": {
+      "status": null
+    }
   }
 }

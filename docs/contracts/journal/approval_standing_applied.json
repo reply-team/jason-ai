@@ -10,37 +10,61 @@
     "contact": { "at": "/contact_id", "presence": "sometimes" },
     "approval": { "at": "/new/id", "presence": "always" }
   },
-  "field_since": { "/new/audience": "0.34.0", "/new/count": "0.34.0" },
+  "field_since": { "/new/audience": "0.35.0", "/new/count": "0.35.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
     "required": ["key", "old", "new"],
-    "properties": {
-      "key": { "type": "string", "pattern": "^jrn_", "description": "The line that set the standing approval, by its id: what the standing approval's ceiling counts." },
-      "old": { "type": "null" },
-      "new": {
+    "$defs": {
+      "reply": {
         "type": "object",
+        "description": "A drafted reply released under a category's standing approval.",
         "additionalProperties": false,
         "required": ["id", "operation", "subject_hash", "standing", "verdict", "category"],
         "properties": {
           "id": { "type": "string", "pattern": "^apr_", "description": "The approval written already approved, decided by the person who set the standing approval." },
-          "operation": { "enum": ["conversation.reply", "message.send", "audience.search"] },
+          "operation": { "enum": ["conversation.reply", "message.send"] },
           "subject_hash": { "type": "string", "pattern": "^sha256:", "description": "The digest of what was released; the subject itself stays on the approval." },
           "standing": { "type": "string", "pattern": "^jrn_", "description": "The line that set the standing approval, the same as the key." },
-          "verdict": { "type": ["string", "null"], "pattern": "^jrn_", "description": "The line that classified the reply this work answers; null on a search." },
-          "category": { "type": ["string", "null"], "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers; null on a search." },
+          "verdict": { "type": "string", "pattern": "^jrn_", "description": "The line that classified the reply this work answers." },
+          "category": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers." }
+        }
+      },
+      "search": {
+        "type": "object",
+        "description": "Since 0.35.0: a search released under the campaign's allowance.",
+        "additionalProperties": false,
+        "required": ["id", "operation", "subject_hash", "standing", "verdict", "category"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^apr_", "description": "The approval written already approved, decided by the person who set the allowance." },
+          "operation": { "enum": ["audience.search"] },
+          "subject_hash": { "type": "string", "pattern": "^sha256:", "description": "The digest of what was released; the subject itself stays on the approval." },
+          "standing": { "type": "string", "pattern": "^jrn_", "description": "The line that set the allowance, the same as the key." },
+          "verdict": { "type": "null", "description": "A search answers no verdict." },
+          "category": { "type": "null", "description": "An allowance covers no category of reply." },
           "audience": {
             "type": "object",
             "additionalProperties": false,
             "required": ["id", "number"],
-            "description": "On a search, the campaign's audience it runs under, the one the allowance names; absent on a reply.",
+            "description": "The campaign's audience the search runs under, the one the allowance names.",
             "properties": {
               "id": { "type": "string", "pattern": "^aud_", "description": "The audience, by its id." },
               "number": { "type": "integer", "minimum": 1, "description": "The number the campaign knows the audience by." }
             }
           },
-          "count": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "On a search, how many people it asks for: what the allowance's ceiling counts. Absent on a reply." }
+          "count": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "How many people the search asks for: what the allowance's ceiling counts." }
         }
+      }
+    },
+    "properties": {
+      "key": { "type": "string", "pattern": "^jrn_", "description": "The line that set the standing approval, by its id: what the standing approval's ceiling counts." },
+      "old": { "type": "null" },
+      "new": {
+        "anyOf": [
+          { "$ref": "#/$defs/reply" },
+          { "$ref": "#/$defs/search" }
+        ],
+        "description": "What was released: a drafted reply under a category's standing approval, as since 0.25.0, or since 0.35.0 a search under the allowance, a branch of its own."
       }
     }
   }

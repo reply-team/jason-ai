@@ -1,7 +1,7 @@
 {
   "kind": "audience_search_ended",
   "version": 1,
-  "since": "0.34.0",
+  "since": "0.35.0",
   "summary": "A search for a campaign's audience ended — finished, exhausted, stalled or stopped — with what it was asked for, found and landed; said once per search, a default manager trigger.",
   "subscribable": true,
   "entities": {

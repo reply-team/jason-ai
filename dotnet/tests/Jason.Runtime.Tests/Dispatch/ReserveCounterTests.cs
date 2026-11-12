@@ -10,6 +10,7 @@ using Jason.Runtime.Tests.Harness;
 using Jason.Runtime.Tests.Journal;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -55,6 +56,28 @@ public class ReserveCounterTests
         }
 
         Assert.Single(await ReserveLinesAsync(harness, campaign));
+    }
+
+    /// <summary>
+    /// The step reads only what its line needs, the campaign's id and its two numbers, never the campaign whole: a stored
+    /// context the runtime can no longer read — here an object whose key is written twice, which the database's own check
+    /// lets through — costs the reserve nothing, and is never read here to fail with the person's text in its message.
+    /// </summary>
+    [Fact]
+    public async Task A_campaign_whose_stored_context_no_longer_reads_still_has_its_reserve_said()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness, people: 3, threshold: 5);
+        await using (var db = harness.Open())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE campaigns SET context_json = {"{\"brief\":\"one\",\"brief\":\"two\"}"} WHERE public_id = {campaign}", Ct);
+        }
+
+        await using var scope = harness.Open();
+        var said = await new ReserveCounter(new JournalWriter(harness.Clock), NullLogger<ReserveCounter>.Instance).CountAsync(scope, Ct);
+
+        Assert.Equal(1, said);
+        Assert.Equal(JournalKinds.AudienceReserveLow, Assert.Single(await ReserveLinesAsync(harness, campaign)).Kind);
     }
 
     /// <summary>

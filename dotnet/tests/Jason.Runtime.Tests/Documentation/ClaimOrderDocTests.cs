@@ -52,6 +52,7 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/routing.md", "### At the claim — the (?<n>[\\w-]+), in the order they are checked", "all")]
     [InlineData("docs/routing.md", "rows 7, (?<n>[\\w-]+) and [\\w-]+ below", "row of input_invalid")]
     [InlineData("docs/routing.md", "rows 7, [\\w-]+ and (?<n>[\\w-]+) below", "row of definition_invalid")]
+    [InlineData("docs/routing.md", "The (?<n>[\\w-]+), `search_unfinished`, is not a refusal", "row of search_unfinished")]
     [InlineData("docs/routing.md", "The (?<n>[\\w-]+) is not a refusal at all", "row of approval_required")]
     [InlineData("docs/routing.md", "The (?<n>[\\w-]+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
     [InlineData("docs/routing.md", "every refusal from check 2 to check (?<n>[\\w-]+) keeps its code", "row of template_not_offered")]
@@ -61,7 +62,8 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/work-execution.md", "(?<n>[\\w-]+) checks, in this order", "all")]
     [InlineData("docs/work-execution.md", "The first (?<n>[\\w-]+) are refusals", "refusals")]
     [InlineData("docs/work-execution.md", "all of them are final: (?<n>[\\w-]+) are `permanent`", "permanent")]
-    [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+) is not a refusal: `approval_required`", "row of approval_required")]
+    [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+) is not a refusal: `search_unfinished`", "row of search_unfinished")]
+    [InlineData("docs/work-execution.md", "(?<n>[\\w-]+) is not a refusal either: `approval_required`", "row of approval_required")]
     [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
     [InlineData("docs/work-execution.md", "every refusal of the claim from check 2 to check (?<n>[\\w-]+) keeps its code", "row of template_not_offered")]
     [InlineData("docs/work-execution.md", "the claim's (?<n>[\\w-]+) check parks held work an open block already holds", "row of provider_blocked")]
@@ -72,14 +74,16 @@ public sealed partial class ClaimOrderDocTests
         var expected = counted switch
         {
             "all" => codes.Count,
-            "refusals" => IndexOf(codes, "approval_required"),
+            // The checks before the first that parks rather than refuses: a search behind another, an approval, a block.
+            "refusals" => IndexOf(codes, "search_unfinished"),
             // Every refusal but three: input_invalid and definition_invalid are validation, provider_answer_lost is ambiguous.
-            "permanent" => IndexOf(codes, "approval_required") - 3,
+            "permanent" => IndexOf(codes, "search_unfinished") - 3,
             "after binding_invalid" => codes.Count - (IndexOf(codes, "binding_invalid") + 1),
             "row of input_invalid" => IndexOf(codes, "input_invalid") + 1,
             "row of definition_invalid" => IndexOf(codes, "definition_invalid") + 1,
             // The last refusal an unsettled send turns ambiguous: the row just before provider_answer_lost's own.
             "row of template_not_offered" => IndexOf(codes, "template_not_offered") + 1,
+            "row of search_unfinished" => IndexOf(codes, "search_unfinished") + 1,
             "row of approval_required" => IndexOf(codes, "approval_required") + 1,
             "row of provider_blocked" => IndexOf(codes, "provider_blocked") + 1,
             _ => throw new ArgumentOutOfRangeException(nameof(counted), counted, "No such count."),

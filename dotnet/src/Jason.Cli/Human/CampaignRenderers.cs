@@ -110,7 +110,7 @@ public static class CampaignRenderers
                 RenderText.Snake(member.State),
                 RenderText.Email(member.Contact?.Channels),
                 string.Join(", ", (member.Counted ?? []).Select(counted => names.GetValueOrDefault(counted.CampaignId, counted.CampaignId))),
-                member.Source is { } source ? string.Create(CultureInfo.InvariantCulture, $"audience {source.Number}") : null,
+                member.Source is { } source ? string.Create(CultureInfo.InvariantCulture, $"audience {source.Audience.Number}") : null,
                 member.Why is { } why ? string.Join(" ", new[] { why.Text ?? why.Code, RenderText.Moment(why.At) }.Where(part => part is not null)) : null);
         }
 

@@ -1,10 +1,56 @@
+using System.Text.Json;
 using Jason.Cli;
+using Jason.Cli.Http;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
 public class AudienceCommandsTests
 {
+    /// <summary>
+    /// A preview is allowed its operation's whole budget, so the CLI waits for it that long and a margin more, not the 30
+    /// seconds an ordinary request gets: a runtime that took the request and is still asking the provider is not given up
+    /// on a moment before. When that wait does run out, the runtime answered the connection, so the CLI says the request
+    /// timed out, exit 1 and not to be repeated blindly, never that the runtime could not be reached.
+    /// </summary>
+    [Fact]
+    public async Task A_preview_is_waited_for_its_own_budget_and_a_timeout_is_no_unreachable_runtime()
+    {
+        using var paths = new TempPaths();
+        paths.WriteDescriptor(new RuntimeDescriptor("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch));
+        var clock = new FixedClock(new DateTimeOffset(2026, 11, 11, 12, 0, 0, TimeSpan.Zero));
+        var asked = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var output = new StringWriter();
+        var env = new CliEnvironment(output, new StringWriter(), paths.Paths, new Waiting(asked), Clock: clock);
+        var budget = TimeSpan.FromMilliseconds(OperationCatalog.Find(Operations.AudiencePreview)!.TimeoutMs) + RuntimeClient.Margin;
+
+        var run = CliApp.RunAsync(["audience", "preview", "--campaign", "cmp_A", "--definition", "{\"industries\":[\"Software\"]}"], env, TestContext.Current.CancellationToken);
+        var request = await asked.Task.WaitAsync(TestContext.Current.CancellationToken);
+        clock.Advance(budget - TimeSpan.FromSeconds(1));
+        var waitedOn = !request.IsCancellationRequested;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        var exit = await run.WaitAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(waitedOn, "the preview was given up before its budget ran out");
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("error");
+        Assert.Equal((CliErrors.RequestTimedOut, false), (error.GetProperty("code").GetString(), error.GetProperty("retryable").GetBoolean()));
+    }
+
+    /// <summary>A runtime that takes the request and answers only when it is cancelled.</summary>
+    private sealed class Waiting(TaskCompletionSource<CancellationToken> asked) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            asked.TrySetResult(cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
+    }
+
     [Fact]
     public async Task Preview_sends_the_campaign_and_the_definition_as_an_object_and_prints_the_estimate_and_the_sample()
     {

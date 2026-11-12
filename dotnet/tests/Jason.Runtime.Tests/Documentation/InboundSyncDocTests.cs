@@ -15,9 +15,9 @@ namespace Jason.Runtime.Tests.Documentation;
 public partial class InboundSyncDocTests
 {
     [Fact]
-    public void The_page_and_the_work_execution_contract_name_the_scan_s_eleven_steps_in_the_order_the_scan_runs_them()
+    public void The_page_and_the_work_execution_contract_name_the_scan_s_twelve_steps_in_the_order_the_scan_runs_them()
     {
-        const string steps = "eleven short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**";
+        const string steps = "twelve short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**";
 
         Assert.Contains(steps, Flattened(Read("inbound-sync.md")), StringComparison.Ordinal);
         Assert.Contains(steps, Flattened(Read("work-execution.md")), StringComparison.Ordinal);

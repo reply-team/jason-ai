@@ -634,7 +634,7 @@ test('the Reply card reads the CLI, its sign-in and whether Jason’s Reply plug
     assert.equal((await setupOn(b).status()).reply.wired, false, 'valid, but no route names it');
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } } });
     const { reply } = await setupOn(b).status();
-    assert.deepEqual(reply, { cli: { found: true, version: '0.19.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [] });
+    assert.deepEqual(reply, { cli: { found: true, version: '0.20.0', install: null }, signedIn: true, user: 'someone@example.com', wired: true, accounts: [] });
     assert.ok(b.record().some((entry) => entry.name === 'reply' && entry.args.join(' ') === 'account list --json'));
 
     const missing = bench(t);

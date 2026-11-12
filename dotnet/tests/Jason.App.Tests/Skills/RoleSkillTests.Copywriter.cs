@@ -136,15 +136,18 @@ public partial class RoleSkillTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>A host read the text as it ships, so the role is verified in its file and in the catalog.</summary>
+    /// <summary>
+    /// The launch contract it carries changed after the last reading, so no host has read the text as it ships: the role
+    /// is a draft in its file and in the catalog, with no reading recorded, until a host reads it again.
+    /// </summary>
     [Fact]
-    public void The_copywriter_is_verified_by_a_reading_of_its_current_text()
+    public void The_copywriter_is_a_draft_until_a_host_reads_its_current_text()
     {
         var file = SkillPack.Find("copywriter").File;
-        Assert.Equal("verified", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
-        Assert.Contains("**Status: verified** against Claude Code", Flattened("copywriter"), StringComparison.Ordinal);
+        Assert.Equal("draft", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
+        Assert.Contains("**Status: draft.**", Flattened("copywriter"), StringComparison.Ordinal);
 
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
-        Assert.Contains("| `copywriter` | verified | Claude Code", catalog, StringComparison.Ordinal);
+        Assert.Contains("| `copywriter` | draft | — | — | — |", catalog, StringComparison.Ordinal);
     }
 }

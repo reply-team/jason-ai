@@ -91,4 +91,5 @@ public sealed record AudienceAvailabilityResponse(
     string? Reason,
     string? Detail,
     JsonObject? Credits,
-    long? Headroom);
+    long? Headroom,
+    JsonObject? Vendor = null);

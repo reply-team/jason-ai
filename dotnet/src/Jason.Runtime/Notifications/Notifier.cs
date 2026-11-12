@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace Jason.Runtime.Notifications;
 
 /// <summary>
-/// The tenth step of a scan, after the claimed work has been handed out: read what was committed since the last read,
+/// The eleventh step of a scan, after the claimed work has been handed out: read what was committed since the last read,
 /// keep the burst it belongs to, and hand one notification to the sender once the burst has settled. It reads rows the
 /// transactions that wrote them had already committed, so a notification follows its commit by construction and a
 /// rolled-back line is never there to be read; and it decides nothing about the work it notices.

@@ -137,6 +137,71 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// One unfinished search per campaign. A search claimed while another of its campaign is still followed — running, or
+    /// held by the provider paused for credits — waits, with no attempt and nobody asked to approve a spend that cannot
+    /// start now: its last error names the search in the way, the line says what it waits behind, and the wait lets it go
+    /// for the claim to ask again a cadence later, the long cadence of a hold where the search in the way is held, so a
+    /// hold of days does not say the wait again every few minutes. Another campaign's search goes on to its person, and
+    /// once the search in the way has ended, the waiting one does too.
+    /// </summary>
+    [Theory]
+    [InlineData("in_progress", 300)]
+    [InlineData("paused_for_credits", 3600)]
+    public async Task Audience_ASecondSearchOfACampaign_WaitsBehindTheOneUnfinished_NamingIt(string state, int seconds)
+    {
+        using var harness = SearchHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var spring = WorkItemFactory.NewCampaign("Spring", now: Noon);
+        var autumn = WorkItemFactory.NewCampaign("Autumn", now: Noon);
+        db.Campaigns.AddRange(spring, autumn);
+        await HeldAsync(harness, db, spring, InSoftware);
+        var first = await db.WorkItems.SingleAsync(w => w.CampaignId == spring.Id, Ct);
+        first.Status = WorkItemStatus.Succeeded;
+        db.AudienceSearches.Add(new AudienceSearch
+        {
+            CampaignId = spring.Id,
+            AudienceId = (await db.Audiences.SingleAsync(a => a.CampaignId == spring.Id, Ct)).Id,
+            SearchWorkItem = first,
+            PluginId = Searcher,
+            Reference = "srch-1",
+            State = state,
+            Asked = 50,
+            QuietSince = Noon,
+            CreatedAt = Noon,
+        });
+        var second = Search(db, spring, new JsonObject { ["definition"] = InLogistics, ["count"] = 50 });
+        var elsewhere = Search(db, autumn, new JsonObject { ["definition"] = InLogistics, ["count"] = 50 });
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using (var fresh = database.Open())
+        {
+            var waiting = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == second.Id, Ct);
+            Assert.Equal((WorkItemStatus.Waiting, AttemptErrors.SearchUnfinished), (waiting.Status, waiting.LastError!.Code));
+            Assert.Contains(first.PublicId, waiting.LastError.Message, StringComparison.Ordinal);
+            Assert.Empty(await fresh.Attempts.AsNoTracking().Where(a => a.WorkItemId == second.Id).ToListAsync(Ct));
+            Assert.Empty(await fresh.Approvals.AsNoTracking().Where(a => a.WorkItemId == second.Id).ToListAsync(Ct));
+            var wait = await fresh.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == second.Id, Ct);
+            Assert.Equal((Noon.AddSeconds(seconds), (DateTime?)Noon.AddSeconds(seconds)), (wait.Until!.Value, wait.Deadline));
+            var line = await fresh.Journal.AsNoTracking().SingleAsync(e => e.WorkItemId == second.PublicId && e.Kind == JournalKinds.WorkItemWaiting, Ct);
+            Assert.Equal(first.PublicId, (string?)line.New!["behind_search"]);
+            Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == elsewhere.Id, Ct)).Status);
+        }
+
+        await db.AudienceSearches.ExecuteUpdateAsync(set => set.SetProperty(row => row.EndedAs, "finished").SetProperty(row => row.EndedAt, Noon), Ct);
+        db.ChangeTracker.Clear();
+        var released = await db.WorkItems.SingleAsync(w => w.Id == second.Id, Ct);
+        WorkItemTransitions.Apply(released, WorkItemStatus.Created, Noon);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var after = database.Open();
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await after.WorkItems.AsNoTracking().SingleAsync(w => w.Id == second.Id, Ct)).Status);
+    }
+
+    /// <summary>
     /// The campaign's audiences made from <paramref name="definitions"/>, numbered in that order: one search under each,
     /// claimed one scan at a time, since a campaign is claimed once a scan.
     /// </summary>

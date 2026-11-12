@@ -32,6 +32,9 @@ public sealed class AudienceFamilyTests
 
     private const string Finishing = "stand-in-finish";
 
+    /// <summary>A provider that sizes audiences and searches none, with answers of its own.</summary>
+    private const string Sizing = "stand-in-sizing";
+
     /// <summary>A real dispatcher that never ticks on its own: every scan here is one the test asked for.</summary>
     private const string Idle = """{"Dispatcher":{"TickSeconds":3600}}""";
 
@@ -77,16 +80,22 @@ public sealed class AudienceFamilyTests
     /// <summary>
     /// The reads first: what <c>audience.search</c> takes for the campaign, the plugin's half beside the contract's, and
     /// nothing of a plugin's for an operation that carries no definition, and a refusal for one the routed plugin does
-    /// not perform; an audience's size and sample; a filter's values; whether the account may search. A definition off the
+    /// not perform; an audience's size and sample; a filter's values; whether the account may search. Each read goes where
+    /// the campaign's searches go, whatever its own operation resolves to — here an override sends all three to another
+    /// provider — so nobody previews one provider's audience and approves a search at another. A definition off the
     /// plugin's schema, and an audience by a number the campaign holds none under, are refused before the provider is
     /// asked. Each exchange is recorded for the clients that render it, and none of them makes an audience.
     /// </summary>
     [Fact]
-    public async Task A_campaign_s_reads_answer_through_its_route_and_describe_what_the_routed_plugin_takes()
+    public async Task A_campaign_s_reads_answer_where_its_searches_go_and_describe_what_the_routed_plugin_takes()
     {
         using var account = new StandInAccount();
         await using var api = await StartAsync(account);
         var campaign = await CampaignAsync(api, "Spring search");
+        foreach (var read in new[] { "audience.preview", "audience.filter_values", "audience.availability" })
+        {
+            await TestRoutes.SetCampaignAsync(api, campaign, read, Sizing, null, Ct);
+        }
 
         var plugin = (await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct)).Plugins.Single(listed => listed.Id == Keeping);
         Assert.Equal("Industries the company is in, as the provider names them.", (string?)plugin.AudienceDefinition!["schema"]!["properties"]!["industries"]!["description"]);
@@ -96,6 +105,9 @@ public sealed class AudienceFamilyTests
         Assert.Equal((Keeping, "1.0.0"), (search.PluginId, search.PluginVersion));
         Assert.Equal("integer", (string?)search.Arguments["properties"]!["count"]!["type"]);
         Assert.True(JsonNode.DeepEquals(plugin.AudienceDefinition, search.Definition));
+        var described = await api.PostOkAsync<OperationDescriptionDto>(Operations.OperationDescribe, new { campaign_id = campaign, operation = "audience.preview" }, Ct);
+        Assert.Equal(Keeping, described.PluginId);
+        Assert.True(JsonNode.DeepEquals(plugin.AudienceDefinition, described.Definition));
         var get = await api.RecordAsync<OperationDescriptionDto>(Operations.OperationDescribe, "campaign-get", new { campaign_id = campaign, operation = "campaign.get" }, Ct);
         Assert.Null(get.Definition);
         Assert.Equal(
@@ -120,6 +132,7 @@ public sealed class AudienceFamilyTests
         var availability = await api.RecordAsync<AudienceAvailabilityResponse>(Operations.AudienceAvailability, "available", new { campaign_id = campaign }, Ct);
         Assert.True(availability.Available);
         Assert.Null(availability.Reason);
+        Assert.Equal("""{"status":null}""", availability.Vendor?.ToJsonString());
 
         // Reads are asked of the provider and recorded nowhere: not one search was started by any of them, and the campaign
         // holds no audience.
@@ -159,7 +172,8 @@ public sealed class AudienceFamilyTests
 
         var members = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "from-a-search", new { campaign_id = campaign }, Ct);
         Assert.Equal(["1", "2", "3"], members.Items.Select(member => member.Contact.LastName).Order(StringComparer.Ordinal));
-        Assert.All(members.Items, member => Assert.Equal((first.Id, 1), (member.Source!.Search, member.Source.Number)));
+        var audience = new AudienceRef((string)first.Context!["audience"]!["id"]!, 1);
+        Assert.All(members.Items, member => Assert.Equal((first.Id, audience), (member.Source!.Search, member.Source.Audience)));
         Assert.Equal(1, await EndedAsync(api, first.Id));
 
         var second = await ApprovedSearchAsync(api, account, campaign, new JsonObject { ["industries"] = new JsonArray("Logistics") });
@@ -204,8 +218,74 @@ public sealed class AudienceFamilyTests
             Refusal(await api.PostAsync(Operations.AudienceAvailability, new { campaign_id = campaign }, Ct)));
     }
 
+    /// <summary>
+    /// Archiving is how a person stops a campaign, so it stops the campaign's searches too: the archive cancels the
+    /// campaign's open work, a read of the search among it but never a stop, and the next scan makes one stop for each
+    /// search in flight, which is claimed in the archived campaign as a stop is in a paused one. The provider's search is
+    /// cancelled and its row ends <c>cancelled</c>, said once; no second stop is made, and nothing else of the campaign
+    /// runs again.
+    /// </summary>
+    [Fact]
+    public async Task Archiving_a_campaign_stops_each_of_its_searches_in_flight()
+    {
+        using var account = new StandInAccount();
+        await using var api = await StartAsync(account);
+        var campaign = await CampaignAsync(api, "Spring search");
+        var search = await ApprovedSearchAsync(api, account, campaign);
+        var read = await CreateAsync(api, campaign, "audience.search_status", new JsonObject { ["search"] = search.Id, ["limit"] = 2 });
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = campaign, actor = new { type = "human", id = "ada" } }, Ct);
+        Assert.Equal(WorkItemStatus.Cancelled, (await ReadAsync(api, read)).Status);
+
+        await ScanAsync(api);
+        await ScanAsync(api);
+
+        var stop = Assert.Single((await api.PostOkAsync<Page<WorkItemDto>>(Operations.WorkItemList, new { campaign_id = campaign }, Ct)).Items, item => item.Operation == "audience.search_cancel");
+        Assert.Equal((WorkItemStatus.Succeeded, "dispatcher"), (stop.Status, stop.CreatedBy.Id));
+        Assert.Equal(["srch-1"], account.Started);
+        Assert.Equal(1, await EndedAsync(api, search.Id));
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        var row = await scope.ServiceProvider.GetRequiredService<JasonDbContext>().AudienceSearches.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal("cancelled", row.EndedAs);
+    }
+
     private static (HttpStatusCode Status, string? Code) Refusal((HttpStatusCode Status, string Body) answer) =>
         (answer.Status, (string?)JsonNode.Parse(answer.Body)!["error"]!["code"]);
+
+    /// <summary>A campaign's read asked the wrong way, as written, and the faults the runtime names for it.</summary>
+    public static TheoryData<string, string, string[]> RefusedReads => new()
+    {
+        { Operations.AudiencePreview, """{"audience":1,"definition":{"industries":["Software"]}}""", ["definition:conflict"] },
+        { Operations.AudiencePreview, "{}", ["definition:required"] },
+        { Operations.AudiencePreview, """{"audience":0}""", ["audience:invalid"] },
+        { Operations.AudiencePreview, """{"audience":1,"people_per_company":0}""", ["people_per_company:invalid"] },
+        { Operations.AudiencePreview, """{"audience":1,"people_per_company":101}""", ["people_per_company:invalid"] },
+        { Operations.AudienceFilterValues, "{}", ["filter:required"] },
+        { Operations.AudienceFilterValues, """{"filter":"Industries"}""", ["filter:invalid"] },
+        { Operations.AudienceFilterValues, $$"""{"filter":"industries","query":"{{new string('a', 201)}}"}""", ["query:too_long"] },
+        { Operations.AudienceFilterValues, """{"filter":"industries","limit":0}""", ["limit:invalid"] },
+        { Operations.AudienceFilterValues, """{"filter":"industries","limit":101}""", ["limit:invalid"] },
+    };
+
+    /// <summary>
+    /// A campaign's read asked the wrong way is refused by the field at fault before any plugin is asked: a preview names
+    /// its audience by its number or by its definition, exactly one of them, and takes from 1 to 100 people per company;
+    /// a filter's values name the filter in the provider's lowercase, a query of at most 200 characters and from 1 to 100
+    /// values.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RefusedReads))]
+    public async Task A_campaign_s_read_asked_the_wrong_way_is_refused_by_the_field_at_fault(string operation, string asked, string[] faults)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var body = JsonNode.Parse(asked)!.AsObject();
+        body["campaign_id"] = await CampaignAsync(api, "Spring search");
+
+        var error = await api.PostErrorAsync(operation, body, HttpStatusCode.BadRequest, Ct);
+
+        Assert.Equal("validation_failed", error.Code);
+        Assert.Equal(faults, error.Details!.Select(detail => $"{detail.Field}:{detail.Code}"));
+    }
 
     private static async Task<RuntimeApiFixture> StartAsync(StandInAccount account)
     {
@@ -226,7 +306,8 @@ public sealed class AudienceFamilyTests
                         $"capabilities:\n  http:\n    hosts: [\"{account.HostKey}\"]\n" + Definition),
                     KeepingMain(account.BaseUrl));
                 TestPlugins.Grant(paths, Keeping, http: [account.HostKey]);
-                TestPlugins.Write(paths, Finishing, TestPlugins.Manifest(Finishing, "[audience.search, audience.search_status]", Definition), FinishingMain);
+                TestPlugins.Write(paths, Finishing, TestPlugins.Manifest(Finishing, "[audience.search, audience.search_status, audience.search_cancel]", Definition), FinishingMain);
+                TestPlugins.Write(paths, Sizing, TestPlugins.Manifest(Sizing, "[audience.preview, audience.filter_values, audience.availability]", Definition), SizingMain);
                 TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(Keeping));
             },
             configureServices: services =>
@@ -357,6 +438,21 @@ public sealed class AudienceFamilyTests
               const answer = call("POST", "searches/" + input.search.reference + "/cancel", {});
               return { result: { items: [{ status: answer.status, ended_as: answer.ended_as }] } };
             }
+          }
+          throw new Error("not performed here: " + operation);
+        }
+        """;
+
+    /// <summary>The provider that sizes audiences and searches none: one person, one value, and an account that may not search.</summary>
+    private const string SizingMain = """
+        export function invoke(operation, input) {
+          switch (operation) {
+            case "audience.preview":
+              return { result: { count: 1, companies: 1, sample: [] } };
+            case "audience.filter_values":
+              return { result: { values: ["Elsewhere"] } };
+            case "audience.availability":
+              return { result: { available: false, reason: "not_included", detail: null, credits: null, headroom: null, vendor: { status: null } } };
           }
           throw new Error("not performed here: " + operation);
         }

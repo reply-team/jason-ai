@@ -36,7 +36,7 @@ public partial class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the twenty-five checks' order")]
+    [Critical(Family.W3, "the twenty-six checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -157,9 +157,26 @@ public partial class ProviderOpPreflightTests
         scenario.Unsettled = true;
         met.Add(Refused(scenario, FailureClass.Ambiguous));
 
-        // Twenty-fourth, and the first that is not a refusal: an operation a person has to confirm is parked rather than
-        // failed, and it is asked here — after the input it would be approved for has been composed and held to its own
-        // schema — rather than before any of that was known.
+        // Twenty-fourth, and the first that is not a refusal: a search while another of its campaign has not ended waits
+        // behind it, and it is asked before the approval, so nobody is asked to approve a spend that cannot start now.
+        scenario.Unsettled = false;
+        scenario.Operation = Search;
+        scenario.Plugin = Scenario.Searching(binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["definition"] = new JsonObject { ["industries"] = new JsonArray("Software") }, ["count"] = 50 };
+        scenario.SearchInTheWay = SearchItem;
+        var behind = scenario.Check();
+        Assert.True(behind.Parks);
+        Assert.False(behind.Refused);
+        Assert.NotNull(behind.Plan);
+        Assert.Null(behind.Class);
+        Assert.Contains(SearchItem, behind.Message, StringComparison.Ordinal);
+        met.Add(behind.Code!);
+        scenario.SearchInTheWay = null;
+
+        // Twenty-fifth: an operation a person has to confirm is parked rather than failed, and it is asked here — after the
+        // input it would be approved for has been composed and held to its own schema — rather than before any of that was
+        // known.
+        scenario.Unsettled = true;
         scenario.Operation = Enroll;
         scenario.Arguments = Scenario.CompleteEnrollment;
         var parked = scenario.Check();
@@ -170,7 +187,7 @@ public partial class ProviderOpPreflightTests
         met.Add(parked.Code!);
 
         // The unsettled attempt stays, and asks nothing of an operation whose repeat does not rest on the key.
-        // Twenty-fifth, and last: work nobody has to confirm, which a block the provider holds on this account still
+        // Twenty-sixth, and last: work nobody has to confirm, which a block the provider holds on this account still
         // parks. It is asked after the approval because it says nothing about the work, so the block travels on the
         // approval's park as well, and work a person releases still waits for it.
         var block = Scenario.Block(binding: "sha256:west");
@@ -242,7 +259,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the twenty-five is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the twenty-six is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -253,7 +270,7 @@ public partial class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
-    /// The one answer three of the checks give that is not a refusal is named beside the twenty-five rather than among
+    /// The one answer three of the checks give that is not a refusal is named beside the twenty-six rather than among
     /// them: the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What the binding's, the input's and the definition's checks answer when their pattern does not finish is that named
     /// outcome, and nothing else.
@@ -490,6 +507,71 @@ public partial class ProviderOpPreflightTests
             Assert.Equal(FailureClass.Ambiguous, verdict.Class);
             Assert.Null(verdict.Plan);
             Assert.Contains("other arguments than the work item carries now", verdict.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A search spends per person found and a blind repeat would start a second that spends again, so a repeat after a lost
+    /// answer is held to the attempt that may have started it, as a send's is: the package by its id and digest, the
+    /// account, and the arguments and the input that attempt ran with. A route moved to another account, a package
+    /// replaced, a count or a definition edited while the item waited: each ends the repeat ambiguous and final rather
+    /// than start a second search that nothing could find, read or stop; a route gone since keeps that class too. The same
+    /// request goes on to the person. An enrollment is metered too, and its contract asks for a recovery read before a
+    /// repeat, so the same hold keeps it from enrolling the person a second time at another account.
+    /// </summary>
+    [Theory]
+    [InlineData(Search, "the same request", null)]
+    [InlineData(Search, "another account", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "another package version", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "another count", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "another definition", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "no route", AttemptErrors.NoRoute)]
+    [InlineData(Enroll, "the same request", null)]
+    [InlineData(Enroll, "another account", AttemptErrors.ProviderAnswerLost)]
+    public void A_metered_repeat_after_a_lost_answer_goes_only_where_and_as_that_attempt_acted(string operation, string since, string? expected)
+    {
+        var searching = operation == Search;
+        var scenario = new Scenario
+        {
+            Operation = operation,
+            Route = Scenario.ToTheInstalledPackage,
+            Plugin = searching ? Scenario.Searching() : Scenario.Package(),
+            Contact = searching ? null : Scenario.Person(("email", "ada@example.test")),
+            Arguments = searching
+                ? new JsonObject { ["definition"] = new JsonObject { ["industries"] = new JsonArray("Software") }, ["count"] = 50 }
+                : Scenario.CompleteEnrollment,
+            Unsettled = true,
+        };
+        var ran = scenario.Arguments.DeepClone().AsObject();
+        switch (since)
+        {
+            case "another account":
+                scenario.UnsettledUnder = (Scenario.PluginId, Scenario.RoutedDigest, "sha256:east");
+                break;
+            case "another package version":
+                scenario.UnsettledUnder = (Scenario.PluginId, "sha256:1", null);
+                break;
+            case "another count":
+                ran["count"] = 25;
+                break;
+            case "another definition":
+                ran["definition"] = new JsonObject { ["industries"] = new JsonArray("Logistics") };
+                break;
+            case "no route":
+                scenario.Route = null;
+                break;
+        }
+
+        scenario.UnsettledArguments = new JsonObject { [WorkItemService.InputKey] = ran };
+
+        var verdict = scenario.Check();
+
+        Assert.Equal(expected ?? AttemptErrors.ApprovalRequired, verdict.Code);
+        if (expected is not null)
+        {
+            Assert.Equal(FailureClass.Ambiguous, verdict.Class);
+            Assert.True(verdict.Refused);
+            Assert.Null(verdict.Plan);
         }
     }
 
@@ -1285,6 +1367,9 @@ public partial class ProviderOpPreflightTests
         /// <summary>The search the arguments name under <c>args.search</c>, as the claim would have read it; null where it found none.</summary>
         public NamedSearch? Searched { get; set; }
 
+        /// <summary>Another search of the campaign that has not ended, as the claim would have read it for a search; null where none.</summary>
+        public string? SearchInTheWay { get; set; }
+
         /// <summary>
         /// The package, by its id and digest, and the account that attempt ran under, as its provenance kept them; null
         /// where it ran under the route and the package this claim resolves, and <see cref="NoProvenance"/> where the
@@ -1414,7 +1499,7 @@ public partial class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);

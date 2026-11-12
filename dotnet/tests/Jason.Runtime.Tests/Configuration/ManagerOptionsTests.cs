@@ -67,7 +67,7 @@ public class ManagerOptionsTests
     }
 
     [Fact]
-    public void The_defaults_are_the_nine_kinds_this_version_reacts_to()
+    public void The_defaults_are_the_ten_kinds_this_version_reacts_to()
     {
         var options = new ManagerOptions();
 
@@ -82,6 +82,7 @@ public class ManagerOptionsTests
                 "provider_blocked",
                 "audience_reserve_low",
                 "audience_search_ended",
+                "audience_search_held",
             ],
             options.Triggers);
         Assert.DoesNotContain(JournalKinds.ProviderBlockCleared, options.Triggers);

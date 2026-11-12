@@ -491,7 +491,7 @@ public class CampaignCommandsTests
     [Fact]
     public async Task Human_mode_renders_the_audience_with_each_definition_laid_out_by_the_plugin_s_schema()
     {
-        var described = JsonSerializer.Serialize(new OperationDescriptionDto("audience.search", 1, "reply", "0.15.2", [], Definition()), JasonJson.Options);
+        var described = JsonSerializer.Serialize(new OperationDescriptionDto("audience.search", 1, "reply", "0.15.0", [], Definition()), JasonJson.Options);
         using var cli = new FolderRun(null, (operation, _) => (HttpStatusCode.OK, operation == Operations.OperationDescribe ? described : AudienceView()));
 
         var exit = await cli.RunAsync("campaign", "audience", "cmp_A", "--human");
@@ -543,7 +543,7 @@ public class CampaignCommandsTests
             JasonJson.Options);
         var described = JsonSerializer.Serialize(
             new OperationDescriptionDto(
-                "audience.search", 1, "reply", "0.15.2", [],
+                "audience.search", 1, "reply", "0.15.0", [],
                 new JsonObject { ["schema"] = new JsonObject { ["properties"] = new JsonObject { ["industries"] = new JsonObject() } }, ["keys"] = new JsonObject() }),
             JasonJson.Options);
         using var cli = new FolderRun(null, (operation, _) => (HttpStatusCode.OK, operation == Operations.OperationDescribe ? described : view));
@@ -847,7 +847,7 @@ public class CampaignCommandsTests
                         Moment,
                         worked,
                         [new CountedIn("cmp_B", worked), new CountedIn("cmp_A")],
-                        new MembershipSource("aud_A", 2, "wi_A", Moment)),
+                        new MembershipSource(new AudienceRef("aud_A", 2), "wi_A", Moment)),
                 ],
                 null),
             JasonJson.Options);

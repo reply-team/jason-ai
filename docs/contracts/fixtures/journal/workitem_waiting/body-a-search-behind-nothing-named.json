@@ -1,0 +1,11 @@
+{
+  "kind": "workitem_waiting",
+  "version": 1,
+  "case": "a wait the claim made with no attempt names what it waits behind: a moment alone is no claim's wait",
+  "body": {
+    "key": null,
+    "old": null,
+    "new": { "on": [], "mode": null, "until": "2026-11-10T12:05:00.000Z", "deadline": "2026-11-10T12:05:00.000Z" }
+  },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

@@ -168,6 +168,14 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
 
+        // What a search spends is the person's: its probe always waits for them, the allowance is offered only once the
+        // audience has been judged, a new audience's search takes the old allowance back and the person hears so first,
+        // and nobody else moves it.
+        Assert.Contains("A search spends the provider's money, so the first search under an audience, its probe, always waits for the person.", skill, StringComparison.Ordinal);
+        Assert.Contains("That is the moment to offer the allowance, never before the audience has been judged", skill, StringComparison.Ordinal);
+        Assert.Contains("takes the old one back in the same act. Say so before they approve such a search", skill, StringComparison.Ordinal);
+        Assert.Contains("No act but the person's moves the allowance: no role, no verdict and no probe that waits.", skill, StringComparison.Ordinal);
+
         var printed = SkillPack.PrintedCommands(SkillPack.Find("approvals-and-questions").File);
         Assert.Contains(printed, line => line.StartsWith("jason approval set-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category meeting_requested ", StringComparison.Ordinal) && line.Contains(" --actor human:", StringComparison.Ordinal));
         Assert.Contains("jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", printed);

@@ -321,12 +321,14 @@ ran and answered that it is not signed in, and only the person can sign in to it
 message names what to change. Fix it and ask for the
 work again — a failed item is finished, and finished items are not reopened.
 
-**If you are the launched role**, two rules travel with you. Call home with the plain command word the
-launch envelope names, exactly as it is — the word, its verb and its arguments, as one command.
-Anything built around it, such as a redirect or a chain, is neither promised to run nor promised to be
-refused, and you have no file-writing tool, so whatever you want to keep goes inside the command
-itself. And answer in the shape the item asked for — where a work item declares a `result_format`, a
-completion that does not satisfy it is refused, however well it reads.
+**If you are the launched role**, three rules travel with you. Call home with the plain command word the
+launch envelope names, exactly as it is — the word, its verb and its arguments, as one command, with no `cd` or
+variable before it, nothing joined to it, and every id written out in full. Anything built around it is neither
+promised to run nor promised to be refused, so a refused call is typed again as one plain line; and you have no
+file-writing tool, so whatever you want to keep goes inside the command itself. Answer in the shape the item asked
+for — where a work item declares a `result_format`, a completion that does not satisfy it is refused, however well it
+reads. And end every run with the item completed, succeeded or failed, or waiting where the work waits on other work: a
+run that exits without one of them leaves its work undone, and nobody is told.
 
 ### A role's notes are its memory, not the truth
 

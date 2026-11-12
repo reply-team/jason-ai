@@ -96,11 +96,23 @@ public static class OperationRunner
             return (Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied), null);
         }
 
-        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler);
+        using var client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler, env.Clock);
         RuntimeResponse response;
         try
         {
             response = await client.PostAsync(operation, RequestBody.Serialize(body), cancellationToken).ConfigureAwait(false);
+        }
+        catch (RuntimeTimeoutException ex)
+        {
+            // The runtime took the request, so it is reachable: this is the request's own end, not a dead runtime, and a
+            // repeat starts the same work over rather than finding it done.
+            env.Out.WriteLine(CliErrors.Serialize(
+                CliErrors.RequestTimedOut,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The runtime at {descriptor.BaseUrl} took '{ex.Operation}' and did not answer within {ex.Budget.TotalSeconds:0} seconds, its budget and a margin; it may still be working. Asking again starts the work over."),
+                retryable: false));
+            return (ExitCodes.ApiError, null);
         }
         catch (HttpRequestException ex)
         {

@@ -20,8 +20,8 @@ namespace Jason.Runtime.Audiences;
 /// <summary>
 /// A campaign's audience reads, made when a person or an agent asks and answered in the request: how big an audience is
 /// and who is in it, the values a provider's filter takes, and whether the account may search now. Each is routed by the
-/// campaign's route for its operation, resolved as the claim resolves it and held to the route's half of the claim's
-/// checks; the input is composed as a work item's would be, with no person; and the answer is held to the operation's
+/// campaign's route for <c>audience.search</c>, the search it serves, resolved as the claim resolves it and held to the
+/// route's half of the claim's checks for its own operation; the input is composed as a work item's would be, with no person; and the answer is held to the operation's
 /// document. It is information, not work: no work item, no attempt, no approval, no retry, nothing journaled and nothing
 /// pinned from what comes back.
 /// </summary>
@@ -36,6 +36,36 @@ public sealed partial class AudienceReadService(
     private const string PreviewOperation = "audience.preview";
     private const string FilterValuesOperation = "audience.filter_values";
     private const string AvailabilityOperation = "audience.availability";
+
+    /// <summary>The campaign's reads on request, each by the verb a person or an agent asks it with.</summary>
+    private static readonly Dictionary<string, string> OnRequest = new(StringComparer.Ordinal)
+    {
+        [PreviewOperation] = "jason audience preview",
+        [FilterValuesOperation] = "jason audience filter-values",
+        [AvailabilityOperation] = "jason audience availability",
+    };
+
+    /// <summary>
+    /// The operation whose route <paramref name="operation"/> goes by: a campaign's read on request goes where the campaign's
+    /// searches go, and every other operation by its own route.
+    /// </summary>
+    public static string RoutedAs(string operation) => OnRequest.ContainsKey(operation) ? SearchLanding.Search : operation;
+
+    /// <summary>
+    /// Refuses a campaign's read on request written as work: it is asked of the runtime and answered there, recorded
+    /// nowhere, and as work its answer — a preview's sample of people among them — would be kept in the item's result.
+    /// </summary>
+    public static void RefuseAsWork(string operation, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        if (OnRequest.TryGetValue(operation, out var verb))
+        {
+            errors.Add(
+                "operation",
+                "on_request_only",
+                $"{operation} is a campaign's read on request, answered and recorded nowhere, never work: ask it with {verb}.");
+        }
+    }
 
     /// <summary>The prefix of a campaign read's invocation id, beside the contact reads' own.</summary>
     private const string InvocationPrefix = "cpr";
@@ -167,24 +197,28 @@ public sealed partial class AudienceReadService(
             (string?)result["reason"],
             (string?)result["detail"],
             result["credits"]?.DeepClone().AsObject(),
-            (long?)result["headroom"]);
+            (long?)result["headroom"],
+            result["vendor"]?.DeepClone().AsObject());
     }
 
     /// <summary>
-    /// The plugin the campaign's route for <paramref name="operation"/> names, resolved against the snapshots active now
-    /// and held to the half of the claim a route answers: nothing resolving is <c>no_route</c>; a route that cannot run is
-    /// refused with the claim's own code; a binding no pattern could finish measuring is a read to ask again.
+    /// The plugin the campaign's route for <c>audience.search</c> names — the search these reads serve, so a definition is
+    /// previewed, its filters offered and the account asked at the provider and account that would run the search,
+    /// whatever <paramref name="operation"/>'s own route says — resolved against the snapshots active now and held to the
+    /// half of the claim a route answers for <paramref name="operation"/>: nothing resolving is <c>no_route</c>; a route
+    /// that cannot run it is refused with the claim's own code; a binding no pattern could finish measuring is a read to ask
+    /// again.
     /// </summary>
     private async Task<Target> TargetAsync(string? campaignId, string operation, CancellationToken ct)
     {
         var campaign = await CampaignService.LoadAsync(db, campaignId, ct).ConfigureAwait(false);
         var contract = OperationCatalog.Find(operation)!;
         var pluginSnapshot = plugins.Snapshot;
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, operation) is not { } resolution)
+        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, SearchLanding.Search) is not { } resolution)
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,
-                $"No route sends '{operation}' anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
+                $"No route sends '{SearchLanding.Search}' anywhere for campaign '{campaign.PublicId}', and '{operation}' goes where its searches go. Write one with route.set, or a global one in the settings file.");
         }
 
         var route = resolution.Route;

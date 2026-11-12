@@ -7,43 +7,74 @@
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" }
   },
-  "field_since": { "/old/audience": "0.34.0", "/old/max_people": "0.34.0", "/old/max_per_search": "0.34.0" },
+  "field_since": { "/old/audience": "0.35.0", "/old/max_people": "0.35.0", "/old/max_per_search": "0.35.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
     "required": ["key", "old", "new"],
-    "properties": {
-      "key": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply, or `audience.search` for the allowance, which the campaign's newest line for it decides." },
-      "old": {
+    "anyOf": [
+      { "properties": { "old": { "$ref": "#/$defs/standing" } } },
+      { "properties": { "key": { "const": "audience.search" }, "old": { "$ref": "#/$defs/allowance" } } }
+    ],
+    "$defs": {
+      "standing": {
         "type": "object",
-        "description": "The standing approval taken back, as it was set: by the person's unset, by a new allowance that replaces it, or by the person's approval of a search under another audience.",
+        "description": "A standing approval for one category of reply, as it was set.",
         "additionalProperties": false,
         "required": ["category", "operations", "expires_at", "max_releases"],
         "properties": {
-          "category": { "type": ["string", "null"], "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers; null on an allowance, which covers searches." },
+          "category": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply the standing approval covers." },
           "operations": {
             "type": "array",
             "minItems": 1,
             "maxItems": 2,
             "uniqueItems": true,
-            "items": { "enum": ["conversation.reply", "message.send", "audience.search"] },
-            "description": "The operations it releases, in ordinal order: one or both of a reply and a message for a category of reply, or `audience.search` alone for an allowance."
+            "items": { "enum": ["conversation.reply", "message.send"] },
+            "description": "The operations it releases, in ordinal order."
           },
           "expires_at": { "type": ["null", "string"], "format": "date-time", "description": "When it stops releasing work; null where it does not expire." },
-          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." },
+          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." }
+        }
+      },
+      "allowance": {
+        "type": "object",
+        "description": "Since 0.35.0: the campaign's allowance for the searches under one of its audiences, as it was set.",
+        "additionalProperties": false,
+        "required": ["category", "operations", "expires_at", "max_releases"],
+        "properties": {
+          "category": { "type": "null", "description": "An allowance covers searches, never a category of reply." },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": { "enum": ["audience.search"] },
+            "description": "`audience.search`, the one operation an allowance releases."
+          },
+          "expires_at": { "type": ["null", "string"], "format": "date-time", "description": "When it stops releasing searches; null where it does not expire." },
+          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many searches it releases before it stops; null where it has no such ceiling." },
           "audience": {
             "type": "object",
             "additionalProperties": false,
             "required": ["id", "number"],
-            "description": "On an allowance, the campaign's audience whose searches it covers; absent on a category of reply's.",
+            "description": "The campaign's audience whose searches it covers.",
             "properties": {
               "id": { "type": "string", "pattern": "^aud_", "description": "The audience, by its id." },
               "number": { "type": "integer", "minimum": 1, "description": "The number the campaign knows the audience by." }
             }
           },
-          "max_people": { "type": "integer", "minimum": 1, "maximum": 100000, "description": "On an allowance, the most people the searches under it may ask for, added up; absent on a category of reply's." },
-          "max_per_search": { "type": ["null", "integer"], "minimum": 1, "maximum": 1000, "description": "On an allowance, the most people one search under it may ask for; null where it caps none, absent on a category of reply's." }
+          "max_people": { "type": "integer", "minimum": 1, "maximum": 100000, "description": "The most people the searches under it may ask for, added up." },
+          "max_per_search": { "type": ["null", "integer"], "minimum": 1, "maximum": 1000, "description": "The most people one search under it may ask for; null where it caps none." }
         }
+      }
+    },
+    "properties": {
+      "key": { "type": "string", "minLength": 1, "maxLength": 100, "description": "The category of reply, which the campaign's newest line for it decides; since 0.35.0, `audience.search` on an allowance's line." },
+      "old": {
+        "anyOf": [
+          { "$ref": "#/$defs/standing" },
+          { "$ref": "#/$defs/allowance" }
+        ],
+        "description": "The standing approval taken back, as it was set: a category of reply's, as since 0.25.0, or since 0.35.0 the allowance's, a branch of its own, taken back by the person's unset, by a new allowance that replaces it, or by the person's approval of a search under another audience."
       },
       "new": { "type": "null" }
     }

@@ -17,7 +17,8 @@ public class AudienceSearchesSchemaTests
 
     /// <summary>
     /// The poll reads only the searches still followed, off the index that holds nothing else, and a campaign's reads under
-    /// way — a read or a stop — off the index of its work by status; the claim and the landing find a search's row by its work item's id.
+    /// way — a read or a stop — off the index of its work by status; the claim and the landing find a search's row by its work item's id,
+    /// and the claim's look for a search in the way and the archive's stops read by an index too.
     /// </summary>
     [Fact]
     public async Task The_poll_the_claim_and_the_landing_find_a_search_by_an_index()
@@ -42,6 +43,34 @@ public class AudienceSearchesSchemaTests
                 "SEARCH a USING INDEX ix_audience_searches_search_work_item_id (search_work_item_id=?)",
             ],
             await PlanAsync(db, AudienceSearches.Named(db, 1, "wi_1").Select(search => search.Cursor).ToQueryString()));
+
+        // The claim asks, for every search it claims, whether another search of the campaign is in the way: its unended rows
+        // off the index of the searches still followed, and its searches starting now off the index of its work by status.
+        Assert.Equal(
+            ["SEARCH a USING INDEX ix_audience_searches_in_flight (campaign_id=?)", "SEARCH w USING INTEGER PRIMARY KEY (rowid=?)"],
+            await PlanAsync(db, AudienceSearches.Unended(db, 1, 2).ToQueryString()));
+        Assert.Equal(
+            ["SEARCH w USING INDEX ix_work_items_campaign_id_status (campaign_id=? AND status=?)"],
+            await PlanAsync(db, AudienceSearches.Starting(db, 1, 2).ToQueryString()));
+
+        // Every scan looks for the searches of archived campaigns still in flight, off the index that holds nothing else,
+        // and for the stops already made of one, off the indexes of its work by status and by when it finished.
+        Assert.Equal(
+            [
+                "SCAN a USING INDEX ix_audience_searches_in_flight",
+                "SEARCH c USING INTEGER PRIMARY KEY (rowid=?)",
+                "SEARCH w USING INTEGER PRIMARY KEY (rowid=?)",
+            ],
+            await PlanAsync(db, SearchPoll.ArchivedInFlight(db).ToQueryString()));
+        Assert.Equal(
+            [
+                "COMPOUND QUERY",
+                "LEFT-MOST SUBQUERY",
+                "SEARCH w USING INDEX ix_work_items_campaign_id_status (campaign_id=? AND status=?)",
+                "UNION ALL",
+                "SEARCH w0 USING INDEX ix_work_items_campaign_id_finished_at (campaign_id=? AND finished_at>?)",
+            ],
+            await PlanAsync(db, SearchPoll.StopsSince(db, 1, DateTime.UnixEpoch).ToQueryString()));
     }
 
     /// <summary>
@@ -65,7 +94,7 @@ public class AudienceSearchesSchemaTests
                 "INDEX 2",
                 "SEARCH c USING INDEX ix_contact_channels_channel_value (channel=? AND value=?)",
             ],
-            await PlanAsync(db, SearchLanding.Reached(db, ["sam@quayside.example"], ["https://www.linkedin.com/in/sam"]).Select(channel => channel.ContactId).ToQueryString()));
+            await PlanAsync(db, SearchLanding.Reached(db, ["sam@quayside.example"], ["https://www.linkedin.com/in/sam-example"]).Select(channel => channel.ContactId).ToQueryString()));
     }
 
     /// <summary>

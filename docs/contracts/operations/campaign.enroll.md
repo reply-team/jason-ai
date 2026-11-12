@@ -109,6 +109,7 @@ summary differently never turns a pending decision into another one. The fixture
 |---|---|
 | pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
+| in an archived campaign | `cancelled` |
 | under a provider block | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | none |

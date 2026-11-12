@@ -24,7 +24,7 @@ using Microsoft.Extensions.Logging;
 namespace Jason.Runtime.Dispatch;
 
 /// <summary>
-/// The ninth step of a scan, and the only one that hands work out. Everything happens inside one immediate
+/// The tenth step of a scan, and the only one that hands work out. Everything happens inside one immediate
 /// transaction, so two runtimes — or two scans — cannot both claim the same item: the second waits, sees the
 /// item already taken and moves on. One item per campaign per scan keeps a busy campaign from starving the
 /// others, and never more than the free handler slots, so a queued item's lease cannot expire before it runs.
@@ -129,9 +129,8 @@ public sealed class Claimer(
             // The decision before the record of it. Everything that can refuse a provider item is decided here,
             // and one of the answers is not a refusal at all: work whose operation needs a person's approval is
             // parked, and parking makes no attempt, because an attempt is a run and nothing has run.
-            var verdict = item.Kind == WorkItemKind.ProviderOp
-                ? ProviderOpPreflight.Check(await FactsAsync(db, item, routing, ct).ConfigureAwait(false), packages, routing, _timing)
-                : null;
+            var facts = item.Kind == WorkItemKind.ProviderOp ? await FactsAsync(db, item, routing, ct).ConfigureAwait(false) : null;
+            var verdict = facts is null ? null : ProviderOpPreflight.Check(facts, packages, routing, _timing);
 
             // A search the claim lets through, to run now or to wait for a person, runs under one of the campaign's audiences
             // from here on: its definition passed the routed plugin's schema. One the claim refuses becomes no audience.
@@ -158,6 +157,22 @@ public sealed class Claimer(
                 ? await agents.PlanAsync(db, item, globalDefault, ct).ConfigureAwait(false)
                 : null;
 
+            // Behind another search of its campaign: the item waits, with no attempt and nobody asked, and is claimed again a
+            // search cadence later, when the search in the way may have ended — the long cadence of a hold where the
+            // provider holds it, since it moves only when a person acts there.
+            if (verdict is { Parks: true, Code: AttemptErrors.SearchUnfinished } && facts?.SearchInTheWay is { } inTheWay)
+            {
+                var error = new AttemptErrorDto(AttemptErrors.SearchUnfinished, verdict.Message!, Retriable: false);
+                var held = SearchLanding.IsHeld(await AudienceSearches.Named(db, item.CampaignId, inTheWay)
+                    .Select(search => search.State)
+                    .FirstOrDefaultAsync(ct)
+                    .ConfigureAwait(false));
+                var cadence = held ? current.SearchHeldCadenceSeconds : current.SearchCadenceSeconds;
+                outcomes.Behind(db, item, now.AddSeconds(cadence), error, inTheWay, Actors.Dispatcher);
+                await SaveAsync(db, item, ct).ConfigureAwait(false);
+                continue;
+            }
+
             var asks = verdict is { Parks: true, Code: AttemptErrors.ApprovalRequired };
             var released = asks
                 ? await DecideAsync(db, item, verdict!, now, ct).ConfigureAwait(false)
@@ -170,7 +185,7 @@ public sealed class Claimer(
                 continue;
             }
 
-            // Held by a provider block, whether the twenty-fifth check said so or a person released work the block still
+            // Held by a provider block, whether the twenty-sixth check said so or a person released work the block still
             // holds: the item waits on the block, with no attempt, unless it is the block's trial.
             if (verdict is { Block: { } block } && (released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
                 && !await TrialAsync(db, block, item, now, ct).ConfigureAwait(false))
@@ -281,7 +296,7 @@ public sealed class Claimer(
     /// One item per campaign, the most important first, and never more than the free slots. Raw SQL because the
     /// per-campaign choice is a window function: doing it in memory would either idle a slot or read the whole
     /// backlog. Its campaign rule is the eligible predicate's, written a second time here and held to it by a test:
-    /// an active campaign, or a paused one for an operation whose contract says its work runs there.
+    /// an active campaign, or a paused or an archived one for an operation whose contract says its work runs there.
     /// </summary>
     internal static async Task<List<int>> CandidatesAsync(JasonDbContext db, DateTime now, int freeSlots, CancellationToken ct)
     {
@@ -290,7 +305,9 @@ public sealed class Claimer(
         var processing = SnakeCaseEnumConverter<WorkItemStatus>.Format(WorkItemStatus.Processing);
         var active = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Active);
         var paused = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Paused);
+        var archived = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Archived);
         var runsInPaused = JsonSerializer.Serialize(OperationCatalog.RunsInPausedCampaign);
+        var runsInArchived = JsonSerializer.Serialize(OperationCatalog.RunsInArchivedCampaign);
 
         return await db.WorkItems.FromSqlInterpolated($"""
             SELECT * FROM (
@@ -298,7 +315,8 @@ public sealed class Claimer(
               FROM work_items w JOIN campaigns c ON c.id = w.campaign_id
               WHERE w.status = {created}
                 AND (c.status = {active}
-                     OR (c.status = {paused} AND w.operation IN (SELECT value FROM json_each({runsInPaused}))))
+                     OR (c.status = {paused} AND w.operation IN (SELECT value FROM json_each({runsInPaused})))
+                     OR (c.status = {archived} AND w.operation IN (SELECT value FROM json_each({runsInArchived}))))
                 AND (w.not_before IS NULL OR w.not_before <= {now})
                 AND (w.due_at IS NULL OR w.due_at > {now})
                 AND (w.retry_after IS NULL OR w.retry_after <= {now})
@@ -695,7 +713,6 @@ public sealed class Claimer(
     {
         var campaign = item.Campaign!;
         var contract = item.Operation is { } operation ? OperationCatalog.Find(operation) : null;
-        var resolution = contract is null ? null : RouteResolver.Resolve(routing, campaign.PublicId, contract.Id);
 
         // The latest attempt this claim would repeat that may have acted: the attempts loaded with the item are all
         // earlier ones, since the claim's own does not exist yet. It is read before the route is, so a refusal for a
@@ -703,6 +720,20 @@ public sealed class Claimer(
         var unsettled = item.Attempts
             .Where(MayHaveActed)
             .MaxBy(earlier => earlier.Number);
+
+        // The search the work names is read before the route, since a read or a stop of it goes where it ran.
+        var search = contract is not null && CanonicalInput.NamesASearch(contract)
+            ? await ReferenceAsync(
+                db,
+                item,
+                CanonicalInput.NamedSearch(item),
+                SearchKind,
+                (made, reference, ran) => new NamedSearch(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
+                ct).ConfigureAwait(false)
+            : null;
+        var resolution = contract is null
+            ? null
+            : ProviderOpPreflight.Resolve(contract, new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Search: search), routing);
         if (contract is null || resolution is null)
         {
             return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Unsettled: unsettled);
@@ -727,15 +758,6 @@ public sealed class Claimer(
 
         // Where a status read starts is the search's own row's: the cursor the last read answered, as the row keeps it, and
         // null before any read answered one. The row is read in the work's own campaign, as the search is.
-        var search = CanonicalInput.NamesASearch(contract)
-            ? await ReferenceAsync(
-                db,
-                item,
-                CanonicalInput.NamedSearch(item),
-                SearchKind,
-                (made, reference, ran) => new NamedSearch(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
-                ct).ConfigureAwait(false)
-            : null;
         if (search is not null)
         {
             search = search with
@@ -748,6 +770,10 @@ public sealed class Claimer(
             };
         }
 
+        var inTheWay = string.Equals(contract.Id, SearchLanding.Search, StringComparison.Ordinal)
+            ? await AudienceSearches.InTheWayAsync(db, campaign.Id, item.Id, ct).ConfigureAwait(false)
+            : null;
+
         var audience = CanonicalInput.CarriesADefinition(contract) && CanonicalInput.NamedAudience(item) is { } number
             && await CampaignAudiences.ByNumber(db, campaign.Id, number).AsNoTracking().FirstOrDefaultAsync(ct).ConfigureAwait(false) is { } held
             ? new NamedAudience(held.Number, held.Definition)
@@ -755,7 +781,7 @@ public sealed class Claimer(
 
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search, audience);
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search, audience, inTheWay);
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -777,7 +803,8 @@ public sealed class Claimer(
             send,
             Learned(contact.ExternalIds, campaign.ExternalIds, pluginId, item, unsettled),
             search,
-            audience);
+            audience,
+            inTheWay);
     }
 
     /// <summary>

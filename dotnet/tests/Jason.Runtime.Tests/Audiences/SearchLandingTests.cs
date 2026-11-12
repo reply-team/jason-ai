@@ -4,6 +4,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Audiences;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -56,7 +57,7 @@ public sealed class SearchLandingTests
             """{"location":"Porto, Portugal","company_domain":"northwind-freight.example","company_size":"51-200","company_industry":"Logistics","provider_record":{"id":"p-1","seniority":"head"}}""",
             lena.Custom.ToJsonString());
         var omar = await after.Contacts.AsNoTracking().Include(c => c.Channels).Include(c => c.ExternalIds).SingleAsync(c => c.FirstName == "Omar", Ct);
-        Assert.Equal([("linkedin", "https://www.linkedin.com/in/omar-haddad", true)], omar.Channels.Select(c => (c.Channel, c.Value, c.IsPrimary)));
+        Assert.Equal([("linkedin", "https://www.linkedin.com/in/omar-example", true)], omar.Channels.Select(c => (c.Channel, c.Value, c.IsPrimary)));
         Assert.Equal("{}", omar.Custom.ToJsonString());
 
         Assert.Equal(
@@ -118,6 +119,47 @@ public sealed class SearchLandingTests
     }
 
     /// <summary>
+    /// The landing reads who is known inside the transaction that saves it, so an import into the same campaign at that
+    /// moment waits for it rather than falling between the read and the save. A person new to the directory, in the page
+    /// and in the import, is one contact and one member, never two; a person the directory knows and the campaign does not
+    /// yet hold, in both, is one member, and the read is recorded rather than stopped on the campaign's unique membership.
+    /// </summary>
+    [Theory]
+    [InlineData("new to the directory")]
+    [InlineData("known, not yet a member")]
+    public async Task An_import_at_the_moment_of_a_landing_neither_doubles_a_person_nor_stops_the_read(string person)
+    {
+        using var scene = await Scene.AcceptedAsync();
+        const string Address = "lena.novak@northwind-freight.example";
+        string? known = null;
+        if (person == "known, not yet a member")
+        {
+            await using var db = scene.Open();
+            var contact = Known(Address, "email");
+            db.Contacts.Add(contact);
+            await db.SaveChangesAsync(Ct);
+            known = contact.PublicId;
+        }
+
+        await scene.ReadAsync(
+            Page("in_progress", found: 1, cursor: "after-1", hasMore: false, Lena),
+            meanwhile: async () =>
+            {
+                await using var db = scene.Open();
+                var item = known is null
+                    ? new AddContactsItem(null, "Lena", "Novak", null, null, null, [new ChannelInput("email", Address, null, null, null)], null)
+                    : new AddContactsItem(known, null, null, null, null, null, null, null);
+                await new MembershipService(db, new JournalWriter(scene.Clock), scene.Clock, TestCanceller.New(scene.Clock))
+                    .AddAsync(new AddContactsRequest(scene.Campaign.PublicId, "email", [item], new ActorRef(ActorType.Human, "ada"), null), Ct);
+            });
+
+        await using var after = scene.Open();
+        var holding = await after.ContactChannels.AsNoTracking().Where(channel => channel.Value == Address).Select(channel => channel.ContactId).ToListAsync(Ct);
+        var contactId = Assert.Single(holding);
+        Assert.Equal(contactId, (await after.CampaignContacts.AsNoTracking().SingleAsync(Ct)).ContactId);
+    }
+
+    /// <summary>
     /// A person is known by any key they carry, the provider's identifier first, then each address, then each LinkedIn
     /// profile: an address the directory never saw does not make a second contact of a person whose profile it holds, and
     /// the person found is not changed by what the page says. A second person of the page who turns out to be the same
@@ -131,13 +173,13 @@ public sealed class SearchLandingTests
         await using (var db = scene.Open())
         {
             var known = Known("old.address@harbor-labs.example", "email");
-            known.Channels.Add(new ContactChannel { Channel = "linkedin", Value = "https://www.linkedin.com/in/omar-haddad" });
+            known.Channels.Add(new ContactChannel { Channel = "linkedin", Value = "https://www.linkedin.com/in/omar-example" });
             db.Contacts.Add(known);
             await db.SaveChangesAsync(Ct);
             held = known.Id;
         }
 
-        var both = Person("p-5", "Omar", "Haddad", null, ("email", "omar@quayside.example"), ("linkedin", "https://www.linkedin.com/in/omar-haddad"));
+        var both = Person("p-5", "Omar", "Haddad", null, ("email", "omar@quayside.example"), ("linkedin", "https://www.linkedin.com/in/omar-example"));
         var again = Person("p-6", "O.", "Haddad", null, ("email", "omar@quayside.example"));
         await scene.ReadAsync(Page("in_progress", found: 2, cursor: "after-2", hasMore: false, both, again));
 
@@ -145,7 +187,7 @@ public sealed class SearchLandingTests
         var contact = await after.Contacts.AsNoTracking().Include(c => c.Channels).SingleAsync(Ct);
         Assert.Equal(held, contact.Id);
         Assert.Equal(
-            ["https://www.linkedin.com/in/omar-haddad", "old.address@harbor-labs.example"],
+            ["https://www.linkedin.com/in/omar-example", "old.address@harbor-labs.example"],
             contact.Channels.Select(channel => channel.Value).Order(StringComparer.Ordinal));
         var pin = await after.ExternalIds.AsNoTracking().SingleAsync(Ct);
         Assert.Equal(("p-5", "p-6"), (pin.Value, pin.DivergedValue));
@@ -244,7 +286,9 @@ public sealed class SearchLandingTests
     /// <summary>
     /// A page that carried nobody lands nobody and says nothing; the row still takes what the provider said — where the
     /// next read starts, its state, how many it found — and the quiet goes on. An answer, even an empty one, ends a run of
-    /// reads that failed.
+    /// reads that failed. An empty page that says more is readable brings no read at once: the next waits the cadence, so
+    /// a provider that answers so is not read back to back; and it ends no search, whatever state it names, since what is
+    /// still readable is still to land.
     /// </summary>
     [Fact]
     public async Task An_empty_page_says_nothing_and_moves_the_row()
@@ -256,13 +300,20 @@ public sealed class SearchLandingTests
             await db.AudienceSearches.ExecuteUpdateAsync(set => set.SetProperty(row => row.Failures, 2), Ct);
         }
 
-        await scene.ReadAsync(Page("paused_for_credits", found: 0, cursor: "after-0", hasMore: false));
+        await scene.ReadAsync(Page("in_progress", found: 0, cursor: "after-0", hasMore: true));
 
         await using var after = scene.Open();
         Assert.Empty(await after.Journal.AsNoTracking().Where(line => line.Kind.StartsWith("audience_")).ToListAsync(Ct));
         Assert.Empty(await after.Contacts.AsNoTracking().ToListAsync(Ct));
         var row = await after.AudienceSearches.AsNoTracking().SingleAsync(Ct);
-        Assert.Equal(("after-0", "paused_for_credits", (int?)0, 0, Noon, (string?)null, 0), (row.Cursor, row.State, row.Found, row.Landed, row.QuietSince, row.EndedAs, row.Failures));
+        Assert.Equal(("after-0", "in_progress", (int?)0, 0, Noon, (string?)null, 0, false), (row.Cursor, row.State, row.Found, row.Landed, row.QuietSince, row.EndedAs, row.Failures, row.More));
+
+        await scene.ReadAsync(Page("finished", found: 3, cursor: "after-0", hasMore: true));
+
+        await using var finished = scene.Open();
+        Assert.Empty(await finished.Journal.AsNoTracking().Where(line => line.Kind == JournalKinds.AudienceSearchEnded).ToListAsync(Ct));
+        var open = await finished.AudienceSearches.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(("finished", (string?)null, false), (open.State, open.EndedAs, open.More));
     }
 
     /// <summary>
@@ -277,7 +328,7 @@ public sealed class SearchLandingTests
         await using (var db = scene.Open())
         {
             var removed = Known("lena.novak@northwind-freight.example", "email");
-            var archived = Known("https://www.linkedin.com/in/omar-haddad", "linkedin");
+            var archived = Known("https://www.linkedin.com/in/omar-example", "linkedin");
             archived.ArchivedAt = Noon;
             var member = Known("ines.ruiz@harbor-labs.example", "email");
             db.Contacts.AddRange(removed, archived, member);
@@ -325,6 +376,44 @@ public sealed class SearchLandingTests
     }
 
     /// <summary>
+    /// A search the provider holds — paused, out of credits, at the plan's limit — is said at once: the first read that
+    /// says so writes one line, with the search, its audience, the state and the counts, and starts the quiet from there,
+    /// so the long bound of a held search counts from the hold. Reads that say it is still held, in the same word or
+    /// another, say nothing more; a read that says it moves again starts the quiet afresh, and a hold after it is said again.
+    /// </summary>
+    [Fact]
+    public async Task A_held_search_is_said_once_per_hold_and_its_quiet_starts_at_each_change()
+    {
+        using var scene = await Scene.AcceptedAsync();
+        scene.Clock.Advance(TimeSpan.FromMinutes(5));
+        var held = await scene.ReadAsync(Page("paused_for_credits", found: 3, cursor: "after-0", hasMore: false));
+        scene.Clock.Advance(TimeSpan.FromMinutes(5));
+        await scene.ReadAsync(Page("paused", found: 3, cursor: "after-0", hasMore: false));
+        await using (var db = scene.Open())
+        {
+            var line = Assert.Single(await LinesAsync(db, JournalKinds.AudienceSearchHeld));
+            Assert.Equal((held.Item.PublicId, scene.Search.PublicId), (line.Key, line.WorkItemId));
+            Assert.Equal(
+                $$"""{"audience":"{{scene.Audience.PublicId}}","plugin":"fake-provider","state":"paused_for_credits","asked":25,"found":3,"landed":0}""",
+                line.New!.ToJsonString());
+            Assert.Equal(Noon.AddMinutes(5), (await db.AudienceSearches.AsNoTracking().SingleAsync(Ct)).QuietSince);
+        }
+
+        scene.Clock.Advance(TimeSpan.FromMinutes(5));
+        await scene.ReadAsync(Page("in_progress", found: 3, cursor: "after-0", hasMore: false));
+        await using (var db = scene.Open())
+        {
+            Assert.Equal(Noon.AddMinutes(15), (await db.AudienceSearches.AsNoTracking().SingleAsync(Ct)).QuietSince);
+        }
+
+        scene.Clock.Advance(TimeSpan.FromMinutes(5));
+        await scene.ReadAsync(Page("paused_for_limit", found: 3, cursor: "after-0", hasMore: false));
+
+        await using var after = scene.Open();
+        Assert.Equal(["paused_for_credits", "paused_for_limit"], (await LinesAsync(after, JournalKinds.AudienceSearchHeld)).Select(line => (string?)line.New!["state"]));
+    }
+
+    /// <summary>
     /// A search ends on the read that says it is final with nothing more readable — not on one that is final with more to
     /// read — and a read after that still lands what it carries, but says no second ending.
     /// </summary>
@@ -351,17 +440,25 @@ public sealed class SearchLandingTests
     /// <summary>
     /// A stop that stopped the search, or found it stopped by an earlier one or gone from the provider, ends it cancelled.
     /// One that found it ended by itself leaves it to the reads: what it found is still to be read, and the last read ends
-    /// it as it really ended. A search already ended stays as it ended.
+    /// it as it really ended. In an archived campaign no read comes, so such a stop ends it there as it ended. A search
+    /// already ended stays as it ended.
     /// </summary>
     [Theory]
-    [InlineData("cancelled", null, "cancelled")]
-    [InlineData("already_ended", "cancelled", "cancelled")]
-    [InlineData("already_ended", null, "cancelled")]
-    [InlineData("already_ended", "finished", null)]
-    [InlineData("already_ended", "exhausted", null)]
-    public async Task A_stop_ends_a_search_cancelled_unless_it_ended_by_itself(string status, string? endedAs, string? ends)
+    [InlineData("cancelled", null, false, "cancelled")]
+    [InlineData("already_ended", "cancelled", false, "cancelled")]
+    [InlineData("already_ended", null, false, "cancelled")]
+    [InlineData("already_ended", "finished", false, null)]
+    [InlineData("already_ended", "exhausted", false, null)]
+    [InlineData("already_ended", "finished", true, "finished")]
+    [InlineData("already_ended", "exhausted", true, "exhausted")]
+    public async Task A_stop_ends_a_search_cancelled_unless_it_ended_by_itself(string status, string? endedAs, bool archived, string? ends)
     {
         using var scene = await Scene.AcceptedAsync();
+        if (archived)
+        {
+            await using var db = scene.Open();
+            await db.Campaigns.ExecuteUpdateAsync(set => set.SetProperty(campaign => campaign.Status, CampaignStatus.Archived), Ct);
+        }
 
         var stop = await scene.StopAsync(status, endedAs);
         await using (var db = scene.Open())
@@ -372,14 +469,14 @@ public sealed class SearchLandingTests
         var again = await scene.StopAsync("already_ended", "cancelled");
 
         await using var after = scene.Open();
-        Assert.Equal("cancelled", (await after.AudienceSearches.AsNoTracking().SingleAsync(Ct)).EndedAs);
+        Assert.Equal(ends ?? "cancelled", (await after.AudienceSearches.AsNoTracking().SingleAsync(Ct)).EndedAs);
         var lines = await LinesAsync(after, JournalKinds.AudienceSearchEnded);
         Assert.Equal([ends is null ? again.Item.PublicId : stop.Item.PublicId], lines.Select(line => (string?)line.New!["ended_by"]));
     }
 
     private static readonly JsonObject Lena = Person("p-1", "Lena", "Novak", "Head of Operations", ("email", "lena.novak@northwind-freight.example"));
 
-    private static readonly JsonObject Omar = Person("p-2", "Omar", "Haddad", null, ("linkedin", "https://www.linkedin.com/in/omar-haddad/"));
+    private static readonly JsonObject Omar = Person("p-2", "Omar", "Haddad", null, ("linkedin", "https://www.linkedin.com/in/omar-example/"));
 
     private static readonly JsonObject Ines = Person("p-3", "Ines", "Ruiz", "Founder", ("email", "ines.ruiz@harbor-labs.example"));
 
@@ -429,7 +526,7 @@ public sealed class SearchLandingTests
         var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Known", CreatedAt = Noon, UpdatedAt = Noon };
         if (value is not null)
         {
-            contact.Channels.Add(new ContactChannel { Channel = channel, Value = channel == "linkedin" ? "https://www.linkedin.com/in/omar-haddad" : value });
+            contact.Channels.Add(new ContactChannel { Channel = channel, Value = channel == "linkedin" ? "https://www.linkedin.com/in/omar-example" : value });
         }
 
         return contact;
@@ -517,8 +614,8 @@ public sealed class SearchLandingTests
         }
 
         /// <summary>A read of the search, made and answered with <paramref name="page"/>.</summary>
-        public Task<(WorkItem Item, string Attempt)> ReadAsync(JsonObject page, bool takenBack = false) =>
-            RunAsync("audience.search_status", new JsonObject { ["search"] = Search.PublicId, ["limit"] = 100 }, page, takenBack);
+        public Task<(WorkItem Item, string Attempt)> ReadAsync(JsonObject page, bool takenBack = false, Func<Task>? meanwhile = null) =>
+            RunAsync("audience.search_status", new JsonObject { ["search"] = Search.PublicId, ["limit"] = 100 }, page, takenBack, meanwhile);
 
         /// <summary>A stop of the search, made and answered <paramref name="status"/>.</summary>
         public Task<(WorkItem Item, string Attempt)> StopAsync(string status, string? endedAs) => RunAsync(
@@ -526,17 +623,17 @@ public sealed class SearchLandingTests
             new JsonObject { ["search"] = Search.PublicId },
             new JsonObject { ["items"] = new JsonArray(new JsonObject { ["status"] = status, ["ended_as"] = endedAs }) });
 
-        private async Task<(WorkItem Item, string Attempt)> RunAsync(string operation, JsonObject args, JsonObject answer, bool takenBack = false)
+        private async Task<(WorkItem Item, string Attempt)> RunAsync(string operation, JsonObject args, JsonObject answer, bool takenBack = false, Func<Task>? meanwhile = null)
         {
             await using var db = Open();
             var campaign = await db.Campaigns.SingleAsync(c => c.Id == Campaign.Id, Ct);
             var item = WorkItemFactory.NewProviderOp(campaign, operation, Clock.GetUtcNow().UtcDateTime);
             item.Context = new JsonObject { ["input"] = args };
-            var attempt = await AnswerAsync(db, item, answer, null, takenBack);
+            var attempt = await AnswerAsync(db, item, answer, null, takenBack, meanwhile);
             return (item, attempt);
         }
 
-        private async Task<string> AnswerAsync(JasonDbContext db, WorkItem item, JsonObject answer, JsonObject? externalIds, bool takenBack = false)
+        private async Task<string> AnswerAsync(JasonDbContext db, WorkItem item, JsonObject answer, JsonObject? externalIds, bool takenBack = false, Func<Task>? meanwhile = null)
         {
             var now = Clock.GetUtcNow().UtcDateTime;
             item.Status = WorkItemStatus.Processing;
@@ -572,15 +669,37 @@ public sealed class SearchLandingTests
                     attempt.PublicId,
                     PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC"),
                 Launch: null);
-            await Recorder.RecordAsync(db, item, attempt, OperationCatalog.Find(item.Operation!)!, TestPlugins.FakeProviderId, false, result, Ct, input);
             if (takenBack)
             {
-                // The lease enforcer's move, by another writer between the answer and its save.
-                await using var other = Open();
-                await other.WorkItems.Where(row => row.Id == item.Id).ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, WorkItemStatus.Created), Ct);
+                // The lease enforcer's move, by another writer once the answer arrived and before it is recorded: an answer
+                // that lands people holds the database from its reads to its save, so no writer falls between those.
+                await using var enforcer = Open();
+                await enforcer.WorkItems.Where(row => row.Id == item.Id).ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, WorkItemStatus.Created), Ct);
+            }
+
+            await Recorder.RecordAsync(db, item, attempt, OperationCatalog.Find(item.Operation!)!, TestPlugins.FakeProviderId, false, result, Ct, input);
+
+            // Another writer between the answer's reads and its save, on a connection and a thread of its own: it is given a
+            // moment to land first, and where the answer's reads hold the database it waits for the save instead.
+            var writer = meanwhile is null ? null : Task.Run(meanwhile, Ct);
+            if (writer is not null)
+            {
+                await Task.WhenAny(writer, Task.Delay(TimeSpan.FromSeconds(2), Ct));
             }
 
             await db.SaveChangesAsync(Ct);
+
+            // As the attempt's handler does: a transaction the recording opened is committed with the save.
+            if (db.Database.CurrentTransaction is { } open)
+            {
+                await open.CommitAsync(Ct);
+            }
+
+            if (writer is not null)
+            {
+                await writer;
+            }
+
             Assert.Equal(WorkItemStatus.Succeeded, item.Status);
             return attempt.PublicId;
         }

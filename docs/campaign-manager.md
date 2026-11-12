@@ -54,6 +54,7 @@ line. These kinds summon a review:
 | `provider_blocked` | A provider block holds the campaign's work: the account, or one sending account under it, is refused for its money, plan, allowance, credential or channel, and what reaches people has stopped until it clears. Said once per campaign and block. Whether to tell somebody, or change course, is the manager's; the block's clearing is not a trigger, because the work runs again by itself ([work execution](work-execution.md) §Provider blocks). |
 | `audience_reserve_low` | The campaign's untouched people — the summary's `new` — fell under the threshold the campaign set with `--audience-threshold`. The runtime counts them and says so once per crossing; whether to top the audience up, and how, is the manager's (§9). |
 | `audience_search_ended` | A search for the campaign's audience ended: it reached its count, its source ran out, its reads landed nobody for the stall bound, or a stop ended it. Said once per search. Whether the audience needs more, another search, or a person's word is the manager's (§10). |
+| `audience_search_held` | The provider holds one of the campaign's searches — paused there, out of credits or at the plan's contact limit — so it spends nothing and finds nobody until a person acts at the provider. The runtime tells nobody directly; telling the person, by one question, is the manager's (§10). Said once per hold. |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
@@ -331,7 +332,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed`, `provider_event_observed`, `provider_blocked`, `audience_reserve_low`, `audience_search_ended`, `audience_search_held` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -354,8 +355,8 @@ defaults; a list written with no kind in it — an empty array, `null`, an empty
 kinds." It used to read as the defaults, the opposite of what whoever wrote it meant, without a word.
 The key is read without regard to case, as every setting is. A list narrowed before
 `inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
-the kind is added; the same holds for `provider_event_observed`, `provider_blocked`, `audience_reserve_low` and
-`audience_search_ended`.
+the kind is added; the same holds for `provider_event_observed`, `provider_blocked`, `audience_reserve_low`,
+`audience_search_ended` and `audience_search_held`.
 
 **A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
 woken for; dropping this one breaks something, because a question a person has answered is what
@@ -372,7 +373,9 @@ field beside the review pace rather than a key in the context for the same reaso
 **Untouched** is the summary's `new` ([work execution](work-execution.md) §A campaign's people, counted): a current
 member with no work about them that a person, a role, an attempt or a plugin created. Work the runtime made about
 somebody by itself, the read of a thread that moved and the responder it woke, does not touch them. The step counts by
-the summary's own definition, so the number it says is the number `jason campaign summary` shows.
+the summary's own definition, so the number it says is the number `jason campaign summary` shows. A person on the
+do-not-contact register lands and counts like any other: the register keeps a send from reaching them, not them from the
+campaign, so a reserve may hold fewer people a send can reach than its number says.
 
 **The reserve step** runs in every scan, for each active campaign that has a threshold, after the respond step and
 before the summon, so a line saying the reserve is low summons a review in the same scan. It counts only when something
@@ -438,7 +441,13 @@ After it, the person's allowance — a standing approval for `audience.search`, 
 ([work execution](work-execution.md), "Standing approvals") — lets the top-ups under that audience run without a
 question until the people they ask for reach its ceiling. The allowance is the person's alone: only their acts set, move
 or take it back, approving a search under another audience retires it in the same act, and no role's act holds or moves
-it. A manager tops an audience up as it always does; a top-up the allowance does not cover waits for the person as the
+it. The allowance is a permission, not an order, and the manager uses it carefully: only for an audience whose latest
+verdict is `working`, and after a verdict of `replace` or `stop` it creates no top-up of that audience, even while the
+allowance still names it, and leaves the reserve low until the person acts; they are asked at once, by the next
+audience's probe or by the manager's question. The runtime does not enforce this — no role and no verdict moves the
+allowance, and a top-up under it still goes, the person's own among them — it is the manager's skill that holds back
+([work execution](work-execution.md) §Standing approvals). A manager tops an audience up as it always does; a top-up the
+allowance does not cover waits for the person as the
 probe did, its preview saying why.
 
 ### Following a search, and the people it lands
@@ -459,11 +468,12 @@ ended at once, and its people land from its own result.
 **The poll**, a step of the dispatcher's scan after the inbound read: for each search still followed in an active
 campaign with no read or stop of it under way — the dispatcher's or anybody's — one `audience.search_status` work item
 naming it, by `system:dispatcher`, `Dispatcher:SearchCadenceSeconds` after the dispatcher made its last read of it, or
-after the search began before its first; at once where the last read said more people are readable now. Each of the
+after the search began before its first — `Dispatcher:SearchHeldCadenceSeconds` for a search the provider holds; at once
+where the last read carried people and said more are readable now, and a cadence later where it carried nobody. Each of the
 dispatcher's reads in a row that ended without an answer doubles the wait, never past a day, as the inbound read waits;
 each such read is a `workitem_failed` line, which wakes the review. The claim composes the read: the reference from the
 search's own attempt, as for any read of a search ([routing](routing.md) §7), and the cursor the last read answered, from
-the row. A paused campaign's searches are neither read nor ended.
+the row. A paused campaign's searches are neither read nor ended; an archived campaign's are stopped, below.
 
 **The landing**, in the change set that ends a read `succeeded` — whoever made the read — and that ends a search
 answered `finished`: each person of the page once, by the provider's identifier. A person is found by the first key
@@ -494,18 +504,43 @@ audience's id and number, the search and when the person landed.
 - `audience_search_ended`, once per search, keyed by and about the search: how it ended — `finished`, `exhausted`,
   `stalled` or `cancelled` — the provider's last word for it, what it was asked for, found and landed, and the work item
   whose answer ended it. A default trigger.
+- `audience_search_held`, keyed by the read that first said so and about the search, when a read first reports that the
+  provider holds it — `paused`, `paused_for_credits` or `paused_for_limit` — with the audience, the state, what it was
+  asked for, found and landed; again only after the search moves and holds again. A default trigger: the runtime tells
+  nobody directly, so the manager raises one question to the person saying what holds the search and what to do at the
+  provider — add credits, lift the plan's limit, resume it — and that the runtime goes on following it.
 
 **How a search ends.** A read that answers `finished` or `exhausted` with nothing more readable ends it as that; one that
 answers either with more readable leaves it to the next read. A stop (`audience.search_cancel`) that stopped it, or found
 it stopped by an earlier stop, or gone from the provider, ends it `cancelled`; one that found it ended by itself leaves it
 to the reads, since what it found is still to be read. And a search whose reads have landed nobody for
-`Dispatcher:SearchStallSeconds` — measured from the start of the quiet, the search's start or the last landing that made
-somebody a member, to the moment the dispatcher made its latest read, once that read is over — ends `stalled`, said by
-the dispatcher, and is read no more; never while a stop of it is under way. The bound counts whatever kept the people from coming: a provider still searching, a search held at the
-provider until a person acts there (`paused`, `paused_for_credits`, `paused_for_limit`), a read that failed; the line
-names the provider's last word, so a stall for credits reads as one. A search a person resumes at the provider after it
-stalled is not followed again by the poll: a read anybody makes still lands its page, and a stop still stops it. A search
-that ended stays as it ended: a later read still lands what it carries, and nothing is said twice.
+`Dispatcher:SearchStallSeconds` — measured from the start of the quiet, the search's start, the last landing that made
+somebody a member or the moment it moved again after a hold, to the moment the dispatcher made its latest read, once that
+read is over — ends `stalled`, said by the dispatcher, and is read no more; never while a stop of it is under way. That
+bound counts a provider still searching and a read that failed. **A search the provider holds** until a person acts there
+(`paused`, `paused_for_credits`, `paused_for_limit`) spends nothing meanwhile, so it is said at once
+(`audience_search_held`), read every `Dispatcher:SearchHeldCadenceSeconds` instead of every cadence, and called
+stalled only once it has stayed held for `Dispatcher:SearchHeldStallSeconds`, a week unless set, measured from the moment
+it was held; the line then names the hold, so a stall for credits reads as one. A search that moves again is read on the
+ordinary cadence again, under the ordinary bound counted from the moment it moved, so a person who adds credits or
+resumes it at the provider has its people landed. A search stalled while it was running is not followed again by the
+poll: a read anybody makes still lands its page, and a stop still stops it. A search that ended stays as it ended: a
+later read still lands what it carries, and nothing is said twice.
+
+**One search at a time.** A campaign runs one search at a time: a search claimed while another of its campaign has not
+ended — its row still followed, running or held, or another search running now — waits behind it, with no attempt and
+nobody asked to approve it, its last error naming the search in the way, and is claimed again a search cadence later,
+the long cadence of a hold where the provider holds that search ([routing](routing.md) §7, `search_unfinished`). Two campaigns searching one definition are the provider's own refusal,
+`search_in_progress`.
+
+**Archiving stops the searches.** Archiving is how a person stops a campaign, and a search goes on spending at the
+provider until it is stopped. So the archive cancels the campaign's open work but a search's stop, which runs in an
+archived campaign as in a paused one (`dispatch.in_archived_campaign: runs`), and the next scan makes one stop for each of
+the campaign's searches still in flight; each ends `cancelled`, and the provider's list for it is deleted. A search the
+provider had already ended by itself ends as it ended, since nobody reads an archived campaign's searches again; through
+Reply its list stays at the provider, with any people not yet read. A search whose start was still under way when the
+campaign was archived has no row yet, so no stop is made for it: the archive cancels that attempt, and whether the
+provider took the start is read there. A stop that fails is protective work, notified, and not made again.
 
 ### Reading the audiences
 
@@ -535,7 +570,5 @@ their own: who was worked on, contacted, replied or opted out since they landed.
   [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
   campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
   one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.
-- **One search at a time.** Nothing stops a campaign from running two searches at once; a provider may refuse the
-  second itself (`search_in_progress`).
 - **Allowing in the browser.** The UI's approval panel approves or rejects a search; allowing more people under its
   audience is `jason approval approve --allow` or `jason approval set-standing` for now.

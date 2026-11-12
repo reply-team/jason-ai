@@ -252,6 +252,15 @@ public static partial class JournalKinds
     public const string AudienceSearchEnded = "audience_search_ended";
 
     /// <summary>
+    /// A search the provider holds — paused by a person, out of credits, at the plan's limit — keyed by the read that first
+    /// said so and about the search's work item, with its audience, the state and the counts. Said by the dispatcher when a
+    /// read first reports the hold, and again only after the search moves and holds again. A default manager trigger: the
+    /// person is told through the manager's question what holds it and what to do at the provider, while the runtime goes
+    /// on reading it on a slower cadence.
+    /// </summary>
+    public const string AudienceSearchHeld = "audience_search_held";
+
+    /// <summary>
     /// A project was made: keyed by its id, with the name and slug it was made with. It names no campaign. The default
     /// project, made by the migration that brought projects in, was made by nobody and has no line.
     /// </summary>
@@ -360,6 +369,7 @@ public static partial class JournalKinds
         AudienceReserveRecovered,
         AudiencePeopleLanded,
         AudienceSearchEnded,
+        AudienceSearchHeld,
         ProjectCreated,
         ProjectUpdated,
         ProjectLinked,

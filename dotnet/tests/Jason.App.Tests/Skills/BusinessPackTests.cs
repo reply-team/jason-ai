@@ -336,4 +336,35 @@ public class BusinessPackTests
 
     private static IEnumerable<string> Files() =>
         Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
+
+    /// <summary>
+    /// The two skills that map the runtime's audience family onto the catalogue teach it as any provider runs it: they name
+    /// no provider this repository ships a plugin for, and no provider's unit of price, because what a search costs is the
+    /// provider's own, and a skill that quoted it would teach one provider's tariff as the operation's.
+    /// </summary>
+    [Theory]
+    [InlineData("audience-building")]
+    [InlineData("sdr-operations")]
+    public void The_skills_that_map_the_audience_family_name_no_provider(string name)
+    {
+        var skill = File.ReadAllText(Assert.Single(SkillPack.Business(), skill => skill.Name == name).File);
+        var providers = ShippedProviders();
+
+        Assert.NotEmpty(providers);
+        foreach (var provider in providers)
+        {
+            Assert.DoesNotMatch(new System.Text.RegularExpressions.Regex($@"\b{System.Text.RegularExpressions.Regex.Escape(provider)}\b"), skill);
+        }
+
+        Assert.DoesNotMatch(new System.Text.RegularExpressions.Regex(@"\bcredits?\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase), skill);
+    }
+
+    /// <summary>The display names of the provider plugins this repository ships, as their manifests give them.</summary>
+    private static IReadOnlyList<string> ShippedProviders() =>
+    [
+        .. Directory.EnumerateFiles(Path.Combine(SkillPack.RepositoryRoot(), "plugins"), "plugin.yaml", SearchOption.AllDirectories)
+            .Select(File.ReadAllLines)
+            .Where(lines => lines.Contains("kind: provider"))
+            .Select(lines => lines.Single(line => line.StartsWith("name: ", StringComparison.Ordinal))["name: ".Length..].Trim()),
+    ];
 }

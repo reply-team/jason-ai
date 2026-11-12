@@ -45,7 +45,7 @@ public sealed record CampaignDto(
     /// <summary>The key the campaign was created with, when its creator gave one; absent otherwise.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null,
     string? FolderPath = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? AudienceThreshold = null);
+    int? AudienceThreshold = null);
 
 /// <summary>
 /// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign

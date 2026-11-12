@@ -2,6 +2,19 @@ namespace Jason.App.Tests.Skills;
 
 public partial class RoleSkillTests
 {
+    /// <summary>
+    /// The analyst judges an audience and owns none: an analyst that searched or wrote a definition would spend on a
+    /// judgement nobody asked it to act on.
+    /// </summary>
+    [Fact]
+    public void The_analyst_judges_an_audience_and_neither_searches_nor_defines_one()
+    {
+        var skill = Flattened("analyst");
+
+        Assert.Contains("the planner forms an audience and the manager runs the campaign's pulse, no other role is made for this, and the researcher owns no audience.", skill, StringComparison.Ordinal);
+        Assert.Contains("So you judge, and you neither search nor write a definition.", skill, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_analyst_is_told_that_this_build_records_no_metrics()
     {

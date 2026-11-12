@@ -37,6 +37,7 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     private const string AudienceDefinitionField = "audience_definition";
     private const string AudienceSearch = "audience.search";
     private const string AudienceSearchStatus = "audience.search_status";
+    private const string AudienceSearchCancel = "audience.search_cancel";
     private const string AudiencePreview = "audience.preview";
     private const int MaxDefinitionDescriptionLength = 500;
 
@@ -91,7 +92,7 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     /// description of its own, which is manifest text: read by whoever writes a definition, never logged and never in a
     /// bundle. Required where the plugin performs an operation that carries a definition — no schema, no search — and
     /// refused where it performs none, since nothing would read it. A search a provider keeps running is read by its
-    /// status, so a plugin that searches reads the status too.
+    /// status and stopped by its stop, the one way to end its spending, so a plugin that searches performs both.
     /// </summary>
     private AudienceDefinition? ReadAudienceDefinition(PluginKind? kind, IReadOnlyList<string> operations)
     {
@@ -102,6 +103,13 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
                 ProblemCodes.AudienceFamilyIncomplete,
                 "operations",
                 $"operations lists '{AudienceSearch}' without '{AudienceSearchStatus}': a search the provider keeps running is read by its status, so a plugin that searches reads the status too.");
+        }
+        else if (searches && !operations.Contains(AudienceSearchCancel, StringComparer.Ordinal))
+        {
+            Add(
+                ProblemCodes.AudienceFamilyIncomplete,
+                "operations",
+                $"operations lists '{AudienceSearch}' without '{AudienceSearchCancel}': a search the provider keeps running spends until it is stopped, so a plugin that searches stops it too.");
         }
 
         var carriesDefinition = searches || operations.Contains(AudiencePreview, StringComparer.Ordinal);
@@ -189,12 +197,13 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             {
                 if (property is not JsonObject described
                     || !TryText(described["description"], out var description)
-                    || description.Length is 0 or > MaxDefinitionDescriptionLength)
+                    || description.Length is 0 or > MaxDefinitionDescriptionLength
+                    || description.Any(char.IsControl))
                 {
                     Add(
                         ProblemCodes.FieldInvalid,
                         LocateInDefinition(Pointer("/properties", name)),
-                        string.Create(CultureInfo.InvariantCulture, $"'{name}' carries a description of 1 to {MaxDefinitionDescriptionLength} characters: it is what whoever writes a definition reads about the filter."));
+                        string.Create(CultureInfo.InvariantCulture, $"'{name}' carries a description of 1 to {MaxDefinitionDescriptionLength} characters and no control character: it is what whoever writes a definition reads about the filter."));
                 }
             }
         }
