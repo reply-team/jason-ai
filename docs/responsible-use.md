@@ -26,12 +26,6 @@ and the kind of program that asked (a browser, a command-line or agent fetcher, 
 the person in those counts. After the redirect, and when you install skills, which are fetched from GitHub directly,
 GitHub's terms and privacy statement apply.
 
-Jason Desktop's own updater ([desktop.md](desktop.md)) is a request of its own, apart from the runtime's: it reads the latest
-release's update feed (`latest.yml`, `latest-mac.yml` or `latest-linux.yml`) from this repository's releases on GitHub
-directly, not through ReplyApp Inc.'s address, on a schedule of its own, and downloads an update only when you say so.
-GitHub's terms and privacy statement apply to those requests, and GitHub, like any web server, receives your IP address,
-the time of the request and the standard headers of the program that makes it.
-
 ### Your providers and AI agents
 
 When you configure the runtime to act at third-party providers through plugins, to start an AI agent, or to send
