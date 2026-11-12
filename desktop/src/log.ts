@@ -94,6 +94,7 @@ export const templates = {
     chat_turn_stopped: 'A chat turn was stopped by the desktop: {Cause}',
     agent_folder_unowned: 'The chat folder\'s agent settings could not be put right at the start ({Code})',
     chat_full_folder_failed: 'A Full access folder failed at {Step} ({Code})',
+    chat_sandbox_checked: 'Codex\'s sandbox on Windows was checked: {Answer}; the desktop\'s settings file inside it: {Settings}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

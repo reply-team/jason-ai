@@ -321,3 +321,26 @@ test('a naming run of a set-up chat is logged by how it ended, one word, never t
         .map(({ '@t': _at, '@mt': _template, SourceContext: _source, EventName: _name, ...rest }) => rest);
     assert.deepEqual(said, outcomes.map((outcome) => ({ Outcome: outcome })));
 });
+
+test('the Windows check of Codex\'s sandbox is logged by its answer and whether the settings file opened inside, one word each, never a path or what was read', (t) => {
+    const removals: (() => void)[] = [];
+    t.after(() => removals.forEach((remove) => remove()));
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: [] });
+    const log = fileLogger(b.paths.logs);
+    const logged = loggedTurns(log);
+    logged.sandboxChecked('holds', 'read');
+    logged.sandboxChecked('reads', 'unread');
+    logged.sandboxChecked('unproven', 'unknown');
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const said = lines0(text)
+        .filter((line) => line.EventName === 'chat_sandbox_checked')
+        .map(({ '@t': _at, SourceContext: _source, EventName: _name, ...rest }) => rest);
+    const template = 'Codex\'s sandbox on Windows was checked: {Answer}; the desktop\'s settings file inside it: {Settings}';
+    assert.deepEqual(said, [
+        { '@mt': template, Answer: 'holds', Settings: 'read' },
+        { '@mt': template, Answer: 'reads', Settings: 'unread' },
+        { '@mt': template, Answer: 'unproven', Settings: 'unknown' },
+    ]);
+    assert.equal(text.includes(b.paths.settings), false);
+    assert.equal(text.includes(b.paths.data), false);
+});

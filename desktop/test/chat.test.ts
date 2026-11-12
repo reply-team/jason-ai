@@ -502,10 +502,31 @@ test('on Windows a sandbox that refuses type itself, so that not even the contro
     assert.deepEqual(r.hosts(), []);
 });
 
-test('on Windows a sandbox that keeps the run file but lets the settings file, with its inherited access, be read refuses the turn', async (t) => {
-    const r = rig(t, { chat: onWindows, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'reads-second' } });
-    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
-    assert.deepEqual(r.hosts(), []);
+test('on Windows a sandbox that keeps the run file but lets the settings file, with its inherited access, be read holds, and says the settings file was read', async (t) => {
+    const told: [string, string][] = [];
+    const r = rig(t, { chat: { ...onWindows, sandboxChecked: (answer, settings) => void told.push([answer, settings]) }, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'reads-second' } });
+    const said = await r.turn('c1', words, { host: 'codex' });
+    assert.deepEqual(said[0], { kind: 'step', text: checkingSandbox });
+    assert.deepEqual(doneOf(said), { kind: 'done', error: null });
+    assert.equal(r.hosts().length, 1, 'the Codex turn ran: the run token stayed out of reach');
+    assert.deepEqual(told, [['holds', 'read']]);
+    assert.deepEqual(doneOf(await r.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
+    assert.deepEqual(told, [['holds', 'read']], 'said once, for the check that ran');
+
+    const kept: [string, string][] = [];
+    const both = rig(t, { chat: { ...onWindows, sandboxChecked: (answer, settings) => void kept.push([answer, settings]) }, env: windowsEnv });
+    assert.deepEqual(doneOf(await both.turn('c1', words, { host: 'codex' })), { kind: 'done', error: null });
+    assert.deepEqual(kept, [['holds', 'unread']]);
+
+    const refused: [string, string][] = [];
+    const reads = rig(t, { chat: { ...onWindows, sandboxChecked: (answer, settings) => void refused.push([answer, settings]) }, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'reads' } });
+    assert.deepEqual(doneOf(await reads.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(refused, [['reads', 'read']]);
+
+    const unknown: [string, string][] = [];
+    const silent = rig(t, { chat: { ...onWindows, sandboxChecked: (answer, settings) => void unknown.push([answer, settings]) }, env: { ...windowsEnv, STUB_CODEX_SANDBOX: 'silent' } });
+    assert.deepEqual(doneOf(await silent.turn('c1', words, { host: 'codex' })), { kind: 'done', error: sandboxSentence });
+    assert.deepEqual(unknown, [['unproven', 'unknown']]);
 });
 
 test('on Windows a check that printed neither marker in either form, or ran out of time, refuses the turn and checks again at the next send', async (t) => {
