@@ -270,19 +270,14 @@ applies to the turns a person starts by sending, from the next one on.
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
   it stays with the chat after a restart, an update and Start afresh.
-- **This version does not offer Full access.** The menu shows it disabled with "Full access is not in this version
-  yet.", and the desktop refuses it before any confirmation. Its code stays behind one switch (`fullAccessOffered` in
-  `src/chat-modes.ts`), and the points below describe it as built; Ask first and Plan only are the modes this version
-  runs.
-- **Full access** acts on this computer without asking. It is given only after the person says yes to the desktop's own
+- **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
   confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
   answering Cancel. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
   2.1.295 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
-  page draws a line under the composer from the mode the desktop holds, never from what it asked for. Full access is
+  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the agent runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the agent can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the agent's commands that approve, reject, answer or clear for you while a program the agent writes and runs can still act as you, that every PowerShell command asks first, that the risk is the person's, and where the agent works. Full access is
   held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
   never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart.
-- **How Full access runs.** Claude Code starts with `--permission-mode bypassPermissions`. Anthropic says "Deny rules
-  block in every mode, including `bypassPermissions`." and that a Bash rule "isn't a security boundary around the
+- **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
   `"onFailure": "block"`, `"disableAllHooks": false` and the hook's address in `allowedHttpHookUrls`, so no project file
@@ -290,7 +285,7 @@ applies to the turns a person starts by sending, from the next one on.
   secret, and the desktop answers by one judgement (`fullAccessJudgement`), which the broker shares for the few calls
   Claude Code still asks about under bypass:
   - **refused** where the permission model refuses, or where a file being written shows what it refuses;
-  - **held**, refused with one sentence that says to switch the chat to Ask first for it, wherever Ask first would have
+  - **held**, a card titled "Full access asks about this one", wherever Ask first would have
     shown a card because the model cannot rule the act out or the act would change what an agent loads: a `jason` that
     is not the program of a plain `jason <verb>` (handed to `xargs`, inside an interpreter's one-liner or a list literal,
     behind a variable or an expansion), `eval`, a script piped into a shell or an interpreter, a search variable, a
@@ -301,6 +296,20 @@ applies to the turns a person starts by sending, from the next one on.
   - **runs** with no question for what the model allows, the tools that run nothing (skills, web search, subagents, the
     task list) and the plain cards: a command it read, a write in or outside the working folders, a page, a read outside
     the folders.
+- **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what an agent loads, is
+  a card titled "Full access asks about this one"; it waits thirty minutes, then is not run and the turn goes on. A
+  deletion on a critical path, and a tool the hook never saw, are cards too.
+- **What Ask first refuses is refused in Full access, with no card.** Every `reply` command is refused there but its exact
+  no-card forms.
+- **PowerShell is held.** Every command of the PowerShell tool in Full access is a card (`powerShellRunsInFullAccess`
+  in `src/chat-modes.ts` is off); only the Bash tool's plainly read commands run unasked.
+- **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
+  person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
+  none reaches a turn.
+- **The agent's folder.** In Full access the agent works in a folder of its own. When Full access ends the desktop says
+  "Full access has ended. The folder the agent worked in is kept for seven days and then removed: <path>", with an Open
+  folder button, and removes it after seven days. Added campaign or project folders whose `.claude` holds skills,
+  agents or commands are left out of a turn, and the chat says so once.
 - **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands, the operations by
   their dots, the confining variable and the data directory's names are looked for a second time over a normalised text:
   quotes and a backslash inside a word removed, a bracket, a comma or a parenthesis read as a space. `appro\ve`,
@@ -365,7 +374,7 @@ applies to the turns a person starts by sending, from the next one on.
   - a line the Feed takes never starts a turn: it reaches the agent with the person's next message, in the mode of that
     turn. The Feed takes the modes as any chat does.
 - The log says each change of mode by its two modes (`chat_mode_changed`), the mode of each turn started and of each
-  request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in Full access), and a turn
+  request settled, each refusal of the hook (`chat_request_decided`, refused, by the model, in Full access), a request the hook held (`chat_request_held`), and a turn
   stopped because a tool ran unchecked (`chat_turn_stopped`, `unchecked_tool`); never a conversation's id or title, a
   command, a path or a person's words.
 
