@@ -85,13 +85,16 @@ describe('the console', () => {
     it('opens a chat, when New chat is chosen, beside what needs the person, the campaigns and the activity, read from the runtime', async () => {
         const fake = pending(new FakeApi());
         renderConsole(fake);
-        await waitFor(() => expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0));
-        expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
-        expect(screen.getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
-        const operations = fake.calls.map((each) => each.operation).sort();
-        expect(operations).toEqual(
-            ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
-        );
+        // Each read answers when it answers: the approvals, the questions and the campaigns arrive in no fixed order, so the
+        // screen is read once every one of them has been asked and has landed.
+        await waitFor(() => {
+            expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+            expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
+            expect(screen.getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
+            expect(fake.calls.map((each) => each.operation).sort()).toEqual(
+                ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
+            );
+        });
     });
 
     it('approves and rejects with a reason through the runtime, and reads the list again', async () => {
