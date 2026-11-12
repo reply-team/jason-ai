@@ -17,7 +17,8 @@
  * no credential, since ending a token takes the run token or a UI token.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Cli } from './cli.ts';
 import type { Logger } from './log.ts';
@@ -71,9 +72,19 @@ export function readWindowPairing(file: string): WindowPairingState {
 export function writeWindowPairing(file: string, state: WindowPairingState): void {
     mkdirSync(dirname(file), { recursive: true });
     const body = { page_storage_cleared: state.cleared, ...(state.tokenId === null ? {} : { token_id: state.tokenId }) };
-    const temporary = `${file}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
-    renameSync(temporary, file);
+    // A name no one can foretell, made only where nothing has it: a link put there beforehand is never followed.
+    const temporary = `${file}.${randomBytes(8).toString('hex')}.tmp`;
+    try {
+        writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+        renameSync(temporary, file);
+    } catch (error) {
+        try {
+            rmSync(temporary, { force: true });
+        } catch {
+            // What could not be removed is never read: a read takes the file alone.
+        }
+        throw error;
+    }
 }
 
 /** Whether an earlier version's page left its storage: read before Electron is ready, before it makes anything there. */

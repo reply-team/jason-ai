@@ -3,9 +3,9 @@
 // page holds now is ended once the next pairing has succeeded.
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { desktopPaths } from '../src/paths.ts';
@@ -201,4 +201,22 @@ test('the record is the desktop\'s own file beside its settings, with the flag a
     writeFileSync(file, JSON.stringify({ page_storage_cleared: 'yes', token_id: plantedToken }));
     assert.deepEqual(readWindowPairing(file), { cleared: false, tokenId: null });
     assert.deepEqual(parseWindowPairing('{'), { cleared: false, tokenId: null });
+});
+
+test('a write goes through a file no one can foretell, made only where nothing is, and one that fails leaves nothing beside it', (t) => {
+    const folder = join(scratch(t), 'desktop');
+    const file = join(folder, 'window-pairing.json');
+    mkdirSync(folder, { recursive: true });
+    // A file put where a predictable name would have been is neither followed nor taken.
+    writeFileSync(`${file}.${process.pid}.tmp`, 'planted');
+    writeWindowPairing(file, { cleared: true, tokenId: oldId });
+    writeWindowPairing(file, { cleared: true, tokenId: newId });
+    assert.deepEqual(readWindowPairing(file), { cleared: true, tokenId: newId });
+    assert.deepEqual(readdirSync(folder).sort(), ['window-pairing.json', `window-pairing.json.${process.pid}.tmp`]);
+    assert.equal(readFileSync(`${file}.${process.pid}.tmp`, 'utf8'), 'planted');
+    // A folder where the file would be: the file beside it is written, the rename over it fails, and it is removed again.
+    const blocked = join(folder, 'blocked', 'window-pairing.json');
+    mkdirSync(blocked, { recursive: true });
+    assert.throws(() => writeWindowPairing(blocked, { cleared: true, tokenId: newId }));
+    assert.deepEqual(readdirSync(dirname(blocked)), ['window-pairing.json']);
 });
