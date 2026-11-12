@@ -590,7 +590,7 @@ where the host reads them from its work directory rather than its command line, 
   launches normally; nothing was configured, so nothing is missing, and its brief travels in the
   envelope either way.
 
-Its environment is the runtime's own plus the runtime's four and the constants a host's row of the host table declares, never a secret and never a value taken from a person. The four:
+Its environment is the runtime's own, less the runtime's configuration, plus the runtime's four and the constants a host's row of the host table declares, never a secret and never a value taken from a person. The runtime's configuration is every variable that starts with `JASON_` and holds the double underscore between a section and a key, compared without regard to case: any setting can be given that way, a plugin's secret under `Plugins:Config` (`JASON_Plugins__Config__<id>__<field>`) among them, and an agent host that prints its environment would put it in the transcript the person keeps. A name the active plugin snapshot grants to any plugin under `Plugins:Grants:<id>:Env` is taken out too, since it carries that plugin's credential, unless it is one of the machine configuration names every plugin host is given ([plugins.md](plugins.md)), a proxy say. Each is taken out before the four are written; the runtime's own single-word `JASON_` names are not configuration, and every other variable the runtime's environment holds stays. This keeps those values out of a dump of the agent's environment and is not a wall: the agent runs as the person and can read what the person can. The four:
 
 - `JASON_DATA_DIR`, pointing at the data directory;
 - `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so

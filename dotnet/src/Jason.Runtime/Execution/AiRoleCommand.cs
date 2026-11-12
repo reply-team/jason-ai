@@ -9,6 +9,7 @@ using Jason.Contracts.Json;
 using Jason.Contracts.Update;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution.Hosts;
+using Jason.Runtime.Plugins.Registry;
 using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Execution;
@@ -30,6 +31,7 @@ public sealed class AiRoleCommand(
     TokenRedactor redactor,
     LiveSettings<RolesOptions> roles,
     IEnumerable<IAgentHost> hosts,
+    PluginRegistry plugins,
     ILogger<AiRoleCommand> logger) : ICommand
 {
     /// <summary>What the envelope names where the claim handed over no memory files: every level unknown.</summary>
@@ -110,14 +112,15 @@ public sealed class AiRoleCommand(
 
         // The child works against the same data directory this runtime owns, knows which attempt it is, and can
         // find the command that calls home. Nothing else is added — least of all the token, which belongs in the
-        // descriptor file and nowhere else.
+        // descriptor file and nowhere else. The runtime's configuration and the names granted to a plugin are taken out.
         LaunchEnvironment.Apply(
             startInfo.Environment,
             paths.Root,
             context.AttemptId,
             context.WorkItemId,
             ProgramResolver.ExecutableDirectory,
-            host?.Environment);
+            host?.Environment,
+            plugins.Snapshot.Plugins.SelectMany(plugin => plugin.Grants.Env));
 
         // And two things are taken away: the mark of an update's own launch says whose start this runtime was, and an
         // agent that ran `jason runtime run` with it would start a runtime around an update it is no part of; and the
