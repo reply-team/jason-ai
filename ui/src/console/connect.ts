@@ -383,6 +383,9 @@ function plugins(state: DesktopSetup, busy: Html | null): Html {
     </div>`;
 }
 
+/** Chats whose Reply card the person dismissed, by conversation id; kept for this window only. */
+export const replyDismissed = signal<readonly string[]>([]);
+
 /** The AI card alone, for a screen that needs an AI before it goes on: the hosts, found or not, and what they ask. */
 export function aiCardView(): Html {
     const state = setup.value;
@@ -397,7 +400,9 @@ export function aiCardView(): Html {
             ${
                 state
                     ? state.hosts.filter((each) => each.kind === 'program').map((each) => program(each, disabled))
-                    : html`<div class="empty">Reading what is set up…</div>`
+                    : failure
+                      ? null
+                      : html`<div class="empty">Reading what is set up…</div>`
             }
         </div>
     </div>`;

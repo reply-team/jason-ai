@@ -4,7 +4,7 @@ import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { stubDesktop, stubStream } from '../test/desktop';
+import { chatDesktop, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
@@ -28,7 +28,7 @@ function renderConsole(fake: FakeApi) {
     fake.answer('system.info', 'system.info/with-ui')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    render(<Console api={fake} desktop={stubDesktop()} stream={stubStream().stream} />);
+    render(<Console api={fake} desktop={chatDesktop()} stream={stubStream().stream} />);
 }
 
 const needs = () => screen.getByRole('heading', { name: 'Needs you', level: 1 }).closest<HTMLElement>('.painted')!;

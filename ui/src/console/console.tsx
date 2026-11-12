@@ -28,7 +28,7 @@ import * as connect from './connect';
 import * as needs from './needs';
 import { Painted } from './painted';
 import { sideView } from './side';
-import { StartPanel } from './start';
+import { StartPanel, startMaking, startWaiting } from './start';
 import {
     bind,
     changeChat,
@@ -188,6 +188,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 // The desktop renamed or reordered its conversations: a hand-over, a new title, or a turn's end.
                 if (event.kind === 'attached' || event.kind === 'renamed' || event.kind === 'done')
                     void reloadConversations();
+                // A hand-over makes a draft campaign the chat is about; the Reply card reads its status from the list.
+                if (event.kind === 'attached') void campaigns.reload();
             }),
             desktop.setup.onChanged(() => void connect.reload()),
             desktop.onCommand((command) => {
@@ -244,13 +246,20 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         });
         event.api.getPanel('needs')?.api.setActive();
         // The window opens on the start screen, beside what needs the person, the campaigns and the activity.
-        event.api.addPanel({
-            id: 'start',
-            component: 'start',
-            title: titles.start,
-            position: { referencePanel: 'needs', direction: 'left' },
+        const placeStart = () => {
+            event.api.addPanel({
+                id: 'start',
+                component: 'start',
+                title: titles.start,
+                position: { referencePanel: 'needs', direction: 'left' },
+            });
+            event.api.getPanel('start')?.api.setActive();
+        };
+        placeStart();
+        // A message that waits is never out of sight: the tab cannot be closed while one waits or a chat is being made.
+        event.api.onDidRemovePanel((panel) => {
+            if (panel.id === 'start' && (startWaiting.value !== null || startMaking.value !== null)) placeStart();
         });
-        event.api.getPanel('start')?.api.setActive();
     };
 
     return (
