@@ -43,7 +43,7 @@ test('Electron keeps its own files under <data>/desktop/electron and its logs in
     assert.equal(desktopPaths(data).electron, join(data, 'desktop', 'electron'));
     assert.equal(desktopPaths(data).electronLogs, join(data, 'desktop', 'electron', 'logs'));
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    const lock = main.indexOf('app.requestSingleInstanceLock()');
+    const lock = main.indexOf('app.requestSingleInstanceLock(');
     const ready = main.indexOf('app.whenReady()');
     for (const set of ["app.setPath('userData', early.electron)", "app.setPath('sessionData', early.electron)", 'app.setAppLogsPath(early.electronLogs)']) {
         const at = main.indexOf(set);

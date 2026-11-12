@@ -209,10 +209,15 @@ export interface UninstallDeps {
     log: Logger;
     /** Resolves a path (`resolved-path.ts`); the system's own unless a test says otherwise. */
     resolve?: Resolve;
+    /**
+     * The `jason` link scheme's registration, on Windows, where the application wrote it at each start
+     * (`deep-link.ts`): whether it names this application, and taking it off. Absent elsewhere.
+     */
+    link?: { registered(): boolean; remove(): boolean };
 }
 
 /** The steps, in the order they are taken, as the log names them. */
-export type RemovalStep = 'runtime' | 'login' | 'autostart' | 'command' | 'bundle';
+export type RemovalStep = 'runtime' | 'login' | 'autostart' | 'command' | 'link' | 'bundle';
 
 export interface UninstallReport {
     /** Files and registrations taken off, each as the person would recognise it. */
@@ -387,6 +392,27 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
         }
         if (before.length === 0) untouched.push('No jason command of this application’s was on the PATH');
         ended('command', threw ? 'failed' : took > 0 ? 'removed' : before.length > 0 ? 'another' : 'was_off');
+    }
+
+    // 4b. The jason link scheme's registration, when it names this application; one that names another is left.
+    if (deps.link !== undefined) {
+        let outcome: string;
+        try {
+            if (!deps.link.registered()) {
+                untouched.push('Links that open Jason were not registered to this application');
+                outcome = 'was_off';
+            } else if (deps.link.remove() && !deps.link.registered()) {
+                removed.push('The registration of jason links to this application');
+                outcome = 'removed';
+            } else {
+                failed.push('The registration of jason links to this application, which could not be taken off: deleting HKEY_CURRENT_USER\\Software\\Classes\\jason takes it off');
+                outcome = 'failed';
+            }
+        } catch {
+            failed.push('The registration of jason links to this application, which could not be read: deleting HKEY_CURRENT_USER\\Software\\Classes\\jason takes it off');
+            outcome = 'failed';
+        }
+        ended('link', outcome);
     }
 
     // The runtime another installation runs is said with the carried jason that stops it.

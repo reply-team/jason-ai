@@ -6,6 +6,19 @@
  */
 export {};
 
+/**
+ * A page a `jason://` link opens, as the desktop parsed it from a closed table of addresses: one of the console's panels,
+ * or a screen at one entity whose id the desktop held to its shape. A link opens that page and does nothing else.
+ */
+export type DesktopLink =
+    | { page: 'needs' }
+    | { page: 'campaigns' }
+    | { page: 'campaign'; id: string }
+    | { page: 'approval'; id: string }
+    | { page: 'question'; id: string }
+    | { page: 'workitem'; id: string }
+    | { page: 'person'; id: string };
+
 /** A command from the desktop's menu, tray or keybindings. The page ignores one it does not know. */
 export type DesktopCommand =
     | 'chat.new'
@@ -316,6 +329,15 @@ export interface JasonDesktop {
          * nothing that shows.
          */
         rename(chatId: string, title: string): Promise<DesktopConversation | DesktopRefusal>;
+    };
+    links: {
+        /**
+         * The link the desktop holds for the page, a cold start's or one that came while no page took links; null when
+         * none waits. From this call on, while this page is loaded, links come by `onOpen`.
+         */
+        take(): Promise<DesktopLink | null>;
+        /** Calls `handler` with each link that comes while this page is loaded; the function it returns stops that. */
+        onOpen(handler: (link: DesktopLink) => void): () => void;
     };
     setup: {
         status(): Promise<DesktopSetup>;

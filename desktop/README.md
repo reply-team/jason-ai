@@ -227,6 +227,38 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
 - The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
   of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
 
+## Links
+
+A `jason://` link opens a page of the application and does nothing else: no command, no turn, no text put into a chat,
+no card, approval or question answered, no chat mode, no setting (`src/deep-link.ts`). The addresses are a closed table:
+
+| Address | Opens |
+| --- | --- |
+| `jason://needs` | Needs you |
+| `jason://campaigns` | Campaigns |
+| `jason://campaign/cmp_…` | that campaign's page |
+| `jason://approval/apr_…` | Needs you, with that approval open; deciding it stays a person's click |
+| `jason://question/dec_…` | Needs you, with that question open |
+| `jason://workitem/wi_…` | Work items, at that item |
+| `jason://person/cnt_…` | People, at that person |
+
+An id is its prefix and 26 uppercase Crockford characters; one trailing `/` is taken, and anything else (a query, a
+fragment, a percent escape, another page word, a second id, more than 64 characters) opens nothing. The page receives
+the page the desktop parsed, never the address; the log says that page, or the refusal's code, never the address.
+
+- **Windows.** The installed application registers the scheme at each start under
+  `HKEY_CURRENT_USER\Software\Classes\jason`, with the command `"<Jason.exe>" "--" "%1"`: the `--` ends the switches,
+  so nothing in an address is read as one. A start whose arguments carry anything beside the address and that `--` (a
+  switch, a flag of the desktop's own, a second address, or the pieces a quote in a crafted address splits it into)
+  opens nothing and quits; a start with `--no-sandbox` is refused before that. The uninstall takes the registration off
+  when it names this application.
+- **macOS.** The bundle declares the scheme in `Info.plist`, and the system hands a link to the application, running or
+  not.
+- **Linux.** The deb's menu entry declares `MimeType=x-scheme-handler/jason;` and starts the program with the address.
+  The AppImage declares no scheme and takes no link, and neither does a development build.
+
+A link that comes before the page is loaded waits for it, the newest replacing an older one; the window comes forward.
+
 ## Processes
 
 Every process is started with a file and arguments, never through a shell, and only by the named modules:
@@ -260,8 +292,9 @@ ends the install or the uninstall before a file is replaced, and a person is tol
 `resources\bundle\jason.exe runtime stop` in the application's folder, with `JASON_DATA_DIR` set when it was started
 with another data directory. Where PowerShell is not available nothing is looked for: a person is asked to stop the
 runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
-stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason at Login and the runtime's
-start at logon when it starts this application's `jason`, and names what it leaves: the data directory, the harness root
+stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason at Login, the runtime's
+start at logon when it starts this application's `jason`, and the `jason` link registration when it names this
+application, and names what it leaves: the data directory, the harness root
 and the updater's cache.
 
 On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before

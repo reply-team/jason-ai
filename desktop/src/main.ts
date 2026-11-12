@@ -16,6 +16,7 @@ import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
+import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
 import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
@@ -152,7 +153,39 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
 /** Brings the window forward; the desk's own once it is open. */
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
-async function run(): Promise<void> {
+/** The desktop's log before run() makes its own, under the data directory this start was given. */
+function startLog(): Logger {
+    return fileLogger(desktopPaths(dataDirectory(process.env, homedir())).logs);
+}
+
+/**
+ * A link that reached the application, from a start's arguments, a second start or the system: parsed, and either held
+ * for the page (`links`) with the window brought forward, or refused, which opens nothing. The log says the page or the
+ * refusal's code, never the address.
+ */
+function linkArrived(raw: unknown, links: LinkPost, log: Logger): void {
+    if (!linksTaken({ packaged: app.isPackaged, platform: process.platform, form: linuxForm() })) {
+        log.warn('deep_link_refused', { Code: 'unregistered' });
+        return;
+    }
+    const target = parseLink(raw);
+    if ('refused' in target) {
+        log.warn('deep_link_refused', { Code: target.refused });
+        showWindow();
+        return;
+    }
+    log.info('deep_link_opened', { Page: target.page });
+    links.arrived(target);
+    showWindow();
+}
+
+/** The link a second start passed in its `additionalData`, or null; it is parsed again here, never trusted. */
+function linkOf(data: unknown): unknown {
+    return data !== null && typeof data === 'object' && 'link' in data ? (data as { link: unknown }).link : null;
+}
+
+/** The window's run; `links` is where a link waits for the page, made by the start before Electron was ready. */
+async function run(links: LinkPost): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
@@ -217,6 +250,14 @@ async function run(): Promise<void> {
     // The origin is read from the run file on every check, because the runtime may come back on another port.
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
     lockNavigation(window.webContents, origin, log);
+    // A link waits for the page that takes it: a page that goes, by a load or a reload, takes no more until the next asks.
+    handle(ipcMain, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    window.webContents.on('did-start-navigation', (details) => {
+        if (details.isMainFrame && !details.isSameDocument) links.away();
+    });
+    // On Windows the scheme is registered at each start, with "--" before the address (`deep-link.ts`).
+    const registration = linkRegistration(process.platform, app.isPackaged, process.execPath);
+    if (registration !== null && !app.setAsDefaultProtocolClient(registration.scheme, registration.path, registration.args)) log.warn('deep_link_registration_failed', {});
 
     let settings: DesktopSettings = readSettings(paths.settings);
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
@@ -473,6 +514,16 @@ if (unsandboxed !== null) {
 function startDesktop(): void {
     keepElectronUnderData();
 
+    // A start that carries a link carries it alone (`linkIn`): one with anything beside it, a flag of the desktop's own
+    // or a switch a crafted address put there, does nothing and quits, before any other branch of a start is decided.
+    const fromArgs = linkIn(process.argv.slice(1));
+    const early = startLog();
+    if (fromArgs.kind === 'refused') {
+        early.warn('deep_link_refused', { Code: fromArgs.reason });
+        app.exit(1);
+        return;
+    }
+
     const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
     if (uninstalling !== null) {
         // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
@@ -483,15 +534,27 @@ function startDesktop(): void {
         // runtime through jason runtime stop and exits, and opens no window; the installer looks again rather than read
         // the code.
         void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
-    } else if (!app.requestSingleInstanceLock()) {
+    } else if (!app.requestSingleInstanceLock(fromArgs.kind === 'link' ? { link: fromArgs.raw } : undefined)) {
         app.quit();
     } else {
-        // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray.
-        app.on('second-instance', (_event, argv) => {
+        // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray. A second
+        // start's link comes in its additionalData, which Electron passes as it was given; its argv may be reordered or
+        // carry what Chromium added (electron.d.ts, `second-instance`).
+        // Where a link waits for the page (`deep-link.ts`): sent to the window's page once that page has taken its links.
+        const links = new LinkPost((target) => BrowserWindow.getAllWindows()[0]?.webContents.send(eventChannels['links.open'], target));
+        app.on('second-instance', (_event, argv, _directory, data) => {
+            const link = linkOf(data);
+            if (link !== null) return linkArrived(link, links, early);
             if (showsOnSecondStart(argv)) showWindow();
         });
+        // macOS hands a link by open-url, at a cold start before ready as at a running one, so it is listened for now.
+        app.on('open-url', (event, url) => {
+            event.preventDefault();
+            linkArrived(url, links, early);
+        });
+        if (fromArgs.kind === 'link') linkArrived(fromArgs.raw, links, early);
         app.on('activate', () => showWindow());
         app.on('window-all-closed', () => app.quit());
-        void app.whenReady().then(run);
+        void app.whenReady().then(() => run(links));
     }
 }

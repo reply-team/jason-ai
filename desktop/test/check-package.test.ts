@@ -64,6 +64,10 @@ const updaterFile = (platform: Kind) => [
 /** The AppArmor profile a deb carries, as app-builder-lib's apparmor-profile.tpl writes it for this program. */
 const appArmorProfile = ['abi <abi/4.0>,', 'include <tunables/global>', '', 'profile "jason-desktop-app" "/opt/Jason/jason-desktop-app" flags=(unconfined) {', '  userns,', '', '  include if exists <local/jason-desktop-app>', '}', ''].join('\n');
 
+/** The Info.plist a Mac package carries, with the URL types electron-builder writes from mac.protocols. */
+const macPlist = (scheme: string) =>
+    ['<?xml version="1.0" encoding="UTF-8"?>', '<plist version="1.0">', '<dict>', '<key>CFBundleURLTypes</key>', '<array>', '<dict>', '<key>CFBundleURLName</key>', '<string>Jason</string>', '<key>CFBundleTypeRole</key>', '<string>Editor</string>', '<key>CFBundleURLSchemes</key>', '<array>', `<string>${scheme}</string>`, '</array>', '</dict>', '</array>', '</dict>', '</plist>', ''].join('\n');
+
 /** The menu entry an AppImage carries at its root, as electron-builder writes it for the static runtime. */
 const menuEntry = (exec: string) => ['[Desktop Entry]', 'Name=Jason', `Exec=${exec}`, 'Terminal=false', 'Type=Application', 'Icon=jason-desktop-app', ''].join('\n');
 
@@ -75,7 +79,7 @@ const menuEntry = (exec: string) => ['[Desktop Entry]', 'Name=Jason', `Exec=${ex
 async function made(
     t: { after(fn: () => void): void },
     platform: Kind,
-    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string | null; profile?: string | null; icons?: number[] } = {},
+    options: { length?: number; copies?: number; updater?: string | null; packageType?: string | null; appRun?: boolean; exec?: string | null; profile?: string | null; icons?: number[]; debEntry?: string | null; plist?: string | null; appImageEntry?: string } = {},
 ): Promise<string> {
     const folder = temporary(t);
     const app = platform === 'win32' ? join(folder, 'win-unpacked') : platform === 'darwin' ? join(folder, 'mac-arm64', 'Jason.app') : join(folder, platform === 'linux-deb' ? join('opt', 'Jason') : 'squashfs-root');
@@ -91,8 +95,14 @@ async function made(
     const packageType = options.packageType === undefined ? (platform === 'linux-deb' ? 'deb\n' : null) : options.packageType;
     if (packageType !== null) writeFileSync(join(app, 'resources', 'package-type'), packageType);
     if (options.appRun ?? platform === 'linux-appimage') writeFileSync(join(app, 'AppRun'), '#!/usr/bin/env bash\n');
-    if (platform === 'linux-appimage' && options.exec !== null) writeFileSync(join(app, 'jason-desktop-app.desktop'), menuEntry(options.exec ?? 'AppRun %U'));
+    if (platform === 'linux-appimage' && options.exec !== null) writeFileSync(join(app, 'jason-desktop-app.desktop'), options.appImageEntry ?? menuEntry(options.exec ?? 'AppRun %U'));
     if (platform === 'linux-deb' && options.profile !== null) writeFileSync(join(app, 'resources', 'apparmor-profile'), options.profile ?? appArmorProfile);
+    if (platform === 'linux-deb' && options.debEntry !== null) {
+        const applications = join(iconRoot(app, 'deb'), 'usr', 'share', 'applications');
+        mkdirSync(applications, { recursive: true });
+        writeFileSync(join(applications, 'jason-desktop-app.desktop'), options.debEntry ?? [menuEntry('/opt/Jason/jason-desktop-app %U'), 'MimeType=x-scheme-handler/jason;', ''].join('\n'));
+    }
+    if (platform === 'darwin' && options.plist !== null) writeFileSync(join(app, 'Contents', 'Info.plist'), options.plist ?? macPlist('jason'));
     if (platform === 'linux-deb' || platform === 'linux-appimage') {
         for (const size of options.icons ?? linuxIconSizes) {
             const target = join(iconRoot(app, formOf(platform) as Form), 'usr', 'share', 'icons', 'hicolor', `${size}x${size}`, 'apps', 'jason-desktop-app.png');
@@ -143,6 +153,8 @@ for (const platform of ['win32', 'darwin', 'linux-deb', 'linux-appimage'] as con
         assert.ok(said.includes('fuse onlyLoadAppFromAsar: enabled'), said.join('\n'));
         assert.ok(said.includes('fuse 8: enabled, as Electron left it'), said.join('\n'));
         if (platform === 'linux-deb') assert.ok(said.includes('package-type: deb, so electron-updater makes its deb updater'), said.join('\n'));
+        if (platform === 'linux-deb') assert.ok(said.includes('jason-desktop-app.desktop: MimeType=x-scheme-handler/jason;'), said.join('\n'));
+        if (platform === 'darwin') assert.ok(said.includes('Info.plist: CFBundleURLSchemes holds jason'), said.join('\n'));
         if (platform === 'linux-appimage') {
             assert.ok(said.includes('package-type: none, so electron-updater makes its AppImage updater'), said.join('\n'));
             assert.ok(said.includes('jason-desktop-app.desktop: Exec=AppRun %U'), said.join('\n'));
@@ -313,4 +325,22 @@ for (const kind of ['linux-deb', 'linux-appimage'] as const) {
 
 test('linux: the sizes a package must carry are 32, 128, 256 and 512', () => {
     assert.deepEqual([...linuxIconSizes], [32, 128, 256, 512]);
+});
+
+test('the jason link scheme is declared by the macOS bundle and the deb\'s menu entry, and a package that does not is refused', async (t) => {
+    const mac = await made(t, 'darwin', { plist: macPlist('other') });
+    assert.throws(() => check(mac, 'darwin'), /declares no CFBundleURLSchemes holding jason, so jason links would not reach the application/);
+    const bare = await made(t, 'darwin', { plist: null });
+    assert.throws(() => check(bare, 'darwin'), /Info\.plist is not there/);
+    const deb = await made(t, 'linux-deb', { debEntry: menuEntry('/opt/Jason/jason-desktop-app %U') });
+    assert.throws(() => check(deb, 'linux-deb'), /declares no MimeType x-scheme-handler\/jason, so the deb would take no jason link/);
+    const noAddress = await made(t, 'linux-deb', { debEntry: [menuEntry('/opt/Jason/jason-desktop-app'), 'MimeType=x-scheme-handler/jason;', ''].join('\n') });
+    assert.throws(() => check(noAddress, 'linux-deb'), /does not start the program with the address \(%U\)/);
+    const none = await made(t, 'linux-deb', { debEntry: null });
+    assert.throws(() => check(none, 'linux-deb'), /holds no \.desktop menu entry, so no link scheme can be read/);
+});
+
+test('an AppImage whose menu entry declares the jason scheme is refused: the AppImage takes no link', async (t) => {
+    const app = await made(t, 'linux-appimage', { appImageEntry: [menuEntry('AppRun %U'), 'MimeType=x-scheme-handler/jason;', ''].join('\n') });
+    assert.throws(() => check(app, 'linux-appimage'), /declares x-scheme-handler\/jason, and the AppImage takes no jason link/);
 });

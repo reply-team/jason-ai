@@ -340,9 +340,12 @@ test('the package carries no UI zip: the CLI installs the UI of the runtime’s 
     assert.ok(!bundleFiles('win32').some((name) => /ui/i.test(name)));
 });
 
-test('no protocol and no file type is registered: the package opens no link and no document', () => {
-    const text = JSON.stringify(built);
-    assert.ok(!/protocols|fileAssociations|jason:/.test(text));
+test('the one link the package registers is the jason scheme, on macOS and the deb alone, and no file type is registered', () => {
+    const { mac, deb, ...rest } = built as typeof built & { mac: { protocols?: unknown }; deb: { mimeTypes?: unknown } };
+    assert.deepEqual(mac.protocols, [{ name: 'Jason', schemes: ['jason'] }]);
+    assert.deepEqual(deb.mimeTypes, ['x-scheme-handler/jason']);
+    const elsewhere = JSON.stringify({ ...rest, mac: { ...mac, protocols: undefined }, deb: { ...deb, mimeTypes: undefined } });
+    assert.ok(!/protocols|fileAssociations|mimeTypes|jason:|x-scheme-handler/.test(elsewhere), elsewhere);
 });
 
 test('DevTools are closed in a packaged build, the window’s and the key that would open them', () => {
