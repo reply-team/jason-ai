@@ -238,10 +238,21 @@ export function removeChat(id: string): void {
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
 }
 
-/** The host a chat's next turn runs on: the one chosen, else the first found that drives the chat. */
+/**
+ * The host a chat's next turn runs on: the one chosen, else the first found that drives the chat. A chosen host that is
+ * held, below the floor or its version not read, is never traded for another: the chat's session lives on that host, and
+ * a turn elsewhere would start afresh. No turn runs until it is updated and checked again, or the person chooses another.
+ */
 export function hostOf(chat: Chat): DesktopHost | null {
     const { drive } = chatHosts(setup.value?.hosts ?? []);
+    if (heldHostOf(chat) !== null) return null;
     return drive.find((each) => each.id === chat.host) ?? drive[0] ?? null;
+}
+
+/** The host the chat chose when it is found and would drive the chat but is held; null otherwise. */
+export function heldHostOf(chat: Chat): DesktopHost | null {
+    if (chat.host === null) return null;
+    return chatHosts(setup.value?.hosts ?? []).held.find((each) => each.id === chat.host) ?? null;
 }
 
 /**
@@ -255,7 +266,7 @@ export function sendTurn(id: string, text: string, resent = false): void {
     const host = hostOf(chat);
     if (!host) {
         // A host that was found and is held says what holds it, below the floor or a version not read, in its own mark.
-        const held = chatHosts(setup.value?.hosts ?? []).held[0]?.belowFloor;
+        const held = (heldHostOf(chat) ?? chatHosts(setup.value?.hosts ?? []).held[0])?.belowFloor;
         if (resent)
             changeChat(id, (each) =>
                 failed(
@@ -265,7 +276,8 @@ export function sendTurn(id: string, text: string, resent = false): void {
             );
         return;
     }
-    changeChat(id, (each) => said(each, words, resent));
+    // A chat that named no host yet is on the one its turn runs on from now, so a hold on that host later holds the chat.
+    changeChat(id, (each) => said(each.host === null ? { ...each, host: host.id } : each, words, resent));
     here()
         .desktop.chat.send(id, words, turnOptions(onHost(chat, host.id), host))
         .then((answer) => {
@@ -575,6 +587,9 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const closeRename = () => changeChat(chatId, (each) => ({ ...each, renaming: null }));
     const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
+    // The chat's own host, held: its sentence alone is said, and the menu keeps naming it until another is chosen.
+    const ownHeld = heldHostOf(chat);
+    const heldSaid = ownHeld ? [ownHeld] : held;
     // The model and effort shown are the ones chosen on the host the next turn runs on (`onHost`).
     const standing = host ? onHost(chat, host.id) : chat;
     const picked = host ? modelView(standing, host) : null;
@@ -721,9 +736,9 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     </div>
                 )}
             <form className="composer" onSubmit={send} aria-label="Message">
-                {setup.value && !host && held.length > 0 && (
+                {setup.value && !host && heldSaid.length > 0 && (
                     <div className="note am host-held">
-                        {[...new Set(held.map((each) => each.belowFloor!))].map((sentence) => (
+                        {[...new Set(heldSaid.map((each) => each.belowFloor!))].map((sentence) => (
                             <div key={sentence}>
                                 {sentence.split('`').map((part, at) => (at % 2 ? <code key={at}>{part}</code> : part))}
                             </div>
@@ -783,7 +798,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     <select
                         aria-label="Agent host"
                         disabled={chat.removing}
-                        value={host?.id ?? ''}
+                        value={host?.id ?? ownHeld?.id ?? ''}
                         onChange={(event) => {
                             const chosen = event.target.value;
                             changeChat(chatId, (each) => hostChosen(each, chosen));

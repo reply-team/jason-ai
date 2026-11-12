@@ -139,6 +139,46 @@ describe('the desktop’s conversations', () => {
         expect(desktop.kept.get(id)?.chosen).toEqual({ host: 'claude', model: 'sonnet', effort: 'low' });
     });
 
+    it('reopened on a Claude Code whose version cannot be read, runs no turn on Codex and says why, with Check again', async () => {
+        const unreadable =
+            'The version of Claude Code could not be read, so the chat does not run on it. Run `claude --version` in a terminal to see it; the chat needs 2.1.257 or newer, and `claude update` updates it. Then check again.';
+        const desktop = chatDesktop({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, version: null, belowFloor: unreadable }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.130.0', install: null }
+                      : each,
+            ),
+        });
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000H1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            chosen: { host: 'claude', model: 'sonnet', effort: 'low' },
+        });
+        renderConsole(desktop);
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        const panel = hero.closest<HTMLElement>('.chat-panel')!;
+        const note = await waitFor(() => {
+            const element = panel.querySelector<HTMLElement>('.composer .host-held');
+            expect(element).toBeTruthy();
+            return element!;
+        });
+        expect(note.textContent).toContain('The version of Claude Code could not be read');
+        expect(within(note).getByRole('button', { name: 'Check again' })).toBeTruthy();
+        expect(within(panel).getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'claude');
+        expect(within(panel).getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+        fireEvent.change(within(panel).getByRole('textbox', { name: 'Your message' }), {
+            target: { value: 'And now?' },
+        });
+        fireEvent.click(within(panel).getByRole('button', { name: 'Send' }));
+        expect(calls(desktop, 'chat.send')).toEqual([]);
+    });
+
     it('reopens on a model its host no longer lists, says so in the control, and sends the turn with the host’s own and no effort', async () => {
         const desktop = chatDesktop({
             ...setupFound,
