@@ -41,6 +41,12 @@ program's HTTP client by its own word (`curl`, `powershell` and the others in [`
 `browser` for anything else that says `Mozilla/`; and `fetcher` for the rest, a request with no User-Agent included.
 HEAD is answered and never counted, and neither are `/stats` nor a refused request.
 
+A day names at most 100 distinct sources (`MAX_SOURCES_PER_DAY` in [`src/index.mjs`](src/index.mjs)). Once it has, a
+request naming a source that day has not seen is counted under `(rest)`, the row /stats folds its rest into, and makes
+no row of its own; a source already seen that day keeps counting under its own name, and the next UTC day starts again
+from none. So a flood of made-up links costs the table a bounded number of rows, and the real sources stay in /stats by
+name. The decision is made in the same statement as the write, so concurrent requests cannot both pass the cap.
+
 That is all that is stored. The Worker keeps no record of a request at all, only the counts: no address, cookie,
 identifier, header or whole User-Agent, and Workers Logs are off. The product itself never adds a `ref` to a request,
 and sends nothing for this.

@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { clientOf, sourceOf } from '../src/classify.mjs';
 import { BASE, GUIDE, fakeDb, fakeFetch, send, sqliteDb } from '../fakes.mjs';
 import { INSTALL_PAGE } from '../src/paths.mjs';
+import { MAX_SOURCES_PER_DAY } from '../src/index.mjs';
+import { FOLDED_SOURCE, readCounts, tabulate } from '../src/stats.mjs';
 
 const page = () => new Response(GUIDE, { status: 200 });
 
@@ -82,8 +84,8 @@ test('a GET of the install page is counted once, by day, path, source and client
   const db = fakeDb();
   await send('/install?ref=LinkedIn', { env: { COUNTS: db }, headers: { 'user-agent': 'curl/8.7.1' }, fetch: fakeFetch({ [INSTALL_PAGE]: page }) });
   assert.equal(db.runs.length, 1);
-  assert.match(db.runs[0].sql, /^INSERT INTO counts \(day, path, ref, client, n\) VALUES \(\?1, \?2, \?3, \?4, 1\) ON CONFLICT/);
-  assert.deepEqual(db.runs[0].args, ['2026-11-12', '/install', 'linkedin', 'fetcher']);
+  assert.match(db.runs[0].sql, /^INSERT INTO counts \(day, path, ref, client, n\)/);
+  assert.deepEqual(db.runs[0].args, ['2026-11-12', '/install', 'linkedin', 'fetcher', MAX_SOURCES_PER_DAY]);
 });
 
 test('a GET of a desktop path is counted once, and the day is the UTC day', async () => {
@@ -93,7 +95,7 @@ test('a GET of a desktop path is counted once, and the day is the UTC day', asyn
     headers: { 'user-agent': 'Mozilla/5.0 (Macintosh) Safari/605.1.15' },
     now: new Date('2026-11-12T23:59:59-07:00'),
   });
-  assert.deepEqual(db.runs.map((run) => run.args), [['2026-11-13', '/desktop/mac-intel', '(none)', 'browser']]);
+  assert.deepEqual(db.runs.map((run) => run.args), [['2026-11-13', '/desktop/mac-intel', '(none)', 'browser', MAX_SOURCES_PER_DAY]]);
 });
 
 test('HEAD is answered as GET is and never counted', async () => {
@@ -162,4 +164,62 @@ test('the one statement the handler writes moves a counter on a real table, and 
     { day: '2026-11-12', path: '/desktop/windows', ref: 'blog', client: 'fetcher', n: 1 },
     { day: '2026-11-12', path: '/desktop/windows', ref: 'news', client: 'fetcher', n: 2 },
   ]);
+});
+
+const rowsOf = (db, day = '2026-11-12') =>
+  db.database.prepare('SELECT ref, SUM(n) AS n FROM counts WHERE day = ? GROUP BY ref ORDER BY ref').all(day).map((row) => ({ ...row }));
+const flood = async (db, count, { from = 0 } = {}) => {
+  for (let i = from; i < from + count; i++) await send('/desktop/windows?ref=made-up-' + i, { env: { COUNTS: db } });
+};
+
+test('the first source past the day cap is counted in the rest row, and no row of its own is made', async () => {
+  const db = sqliteDb();
+  await flood(db, MAX_SOURCES_PER_DAY);
+  assert.equal(rowsOf(db).length, MAX_SOURCES_PER_DAY);
+  await send('/desktop/windows?ref=one-too-many', { env: { COUNTS: db } });
+  await send('/install?ref=another-one', { env: { COUNTS: db }, fetch: fakeFetch({ [INSTALL_PAGE]: page }) });
+  const rows = rowsOf(db);
+  assert.equal(rows.length, MAX_SOURCES_PER_DAY + 1);
+  assert.deepEqual(rows.find((row) => row.ref === FOLDED_SOURCE), { ref: FOLDED_SOURCE, n: 2 });
+  assert.equal(rows.some((row) => row.ref === 'one-too-many' || row.ref === 'another-one'), false);
+});
+
+test('a source seen before the cap keeps counting under its own name after it', async () => {
+  const db = sqliteDb();
+  await flood(db, MAX_SOURCES_PER_DAY);
+  await flood(db, 3, { from: MAX_SOURCES_PER_DAY });
+  await send('/desktop/windows?ref=made-up-0', { env: { COUNTS: db } });
+  await send('/desktop/windows?ref=made-up-0', { env: { COUNTS: db } });
+  const rows = rowsOf(db);
+  assert.deepEqual(rows.find((row) => row.ref === 'made-up-0'), { ref: 'made-up-0', n: 3 });
+  assert.deepEqual(rows.find((row) => row.ref === FOLDED_SOURCE), { ref: FOLDED_SOURCE, n: 3 });
+  assert.equal(rows.length, MAX_SOURCES_PER_DAY + 1);
+});
+
+test('a new UTC day starts with no sources counted', async () => {
+  const db = sqliteDb();
+  await flood(db, MAX_SOURCES_PER_DAY + 5);
+  await send('/desktop/windows?ref=fresh', { env: { COUNTS: db }, now: new Date('2026-11-13T00:00:01Z') });
+  assert.deepEqual(rowsOf(db, '2026-11-13'), [{ ref: 'fresh', n: 1 }]);
+});
+
+test('a source is one source of the day however many paths and client classes it is counted under', async () => {
+  const db = sqliteDb();
+  await flood(db, MAX_SOURCES_PER_DAY - 1);
+  await send('/desktop/mac?ref=shared', { env: { COUNTS: db }, headers: { 'user-agent': 'curl/8.7.1' } });
+  await send('/desktop/linux-deb?ref=shared', { env: { COUNTS: db }, headers: { 'user-agent': 'Mozilla/5.0 Firefox/132.0' } });
+  assert.deepEqual(rowsOf(db).find((row) => row.ref === 'shared'), { ref: 'shared', n: 2 });
+  assert.equal(rowsOf(db).some((row) => row.ref === FOLDED_SOURCE), false);
+});
+
+test('after a flood /stats still shows the real sources by name, and the flood costs one row', async () => {
+  const db = sqliteDb();
+  for (const ref of ['newsletter', 'blog']) for (let i = 0; i < 3; i++) await send('/desktop/windows?ref=' + ref, { env: { COUNTS: db } });
+  await flood(db, MAX_SOURCES_PER_DAY * 3);
+  await send('/desktop/windows?ref=newsletter', { env: { COUNTS: db } });
+  const read = await readCounts(db, new Date('2026-11-12T10:00:00Z'));
+  const sources = tabulate(read.rows).map((line) => line.source);
+  assert.ok(sources.includes('newsletter') && sources.includes('blog'));
+  assert.equal(read.rows.filter((row) => row.source === FOLDED_SOURCE).length, 1);
+  assert.equal(db.database.prepare('SELECT COUNT(*) AS c FROM counts').get().c, MAX_SOURCES_PER_DAY + 1);
 });
