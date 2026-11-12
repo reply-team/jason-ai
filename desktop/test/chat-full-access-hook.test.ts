@@ -11,6 +11,7 @@ import { join, posix, win32 } from 'node:path';
 import { mock, test } from 'node:test';
 import ts from 'typescript';
 import { readFence } from '../src/chat-deny.ts';
+import { hostEnvironment } from '../src/chat-hosts.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
@@ -364,4 +365,15 @@ test('a judgement that fails before Full access reads anything holds the request
     const failing: ChatScope = { ...(scopes[0] as ChatScope), real: () => { throw new Error('no reading'); } };
     assert.deepEqual(fullAccessJudgement('Bash', { command: 'cat notes.md' }, failing), { outcome: 'held', message: heldSentence, reason: 'syntax' });
     assert.deepEqual(fullAccessJudgement('Read', { file_path: '/home/someone/notes.md' }, failing), { outcome: 'held', message: heldSentence });
+});
+
+test('a Full access turn\'s environment names HOME as the folder the judgement takes for home, in place of any other spelling of it', () => {
+    const options = { bundleVersion: null, bundle: '/b', data: null, program: 'claude', keyed: false, provider: {} } as const;
+    const posixEnv = hostEnvironment({ PATH: '/x', HOME: '/elsewhere' }, { ...options, platform: 'linux', home: '/home/someone' });
+    assert.equal(posixEnv.HOME, '/home/someone');
+    const windowsEnv = hostEnvironment({ PATH: '/x', Home: '/a', HOME: '/b' }, { ...options, platform: 'win32', home: '/c/Users/someone' });
+    assert.deepEqual(Object.keys(windowsEnv).filter((name) => name.toUpperCase() === 'HOME'), ['HOME']);
+    assert.equal(windowsEnv.HOME, '/c/Users/someone');
+    assert.equal(hostEnvironment({ PATH: '/x' }, { ...options, platform: 'linux' }).HOME, undefined, 'without a home named, nothing is added');
+    assert.equal(hostEnvironment({ PATH: '/x', HOME: '/h' }, { ...options, platform: 'linux' }).HOME, '/h', 'and nothing is changed');
 });

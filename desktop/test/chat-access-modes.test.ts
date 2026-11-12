@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
@@ -308,6 +308,38 @@ test('in a Full access turn a held card nobody answers is refused when its wait 
     assert.ok(texts(said).includes('after the card'), 'the turn goes on');
     assert.deepEqual(done(said), { kind: 'done', error: null });
     assert.equal(r.chat.open(id).mode, 'full_access');
+});
+
+/** The HOME a recorded host was started with, in whatever letter case the platform keeps it. */
+const homeOf = (recorded: Recorded | undefined) => Object.entries(recorded?.env ?? {}).find(([name]) => (process.platform === 'win32' ? name.toUpperCase() : name) === 'HOME')?.[1];
+
+test('a Full access turn starts its host with HOME set to the folder its judgement reads a ~ against, so the two cannot differ', async (t) => {
+    // The desktop's own environment names no HOME: the judgement takes the profile's home folder, and so does the host.
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    plan(r, [{ use: { tool: 'Bash', input: { command: 'ls ~/notes' } } }]);
+    const said = await r.turn(id, 'go', claude);
+    assert.equal(homeOf(r.hosts()[0]), homedir());
+    assert.ok(texts(said).includes('tool ran'), 'a ~ read against that same home runs');
+
+    // The desktop's own environment names another HOME: the host is given exactly it, and the judgement, which reads a
+    // ~ against it, does not take it for the profile's home, so a ~ is put to the person.
+    const elsewhere = join(tmpdir(), 'jason-elsewhere-home');
+    const other = rig(t, { env: { HOME: elsewhere } });
+    const made = await other.chat.create();
+    await other.chat.setMode(made.id, 'full_access', 'claude');
+    plan(other, [{ use: { tool: 'Bash', input: { command: 'ls ~/notes' } } }]);
+    const asked = await answered(other, made.id, [false]);
+    assert.equal(homeOf(other.hosts()[0]), elsewhere);
+    assert.deepEqual(cards(asked).map((card) => card.detail), ['ls ~/notes']);
+});
+
+test('an Ask first turn\'s host environment keeps HOME as the desktop\'s own environment has it', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.turn(id, 'hello', claude);
+    assert.equal(homeOf(r.hosts()[0]), undefined);
 });
 
 test('in Ask first and in Plan only a tool result the desktop has no hook for is no reason to stop', async (t) => {

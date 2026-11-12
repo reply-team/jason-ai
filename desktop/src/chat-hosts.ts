@@ -488,6 +488,11 @@ export function hostEnvironment(
         bundleVersion: string | null;
         /** Whether the turn names an effort, which an inherited `CLAUDE_CODE_EFFORT_LEVEL` would override. */
         effortNamed?: boolean;
+        /**
+         * A Full access turn: the folder its judgement reads a `~` against (`ChatScope.shellHome`), set as `HOME` in place
+         * of any spelling of it the base carries, so the host's shell and the judgement take the same home.
+         */
+        home?: string;
     },
 ): Record<string, string> {
     const env: Record<string, string> = {};
@@ -503,8 +508,10 @@ export function hostEnvironment(
             continue;
         }
         if (upper === 'JASON_DATA_DIR' || upper === confinedVariable) continue;
+        if (options.home !== undefined && (options.platform === 'win32' ? upper : name) === 'HOME') continue;
         env[name] = value;
     }
+    if (options.home !== undefined) env.HOME = options.home;
     const separator = options.platform === 'win32' ? ';' : ':';
     env.PATH = path === '' ? options.bundle : `${options.bundle}${separator}${path}`;
     if (options.data !== null) env.JASON_DATA_DIR = options.data;
