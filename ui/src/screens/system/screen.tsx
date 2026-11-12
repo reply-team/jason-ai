@@ -28,8 +28,17 @@ export function SystemScreen() {
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 {info?.update?.available && (
                     <Notice>
-                        Jason {info.update.version} is available. Update from a terminal with{' '}
-                        <code>jason update apply</code>, or ask your agent.
+                        Jason {info.update.version} is available.{' '}
+                        {window.jasonDesktop ? (
+                            <>
+                                The desktop updates itself and the jason it carries. Choose Check for Updates… in the
+                                desktop&apos;s Jason menu, or in the menu of its icon in the tray.
+                            </>
+                        ) : (
+                            <>
+                                Update from a terminal with <code>jason update apply</code>, or ask your agent.
+                            </>
+                        )}
                         {info.update.release_notes_url && (
                             <>
                                 {' '}

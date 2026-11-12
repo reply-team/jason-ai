@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
@@ -95,5 +95,36 @@ describe('System', () => {
     it('says when no UI module is reported', async () => {
         systemFake('without-ui');
         await waitFor(() => expect(screen.getByText(/not reported/)).toBeTruthy());
+    });
+});
+
+describe('System, the update sentence', () => {
+    const update = {
+        available: true,
+        version: '9.9.9',
+        checked_at: '2026-01-01T00:00:00Z',
+        release_notes_url: null,
+    };
+    const recorded = fixtures['system.info/with-ui'].response as { update?: unknown };
+    afterEach(() => {
+        recorded.update = null;
+        delete window.jasonDesktop;
+    });
+
+    it('in a browser names the terminal command, as before', async () => {
+        recorded.update = update;
+        systemFake();
+        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+        expect(screen.getByText(/jason update apply/)).toBeTruthy();
+    });
+
+    it("in the desktop names the desktop's own update and not the terminal command", async () => {
+        recorded.update = update;
+        window.jasonDesktop = {} as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+        expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
+        expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
+        expect(screen.queryByText(/jason update apply/)).toBeNull();
     });
 });
