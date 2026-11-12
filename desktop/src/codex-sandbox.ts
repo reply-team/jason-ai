@@ -18,6 +18,13 @@
 // directory on macOS and Linux too; whether it opened is reported beside the verdict (`SandboxFound.opened`), and the
 // chat logs it, never as a reason to refuse.
 //
+// What the verdict stands for, credential by credential. Checked: the run token, which `holds` requires unreadable.
+// Absent by construction: the window's own pairing with the runtime, which lives in memory only (`window-pairing.ts`).
+// Sealed: the AI providers' keys, encrypted by the operating system for the person's account (`providers.ts`).
+// Readable and told to the person: a plugin's secret kept in the installation's settings, for which the settings file
+// read here stands, the live Claude turns' endpoint secrets, which open no API, and Jason's data, conversations and
+// transcripts. Outside Jason's folder and not checked: a browser's own pairing and the agent hosts' own sign-ins.
+//
 // What it runs, three times. One cmd line: `echo <ran>`, then `type "<file>" >nul 2>nul && echo <marker>` for the
 // control file and for each file of the data directory. It prints a random marker whatever happens and a marker of each
 // file's own only if that file opened; the files go to nul, so nothing of them reaches a pipe in any run. The control is

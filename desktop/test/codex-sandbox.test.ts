@@ -147,6 +147,13 @@ test('the run file kept and the settings file read inside holds, and says the se
     assert.equal((await checkWith([all, all], [nothing, settingsRead])).answer, 'holds', 'in the worded form too');
 });
 
+test('the run file\'s read marker after the settings file\'s is refused all the same: the order of the reads decides nothing', async () => {
+    const after = await checkWith([all, all], [said(`${markers.ran}\n${markers.control}\n${markers.reads[1]}\n${markers.reads[0]}\n`)]);
+    assert.equal(after.answer, 'reads');
+    assert.deepEqual(after.opened, [true, true]);
+    assert.deepEqual(after.ran, ['cmd', 'codex'], 'nothing runs after a read');
+});
+
 test('the settings file\'s marker without the control\'s, before it, twice, or not on a line of its own proves nothing', async () => {
     for (const stdout of [
         `${markers.ran}\n${markers.reads[1]}\n`,
