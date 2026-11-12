@@ -69,7 +69,12 @@ next free one above it and `jason runtime status --human` says so; `Runtime:Port
 
 What waits for you: approvals and questions, **Pending** or **Decided** (`jason approval list`, `jason decision list`).
 Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
-which account and on which channel, and through which provider. A row above the list narrows it to **All**, **Approvals**
+which account and on which channel, and through which provider. An approval to send a message shows it under "The message as
+written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
+body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
+labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
+is made of. One sentence under it says what is not shown: the provider adds its signature and its tracking when it sends.
+A row above the list narrows it to **All**, **Approvals**
 or **Questions**, each option with how many of its kind are listed, the chosen one ticked so that it is told apart by
 more than its colour, and "Shown: N" saying how many the list shows. The filter belongs to the screen alone: it is never
 stored, never part of the page's address and never sent to the runtime, and it goes back to All when nothing at all is

@@ -8,6 +8,7 @@ import { CopyPromptButton } from './copy-prompt-button';
 import { SessionLink } from './session-link';
 import { PanelHeader } from '../../layout/panel-header';
 import { toApprovalDetail } from '../../console/live';
+import { MessageCard } from './message-card';
 
 type Props = {
     approval: Approval;
@@ -39,7 +40,8 @@ export function ApprovalPanel({
     const preview = approval.preview as { intent?: unknown; contact?: { name?: string; value?: string } };
     const intent = typeof preview.intent === 'string' ? preview.intent : null;
     const person = preview.contact?.name ?? approval.contact_name;
-    const { from, channel } = toApprovalDetail(approval.preview);
+    const detail = toApprovalDetail(approval.preview);
+    const { from, channel } = detail;
     const pending = approval.status === 'pending';
     const heading = title(approval.operation, approval.contact_name);
     return (
@@ -120,6 +122,7 @@ export function ApprovalPanel({
                         </>
                     )}
                 </dl>
+                <MessageCard detail={detail} />
                 <details className="fold">
                     <summary>Raw request</summary>
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>
