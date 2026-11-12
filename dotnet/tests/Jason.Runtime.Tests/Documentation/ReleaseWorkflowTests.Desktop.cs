@@ -287,7 +287,7 @@ public partial class ReleaseWorkflowTests
         var guide = Regex.Replace(Read(["docs", "release-and-update.md"]), @"\s+", " ");
         foreach (var said in (string[])
         [
-            "on an Intel Mac `jason update apply` refuses with `update_not_updatable` and the `jason` the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.",
+            "on an Intel Mac `jason update apply` refuses with `update_carried_by_desktop` and the `jason` the Intel application carries moves only with the desktop's own update; the test suite does not run on an Intel Mac.",
             "the desktop updates to stable releases only.",
             "Installing a desktop update restarts the runtime.",
             "the descriptor's `installed_image` is the application's own `jason`",
