@@ -170,8 +170,8 @@ function closeDialog(): void {
 }
 
 /**
- * Drops the link, the choices and the name field a card at `place` has open: called when that card is no longer drawn,
- * so a link the person stopped seeing is not held.
+ * Drops the link, the choices and the name field a card at `place` has open: called when that card is removed, so a
+ * link the person can no longer reach is not held; a tab that is only hidden keeps its open dialog.
  */
 export function dropLinks(place: Place): void {
     if (linkDialog.peek()?.place === place) closeDialog();

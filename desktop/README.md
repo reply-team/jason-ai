@@ -31,8 +31,8 @@ A link Reply answers for connecting an account is checked before it is shown: ht
 either the connect page's exact path with no query on a host name (never an address written as numbers), any path on
 `auth.linkedin.reply.io`, or the hosted mailbox page with its token. It reaches the window only as the answer to the
 card's ask: whoever holds it can connect an account to that Reply account, so it is never logged, written to a file or
-given to the chat, and the card drops it when its dialog closes or the card is no longer drawn. A LinkedIn link expires
-and connects one account. The mailbox address is one address for the Reply user and does not expire: whoever holds it
+given to the chat, and the card drops it when its dialog closes or its card is removed; a tab that is only hidden keeps
+its open dialog. A LinkedIn link expires and connects one account. The mailbox address is one address for the Reply user and does not expire: whoever holds it
 can add and manage that Reply account's mailboxes. So before it is asked of Reply the desktop's main process asks the
 person in a native box of its own, each time, with Cancel focused; no window to ask on is a no. The LinkedIn acts need
 reply-cli 0.20.0, the first that reads a body from standard input; below it the card turns them off and says so. A
