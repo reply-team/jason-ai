@@ -3,6 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.15.1
+
+- The README says the two names this package gives a search never change from one version of the package to the next:
+  the private list it fills, named `Jason search`, the work item and the attempt's number, and the reference it answers,
+  `search-<search>-list-<list>`. A later version finds a search an earlier one started by the list's name, when an
+  update falls between an attempt whose answer was lost and its repeat, and reads every reference an earlier one gave.
+  Nothing the package does has changed; update the package (`jason update apply`) to have the page.
+
 ## 0.15.0
 
 - The package performs the audience family over Reply's Live Data: `audience.preview`, `audience.search`,

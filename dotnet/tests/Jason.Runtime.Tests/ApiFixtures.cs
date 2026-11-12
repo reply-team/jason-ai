@@ -155,6 +155,7 @@ public static class ApiFixtures
         "campaign.summary/audience-nobody-landed",
         "campaign.summary/audience-two-campaigns",
         "campaign.summary/audience-unknown",
+        "campaign.summary/audience-without-archived",
         "campaign.summary/everyone",
         "campaign.summary/everyone-without-archived",
         "campaign.summary/everyone-without-archived-empty",

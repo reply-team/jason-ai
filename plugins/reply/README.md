@@ -1059,14 +1059,17 @@ spent or pinned.
 Two writes: `reply contact-list create`, a private list named `Jason search`, the work item, ` #` and the attempt's
 number, and `reply live-data start` on it, the definition on stdin as written, `--count` the work item's count,
 `--max-per-company` where it names people per company, and `--with-phones` where it asks for phones. The answer is
-`accepted`, with the reference `search-<search>-list-<list>` under `external_ids.search`: Reply runs the search on its
+`accepted`, with the reference `search-<search>-list-<list>` under `external_ids.search`, a form every later version of
+this package reads, so it never changes: Reply runs the search on its
 own and puts each person it finds on the list, and `audience.search_status` reads them there. A start Reply refused
 deletes the list again. A create whose answer was lost may have made its list, which stays behind empty: reply-cli reads
 no list by its name, so a repeat cannot find it, and makes a list of its own attempt. A start whose answer was lost
 keeps its list, since the search may have started on it; the repeat reads the team's searches first (`reply live-data
 list`, newest first, back to an hour before the earliest attempt that may have acted, at most ten pages of a hundred,
 each search's start, which Reply writes with no zone, read as UTC whatever zone the machine is in) and answers the one
-on a list named after its work item, starting none. A search it misses is still never a second
+on a list named after its work item, starting none. That name is how a later version of this package finds a search
+an earlier one started, after an update between a lost answer and its repeat, so its form never changes. A search it
+misses is still never a second
 search on the same people: Reply refuses a second unfinished search of the same filters, `search_in_progress`. Nothing
 is pinned.
 

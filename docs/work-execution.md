@@ -962,7 +962,8 @@ The first twenty-three are refusals and all of them are final: twenty are `perma
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
-the routed package, by its id and digest, or its binding is not the one the unsettled attempt ran under, or the input
+the routed package — by its id and digest for a send, by its id alone for a metered act — or its binding is not the one
+the unsettled attempt ran under, or the input
 composed now is not the one it was composed with, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
 nothing ever falls back to another plugin. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
@@ -998,7 +999,10 @@ that attempt was composed with — its arguments, and the whole composed input b
 (below): a route, a binding or a package changed in between ends it `provider_answer_lost` at the claim, since the key
 settles a send only at the provider and the account that took it, and so does an item edited since, or a person or a
 campaign whose part of the input changed since, since the key settles only the request it went with and a provider
-holding it answers a repeat with the earlier send.
+holding it answers a repeat with the earlier send. A metered act settled by a recovery read — `audience.search`,
+`campaign.enroll`, `campaign.activate` — is held the same way but for the package's digest: its recovery read finds
+the earlier act at the account whichever version of the package made it, so an update of the package in between lets
+the repeat through.
 While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
 (`docs/routing.md`). An answer that arrived and does not satisfy the

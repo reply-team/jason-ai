@@ -2,7 +2,7 @@
   "kind": "audience_search_ended",
   "version": 1,
   "since": "0.36.0",
-  "summary": "A search for a campaign's audience ended — finished, exhausted, stalled or stopped — with what it was asked for, found and landed; said once per search, a default manager trigger.",
+  "summary": "A search for a campaign's audience ended — finished, exhausted, stalled, stopped, or found gone by a read or a stop — with what it was asked for, found and landed; said once per search, a default manager trigger.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -27,7 +27,7 @@
           "ended_as": {
             "type": "string",
             "enum": ["finished", "exhausted", "stalled", "cancelled"],
-            "description": "How it ended: it reached its count, the source ran out, its reads landed nobody for the stall bound, or a stop ended it."
+            "description": "How it ended: it reached its count, the source ran out, its reads landed nobody for the stall bound, or a stop ended it, or a read or a stop found it gone from the provider (`search_not_found`)."
           },
           "state": {
             "type": ["null", "string"],
@@ -40,7 +40,7 @@
           "ended_by": {
             "type": ["null", "string"],
             "pattern": "^wi_",
-            "description": "The work item whose answer ended it — the last read, the stop, or the search itself — or null for a stall, which the dispatcher decides."
+            "description": "The work item whose answer ended it — the last read, the stop, a read or a stop that found it gone, or the search itself — or null for a stall, which the dispatcher decides."
           }
         }
       }

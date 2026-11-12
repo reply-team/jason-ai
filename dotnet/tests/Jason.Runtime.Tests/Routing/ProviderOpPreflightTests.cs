@@ -28,6 +28,7 @@ public partial class ProviderOpPreflightTests
     private const string Stop = "enrollment.stop";
     private const string Delete = "contact.delete";
     private const string Pause = "campaign.pause";
+    private const string Activate = "campaign.activate";
     private const string Send = "message.send";
 
     /// <summary>
@@ -512,34 +513,47 @@ public partial class ProviderOpPreflightTests
 
     /// <summary>
     /// A search spends per person found and a blind repeat would start a second that spends again, so a repeat after a lost
-    /// answer is held to the attempt that may have started it, as a send's is: the package by its id and digest, the
-    /// account, and the arguments and the input that attempt ran with. A route moved to another account, a package
-    /// replaced, a count or a definition edited while the item waited: each ends the repeat ambiguous and final rather
-    /// than start a second search that nothing could find, read or stop; a route gone since keeps that class too. The same
-    /// request goes on to the person. An enrollment is metered too, and its contract asks for a recovery read before a
-    /// repeat, so the same hold keeps it from enrolling the person a second time at another account.
+    /// answer is held to the attempt that may have started it: the plugin by its id, the account, and the arguments and the
+    /// input that attempt ran with. A route moved to another account, a count or a definition edited while the item
+    /// waited: each ends the repeat ambiguous and final rather than start a second search that nothing could find, read or
+    /// stop; a route gone since keeps that class too. The same request goes on to the person, and so does one after the
+    /// package was updated in between: a metered operation's recovery read finds what the earlier attempt did at the
+    /// account, whichever version of the package made it, unlike a send's key, which only the version that kept it reads.
+    /// An enrollment and an activation are metered too, and their contracts ask for a recovery read before a repeat, so the
+    /// same hold keeps them from enrolling the person, or starting the campaign, a second time at another account or for
+    /// another request.
     /// </summary>
     [Theory]
     [InlineData(Search, "the same request", null)]
     [InlineData(Search, "another account", AttemptErrors.ProviderAnswerLost)]
-    [InlineData(Search, "another package version", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Search, "another package version", null)]
     [InlineData(Search, "another count", AttemptErrors.ProviderAnswerLost)]
     [InlineData(Search, "another definition", AttemptErrors.ProviderAnswerLost)]
     [InlineData(Search, "no route", AttemptErrors.NoRoute)]
     [InlineData(Enroll, "the same request", null)]
     [InlineData(Enroll, "another account", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Enroll, "another package version", null)]
+    [InlineData(Enroll, "another start", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Activate, "the same request", null)]
+    [InlineData(Activate, "another account", AttemptErrors.ProviderAnswerLost)]
+    [InlineData(Activate, "another package version", null)]
+    [InlineData(Activate, "another population", AttemptErrors.ProviderAnswerLost)]
     public void A_metered_repeat_after_a_lost_answer_goes_only_where_and_as_that_attempt_acted(string operation, string since, string? expected)
     {
         var searching = operation == Search;
+        var enrolling = operation == Enroll;
         var scenario = new Scenario
         {
             Operation = operation,
             Route = Scenario.ToTheInstalledPackage,
-            Plugin = searching ? Scenario.Searching() : Scenario.Package(),
-            Contact = searching ? null : Scenario.Person(("email", "ada@example.test")),
-            Arguments = searching
-                ? new JsonObject { ["definition"] = new JsonObject { ["industries"] = new JsonArray("Software") }, ["count"] = 50 }
-                : Scenario.CompleteEnrollment,
+            Plugin = searching ? Scenario.Searching() : Scenario.Package(operations: [Add, Enroll, Get, Delete, Activate]),
+            Contact = enrolling ? Scenario.Person(("email", "ada@example.test")) : null,
+            Arguments = operation switch
+            {
+                Search => new JsonObject { ["definition"] = new JsonObject { ["industries"] = new JsonArray("Software") }, ["count"] = 50 },
+                Enroll => Scenario.CompleteEnrollment,
+                _ => new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "sq-1129" }, ["expected"] = new JsonObject { ["enrolled"] = 12 } },
+            },
             Unsettled = true,
         };
         var ran = scenario.Arguments.DeepClone().AsObject();
@@ -556,6 +570,12 @@ public partial class ProviderOpPreflightTests
                 break;
             case "another definition":
                 ran["definition"] = new JsonObject { ["industries"] = new JsonArray("Logistics") };
+                break;
+            case "another start":
+                ran["start"] = new JsonObject { ["position"] = "step", ["step"] = 2 };
+                break;
+            case "another population":
+                ran["expected"] = new JsonObject { ["enrolled"] = 11 };
                 break;
             case "no route":
                 scenario.Route = null;
