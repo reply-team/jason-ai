@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import type { DesktopReplyAccount, DesktopSetup } from '../platform/desktop';
+import type { DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
@@ -68,6 +68,10 @@ const withAccounts = (accounts: DesktopReplyAccount[]): DesktopSetup => ({
     ...setupFound,
     reply: { ...setupFound.reply, accounts },
 });
+
+const statusReads = (desktop: StubDesktop) => desktop.calls.filter((call) => call.name === 'setup.status').length;
+
+const focusBack = () => fireEvent.focus(window);
 
 /** Each account row as a person reads it: the heading over it, its name and its state. */
 function rows(card: HTMLElement): [string, string, string][] {
@@ -211,6 +215,98 @@ describe('the Reply card', () => {
         expect(link.getAttribute('rel')).toBe('noreferrer');
         expect(link.getAttribute('data-act')).toBeNull();
         for (const row of card.querySelectorAll('.acct')) expect(row.querySelector('button, a')).toBeNull();
+    });
+});
+
+describe('the Reply card, a channel it did not list', () => {
+    const with_ = (absent: DesktopReplyChannel[], unread: DesktopReplyChannel[]): DesktopSetup => ({
+        ...setupFound,
+        reply: { ...setupFound.reply, accounts: [account('em1', 'email', 'connected')], absent, unread },
+    });
+    const noted = (card: HTMLElement) => Array.from(card.querySelectorAll('.acct-none'), words);
+
+    it('says a channel the CLI named as not in the plan or role in one fixed line, beside the other rows, as no error', async () => {
+        const card = replyCard((renderConnect(with_(['linkedin'], [])), await openConnect()));
+        expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
+        expect(noted(card)).toEqual(['This Reply account has no LinkedIn.']);
+        expect(within(card).queryByRole('alert')).toBeNull();
+    });
+
+    it('says the same of email', async () => {
+        const card = replyCard((renderConnect(with_(['email'], [])), await openConnect()));
+        expect(noted(card)).toEqual(['This Reply account has no email.']);
+    });
+
+    it('says a channel that could not be read in its own fixed sentence, never as an absent one', async () => {
+        const card = replyCard((renderConnect(with_([], ['linkedin'])), await openConnect()));
+        expect(rows(card)).toEqual([['Email', 'Account em1', 'Connected']]);
+        expect(noted(card)).toEqual(['LinkedIn accounts could not be read. Check again.']);
+        expect(card.textContent).not.toContain('has no LinkedIn');
+    });
+
+    it('says the unread sentence for email too, and one line for each channel when both ended so', async () => {
+        const card = replyCard((renderConnect(with_(['linkedin'], ['email'])), await openConnect()));
+        expect(noted(card)).toEqual([
+            'This Reply account has no LinkedIn.',
+            'Email accounts could not be read. Check again.',
+        ]);
+    });
+
+    it('says nothing when both channels were listed', async () => {
+        renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        expect((await openConnect()).querySelector('.acct-none')).toBeNull();
+    });
+});
+
+describe('the Reply card, reading again', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('has a Check again button that reads the list again', async () => {
+        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        const card = replyCard(await openConnect());
+        const before = statusReads(desktop);
+        fireEvent.click(within(card).getByRole('button', { name: 'Check again' }));
+        await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
+    });
+
+    it('reads again when the window takes the focus back, not more often than once in thirty seconds', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
+        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        await openConnect();
+        await waitFor(() => expect(statusReads(desktop)).toBeGreaterThan(0));
+        const first = statusReads(desktop);
+        vi.setSystemTime(new Date('2026-11-12T10:00:29Z'));
+        focusBack();
+        await Promise.resolve();
+        expect(statusReads(desktop)).toBe(first);
+        vi.setSystemTime(new Date('2026-11-12T10:00:31Z'));
+        focusBack();
+        await waitFor(() => expect(statusReads(desktop)).toBe(first + 1));
+        vi.setSystemTime(new Date('2026-11-12T10:00:50Z'));
+        focusBack();
+        await Promise.resolve();
+        expect(statusReads(desktop)).toBe(first + 1);
+    });
+
+    it('does not start a read on the focus while one is going', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
+        const desktop = renderConnect(withAccounts([account('em1', 'email', 'connected')]));
+        await openConnect();
+        const first = statusReads(desktop);
+        let release: () => void = () => undefined;
+        const slow = new Promise<DesktopSetup>((resolve) => (release = () => resolve(desktop.status)));
+        desktop.setup.status = () => {
+            desktop.calls.push({ name: 'setup.status', args: [] });
+            return slow;
+        };
+        vi.setSystemTime(new Date('2026-11-12T10:01:00Z'));
+        focusBack();
+        vi.setSystemTime(new Date('2026-11-12T10:02:00Z'));
+        focusBack();
+        expect(statusReads(desktop)).toBe(first + 1);
+        release();
     });
 });
 
