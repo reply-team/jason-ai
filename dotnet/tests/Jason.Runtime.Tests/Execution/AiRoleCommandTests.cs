@@ -11,6 +11,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.WorkItems;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -517,13 +518,15 @@ public class AiRoleCommandTests
         MemoryFileLocations? memoryFiles = null,
         Resumption? resumption = null,
         IAgentHost? host = null,
-        IReadOnlyList<string>? allow = null)
+        IReadOnlyList<string>? allow = null,
+        PluginRegistry? plugins = null)
     {
         var command = new AiRoleCommand(
             paths,
             new TokenRedactor(new RuntimeSecrets(Token)),
             TestOptions.RoleSettings(roles),
             host is null ? [] : [host],
+            plugins ?? new PluginRegistry(TimeProvider.System),
             NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
             WorkItemId,

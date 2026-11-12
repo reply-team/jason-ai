@@ -194,8 +194,10 @@ manifest holds a secret: a secret belongs under `Plugins:Config` (§6, `host.con
 variable of the runtime's environment, `JASON_Plugins__Config__<id>__<field>`, is kept from every child the runtime
 starts: a plugin host is given no `JASON_*` variable (§6), and an AI role's agent is launched without any of the
 runtime's configuration ([work-execution.md](work-execution.md)), so it reaches this plugin through `host.config` alone.
-A variable granted for `host.env` is the person's own environment, which a role's agent inherits as it inherits
-everything else the runtime's environment holds.
+A variable granted for `host.env` is kept from every AI role's agent in the same way, unless it is one of the machine
+configuration names every plugin host is given (§6), a proxy say, which an agent keeps whether or not it is granted.
+This keeps a plugin's secret out of a dump of an agent's environment; it is not a wall, since a role's agent runs as the
+person and can read what the person can.
 
 `settles_by_key` says which of the sends whose document settles a lost answer by the work item's key — today
 `message.send` and `social_invitation.send` — the plugin makes under that key on every attempt, so that a repeat is

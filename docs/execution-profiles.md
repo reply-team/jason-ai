@@ -41,8 +41,9 @@ A revision holds:
 **A profile cannot hold a credential, because there is nowhere to put one.** No environment field, no
 secret field, no free-form bag. The host a profile names was installed and authenticated by a person,
 and the profile only says which one to start. A launched child's environment is the runtime's own, less
-every `JASON_<Section>__<Key>` override of the runtime's configuration, plus the runtime's four and the
-constants a host's row of §12 declares, never a secret and never a value taken from a person. The four are the data directory, the attempt, the work item, and this build's own
+every `JASON_<Section>__<Key>` override of the runtime's configuration and every name a plugin is granted
+that is not machine configuration, plus the runtime's four and the constants a host's row of §12 declares,
+never a secret and never a value taken from a person. The four are the data directory, the attempt, the work item, and this build's own
 directory at the front of `PATH`; every one of them is non-secret and already in the launch envelope or
 known to the process, and a host's constants are fixed in its own row. The capability token is in none of them, and in nothing else the child can
 read: [docs/work-execution.md](work-execution.md) has the whole list.
@@ -543,7 +544,8 @@ A proxy flag or a proxy variable, such as Gemini CLI's `--proxy`, is the person'
 them and reserves none of them. A flag that names the host's own server, its credentials or its certificate check is
 reserved where the host has one, as Cursor CLI's section says, and a host whose arguments are an allowlist takes no flag
 outside it, as its section says. A variable the runtime's own environment holds reaches a launched child like any other,
-unless it is a `JASON_<Section>__<Key>` override of the runtime's configuration, which no launched child is given.
+unless it is a `JASON_<Section>__<Key>` override of the runtime's configuration or a name a plugin is granted that is not
+machine configuration, neither of which a launched child is given.
 
 ### Codex CLI
 

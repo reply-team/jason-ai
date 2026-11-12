@@ -1,5 +1,6 @@
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Execution.Hosts;
 
 namespace Jason.Runtime.Tests.Execution;
@@ -214,6 +215,46 @@ public class LaunchEnvironmentTests
             () => LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason", new Dictionary<string, string> { ["JASON_SNEAKY"] = "x" }));
 
         Assert.Equal("3", environment["JASON_Dispatcher__MaxParallel"]);
+    }
+
+    /// <summary>
+    /// A name a plugin is granted carries that plugin's credential to its host, and a role's agent is no plugin: it is
+    /// taken out, in a dictionary of either kind, unless the machine list every plugin host gets holds it.
+    /// </summary>
+    [Fact]
+    public void A_name_granted_to_a_plugin_is_taken_out_unless_the_machine_list_holds_it()
+    {
+        Assert.Contains("HTTPS_PROXY", BaseEnvironment.ForCurrentOs);
+
+        foreach (var environment in new[] { Existing(), ExistingExactly() })
+        {
+            environment["ACME_TOKEN"] = "made-up-token";
+            environment["HTTPS_PROXY"] = "http://proxy.example:3128";
+
+            LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason", grantedVariables: ["ACME_TOKEN", "HTTPS_PROXY"]);
+
+            Assert.DoesNotContain("ACME_TOKEN", environment.Keys);
+            Assert.DoesNotContain("made-up-token", environment.Values);
+            Assert.Equal("http://proxy.example:3128", environment["HTTPS_PROXY"]);
+
+            // The four are still written, and so is the search path, whatever was granted.
+            Assert.Equal(AttemptId, environment[ExecutionEnvironment.AttemptIdVariable]);
+            Assert.Equal("/opt/jason" + Path.PathSeparator + "/usr/bin", environment["PATH"]);
+        }
+    }
+
+    [Fact]
+    public void With_no_plugin_granted_anything_only_the_configuration_is_taken_out()
+    {
+        var environment = ExistingExactly();
+        environment["JASON_Dispatcher__MaxParallel"] = "3";
+        environment["ACME_TOKEN"] = "made-up-token";
+
+        LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/jason", grantedVariables: []);
+
+        Assert.DoesNotContain("JASON_Dispatcher__MaxParallel", environment.Keys);
+        Assert.Equal("made-up-token", environment["ACME_TOKEN"]);
+        Assert.Equal("/home/somebody", environment["HOME"]);
     }
 
     /// <summary>

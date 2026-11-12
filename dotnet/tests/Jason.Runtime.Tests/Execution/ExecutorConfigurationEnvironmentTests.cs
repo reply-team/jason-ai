@@ -1,3 +1,8 @@
+using Jason.Contracts.Plugins;
+using Jason.Contracts.Ids;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests.Plugins;
+
 namespace Jason.Runtime.Tests.Execution;
 
 /// <summary>
@@ -58,6 +63,70 @@ public class ExecutorConfigurationEnvironmentTests
         Assert.Contains($"path-head={ProgramResolverDirectory()}", stderr, StringComparison.Ordinal);
         Assert.Contains("ordinary-in-env=kept", stderr, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A name the active snapshot grants a plugin carries that plugin's credential and is taken from a role's child; one
+    /// the machine list holds stays, granted or not, so granting a machine variable never takes it from an agent.
+    /// </summary>
+    [Fact]
+    [Critical(Family.B1, "no stray variable reaches a child")]
+    public async Task A_name_granted_to_a_plugin_never_reaches_an_agent_unless_the_machine_list_holds_it()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        var home = OperatingSystem.IsWindows() ? "USERPROFILE" : "HOME";
+        Assert.Contains(home, BaseEnvironment.ForCurrentOs);
+        Assert.False(string.IsNullOrEmpty(Environment.GetEnvironmentVariable(home)), $"This test needs {home} in its own environment.");
+
+        var registry = new PluginRegistry(TimeProvider.System);
+        var plugin = TestPlugins.Loaded("acme-provider") with { Grants = new ResolvedGrants([], [], [Granted, home], []) };
+        registry.Replace(
+            new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), DateTime.UnixEpoch, SnapshotSource.Startup, [plugin]),
+            new ReloadReport(DateTime.UnixEpoch, SnapshotSource.Startup, Activated: true, [], []));
+
+        var original = Environment.GetEnvironmentVariable(Granted);
+        try
+        {
+            Environment.SetEnvironmentVariable(Granted, "made-up-granted-token");
+
+            await AiRoleCommandTests.RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"), plugins: registry);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Granted, original);
+        }
+
+        var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
+        Assert.Contains("granted-in-env=unset", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("made-up-granted-token", stderr, StringComparison.Ordinal);
+        Assert.Contains("home-in-env=set", stderr, StringComparison.Ordinal);
+        Assert.Contains($"attempt-in-env={AttemptId}", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>With no plugin granted anything, a variable of that name is the person's and reaches the agent.</summary>
+    [Fact]
+    public async Task With_no_plugins_a_variable_of_a_granted_kind_still_reaches_the_agent()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        var original = Environment.GetEnvironmentVariable(Granted);
+        try
+        {
+            Environment.SetEnvironmentVariable(Granted, "kept");
+
+            await AiRoleCommandTests.RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Granted, original);
+        }
+
+        var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
+        Assert.Contains("granted-in-env=kept", stderr, StringComparison.Ordinal);
+        Assert.Contains("configuration-in-env=none", stderr, StringComparison.Ordinal);
+    }
+
+    private const string Granted = "GRANTED_TOKEN_FOR_TESTS";
 
     private static string ProgramResolverDirectory() =>
         Jason.Runtime.Execution.Hosts.ProgramResolver.ExecutableDirectory
