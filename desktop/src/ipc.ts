@@ -13,6 +13,7 @@ export const invokeChannels = {
     'setup.installProgram': 'jason:setup.installProgram',
     'setup.configurePlugin': 'jason:setup.configurePlugin',
     'setup.disconnectPlugin': 'jason:setup.disconnectPlugin',
+    'theme.get': 'jason:theme.get',
     'theme.set': 'jason:theme.set',
     'chat.send': 'jason:chat.send',
     'chat.stop': 'jason:chat.stop',

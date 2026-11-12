@@ -11,7 +11,7 @@ const top = { platform: true, onCommand: true, theme: true, chat: true, setup: t
     keyof JasonDesktop,
     true
 >;
-const theme = { set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
+const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
 const chat = {
     send: true,
     stop: true,
@@ -65,6 +65,7 @@ describe('the desktop seam', () => {
         ]).toEqual([
             'platform',
             'onCommand',
+            'theme.get',
             'theme.set',
             'chat.send',
             'chat.stop',

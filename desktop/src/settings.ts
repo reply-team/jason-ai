@@ -16,17 +16,17 @@ export interface DesktopSettings {
     skillsDeployedFor: string | null;
     /**
      * The theme the application shows, which the page tells the desktop whenever the person chooses. The desktop keeps it
-     * so the starting page and the window's first paint are in the same theme before the page loads. Light is what a new
-     * installation meets.
+     * so the starting page and the window's first paint are in the same theme before the page loads. Null is a choice
+     * never told: the system's, except for a new installation, which meets Light (`theme.ts`).
      */
-    theme: ThemeChoice;
+    theme: ThemeChoice | null;
 }
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 export const isTheme = (value: unknown): value is ThemeChoice => value === 'system' || value === 'light' || value === 'dark';
 
-export const defaultSettings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: 'light' };
+export const defaultSettings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null };
 
 /** Whether a feed is one the CLI takes: https anywhere, or http on this machine. */
 export function isFeed(value: string): boolean {
@@ -53,7 +53,7 @@ export function parseSettings(text: string | null): DesktopSettings {
     return {
         feed: typeof value.feed === 'string' && isFeed(value.feed) ? value.feed : null,
         skillsDeployedFor: typeof value.skills_deployed_for === 'string' ? value.skills_deployed_for : null,
-        theme: isTheme(value.theme) ? value.theme : defaultSettings.theme,
+        theme: isTheme(value.theme) ? value.theme : null,
     };
 }
 
@@ -71,7 +71,7 @@ export function writeSettings(file: string, settings: DesktopSettings): void {
     const body: Record<string, string> = {};
     if (settings.feed !== null) body.feed = settings.feed;
     if (settings.skillsDeployedFor !== null) body.skills_deployed_for = settings.skillsDeployedFor;
-    if (settings.theme !== defaultSettings.theme) body.theme = settings.theme;
+    if (settings.theme !== null) body.theme = settings.theme;
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, file);

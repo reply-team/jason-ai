@@ -3,16 +3,24 @@ import { signal } from '@preact/signals-react';
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
 const key = 'jason.ui.theme';
+const isChoice = (value: unknown): value is ThemeChoice => value === 'light' || value === 'dark' || value === 'system';
 
+/**
+ * The choice this browser keeps. Light is for a viewer that is new: one with no key of the UI stored at all. A viewer
+ * that has any (a pairing, a stored choice) is an existing one and, never having chosen, keeps following the system.
+ * A new viewer's Light is stored, so the pairing it makes next does not turn it into an existing one.
+ */
 function read(): ThemeChoice {
     try {
         const saved = localStorage.getItem(key);
-        if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+        if (isChoice(saved)) return saved;
+        const existing = Object.keys(localStorage).some((each) => each.startsWith('jason.ui.'));
+        if (existing) return 'system';
+        localStorage.setItem(key, 'light');
+        return 'light';
     } catch {
-        // No storage: the default below.
+        return 'light';
     }
-    // A new installation meets the light theme; a choice already stored is kept as it is.
-    return 'light';
 }
 
 export const themeChoice = signal<ThemeChoice>(typeof localStorage === 'undefined' ? 'light' : read());
@@ -27,16 +35,56 @@ function apply(): void {
     document.documentElement.dataset['theme'] = resolvedTheme.value;
 }
 
-/** Tells the desktop, when there is one, the choice to keep for its own window and starting page; nothing in a browser. */
-let tell: ((choice: ThemeChoice) => void) | null = null;
+/** What the desktop offers for the theme; a desktop older than this page offers none of it, or only part. */
+export interface DesktopThemeSeam {
+    get?: () => Promise<ThemeChoice | null>;
+    set?: (choice: ThemeChoice) => Promise<void>;
+}
 
-export function bindDesktopTheme(send: ((choice: ThemeChoice) => Promise<void>) | null): void {
-    tell = send === null ? null : (choice) => void send(choice).catch(() => undefined);
+let seam: DesktopThemeSeam | undefined;
+
+/** Tells the desktop a choice; never throws, since a desktop that cannot be told is no reason for a page not to open. */
+function tell(choice: ThemeChoice): void {
+    try {
+        void seam?.set?.(choice)?.catch(() => undefined);
+    } catch {
+        // A desktop with no such member.
+    }
+}
+
+/**
+ * In the desktop, the desktop's kept choice is the truth: it is read before the page's first paint and taken over the
+ * page's own storage. When the desktop holds none, the page's own stored choice, if it has one, is told to it once, so the
+ * next start opens in it; a default the page did not read is never told. Never throws.
+ */
+export async function bindDesktopTheme(desktopSeam: DesktopThemeSeam | undefined): Promise<void> {
+    seam = desktopSeam;
+    let kept: ThemeChoice | null;
+    try {
+        const answer = await seam?.get?.();
+        kept = isChoice(answer) ? answer : null;
+    } catch {
+        kept = null;
+    }
+    if (kept !== null) {
+        themeChoice.value = kept;
+        try {
+            localStorage.setItem(key, kept);
+        } catch {
+            // The choice lasts for this page load.
+        }
+        return;
+    }
+    try {
+        if (isChoice(localStorage.getItem(key))) tell(themeChoice.value);
+    } catch {
+        // No storage: nothing of the page's own to tell.
+    }
 }
 
 export function setTheme(choice: ThemeChoice): void {
     themeChoice.value = choice;
-    tell?.(choice);
+    tell(choice);
     try {
         localStorage.setItem(key, choice);
     } catch {
@@ -45,9 +93,8 @@ export function setTheme(choice: ThemeChoice): void {
     apply();
 }
 
-/** Applies the saved choice and follows the system while the choice is to. */
+/** Applies the choice and follows the system while the choice is to. */
 export function startTheme(): void {
     apply();
-    tell?.(themeChoice.value);
     if (typeof matchMedia === 'function') matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply);
 }

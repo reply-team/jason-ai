@@ -34,7 +34,8 @@ import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { isTheme, readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
@@ -163,6 +164,8 @@ async function run(): Promise<void> {
     const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
+    // Whether this installation is new is read before anything is written under the data directory.
+    const newInstallation = isNewInstallation(paths.data);
     const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
@@ -176,7 +179,7 @@ async function run(): Promise<void> {
     const conduct = windowConduct(process.platform);
     const atLogin = openedAtLogin(process.argv);
     // The theme the person chose last, before any page is drawn: the window's first paint and the starting page follow it.
-    nativeTheme.themeSource = readSettings(paths.settings).theme;
+    nativeTheme.themeSource = startingTheme(readSettings(paths.settings).theme, newInstallation);
     const window = new BrowserWindow({
         width: 1280,
         height: 860,
@@ -186,7 +189,7 @@ async function run(): Promise<void> {
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
-        backgroundColor: nativeTheme.shouldUseDarkColors ? '#1b1b1a' : '#f7f7f5',
+        backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackground : lightBackground,
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -221,6 +224,11 @@ async function run(): Promise<void> {
     lockNavigation(window.webContents, origin, log);
 
     let settings: DesktopSettings = readSettings(paths.settings);
+    // A new installation meets Light, and is told so in its settings, so its second start is not an existing one's.
+    if (newInstallation && settings.theme === null) {
+        settings = { ...settings, theme: 'light' };
+        writeSettings(paths.settings, settings);
+    }
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);
@@ -334,15 +342,16 @@ async function run(): Promise<void> {
         changed: () => current?.webContents.send(eventChannels['setup.changed']),
         ...loggedModels(log),
     });
-    handle(ipcMain, 'theme.set', origin, (choice) => {
-        if (!isTheme(choice)) throw new Error('That is not a theme.');
-        nativeTheme.themeSource = choice;
-        window.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#1b1b1a' : '#f7f7f5');
-        if (settings.theme !== choice) {
-            settings = { ...settings, theme: choice };
-            writeSettings(paths.settings, settings);
-        }
-    }, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    const refusedTheme = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
+    const themeDeps = {
+        setSource: (choice: 'system' | 'light' | 'dark') => {
+            nativeTheme.themeSource = choice;
+            window.setBackgroundColor(nativeTheme.shouldUseDarkColors ? darkBackground : lightBackground);
+        },
+        write: (next: DesktopSettings) => writeSettings(paths.settings, next),
+    };
+    handle(ipcMain, 'theme.get', origin, () => settings.theme, refusedTheme);
+    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refusedTheme);
     registerSetup(
         new Setup({
             paths,

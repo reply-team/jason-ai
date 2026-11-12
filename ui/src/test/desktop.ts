@@ -162,6 +162,8 @@ export interface StubDesktop extends JasonDesktop {
     command(name: DesktopCommand): void;
     changed(): void;
     status: DesktopSetup;
+    /** The theme the desktop keeps, as `theme.get` answers it; null when it was never told one. */
+    themeKept: 'system' | 'light' | 'dark' | null;
     /**
      * Calls the test refuses, by name, with the sentence: a chat call answers it as a value (`{ refused }`), as the
      * desktop does; a setup call rejects with it.
@@ -246,10 +248,11 @@ export function stubDesktop(status: DesktopSetup = setupFound): StubDesktop {
         typeof id === 'string' ? kept.get(id) : undefined;
     const stub: StubDesktop = {
         platform: 'win32',
-        theme: { set: call('theme.set') },
+        theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
         calls,
         refuse,
         status,
+        themeKept: null,
         kept,
         names,
         keep,

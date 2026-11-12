@@ -28,7 +28,7 @@ function setupOn(b: Bench, log: Logger = memoryLog()) {
         log,
         bundleVersion: '0.34.0-rc.1',
         runtimeVersion: () => '0.34.0-rc.1',
-        settings: () => ({ feed: null, skillsDeployedFor: null, theme: 'light' }),
+        settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
     });
 }
 
@@ -308,7 +308,7 @@ test('against the real executable, the reload after Disconnect activates a snaps
             log,
             bundleVersion: before.runtime_version,
             runtimeVersion: () => before.runtime_version,
-            settings: () => ({ feed: null, skillsDeployedFor: null, theme: 'light' }),
+            settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
         }).disconnectPlugin('slack');
 
         const kept = JSON.parse(readFileSync(paths.installationSettings, 'utf8')) as Record<string, unknown>;
