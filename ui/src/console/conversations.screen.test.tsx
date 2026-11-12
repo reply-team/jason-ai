@@ -5,7 +5,7 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { setupFound, chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -17,7 +17,7 @@ import { chats, conversations } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
-function renderConsole(desktop: StubDesktop = stubDesktop()): { desktop: StubDesktop; fake: FakeApi } {
+function renderConsole(desktop: StubDesktop = chatDesktop()): { desktop: StubDesktop; fake: FakeApi } {
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
@@ -73,7 +73,7 @@ afterEach(() => {
 
 describe('the desktop’s conversations', () => {
     it('are listed in the sidebar newest first, and one reopens with what the page drew, drawn as a live turn is', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000A1',
             campaignId: 'cmp_1',
@@ -114,7 +114,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('reopens on the host, model and effort its last turn was sent with, and the next turn names them again', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000C1',
             campaignId: 'cmp_1',
@@ -140,7 +140,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('reopens on a model its host no longer lists, says so in the control, and sends the turn with the host’s own and no effort', async () => {
-        const desktop = stubDesktop({
+        const desktop = chatDesktop({
             ...setupFound,
             hosts: setupFound.hosts.map((each) =>
                 each.id === 'claude'
@@ -172,7 +172,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('the stand-in refuses what the desktop refuses, keeping the record as it was', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000E1',
             title: 'Kept',
@@ -201,7 +201,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('reads the list again when a turn ends, so what the desktop changed meanwhile is listed', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000B1', campaignId: 'cmp_1', title: 'Spring' });
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000B2', campaignId: 'cmp_2', title: 'Autumn' });
         renderConsole(desktop);
@@ -254,7 +254,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('offers the campaigns a set-up turn made to pick from, by name and as text, and attaches the one picked', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.names.set('cmp_3', 'Summer referrals');
         renderConsole(desktop);
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
@@ -278,7 +278,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('says a pick the desktop refused in its own words, and keeps the choice open', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.refuse.set('chat.attach', 'That campaign has its conversation already. Open it from the campaign.');
         renderConsole(desktop);
         const id = await send(desktop, 'Make two campaigns');
@@ -334,7 +334,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('keeps Start afresh and Remove from a turn that runs, and says a refusal in the desktop’s words', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         renderConsole(desktop);
         const id = await send(desktop, 'Go');
         expect(screen.getByRole('button', { name: 'Start afresh' })).toHaveProperty('disabled', true);
@@ -356,7 +356,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('opens a conversation whose turn still runs as running, with Stop, and the turn’s events reach it', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         // A page loaded again while the desktop runs a turn of Spring's conversation.
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000R1',
@@ -385,7 +385,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('says in the sidebar, in the desktop’s words, a list that failed, a conversation it would not open and one it would not make', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000F1', campaignId: 'cmp_1', title: 'Spring' });
         desktop.refuse.set('chat.list', 'The desktop could not read its conversations.');
         renderConsole(desktop);
@@ -489,7 +489,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('offers only the last pick of a set-up chat, and draws an earlier one as text', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.names.set('cmp_3', 'Summer referrals');
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000P1',
@@ -521,7 +521,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('reads the list again after Start afresh, so the conversation started afresh is listed first', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000S1',
             campaignId: 'cmp_1',
@@ -551,7 +551,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('says a failed list once: the note is not drawn again as the chats change', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000N1', campaignId: 'cmp_1', title: 'Spring' });
         renderConsole(desktop);
         await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
@@ -568,7 +568,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('marks the conversation open in front in the sidebar', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000C1', campaignId: 'cmp_1', title: 'Spring' });
         desktop.keep({ id: 'conv_01JDKEPT0000000000000000C2', campaignId: 'cmp_2', title: 'Autumn' });
         renderConsole(desktop);
@@ -669,7 +669,7 @@ describe('the desktop’s conversations', () => {
     });
 
     it('cuts a typed name by characters as the desktop does, and a picked campaign keeps a name a person gave', async () => {
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         desktop.names.set('cmp_3', 'Summer referrals');
         renderConsole(desktop);
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));

@@ -8,7 +8,7 @@ import { browserPlugins } from '../plugins';
 import { navigate, parseRoute, route } from '../router';
 import * as classicAttention from '../screens/attention/store';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
+import { journalLine, setupFound, chatDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
@@ -19,7 +19,7 @@ import { chats, clock, conversations, lines, setup, setupBusy, streamState } fro
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
-function renderConsole(fake: FakeApi, desktop: StubDesktop = stubDesktop(), journal: StubStream = stubStream()) {
+function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop(), journal: StubStream = stubStream()) {
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 describe('the console', () => {
-    it('opens on a chat beside what needs the person, the campaigns and the activity, read from the runtime', async () => {
+    it('opens a chat, when New chat is chosen, beside what needs the person, the campaigns and the activity, read from the runtime', async () => {
         const fake = pending(new FakeApi());
         renderConsole(fake);
         await waitFor(() => expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0));
@@ -271,7 +271,7 @@ describe('the console', () => {
 
     it('shows no model menu for a host that offers none here, and sends the turn with the host alone', async () => {
         const fake = pending(new FakeApi());
-        const desktop = stubDesktop({
+        const desktop = chatDesktop({
             ...setupFound,
             hosts: setupFound.hosts.map((each) =>
                 each.id === 'claude'
@@ -299,7 +299,7 @@ describe('the console', () => {
     it('keeps Codex’s model control where its models could not be read, says so in one line, and sends the turn with the host alone', async () => {
         const fake = pending(new FakeApi());
         const sentence = "Codex's models could not be read, so the turn uses its own default model.";
-        const desktop = stubDesktop({
+        const desktop = chatDesktop({
             ...setupFound,
             hosts: setupFound.hosts.map((each) =>
                 each.id === 'claude'
@@ -666,7 +666,7 @@ describe('the console', () => {
 
         it('is listed with the desktop sentence and cannot be chosen, and the turn goes to a host that drives the chat', async () => {
             const fake = pending(new FakeApi());
-            const desktop = stubDesktop(withClaude(old(), true));
+            const desktop = chatDesktop(withClaude(old(), true));
             renderConsole(fake, desktop);
             await waitFor(() =>
                 expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
@@ -691,7 +691,7 @@ describe('the console', () => {
 
         it('as the only host that drives the chat, says why no turn starts, as text, and checks again on a click', async () => {
             const fake = pending(new FakeApi());
-            const desktop = stubDesktop(withClaude(old(` ${hostile}`), false));
+            const desktop = chatDesktop(withClaude(old(` ${hostile}`), false));
             renderConsole(fake, desktop);
             await waitFor(() => expect(document.querySelector('.composer .host-held')).toBeTruthy());
             const note = document.querySelector<HTMLElement>('.composer .host-held')!;
@@ -719,7 +719,7 @@ describe('the console', () => {
 
         it('is marked on the Connect card with the same sentence, its command as code', async () => {
             const fake = pending(new FakeApi());
-            renderConsole(fake, stubDesktop(withClaude(old(), false)));
+            renderConsole(fake, chatDesktop(withClaude(old(), false)));
             await waitFor(() => screen.getByRole('button', { name: 'Send' }));
             show('Connect');
             const connect = await waitFor(() => panel('Connect'));
@@ -733,7 +733,7 @@ describe('the console', () => {
 
     it('connects: lists the hosts found or not, installs one, and configures a plugin through the desktop', async () => {
         const fake = pending(new FakeApi());
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         renderConsole(fake, desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -779,7 +779,7 @@ describe('the console', () => {
         const sentence = `The runtime is 0.33.0 and this desktop carries 0.34.0: run jason update. ${hostile}`;
         renderConsole(
             pending(new FakeApi()),
-            stubDesktop({ ...setupFound, runtimeVersion: '0.33.0', versionsDiffer: sentence }),
+            chatDesktop({ ...setupFound, runtimeVersion: '0.33.0', versionsDiffer: sentence }),
         );
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -804,7 +804,7 @@ describe('the console', () => {
     it('refuses to configure a plugin over a settings file it cannot read, and reloads with no values on Reload', async () => {
         const fake = pending(new FakeApi());
         const reason = `The settings file is not valid JSON at line 3. ${hostile}`;
-        const desktop = stubDesktop({ ...setupFound, settingsRefused: reason });
+        const desktop = chatDesktop({ ...setupFound, settingsRefused: reason });
         renderConsole(fake, desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -824,7 +824,7 @@ describe('the console', () => {
 
     it('draws a server field for ntfy alone, sends it only when filled, and removes it by an act of its own', async () => {
         const fake = pending(new FakeApi());
-        const desktop = stubDesktop();
+        const desktop = chatDesktop();
         renderConsole(fake, desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         show('Connect');
@@ -1071,7 +1071,7 @@ describe('the console', () => {
     });
 
     it('gives the sidebar room for the macOS window buttons, and every control the console draws a focus ring', async () => {
-        const desktop = Object.assign(stubDesktop(), { platform: 'darwin' as const });
+        const desktop = Object.assign(chatDesktop(), { platform: 'darwin' as const });
         renderConsole(pending(new FakeApi()), desktop);
         await waitFor(() => screen.getByRole('button', { name: 'Send' }));
         const side = document.querySelector('.jc-console .side')!;

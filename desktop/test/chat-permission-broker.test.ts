@@ -170,6 +170,18 @@ test('"always" on a web page holds for its host: a second page of it opens witho
     assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Open a web page', detail: 'https://example.org/a', remember: 'pages on example.org' });
 });
 
+test('a documentation page opens with no card, decided by the model; the same page over http still asks', async () => {
+    const { broker, sent, decided, turn } = bench();
+    turn('chat_a', 'turn_1');
+    const input = { url: 'https://code.claude.com/docs/en/cli-reference', prompt: 'p' };
+    assert.deepEqual(await within(broker.ask('turn_1', 'WebFetch', input)), { behavior: 'allow', updatedInput: input });
+    assert.equal(sent.length, 0);
+    assert.deepEqual(decided.at(-1), { outcome: 'allowed', by: 'model' });
+    void broker.ask('turn_1', 'WebFetch', { url: 'http://code.claude.com/docs/en/cli-reference', prompt: 'p' });
+    await settle();
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_1', title: 'Open a web page', detail: 'http://code.claude.com/docs/en/cli-reference', remember: 'pages on code.claude.com' });
+});
+
 test('a remembered grant never allows what the model refuses: the refusal is the model\'s, with no card', async () => {
     const { broker, sent, decided, turn } = bench();
     turn('chat_a', 'turn_1');
