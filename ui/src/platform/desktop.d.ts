@@ -46,6 +46,8 @@ export interface DesktopLineEntry {
     campaign_id: string;
     work_item_id?: string;
     count: number;
+    /** Present, and true, once a turn of the Feed was given the line with this count; a fold that raises it removes it. */
+    given?: true;
 }
 
 /**

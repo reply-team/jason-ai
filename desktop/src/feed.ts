@@ -3,8 +3,8 @@
 // campaign created, started or paused, and work that stopped. A line keeps identifiers, the kind, the moment and a count,
 // and never a person's text: no reason, no old or new value, no campaign or contact name. Lines of the same kind and
 // campaign that follow one another fold into one, at most `feedLimit` are kept, and a turn of the Feed is given the
-// lines newer than the newest one a turn was given before, which the record keeps, set apart as records (`feedBlock` in
-// `chat-header.ts`). A line never starts a turn.
+// lines no turn was given yet, set apart as records (`feedBlock` in `chat-header.ts`): each kept line is marked once
+// it was given, on the record, so the order the runtime commits lines in decides nothing. A line never starts a turn.
 
 import type { KeptEntry } from './chat-conversations.ts';
 
@@ -36,6 +36,11 @@ export interface LineEntry {
     work_item_id?: string;
     /** How many journal lines it stands for: more than one when lines of its kind and campaign followed one another. */
     count: number;
+    /**
+     * Present, and true, once a turn whose host started was given the line with this count. A line is kept without it,
+     * and a fold that raises the count makes a line without it, so the raised count is given too.
+     */
+    given?: true;
 }
 
 /** The Feed's title, which nothing replaces. */
@@ -82,7 +87,10 @@ export function keptLineOf(value: unknown): LineEntry | null {
     if (entry.kind !== 'line' || !isKind(kind) || !shaped(id, journalIdShape) || !shaped(at, atShape) || !shaped(campaign, campaignIdShape)) return null;
     if (workItem !== undefined && !shaped(workItem, workItemIdShape)) return null;
     if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) return null;
-    return made(kind, id, at, campaign, workItem, count);
+    const line = made(kind, id, at, campaign, workItem, count);
+    // Anything but true is a line not given yet: given again at worst, never left out.
+    if (entry.given === true) line.given = true;
+    return line;
 }
 
 /**
@@ -116,20 +124,31 @@ export function trimmed(entries: KeptEntry[], limit = feedLimit): number {
 }
 
 /**
- * The lines no turn was given yet, in the order they stand: those whose journal id is newer than `delivered`, the newest
- * one a turn was given before (ids are ULIDs, so they sort by their moment), or every line when none was. A line folded
- * after it was given takes a newer id and is given again, with its count. The newest `limit`, and how many older ones are
- * left out.
+ * The lines no turn was given yet, in the order they stand, wherever they stand and whatever their journal ids: the
+ * newest `limit` of them, how many older ones are left out, and all of them, which the turn marks given once its host
+ * started (`markGiven`), those left out included, as they are counted to it.
  */
-export function linesSince(entries: readonly KeptEntry[], delivered: string | undefined, limit = headerLimit): { lines: LineEntry[]; more: number } {
-    const lines = entries.filter((entry): entry is LineEntry => entry.kind === 'line' && (delivered === undefined || entry.journal_id > delivered));
-    const more = Math.max(0, lines.length - limit);
-    return { lines: lines.slice(more), more };
+export function linesWaiting(entries: readonly KeptEntry[], limit = headerLimit): { lines: LineEntry[]; more: number; waiting: LineEntry[] } {
+    const waiting = entries.filter((entry): entry is LineEntry => entry.kind === 'line' && entry.given !== true);
+    const more = Math.max(0, waiting.length - limit);
+    return { lines: waiting.slice(more), more, waiting };
 }
 
-/** The newest journal id among lines, or null for none. */
-export function newestId(lines: readonly LineEntry[]): string | null {
-    return lines.reduce<string | null>((newest, line) => (newest === null || line.journal_id > newest ? line.journal_id : newest), null);
+/**
+ * Marks given each line still kept as it was handed: the same journal id and count. A line folded since it was handed
+ * stands for more lines under another id and count, and waits for the next turn; one dropped since is gone.
+ */
+export function markGiven(entries: readonly KeptEntry[], handed: readonly LineEntry[]): void {
+    const keys = new Set(handed.map((line) => `${line.journal_id}/${line.count}`));
+    for (const entry of entries) if (entry.kind === 'line' && keys.has(`${entry.journal_id}/${entry.count}`)) entry.given = true;
+}
+
+/**
+ * The lines of a Feed record an earlier desktop wrote, which kept the newest journal id a turn was given instead of a mark
+ * on each line: those whose id is not newer than it are marked given, the rest wait.
+ */
+export function givenUpTo(entries: readonly KeptEntry[], delivered: string): void {
+    for (const entry of entries) if (entry.kind === 'line' && entry.journal_id <= delivered) entry.given = true;
 }
 
 /** Whether a value is a journal id, `jrn_` and its ULID. */

@@ -141,6 +141,17 @@ const kept = (n: number, fields: Partial<LineEntry> = {}): LineEntry => ({
 
 const recordOf = (r: Rig, id: string) => readFileSync(join(r.b.paths.conversations, `${id}.json`), 'utf8');
 const linesSaid = (r: Rig, id: string) => (r.events.get(id) ?? []).filter((event) => event.kind === 'line' || event.kind === 'gap');
+/** The lines a turn's standard input hands the agent, as journal id and count, in the order given. */
+const handedIn = (stdin: string | undefined): [string, number][] => {
+    const rows = (stdin ?? '').split('\n');
+    const open = rows.indexOf('<runtime-lines>');
+    if (open < 0) return [];
+    const close = rows.indexOf('</runtime-lines>', open);
+    return rows.slice(open + 1, close).map((row) => {
+        const { journal_id: id, count } = JSON.parse(row) as { journal_id: string; count: number };
+        return [id, count];
+    });
+};
 
 test('the Feed is made and written on the first ask, listed as the main chat from then on, and is the same on every ask', (t) => {
     const r = rig(t);
@@ -243,7 +254,89 @@ test('a line that lands while a turn of the Feed is starting is given to the nex
     await r.turn(feed.id, 'And then?', { host: 'claude' });
     const second = r.hosts()[1]?.stdin ?? '';
     assert.ok(second.includes(jrn(2)) && !second.includes(jrn(1)), second);
-    assert.equal((JSON.parse(recordOf(r, feed.id)) as { delivered?: string }).delivered, jrn(2), 'the record keeps the newest line handed');
+    const record = JSON.parse(recordOf(r, feed.id)) as { delivered?: unknown; entries: { kind: string; journal_id?: string; given?: unknown }[] };
+    assert.deepEqual(
+        record.entries.filter((entry) => entry.kind === 'line').map((entry) => [entry.journal_id, entry.given]),
+        [[jrn(1), true], [jrn(2), true]],
+        'the record marks each line given',
+    );
+    assert.equal(record.delivered, undefined, 'and keeps no newest id');
+});
+
+test('a line whose id is older than one already given, landing after it, is given at the next message, and no line twice', async (t) => {
+    const r = rig(t);
+    // The runtime commits lines out of id order: the line with the older id is handed after the newer one was given.
+    const feed = r.chat.feed([journalLine(5)]);
+    await r.turn(feed.id, 'What happened?', { host: 'claude' });
+    assert.deepEqual(handedIn(r.hosts()[0]?.stdin), [[jrn(5), 1]]);
+    r.chat.feed([journalLine(3, { campaign_id: cmp(2) })]);
+    await r.turn(feed.id, 'And then?', { host: 'claude' });
+    assert.deepEqual(handedIn(r.hosts()[1]?.stdin), [[jrn(3), 1]], 'the older line is given, and the one given before is not');
+    await r.turn(feed.id, 'Anything else?', { host: 'claude' });
+    assert.deepEqual(handedIn(r.hosts()[2]?.stdin), [], 'nothing is given twice');
+    assert.deepEqual(r.chat.open(feed.id).entries.filter((entry) => entry.kind === 'line'), [kept(5, { given: true }), kept(3, { campaign_id: cmp(2), given: true })]);
+});
+
+test('a fold that raises a given line\'s count gives the line again with its new count, a fold under an older id included', async (t) => {
+    let landing: (() => void) | null = null;
+    const r = rig(t, {
+        // A line handed after the turn chose its lines and before the person's message went in folds into the line given.
+        fence: () => {
+            const land = landing;
+            landing = null;
+            land?.();
+            return fence;
+        },
+    });
+    const feed = r.chat.feed([journalLine(5)]);
+    landing = () => void r.chat.feed([journalLine(3)]);
+    await r.turn(feed.id, 'What happened?', { host: 'claude' });
+    assert.deepEqual(handedIn(r.hosts()[0]?.stdin), [[jrn(5), 1]]);
+    assert.deepEqual(r.chat.open(feed.id).entries.filter((entry) => entry.kind === 'line'), [kept(3, { count: 2 })], 'the fold took the older id');
+    await r.turn(feed.id, 'And then?', { host: 'claude' });
+    assert.deepEqual(handedIn(r.hosts()[1]?.stdin), [[jrn(3), 2]], 'given again, with the raised count');
+    await r.turn(feed.id, 'Anything else?', { host: 'claude' });
+    assert.deepEqual(handedIn(r.hosts()[2]?.stdin), [], 'and only once more');
+});
+
+test('a restarted desktop keeps what was given: a line given before is not given again, a line older than it that lands after is', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(5)]);
+    await r.turn(feed.id, 'What happened?', { host: 'claude' });
+    const after = r.again();
+    after.feed([journalLine(3, { campaign_id: cmp(2) })]);
+    await r.turn(feed.id, 'And since?', { host: 'claude' }, after);
+    assert.deepEqual(handedIn(r.hosts()[1]?.stdin), [[jrn(3), 1]]);
+    const third = r.again();
+    third.feed([]);
+    await r.turn(feed.id, 'Anything else?', { host: 'claude' }, third);
+    assert.deepEqual(handedIn(r.hosts()[2]?.stdin), []);
+});
+
+test('a Feed record an earlier desktop wrote, keeping the newest id given, is read with the lines up to it given and the rest waiting', async (t) => {
+    const r = rig(t);
+    const id = newConversationId();
+    const earlier = {
+        id,
+        campaign_id: null,
+        main: true,
+        delivered: jrn(2),
+        title: 'Feed',
+        created_at: '2026-11-01T00:00:00.000Z',
+        updated_at: '2026-11-01T00:00:00.000Z',
+        sessions: {},
+        entries: [kept(1), kept(2, { campaign_id: cmp(2) }), { kind: 'user', text: 'hi' }, kept(3, { campaign_id: cmp(3) })],
+        dropped: 0,
+    };
+    mkdirSync(r.b.paths.conversations, { recursive: true });
+    writeFileSync(join(r.b.paths.conversations, `${id}.json`), JSON.stringify(earlier));
+    const after = r.again();
+    assert.equal(after.feed([]).id, id);
+    await r.turn(id, 'What happened?', { host: 'claude' }, after);
+    assert.deepEqual(handedIn(r.hosts()[0]?.stdin), [[jrn(3), 1]]);
+    const record = JSON.parse(recordOf(r, id)) as { delivered?: unknown; entries: { kind: string; given?: unknown }[] };
+    assert.equal(record.delivered, undefined, 'written back without it');
+    assert.deepEqual(record.entries.filter((entry) => entry.kind === 'line').map((entry) => entry.given), [true, true, true]);
 });
 
 test('a turn whose host never started has given no line: the next turn is given them', async (t) => {
