@@ -13,7 +13,7 @@ const element = document.getElementById('app')!;
 
 async function startConsole(desktop: JasonDesktop): Promise<void> {
     const shell = await import('./console/mount');
-    shell.mount(element, desktop);
+    await shell.mount(element, desktop);
 }
 
 async function startClassic(): Promise<void> {

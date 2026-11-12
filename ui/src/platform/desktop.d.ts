@@ -270,6 +270,15 @@ export interface JasonDesktop {
     platform: 'darwin' | 'win32' | 'linux';
     /** Calls `handler` with each command; the function it returns stops that. */
     onCommand(handler: (command: DesktopCommand) => void): () => void;
+    theme: {
+        /** The theme the desktop keeps, or null when the person never told it one; the page reads it before its first paint. */
+        get(): Promise<'system' | 'light' | 'dark' | null>;
+        /**
+         * Tells the desktop the theme the person chose, `system`, `light` or `dark`, which it keeps and shows in its own
+         * window and starting page. The page calls it as it starts and whenever the choice changes.
+         */
+        set(choice: 'system' | 'light' | 'dark'): Promise<void>;
+    };
     chat: {
         /**
          * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; null once started, or a

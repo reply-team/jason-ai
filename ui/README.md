@@ -50,8 +50,9 @@ classic screens in the page panel take the browser's stylesheet, scoped under `.
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
 **Words and theme.** The browser shell's words are in `src/locale/en.ts`, one table read through `t()`. The theme
-(light, dark, or the system's) is chosen under Settings and kept in this browser, never sent to the runtime; the
-document's `lang` is `en`. The console's own words are English in this release: the table serves the browser shell's.
+(light, dark, or the system's) is chosen under Settings; light is what an installation that has chosen nothing meets.
+The choice is kept in this browser and never sent to the runtime; inside the desktop it is also told to the desktop, which
+keeps it so its window and starting page open in the same theme before the page loads. The document's `lang` is `en`. The console's own words are English in this release: the table serves the browser shell's.
 
 ## Dev loop
 
