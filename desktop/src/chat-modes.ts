@@ -14,6 +14,14 @@ export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
  */
 export const fullAccessOffered = false;
 
+/**
+ * Whether Full access runs the PowerShell tool's literal commands unasked. Off: in Full access every command of the
+ * PowerShell tool is held or refused, never run unasked, and only the Bash tool's literal commands run. The PowerShell
+ * grammar stays behind this switch: two PowerShell generations pass arguments differently, and its built-in functions
+ * and providers reach code from literal words, so that surface needs its own reading before it runs anything unasked.
+ */
+export const powerShellRunsInFullAccess = false;
+
 /** What the menu and the desktop say of Full access while this version does not offer it. */
 export const fullAccessNotYet = 'Full access is not in this version yet.';
 

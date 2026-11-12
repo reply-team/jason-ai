@@ -1210,6 +1210,8 @@ export class Chat {
                     added,
                     data: paths.data,
                     home: homedir(),
+                    // The host's environment is built from this one (`hostEnvironment`), so its shell's `~` is this HOME.
+                    shellHome: Object.entries(this.#options.env).find(([name, value]) => (this.#platform === 'win32' ? name.toUpperCase() : name) === 'HOME' && value !== undefined && value !== '')?.[1] ?? homedir(),
                     protectedFiles: [paths.installationSettings, paths.runFile],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
