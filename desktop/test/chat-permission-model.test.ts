@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { commandPrefix, documentationHosts, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
+import { commandPrefix, documentationAddressLimit, documentationPages, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 import { memoryFiles } from '../src/chat-instructions.ts';
@@ -906,72 +906,166 @@ test('a web page gets a card remembered by its host; any other tool gets a card 
 
 // ---- Documentation pages ------------------------------------------------------------------------------------------------
 
-test('the documentation hosts a page of which opens with no card are these, each an exact host and none a wildcard', () => {
-    assert.deepEqual(documentationHosts, ['code.claude.com', 'developers.openai.com', 'learn.chatgpt.com', 'docs.reply.io']);
-    for (const host of documentationHosts) assert.match(host, /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$/, host);
+/** A page judged the way a fetch of it is. */
+const fetched = (url: unknown, scope: ChatScope = mac()) => judge('WebFetch', { url, prompt: 'p' }, scope);
+
+/** True when a judgement is the page's own card, never a refusal and never an allowance. */
+const pageCard = (judged: Judgement) => judged.verdict === 'ask' && judged.title === 'Open a web page';
+
+test('the documentation pages that open with no card are these, each an exact host with the path its documentation lives under', () => {
+    assert.deepEqual(documentationPages, [
+        { host: 'code.claude.com', prefix: '/docs/' },
+        { host: 'developers.openai.com', prefix: '/codex/' },
+        { host: 'developers.openai.com', prefix: '/api/docs/' },
+        { host: 'developers.openai.com', prefix: '/api/reference/' },
+        { host: 'learn.chatgpt.com', prefix: '/docs/' },
+        { host: 'docs.reply.io', prefix: '/' },
+    ]);
+    for (const { host, prefix } of documentationPages) {
+        assert.match(host, /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$/, host);
+        assert.match(prefix, /^\/(?:[a-z0-9-]+\/)*$/, prefix);
+    }
+    assert.equal(documentationAddressLimit, 300);
 });
 
-test('a page of a documentation host over https opens with no card, on every platform', () => {
+test('a documentation page over https opens with no card, on every platform', () => {
     for (const scope of [mac(), windows()]) {
-        for (const host of documentationHosts) {
-            for (const url of [`https://${host}`, `https://${host}/`, `https://${host}/docs/a?b=c#d`, `https://${host}?q=1`, `https://${host}#top`]) {
-                assert.deepEqual(judge('WebFetch', { url, prompt: 'p' }, scope), { verdict: 'allow' }, url);
+        for (const { host, prefix } of documentationPages) {
+            for (const url of [`https://${host}${prefix}a`, `https://${host}${prefix}en/cli-reference.md`, `https://${host}${prefix}a/b-c_d~e#top`, `https://${host}${prefix}a#`]) {
+                assert.deepEqual(fetched(url, scope), { verdict: 'allow' }, url);
             }
         }
-        // The host as a URL spells it in capitals is the same host.
-        assert.deepEqual(judge('WebFetch', { url: 'https://Code.Claude.COM/docs', prompt: 'p' }, scope), { verdict: 'allow' });
+        // A prefix's own folder without its last slash, the host as a URL spells it in capitals, and the one host open whole.
+        for (const url of ['https://code.claude.com/docs', 'https://Code.Claude.COM/docs/en/overview', 'https://docs.reply.io', 'https://docs.reply.io/', 'https://docs.reply.io/CLAUDE.md']) {
+            assert.deepEqual(fetched(url, scope), { verdict: 'allow' }, url);
+        }
     }
 });
 
 test('a page of any other host keeps its card, remembered by its host', () => {
     for (const url of ['https://example.com/a', 'https://claude.com/docs', 'https://www.claude.com/product', 'https://openai.com/', 'https://reply.io/', 'https://platform.claude.com/docs']) {
-        const card = judge('WebFetch', { url, prompt: 'p' }, mac());
+        const card = fetched(url);
         const host = new URL(url).host;
-        assert.ok(card.verdict === 'ask' && card.title === 'Open a web page' && card.remember === `web:${host}`, url);
+        assert.ok(pageCard(card) && card.verdict === 'ask' && card.remember === `web:${host}`, url);
+    }
+});
+
+test('a listed host\'s page off its documentation path keeps its card, remembered by its host', () => {
+    for (const url of [
+        'https://code.claude.com',
+        'https://code.claude.com/',
+        'https://code.claude.com/en/docs/overview',
+        'https://code.claude.com/docsx/a',
+        'https://code.claude.com/DOCS/en/overview',
+        'https://developers.openai.com/',
+        'https://developers.openai.com/showcase/a-game',
+        'https://developers.openai.com/community',
+        'https://developers.openai.com/blog/a-post',
+        'https://developers.openai.com/api/other/a',
+        'https://developers.openai.com/codexa/b',
+        'https://learn.chatgpt.com/blog/a-post',
+        'https://learn.chatgpt.com/use-cases/a',
+    ]) {
+        const card = fetched(url);
+        assert.ok(pageCard(card) && card.verdict === 'ask' && card.remember === `web:${new URL(url).host}`, url);
+    }
+});
+
+test('a documentation page under a path segment that begins with an underscore keeps its card', () => {
+    for (const url of [
+        'https://docs.reply.io/_next/image',
+        'https://docs.reply.io/_mintlify/static/a.js',
+        'https://docs.reply.io/_llms/3-0.txt',
+        'https://docs.reply.io/api-reference/_next/a',
+        'https://code.claude.com/docs/_next/static/a.js',
+        'https://learn.chatgpt.com/docs/_astro/a.css',
+    ]) {
+        assert.ok(pageCard(fetched(url)), url);
+    }
+    // An underscore inside a segment is a page like any other.
+    assert.deepEqual(fetched('https://docs.reply.io/api-reference/a_b'), { verdict: 'allow' });
+});
+
+test('a documentation page with a query string, however short, keeps its card', () => {
+    for (const url of [
+        'https://code.claude.com/docs/en/overview?',
+        'https://code.claude.com/docs/en/overview?q=1',
+        'https://docs.reply.io/?q',
+        'https://docs.reply.io/_next/image?url=https://example.com/a',
+        `https://learn.chatgpt.com/docs/web-search?x=${'a'.repeat(400)}`,
+        'https://code.claude.com/docs/en/overview#a?b',
+    ]) {
+        assert.ok(pageCard(fetched(url)), url.slice(0, 80));
+    }
+});
+
+test('a documentation address longer than three hundred characters keeps its card', () => {
+    const at = (length: number) => {
+        const head = 'https://docs.reply.io/';
+        return `${head}${'a'.repeat(length - head.length)}`;
+    };
+    assert.equal(at(300).length, 300);
+    assert.deepEqual(fetched(at(300)), { verdict: 'allow' });
+    assert.ok(pageCard(fetched(at(301))));
+    assert.ok(pageCard(fetched(`https://code.claude.com/docs/${'a/'.repeat(200)}`)));
+    assert.ok(pageCard(fetched(`https://code.claude.com/docs/en/a#${'b'.repeat(300)}`)));
+});
+
+test('a documentation path that a reader could take as another path keeps its card', () => {
+    for (const url of [
+        'https://code.claude.com/docs/../_next/a',
+        'https://code.claude.com/docs/./en/overview',
+        'https://code.claude.com/docs/..',
+        'https://code.claude.com/docs/%2e%2e/_next/a',
+        'https://code.claude.com/docs/en%2Foverview',
+        'https://code.claude.com/docs//en/overview',
+        'https://code.claude.com/docs/a%20b',
+        'https://code.claude.com/docs/a;b',
+        'https://code.claude.com/docs/a@example.com',
+        'https://code.claude.com/docs\\_next\\a',
+    ]) {
+        assert.ok(pageCard(fetched(url)), url);
     }
 });
 
 test('a URL that only looks like a documentation host\'s page keeps its card: a prefix, a suffix, a user, a port, plain http', () => {
     const lookalikes = [
         // A prefix, a subdomain, a suffix, another top-level domain.
-        'https://xcode.claude.com/docs',
-        'https://a.code.claude.com/docs',
-        'https://code.claude.com.example.com/docs',
-        'https://code.claude.community/docs',
-        'https://code-claude.com/docs',
+        'https://xcode.claude.com/docs/a',
+        'https://a.code.claude.com/docs/a',
+        'https://code.claude.com.example.com/docs/a',
+        'https://code.claude.community/docs/a',
+        'https://code-claude.com/docs/a',
         'https://docs.reply.io.evil.test/',
         'https://evildocs.reply.io/',
         // A user before the host, either way round.
-        'https://someone@code.claude.com/docs',
-        'https://someone:secret@code.claude.com/docs',
-        'https://code.claude.com@example.com/docs',
-        'https://code.claude.com:pw@example.com/docs',
+        'https://someone@code.claude.com/docs/a',
+        'https://someone:secret@code.claude.com/docs/a',
+        'https://code.claude.com@example.com/docs/a',
+        'https://code.claude.com:pw@example.com/docs/a',
         // A port, the default one spelled included.
-        'https://code.claude.com:8443/docs',
-        'https://code.claude.com:443/docs',
+        'https://code.claude.com:8443/docs/a',
+        'https://code.claude.com:443/docs/a',
         // Not https.
-        'http://code.claude.com/docs',
-        'ftp://code.claude.com/docs',
-        'wss://code.claude.com/docs',
-        '//code.claude.com/docs',
-        'code.claude.com/docs',
+        'http://code.claude.com/docs/a',
+        'ftp://code.claude.com/docs/a',
+        'wss://code.claude.com/docs/a',
+        '//code.claude.com/docs/a',
+        'code.claude.com/docs/a',
         // A host a parser might read as the listed one but that is not spelled as it.
-        'https://code.claude.com./docs',
-        'https://code%2Eclaude.com/docs',
-        'https://code.claude.com\\@example.com/docs',
-        'https://cоde.claude.com/docs',
+        'https://code.claude.com./docs/a',
+        'https://code%2Eclaude.com/docs/a',
+        'https://code.claude.com\\@example.com/docs/a',
+        'https://cоde.claude.com/docs/a',
         'https://code.claude.com。example.com/',
-        ' https://code.claude.com/docs',
-        'https://code.claude.com/docs ',
-        'HTTPS://code.claude.com/docs\n',
+        ' https://code.claude.com/docs/a',
+        'https://code.claude.com/docs/a ',
+        'HTTPS://code.claude.com/docs/a\n',
     ];
-    for (const url of lookalikes) {
-        const card = judge('WebFetch', { url, prompt: 'p' }, mac());
-        assert.ok(card.verdict === 'ask' && card.title === 'Open a web page', url);
-    }
+    for (const url of lookalikes) assert.ok(pageCard(fetched(url)), url);
     // A URL that is not text is no documentation page either.
-    for (const url of [undefined, 42, ['https://code.claude.com/'], { href: 'https://code.claude.com/' }]) {
-        assert.ok(judge('WebFetch', { url, prompt: 'p' }, mac()).verdict === 'ask', String(url));
+    for (const url of [undefined, 42, ['https://code.claude.com/docs/a'], { href: 'https://code.claude.com/docs/a' }]) {
+        assert.ok(fetched(url).verdict === 'ask', String(url));
     }
 });
 

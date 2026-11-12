@@ -129,6 +129,22 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
 }
 
 /**
+ * What every Codex chat turn sets for its search: the top-level key at `cached`, and beside it the two legacy toggles
+ * the reference gives a meaning next to that key, both off, so that a Codex older than the key, which the person's own
+ * legacy setting would otherwise send searching live, searches no more than the cache. A current Codex ignores both
+ * while the key is set. OpenAI, https://developers.openai.com/codex/config-reference (read 2026-11-11):
+ * `features.web_search_cached` "Deprecated legacy toggle. When `web_search` is unset, true maps to `web_search =
+ * "cached"`." and `features.web_search_request` "Deprecated legacy toggle. When `web_search` is unset, true maps to
+ * `web_search = "live"`." Its other two keys are left alone: `features.web_search`, "Deprecated legacy toggle; prefer the
+ * top-level `web_search` setting.", says nothing of how it stands beside the key, and `tools.web_search`, "Optional web
+ * search tool configuration", is no toggle of the mode. No floor is held for Codex instead, since OpenAI's changelog,
+ * https://developers.openai.com/codex/changelog (read 2026-11-11), names no version for the key: its entry of 2026-01-28,
+ * "Web search is now enabled by default", says "To disable this behavior or switch modes, use the web_search
+ * configuration option" and names none.
+ */
+export const codexSearchSettings: readonly string[] = ['web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false'];
+
+/**
  * The command line of one Codex turn: `codex exec` in its read-only sandbox, emitting JSON events, the prompt read from
  * standard input (`-`), resumed as `codex exec resume <thread>` from the chat's second turn on.
  *
@@ -155,10 +171,10 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
  * and it can remain available when command network access is disabled." A search is a step (`codexLine`); the item
  * types https://developers.openai.com/codex/noninteractive names, "agent messages, reasoning, command executions, file
  * changes, MCP tool calls, web searches, and plan updates", hold no fetch of a page. The naming run keeps its search off
- * (`codexToolsOff`).
+ * (`codexToolsOff`). The settings are `codexSearchSettings`.
  */
 export function codexArguments(turn: { model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
-    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached'];
+    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', ...codexSearchSettings.flatMap((setting) => ['-c', setting])];
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);
     if (turn.resume) args.push('resume', resumable(turn.resume));

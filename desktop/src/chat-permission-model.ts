@@ -732,32 +732,65 @@ function hostOf(url: string): string | null {
 }
 
 /**
- * The hosts a page of which the chat's agent opens with no card: the documentation of the two agent hosts and of the
- * provider, each published by its own vendor and holding no one else's pages, so a page there is the vendor's word and a
- * fetch there reaches only the vendor. Claude Code's documentation (`code.claude.com`), Codex's (`developers.openai.com`
- * and `learn.chatgpt.com`, where OpenAI publishes it too), and Reply's API reference (`docs.reply.io`). Each is one exact
- * host; none is a wildcard, since a vendor's other subdomains may serve what others wrote. Claude Code does not follow a
- * redirect to another host: Anthropic, https://code.claude.com/docs/en/tools-reference#webfetch-tool-behavior (read
- * 2026-11-11), "When a URL redirects to a different host, WebFetch returns a text result that names the original URL
- * and the redirect target instead of following it. Claude then fetches the new URL with a second WebFetch call.", so a
- * listed page that leads elsewhere is a card at the next fetch.
+ * The documentation pages the chat's agent opens with no card: each a host and the path its documentation lives under,
+ * as the vendor's own index of its pages gives it (read 2026-11-11).
+ * - Claude Code's, https://code.claude.com/docs/llms.txt: "# Claude Code Docs", "Official documentation for Claude Code,
+ *   Anthropic's agentic coding tool", every page listed under `https://code.claude.com/docs/`.
+ * - OpenAI's, https://developers.openai.com/llms.txt: "[Codex developer tools](https://developers.openai.com/codex/llms.txt)";
+ *   https://developers.openai.com/api/llms.txt: "[OpenAI API guides](https://developers.openai.com/api/docs/llms.txt)" and
+ *   "[OpenAI API endpoint reference](https://developers.openai.com/api/reference/llms.txt)"; and the host the Codex pages
+ *   redirect to, https://learn.chatgpt.com/docs/llms.txt: "Each page has a Markdown twin at `/docs/<slug>.md`".
+ * - Reply's, https://docs.reply.io/llms.txt: "# Reply API Documentation", the host open whole.
+ * The same hosts serve pages others wrote or a platform's own files beside them: https://developers.openai.com/llms.txt
+ * lists "[OpenAI developer showcase](https://developers.openai.com/showcase/llms.txt): Projects, demos, games, and
+ * applications built with OpenAI APIs and Codex.", and https://docs.reply.io/ says "This documentation is built and
+ * hosted on Mintlify, a developer documentation platform", whose files stand under a path segment that begins with an
+ * underscore (`/_llms/`, `/_next/`). So no host is open beyond its documentation's path, and no path below a segment that
+ * begins with an underscore opens, on any of them. Each host is exact; none is a wildcard, since a vendor's other
+ * subdomains may serve what others wrote. Claude Code does not follow a redirect to another host: Anthropic,
+ * https://code.claude.com/docs/en/tools-reference#webfetch-tool-behavior (read 2026-11-11), "When a URL redirects to a
+ * different host, WebFetch returns a text result that names the original URL and the redirect target instead of
+ * following it. Claude then fetches the new URL with a second WebFetch call.", so a listed page that leads to another
+ * host is judged again at the next fetch.
  */
-export const documentationHosts: readonly string[] = ['code.claude.com', 'developers.openai.com', 'learn.chatgpt.com', 'docs.reply.io'];
+export const documentationPages: readonly { host: string; prefix: string }[] = [
+    { host: 'code.claude.com', prefix: '/docs/' },
+    { host: 'developers.openai.com', prefix: '/codex/' },
+    { host: 'developers.openai.com', prefix: '/api/docs/' },
+    { host: 'developers.openai.com', prefix: '/api/reference/' },
+    { host: 'learn.chatgpt.com', prefix: '/docs/' },
+    { host: 'docs.reply.io', prefix: '/' },
+];
 
 /**
- * True when a URL is a page of a documentation host as written: `https://`, then the host exactly as listed (in any
- * letter case), then the end or `/`, `?` or `#`. Anything else in its place, a user, a port (the default one spelled
- * included), a trailing dot, an escape or a character a parser would turn into a dot, is not; nor is a URL with a space
- * or a control character anywhere, which a parser drops or trims. A URL parser must read the same host from it, so no
- * reading of it can reach another.
+ * The longest address of a documentation page that opens with no card: a page's own address is far shorter, and a longer
+ * one would carry more than the name of a page to the vendor.
+ */
+export const documentationAddressLimit = 300;
+
+/**
+ * True when a URL is a documentation page as written: at most `documentationAddressLimit` characters, no space or
+ * control character anywhere (a parser drops or trims them), `https://`, the host exactly as listed (in any letter case),
+ * then a path of letters, digits and `-._~/` alone under one of that host's paths, and at most a fragment of the same
+ * characters but the slash. No query string, not even an empty one; no escape, no empty segment, no `.` or `..`
+ * segment, and no segment that begins with an underscore. Anything else in the host's place, a user, a port (the default
+ * one spelled included), a trailing dot, an escape or a character a parser would turn into a dot, is not one. A URL
+ * parser then reads the same host and path from it; no address that passes the spelling reads otherwise, and the parser's
+ * reading stays as a second one.
  */
 function isDocumentationPage(url: string): boolean {
-    if (/[\s\x00-\x1f\x7f]/.test(url)) return false;
-    const spelled = /^https:\/\/([A-Za-z0-9.-]+)(?:[/?#]|$)/.exec(url)?.[1]?.toLowerCase();
-    if (spelled === undefined || !documentationHosts.includes(spelled)) return false;
+    if (url.length > documentationAddressLimit || /[\s\x00-\x1f\x7f]/.test(url)) return false;
+    const match = /^https:\/\/([A-Za-z0-9.-]+)(\/[A-Za-z0-9._~/-]*)?(?:#[A-Za-z0-9._~-]*)?$/.exec(url);
+    const host = match?.[1]?.toLowerCase();
+    const path = match?.[2] ?? '/';
+    if (host === undefined) return false;
+    const segments = path.split('/').slice(1);
+    if (segments.some((segment, at) => (segment === '' && at < segments.length - 1) || segment === '.' || segment === '..' || segment.startsWith('_'))) return false;
+    const under = documentationPages.some((page) => page.host === host && (path.startsWith(page.prefix) || `${path}/` === page.prefix));
+    if (!under) return false;
     try {
         const parsed = new URL(url);
-        return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '' && parsed.port === '' && parsed.hostname === spelled;
+        return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '' && parsed.port === '' && parsed.hostname === host && parsed.pathname === path && parsed.search === '';
     } catch {
         return false;
     }
@@ -805,7 +838,7 @@ function judgeAsked(tool: string, input: Record<string, unknown>, scope: ChatSco
     if (shells.has(tool)) return judgeCommand(tool, '', scope);
     if (tool === 'WebFetch') {
         const url = typeof input['url'] === 'string' ? input['url'] : '';
-        // A documentation host's page opens with no card; any other page, a lookalike of one included, keeps its card.
+        // A documentation page opens with no card; any other page, a lookalike of one included, keeps its card.
         if (isDocumentationPage(url)) return allow;
         const host = hostOf(url);
         if (host === null) return { verdict: 'ask', title: 'Open a web page', detail: shorten(url), remember: null };
