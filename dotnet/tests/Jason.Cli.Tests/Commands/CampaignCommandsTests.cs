@@ -512,7 +512,7 @@ public class CampaignCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal([Operations.CampaignAudience, Operations.OperationDescribe], cli.Operations);
         cli.AssertSent(1, "{\"campaign_id\":\"cmp_A\",\"operation\":\"audience.search\"}");
-        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd()).ToList();
+        var lines = cli.Text.Split('\n').Select(line => line.TrimEnd()).Where(line => line.Length > 0).ToList();
         Assert.Equal(
             [
                 "Campaign:   cmp_A",
@@ -564,7 +564,7 @@ public class CampaignCommandsTests
         var exit = await cli.RunAsync("campaign", "audience", "cmp_A", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd()).ToList();
+        var lines = cli.Text.Split('\n').Select(line => line.TrimEnd()).Where(line => line.Length > 0).ToList();
         Assert.Equal(["Campaign:   cmp_A", "Untouched:  5, no threshold", "Allowance:  none", "Audience 1  aud_A  made 2026-10-01 10:00:00 UTC  1 landed, 1 search"], lines[..4]);
         Assert.Equal(["  industries: Software", "  keywords: fintech"], lines[4..6]);
         Assert.Equal(["wi_S1", "finished", "1", "1", "1", "2026-10-01 11:00:00 UTC", "finished, 2026-10-01 12:00:00 UTC"], Cells(lines[8]));

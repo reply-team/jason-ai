@@ -27,7 +27,7 @@ public sealed class PluginFileAppendTests
 
     [Fact]
     [Critical(Family.R1, "several hosts appending to one file keep every line whole, on every platform")]
-    public async Task Four_plugin_hosts_appending_to_one_file_keep_every_line_whole_with_a_reader_polling()
+    public async Task Four_plugin_hosts_appending_to_one_file_keep_every_line_whole_and_every_host_succeeds_while_a_reader_keeps_opening_the_file()
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-file-append-" + Guid.NewGuid().ToString("N"));
         var folder = Path.Combine(root, "lines");
@@ -50,19 +50,19 @@ public sealed class PluginFileAppendTests
                 .ToArray();
             var all = Task.WhenAll(invocations);
 
-            // A reader that must neither stop the appends nor be stopped by them, and that opens, reads and closes between
-            // its reads: on Linux and macOS a .NET program that keeps the file open holds a shared lock for as long as it does.
-            var read = new List<long>();
+            // A reader that must not stop the appends, and that opens, reads and closes between its reads: on Linux and macOS a
+            // .NET program that keeps the file open holds a shared lock for as long as it does. Whether a read lands between two
+            // appends is not the row's to claim: four hosts in a tight loop hold the lock nearly all the time, and on a fast
+            // runner every line is down before one try finds a gap. What the row holds is what the reader cannot take away.
             while (!all.IsCompleted)
             {
-                read.Add(LengthRead(file));
+                _ = LengthRead(file);
                 await Task.WhenAny(all, Task.Delay(ReaderPause, TestContext.Current.CancellationToken));
             }
 
             var outcomes = await all;
 
             Assert.All(outcomes, outcome => Assert.IsType<InvocationOutcome.Succeeded>(outcome.Outcome));
-            Assert.Contains(read, length => length > 0 && length < Hosts * LinesPerHost * (LineLength + 1));
 
             var whole = File.ReadAllLines(file, new UTF8Encoding(false));
             Assert.Equal(Hosts * LinesPerHost, whole.Length);
@@ -89,7 +89,10 @@ public sealed class PluginFileAppendTests
         }
     }
 
-    /// <summary>What one read found, nothing when the file is not there yet or a writer has it for the length of a line.</summary>
+    /// <summary>
+    /// What one read found: nothing when the file is not there yet or a writer has it for the length of a line, and then
+    /// the read only has to have been tried.
+    /// </summary>
     private static long LengthRead(string file)
     {
         try
