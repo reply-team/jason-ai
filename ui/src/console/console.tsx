@@ -21,7 +21,7 @@ import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
 import { listen } from './actions';
-import { ChatPanel, reloadConversations, startChat } from './chat';
+import { askFeed, ChatPanel, handLine, reloadConversations, startChat } from './chat';
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
@@ -35,6 +35,8 @@ import {
     clock,
     conversationsFailure,
     currentChat,
+    feedId,
+    feedUnseen,
     here,
     keepLine,
     streamState,
@@ -180,6 +182,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         void campaigns.reload();
         void connect.reload();
         void reloadConversations();
+        void askFeed();
         void startChat().then((id) => {
             first.current = id;
             placeFirst();
@@ -201,6 +204,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const stops = [
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
+                // A line the Feed took while it is not in front marks it in the sidebar; nothing else happens.
+                if ((event.kind === 'line' || event.kind === 'gap') && id === feedId.value && currentChat.value !== id)
+                    feedUnseen.value = true;
                 // The desktop renamed or reordered its conversations: a hand-over, a new title, or a turn's end.
                 if (event.kind === 'attached' || event.kind === 'renamed' || event.kind === 'done')
                     void reloadConversations();
@@ -217,6 +223,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             }),
             journal.onLine((line) => {
                 keepLine(line);
+                handLine(line);
                 if (pending !== null) return;
                 pending = setTimeout(() => {
                     pending = null;
@@ -244,6 +251,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         // The sidebar marks the conversation whose chat came to the front last.
         event.api.onDidActivePanelChange(({ panel }) => {
             if (panel?.id.startsWith('chat:')) currentChat.value = panel.id.slice('chat:'.length);
+            if (currentChat.value !== null && currentChat.value === feedId.value) feedUnseen.value = false;
         });
         event.api.addPanel({ id: 'needs', component: 'needs', title: titles.needs });
         event.api.addPanel({

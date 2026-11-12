@@ -11,12 +11,15 @@ import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { currentModel, isEffort, modelShape, type Effort } from './chat-models.ts';
+import { keptLineOf, type LineEntry } from './feed.ts';
 
 export type KeptAnswer = 'allow' | 'always' | 'deny' | 'gone';
 
 /**
  * One thing the page drew, kept as text: the person's words, the agent's, a step, a card and its answer, an error, and
- * the campaigns a set-up turn made for the person to pick from.
+ * the campaigns a set-up turn made for the person to pick from. The Feed's record alone also keeps its lines
+ * (`feed.ts`) and the gap a catch-up left, where the lines written while the window was closed were more than one read
+ * brings back.
  */
 export type KeptEntry =
     | { kind: 'user'; text: string }
@@ -24,7 +27,9 @@ export type KeptEntry =
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: KeptAnswer | null }
     | { kind: 'error'; text: string }
-    | { kind: 'pick'; campaignIds: string[] };
+    | { kind: 'pick'; campaignIds: string[] }
+    | LineEntry
+    | { kind: 'gap' };
 
 /** What the person chose for the conversation's last turn: the host, the model (null: the host's own) and the effort. */
 export interface Chosen {
@@ -36,8 +41,10 @@ export interface Chosen {
 export interface Conversation {
     /** `conv_` and 26 Crockford base-32 characters, made by the desktop. */
     id: string;
-    /** The campaign it is about, or null for a set-up chat. */
+    /** The campaign it is about, or null for a set-up chat and for the Feed. */
     campaign_id: string | null;
+    /** Present, and true, for the Feed: the person's main chat, one per desktop, which keeps lines and is never handed over. */
+    main?: true;
     title: string;
     /**
      * Present, and true, when a person gave the title: nothing replaces it afterwards, not a hand-over to a campaign, not
@@ -91,7 +98,7 @@ export function newConversationId(now = Date.now(), random: Buffer = randomBytes
 }
 
 const isText = (value: unknown): value is string => typeof value === 'string';
-const knownKinds: ReadonlySet<string> = new Set<KeptEntry['kind']>(['user', 'text', 'step', 'permission', 'error', 'pick']);
+const knownKinds: ReadonlySet<string> = new Set<KeptEntry['kind']>(['user', 'text', 'step', 'permission', 'error', 'pick', 'line', 'gap']);
 
 function entryOf(value: unknown): KeptEntry | null {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -115,6 +122,10 @@ function entryOf(value: unknown): KeptEntry | null {
             if (!Array.isArray(ids) || ids.length === 0 || !ids.every((each) => isText(each) && campaignIdShape.test(each))) return null;
             return { kind: 'pick', campaignIds: [...ids] as string[] };
         }
+        case 'line':
+            return keptLineOf(entry);
+        case 'gap':
+            return { kind: 'gap' };
         default:
             return null;
     }
@@ -155,11 +166,14 @@ export function parseConversation(text: string, id: string): Conversation | null
         if (sessionShape.test(session)) sessions[host] = session;
     }
     if (!Array.isArray(raw.entries)) return null;
+    const main = raw.main === true && raw.campaign_id === null;
     const entries: KeptEntry[] = [];
     let skipped = 0;
     for (const each of raw.entries) {
         const entry = entryOf(each);
-        if (entry !== null) entries.push(entry);
+        // A line or a gap belongs to the Feed's record alone: anywhere else it is skipped and counted.
+        if (entry !== null && (entry.kind === 'line' || entry.kind === 'gap') && !main) skipped++;
+        else if (entry !== null) entries.push(entry);
         // An entry of a kind another version of the desktop wrote is skipped and counted, as an entry dropped is.
         else if (isText((each as { kind?: unknown } | null)?.kind) && !knownKinds.has((each as { kind: string }).kind)) skipped++;
         else return null;
@@ -170,6 +184,7 @@ export function parseConversation(text: string, id: string): Conversation | null
     const read: Conversation = {
         id,
         campaign_id: raw.campaign_id as string | null,
+        ...(main ? { main: true as const } : {}),
         title: raw.title,
         ...(raw.named_by_person === true ? { named_by_person: true as const } : {}),
         created_at: raw.created_at,
@@ -181,11 +196,12 @@ export function parseConversation(text: string, id: string): Conversation | null
     return chosen === undefined ? read : { ...read, chosen };
 }
 
-/** The record as it is written: its fields in a fixed order, the person's mark only when a person named it. */
+/** The record as it is written: its fields in a fixed order, the Feed's mark and the person's only where they stand. */
 export function serialize(conversation: Conversation): string {
     const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, chosen } = conversation;
+    const main = conversation.main === true ? { main: true } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
-    return JSON.stringify({ id, campaign_id, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }) });
+    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }) });
 }
 
 const bytes = (value: string) => Buffer.byteLength(value, 'utf8');
@@ -227,6 +243,8 @@ function fittedEntry(entry: KeptEntry): KeptEntry {
             return title === entry.title && detail === entry.detail ? entry : { kind: 'permission', title, detail, answer: entry.answer };
         }
         case 'pick':
+        case 'line':
+        case 'gap':
             return entry;
     }
 }

@@ -12,6 +12,7 @@ import type {
     DesktopEffort,
     DesktopHost,
     DesktopKeptEntry,
+    DesktopLineEntry,
     DesktopModel,
 } from '../platform/desktop';
 
@@ -44,13 +45,19 @@ export type Entry =
     /** The turn started a fresh session of the host, and why: said in the page, not kept by the desktop. */
     | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
     /** The person started the conversation afresh: said in the page, not kept by the desktop. */
-    | { kind: 'afresh' };
+    | { kind: 'afresh' }
+    /** A line of the Feed, as the desktop kept it. */
+    | { kind: 'line'; line: DesktopLineEntry }
+    /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
+    | { kind: 'gap' };
 
 export interface Chat {
     /** The conversation's id, the desktop's, which every turn of it carries. */
     id: string;
     title: string;
     campaignId: string | null;
+    /** Whether it is the Feed, the person's main chat, which keeps its name and is never handed over. */
+    main: boolean;
     /** The host the next turn runs on: a `DesktopHost.id`, or null when none that drives the chat was found. */
     host: string | null;
     /** The model the next turn names, as the host takes it; null for the host's own. */
@@ -101,6 +108,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         id,
         title: campaign ? campaign.name : 'New chat',
         campaignId: campaign?.id ?? null,
+        main: false,
         host,
         model: null,
         effort: null,
@@ -138,6 +146,10 @@ function entryOf(entry: DesktopKeptEntry): Entry {
             };
         case 'pick':
             return { kind: 'pick', campaignIds: [...entry.campaignIds] };
+        case 'line':
+            return { kind: 'line', line: { ...entry } };
+        case 'gap':
+            return { kind: 'gap' };
         default:
             return { kind: entry.kind, text: entry.text };
     }
@@ -152,6 +164,7 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         effort: chosen?.effort ?? null,
         title: record.title,
         campaignId: record.campaignId,
+        main: record.main === true,
         entries: record.entries.map(entryOf),
         dropped: record.dropped,
         // A turn of it runs: a page loaded again shows it running, with Stop, and its events follow.
@@ -270,7 +283,7 @@ export const pickedFor = (chat: Chat, conversation: DesktopConversation): Chat =
  * the words were the waiting message, which the turn gives back if it fails.
  */
 export function said(chat: Chat, text: string, resent = false): Chat {
-    const first = chat.campaignId === null && !chat.entries.some((each) => each.kind === 'user');
+    const first = chat.campaignId === null && !chat.main && !chat.entries.some((each) => each.kind === 'user');
     return {
         ...chat,
         title: first ? titleOf(text) : chat.title,
@@ -320,6 +333,16 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
         case 'renamed':
             return { ...chat, title: event.title };
+        // A line never starts a turn: it goes into the thread, and nothing else of the chat changes.
+        case 'line': {
+            const last = chat.entries.at(-1);
+            const entry: Entry = { kind: 'line', line: { ...event.line } };
+            if (event.folded && last?.kind === 'line')
+                return { ...chat, entries: [...chat.entries.slice(0, -1), entry] };
+            return { ...chat, entries: [...chat.entries, entry] };
+        }
+        case 'gap':
+            return { ...chat, entries: [...chat.entries, { kind: 'gap' }] };
         case 'done': {
             const over = ended(chat);
             if (event.error === null)

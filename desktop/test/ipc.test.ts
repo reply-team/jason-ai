@@ -116,6 +116,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             restart: 'function',
             attach: 'function',
             rename: 'function',
+            feed: 'function',
         },
         setup: {
             status: 'function',
@@ -144,6 +145,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.restart', ['conv_01']],
         ['chat.attach', ['conv_01', 'cmp_01']],
         ['chat.rename', ['conv_01', 'Mine']],
+        ['chat.feed', [[]]],
         ['setup.status', []],
         ['setup.connectReply', []],
         ['setup.connectReplyWithKey', ['k']],

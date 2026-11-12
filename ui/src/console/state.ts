@@ -26,6 +26,10 @@ export const chats = signal<Readonly<Record<string, Chat>>>({});
 export const conversations = signal<readonly DesktopConversation[]>([]);
 /** The conversation whose chat was brought to the front last, which the sidebar marks; null when none is open. */
 export const currentChat = signal<string | null>(null);
+/** The Feed's id, once the desktop answered the first ask; null before. */
+export const feedId = signal<string | null>(null);
+/** Whether the Feed took a line since the person last brought it to the front: the sidebar marks it. Kept here only. */
+export const feedUnseen = signal(false);
 /** Why the conversations could not be listed or one opened, in the desktop's words; null when nothing failed. */
 export const conversationsFailure = signal<string | null>(null);
 

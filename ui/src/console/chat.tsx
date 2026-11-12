@@ -1,5 +1,6 @@
 import { computed, effect } from '@preact/signals-react';
 import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import type { JournalEntry } from '../api/types';
 import type { DesktopEffort, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { act, define } from './actions';
 import {
@@ -33,20 +34,22 @@ import {
     type Entry,
 } from './chat-model';
 import { campaigns } from './campaigns';
+import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
 import { reload as listHosts } from './connect';
-import { changeChat, chats, conversations, conversationsFailure, here, messageOf, setup } from './state';
+import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
 
 // The Live chat: the person's words go to the agent host the desktop runs, and what the agent says and does comes
 // back as events. The agent's words are drawn as a fixed subset of Markdown, every word of them as text. A message sent
 // while a turn runs waits in the page, and the page hands it to the desktop as the next turn when the turn ends well.
-// Every chat is a conversation the desktop keeps: a campaign's one, or a set-up chat about no campaign yet. The desktop
-// decides which campaign a turn is about, from its record; the page names the conversation, the host, and the model and
-// effort chosen in the box, nothing more.
+// Every chat is a conversation the desktop keeps: a campaign's one, a set-up chat about no campaign yet, or the Feed, the
+// person's main chat, into which the page hands the journal's lines and which draws each as a row linking to its
+// campaign. The desktop decides which campaign a turn is about, from its record; the page names the conversation, the
+// host, and the model and effort chosen in the box, nothing more. A line never starts a turn.
 
 const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
 
@@ -74,6 +77,29 @@ export const isRefusal = (answer: unknown): answer is DesktopRefusal =>
 function unless<T>(answer: T | DesktopRefusal): T {
     if (isRefusal(answer)) throw new Error(answer.refused);
     return answer;
+}
+
+/**
+ * The Feed, made by the desktop on the first ask: its id is kept for the sidebar. A refusal or a failure leaves the
+ * sidebar without it, and is said there.
+ */
+export async function askFeed(): Promise<void> {
+    try {
+        const feed = unless(await here().desktop.chat.feed([]));
+        feedId.value = feed.id;
+        void reloadConversations();
+    } catch (error) {
+        conversationsFailure.value = messageOf(error);
+    }
+}
+
+/** Hands the desktop a line of the journal's stream when the Feed takes its kind; the desktop checks it again. */
+export function handLine(line: JournalEntry): void {
+    const handed = toFeedLine(line);
+    if (handed === null) return;
+    here()
+        .desktop.chat.feed([handed])
+        .catch(() => undefined);
 }
 
 /** Lists the conversations the desktop keeps again; one it could not list is said in the sidebar. */
@@ -237,6 +263,14 @@ define('chat.answer', ([id, request, answer]) => {
         .catch(() => changeChat(id, (chat) => lost(chat, request)));
 });
 
+define('feed.campaign', ([id]) => {
+    if (typeof id !== 'string') return;
+    const name = campaigns.value.find((each) => each.id === id)?.name ?? id;
+    here().dock.chat({ id, name });
+});
+
+define('feed.needs', () => here().dock.show('needs'));
+
 define('chat.attach', ([id, campaignId]) => {
     if (typeof id !== 'string' || typeof campaignId !== 'string') return;
     here()
@@ -314,7 +348,28 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
 /** One line in the desktop's words for something the page alone says of the conversation. */
 const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
 
+/** A line of the Feed: the kind in words, how many it stands for, its campaign as a link, its age. */
+function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html {
+    const names = new Map(campaigns.value.map((each) => [each.id, each.name]));
+    const row = toFeedRow(entry.line, names, clock.value);
+    return html`<div class="feed-line" data-id="${row.id}">
+        ${svg(row.icon, 14)}<b>${row.words}</b>${row.count === null ? null : html`<span class="meta">${row.count}</span>`}
+        <button class="btn sm" type="button" ${act('feed.campaign', row.campaignId)}>${row.campaign}</button>
+        ${row.needs ? html`<button class="btn sm" type="button" ${act('feed.needs')}>Needs you</button>` : null}
+        <span class="meta">${row.age}</span>
+    </div>`;
+}
+
 export function threadView(chat: Chat, host: DesktopHost | null): Html {
+    if (chat.entries.length === 0 && chat.main)
+        return html`<div class="hero">
+            <div class="glyph">${svg('pulse', 22)}</div>
+            <h2>The Feed</h2>
+            <p>
+                What happens in your campaigns comes here: a reply, an approval or a question waiting, a campaign
+                started or paused, work that stopped. Ask about any of it below.
+            </p>
+        </div>`;
     if (chat.entries.length === 0)
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
@@ -368,6 +423,12 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 return noteLine(
                     "Started afresh: the agent's next turn begins without its memory of this conversation.",
                 );
+            case 'line':
+                return feedLine(entry);
+            case 'gap':
+                return noteLine(
+                    'More happened while Jason was closed than is shown here; Needs you and Campaigns hold all of it.',
+                );
         }
     });
     const dropped =
@@ -382,22 +443,25 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
  * draw the thread afresh, closing what the person opened in it, nor read its Markdown again.
  */
 function threadOf(chatId: string) {
-    let last: { chat: Chat; host: DesktopHost | null; named: unknown; view: Html } | null = null;
+    let last: { chat: Chat; host: DesktopHost | null; named: unknown; now: number; view: Html } | null = null;
     return computed(() => {
         const chat = chats.value[chatId];
         if (!chat) return html``;
         const host = hostOf(chat);
         // A pick names its campaigns by the names the console read, which may come after the pick.
         const named = campaigns.value;
+        // A line's age is counted from the console's clock, which moves on every half minute.
+        const now = clock.value;
         const same =
             last !== null &&
+            last.now === now &&
             last.host === host &&
             last.named === named &&
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, named, view: threadView(chat, host) };
+        if (!same) last = { chat, host, named, now, view: threadView(chat, host) };
         return last!.view;
     });
 }
@@ -473,7 +537,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     return (
         <div className="chat-panel" ref={panel}>
             <div className="chat-bar">
-                {chat.renaming === null ? (
+                {chat.main ? null : chat.renaming === null ? (
                     <button
                         ref={renameButton}
                         className="btn sm"
@@ -529,15 +593,17 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 >
                     Start afresh
                 </button>
-                <button
-                    ref={removeButton}
-                    className="btn sm"
-                    type="button"
-                    disabled={chat.running || chat.removing}
-                    onClick={() => changeChat(chatId, (each) => ({ ...each, removing: true }))}
-                >
-                    Remove
-                </button>
+                {chat.main ? null : (
+                    <button
+                        ref={removeButton}
+                        className="btn sm"
+                        type="button"
+                        disabled={chat.running || chat.removing}
+                        onClick={() => changeChat(chatId, (each) => ({ ...each, removing: true }))}
+                    >
+                        Remove
+                    </button>
+                )}
             </div>
             {chat.removing && (
                 <div

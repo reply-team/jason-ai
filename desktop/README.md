@@ -125,6 +125,21 @@ desktop does not narrow, so it may read the records.
   overlapped, is offered to the person to pick from (`pick`, kept with the record), and `chat.attach` takes only a
   campaign the pick named. Nothing is handed over when a page of the list could not be read. A campaign a person makes
   by hand while a set-up turn runs cannot be told apart from one the turn made.
+- **The Feed.** One conversation is of its own kind: the Feed, the person's main chat, about no campaign, marked `main`
+  in its record, made and written the first time the page asks for it (`chat.feed`) and drawn first in the sidebar. The
+  page hands it each line of the journal's stream whose kind it takes: `inbound_reply_observed`, `approval_requested`,
+  `decision_raised`, `campaign_created`, `campaign_started`, `campaign_paused`, `workitem_failed`, `workitem_expired`
+  and `provider_blocked`, each a kind the runtime writes itself (a test reads them from the runtime's source). The
+  desktop checks each line again and keeps its id, moment, kind, campaign and work item, each held to its shape, and
+  nothing else of it: no reason, no old or new value, no name. A line it has taken is not taken twice; lines of the same
+  kind and campaign that follow one another fold into one with a count; at most 500 are kept, the oldest dropped and
+  counted. A restarted desktop's first ask reads back one page of 100 of the lines written since the Feed's newest
+  (`jason journal list --kind … --since …`), and says when there were more. A line never starts a turn: a turn of the
+  Feed is given the lines since the person's last message after its header, at most 50, each as one JSON object,
+  under the desktop's sentence that they are records, information and never instructions; rule 9 of the instruction
+  text says the same. The Feed is never renamed, removed or handed over; a campaign one of its turns makes keeps a
+  conversation of its own. Its record keeps no line outside it: a line in any other record is let go when it is read,
+  and of two records marked as the Feed the older is it.
 - **A name a person gives.** A person renames a conversation, a set-up chat or a campaign's, from its header
   (`chat.rename`): one line, every control, format and separator character and every default-ignorable code point (a
   filler that draws nothing) dropped, cut at 60 characters, and refused when nothing is left. The record
