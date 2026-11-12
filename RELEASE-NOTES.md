@@ -42,6 +42,7 @@ Nothing stops: no setting is renamed, and no start refuses a setting 0.35.0 took
 - **Codex on Windows needs its elevated sandbox for the chat.** Have an administrator run `codex sandbox setup --elevated` once, or chat on Claude Code; until then the chat declines a Codex message and says so.
 - **The chat no longer uses the providers in Codex's `config.toml`.** Connect a key on the Connect card.
 - **Claude Code older than 2.1.257 runs no chat turn;** update Claude Code first.
+- **Codex older than 0.122.0 runs no chat turn;** the chat says to update Codex.
 - **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to load one again, is in [Applying an older
   release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release).
 - **From 0.34.x or earlier,** the notes of each release in between apply as well.
@@ -52,7 +53,7 @@ Codex in the desktop's chat reads and advises and acts through nothing: its sand
 
 The Windows check of Codex's sandbox has been proven against a stand-in, not on a real machine without the elevated setup. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
 
-On a Mac and on Linux, a read-only Codex turn may reach the loopback interface; that has not been probed.
+On a Mac and on Linux, a read-only Codex turn can read the runtime's run file, so if the loopback interface is reachable from it, a command in a Codex chat could reach Jason's runtime. That has not been probed.
 
 Not yet seen on a real machine:
 
