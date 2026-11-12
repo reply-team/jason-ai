@@ -84,7 +84,19 @@ test('a GET of the install page is counted once, by day, path, source and client
   const db = fakeDb();
   await send('/install?ref=LinkedIn', { env: { COUNTS: db }, headers: { 'user-agent': 'curl/8.7.1' }, fetch: fakeFetch({ [INSTALL_PAGE]: page }) });
   assert.equal(db.runs.length, 1);
-  assert.match(db.runs[0].sql, /^INSERT INTO counts \(day, path, ref, client, n\)/);
+  assert.equal(
+    db.runs[0].sql,
+    [
+      'INSERT INTO counts (day, path, ref, client, n)',
+      'SELECT ?1, ?2,',
+      '  CASE WHEN EXISTS (SELECT 1 FROM counts WHERE day = ?1 AND ref = ?3)',
+      "         OR (SELECT COUNT(DISTINCT ref) FROM counts WHERE day = ?1 AND ref <> '(rest)') < ?5",
+      "       THEN ?3 ELSE '(rest)' END,",
+      '  ?4, 1',
+      'WHERE true',
+      'ON CONFLICT (day, path, ref, client) DO UPDATE SET n = n + 1',
+    ].join(String.fromCharCode(10)),
+  );
   assert.deepEqual(db.runs[0].args, ['2026-11-12', '/install', 'linkedin', 'fetcher', MAX_SOURCES_PER_DAY]);
 });
 
