@@ -368,11 +368,19 @@ Under the chat, these things differ from a terminal:
 
 A `jason-desktop://` link opens a page of the application and does nothing else: it never approves, sends, drafts or
 starts a conversation. The addresses are a closed table: `jason-desktop://feed`, `needs`, `campaigns`,
-`campaign/<campaign id>`, `approval/<approval id>`, `question/<decision id>` and `workitem/<work item id>`, and
-`person/<contact id>`. An approval or a question opens Needs you on that item, and deciding stays your click. An address
-with a query, a fragment, a percent escape, a dot segment, a port or a second id opens nothing. The scheme is the
-desktop's own on every system; `jason://`, which the runtime's Windows notifications use, is the runtime's and the
+`campaign/<campaign id>`, `approval/<approval id>`, `question/<decision id>` and `workitem/<work item id>`,
+`person/<contact id>`, and `attention`, `attention/approvals/<approval id>` and `attention/questions/<decision id>`.
+An approval or a question opens Needs you on that item, and deciding stays your click; `attention` opens Needs you. An
+address with a query, a fragment, a percent escape, a dot segment, a port or a second id opens nothing. The scheme is
+the desktop's own on every system; `jason://`, which the runtime's Windows notifications use, is the runtime's and the
 desktop never registers it.
+
+On Windows a click on one of Jason's notifications opens the desktop where it is installed for your account. The
+command line handling the `jason://attention` link reads the desktop's registration under your account, never writes
+it, and when the program it names is there hands the matching `jason-desktop://attention` address to Windows, which
+starts the desktop; the address is made from the link's parsed parts, never from its text. With no desktop registered,
+its program gone, or the hand-on failing, the browser UI opens as before, and the failure is said by its code
+([notifications.md](notifications.md)). On macOS and Linux a notification's click opens nothing.
 
 On Windows and macOS the application registers the scheme, on Windows at each start for your account alone. On Linux the
 deb's menu entry registers it and the AppImage opens no link. Built so, and not yet seen on a real machine: a link from a
