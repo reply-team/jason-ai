@@ -41,9 +41,10 @@ public sealed class DoorServiceTests : IDisposable
 
     private sealed record Seen(string Method, string Path, string? Authorization, string? ContentType, string Body);
 
-    /// <summary>A runtime that answers every call with <paramref name="status"/> and <paramref name="body"/>.</summary>
-    private LoopbackHttpServer Api(int status = 200, string body = """{"items":[],"next_cursor":null}""", int delayMs = 0)
+    /// <summary>A runtime that answers every call with <paramref name="status"/> and <paramref name="body"/>; with <paramref name="warmFirst"/> its first answer is at once, so a test can warm the engine and the HTTP client before it times a slow one.</summary>
+    private LoopbackHttpServer Api(int status = 200, string body = """{"items":[],"next_cursor":null}""", int delayMs = 0, bool warmFirst = false)
     {
+        var served = 0;
         var server = new LoopbackHttpServer(async context =>
         {
             using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
@@ -55,7 +56,7 @@ public sealed class DoorServiceTests : IDisposable
                 context.Request.ContentType,
                 text));
 
-            if (delayMs > 0)
+            if (delayMs > 0 && !(warmFirst && Interlocked.Increment(ref served) == 1))
             {
                 await Task.Delay(delayMs).ConfigureAwait(false);
             }
@@ -271,8 +272,10 @@ public sealed class DoorServiceTests : IDisposable
     [Fact]
     public void A_call_ends_at_the_door_s_own_bound()
     {
-        var api = Api(delayMs: 4_000);
+        var api = Api(delayMs: 4_000, warmFirst: true);
         using var harness = Harness(DoorTo(Base(api), DoorLimits.Standard with { TimeoutMs = 300 }));
+
+        harness.Evaluate("host.call(\"campaign.list\")");
 
         var watch = Stopwatch.StartNew();
         var caught = Caught(harness, "host.call(\"campaign.list\")");
@@ -286,8 +289,10 @@ public sealed class DoorServiceTests : IDisposable
     [Fact]
     public void A_call_ends_at_what_is_left_of_the_invocation()
     {
-        var api = Api(delayMs: 4_000);
+        var api = Api(delayMs: 4_000, warmFirst: true);
         using var harness = Harness(DoorTo(Base(api)), remaining: TimeSpan.FromMilliseconds(300));
+
+        harness.Evaluate("host.call(\"campaign.list\")");
 
         var watch = Stopwatch.StartNew();
         var caught = Caught(harness, "host.call(\"campaign.list\")");
