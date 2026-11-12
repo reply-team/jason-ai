@@ -475,7 +475,7 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
                           ${
                               opened.linkKind === 'shared_page'
                                   ? 'It is Reply’s shared mailbox page, which does not expire: close it once the mailbox is connected.'
-                                  : `It works once and connects one account.${until ? ` Valid until ${until}.` : ''}`
+                                  : `It connects one account until ${until ?? 'it expires'}.`
                           }
                       </p>
                       <div class="setrow">
@@ -490,13 +490,8 @@ function dialogView(shown: ActDialog, busy: Html | null): Html {
             shown.copied !== null
                 ? html`<div class="meta" role="status">The link was copied.</div>
                       <p class="meta link-note">
-                          Hand it to whoever owns the account: it works once and connects one account to this Reply
-                          account, so send it to no one
-                          else.${
-                              momentOf(shown.copied.expiresAt)
-                                  ? ` Valid until ${momentOf(shown.copied.expiresAt)}.`
-                                  : ''
-                          }
+                          Hand it to whoever owns the account: it connects one account to this Reply account until
+                          ${momentOf(shown.copied.expiresAt) ?? 'it expires'}, so send it to no one else.
                       </p>
                       <div class="setrow">
                           <div class="grow meta">The account appears in the list when they finish.</div>

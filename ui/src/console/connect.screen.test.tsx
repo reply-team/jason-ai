@@ -403,7 +403,7 @@ describe('the Reply card, its acts', () => {
         await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'email', { provider: 'gmail' }]]);
         const dialog = dialogOf(card);
-        expect(words(dialog)).toContain('It works once and connects one account.');
+        expect(words(dialog)).toContain('It connects one account until it expires.');
         expect(within(dialog).queryByRole('textbox')).toBeNull();
         expect(within(dialog).queryByRole('link')).toBeNull();
         expect(within(dialog).queryByRole('button', { name: 'Copy link' })).toBeNull();
@@ -439,7 +439,7 @@ describe('the Reply card, its acts', () => {
         fireEvent.click(within(card()).getByRole('button', { name: 'Make the link' }));
         await waitFor(() => expect(words(dialogOf(card))).toContain(opened));
         expect(actCalls(desktop)).toEqual([['setup.replyConnect', 'linkedin', { name: 'Made-up Sales' }]]);
-        expect(words(dialogOf(card))).toContain('Valid until 2026-11-19 04:59 UTC');
+        expect(words(dialogOf(card))).toContain('It connects one account until 2026-11-19 04:59 UTC.');
         await waitFor(() => expect(statusReads(desktop)).toBe(before + 1));
     });
 
@@ -489,7 +489,10 @@ describe('the Reply card, its acts', () => {
         });
         await addAccount(card, 'Gmail');
         await waitFor(() => expect(words(dialogOf(card))).toContain('The link was copied.'));
-        expect(words(dialogOf(card))).toContain('Valid until 2026-11-18 12:00 UTC');
+        expect(words(dialogOf(card))).toContain(
+            'Hand it to whoever owns the account: it connects one account to this Reply account until 2026-11-18 12:00 UTC, so send it to no one else.',
+        );
+        expect(words(dialogOf(card))).not.toContain('works once');
         expect(words(dialogOf(card))).not.toContain(opened);
         fireEvent.click(within(dialogOf(card)).getByRole('button', { name: 'Close' }));
         fireEvent.click(within(rowOf(card, 'Account 14')).getByRole('button', { name: 'Reconnect' }));
