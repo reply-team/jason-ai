@@ -47,14 +47,20 @@ export type LinkTarget =
 
 export type LinkRefusal = 'too_long' | 'not_a_link' | 'unknown_page' | 'bad_id' | 'two_links' | 'beside_flag' | 'unregistered';
 
-/** The longest address taken, in characters; the longest in the table is under fifty. */
-export const linkLimit = 64;
+/** The longest address taken, in characters; the longest in the table, an item of `attention`, is sixty-six. */
+export const linkLimit = 72;
 
 const crockford = '[0-9A-HJKMNP-TV-Z]{26}';
 /** The pages that take no id, and the pages that take one, with the prefix its id carries. */
 const plain = new Set(['feed', 'needs', 'campaigns']);
 const withId: Readonly<Record<string, string>> = { campaign: 'cmp', approval: 'apr', question: 'dec', workitem: 'wi', person: 'cnt' };
 const prefix = new RegExp(`^${linkScheme}://`, 'i');
+/**
+ * The runtime's attention links in the desktop's scheme, which the command line hands on from a toast's click where the
+ * desktop is installed (docs/notifications.md): `attention`, the list, and `attention/<collection>/<id>`, one item, each
+ * opening Needs you. The collection names the page its item opens.
+ */
+const attention: Readonly<Record<string, 'approval' | 'question'>> = { approvals: 'approval', questions: 'question' };
 
 /** An address read: the page it opens, or why it opens nothing. */
 export function parseLink(raw: unknown): LinkTarget | { refused: LinkRefusal } {
@@ -64,12 +70,24 @@ export function parseLink(raw: unknown): LinkTarget | { refused: LinkRefusal } {
     if (rest.endsWith('/')) rest = rest.slice(0, -1);
     const parts = rest.split('/');
     const page = parts[0] ?? '';
+    if (page === 'attention') return attentionLink(parts);
     if (plain.has(page)) return parts.length === 1 ? ({ page } as LinkTarget) : { refused: 'unknown_page' };
     const shape = Object.hasOwn(withId, page) ? new RegExp(`^${withId[page]}_${crockford}$`) : null;
     if (shape === null) return { refused: 'unknown_page' };
     const id = parts[1];
     if (parts.length !== 2 || id === undefined || !shape.test(id)) return { refused: 'bad_id' };
     return { page, id } as LinkTarget;
+}
+
+/** `attention` alone opens Needs you; one approval or question in its collection opens Needs you on that item. */
+function attentionLink(parts: readonly string[]): LinkTarget | { refused: LinkRefusal } {
+    if (parts.length === 1) return { page: 'needs' };
+    const collection = parts[1] ?? '';
+    const page = Object.hasOwn(attention, collection) ? attention[collection]! : null;
+    if (page === null) return { refused: 'unknown_page' };
+    const id = parts[2];
+    if (parts.length !== 3 || id === undefined || !new RegExp(`^${withId[page]}_${crockford}$`).test(id)) return { refused: 'bad_id' };
+    return { page, id };
 }
 
 const isLink = (arg: string) => prefix.test(arg) || new RegExp(`^${linkScheme}:`, 'i').test(arg);

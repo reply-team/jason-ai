@@ -438,8 +438,10 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
 A `jason-desktop://` link opens a page of the application and does nothing else: no command, no turn, no text put into
 a chat, no card, approval or question answered, no chat mode, no setting (`src/deep-link.ts`). The scheme is the
 desktop's own on every platform. `jason:` is the runtime's: on Windows its toast host registers it for the command line,
-which opens `jason://attention...` in a browser ([`docs/notifications.md`](../docs/notifications.md), section 7); the
-desktop never registers, declares or removes it. The addresses are a closed table:
+which handles `jason://attention...` ([`docs/notifications.md`](../docs/notifications.md), section 7); the desktop never
+registers, declares or removes it. Where the desktop's registration names a program that is there, the command line
+hands the same list or item on as `jason-desktop://attention...`, made from the parsed link, and opens the browser UI
+otherwise. The addresses are a closed table:
 
 | Address | Opens |
 | --- | --- |
@@ -451,9 +453,12 @@ desktop never registers, declares or removes it. The addresses are a closed tabl
 | `jason-desktop://question/dec_…` | Needs you, with that question open |
 | `jason-desktop://workitem/wi_…` | Work items, at that item |
 | `jason-desktop://person/cnt_…` | People, at that person |
+| `jason-desktop://attention` | Needs you, as a toast's click on the list hands it on |
+| `jason-desktop://attention/approvals/apr_…` | Needs you, with that approval open |
+| `jason-desktop://attention/questions/dec_…` | Needs you, with that question open |
 
 An id is its prefix and 26 uppercase Crockford characters; one trailing `/` is taken, and anything else (a query, a
-fragment, a percent escape, another page word, a second id, more than 64 characters) opens nothing. The page receives
+fragment, a percent escape, another page word, a second id, more than 72 characters) opens nothing. The page receives
 the page the desktop parsed, never the address. The log has three lines for links, none of which holds the address:
 `deep_link_opened` with the page, `deep_link_refused` with the refusal's code, and `deep_link_registration_failed`
 when Windows did not take the registration.
