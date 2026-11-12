@@ -229,10 +229,16 @@ first, and the desktop keeps no transcript of a host.
 ### Access modes
 
 Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the
-chat is in. **Ask first**, the default, is the chat as the next section describes it. **Plan only** lets the agent read
-and plan and change nothing: it passes only the allowed verbs that read, Claude Code starts in its plan mode with the
-exit from it removed, and every write is refused. The cards left in Plan only are a read outside the chat's folders and
-a web page. Switching between the two lets a running turn finish. A Codex turn runs in its read-only sandbox in either.
+chat is in. A mode applies to the turns you start by sending, from the next one on. **Ask first** is the mode of every new
+chat and the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
+passes only the allowed verbs that read, Claude Code starts in its plan mode with the exit from it removed, and every
+other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
+refusal of the next section stays. A Codex turn runs in its read-only sandbox in either mode.
+
+Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh** leaves it.
+Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could still ask to
+change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu also lists
+Full access, which this version does not offer: it is shown disabled and the desktop refuses it.
 
 ### What runs without asking, what is refused, what is a card
 
