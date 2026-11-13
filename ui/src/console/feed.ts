@@ -17,6 +17,10 @@ const kinds: Readonly<Record<DesktopFeedKind, { words: string; icon: IconName; n
     workitem_failed: { words: 'Work stopped', icon: 'work', needs: false },
     workitem_expired: { words: 'Work stopped', icon: 'work', needs: false },
     provider_blocked: { words: 'A provider block holds work', icon: 'shield', needs: false },
+    approval_approved: { words: 'Approved', icon: 'att', needs: false },
+    approval_rejected: { words: 'Rejected', icon: 'att', needs: false },
+    decision_answered: { words: 'A question was answered', icon: 'att', needs: false },
+    campaign_archived: { words: 'Agent archived', icon: 'camp', needs: false },
 };
 
 /** The kinds the Feed takes, as the desktop declares them. */

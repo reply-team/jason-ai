@@ -7,8 +7,9 @@
 export {};
 
 /**
- * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, a campaign created, started or
- * paused, and work that stopped. Each is a kind the runtime writes itself.
+ * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, an approval approved or
+ * rejected, a question answered, a campaign created, started, paused or archived, and work that stopped. Each is a
+ * kind the runtime writes itself.
  */
 export type DesktopFeedKind =
     | 'inbound_reply_observed'
@@ -19,7 +20,11 @@ export type DesktopFeedKind =
     | 'campaign_paused'
     | 'workitem_failed'
     | 'workitem_expired'
-    | 'provider_blocked';
+    | 'provider_blocked'
+    | 'approval_approved'
+    | 'approval_rejected'
+    | 'decision_answered'
+    | 'campaign_archived';
 
 /**
  * A journal line as the page hands it to the Feed: its id, moment, kind, campaign and work item, as `journal.list` and
