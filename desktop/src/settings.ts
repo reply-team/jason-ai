@@ -119,3 +119,6 @@ export function applyDailyTrends(
     write(next);
     return next;
 }
+
+/** What the page is told of the switch: the person's choice, or null when none was ever told, which the page reads as on. */
+export const keptDailyTrends = (settings: DesktopSettings): boolean | null => settings.dailyTrends ?? null;

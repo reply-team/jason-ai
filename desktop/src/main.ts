@@ -52,7 +52,7 @@ import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { applyDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
+import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
 import { SkillsGate } from './skills-gate.ts';
@@ -542,7 +542,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
-    handle(seam, 'dailyTrends.get', origin, () => settings.dailyTrends ?? null, refused);
+    handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,
         'dailyTrends.set',
