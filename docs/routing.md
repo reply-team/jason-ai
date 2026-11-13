@@ -339,8 +339,9 @@ change that would itself take the account away.
 
 An activated load journals `plugins_reloaded` with the routes it froze beside the packages:
 `routes: {snapshot_id, global_default, override_count, campaign_route_count}`. A route write journals
-`routes_updated` against the campaign, keyed by the operation or by `default`, with the old and new
-values.
+`routes_updated` against the campaign, keyed by the operation, by `default`, or by `<operation>/<channel>` for a
+channel route — `message.send/linkedin` — with the old and new values. A line keyed by an operation and a channel is
+about that channel's route only, never the operation's own.
 
 ## 7. Fail-closed: every reason, and what to change
 
