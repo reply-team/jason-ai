@@ -390,3 +390,154 @@ for (const mode of modes) {
         }
     });
 }
+
+// ---- A device's namespace, a link's own folder, a launcher in a written script -------------------------------------------
+
+const deviceSentence = /device or a volume/;
+const launchSentence = /opener, launcher, session or scheduler/;
+
+/** Refused where Ask first refuses, and otherwise a card no "always" covers; in Full access held by its hook and its reading. */
+async function heldOrCarded(mode: ChatMode, scope: ChatScope, tool: string, command: string, reason?: string): Promise<void> {
+    const said = `${mode} ${scope.platform} ${command}`;
+    const got = await outcome(mode, scope, tool, { command });
+    if (mode === 'plan_only') assert.ok(typeof got === 'object' && 'refused' in got, `${said}: ${JSON.stringify(got)}`);
+    else assert.deepEqual(got, { card: null }, said);
+    if (mode === 'full_access') {
+        assert.equal(broker(scope).hook('turn_1', tool, { command }, null).decision, 'ask', said);
+        const judged = fullAccessJudgement(tool, { command }, scope);
+        assert.equal(judged.outcome, 'held', said);
+        if (reason !== undefined) assert.equal(judged.outcome === 'held' ? judged.reason : undefined, reason, said);
+    }
+}
+
+for (const mode of modes) {
+    test(`${mode}: a path in a Windows device's or volume's namespace is never read or written by a command or a file tool, in a demo run and in the person's own installation`, async () => {
+        for (const scope of [demoWindows(), liveWindows()]) {
+            for (const command of [
+                "findstr . '\\\\.\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\Jason\\Northwind\\notes.md'",
+                "xcopy /y notes.md '\\\\.\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\Jason\\Northwind\\'",
+                "certutil -encode '\\\\?\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\.jason\\run\\runtime.json' out.b64",
+                "cat '\\\\?\\Volume{0b5a3c3e-0000-0000-0000-100000000000}\\Users\\someone\\.jason\\run\\runtime.json'",
+                "robocopy . '\\\\.\\HarddiskVolume3\\Users\\someone\\Jason\\Northwind' notes.md",
+                'cat //./GLOBALROOT/Device/HarddiskVolume3/Users/someone/Jason/Northwind/notes.md',
+                "echo x > '\\\\.\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\Jason\\Northwind\\notes.md'",
+            ]) {
+                await refusedIn(mode, scope, 'Bash', { command }, deviceSentence);
+            }
+            await refusedIn(mode, scope, 'Read', { file_path: '\\\\.\\GLOBALROOT\\Device\\HarddiskVolume3\\Users\\someone\\Jason\\Northwind\\notes.md' }, deviceSentence);
+            await refusedIn(mode, scope, 'Grep', { pattern: 'token', path: '\\\\?\\Volume{0b5a3c3e-0000-0000-0000-100000000000}\\Users' }, deviceSentence);
+        }
+        // A drive's path in the same namespace is that drive's path, matched as itself.
+        await refusedIn(mode, demoWindows(), 'Bash', { command: "cat '\\\\?\\C:\\Users\\someone\\Jason\\Northwind\\AGENTS.md'" }, persons);
+        await refusedIn(mode, liveWindows(), 'Bash', { command: "cat '\\\\.\\C:\\Users\\someone\\.jason\\run\\runtime.json'" }, ownData);
+    });
+
+    test(`${mode}: a link's target is read from the folder the link is made in, and refused where that is fenced`, async () => {
+        for (const scope of [demoMac(), linuxOf(demoMac()), demoWindows()]) {
+            for (const command of [
+                'mkdir -p a/b/c && ln -s ../../../../../../Jason a/b/c/p',
+                'ln -s ../../../../../../.jason a/b/c/p',
+                'ln -sfn ../../../../../../Jason/Northwind a/b/c/',
+                'cp -rs ../../../../../../Jason a/b/c/p',
+            ]) {
+                await refusedIn(mode, scope, 'Bash', { command }, persons);
+            }
+        }
+        await refusedIn(mode, demoWindows(), 'Bash', { command: "cmd //c 'mklink /J a\\b\\c\\p ..\\..\\..\\..\\..\\..\\Jason'" }, persons);
+        await refusedIn(mode, demoWindows(), 'PowerShell', { command: 'New-Item -ItemType Junction -Path a\\b\\c\\p -Target ..\\..\\..\\..\\..\\..\\Jason' }, persons);
+        // The person's own installation: a link from the chat folder to the run file's and the settings' folders.
+        for (const scope of [liveMac(), liveWindows(), linuxOf(liveMac())]) {
+            for (const command of ['ln -s ../../../../../run a/b/c/r', 'mkdir -p a/b/c && ln -s ../../../../../config a/b/c/k']) {
+                await refusedIn(mode, scope, 'Bash', { command }, ownData);
+            }
+        }
+    });
+
+    test(`${mode}: a command that makes a link, wherever it points, or walks a tree following links, is never run unasked`, async () => {
+        for (const scope of [demoMac(), liveMac(), linuxOf(demoMac())]) {
+            for (const command of ['ln -s /tmp/elsewhere l', 'ln notes.md hard.md', 'cp -s notes.md l.md', 'link notes.md hard.md', 'mount --bind /tmp/x a']) {
+                await heldOrCarded(mode, scope, 'Bash', command, 'link');
+            }
+        }
+        for (const command of ['subst X: C:/Temp', 'fsutil hardlink create a.md notes.md', 'junction a C:/Temp']) {
+            await heldOrCarded(mode, demoWindows(), 'Bash', command, 'link');
+        }
+        if (mode !== 'full_access') return;
+        for (const scope of [demoMac(), liveMac(), demoWindows()]) {
+            for (const command of [
+                'grep -R secret .',
+                'grep -rR secret .',
+                'grep --dereference-recursive secret .',
+                'rg -L secret',
+                'rg --follow secret',
+                'find -L . -name notes.md',
+                'find . -follow -name notes.md',
+                'tar -chf out.tar a',
+                'tar chf out.tar a',
+                'tar --dereference -cf out.tar a',
+                'cp -rL a b',
+                'cp --dereference a b',
+                'rsync -rL a b',
+                'rsync -r --copy-links a b',
+                'du -L .',
+                'ls -LR a',
+                'zip -r out.zip a',
+                'diff -r a b',
+            ]) {
+                const judged = fullAccessJudgement('Bash', { command }, scope);
+                assert.deepEqual(judged.outcome === 'held' ? judged.reason : judged, 'link', `${scope.platform} ${command}`);
+            }
+            for (const command of ['grep -r secret .', 'zip -ry out.zip a', 'tar -cf out.tar a', 'cp -r a b', 'diff -r --no-dereference a b', 'ls -l a']) {
+                assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'runs' }, `${scope.platform} ${command}`);
+            }
+        }
+        for (const command of ['robocopy a b /E', 'xcopy a b /S', 'findstr /S secret *.md', 'where /R . notes.md']) {
+            const judged = fullAccessJudgement('Bash', { command }, demoWindows());
+            assert.notEqual(judged.outcome, 'runs', command);
+        }
+    });
+
+    test(`${mode}: a program that hands a command to a process already running is never run unasked, nor covered by "always"`, async () => {
+        for (const [scope, commands] of [
+            [demoWindows(), ['bitsadmin /SetNotifyCmdLine job s.bat NUL', 'nircmd exec show s.bat', 'gsudo s.bat']],
+            [liveWindows(), ['bitsadmin /SetNotifyCmdLine job s.bat NUL']],
+            [demoMac(), ['kitty @ launch ./s.sh', 'kitty --single-instance ./s.sh', 'wezterm cli spawn ./s.sh', 'emacsclient -e x', 'nvim --server s --remote-send x', 'cliclick t:x']],
+            [linuxOf(demoMac()), ['xfce4-terminal -x ./s.sh', 'tilix -e ./s.sh', 'xdotool type x', 'ydotool type x', 'alacritty msg create-window', 'zellij run -- ./s.sh', 'gdb -p 1', 'nsenter -t 1 ./s.sh']],
+            [linuxOf(liveMac()), ['xdotool type x']],
+        ] as const) {
+            for (const command of commands) await heldOrCarded(mode, scope, 'Bash', command);
+        }
+    });
+}
+
+test('full_access: a script the chat writes that starts a launcher, or hands a command to a running process, is refused, from the one list', async () => {
+    for (const scope of [demoMac(), liveMac(), demoWindows(), liveWindows()]) {
+        const at = (name: string) => `${scope.chat}${scope.platform === 'win32' ? '\\' : '/'}${name}`;
+        for (const [tool, input] of [
+            ['Write', { file_path: at('s.sh'), content: 'echo hi\nexplorer.exe s.bat\n' }],
+            ['Write', { file_path: at('s.ps1'), content: 'Start-Process s.bat' }],
+            ['Write', { file_path: at('s.bat'), content: '@echo off\r\n@start "" s.bat\r\n' }],
+            ['Write', { file_path: at('Makefile'), content: 'all:\n\t@explorer.exe s.bat\n' }],
+            ['Write', { file_path: at('build.mk'), content: 'x := $(shell open s.command)\n' }],
+            ['Write', { file_path: at('package.json'), content: '{"scripts":{"x":"open s.command"}}' }],
+            ['Write', { file_path: at('.git/hooks/pre-commit'), content: 'xdg-open s.desktop\n' }],
+            ['Write', { file_path: at('run'), content: '#!/bin/sh\nenv X=1 nohup ./s.sh &\n' }],
+            ['Write', { file_path: at('s.sh'), content: "if true; then bash -c 'osascript s.scpt'; fi\n" }],
+            ['Write', { file_path: at('s.sh'), content: 'timeout 5 /usr/bin/xdotool type x\n' }],
+            ['Write', { file_path: at('s.sh'), content: 'echo $(kitty @ launch ./x.sh)\n' }],
+            ['Edit', { file_path: at('s.sh'), old_string: 'a', new_string: 'X=1 schtasks /run /tn x' }],
+            ['MultiEdit', { file_path: at('s.ps1'), edits: [{ old_string: 'a', new_string: '& "C:\\Windows\\explorer.exe" s.bat' }] }],
+            ['NotebookEdit', { notebook_path: at('n.ipynb'), new_source: 'print(1)\n!xdg-open s.desktop' }],
+        ] as const) {
+            await refusedIn('full_access', scope, tool, input, launchSentence);
+        }
+        // Prose and a script whose words only name a launcher are written: the names are words too.
+        for (const [tool, input] of [
+            ['Write', { file_path: at('notes.md'), content: 'Open questions\nstart here\nat noon, see the list\n' }],
+            ['Write', { file_path: at('s.sh'), content: 'npm start\ngit commit -m "open the door"\necho start\n' }],
+            ['Write', { file_path: at('package.json'), content: '{"scripts":{"start":"node index.js","dev":"npm start"}}' }],
+        ] as const) {
+            assert.deepEqual(fullAccessJudgement(tool, input, scope), { outcome: 'runs' }, `${scope.platform} ${JSON.stringify(input)}`);
+        }
+    }
+});

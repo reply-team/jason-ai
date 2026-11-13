@@ -45,7 +45,8 @@ export type HeldReason =
     | 'guarded_name'
     | 'search'
     | 'local_jason'
-    | 'holds_data';
+    | 'holds_data'
+    | 'link';
 
 /** What a simple command's standard input is: nothing given, a pipe, a here-document's body, or a file. */
 export type LiteralInput = 'none' | 'pipe' | 'here_document' | 'file';
@@ -656,10 +657,13 @@ const runners = new Set(
 
 /**
  * The programs that hand a file, an address or a command to the system's own opener, launcher, session, service manager,
- * scheduler or another user's or system's environment: what they start runs outside this process's environment, so
- * outside the fence the chat's host is given, the data directory it names included. Windows', macOS' and Linux's. This
- * is a list, not a rule: a program it does not name is not recognised as one. A literal reading holds them as runners
- * (`heldByWhatRuns`), and the permission model never lets "always" cover one (`runsAnotherProgram`).
+ * scheduler, another user's or system's environment, or a process already running (a terminal's or an editor's server,
+ * a remote control, a window that is typed into): what they start runs outside this process's environment, so outside
+ * the fence the chat's host is given, the data directory it names included. Windows', macOS' and Linux's. This is a
+ * list, not a rule: a program it does not name is not recognised as one. A literal reading holds them as runners
+ * (`heldByWhatRuns`), the permission model never lets "always" cover one (`runsAnotherProgram`), and a script the chat
+ * writes that starts one is refused (`writtenRefusal`). A few programs do it only with an option and are held by it in
+ * `handsToRunning`.
  */
 export const systemLaunchers: ReadonlySet<string> = new Set(
     ('start start-process saps invoke-item ii explorer pcalua scriptrunner msiexec cmstp control hh infdefaultinstall wt '
@@ -671,8 +675,84 @@ export const systemLaunchers: ReadonlySet<string> = new Set(
         + 'abduco xdg-open gio gvfs-open kde-open kde-open5 kde-open6 kioclient kioclient5 kioclient6 gnome-open exo-open '
         + 'gtk-launch mimeopen see run-mailcap sensible-browser x-www-browser www-browser xdg-terminal-exec x-terminal-emulator '
         + 'gnome-terminal konsole kstart kstart5 systemctl dbus-send gdbus busctl qdbus flatpak-spawn wslview daemonize '
-        + 'start-stop-daemon').split(' '),
+        + 'start-stop-daemon bitsadmin nircmd nircmdc psexec64 paexec gsudo mavinject pcwrun autohotkey autohotkey64 '
+        + 'autohotkeyu64 autohotkeyu32 kitty kitten wezterm wezterm-gui xfce4-terminal tilix terminator guake yakuake '
+        + 'footclient urxvtc ptyxis kgx emacsclient gnuclient xdotool ydotool wtype dotool xte cliclick zellij mosh nsenter '
+        + 'run0 machinectl qdbus6 qdbus-qt5 qdbus-qt6').split(' '),
 );
+
+/**
+ * True when a program that otherwise runs in this process's environment is told to hand a command to one already
+ * running: an editor's `--remote` or `--server`, alacritty's `msg`, a debugger attached to a running process.
+ */
+export function handsToRunning(program: string, args: readonly string[]): boolean {
+    if (editors.has(program)) return args.some((word) => /^--(remote|server)/i.test(word));
+    if (program === 'alacritty') return args.includes('msg');
+    if (program === 'gdb') return args.some((word) => word === '-p' || longOption(word, ['pid']) || word === 'attach');
+    if (program === 'lldb') return args.some((word) => word === '-p' || longOption(word, ['attach-pid', 'attach-name']) || word === '-n');
+    return false;
+}
+
+/**
+ * The programs that give a place another name: a symbolic or hard link, a junction, a substituted or mapped drive, a
+ * mounted folder. A list, not a rule.
+ */
+const linkPrograms = new Set(['ln', 'gln', 'link', 'mklink', 'junction', 'junction64', 'linkd', 'subst', 'new-psdrive', 'ndr', 'mount', 'mount_nullfs', 'bindfs']);
+
+/** True when a command, its program first, gives a place another name (`linkPrograms`, and the options that make `cp`, `fsutil`, `New-Item`, `rsync` and `net` do it). */
+function makesLink(program: string, args: readonly string[]): boolean {
+    if (linkPrograms.has(program)) return true;
+    if (program === 'cp' || program === 'gcp') return args.some((word) => shortOption(word, 'sl', 'tS') || longOption(word, ['symbolic-link', 'link']));
+    if (program === 'fsutil') return args.some((word) => /^(hardlink|reparsepoint)$/i.test(word));
+    if (program === 'new-item' || program === 'ni') return args.some((word) => /^(-[a-z]+:)?['"]?(sym|junc|hardl)/i.test(word));
+    if (program === 'rsync') return args.some((word) => longOption(word, ['link-dest']));
+    if (program === 'net') return args.some((word) => /^use$/i.test(word));
+    return false;
+}
+
+/**
+ * The words of a command that gives a place another name (`makesLink`), searched from each word of it, so that a link
+ * made under a wrapper (`cmd /c mklink`) is found too: every word after the program that is no option. Null when no word
+ * starts such a command.
+ */
+export function linkOperands(words: readonly string[]): string[] | null {
+    for (let at = 0; at < words.length; at++) {
+        const args = words.slice(at + 1);
+        if (!makesLink(programName(words[at] ?? ''), args)) continue;
+        return args.filter((word) => word !== '' && !word.startsWith('-') && !/^\/[A-Za-z]{1,2}$/.test(word));
+    }
+    return null;
+}
+
+/**
+ * True when a command walks a folder tree following the links in it, so it reads where a link leads without the path
+ * being named, or copies what a link leads to: a closed list of programs and options.
+ */
+function followsLinks(program: string, args: readonly string[]): boolean {
+    const any = (test: (word: string) => boolean) => args.some(test);
+    if (program === 'grep' || program === 'egrep' || program === 'fgrep' || program === 'ggrep') return any((word) => shortOption(word, 'R', 'efABCmdD') || longOption(word, ['dereference-recursive']));
+    if (program === 'rg') return any((word) => shortOption(word, 'L', 'efgjmMtTABCE') || longOption(word, ['follow']));
+    if (program === 'find' || program === 'gfind') return any((word) => word === '-L' || word === '-follow');
+    if (program === 'fd' || program === 'fdfind') return any((word) => shortOption(word, 'L', 'etdEcjxXSo') || longOption(word, ['follow']));
+    if (program === 'ag') return any((word) => shortOption(word, 'f', 'ABCGgmp') || longOption(word, ['follow']));
+    if (program === 'ack') return any((word) => longOption(word, ['follow']));
+    if (tarPrograms.has(program)) {
+        const old = args[0] !== undefined && /^[A-Za-z]+$/.test(args[0]) && args[0].includes('h');
+        return old || any((word) => shortOption(word, 'h', 'fCbHKLNTVXIF') || longOption(word, ['dereference']));
+    }
+    if (program === 'cp' || program === 'gcp') return any((word) => shortOption(word, 'L', 'tS') || longOption(word, ['dereference']));
+    if (program === 'rsync') return any((word) => shortOption(word, 'LkK', 'eBfTM') || longOption(word, ['copy-links', 'copy-dirlinks', 'keep-dirlinks', 'copy-unsafe-links']));
+    if (program === 'du' || program === 'gdu') return any((word) => shortOption(word, 'L', 'BdtX') || longOption(word, ['dereference']));
+    if (program === 'ls' || program === 'gls') return any((word) => shortOption(word, 'L', 'ITw') || longOption(word, ['dereference']));
+    if (program === 'tree') return any((word) => shortOption(word, 'l', 'LPIoH'));
+    if (program === 'zip') return any((word) => shortOption(word, 'rR', 'bntxiPZ')) && !any((word) => shortOption(word, 'y', 'bntxiPZ') || longOption(word, ['symlinks']));
+    if (program === 'diff' || program === 'gdiff') return any((word) => shortOption(word, 'r', 'CDFILSUWxX') || longOption(word, ['recursive'])) && !any((word) => longOption(word, ['no-dereference']));
+    if (program === 'robocopy') return any((word) => /^\/{1,2}(e|s|mir)$/i.test(word)) && !any((word) => /^\/{1,2}(xj|xjd|sl)$/i.test(word));
+    if (program === 'xcopy') return any((word) => /^\/{1,2}[se]$/i.test(word));
+    if (program === 'findstr') return any((word) => /^\/{1,2}s$/i.test(word));
+    if (program === 'where') return any((word) => /^\/{1,2}r$/i.test(word));
+    return false;
+}
 
 /** The builtins that change how a later word or program is read, bash's and zsh's. */
 const builtins = new Set(
@@ -865,7 +945,7 @@ export function heldByWhatRuns(commands: readonly LiteralCommand[]): HeldReason 
         const args = command.words.slice(1);
         if (program === commandPrompt || (/\.(bat|cmd)[. ]*$/i.test(first) && command.words.length > 1)) return 'command_prompt';
         if (takesCode(command)) return 'inline_code';
-        if (runners.has(program) || systemLaunchers.has(program)) return 'runner';
+        if (runners.has(program) || systemLaunchers.has(program) || handsToRunning(program, args)) return 'runner';
         if (program === 'git' && gitRuns(args)) return 'runner';
         if (program === 'find' && command.words.some((word) => /^-(exec|execdir|ok|okdir)$/.test(word))) return 'runner';
         if (startsGiven(program, args)) return 'runner';
@@ -874,6 +954,9 @@ export function heldByWhatRuns(commands: readonly LiteralCommand[]): HeldReason 
         if (command.words.some((word) => /^(alias|function|variable|env):/i.test(word))) return 'builtin';
         if (evaluatesSubscript.has(program) && args.some((word) => /[[$`]/.test(word))) return 'expansion';
         if (changesServers(command.words)) return 'servers';
+        // A link the command makes leads where its folder's path does not say, and a walk that follows links reads there
+        // unlocated: held, wherever the link points.
+        if (linkOperands(command.words) !== null || followsLinks(program, args)) return 'link';
     }
     return null;
 }

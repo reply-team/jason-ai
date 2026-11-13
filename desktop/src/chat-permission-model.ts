@@ -4,7 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
-import { heldByWhatRuns, programName, readLiteral, systemLaunchers, type HeldReason, type LiteralCommand } from './chat-literal.ts';
+import { heldByWhatRuns, linkOperands, programName, readLiteral, systemLaunchers, type HeldReason, type LiteralCommand } from './chat-literal.ts';
 import { powerShellRunsInFullAccess } from './chat-modes.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -231,8 +231,9 @@ const dataVolume = '/system/volumes/data';
  * directly or through `located`:
  * - a leading home spelling (`homeExpanded`) is the home folder, at any depth below it;
  * - a `file:` URL is its path (`urlPath`);
- * - on Windows, slashes are backslashes, the `\\?\` and `\\.\` forms are the plain path, `\\?\UNC\` is a network path, and
- *   each component is read as Windows opens it: without a stream after a colon and without trailing dots and spaces;
+ * - on Windows, slashes are backslashes, a `\\?\` or `\\.\` form of a drive's path is the plain path, `\\?\UNC\` is a
+ *   network path, any other `\\?\` or `\\.\` form is a device path, kept as it is spelled (`device`), and each component
+ *   is read as Windows opens it: without a stream after a colon and without trailing dots and spaces;
  * - on macOS, a path under the data volume's prefix is the same path without it;
  * - `..` and a relative path are settled against the folder the path is read in (`scope.cwd`, which a literal directory
  *   change sets for the commands after it).
@@ -242,7 +243,9 @@ function spelled(value: string, scope: ChatScope): string {
     if (scope.platform === 'win32') {
         text = text.replace(/\//g, '\\');
         if (/^\\\\[?.]\\UNC\\/i.test(text)) text = `\\\\${text.slice(8)}`;
-        else if (/^\\\\[?.]\\/.test(text)) text = text.slice(4);
+        else if (/^\\\\[?.]\\[a-z]:\\/i.test(text)) text = text.slice(4);
+        // A device's or a volume's namespace names no folder this resolves: the path is kept as spelled, a device path.
+        else if (/^\\\\[?.]\\/.test(text) || /^\\\\[?.]$/.test(text)) return text;
     }
     const paths = pathsOf(scope.platform);
     let path = paths.resolve(scope.cwd, text);
@@ -261,9 +264,23 @@ function volumeFolded(platform: Platform, path: string): string {
     return key === dataVolume || key.startsWith(`${dataVolume}/`) ? path.slice(dataVolume.length) || '/' : path;
 }
 
-/** A path that names another computer, whatever the computer: never looked up, since a lookup can send the machine's credentials. */
+/**
+ * A path that names another computer, whatever the computer, or on Windows a device path (`device`): never looked up,
+ * since a lookup can send the machine's credentials, and never matched against a folder, since it names none.
+ */
 function network(platform: Platform, path: string): boolean {
     return platform === 'win32' ? path.startsWith('\\\\') : path.startsWith('/net/');
+}
+
+/** On Windows, a path in a device's or a volume's namespace (`\\.\GLOBALROOT\...`, `\\?\Volume{...}\...`), as `spelled` keeps it. */
+function device(platform: Platform, path: string): boolean {
+    return platform === 'win32' && /^\\\\[?.](\\|$)/.test(path);
+}
+
+/** The refusal of a path that names another computer or a device (`network`); null for any other. */
+function remoteRefusal(platform: Platform, path: string): string | null {
+    if (device(platform, path)) return deviceRefusal;
+    return network(platform, path) ? networkRefusal : null;
 }
 
 /** The computer a network path (`network`) names. */
@@ -441,7 +458,8 @@ function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement 
 function judgeLocated(value: string, scope: ChatScope, writes: boolean): Judgement {
     // A path that names another computer, or this one as another computer would, is outside every chat's folders: never
     // read and never written, in every mode.
-    if (network(scope.platform, spelled(value, scope))) return { verdict: 'deny', message: networkRefusal };
+    const remote = remoteRefusal(scope.platform, spelled(value, scope));
+    if (remote !== null) return { verdict: 'deny', message: remote };
     const paths = pathsOf(scope.platform);
     const path = located(value, scope);
     const key = keyOf(scope.platform, path);
@@ -548,7 +566,7 @@ export function isCompound(command: string): boolean {
  */
 const runsAnother = new Set(
     ('cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start python python3 py node deno bun ruby perl php npm pnpm yarn make '
-        + 'timeout nohup time command exec watch nice stdbuf setsid doas').split(' '),
+        + 'timeout nohup time command exec watch nice stdbuf setsid doas alacritty gdb lldb').split(' '),
 );
 const interpreterStem = /^(python|pythonw|node|nodejs|ruby|perl|php)[0-9.]*$/;
 
@@ -575,6 +593,8 @@ export function commandPrefix(command: string): string | null {
     const words = command.trim().split(/\s+/);
     if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word) && !/(^|[^.])\.\.([\\/]|$)/.test(word))) return null;
     if (words.some(namesReply)) return null;
+    // A link a command makes leads where no later command's words say: each is a card of its own.
+    if (linkOperands(words) !== null) return null;
     const [program, first] = words;
     if (program === undefined || first === undefined || first.startsWith('-')) return null;
     if (/[\\/:]/.test(program) || runsAnotherProgram(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
@@ -839,7 +859,31 @@ function namesFolder(command: string, scope: ChatScope, folder: string, except: 
  * the text's spellings.
  */
 function placesOf(command: string, scope: ChatScope): string[] {
-    return placesOfWords(command.split(/[\s;|&<>()`]+/).map(unquoted), scope, false);
+    const links = command
+        .split(/&&|\|\||[;|&\n\r()`]/)
+        .flatMap((part) => linkPlaces(part.trim().split(/\s+/).map(unquoted).filter((word) => word !== ''), scope, false));
+    return [...placesOfWords(command.split(/[\s;|&<>()`]+/).map(unquoted), scope, false), ...links];
+}
+
+/**
+ * The places a link a command makes may lead to (`linkOperands`): each of its words located from the folder the link is
+ * made in as well as from the command's own, since a link's relative target is read from the link's own folder, not from
+ * the folder the command runs in. Every word is taken for a target, and every word and its parent for the folder the
+ * link may be made in: more places than the link names, which only adds refusals.
+ */
+function linkPlaces(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
+    const operands = (linkOperands(words) ?? [])
+        .map((word) => nativeSpelling(word, scope))
+        .filter((word) => word.length <= pathLimit(scope.platform) && (literal || !/^~|[$%]/.test(homeExpanded(word, scope))));
+    const paths = pathsOf(scope.platform);
+    const folders = new Set<string>();
+    for (const word of operands) {
+        const at = located(word, scope);
+        if (network(scope.platform, at)) continue;
+        folders.add(at);
+        folders.add(paths.dirname(at));
+    }
+    return [...folders].flatMap((folder) => operands.map((word) => located(word, { ...scope, cwd: folder })));
 }
 
 /**
@@ -888,14 +932,22 @@ function wordNamesData(places: readonly string[], scope: ChatScope): boolean {
 function literalPlaces(tool: string, command: string, scope: ChatScope): string[] {
     const reading = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope), relativeDirectories: true });
     if (reading.held) return [];
-    return reading.commands.flatMap((each) =>
-        placesOfWords([...each.words, ...each.targets], each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) }, true),
-    );
+    return reading.commands.flatMap((each) => {
+        const at = each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) };
+        return [...placesOfWords([...each.words, ...each.targets], at, true), ...linkPlaces(each.words, at, true)];
+    });
 }
 
-/** True when a place a command's words name is on another computer, or reaches this one as another computer would. */
-function wordNamesHost(places: readonly string[], scope: ChatScope): boolean {
-    return places.some((path) => network(scope.platform, path));
+/**
+ * The refusal of a place a command's words name on another computer, or reaching this one as another computer would, or
+ * in a device's namespace (`remoteRefusal`); null when none does.
+ */
+function wordNamesHost(places: readonly string[], scope: ChatScope): string | null {
+    for (const path of places) {
+        const refused = remoteRefusal(scope.platform, path);
+        if (refused !== null) return refused;
+    }
+    return null;
 }
 
 /** True when a place the command's words name is in one of the person's own directories (`ChatScope.personsOwn`). */
@@ -927,7 +979,8 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesConfinedVariable(command)) return { verdict: 'deny', message: confinedRefusal };
     if (changesSearch(command)) return { verdict: 'deny', message: lookupRefusal };
     const places = [...placesOf(command, scope), ...literalPlaces(tool, command, scope)];
-    if (wordNamesHost(places, scope)) return { verdict: 'deny', message: networkRefusal };
+    const remote = wordNamesHost(places, scope);
+    if (remote !== null) return { verdict: 'deny', message: remote };
     if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope)) return { verdict: 'deny', message: personsRefusal };
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
@@ -982,7 +1035,105 @@ function writtenText(tool: string, input: Record<string, unknown>): string[] {
  */
 export function writtenRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
     for (const text of writtenText(tool, input)) if (textRefused(text, scope)) return contentRefusal;
+    if (writtenLaunch(tool, input)) return launchRefusal;
     return null;
+}
+
+const launchRefusal = 'That file starts a program through the system\'s own opener, launcher, session or scheduler, or hands a command to a process already running, which runs outside the chat\'s fence: the chat never writes it. Nothing was written.';
+
+/** What a written file is run as, by its name or its first line: a shell's or PowerShell's script, a makefile, a package's scripts, a notebook. */
+type ScriptKind = 'shell' | 'make' | 'package' | 'notebook';
+
+const scriptExtension = /\.(sh|bash|zsh|ksh|dash|fish|csh|tcsh|command|tool|ps1|psm1|psd1|bat|cmd|btm)$/;
+const makeNames: ReadonlySet<string> = new Set(['makefile', 'gnumakefile', 'bsdmakefile', 'justfile']);
+const shellStartupNames: ReadonlySet<string> = new Set(['.bashrc', '.bash_profile', '.bash_login', '.profile', '.zshrc', '.zprofile', '.zshenv', '.zlogin', '.kshrc', '.envrc']);
+
+function scriptKind(tool: string, path: string, text: string): ScriptKind | null {
+    const parts = path.toLowerCase().split(/[\\/]+/);
+    const name = parts.at(-1) ?? '';
+    if (tool === 'NotebookEdit' || name.endsWith('.ipynb')) return 'notebook';
+    if (name === 'package.json') return 'package';
+    if (makeNames.has(name) || /\.(mk|mak|make)$/.test(name)) return 'make';
+    const hooks = (parts.at(-2) === 'hooks' && parts.at(-3) === '.git') || parts.at(-2) === '.husky';
+    return scriptExtension.test(name) || shellStartupNames.has(name) || hooks || text.startsWith('#!') ? 'shell' : null;
+}
+
+/** The command texts a written file of a kind runs: the file itself, a package's script strings, a notebook's shell lines. */
+function scriptCommands(kind: ScriptKind, text: string): string[] {
+    if (kind === 'package') {
+        const strings: string[] = [];
+        // Each value, a script's command among them; a key, which a colon follows, is a name.
+        for (const match of text.matchAll(/"((?:[^"\\]|\\.)*)"(\s*:)?/g)) {
+            if (match[2] !== undefined) continue;
+            try {
+                strings.push(JSON.parse(`"${match[1] ?? ''}"`) as string);
+            } catch {
+                strings.push(match[1] ?? '');
+            }
+        }
+        return strings;
+    }
+    if (kind === 'notebook') {
+        if (/^\s*%%(bash|sh|zsh|script|cmd|powershell|pwsh|system)\b/.test(text)) return [text];
+        return text.split(/\r?\n/).filter((line) => /^\s*(!|%(system|sx|sc)\b)/.test(line)).map((line) => line.replace(/^\s*(!|%(system|sx|sc)\b)/, ''));
+    }
+    return [text];
+}
+
+/** Words that stand before a program without being one: a shell's and PowerShell's keywords, cmd's `call`, make's `shell`. */
+const beforeProgram: ReadonlySet<string> = new Set(['if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'while', 'until', 'for', 'case', 'esac', 'function', 'select', '!', '&', 'call', 'shell', 'try', 'catch', 'finally']);
+
+/** The wrappers whose next word that is no option is the program they run. */
+const wrappers: ReadonlySet<string> = new Set(
+    ('env timeout nice ionice stdbuf time command builtin exec xargs watch flock chronic unbuffer caffeinate taskset strace '
+        + 'ltrace chroot busybox bash sh zsh dash ksh fish cmd pwsh powershell').split(' '),
+);
+
+/**
+ * True when a written file that is run as a script (`scriptKind`) starts a program of `systemLaunchers` or hands a command
+ * to one already running: read at each place a program stands — the start of a line or of a command after an operator, a
+ * substitution or a bracket, past a keyword, an assignment and make's prefixes, and after a wrapper and its options.
+ * Prose in any other file is not read this way, since the launchers' names are words too (`open`, `start`, `at`).
+ */
+function writtenLaunch(tool: string, input: Record<string, unknown>): boolean {
+    const path = input['file_path'] ?? input['notebook_path'];
+    if (typeof path !== 'string') return false;
+    for (const text of writtenText(tool, input)) {
+        const kind = scriptKind(tool, path, text);
+        if (kind === null) continue;
+        for (const commands of scriptCommands(kind, text)) if (launchesIn(commands, kind)) return true;
+    }
+    return false;
+}
+
+function launchesIn(text: string, kind: ScriptKind): boolean {
+    for (const line of text.split(/\r?\n/)) {
+        let body = kind === 'make' ? line.replace(/^\s+/, '').replace(/^[@+-]+/, '') : line;
+        if (/^\s*(#|rem(\s|$)|::)/i.test(body)) continue;
+        body = body.replace(/\s#.*$/, '');
+        for (const part of body.split(/&&|\|\||\$\(|[;|&`(){}]/)) {
+            const words = part.trim().split(/\s+/).map((word) => word.replace(/^['"@]+|['"]+$/g, '')).filter((word) => word !== '');
+            if (programLaunches(words)) return true;
+        }
+    }
+    return false;
+}
+
+function programLaunches(words: readonly string[]): boolean {
+    let at = 0;
+    while (at < words.length) {
+        const word = words[at] as string;
+        if (beforeProgram.has(word.toLowerCase()) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+            at++;
+            continue;
+        }
+        const program = programName(word);
+        if (systemLaunchers.has(program)) return true;
+        if (!wrappers.has(program)) return false;
+        at++;
+        while (at < words.length && /^(-|\/[A-Za-z?]{1,2}$|\d+(\.\d+)?[smhd]?$|[A-Za-z_][A-Za-z0-9_]*=)/.test(words[at] as string)) at++;
+    }
+    return false;
 }
 
 /**
@@ -1374,7 +1525,8 @@ function literalJudgement(tool: string, command: string | null, scope: ChatScope
 function refusalOver(text: string, places: readonly string[], scope: ChatScope): string | null {
     if (namesConfinedVariable(text)) return confinedRefusal;
     if (changesSearch(text)) return lookupRefusal;
-    if (wordNamesHost(places, scope)) return networkRefusal;
+    const remote = wordNamesHost(places, scope);
+    if (remote !== null) return remote;
     if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(places, scope)) return personsRefusal;
     if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(places, scope)) return dataRefusal;
     if (jasonIn(text, scope) === 'deny') return commandRefusal;
@@ -1400,7 +1552,7 @@ function literalOutcome(tool: string, command: string, scope: ChatScope): FullAc
     if (reading.held) return heldFor(reading.reason);
     // Each command's words are located against the folder it runs in: a directory change's literal absolute target.
     const commands = reading.commands.map((each) => ({ command: each, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) } }));
-    const places = commands.flatMap(({ command: each, scope: at }) => placesOfWords([...each.words, ...each.targets], at, true));
+    const places = commands.flatMap(({ command: each, scope: at }) => [...placesOfWords([...each.words, ...each.targets], at, true), ...linkPlaces(each.words, at, true)]);
     // (a) Refused, over the resolved words, a URL's percent-escapes decoded.
     const resolved = reading.commands.map((each) => [...each.words, ...each.targets].join(' ')).join('\n');
     for (const text of new Set([resolved, percentDecoded(resolved)])) {
