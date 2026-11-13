@@ -97,6 +97,13 @@ describe('switching', () => {
         expect(mode.value).toBe('live');
     });
 
+    it('the stand-in rejects a word that is neither mode, as the desktop does, and keeps nothing', async () => {
+        const desktop = stubDesktop();
+        await expect(desktop.mode.set('sample' as 'live')).rejects.toThrow('That is not a mode.');
+        expect(desktop.modeKept).toBe('live');
+        expect(desktop.calls.filter((each) => each.name === 'mode.set')).toEqual([]);
+    });
+
     it('in a desktop too old for it says so, and asks nothing', async () => {
         await loadMode({ mode: { get: () => Promise.resolve('live') } });
         await switchMode('demo');

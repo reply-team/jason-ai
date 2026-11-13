@@ -43,6 +43,7 @@ export const en = {
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',
+    'mode.unsupported': 'This version of the desktop cannot switch to the demo.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
 } as const;
