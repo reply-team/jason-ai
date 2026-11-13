@@ -237,3 +237,17 @@ test('a name a person gave is kept with its mark, and a record without the mark 
         assert.equal(parseConversation(planted, plain.id)?.named_by_person, undefined, JSON.stringify(value));
     }
 });
+
+test('a plan\'s mark on the agent\'s words is kept, read back only as true, and kept when the words are cut to fit', () => {
+    const kept = record({ entries: [{ kind: 'user', text: 'Plan the follow-ups' }, { kind: 'text', text: 'First, read the replies.', plan: true }] });
+    assert.deepEqual(parseConversation(serialize(kept), kept.id), kept);
+    // Any other value is no mark: the words stand as a plain answer, and the record is kept.
+    for (const value of [false, 'true', 1, null, {}]) {
+        const planted = record({ entries: [{ kind: 'text', text: 'Words', plan: value } as never] });
+        assert.deepEqual(parseConversation(serialize(planted), planted.id)?.entries, [{ kind: 'text', text: 'Words' }], JSON.stringify(value));
+    }
+    const long = bounded(record({ entries: [{ kind: 'text', text: 'p'.repeat(recordLimit) + 'END', plan: true }] })).entries[0];
+    assert.ok(long?.kind === 'text' && long.plan === true && long.text.endsWith('END'));
+    // A desktop that knows no mark reads the words alone: the field is an extra one on a kind it takes.
+    assert.equal(JSON.parse(serialize(kept)).entries[1].plan, true);
+});

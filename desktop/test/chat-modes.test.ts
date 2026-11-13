@@ -10,7 +10,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -613,4 +613,13 @@ test('the settings of every turn, in all three modes, turn off the shell command
     assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
     assert.equal(JSON.parse(planTurnSettings).disableSkillShellExecution, true);
     assert.equal(fullAccessSettings('http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true);
+});
+
+test('Plan only says the AI how it is left, the plan card included, and a go approved for another mode says why it was not sent', () => {
+    assert.equal(
+        planExitRefusal,
+        'Plan only is on, and only the person leaves it, from the menu beside the message box or by approving your plan. Give your plan as your answer.',
+    );
+    assert.equal(planModeMoved, "The chat's mode changed before the plan was approved, so nothing was sent.");
+    assert.equal(planRefusal, 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.', 'unchanged');
 });

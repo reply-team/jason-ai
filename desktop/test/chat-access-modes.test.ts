@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox } from '../src/chat-hosts.ts';
-import { codexAutoEdit, feedAutoEdit, feedFullAccess, fullAccessOffered, fullAccessSentence, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexAutoEdit, feedAutoEdit, feedFullAccess, fullAccessOffered, fullAccessSentence, planModeMoved, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
@@ -346,7 +346,8 @@ test('in Ask first and in Plan only a tool result the desktop has no hook for is
     plan(r, [{ unhooked: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }]);
     assert.deepEqual(done(await r.turn(id, 'go', claude)), { kind: 'done', error: null });
     await r.chat.setMode(id, 'plan_only');
-    assert.deepEqual(done(await r.turn(id, 'go', claude)), { kind: 'done', error: null });
+    // It ended well with its words last: in Plan only those words are its plan.
+    assert.deepEqual(done(await r.turn(id, 'go', claude)), { kind: 'done', error: null, plan: true });
 });
 
 test('a restart opens a chat that was in Full access in Ask first: its record never says Full access', async (t) => {
@@ -751,4 +752,183 @@ test('the standing choice of Full access with new chats never starts a chat in A
         const made = await r.chat.create(undefined, host);
         assert.notEqual(made.mode, 'auto_edit', String(host));
     }
+});
+
+// Plan only's plan as a card: which words are a plan, when they stop being one, and the go the card sends, which names
+// the mode it was approved for.
+
+const recordOf = (r: Rig, id: string) => JSON.parse(readFileSync(join(r.b.paths.conversations, `${id}.json`), 'utf8'));
+const marked = (entries: { kind: string; plan?: unknown }[]) => entries.flatMap((entry, at) => (entry.kind === 'text' && entry.plan !== undefined ? [at] : []));
+const go = 'Go ahead with the plan in your last answer.';
+
+test('a Plan only turn that ends well with its words last marks those words its plan, on its end and on the record, through a restart', async (t) => {
+    for (const host of ['claude', 'codex']) {
+        const r = rig(t);
+        const { id } = await r.chat.create();
+        await r.chat.setMode(id, 'plan_only');
+        plan(r, [{ say: 'Read the replies, then draft three answers.' }]);
+        const said = await r.turn(id, 'plan the follow-ups', { host });
+        assert.deepEqual(done(said), { kind: 'done', error: null, plan: true }, host);
+        const entries = r.chat.open(id).entries;
+        assert.deepEqual(entries.at(-1), { kind: 'text', text: 'Read the replies, then draft three answers.', plan: true }, host);
+        assert.deepEqual(marked(entries), [entries.length - 1], 'only the last words are the plan');
+        assert.equal(recordOf(r, id).entries.at(-1).plan, true);
+        const later = r.again().open(id);
+        assert.equal(later.mode, 'plan_only');
+        assert.deepEqual(marked(later.entries), [later.entries.length - 1], `${host}: a restart keeps the card`);
+    }
+});
+
+test('no plan is marked for an Ask first turn, a stopped one, one that failed, one whose last act was a step, nor for the Feed', async (t) => {
+    const r = rig(t);
+    const asked = await r.chat.create();
+    assert.deepEqual(done(await r.turn(asked.id, 'hello', claude)), { kind: 'done', error: null });
+    assert.deepEqual(marked(r.chat.open(asked.id).entries), []);
+
+    const failed = await r.chat.create();
+    await r.chat.setMode(failed.id, 'plan_only');
+    plan(r, [{ say: 'A plan' }, { end: 'error', text: 'It broke.' }]);
+    const broke = done(await r.turn(failed.id, 'plan it', claude));
+    assert.ok(broke?.kind === 'done' && broke.error !== null && broke.plan === undefined);
+    assert.deepEqual(marked(r.chat.open(failed.id).entries), []);
+
+    const stepped = await r.chat.create();
+    await r.chat.setMode(stepped.id, 'plan_only');
+    plan(r, [{ say: 'Looking' }, { use: { tool: 'Read', input: { file_path: join(r.b.paths.chat, 'notes.md') } } }]);
+    assert.deepEqual(done(await r.turn(stepped.id, 'plan it', claude)), { kind: 'done', error: null });
+    assert.deepEqual(marked(r.chat.open(stepped.id).entries), []);
+
+    const stopped = await r.chat.create();
+    await r.chat.setMode(stopped.id, 'plan_only');
+    const { ended } = await heldTurn(r, stopped.id, join(r.b.root, 'held.pid'));
+    r.chat.stop(stopped.id);
+    assert.deepEqual(await ended, { kind: 'done', error: null });
+    assert.deepEqual(marked(r.chat.open(stopped.id).entries), []);
+
+    plan(r, [{ say: 'Answer the reply first.' }]);
+    const feed = r.chat.feed([]);
+    await r.chat.setMode(feed.id, 'plan_only');
+    assert.deepEqual(done(await r.turn(feed.id, 'plan the replies', claude)), { kind: 'done', error: null });
+    assert.deepEqual(marked(r.chat.open(feed.id).entries), [], 'the Feed has no plan card');
+});
+
+test('an earlier plan is no plan once a later turn ended, nor after Start afresh, nor once the chat left Plan only, through a restart', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'plan_only');
+    plan(r, [{ say: 'Plan one' }]);
+    await r.turn(id, 'plan', claude);
+    plan(r, [{ say: 'Plan two' }]);
+    await r.turn(id, 'again', claude);
+    let entries = r.chat.open(id).entries;
+    assert.deepEqual(marked(entries), [entries.length - 1], 'the later plan alone');
+    plan(r, [{ say: 'Plan three' }, { end: 'error', text: 'It broke.' }]);
+    await r.turn(id, 'once more', claude);
+    assert.deepEqual(marked(r.chat.open(id).entries), [], 'a later turn that failed ends the earlier plan too');
+
+    plan(r, [{ say: 'Plan four' }]);
+    await r.turn(id, 'plan', claude);
+    r.chat.restart(id);
+    assert.deepEqual(marked(r.chat.open(id).entries), [], 'Start afresh: the host no longer remembers it');
+    assert.deepEqual(marked(recordOf(r, id).entries), []);
+
+    await r.turn(id, 'plan', claude);
+    entries = r.chat.open(id).entries;
+    assert.deepEqual(marked(entries), [entries.length - 1]);
+    // Approving is choosing Ask first, the menu's own change: the plan is no card any more, kept so.
+    assert.equal((await r.chat.setMode(id, 'ask_first', 'claude')).mode, 'ask_first');
+    assert.deepEqual(marked(r.chat.open(id).entries), []);
+    assert.deepEqual(marked(recordOf(r, id).entries), []);
+    assert.equal(recordOf(r, id).mode, undefined);
+    // Back in Plan only, by the menu or after a restart, the approved plan is never offered again.
+    assert.equal((await r.chat.setMode(id, 'plan_only')).mode, 'plan_only');
+    assert.deepEqual(marked(r.chat.open(id).entries), []);
+    assert.deepEqual(marked(r.again().open(id).entries), []);
+
+    // Leaving Plan only for Full access keeps Plan only on the record, and still ends the card.
+    await r.turn(id, 'plan', claude);
+    assert.equal((await r.chat.setMode(id, 'full_access', 'claude')).mode, 'full_access');
+    assert.deepEqual(marked(recordOf(r, id).entries), []);
+    assert.equal(r.again().open(id).mode, 'plan_only');
+});
+
+test('approving a plan lands in Ask first with the standing choice in force: no box, the choice untouched, never Full access or Auto-edit', async (t) => {
+    const r = rig(t, { chat: { fullAccessOffered: true } });
+    mkdirSync(dirname(r.b.paths.fullAccess), { recursive: true });
+    const kept = JSON.stringify({ claude: { consent: 1, given_at: '2026-11-13T08:00:00Z', new_chats: true } });
+    writeFileSync(r.b.paths.fullAccess, kept);
+    const { id } = await r.chat.create(undefined, 'claude');
+    assert.equal(r.chat.open(id).mode, 'full_access', 'the standing choice started the chat in Full access');
+    await r.chat.setMode(id, 'plan_only');
+    plan(r, [{ say: 'A plan' }]);
+    assert.deepEqual(done(await r.turn(id, 'plan', claude)), { kind: 'done', error: null, plan: true });
+    // The card's two calls, as the page makes them: the menu's change to Ask first, then the go naming Ask first.
+    assert.equal((await r.chat.setMode(id, 'ask_first', 'claude')).mode, 'ask_first');
+    plan(r, []);
+    assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'ask_first' })), { kind: 'done', error: null });
+    assert.deepEqual(r.started.slice(-2), ['plan_only', 'ask_first']);
+    assert.equal(r.confirms, 0);
+    assert.equal(readFileSync(r.b.paths.fullAccess, 'utf8'), kept);
+    assert.equal(r.chat.open(id).mode, 'ask_first');
+    assert.equal(flag(r.hosts().at(-1)?.args ?? [], '--permission-mode'), undefined, "Ask first's own turn");
+});
+
+test('a go that names the mode it was approved for is refused, before any host starts, when the chat is in another mode', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    for (const mode of ['full_access', 'auto_edit', 'plan_only'] as const) {
+        await r.chat.setMode(id, mode, 'claude');
+        const before = r.hosts().length;
+        assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'ask_first' })), { kind: 'done', error: planModeMoved }, mode);
+        assert.equal(r.hosts().length, before, `${mode}: no host started`);
+        assert.equal(r.chat.open(id).mode, mode, 'and the mode is left as it is');
+    }
+    assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'approve' })), { kind: 'done', error: 'That is not a mode of the chat.' });
+    await r.chat.setMode(id, 'ask_first');
+    assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'ask_first' })), { kind: 'done', error: null });
+    assert.deepEqual(r.started, ['ask_first']);
+});
+
+test('a Full access box answered from the menu while the approval is pending never lets the go run in Full access', async (t) => {
+    // The person answers the box only when the test says: the approval and the go come in between.
+    let answer: (yes: boolean) => void = () => undefined;
+    let shown: () => void = () => undefined;
+    const asked = () => new Promise<void>((resolve) => (shown = resolve));
+    const r = rig(t, {
+        chat: {
+            confirmFullAccess: () =>
+                new Promise<boolean>((resolve) => {
+                    answer = resolve;
+                    shown();
+                }),
+        },
+    });
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'plan_only');
+    await r.turn(id, 'plan', claude);
+
+    // The box answered first, then the go: the go is refused, and nothing runs in Full access.
+    const open = asked();
+    const box = r.chat.setMode(id, 'full_access', 'claude');
+    await open;
+    assert.equal((await r.chat.setMode(id, 'ask_first', 'claude')).mode, 'ask_first');
+    answer(true);
+    assert.equal((await box).mode, 'full_access');
+    assert.deepEqual(done(await r.turn(id, go, { host: 'claude', mode: 'ask_first' })), { kind: 'done', error: planModeMoved });
+    assert.deepEqual(r.started, ['plan_only']);
+
+    // The go first, then the box: the go's turn runs in Ask first, the mode it was read in, whatever the box says after.
+    await r.chat.setMode(id, 'plan_only');
+    await r.turn(id, 'plan', claude);
+    const reopened = asked();
+    const later = r.chat.setMode(id, 'full_access', 'claude');
+    await reopened;
+    assert.equal((await r.chat.setMode(id, 'ask_first', 'claude')).mode, 'ask_first');
+    plan(r, [{ sleep: 300 }]);
+    const ran = r.turn(id, go, { host: 'claude', mode: 'ask_first' });
+    await r.until(id, (event) => event.kind === 'text' && event.text.startsWith('heard'));
+    answer(true);
+    assert.equal((await later).mode, 'full_access');
+    assert.deepEqual(done(await ran), { kind: 'done', error: null });
+    assert.deepEqual(r.started, ['plan_only', 'plan_only', 'ask_first']);
 });

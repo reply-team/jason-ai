@@ -76,7 +76,14 @@ export const feedAutoEdit = 'Auto-edit is not offered for the Feed: its turns ar
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';
 
 /** What a chat in Plan only answers the host's own way out of planning: only the person changes the mode. */
-export const planExitRefusal = 'Plan only is on, and only the person leaves it, from the menu beside the message box. Give your plan as your answer.';
+export const planExitRefusal =
+    'Plan only is on, and only the person leaves it, from the menu beside the message box or by approving your plan. Give your plan as your answer.';
+
+/**
+ * Why a send that names the mode it was approved for is refused: the chat is in another mode now. The plan card's go
+ * names Ask first, and a mode chosen from the menu between the approval and the send would otherwise carry it.
+ */
+export const planModeMoved = "The chat's mode changed before the plan was approved, so nothing was sent.";
 
 /**
  * The turn's end when a tool ran that the turn's hook never saw, a policy having filtered the hook out, say: that first
