@@ -83,6 +83,20 @@ export function refusalOf(frame: SenderFrame | null | undefined, origin: string 
 /** The registration surface of Electron's `ipcMain` that this module uses. */
 export interface IpcRegistrar {
     handle(channel: string, listener: (event: { senderFrame: SenderFrame | null }, ...args: unknown[]) => unknown): void;
+    /**
+     * Where each member's handler is kept as it is registered, before the origin check wraps it: the one registry the
+     * browser bridge reaches a member's handler through (`browser-bridge.ts`), so a tab's call runs the very handler the
+     * window's channel runs and never a second copy of it. Absent, nothing is kept.
+     */
+    members?: Map<InvokeMember, Handler>;
+}
+
+/** A member's handler, as it is registered: the arguments the page sent, and its answer. */
+export type Handler = (...args: unknown[]) => unknown;
+
+/** A registrar that registers on `ipc` and keeps each member's handler in `members`. */
+export function withMembers(ipc: IpcRegistrar): IpcRegistrar & { members: Map<InvokeMember, Handler> } {
+    return { handle: (channel, listener) => ipc.handle(channel, listener), members: new Map() };
 }
 
 export class RefusedSender extends Error {
@@ -99,10 +113,15 @@ export function handle(
     ipc: IpcRegistrar,
     member: InvokeMember,
     origin: () => string | null,
-    handler: (...args: unknown[]) => unknown,
+    handler: Handler,
     refused: (channel: string, why: Refusal) => void,
 ): void {
     const channel = invokeChannels[member];
+    if (ipc.members !== undefined) {
+        // Electron refuses a second handler for a channel; the registry refuses it as well, so no member has two.
+        if (ipc.members.has(member)) throw new Error(`A handler for ${member} is already registered.`);
+        ipc.members.set(member, handler);
+    }
     ipc.handle(channel, (event, ...args) => {
         const why = refusalOf(event.senderFrame, origin());
         if (why !== null) {
