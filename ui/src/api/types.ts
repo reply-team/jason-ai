@@ -110,6 +110,29 @@ export type SystemInfo = {
         root: string;
         root_state: string;
     } | null;
+    notifications?: NotificationsInfo | null;
+};
+
+/** What `system.info` says of the notification channels: whether they are on, and what each did with the last one. */
+export type NotificationsInfo = {
+    enabled: boolean;
+    channels: NotificationChannel[];
+    last_notification_id: string | null;
+    last_at: string | null;
+};
+
+export type NotificationChannel = {
+    channel: string;
+    kind: string;
+    on: boolean;
+    /** `delivered`, `silenced`, `failed` or `not_attempted`; null before anything was sent. */
+    outcome: string | null;
+    reason: string | null;
+    code: string | null;
+    class: string | null;
+    at: string | null;
+    /** The toast's: `available`, or `no_desktop`. */
+    presence?: string | null;
 };
 export type Plugin = {
     id: string;
@@ -210,6 +233,8 @@ export type WorkItemUpdateRequest = {
     priority?: number;
     not_before?: string | null;
     due_at?: string | null;
+    set?: Record<string, unknown>;
+    reason?: string;
     actor?: ActorRef;
 };
 export type WorkItemCancelRequest = { work_item_id: string; reason?: string; actor?: ActorRef };

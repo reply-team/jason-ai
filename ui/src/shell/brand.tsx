@@ -8,6 +8,7 @@ export function Brand() {
             <img className="mark" src={`${base}favicon.svg`} alt="" />
             <img className="wordmark light" src={`${base}brand-wordmark.svg`} alt="Jason AI, GTM Harness" />
             <img className="wordmark dark" src={`${base}brand-wordmark-dark.svg`} alt="Jason AI, GTM Harness" />
+            <span className="alpha">Alpha</span>
         </div>
     );
 }

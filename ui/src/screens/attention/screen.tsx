@@ -170,6 +170,11 @@ export function AttentionScreen() {
                     }
                     onSkip={() => go(store.nextPending(selected, only))}
                     onClose={close}
+                    onSuperseded={() => void store.load(api, decided)}
+                    onReasked={(id) => {
+                        void store.load(api, decided);
+                        go({ kind: 'approvals', id });
+                    }}
                 />
             )}
             {selected && detail?.kind === 'questions' && (

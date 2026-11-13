@@ -120,6 +120,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
             openFolder: 'function',
             feed: 'function',
         },
+        fullAccess: { standing: 'function', takeBack: 'function', onChanged: 'function' },
         theme: { get: 'function', set: 'function' },
         links: {
             take: 'function',
@@ -154,7 +155,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.answer', ['c1', 'r1', { allow: true, always: false }]],
         ['chat.list', []],
         ['chat.open', ['conv_01']],
-        ['chat.create', ['cmp_01']],
+        ['chat.create', ['cmp_01', 'claude']],
         ['chat.remove', ['conv_01']],
         ['chat.restart', ['conv_01']],
         ['chat.attach', ['conv_01', 'cmp_01']],
@@ -162,6 +163,8 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['chat.setMode', ['conv_01', 'plan_only', 'claude']],
         ['chat.openFolder', ['01JD0000000000000000000000-1788000000000']],
         ['chat.feed', [[], { catchUp: true }]],
+        ['fullAccess.standing', []],
+        ['fullAccess.takeBack', []],
         ['links.take', []],
         ['theme.get', []],
         ['theme.set', ['dark']],
@@ -194,5 +197,6 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
     void api.chat?.onEvent?.(() => undefined);
     void api.setup?.onChanged?.(() => undefined);
     void api.links?.onOpen?.(() => undefined);
-    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open']]);
+    void api.fullAccess?.onChanged?.(() => undefined);
+    assert.deepEqual(recorded.listening, [eventChannels.command, eventChannels['chat.event'], eventChannels['setup.changed'], eventChannels['links.open'], eventChannels['fullAccess.changed']]);
 });
