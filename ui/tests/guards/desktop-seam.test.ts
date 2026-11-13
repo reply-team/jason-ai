@@ -20,8 +20,12 @@ const top = {
     fullAccess: true,
 } as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
-// Live or Demo, the installation the desktop runs on: read once as the page loads, and set, which starts it again.
-const mode = { get: true, set: true, startOver: true } as const satisfies Record<keyof JasonDesktop['mode'], true>;
+// Live or Demo, the installation the desktop runs on: read once as the page loads, and set, which starts it again; and
+// whether the demo's sample is still being made, said again when it is ready.
+const mode = { get: true, set: true, startOver: true, onPreparing: true } as const satisfies Record<
+    keyof JasonDesktop['mode'],
+    true
+>;
 // Open in: the places this computer offers for a folder and the act of opening one; the page names a place, never a path.
 const openIn = { targets: true, open: true, continueChat: true } as const satisfies Record<
     keyof JasonDesktop['openIn'],
@@ -123,6 +127,7 @@ describe('the desktop seam', () => {
             'mode.get',
             'mode.set',
             'mode.startOver',
+            'mode.onPreparing',
             'openIn.targets',
             'openIn.open',
             'openIn.continueChat',

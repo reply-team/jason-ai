@@ -1409,6 +1409,16 @@ body,
 .jc-console .mode-strip-refusal {
     font-weight: 600;
 }
+/* The demo's sample being made: a quiet mark, gone once it is ready. */
+.jc-console .mode-preparing {
+    flex: none;
+    opacity: 0.75;
+    font-style: italic;
+}
+.jc-console .mode-switch button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
 .jc-console .mode-unopened {
     display: flex;
     align-items: center;

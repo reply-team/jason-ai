@@ -78,7 +78,8 @@ type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop['chat'], 'chat.'>
     | Subscriptions<JasonDesktop['setup'], 'setup.'>
     | Subscriptions<JasonDesktop['links'], 'links.'>
-    | Subscriptions<JasonDesktop['fullAccess'], 'fullAccess.'>;
+    | Subscriptions<JasonDesktop['fullAccess'], 'fullAccess.'>
+    | Subscriptions<JasonDesktop['mode'], 'mode.'>;
 
 // ipc.ts registers a channel for every call the page declares, and for nothing else.
 type InvokeChannelsAreTheSeam = Holds<Equal<InvokeMember, DeclaredCalls>>;
@@ -90,6 +91,7 @@ const eventChannelOf = {
     'setup.onChanged': 'setup.changed',
     'links.onOpen': 'links.open',
     'fullAccess.onChanged': 'fullAccess.changed',
+    'mode.onPreparing': 'mode.preparing',
 } as const satisfies Record<DeclaredSubscriptions, keyof typeof eventChannels>;
 type EventChannelsAreTheSeam = [
     Holds<Equal<keyof typeof eventChannelOf, DeclaredSubscriptions>>,
@@ -132,7 +134,7 @@ type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStandi
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
 
 // The mode reaches the page as the desktop keeps it, one of two words, with the sentence of a demo that could not be
-// opened, and setting it answers as the desktop does: null once written and the desktop starting again, or the desktop's refusal when the record could not be written.
+// opened and whether the demo's sample is still being made, and setting it answers as the desktop does: null once written and the desktop starting again, or the desktop's refusal when the record could not be written.
 type ModeIsTheSeam = [
     Holds<Equal<ModeAnswer, Awaited<ReturnType<JasonDesktop['mode']['get']>>>>,
     Holds<Equal<Mode, Parameters<JasonDesktop['mode']['set']>[0]>>,
@@ -170,5 +172,5 @@ export type SeamHeld = [
 ];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
-    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged']);
+    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged', 'mode.onPreparing']);
 });

@@ -15,6 +15,11 @@
  *
  * A marker carrying the seed's version is written last, so a seeded directory with the same version is not seeded again.
  * "Start the demo over" removes the demo's two folders and seeds again.
+ *
+ * The page is loaded before the sample is made (`openOnTheSample`): the runtime's link that pairs the page is good for a
+ * minute and the seed takes longer, and the page shows the data as it lands. While the sample is made the page and the
+ * menu say so, and the person's request to start the demo over is left in place, so a desktop that quits half-way makes
+ * the sample whole at its next start rather than show the half.
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -61,6 +66,8 @@ export interface WaitStep {
     atLeast: number;
     /** The answer's field holding the list. */
     list: string;
+    /** The first item's id, kept under this name for the steps after it. */
+    keep?: string;
 }
 
 /** Waits, by asking again, until a field of the verb's answer holds a value, the way a person watches `workitem get`. */
@@ -71,10 +78,10 @@ export interface WaitFieldStep {
     equals: string;
 }
 
-/** Approves the pending approval of one work item, by `approval approve`, in the story's operator's name. */
+/** Approves one pending approval, the one the wait before it listed, by `approval approve`, in the story's operator's name. */
 export interface ApproveStep {
     kind: 'approve';
-    workItem: Arg;
+    approval: Arg;
     reason: string;
 }
 
@@ -205,10 +212,11 @@ export function buildSeed(story: Story): SeedStep[] {
 
     const active = new Set(story.campaigns.filter((campaign) => campaign.status === 'active').map((campaign) => campaign.key));
     const given = sends.filter((entry) => entry.send.approval === 'given');
-    // The sends the story says were approved: each parks, is approved in the operator's name, and then is done.
+    // The sends the story says were approved: each parks, is approved in the operator's name, and then is done. The
+    // approval approved is the one the wait listed, so the list is asked for once.
     for (const { send } of given) {
-        steps.push({ kind: 'wait', args: ['approval', 'list', '--work-item', sendRef(send)], list: 'items', atLeast: 1 });
-        steps.push({ kind: 'approve', workItem: sendRef(send), reason: 'reviewed and fine to send' });
+        steps.push({ kind: 'wait', args: ['approval', 'list', '--work-item', sendRef(send)], list: 'items', atLeast: 1, keep: `apr:${send.key}` });
+        steps.push({ kind: 'approve', approval: ref(`apr:${send.key}`), reason: 'reviewed and fine to send' });
     }
     for (const { send } of given) steps.push({ kind: 'wait-field', args: ['workitem', 'get', sendRef(send)], field: 'status', equals: 'succeeded' });
     // A paused campaign's given sends went first; only then is it paused.
@@ -227,10 +235,7 @@ export function verbsUsed(steps: readonly SeedStep[]): string[] {
     const used = new Set<string>();
     for (const step of steps) {
         if (step.kind === 'verb' || step.kind === 'wait' || step.kind === 'wait-field') used.add(`${step.args[0]} ${step.args[1]}`);
-        if (step.kind === 'approve') {
-            used.add('approval list');
-            used.add('approval approve');
-        }
+        if (step.kind === 'approve') used.add('approval approve');
         if (step.kind === 'cancel-reviews') {
             used.add('workitem list');
             used.add('workitem cancel');
@@ -259,16 +264,36 @@ export interface SeedDeps {
     removeTree(path: string): void;
     /** The text of the placed package's story module. */
     readStory(data: string): string;
-    /** What the window says while this goes on. */
-    progress(message: string): void;
+    /** Each phase of the seed as it begins (`seedPhase`), and `made` once the sample is whole: steps, never a text. */
+    progress(step: SeedPhase | 'made'): void;
     sleep(ms: number): Promise<void>;
     /** The moment now. */
     now(): Date;
     /** The scratch folder the body files are written to; removed after. */
     scratch: string;
-    /** How long a wait may last, and how often it asks. */
+    /** How long a wait may last, and how often it asks (`seedWaitStepMs` unless given). */
     waitLimitMs?: number;
     waitStepMs?: number;
+}
+
+/** How often a wait asks again: a quarter of a second, so a step is seen soon after the runtime has done it. */
+export const seedWaitStepMs = 250;
+
+/** The seed's phases, in the order it goes through them. */
+export type SeedPhase = 'campaigns' | 'approvals' | 'sends' | 'story';
+
+/**
+ * The phase a step belongs to, for the log line that says where the seed is: the approvals given (a wait that comes
+ * before an approve, and the approve), the sends waited on until done, the story told after them, and before all that
+ * the project and the campaigns with their people and their work.
+ */
+export function seedPhase(steps: readonly SeedStep[], index: number): SeedPhase {
+    const step = steps[index]!;
+    if (step.kind === 'approve' || (step.kind === 'wait' && steps[index + 1]?.kind === 'approve')) return 'approvals';
+    if (step.kind === 'wait-field') return 'sends';
+    if (step.kind === 'wait' || step.kind === 'story-start') return 'story';
+    if (step.kind === 'verb' && ((step.args[0] === 'campaign' && step.args[1] === 'pause') || (step.args[0] === 'plugin' && step.args[1] === 'reload'))) return 'story';
+    return 'campaigns';
 }
 
 export type SeedOutcome =
@@ -322,7 +347,6 @@ export async function ensureSeeded(deps: SeedDeps, version = seedVersion): Promi
     if (marker?.complete && marker.version === version) return { kind: 'already-seeded' };
     // Something is there that this seed did not finish or did not make: it is never built on, and never removed here.
     if (marker) return { kind: 'needs-start-over' };
-    deps.progress('Preparing the sample');
     deps.makeDirectory(deps.places.data);
     deps.makeDirectory(deps.scratch);
     try {
@@ -330,13 +354,16 @@ export async function ensureSeeded(deps: SeedDeps, version = seedVersion): Promi
         // The story is read from the package the desktop placed, so it is the one set.
         const story = parseStory(deps.readStory(deps.places.data));
         const context: Context = { refs: new Map(), story };
-        let count = 0;
-        for (const step of buildSeed(story)) {
-            count += 1;
-            const failed = await runStep(deps, step, context, count);
+        const steps = buildSeed(story);
+        let phase: SeedPhase | null = null;
+        for (const [index, step] of steps.entries()) {
+            const now = seedPhase(steps, index);
+            if (now !== phase) deps.progress((phase = now));
+            const failed = await runStep(deps, step, context, index + 1);
             if (failed) return { kind: 'failed', step: failed.step, detail: failed.detail, ...(failed.code === undefined ? {} : { code: failed.code }) };
         }
         deps.writeText(deps.markerFile, `${JSON.stringify({ version, complete: true })}\n`);
+        deps.progress('made');
         return { kind: 'seeded' };
     } catch (error) {
         return { kind: 'failed', step: 'story', detail: error instanceof Error ? error.message : String(error) };
@@ -386,7 +413,7 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
     const actor = operatorActor(context.story);
     const label = (args: readonly Arg[]) => `${args[0]} ${args[1]}`;
     const limit = deps.waitLimitMs ?? 120_000;
-    const every = deps.waitStepMs ?? 1_000;
+    const every = deps.waitStepMs ?? seedWaitStepMs;
     try {
         switch (step.kind) {
             case 'verb': {
@@ -410,18 +437,20 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
                     const answer = parse(result);
                     const list = step.kind === 'wait' ? answer?.[step.list] : undefined;
                     const reached = step.kind === 'wait' ? Array.isArray(list) && list.length >= step.atLeast : answer?.[step.field] === step.equals;
-                    if (reached) return null;
+                    if (reached) {
+                        if (step.kind === 'wait' && step.keep !== undefined) {
+                            const id = ((list as unknown[])[0] as { id?: unknown } | undefined)?.id;
+                            if (typeof id !== 'string') return { step: label(step.args), detail: 'the first item listed has no id' };
+                            refs.set(step.keep, id);
+                        }
+                        return null;
+                    }
                     if (waited >= limit) return { step: label(step.args), detail: `not reached after ${limit} ms` };
                     await deps.sleep(every);
                 }
             }
             case 'approve': {
-                const item = resolveArg(step.workItem, refs);
-                const listed = await deps.cli.run(['approval', 'list', '--work-item', item]);
-                if (listed.exit !== 0) return { step: 'approval list', detail: describe(listed), code: codeOf(listed) };
-                const items = parse(listed)?.['items'];
-                const id = (Array.isArray(items) ? (items[0] as { id?: unknown } | undefined) : undefined)?.id;
-                if (typeof id !== 'string') return { step: 'approval list', detail: `nothing waits on ${item}` };
+                const id = resolveArg(step.approval, refs);
                 const approved = await deps.cli.run(['approval', 'approve', id, '--reason', step.reason, '--actor', actor]);
                 return approved.exit === 0 ? null : { step: 'approval approve', detail: describe(approved), code: codeOf(approved) };
             }
@@ -502,16 +531,22 @@ export async function startDemoOver(deps: StartOverDeps): Promise<StartOverOutco
 
 export type ReadyOutcome = { kind: 'ready'; seeded: boolean } | { kind: 'failed'; why: string; step?: string; code?: string };
 
+/** What a start does around a making of the sample: `begin` before its first verb, `made` once the sample is whole. */
+export interface Preparing {
+    begin(): void | Promise<void>;
+    made(): void;
+}
+
 /**
- * What every start of the demo does once its runtime is up: a demo with no marker is seeded (behind `showPreparing`),
- * one whose seed was not finished is left alone and said so, and in every case the open AI-role work items are
- * cancelled in the operator's name, because no AI role runs in the demo's runtime.
+ * What every start of the demo does once its runtime is up: a demo with no marker is seeded (between `preparing.begin`
+ * and `preparing.made`), one whose seed was not finished is left alone and said so, and in every case the open AI-role
+ * work items are cancelled in the operator's name, because no AI role runs in the demo's runtime.
  */
-export async function readyTheSample(deps: SeedDeps, showPreparing: () => Promise<void>, version = seedVersion): Promise<ReadyOutcome> {
+export async function readyTheSample(deps: SeedDeps, preparing: Preparing, version = seedVersion): Promise<ReadyOutcome> {
     const marker = readMarker(deps);
     let seeded = false;
     if (marker === null) {
-        await showPreparing();
+        await preparing.begin();
         const outcome = await ensureSeeded(deps, version);
         if (outcome.kind === 'failed') return { kind: 'failed', why: `The sample could not be prepared (${outcome.step}). Choose Start the Demo Over in the menu to try again.`, step: outcome.step, code: outcome.code ?? 'none' };
         if (outcome.kind !== 'seeded') return { kind: 'failed', why: 'The sample could not be prepared. Choose Start the Demo Over in the menu to try again.' };
@@ -527,16 +562,64 @@ export async function readyTheSample(deps: SeedDeps, showPreparing: () => Promis
     }
     const failed = await cancelOpenReviews(deps.cli, actor);
     if (failed) return { kind: 'failed', why: `The sample could not be made ready (${failed.step}).`, step: failed.step, code: failed.code ?? 'none' };
+    if (seeded) preparing.made();
     return { kind: 'ready', seeded };
 }
 
-/** The sentence the window shows while the sample is made. */
-export const preparingSentence = 'Preparing the sample: inventing a few fleets and the people who work there. This takes a moment.';
+/** A demo whose sample is there and cannot be made ready: the start fails before the page, as it says. */
+export class SampleNotReady extends Error {
+    readonly outcome: ReadyOutcome & { kind: 'failed' };
+    constructor(outcome: ReadyOutcome & { kind: 'failed' }) {
+        super(outcome.why);
+        this.outcome = outcome;
+    }
+}
 
-/** A page for the window while the seed runs: a sentence and nothing else; no script, no outside file. */
-export function preparingPage(): string {
-    const sentence = preparingSentence.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Jason</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;font:16px system-ui,sans-serif;background:#f6f6f4;color:#222}@media (prefers-color-scheme: dark){body{background:#1b1b1a;color:#e8e8e6}}p{max-width:30em;text-align:center;line-height:1.5}</style></head><body><p role="status">${sentence}</p></body></html>`;
+/** What `openOnTheSample` is given: the demo's sample (null on the person's own installation) and the start's acts. */
+export interface OpeningDeps<T> {
+    sample: SeedDeps | null;
+    /** Loads the page. */
+    load(): Promise<T>;
+    /** The mark, said to the page and the menu: on while the sample is made, off once it is done either way. */
+    preparing(on: boolean): void;
+    /** Leaves the person's request to start the demo over, so a making cut short is made whole at the next start. */
+    request(): void;
+    /** Takes the request away once the sample is whole. */
+    drop(): void;
+}
+
+/**
+ * Loads the page on the sample. A sample already made is made ready first (its reviews cancelled), and one that cannot
+ * be fails the start (`SampleNotReady`), as before. A sample not yet made is made behind the page: the page loads at once
+ * on the link the start minted, which is good for a minute while the seed takes longer, and shows the data as it lands;
+ * `making` settles when the sample is ready or has failed, and never rejects.
+ */
+export async function openOnTheSample<T>(deps: OpeningDeps<T>): Promise<{ loaded: T; making: Promise<ReadyOutcome> | null }> {
+    if (deps.sample === null) return { loaded: await deps.load(), making: null };
+    if (readMarker(deps.sample) !== null) {
+        const outcome = await readyTheSample(deps.sample, { begin: () => undefined, made: () => undefined });
+        if (outcome.kind === 'failed') throw new SampleNotReady(outcome);
+        return { loaded: await deps.load(), making: null };
+    }
+    deps.preparing(true);
+    let loaded: T;
+    try {
+        loaded = await deps.load();
+    } catch (error) {
+        deps.preparing(false);
+        throw error;
+    }
+    const making = readyTheSample(deps.sample, { begin: deps.request, made: deps.drop }).then(
+        (outcome) => {
+            deps.preparing(false);
+            return outcome;
+        },
+        (error: unknown): ReadyOutcome => {
+            deps.preparing(false);
+            return { kind: 'failed', why: 'The sample could not be prepared. Choose Start the Demo Over in the menu to try again.', step: 'start', code: error instanceof Error ? 'thrown' : 'none' };
+        },
+    );
+    return { loaded, making };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -549,7 +632,7 @@ export const placedPackage = (data: string): string => join(data, 'plugins', dem
 export const storyModule = (data: string): string => join(placedPackage(data), 'modules', 'story.js');
 
 /** The seed's dependencies on the machine's own files. */
-export function seedDepsOnDisk(parts: { cli: Cli; places: DemoPlaces; scratch: string; progress(message: string): void }): SeedDeps {
+export function seedDepsOnDisk(parts: { cli: Cli; places: DemoPlaces; scratch: string; progress(step: SeedPhase | 'made'): void }): SeedDeps {
     return {
         cli: parts.cli,
         places: parts.places,

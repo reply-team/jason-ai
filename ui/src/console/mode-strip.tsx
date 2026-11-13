@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { t } from '../platform/i18n';
-import { mode, modeRefusal, modeUnopened, switchMode, type Mode } from '../platform/mode';
+import { mode, modePreparing, modeRefusal, modeUnopened, switchMode, type Mode } from '../platform/mode';
 
 const modes: readonly Mode[] = ['demo', 'live'];
 
@@ -11,11 +11,14 @@ const modes: readonly Mode[] = ['demo', 'live'];
  * leaves the person in Live, and the desktop's sentence about it stands in the bar until closed; a refused switch
  * is said there too. On the right, in this order: `data-slot="open-in"`, the one place a control for opening the
  * work elsewhere goes, then the Demo | Live switch, the mode in force marked, asking the desktop through the seam.
+ * While the demo's sample is still being made a quiet mark says so beside the sentence, and the switch is off, its
+ * reason on each button, until the desktop says the sample is ready.
  */
 export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
     const unopened = modeUnopened.value;
     const refusal = modeRefusal.value;
     const demo = mode.value === 'demo';
+    const preparing = demo && modePreparing.value;
     return (
         <div className={`mode-strip ${demo ? 'mode-demo' : 'mode-live'}`} role="region" aria-label={t('mode.strip')}>
             <span className="mode-dot" aria-hidden="true" />
@@ -25,6 +28,11 @@ export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
                         <strong>{t('mode.strip.name')}</strong> {t('mode.strip.long')}
                     </span>
                     <span className="mode-strip-short">{t('mode.strip.short')}</span>
+                    {preparing && (
+                        <span className="mode-preparing" role="status" aria-label={t('mode.preparing')}>
+                            {t('mode.preparing')}
+                        </span>
+                    )}
                 </>
             ) : (
                 <span className="mode-mark">
@@ -55,6 +63,8 @@ export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
                         type="button"
                         className={each === mode.value ? 'on' : undefined}
                         aria-pressed={each === mode.value}
+                        disabled={preparing}
+                        title={preparing ? t('mode.preparing.reason') : undefined}
                         onClick={() => void switchMode(each)}
                     >
                         {t(each === 'demo' ? 'mode.switch.demo' : 'mode.switch.live')}

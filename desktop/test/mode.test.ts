@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoUnopened, enterRun, isSettingsVariable, modeUnkept, offersOf, openDirectory, parseMode, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
+import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoPreparing, demoUnopened, enterRun, isSettingsVariable, keepFirstStart, modeUnkept, offersOf, openDirectory, opensOnDemo, parseMode, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
 import { dataDirectory, desktopPaths } from '../src/paths.ts';
 import { harnessRoot } from '../src/uninstall.ts';
+import { isNewInstallation } from '../src/theme.ts';
+import { prepareDemo, writeDemoRoute } from '../src/demo-start.ts';
+import { claimDemoFolder } from '../src/demo-folders.ts';
+import { placeDemoPlugin } from '../src/demo-plugin.ts';
+import { writeDemoSettings } from '../src/demo-settings.ts';
+import { demoFullAccess } from '../src/chat-modes.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'mode-'));
 
@@ -148,10 +154,14 @@ test('a start reads the record before it resolves any path, and only then points
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
     const chosen = choose.indexOf('const personDirectory = dataDirectory(process.env, homedir());');
+    const fresh = choose.indexOf('installationWasNew = isNewInstallation(personDirectory);');
+    const first = choose.indexOf('keepFirstStart(desktopPaths(personDirectory).mode, installationWasNew, installerStart)');
+    const carried = choose.indexOf('carryOutStartOver({');
     const started = choose.indexOf('runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {');
     const entered = choose.indexOf('personEnvironment = enterRun(process.env, runOn);');
-    const firstPath = choose.indexOf('installationWasNew = isNewInstallation(');
-    assert.ok(chosen > 0 && started > chosen && entered > started && firstPath > entered);
+    const firstPath = choose.indexOf('earlierPageWasFound = earlierPageFound(');
+    // Newness is read of the person's directory first, then a first start's record is written, then the record is read.
+    assert.ok(chosen > 0 && fresh > chosen && first > fresh && carried > first && started > carried && entered > started && firstPath > entered);
     // In the start, nothing between the link's decision and the choice resolves a path, and the profile, the logs and
     // the lock follow the choice.
     const start = main.slice(main.indexOf('function startDesktop('));
@@ -167,6 +177,173 @@ test('a start reads the record before it resolves any path, and only then points
 });
 
 const noPreparation = { prepare: () => undefined };
+
+test('a new installation’s first start opens on the demo; any other start goes by its record or the default', () => {
+    assert.equal(opensOnDemo(false, true, false), true, 'no record, a new directory');
+    assert.equal(opensOnDemo(true, true, false), false, 'a record is kept as it is');
+    assert.equal(opensOnDemo(false, false, false), false, 'an installation that existed opens where it did');
+    assert.equal(opensOnDemo(false, true, true), false, 'the installer’s and the uninstaller’s starts never do');
+    assert.equal(defaultMode, 'live', 'a record that says nothing is still Live');
+});
+
+test('a new installation starts in the demo and prepares it without a click: the record written, the demo directory made and prepared', () => {
+    const person = join(folder(), '.jason');
+    const home = startFirst(person);
+    assert.equal(home.wrote, true);
+    assert.equal(readMode(desktopPaths(person).mode), 'demo');
+    assert.equal(home.run.mode, 'demo');
+    assert.equal(home.run.data, `${person}-demo`);
+    assert.deepEqual(home.prepared, [`${person}-demo`], 'prepared at the start, nothing asked of the person');
+    assert.equal(home.run.unopened, null);
+});
+
+test('an existing installation with no mode record opens where it did, Live, and nothing is written', () => {
+    const person = join(folder(), '.jason');
+    mkdirSync(person, { recursive: true });
+    writeFileSync(join(person, 'jason.db'), '');
+    const home = startFirst(person);
+    assert.equal(home.wrote, false);
+    assert.equal(existsSync(desktopPaths(person).mode), false);
+    assert.deepEqual(home.run, { person, data: person, mode: 'live', unopened: null });
+    assert.deepEqual(home.prepared, []);
+});
+
+test('an installation with a mode record opens on its record, whatever else is there', () => {
+    for (const mode of ['live', 'demo'] as Mode[]) {
+        // The record alone: the directory is new by its contents, and still the record decides.
+        const alone = join(folder(), '.jason');
+        writeMode(desktopPaths(alone).mode, mode);
+        const first = startFirst(alone);
+        assert.equal(first.wrote, false);
+        assert.equal(first.run.mode, mode);
+        assert.equal(readMode(desktopPaths(alone).mode), mode, 'the record is not written over');
+    }
+    // A record that holds neither word is a record all the same: it reads as the default, as it always has.
+    const garbage = join(folder(), '.jason');
+    mkdirSync(join(garbage, 'desktop'), { recursive: true });
+    writeFileSync(desktopPaths(garbage).mode, 'sample');
+    const odd = startFirst(garbage);
+    assert.equal(odd.wrote, false);
+    assert.equal(odd.run.mode, 'live');
+});
+
+test('an update from the release before changes nothing, with a mode record and without one', () => {
+    // An installation the release before made: a database, its logs, the desktop's settings; with or without a record.
+    const made = (record: Mode | null): string => {
+        const person = join(folder(), '.jason');
+        mkdirSync(join(person, 'logs'), { recursive: true });
+        writeFileSync(join(person, 'jason.db'), '');
+        mkdirSync(join(person, 'desktop'), { recursive: true });
+        writeFileSync(desktopPaths(person).settings, '{"skills_deployed_for":"0.39.0"}');
+        if (record !== null) writeMode(desktopPaths(person).mode, record);
+        return person;
+    };
+    for (const record of [null, 'live', 'demo'] as (Mode | null)[]) {
+        const person = made(record);
+        const before = readdirSync(join(person, 'desktop')).sort();
+        const home = startFirst(person);
+        assert.equal(home.isNew, false);
+        assert.equal(home.wrote, false);
+        assert.equal(home.run.mode, record ?? 'live');
+        assert.deepEqual(readdirSync(join(person, 'desktop')).sort(), before, 'nothing written in the person’s desktop folder');
+    }
+});
+
+test('a record that cannot be written leaves the first start where it was, on the person’s own installation', () => {
+    // A file where the person's directory would be: no record can be written under it.
+    const person = join(folder(), '.jason');
+    writeFileSync(person, '');
+    assert.equal(keepFirstStart(desktopPaths(person).mode, true, false), false);
+    assert.equal(readMode(desktopPaths(person).mode), 'live');
+});
+
+test('nothing of the person’s installation exists before they choose Live, but the record; Live then runs today’s first start', () => {
+    const home = folder();
+    const person = join(home, '.jason');
+    const personHarness = join(home, 'Jason');
+    const carried = join(home, 'bundle', 'plugins', 'demo');
+    mkdirSync(carried, { recursive: true });
+    writeFileSync(join(carried, 'plugin.yaml'), 'id: demo\n');
+    // The first start, with the demo's real preparation.
+    const first = startFirst(person, (demo) =>
+        prepareDemo(demo, {
+            harnessRoot: () => claimDemoFolder(demoDirectory(personHarness)),
+            place: (data) => placeDemoPlugin(carried, data, person),
+            route: writeDemoRoute,
+            fixedSettings: (data) => writeDemoSettings(data, personHarness),
+        }),
+    );
+    assert.equal(first.run.mode, 'demo');
+    assert.ok(existsSync(join(`${person}-demo`, 'plugins', 'demo', 'plugin.yaml')));
+    // Of the person's own: the record and nothing else, and no harness root of theirs.
+    assert.deepEqual(readdirSync(person), ['desktop']);
+    assert.deepEqual(readdirSync(join(person, 'desktop')), ['mode']);
+    assert.equal(existsSync(personHarness), false);
+    // Live from the demo: the record written and the desktop started again, which is a first start of their own
+    // installation: Live on their directory, new, as a start of a directory never used would be, with nothing prepared.
+    const steps: string[] = [];
+    assert.equal(applyMode('live', { write: (mode) => writeMode(desktopPaths(person).mode, mode), relaunch: () => void steps.push('relaunch') }), null);
+    assert.deepEqual(steps, ['relaunch']);
+    const live = startFirst(person);
+    const never = startFirst(join(folder(), '.jason'), undefined, 'live');
+    assert.deepEqual(live.run, { person, data: person, mode: 'live', unopened: null });
+    assert.deepEqual({ ...never.run, person, data: person }, live.run);
+    assert.equal(live.isNew, true);
+    assert.equal(never.isNew, true);
+    assert.deepEqual(live.prepared, []);
+    assert.equal(live.wrote, false);
+});
+
+test('a first start’s run is a demo run, which main hands to the chat as one, where Full access is not offered', () => {
+    const first = startFirst(join(folder(), '.jason'));
+    assert.equal(first.run.mode, 'demo');
+    assert.equal(demoFullAccess, 'Not in the demo: Full access is for your own installation.');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const chat = main.slice(main.indexOf('const chat = new Chat({'));
+    assert.ok(chat.slice(0, chat.indexOf('});')).includes("demo: runOn.mode === 'demo',"));
+});
+
+test('while the demo’s sample is made a switch is refused with the desktop’s words, a word that is not a mode still thrown', () => {
+    const b = bench();
+    assert.deepEqual(applyMode('live', b.deps, true), { refused: demoPreparing });
+    assert.deepEqual(applyMode('demo', b.deps, true), { refused: demoPreparing });
+    assert.deepEqual(b.steps, [], 'nothing written, nothing started');
+    assert.throws(() => applyMode('sample', b.deps, true), /not a mode/);
+    assert.equal(applyMode('live', b.deps, false), null);
+    assert.deepEqual(b.steps, ['write live', 'relaunch']);
+    assert.equal(demoPreparing, 'The demo is still being prepared. Try again once it is ready.');
+});
+
+test('while the demo’s sample is made the menu’s Start the Demo Over and the way back are off, each with its reason', () => {
+    const making = demoMenu('demo', true, true)!;
+    assert.deepEqual(making.startOver, { label: 'Start the Demo Over: available once the demo is ready', enabled: false });
+    assert.deepEqual(making.back, { label: 'Back to Your Own Installation: available once the demo is ready', enabled: false });
+    const ready = demoMenu('demo', true, false)!;
+    assert.deepEqual(ready.startOver, { label: 'Start the Demo Over', enabled: true });
+    assert.deepEqual(ready.back, { label: 'Back to Your Own Installation', enabled: true });
+    assert.equal(demoMenu('live', true, true), null);
+});
+
+/**
+ * A start's choice of installation as the main module makes it (`chooseInstallation`), against a directory of its own:
+ * newness read of the person's directory, a first start's record written, the record read, the demo opened and prepared.
+ * `record` writes a record first, for a start that is not a first one.
+ */
+function startFirst(person: string, prepare: (demo: string) => void = () => undefined, record?: Mode) {
+    if (record !== undefined) writeMode(desktopPaths(person).mode, record);
+    const isNew = isNewInstallation(person);
+    const wrote = keepFirstStart(desktopPaths(person).mode, isNew, false);
+    const prepared: string[] = [];
+    const run = startOn(person, readMode(desktopPaths(person).mode), false, {
+        open: openDirectory,
+        prepare: (demo) => {
+            prepared.push(demo);
+            prepare(demo);
+        },
+        keep: (mode) => writeMode(desktopPaths(person).mode, mode),
+    });
+    return { isNew, wrote, run, prepared };
+}
 
 test('a demo start whose directory can be made and used runs on it, the directory made', () => {
     const person = join(folder(), '.jason');
@@ -298,6 +475,7 @@ test('back to Live puts back every runtime settings variable byte for byte, name
 /** One start of the desktop as the main module makes it, against a home of its own: the record read, the process pointed at the run. */
 function startDesktop(env: Environment, home: string) {
     const personDirectory = dataDirectory(env, home);
+    keepFirstStart(desktopPaths(personDirectory).mode, isNewInstallation(personDirectory), false);
     const run = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), false, {
         open: openDirectory,
         ...noPreparation,

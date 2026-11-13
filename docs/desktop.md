@@ -92,8 +92,8 @@ shows before anything is typed and what you send waits, while the window is open
 - The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
 
-**Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light; one that
-existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
+**Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light, in the demo it opens on and again when
+you first choose Live; one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
 its settings and the starting page and the window's background before the page loads follow it.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
@@ -108,12 +108,13 @@ them on.
 
 - `<data>/desktop/settings.json`: the desktop's settings (a `feed`, the theme, and the version whose skills were last deployed).
 - `<data>/desktop/mode`: which installation the desktop runs on, one word, `live` or `demo`; a file that is missing or
-  says anything else is Live. For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
+  says anything else is Live, but a new installation's first start writes it as `demo` (see [the demo](#the-demo)). For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
   `~/.jason-demo`), and this file stays in `<data>`. Before the demo's runtime first starts, the desktop writes the demo's
   own `<data>-demo/config/settings.json`, after it has placed the demo provider in `<data>-demo/plugins/demo/` (from the copy the application carries) and written `Routes:Default` naming it, so no route stands without its plugin: a harness root beside yours with `-demo` after it (`~/Jason` gives
   `~/Jason-demo`), the responder off and the campaign manager left only to answered decisions, so a terminal with
-  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. The window's Demo and
-  Live buttons write this file and start the desktop again, on your own environment. Quitting a demo run, the switch to
+  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. The top bar's Demo | Live
+  switch writes this file and starts the desktop again, on your own environment, and a new installation's first start
+  writes it as `demo` before anything else. Quitting a demo run, the switch to
   Live included, stops the demo's runtime first, waiting at most fifteen seconds; your own runtime is never stopped by
   either. An update, the installer and the uninstaller, run from your own installation, stop a demo runtime that a crash left running too. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What Jason
   Placed: each says to go back to your own installation, and the tray and the Jason menu offer Back to Your Own
@@ -264,11 +265,19 @@ an approval you give moves the work, and the numbers and the Feed are the runtim
 would is [the demo provider](../plugins/demo/README.md), a plugin that requests no program, no host and no variable, so
 it can reach nothing outside its process: a message approved in the demo is answered as sent and goes to nobody.
 
-**How you meet it.** On the first screen of your own installation, one line offers **See Jason with sample data**.
-Choosing it writes the mode and starts the desktop again on the demo; while the sample is made the window says it is
-being prepared, which takes a moment the first time. In the demo a strip heads every screen: the data is sample, nothing
-in it is real and nothing is sent to anyone, with a **Demo** and a **Live** button, and **Live**, or **Back to Your Own
-Installation** in the tray and the Jason menu, takes you back to your own installation. **Start the Demo Over**, beside it
+**How you meet it.** A new installation opens on the demo: the first start of a desktop that finds no data directory of
+yours, or one holding nothing but the desktop's own records, and no record of a mode writes the record as the demo and
+starts on it, and nothing of your own installation is made until you choose **Live**. Choosing **Live** from it starts your
+own installation for the first time, as a first start without the demo would, in the Light theme a new installation meets.
+An installation that already existed, with a record or without, and one updated from an earlier version open where they
+did. A top bar heads every screen in both modes: in your own installation a green dot and **Live**; in the demo an amber
+dot, **Demo data** and "Nothing here is real or sent." (in a narrow window, "Sample data. Nothing is sent."). On its right
+the **Demo | Live** switch marks the mode in force; choosing the other writes the mode and starts the desktop again on that
+installation, and **Back to Your Own Installation** in the tray and the Jason menu does what **Live** does, for a demo
+whose start failed. The first time the demo opens, the page opens at once and the sample fills it as it is made, with
+**Preparing the demo…** in the top bar until it is ready, which takes a little over a minute; until then the switch, **Start
+the Demo Over** and **Back to Your Own Installation** wait for it, each saying so. If the desktop quits before the sample
+is whole, the next start of the demo starts it over by itself and makes it whole. **Start the Demo Over**, beside it
 in the same menus, asks once ("Start the demo over?": everything you did in the demo is removed and it starts again from
 the beginning; your own installation is not touched), stops the demo's runtime, leaves a request in your own installation's
 `desktop/` folder and starts the desktop again. The next start carries the request out before anything names the demo's

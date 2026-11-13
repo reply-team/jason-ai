@@ -13,9 +13,19 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, r
 import { basename, dirname, join } from 'node:path';
 import { demoMarkerName } from './demo-folders.ts';
 import type { DemoPlaces } from './demo-seed.ts';
+import type { Logger } from './log.ts';
 
 /** The request file's text: the asking run's process id, so a start that is not that run waits for it to end. */
-export const startOverRequestText = (pid: number): string => `pid=${pid}\n`;
+export const startOverRequestText = (pid: number, making = false): string => `pid=${pid}\n${making ? `${makingLine}\n` : ''}`;
+
+/**
+ * The line that says a request was left by a making of the sample (`openOnTheSample`), not by Start the Demo Over: the
+ * run that left it may still be running, making the sample or showing one whose making failed.
+ */
+export const makingLine = 'making';
+
+/** Whether a request was left by a making of the sample. */
+export const leftByAMaking = (text: string): boolean => text.split('\n').includes(makingLine);
 
 /** What an aside copy's name carries after the folder's own: `<folder>.removing-<time>`. */
 export const asideMarker = '.removing-';
@@ -37,10 +47,22 @@ export class CarryOutRefused extends Error {
     }
 }
 
-/** Leaves the request at `file`, naming the asking process; throws when it cannot. */
-export function requestStartOver(file: string, pid: number = process.pid): void {
+/** Leaves the request at `file`, naming the asking process and whether a making left it; throws when it cannot. */
+export function requestStartOver(file: string, pid: number = process.pid, making = false): void {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, startOverRequestText(pid));
+    writeFileSync(file, startOverRequestText(pid, making));
+}
+
+/**
+ * Takes the request away once a making of the sample is whole; one that cannot be removed is logged and kept, and the
+ * next start then makes the sample again, which costs time and never shows a half.
+ */
+export function dropStartOver(file: string, log: Pick<Logger, 'warn'>): void {
+    try {
+        rmSync(file, { force: true });
+    } catch (error) {
+        log.warn('demo_start_over_request_unremoved', { Code: (error as NodeJS.ErrnoException).code ?? 'unknown' });
+    }
 }
 
 /** The process that asked, or null when the text does not say. */
@@ -78,7 +100,8 @@ export interface CarryOutDeps {
 }
 
 /**
- * Does nothing when no request is there. Otherwise, in this order: keeps the request and throws while the asking run is
+ * Does nothing when no request is there, nor when the request is a making's and its run still runs (a second start of
+ * that run). Otherwise, in this order: keeps the request and throws while the asking run is
  * still alive or a demo runtime is; refuses a folder there without the marker; takes each marked folder out of the demo's
  * name by ONE rename, so a failure changes nothing; removes the renamed copies as far as it can (one it cannot is left,
  * marked, and removed at a later carry-out); drops the request. Never touches anything but the two folders and their own
@@ -86,7 +109,12 @@ export interface CarryOutDeps {
  */
 export function carryOutStartOver(deps: CarryOutDeps): void {
     if (!deps.requested()) return;
-    const asking = askedBy(deps.requestText());
+    const text = deps.requestText();
+    const asking = askedBy(text);
+    // A making's request whose run is still running is that run's own, left while it makes the sample or shows one whose
+    // making failed: this start is a second start of that run, which loses the instance lock and quits. It carries
+    // nothing out and is refused nothing, so it never sends the record to Live; the request stays for a real next start.
+    if (asking !== null && asking !== deps.self && leftByAMaking(text) && deps.running(asking)) return;
     // The asking run is honoured only while the request is young: an older request is of a run that has long gone, and its
     // process id may be anyone's now. A young one is waited for a few seconds, then refused.
     if (asking !== null && asking !== deps.self && deps.requestAgeMs() <= requestYoungMs) {

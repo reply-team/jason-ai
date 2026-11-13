@@ -39,11 +39,11 @@ import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistra
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, requestStartOver } from './demo-over.ts';
+import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
 import { processIsRunning } from './own-runtime.ts';
-import { applyMode, demoDirectory, demoMenu, demoUnopened, enterRun, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
+import { applyMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterRun, keepFirstStart, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
 import { claimDemoFolder, hasDemoMarker } from './demo-folders.ts';
@@ -445,8 +445,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     // Back to Your Own Installation, in a demo run's tray and menu: the way back that needs no page, for a demo whose
     // start failed.
+    // True while the demo's sample is made behind the page (`openOnTheSample`): the switch, the way back and Start the Demo
+    // Over wait for it, each saying so, and the page shows the mark.
+    let sampleMaking = false;
     const back = () => {
-        const refusal = applyMode('live', modeDeps);
+        const refusal = applyMode('live', modeDeps, sampleMaking);
         if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
     };
     // Start the Demo Over: one question first (everything done in the demo goes), then the demo's runtime is stopped, a
@@ -459,6 +462,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const startOver = async (): Promise<{ refused: string } | null> => {
         if (runOn.mode !== 'demo') return { refused: 'Start the Demo Over is only in the demo.' };
         if (startInFlight) return { refused: 'The demo is still starting. Try again in a moment.' };
+        if (sampleMaking) return { refused: demoPreparing };
         const parent = current;
         const options = { type: 'question' as const, title: 'Jason', message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
         const { response } = parent === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(parent, options);
@@ -495,6 +499,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back, startOver: startOverFromMenu });
     desk.open();
+    // The mark, said to the page, which shows it and holds its switch, and to the menu, which draws its lines again.
+    const setPreparing = (on: boolean) => {
+        sampleMaking = on;
+        desk.setDemo(demoMenu(runOn.mode, removalOffered(process.platform), on));
+        toPage('mode.preparing', on);
+    };
     showWindow = () => desk.show();
     const repointed = (async () => {
         if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
@@ -532,8 +542,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
-    handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);
-    handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
+    handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened, preparing: sampleMaking }), refused);
+    handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);
     handle(seam, 'mode.startOver', origin, () => startOver(), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
@@ -696,37 +706,50 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             },
         });
         runtimeVersion = started.runtimeVersion;
-        // A demo's runtime is up: a demo with no sample gets it made, behind the preparing page, and every start cancels the
-        // open AI-role reviews, because no AI role runs in the demo.
-        if (runOn.mode === 'demo') {
-            const ready = await readyTheSample(
-                seedDepsOnDisk({ cli, places: demoWhere, scratch: join(paths.data, 'seed-scratch'), progress: (step) => log.info('demo_seed_step', { Step: step }) }),
-                () => window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(preparingPage())}`),
-            );
-            if (ready.kind === 'failed') {
-                log.error('demo_seed_failed', { Step: ready.step ?? 'marker', Code: ready.code ?? 'none' });
-                throw new Error(ready.why);
-            }
-        }
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
         // What an earlier version's page kept on disk is unpaired and removed first, once (`window-pairing.ts`).
         const kept = readWindowPairing(paths.windowPairing);
-        const { cleared } = await loadWindow(
-            { cleared: kept.cleared, found: earlierPageWasFound },
-            {
-                cli,
-                clearSession: async () => {
-                    await session.defaultSession.clearStorageData();
-                    await session.defaultSession.clearCache();
-                },
-                remove: (folder) => rmSync(folder, { recursive: true, force: true }),
-                electron: paths.electron,
-                log,
-            },
-            () => window.loadURL(started.link),
-        );
+        // A demo's runtime is up: every start cancels the open AI-role reviews, because no AI role runs in the demo, and a
+        // demo with no sample gets it made behind the page, which loads first on the link the start minted (good for a
+        // minute; the seed takes longer) and shows the data as it lands.
+        let opened;
+        try {
+            opened = await openOnTheSample({
+                sample: runOn.mode === 'demo' ? seedDepsOnDisk({ cli, places: demoWhere, scratch: join(paths.data, 'seed-scratch'), progress: (step) => log.info('demo_seed_step', { Step: step }) }) : null,
+                load: () =>
+                    loadWindow(
+                        { cleared: kept.cleared, found: earlierPageWasFound },
+                        {
+                            cli,
+                            clearSession: async () => {
+                                await session.defaultSession.clearStorageData();
+                                await session.defaultSession.clearCache();
+                            },
+                            remove: (folder) => rmSync(folder, { recursive: true, force: true }),
+                            electron: paths.electron,
+                            log,
+                        },
+                        () => window.loadURL(started.link),
+                    ),
+                preparing: setPreparing,
+                // A making cut short leaves the person's request to start the demo over, so the next start makes the sample
+                // whole rather than show the half; it is taken away once the sample is whole.
+                request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true),
+                drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),
+            });
+        } catch (error) {
+            if (!(error instanceof SampleNotReady)) throw error;
+            log.error('demo_seed_failed', { Step: error.outcome.step ?? 'marker', Code: error.outcome.code ?? 'none' });
+            throw new Error(error.outcome.why);
+        }
+        void opened.making?.then(async (made) => {
+            if (made.kind !== 'failed') return;
+            log.error('demo_seed_failed', { Step: made.step ?? 'marker', Code: made.code ?? 'none' });
+            if (current !== null) await showStarting(current, made.why, true);
+        });
+        const { cleared } = opened.loaded;
         if (cleared !== kept.cleared) {
             try {
                 writeWindowPairing(paths.windowPairing, { ...readWindowPairing(paths.windowPairing), cleared });
@@ -826,6 +849,11 @@ function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
     const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
     demoWhere = demoPlaces(personDirectory, personHarness);
+    // Whether this installation is new is read first, of the person's directory: before this start writes anything there,
+    // before Electron makes its profile, before the single-instance lock. A new installation's first start opens on the
+    // demo (`keepFirstStart`), the record being the one thing written in the person's directory before they choose Live.
+    installationWasNew = isNewInstallation(personDirectory);
+    keepFirstStart(desktopPaths(personDirectory).mode, installationWasNew, installerStart);
     // Before the demo's directory is claimed, and before anything of this run names it, a start over asked by the run
     // before is carried out (`demo-over.ts`), and a demo whose places break the rule is refused. Either makes this run the
     // person's own, as an unusable directory does; a failed removal keeps its request for the next demo start.
@@ -869,9 +897,6 @@ function chooseInstallation(installerStart: boolean): void {
     personsOwn = personsOwnOf(runOn, () => personHarness);
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
     personEnvironment = enterRun(process.env, runOn);
-    // Whether this installation is new is read next: before Electron makes its profile under the data directory, before
-    // the single-instance lock, before anything is written there.
-    installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
     // Whether an earlier version's page left its storage on disk, read before Electron is ready (`window-pairing.ts`).
     earlierPageWasFound = earlierPageFound(desktopPaths(dataDirectory(process.env, homedir())).electron);
 }
