@@ -186,8 +186,8 @@ export interface StubDesktop extends JasonDesktop {
     /** The theme the desktop keeps, as `theme.get` answers it; null when it was never told one. */
     themeKept: 'system' | 'light' | 'dark' | null;
     /**
-     * The mode the desktop keeps, as `mode.get` answers it; Live unless a test says Demo. `mode.set` keeps the mode it is
-     * given and answers null, as the desktop does before it reloads the window, or a refusal the test set by name.
+     * The mode this run is on, as `mode.get` answers it; Live unless a test says Demo. `mode.set` keeps the mode it is
+     * given and answers null, as the desktop does before it starts again, or a refusal the test set by name.
      */
     modeKept: 'live' | 'demo';
     /**

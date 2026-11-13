@@ -19,7 +19,7 @@ const top = {
     fullAccess: true,
 } as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
-// Live or Demo: read once by the page as it loads, and set, which reloads the window.
+// Live or Demo, the installation the desktop runs on: read once as the page loads, and set, which starts it again.
 const mode = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['mode'], true>;
 const chat = {
     send: true,

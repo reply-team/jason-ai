@@ -126,7 +126,7 @@ type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStandi
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
 
 // The mode reaches the page as the desktop keeps it, one of two words, and setting it answers as the desktop does: null
-// once written and the window reloading, or the desktop's refusal when the file could not be written.
+// once written and the desktop starting again, or the desktop's refusal when the record could not be written.
 type ModeIsTheSeam = [
     Holds<Equal<Mode, Awaited<ReturnType<JasonDesktop['mode']['get']>>>>,
     Holds<Equal<Mode, Parameters<JasonDesktop['mode']['set']>[0]>>,

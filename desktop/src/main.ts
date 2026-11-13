@@ -33,7 +33,7 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, readMode, writeMode, type Mode } from './mode.ts';
+import { applyMode, readMode, relaunchOptions, runsOn, writeMode, type Mode, type RunsOn } from './mode.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
@@ -410,21 +410,25 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(ipcMain, 'theme.get', origin, () => settings.theme, refused);
     handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
-    // Live or Demo, kept in a file of the desktop's own and read afresh at each ask: the page reads it once as it loads,
-    // so a mode set is written first and the window loaded again after; a write that fails reloads nothing.
+    // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
+    // directory, also from a demo run, and the desktop then starts again on the installation it names; a write that fails
+    // starts nothing. Quitting leaves the runtime running, as any quit does.
     const modeDeps = {
         write: (mode: Mode) => {
             try {
-                writeMode(paths.mode, mode);
+                writeMode(desktopPaths(runOn.person).mode, mode);
             } catch (error) {
                 log.warn('mode_write_failed', { Mode: mode });
                 throw error;
             }
             log.info('mode_set', { Mode: mode });
         },
-        reload: () => current?.webContents.reload(),
+        relaunch: () => {
+            app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath)));
+            app.quit();
+        },
     };
-    handle(ipcMain, 'mode.get', origin, () => readMode(paths.mode), refused);
+    handle(ipcMain, 'mode.get', origin, () => runOn.mode, refused);
     handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
@@ -619,6 +623,16 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
+// Which installation this run is on (`mode.ts`), decided before anything resolves a path: the record in the person's
+// directory says Live or Demo, and for Demo the demo's directory becomes this run's data directory, so the profile, the
+// lock, the logs, the runtime it starts, the chat's hosts and every jason verb are the demo installation's by the rule
+// they already follow. The installer's and the uninstaller's starts ignore the record.
+const installerStart =
+    uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform }) !== null ||
+    stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
+const personDirectory = dataDirectory(process.env, homedir());
+const runOn: RunsOn = runsOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart);
+if (runOn.mode === 'demo') process.env.JASON_DATA_DIR = runOn.data;
 // Whether this installation is new is read next: before Electron makes its profile under the data directory, before the
 // single-instance lock, before anything is written there, on either start below.
 const installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);

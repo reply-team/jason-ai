@@ -100,8 +100,10 @@ them on.
 ## Its own files
 
 - `<data>/desktop/settings.json`: the desktop's settings (a `feed`, the theme, and the version whose skills were last deployed).
-- `<data>/desktop/mode`: the window's mode, one word, `live` or `demo`; a file that is missing or says anything else is
-  Live. The window's Demo and Live buttons write it and load the window again.
+- `<data>/desktop/mode`: which installation the desktop runs on, one word, `live` or `demo`; a file that is missing or
+  says anything else is Live. For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
+  `~/.jason-demo`), and this file stays in `<data>`. The window's Demo and Live buttons write it and start the desktop
+  again; the runtime of the installation it leaves keeps running.
 - `<data>/desktop/chat/`: the chat's working folder. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.

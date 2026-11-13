@@ -77,6 +77,30 @@ describe('Demo in the desktop', () => {
         expect(shown.parentElement).toBe(console);
         expect(shown.nextElementSibling?.classList.contains('shell')).toBe(true);
         expect(shown.textContent).toMatch(/sample data/);
+        expect(shown.textContent).toMatch(/Nothing in it is real/);
+        expect(shown.textContent).toMatch(/nothing is sent to anyone/);
+        expect(shown.textContent).toMatch(/back to your own installation/);
+    });
+
+    it('keeps the one strip above the console whichever screen is in front', async () => {
+        const desktop = await renderConsole('demo');
+        await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
+        expect(strip()).not.toBeNull();
+        desktop.command('navigate.settings');
+        await waitFor(() => screen.getByRole('heading', { name: 'Settings' }));
+        expect(screen.getAllByRole('region', { name: 'Demo' })).toHaveLength(1);
+        desktop.command('navigate.connect');
+        await waitFor(() => expect(document.querySelector('.dv-tab.dv-active-tab')?.textContent).toMatch(/Connect/));
+        expect(screen.getAllByRole('region', { name: 'Demo' })).toHaveLength(1);
+    });
+
+    it('has a short form beside the long one, for a narrow window', async () => {
+        await renderConsole('demo');
+        const shown = await waitFor(() => strip()!);
+        const long = shown.querySelector('.mode-strip-long')?.textContent ?? '';
+        const short = shown.querySelector('.mode-strip-short')?.textContent ?? '';
+        expect(short).toMatch(/sample data/);
+        expect(short.length).toBeLessThan(long.length / 2);
     });
 
     it('switches to Live through the seam, and Demo, the one marked, asks nothing', async () => {
@@ -91,11 +115,11 @@ describe('Demo in the desktop', () => {
 
     it('says the desktop’s refusal in the strip when the mode could not be kept', async () => {
         const desktop = await renderConsole('demo');
-        desktop.refuse.set('mode.set', 'The mode could not be saved, so the window stays as it is.');
+        desktop.refuse.set('mode.set', 'The mode could not be saved, so Jason stays as it is.');
         const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Mode' }));
         fireEvent.click(within(group).getByRole('button', { name: 'Live' }));
         const alert = await waitFor(() => within(strip()!).getByRole('alert'));
-        expect(alert.textContent).toBe('The mode could not be saved, so the window stays as it is.');
+        expect(alert.textContent).toBe('The mode could not be saved, so Jason stays as it is.');
     });
 
     it('offers no demo on the start screen', async () => {
@@ -126,11 +150,9 @@ describe('Live in the desktop', () => {
 
     it('says the desktop’s refusal beside the offer when the mode could not be kept', async () => {
         const desktop = await renderConsole('live');
-        desktop.refuse.set('mode.set', 'The mode could not be saved, so the window stays as it is.');
+        desktop.refuse.set('mode.set', 'The mode could not be saved, so Jason stays as it is.');
         fireEvent.click(await waitFor(() => offer()!));
-        const said = await waitFor(() =>
-            screen.getByText('The mode could not be saved, so the window stays as it is.'),
-        );
+        const said = await waitFor(() => screen.getByText('The mode could not be saved, so Jason stays as it is.'));
         expect(said.getAttribute('role')).toBe('alert');
         expect(said.closest('.start')).not.toBeNull();
     });

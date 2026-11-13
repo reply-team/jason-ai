@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, modeUnkept, parseMode, readMode, writeMode, type Mode } from '../src/mode.ts';
+import { applyMode, defaultMode, demoDirectory, modeUnkept, parseMode, readMode, relaunchOptions, runsOn, writeMode, type Mode } from '../src/mode.ts';
 import { desktopPaths } from '../src/paths.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'mode-'));
@@ -66,26 +66,26 @@ function bench(failWrite = false) {
                 if (failWrite) throw new Error('EACCES');
                 steps.push(`write ${mode}`);
             },
-            reload: () => void steps.push('reload'),
+            relaunch: () => void steps.push('relaunch'),
         },
     };
 }
 
-test('setting a mode writes the file first and then reloads the window, and answers null', () => {
+test('setting a mode writes the record first and then starts the desktop again, and answers null', () => {
     for (const mode of ['demo', 'live'] as Mode[]) {
         const b = bench();
         assert.equal(applyMode(mode, b.deps), null);
-        assert.deepEqual(b.steps, [`write ${mode}`, 'reload']);
+        assert.deepEqual(b.steps, [`write ${mode}`, 'relaunch']);
     }
 });
 
-test('a write that fails does not reload and says so as a refusal', () => {
+test('a write that fails starts nothing again and says so as a refusal', () => {
     const b = bench(true);
     assert.deepEqual(applyMode('demo', b.deps), { refused: modeUnkept });
     assert.deepEqual(b.steps, []);
 });
 
-test('a word that is not a mode is refused with nothing written and no reload', () => {
+test('a word that is not a mode is refused with nothing written and nothing started', () => {
     for (const bad of ['Demo', 'sample', '', null, undefined, 1, {}]) {
         const b = bench();
         assert.throws(() => applyMode(bad, b.deps), /not a mode/);
@@ -99,16 +99,67 @@ test('a real write that fails, the folder being a file, is refused and leaves no
     writeFileSync(desktop, 'not a folder');
     const file = join(desktop, 'mode');
     const steps: string[] = [];
-    const answer = applyMode('demo', { write: (mode) => writeMode(file, mode), reload: () => void steps.push('reload') });
+    const answer = applyMode('demo', { write: (mode) => writeMode(file, mode), relaunch: () => void steps.push('relaunch') });
     assert.deepEqual(answer, { refused: modeUnkept });
     assert.deepEqual(steps, []);
     assert.equal(existsSync(file), false);
 });
 
-test('the main process answers mode.get from the file and mode.set through applyMode, reloading the window', () => {
+test('the demo’s data directory is the person’s sibling, with -demo after its name, a trailing separator aside', () => {
+    const home = join(folder(), 'home');
+    assert.equal(demoDirectory(join(home, '.jason')), join(home, '.jason-demo'));
+    assert.equal(demoDirectory(join(home, 'my-data')), join(home, 'my-data-demo'));
+    assert.equal(demoDirectory(`${join(home, '.jason')}/`), join(home, '.jason-demo'));
+    assert.equal(demoDirectory(join(home, '.jason') + String.fromCharCode(92)), join(home, '.jason-demo'));
+});
+
+test('a start runs on the person’s directory in Live and on the demo’s in Demo, the record staying in the person’s', () => {
+    const person = join(folder(), '.jason');
+    assert.deepEqual(runsOn(person, 'live', false), { person, data: person, mode: 'live' });
+    assert.deepEqual(runsOn(person, 'demo', false), { person, data: `${person}-demo`, mode: 'demo' });
+});
+
+test('the installer’s and the uninstaller’s starts ignore the record and act on the person’s installation', () => {
+    const person = join(folder(), '.jason');
+    assert.deepEqual(runsOn(person, 'demo', true), { person, data: person, mode: 'live' });
+});
+
+test('the record read at start comes from the person’s directory: a demo record there makes the run the demo’s', () => {
+    const person = join(folder(), '.jason');
+    writeMode(desktopPaths(person).mode, 'demo');
+    const run = runsOn(person, readMode(desktopPaths(person).mode), false);
+    assert.equal(run.data, `${person}-demo`);
+    assert.equal(desktopPaths(run.person).mode, join(person, 'desktop', 'mode'));
+});
+
+test('a packaged desktop starts again with nothing after the program, an unpackaged one with its folder', () => {
+    assert.deepEqual(relaunchOptions(['C:/Programs/Jason/Jason.exe', 'jason://campaigns', '--opened-at-login'], true, 'C:/Programs/Jason/Jason.exe'), {
+        execPath: 'C:/Programs/Jason/Jason.exe',
+        args: [],
+    });
+    assert.deepEqual(relaunchOptions(['/x/electron', '.', '--inspect'], false, '/x/electron'), { execPath: '/x/electron', args: ['.'] });
+    // On Linux an AppImage starts again from its file, never from the mount that goes with this run.
+    assert.deepEqual(relaunchOptions(['/tmp/.mount_Jason/jason-desktop'], true, '/home/someone/Jason.AppImage').execPath, '/home/someone/Jason.AppImage');
+});
+
+test('the main module reads the record before any path is resolved, and only then names the demo’s directory', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    assert.ok(main.includes("handle(ipcMain, 'mode.get', origin, () => readMode(paths.mode), refused);"));
+    const chosen = main.indexOf('const personDirectory = dataDirectory(process.env, homedir());');
+    assert.ok(main.indexOf('const runOn: RunsOn = runsOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart);') > chosen);
+    const named = main.indexOf('if (runOn.mode === \'demo\') process.env.JASON_DATA_DIR = runOn.data;');
+    const firstPath = main.indexOf('const installationWasNew = isNewInstallation(');
+    assert.ok(chosen > 0 && named > chosen && firstPath > named);
+    // Nothing before the choice resolves the data directory at the module's top level.
+    const before = main.slice(main.indexOf('const unsandboxed'), chosen);
+    assert.equal(before.includes('dataDirectory('), false);
+    assert.ok(main.includes('uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform }) !== null ||'));
+});
+
+test('the main process answers mode.get with this run’s mode, writes the person’s record and starts again', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.ok(main.includes("handle(ipcMain, 'mode.get', origin, () => runOn.mode, refused);"));
     assert.ok(main.includes("handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);"));
-    assert.ok(main.includes('writeMode(paths.mode, mode);'));
-    assert.ok(main.includes('reload: () => current?.webContents.reload(),'));
+    assert.ok(main.includes('writeMode(desktopPaths(runOn.person).mode, mode);'));
+    assert.ok(main.includes('app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath)));'));
+    assert.equal(main.includes('webContents.reload()'), false);
 });

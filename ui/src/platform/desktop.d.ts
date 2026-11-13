@@ -511,14 +511,15 @@ export interface JasonDesktop {
     };
     mode: {
         /**
-         * The mode the desktop keeps in a file of its own: `live`, the installation's own data, or `demo`, invented sample
-         * data; the default when the file is missing, unreadable or holds anything else. The page reads it once as it
-         * loads.
+         * Which installation this run of the desktop is on: `live`, the person's own, or `demo`, the second installation
+         * of sample data beside it, as the record in the person's installation said when the desktop started. The page
+         * reads it once as it loads.
          */
         get(): Promise<'live' | 'demo'>;
         /**
-         * Keeps the mode and then loads the window again, which opens in it: null once kept and the reload begun; the
-         * desktop's refusal, with the window left as it is, when the mode could not be kept. Any other word is rejected.
+         * Writes the mode to the record in the person's installation and then starts the desktop again, which runs on
+         * the installation it names: null once written and the new start asked for; the desktop's refusal, with nothing
+         * started, when the record could not be written. Any other word is rejected.
          */
         set(mode: 'live' | 'demo'): Promise<DesktopRefusal | null>;
     };

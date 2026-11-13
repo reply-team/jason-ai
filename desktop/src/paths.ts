@@ -9,7 +9,7 @@ export interface DesktopPaths {
     desktop: string;
     /** `<data>/desktop/settings.json`. */
     settings: string;
-    /** `<data>/desktop/mode`: the window's mode, Live or Demo, one word, the main process's alone (`mode.ts`). */
+    /** `<data>/desktop/mode`: the record of the mode, Live or Demo, one word; read and written in the person's directory only, also during a demo run (`mode.ts`). */
     mode: string;
     /** `<data>/desktop/full-access.json`: the standing choice of Full access, the main process's alone (`full-access-standing.ts`). */
     fullAccess: string;

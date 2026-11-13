@@ -34,7 +34,7 @@ export const en = {
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
     'mode.strip': 'Demo',
     'mode.strip.long':
-        'Demo: this is sample data. Nothing in it is real, and nothing is sent. The demo starts fresh each time it opens.',
+        'Demo: this is sample data. Nothing in it is real, and nothing is sent to anyone. Live takes you back to your own installation.',
     'mode.strip.short': 'Demo: sample data, nothing sent',
     'mode.switch': 'Mode',
     'mode.switch.demo': 'Demo',

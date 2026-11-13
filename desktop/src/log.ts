@@ -101,8 +101,8 @@ export const templates = {
     page_storage_clear_failed: 'What an earlier version\'s page kept on disk was not cleared, at {Step} ({Code})',
     window_token_revoke_failed: 'The window\'s previous UI token was not revoked (exit {Exit})',
     // The mode: Live or Demo.
-    mode_set: 'The window\'s mode was set to {Mode}; the window is loaded again',
-    mode_write_failed: 'The window\'s mode {Mode} could not be written; the window was not loaded again',
+    mode_set: 'The mode was set to {Mode}; the desktop starts again on that installation',
+    mode_write_failed: 'The mode {Mode} could not be written; the desktop was not started again',
 } as const;
 
 export type TemplateName = keyof typeof templates;

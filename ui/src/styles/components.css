@@ -676,27 +676,3 @@ button.row:hover .what .cue { text-decoration: underline; }
 /* The message an approval would send: the person's text with its line breaks, never as markup. */
 .message-card .message-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 .message-card .hint { color: var(--text-muted); font-size: var(--text-sm); margin: var(--space-2) 0; }
-
-/* Demo: the strip heads every screen, and the shell below it takes the height that is left. */
-#app:has(> .mode-strip) { display: flex; flex-direction: column; min-height: 100vh; }
-.mode-strip + .app { flex: 1; min-height: 0; }
-.mode-strip {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--border);
-  background: var(--warning-bg); color: var(--warning);
-  font-size: var(--text-sm);
-}
-.mode-strip-long, .mode-strip-short { flex: 1; min-width: 0; }
-.mode-strip-short { display: none; }
-.mode-strip-refusal { font-weight: 600; }
-.mode-switch { display: flex; flex: none; gap: 4px; }
-.mode-switch button {
-  padding: 2px 10px; border: 1px solid currentColor; border-radius: var(--radius);
-  background: transparent; color: inherit; font: inherit; cursor: pointer;
-}
-.mode-switch button.on { background: var(--warning); color: var(--warning-bg); }
-@media (max-width: 960px) {
-  .mode-strip-long { display: none; }
-  .mode-strip-short { display: inline; }
-}

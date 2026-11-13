@@ -4,9 +4,9 @@ import { mode, modeRefusal, switchMode, type Mode } from '../platform/mode';
 const modes: readonly Mode[] = ['demo', 'live'];
 
 /**
- * The strip above every screen in Demo: that the data is sample, that nothing is real or sent, that the demo starts
- * fresh each time; and the two modes, the one in force marked, the other switched to. A short form stands in for the
- * long one in a narrow window (each shell's stylesheet). In Live there is none.
+ * The strip above the console in Demo, over the sidebar and every panel: that the data is sample, that nothing is real
+ * and nothing is sent to anyone; and the two modes, the one in force marked, Live the way back to the person's own
+ * installation. A short form stands in for the long one in a narrow window (`console.css`). In Live there is none.
  */
 export function ModeStrip() {
     if (mode.value !== 'demo') return null;
