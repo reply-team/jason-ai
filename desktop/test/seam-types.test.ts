@@ -9,6 +9,7 @@ import type {
     DesktopChatOptions,
     DesktopConversation,
     DesktopConversationRecord,
+    DesktopFullAccessStanding,
     DesktopKeptEntry,
     DesktopLink,
     DesktopRefusal,
@@ -19,7 +20,7 @@ import type {
     DesktopSetup,
     JasonDesktop,
 } from '../../ui/src/platform/desktop.d.ts';
-import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary } from '../src/chat.ts';
+import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary, FullAccessStanding } from '../src/chat.ts';
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
@@ -41,6 +42,7 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload['setup'], keyof JasonDesktop['setup']>>,
     Holds<Equal<keyof DesktopPreload['links'], keyof JasonDesktop['links']>>,
     Holds<Equal<keyof DesktopPreload['theme'], keyof JasonDesktop['theme']>>,
+    Holds<Equal<keyof DesktopPreload['fullAccess'], keyof JasonDesktop['fullAccess']>>,
     Holds<DesktopPreload extends JasonDesktop ? true : false>,
 ];
 
@@ -58,12 +60,14 @@ type DeclaredCalls =
     | Calls<JasonDesktop['chat'], 'chat'>
     | Calls<JasonDesktop['setup'], 'setup'>
     | Calls<JasonDesktop['links'], 'links'>
-    | Calls<JasonDesktop['theme'], 'theme'>;
+    | Calls<JasonDesktop['theme'], 'theme'>
+    | Calls<JasonDesktop['fullAccess'], 'fullAccess'>;
 type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop, ''>
     | Subscriptions<JasonDesktop['chat'], 'chat.'>
     | Subscriptions<JasonDesktop['setup'], 'setup.'>
-    | Subscriptions<JasonDesktop['links'], 'links.'>;
+    | Subscriptions<JasonDesktop['links'], 'links.'>
+    | Subscriptions<JasonDesktop['fullAccess'], 'fullAccess.'>;
 
 // ipc.ts registers a channel for every call the page declares, and for nothing else.
 type InvokeChannelsAreTheSeam = Holds<Equal<InvokeMember, DeclaredCalls>>;
@@ -74,6 +78,7 @@ const eventChannelOf = {
     'chat.onEvent': 'chat.event',
     'setup.onChanged': 'setup.changed',
     'links.onOpen': 'links.open',
+    'fullAccess.onChanged': 'fullAccess.changed',
 } as const satisfies Record<DeclaredSubscriptions, keyof typeof eventChannels>;
 type EventChannelsAreTheSeam = [
     Holds<Equal<keyof typeof eventChannelOf, DeclaredSubscriptions>>,
@@ -106,6 +111,9 @@ type ReplyLinkIsTheSeam = [
     Holds<Equal<keyof DesktopReplyOpened, 'opened' | 'channel' | 'kind' | 'linkKind' | 'expiresAt' | 'pendingId'>>,
 ];
 
+// The standing choice of Full access reaches the page as the chat reads it: when it was given and whether new chats start in it.
+type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStanding>>;
+
 // A link reaches the page as the page the desktop parsed it to, never as the address.
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
 
@@ -119,8 +127,9 @@ export type SeamHeld = [
     ConversationsAreTheSeam,
     SendIsTheSeam,
     LinkIsTheSeam,
+    StandingIsTheSeam,
 ];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
-    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen']);
+    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged']);
 });

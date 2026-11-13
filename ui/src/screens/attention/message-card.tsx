@@ -19,16 +19,17 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
  * a LinkedIn message's text, a template with the example the runtime made of it. Everything is text, never markup. It
  * claims nothing about how the message reaches the person, and the sentence under it says what it leaves out.
  */
-export function MessageCard({ detail }: { detail: ApprovalDetail }) {
+export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail; reply?: boolean }) {
     if (!detail.body) return null;
-    const email = detail.channel === channelWords('email');
+    const email = !reply && detail.channel === channelWords('email');
     const template = detail.compose === 'template';
     return (
         <div className="section message-card">
             <h3>The message as written</h3>
             <dl className="facts message-facts">
                 {email && detail.from && <Row label="From">{detail.from}</Row>}
-                {email && detail.to && <Row label="To">{detail.to}</Row>}
+                {(email || reply) && detail.to && <Row label="To">{detail.to}</Row>}
+                {reply && detail.channel && <Row label="Channel">{detail.channel}</Row>}
                 {detail.subject && (
                     <Row label="Subject">
                         <Text value={detail.subject} />
@@ -62,7 +63,10 @@ export function MessageCard({ detail }: { detail: ApprovalDetail }) {
                     </dl>
                 </>
             )}
-            <p className="hint">Not shown: the provider adds its signature and its tracking when it sends.</p>
+            <p className="hint">
+                Not shown: the sender's signature kept at the provider, and the provider's tracking, which are added
+                when it sends.
+            </p>
         </div>
     );
 }

@@ -361,7 +361,7 @@ const kindWords: Record<string, string> = {
     workitem_failed: 'Failed',
     workitem_cancelled: 'Cancelled',
     workitem_expired: 'Expired',
-    workitem_released: 'Released for another attempt',
+    workitem_released: 'Put back to be taken again',
     workitem_awaiting_approval: 'Parked for approval',
     workitem_reopened: 'Reopened',
 };

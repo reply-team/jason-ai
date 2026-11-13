@@ -100,11 +100,22 @@ export interface DesktopChatOptions {
 
 /**
  * A chat's access mode, chosen per conversation from the menu beside the composer. `ask_first`, the default of every new
- * chat: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads and proposes,
- * and changes nothing. `full_access`: it acts on this computer without asking; the desktop asks the person to confirm,
- * each time it is chosen, and holds it for that conversation only until the window closes. Codex has no Full access.
+ * chat out of the box: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads
+ * and proposes, and changes nothing. `full_access`: it acts on this computer without asking; the desktop asks the person
+ * to confirm each time it is chosen, unless they answered that box with Always (`DesktopFullAccessStanding`), and holds
+ * it for that conversation only until the window closes. Codex has no Full access.
  */
 export type DesktopChatMode = 'ask_first' | 'plan_only' | 'full_access';
+
+/**
+ * The standing choice of Full access, which only the person's answer to the desktop's own box gives: while it stands,
+ * the menu enters Full access without the box, and with `newChats` a new chat on a host that can take Full access starts
+ * in it. `givenAt` is when it was given, ISO-8601 UTC.
+ */
+export interface DesktopFullAccessStanding {
+    givenAt: string;
+    newChats: boolean;
+}
 
 /** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
 export interface DesktopModel {
@@ -483,9 +494,11 @@ export interface JasonDesktop {
         open(chatId: string): Promise<DesktopConversationRecord | DesktopRefusal>;
         /**
          * A conversation to start in: with a campaign, that campaign's own conversation, found or made with its name;
-         * without one, a new set-up chat.
+         * without one, a new set-up chat. `host` is the `DesktopHost.id` the next turn runs on: a conversation newly made
+         * starts in Full access, its `mode` saying so in this answer, when the standing choice says new chats do and that
+         * host can take Full access; otherwise in Ask first, with nothing said.
          */
-        create(campaignId?: string): Promise<DesktopConversation | DesktopRefusal>;
+        create(campaignId?: string, host?: string): Promise<DesktopConversation | DesktopRefusal>;
         /** Removes a conversation and its record: null once done. Refused while its turn runs. */
         remove(chatId: string): Promise<DesktopRefusal | null>;
         /**
@@ -509,8 +522,8 @@ export interface JasonDesktop {
         /**
          * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on. `full_access` is refused
          * before anything is asked where it cannot apply (Codex, a host that does not drive the chat, a Claude Code too old
-         * for it, the Feed), in the desktop's words; otherwise the desktop asks the person to confirm, every time, and their no
-         * answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
+         * for it, the Feed), in the desktop's words; otherwise the desktop asks the person to confirm, every time while no
+         * standing choice stands, and their no answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
          * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
          */
         setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
@@ -527,6 +540,18 @@ export interface JasonDesktop {
          * most 200 lines a call; more is refused.
          */
         feed(lines: DesktopFeedLine[], options?: { catchUp: true }): Promise<DesktopConversation | DesktopRefusal>;
+    };
+    fullAccess: {
+        /** The standing choice of Full access, or null when none stands. */
+        standing(): Promise<DesktopFullAccessStanding | null>;
+        /**
+         * Takes the standing choice back: the box is asked again at the next entry, and new chats start in Ask first. A
+         * chat in Full access now stays in it. Null once done, or a refusal when its file could not be changed. No call
+         * gives the choice: only the person's answer to the desktop's own box does.
+         */
+        takeBack(): Promise<DesktopRefusal | null>;
+        /** Calls `handler` with the standing choice each time it changes, wherever; the function it returns stops that. */
+        onChanged(handler: (standing: DesktopFullAccessStanding | null) => void): () => void;
     };
     links: {
         /**

@@ -28,6 +28,8 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             setMode: async (...args) => (calls.push(['setMode', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'plan_only' }),
             openEndedFolder: async (...args) => void calls.push(['openEndedFolder', ...args]),
             feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' }),
+            fullAccessStanding: (...args: unknown[]) => (calls.push(['fullAccessStanding', ...args]), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true }),
+            takeBackFullAccess: (...args: unknown[]) => (calls.push(['takeBackFullAccess', ...args]), null),
         },
         () => origin,
         (channel, why) => refusals.push(`${channel} ${why}`),
@@ -35,7 +37,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
     return { listeners, calls, refusals };
 }
 
-test('the chat registers its thirteen calls, and each reaches the chat from the runtime\'s page', async () => {
+test('the chat registers its fifteen calls, and each reaches the chat from the runtime\'s page', async () => {
     const { listeners, calls } = registered();
     assert.deepEqual([...listeners.keys()].sort(), [
         'jason:chat.answer',
@@ -51,6 +53,8 @@ test('the chat registers its thirteen calls, and each reaches the chat from the 
         'jason:chat.send',
         'jason:chat.setMode',
         'jason:chat.stop',
+        'jason:fullAccess.standing',
+        'jason:fullAccess.takeBack',
     ]);
     const page = { senderFrame: { url: `${origin}/ui/#/chat`, parent: null } };
     await listeners.get('jason:chat.send')?.(page, 'c1', 'hello', { host: 'claude' });
@@ -58,7 +62,7 @@ test('the chat registers its thirteen calls, and each reaches the chat from the 
     listeners.get('jason:chat.answer')?.(page, 'c1', 'r1', { allow: true, always: false });
     listeners.get('jason:chat.list')?.(page);
     listeners.get('jason:chat.open')?.(page, 'conv_1');
-    await listeners.get('jason:chat.create')?.(page, 'cmp_1');
+    await listeners.get('jason:chat.create')?.(page, 'cmp_1', 'claude');
     listeners.get('jason:chat.remove')?.(page, 'conv_1');
     listeners.get('jason:chat.restart')?.(page, 'conv_1');
     await listeners.get('jason:chat.attach')?.(page, 'conv_1', 'cmp_1');
@@ -66,13 +70,15 @@ test('the chat registers its thirteen calls, and each reaches the chat from the 
     await listeners.get('jason:chat.setMode')?.(page, 'conv_1', 'plan_only', 'claude');
     await listeners.get('jason:chat.openFolder')?.(page, 'name-1');
     await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
+    assert.deepEqual(listeners.get('jason:fullAccess.standing')?.(page, 'planted'), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
+    assert.equal(await listeners.get('jason:fullAccess.takeBack')?.(page, { always: true, newChats: true }), null);
     assert.deepEqual(calls, [
         ['send', 'c1', 'hello', { host: 'claude' }],
         ['stop', 'c1'],
         ['answer', 'c1', 'r1', { allow: true, always: false }],
         ['list'],
         ['open', 'conv_1'],
-        ['create', 'cmp_1'],
+        ['create', 'cmp_1', 'claude'],
         ['remove', 'conv_1'],
         ['restart', 'conv_1'],
         ['attach', 'conv_1', 'cmp_1'],
@@ -80,7 +86,14 @@ test('the chat registers its thirteen calls, and each reaches the chat from the 
         ['setMode', 'conv_1', 'plan_only', 'claude'],
         ['openEndedFolder', 'name-1'],
         ['feed', [], { catchUp: true }],
-    ]);
+        ['fullAccessStanding'],
+        ['takeBackFullAccess'],
+    ], 'the standing choice\'s two calls pass nothing the page sends');
+});
+
+test('no channel of the page gives the standing choice of Full access: the page reads it and takes it back', () => {
+    const { listeners } = registered();
+    assert.deepEqual([...listeners.keys()].filter((channel) => /fullaccess|standing/i.test(channel)).sort(), ['jason:fullAccess.standing', 'jason:fullAccess.takeBack']);
 });
 
 test('a chat call from another origin or a subframe never reaches the chat', () => {
@@ -90,7 +103,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 26);
+    assert.equal(refusals.length, 30);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 

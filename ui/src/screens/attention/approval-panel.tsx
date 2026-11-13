@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import type { Approval } from '../../api/types';
+import { useEffect, useState } from 'react';
+import { Unpaired } from '../../api/client';
+import { useApi } from '../../api/context';
+import type { Approval, WorkItem } from '../../api/types';
 import { clock, relative } from '../../time/format';
 import { DecideDialog } from './decide-dialog';
 import { reasonLabel, title } from './labels';
@@ -9,6 +11,8 @@ import { SessionLink } from './session-link';
 import { PanelHeader } from '../../layout/panel-header';
 import { toApprovalDetail } from '../../console/live';
 import { MessageCard } from './message-card';
+import { MessageEditor } from './message-editor';
+import { REPLIES, awaitNewApproval, editable, isMessage, isStale, readItem, sentence } from './message-edit';
 
 type Props = {
     approval: Approval;
@@ -22,6 +26,12 @@ type Props = {
     onReject: (reason?: string) => void;
     onSkip: () => void;
     onClose: () => void;
+    /** Called with the new approval once the runtime has asked again under an edited text. */
+    onReasked?: (approvalId: string) => void;
+    /** Called once a saved edit has withdrawn this approval, so a list showing it can be read again. */
+    onSuperseded?: () => void;
+    /** How the card waits for the new approval; the default is a poll a second apart for half a minute. */
+    reaskPoll?: { tries?: number; delayMs?: number } | undefined;
 };
 
 export function ApprovalPanel({
@@ -35,8 +45,55 @@ export function ApprovalPanel({
     onReject,
     onSkip,
     onClose,
+    onReasked,
+    onSuperseded,
+    reaskPoll,
 }: Props) {
+    const api = useApi();
     const [rejecting, setRejecting] = useState(false);
+    // A message approval is checked against its work item before Approve is offered, and again at the press.
+    const watched = approval.status === 'pending' && isMessage(approval.operation);
+    const [item, setItem] = useState<WorkItem | null>(null);
+    const [unread, setUnread] = useState<string | null>(null);
+    const [savedHere, setSavedHere] = useState(false);
+    useEffect(() => {
+        setItem(null);
+        setUnread(null);
+        setSavedHere(false);
+        if (!watched) return;
+        let current = true;
+        readItem(api, approval.work_item_id).then(
+            (read) => current && setItem(read),
+            (error: unknown) => current && !(error instanceof Unpaired) && setUnread(sentence(error)),
+        );
+        return () => {
+            current = false;
+        };
+    }, [api, watched, approval.id, approval.work_item_id]);
+    const stale = watched && item !== null && isStale(approval, item);
+    // After a save the runtime asks again; the card waits for the new approval and hands it on when it arrives.
+    useEffect(() => {
+        if (!savedHere) return;
+        let current = true;
+        awaitNewApproval(api, approval.work_item_id, approval.id, { ...reaskPoll, stopped: () => !current }).then(
+            (id) => current && id && onReasked?.(id),
+            () => {},
+        );
+        return () => {
+            current = false;
+        };
+    }, [api, savedHere, approval.id, approval.work_item_id]);
+
+    async function approveChecked() {
+        if (!watched) return onApprove();
+        try {
+            const fresh = await readItem(api, approval.work_item_id);
+            setItem(fresh);
+            if (!isStale(approval, fresh)) onApprove();
+        } catch (error) {
+            if (!(error instanceof Unpaired)) setUnread(sentence(error));
+        }
+    }
     const preview = approval.preview as { intent?: unknown; contact?: { name?: string; value?: string } };
     const intent = typeof preview.intent === 'string' ? preview.intent : null;
     const person = preview.contact?.name ?? approval.contact_name;
@@ -44,6 +101,19 @@ export function ApprovalPanel({
     const { from, channel } = detail;
     const pending = approval.status === 'pending';
     const heading = title(approval.operation, approval.contact_name);
+    // A saved edit withdrew this approval: the card is gone, and the sentence says what happens next. The poll above
+    // shows the new approval when it comes; if it never does, the sentence stays true and the screen's refresh shows it.
+    if (savedHere)
+        return (
+            <div className="panel">
+                <PanelHeader title={heading} sub={<>in {approval.campaign_name}</>} onClose={onClose} />
+                <div className="panel-body">
+                    <p className="notice" role="status">
+                        Jason asks again with the new text when it next takes this work.
+                    </p>
+                </div>
+            </div>
+        );
     return (
         <div className="panel">
             <PanelHeader
@@ -59,7 +129,12 @@ export function ApprovalPanel({
             <ActionsRow>
                 {pending && (
                     <>
-                        <button className="btn primary" type="button" disabled={busy} onClick={() => onApprove()}>
+                        <button
+                            className="btn primary"
+                            type="button"
+                            disabled={busy || (watched && (item === null || stale))}
+                            onClick={() => void approveChecked()}
+                        >
                             Approve
                         </button>
                         <button className="btn danger" type="button" disabled={busy} onClick={() => setRejecting(true)}>
@@ -76,6 +151,17 @@ export function ApprovalPanel({
                 )}
             </ActionsRow>
             <div className="panel-body">
+                {stale && (
+                    <p className="notice" role="status">
+                        The text of this message changed after this approval was asked, so Jason will ask again with the
+                        new text.
+                    </p>
+                )}
+                {unread && (
+                    <p className="notice" role="alert">
+                        The message could not be checked against its work item, so it cannot be approved now: {unread}
+                    </p>
+                )}
                 {intent && (
                     <div className="section">
                         <h3>What will happen</h3>
@@ -122,7 +208,20 @@ export function ApprovalPanel({
                         </>
                     )}
                 </dl>
-                <MessageCard detail={detail} />
+                <MessageCard detail={detail} reply={approval.operation === REPLIES} />
+                {watched && item && editable(approval) && (
+                    <MessageEditor
+                        approval={approval}
+                        item={item}
+                        busy={busy}
+                        onMoved={setItem}
+                        onSaved={(saved) => {
+                            setItem(saved);
+                            setSavedHere(true);
+                            onSuperseded?.();
+                        }}
+                    />
+                )}
                 <details className="fold">
                     <summary>Raw request</summary>
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>

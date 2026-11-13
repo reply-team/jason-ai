@@ -28,6 +28,7 @@ import * as campaigns from './campaigns';
 import * as connect from './connect';
 import { linkPlace } from './links';
 import * as needs from './needs';
+import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { sideView } from './side';
 import { StartPanel, startMaking, startWaiting } from './start';
@@ -216,6 +217,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             if (place.panel === 'needs' && place.open) void needs.attention.open(api, place.open.kind, place.open.id);
         };
         const stops = [
+            // The standing choice of Full access, for the mode menu's take-back and the System screen.
+            followStanding(desktop),
             desktop.links.onOpen(opened),
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
