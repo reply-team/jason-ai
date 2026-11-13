@@ -32,6 +32,14 @@ export const en = {
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
+    'mode.strip': 'Demo',
+    'mode.strip.long':
+        'Demo: this is sample data. Nothing in it is real, and nothing is sent. The demo starts fresh each time it opens.',
+    'mode.strip.short': 'Demo: sample data, nothing sent',
+    'mode.switch': 'Mode',
+    'mode.switch.demo': 'Demo',
+    'mode.switch.live': 'Live',
+    'mode.offer': 'See Jason with sample data',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
 } as const;

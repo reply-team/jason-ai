@@ -18,7 +18,7 @@ async function startConsole(desktop: JasonDesktop): Promise<void> {
 
 async function startClassic(): Promise<void> {
     const shell = await import('./classic');
-    shell.mount(element);
+    await shell.mount(element);
 }
 
 const desktop = window.jasonDesktop;

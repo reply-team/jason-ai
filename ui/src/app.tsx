@@ -7,6 +7,7 @@ import { API_VERSION } from './api/version';
 import { t } from './platform/i18n';
 import { registry } from './platform/slots';
 import { route } from './router';
+import { ModeStrip } from './shell/mode-strip';
 import { PairAgain } from './shell/pair-again';
 import { Sidebar } from './shell/sidebar';
 import * as shell from './shell/shell';
@@ -51,6 +52,8 @@ export function App({
     const runtimeApi = shell.info.value?.api_version;
     return (
         <ApiProvider api={client}>
+            {/* In Demo the strip heads every screen; a shell around a chromeless harness draws its own. */}
+            {!chromeless && <ModeStrip />}
             <div className={chromeless ? 'app chromeless' : 'app'}>
                 {!chromeless && <Sidebar />}
                 <div className="content">
