@@ -39,7 +39,8 @@ name: CI
 # report at all.
 # Wherever the suite runs, a test that fails is run again, alone, at most twice, by the test platform's own repeat
 # (.github/scripts/Invoke-Tests.ps1): one that passes on a repeat keeps its job green and is named on the run's summary
-# and among its annotations, and one that fails every attempt fails its job.
+# and among its annotations, and one that fails every attempt fails its job. On Windows, a job that builds leaves its
+# workspace and the temporary directories out of the antivirus's real-time scan first, for that job's runner alone.
 on:
   push:
     branches: [main, 'release/**']
@@ -645,6 +646,26 @@ jobs:
       - uses: ./.github/actions/setup-dotnet
         with:
           sdk-version: ${{ needs.version.outputs.sdk }}
+
+      # The antivirus's real-time scan reads every file the build writes and every program the tests start, which on a
+      # runner costs time and finds nothing: the workspace and the temporary directories are left out of it for this job.
+      # The runner is thrown away when the job ends; nothing of the product and nothing on a person's machine is touched.
+      - name: Leave the workspace and the temporary directories out of the real-time scan
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, [IO.Path]::GetTempPath()) | Where-Object { $_ } | Select-Object -Unique
+          if (-not (Get-Command Add-MpPreference -ErrorAction SilentlyContinue)) {
+            Write-Host "::warning title=Real-time scan::this runner has no Add-MpPreference, so nothing was left out of a scan"
+            exit 0
+          }
+          try {
+            Add-MpPreference -ExclusionPath $paths
+            Write-Host "left out of the real-time scan: $($paths -join ', ')"
+          } catch {
+            Write-Host "::warning title=Real-time scan::the paths could not be left out of the scan, and the job runs scanned: $($_.Exception.Message)"
+          }
+          exit 0
 
       - name: Restore
         run: dotnet restore dotnet/Jason.slnx

@@ -1625,6 +1625,38 @@ public class CiRunsTests
             File.ReadAllText(Path.Combine(RepositoryRoot(), "dotnet", "Directory.Packages.props")));
     }
 
+    /// <summary>
+    /// Every job that builds the solution on a runner its matrix chooses, which may be Windows, first leaves the workspace
+    /// and the temporary directories out of the antivirus's real-time scan, on Windows alone and before anything is
+    /// restored. It is a speed and nothing else, so a runner where it cannot be done says so and the job goes on.
+    /// </summary>
+    [Fact]
+    public void A_job_that_builds_on_windows_first_leaves_its_workspace_and_temporary_directories_out_of_the_real_time_scan()
+    {
+        var building = Jobs().Children
+            .Where(pair => Scalar((YamlMappingNode)pair.Value, "runs-on") == "${{ matrix.os }}")
+            .Where(pair => Steps((YamlMappingNode)pair.Value).Any(step => Scalar(step, "run") == "dotnet restore dotnet/Jason.slnx"))
+            .ToList();
+        Assert.NotEmpty(building);
+        foreach (var (key, value) in building)
+        {
+            var steps = Steps((YamlMappingNode)value);
+            var leaving = steps.FindIndex(step => Scalar(step, "name") == "Leave the workspace and the temporary directories out of the real-time scan");
+            Assert.True(leaving >= 0, $"the {key} job builds on a runner its matrix chooses and leaves nothing out of the real-time scan");
+            var step = steps[leaving];
+            Assert.Equal("runner.os == 'Windows'", Scalar(step, "if"));
+            Assert.Equal("pwsh", Scalar(step, "shell"));
+            Assert.True(leaving < steps.FindIndex(next => Scalar(next, "run") == "dotnet restore dotnet/Jason.slnx"), $"the {key} job restores before it leaves anything out of the scan");
+
+            var run = Scalar(step, "run")!;
+            Assert.Contains("Add-MpPreference -ExclusionPath $paths", run, StringComparison.Ordinal);
+            Assert.Contains("@($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, [IO.Path]::GetTempPath())", run, StringComparison.Ordinal);
+            Assert.DoesNotContain("ExclusionProcess", run, StringComparison.Ordinal);
+            Assert.DoesNotContain("DisableRealtimeMonitoring", run, StringComparison.Ordinal);
+            Assert.EndsWith("exit 0", run.TrimEnd(), StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>The version a test step is told the build carries. Made up.</summary>
     private const string TestedVersion = "0.0.0-dev";
 
