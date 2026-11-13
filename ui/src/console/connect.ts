@@ -11,7 +11,9 @@ import type {
     DesktopReplyRefusal,
     DesktopSetup,
 } from '../platform/desktop';
-import { act, argsOf, define } from './actions';
+import { t } from '../platform/i18n';
+import { mode } from '../platform/mode';
+import { act, argsOf, define, type Action } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
 import { signInSentence } from './live';
@@ -22,6 +24,27 @@ import { here, messageOf, setup, setupBusy, setupError } from './state';
 
 /** Keys and tokens being typed, held only until they are handed to the desktop. */
 const typed = new Map<string, string>();
+
+// In the demo the acts that connect or change a real account are off: the accounts there are the demo provider's, and a
+// real one is connected in the person's own installation. A control drawn for such an act is disabled and the card says
+// why in one sentence; the act itself also refuses to run, so a stale control cannot reach a real account.
+
+/** Whether this window is the demo. */
+const inDemo = (): boolean => mode.value === 'demo';
+
+/** Defines an act that connects or changes a real account: in the demo it does nothing. */
+function defineReal(name: string, action: Action): void {
+    define(name, (args, element, event) => {
+        if (!inDemo()) action(args, element, event);
+    });
+}
+
+/** The one sentence a card says in the demo about its acts being off. */
+const notInDemo = (): Html | null =>
+    inDemo() ? html`<div class="setrow meta demo-off" role="note">${t('mode.notDemo')}</div>` : null;
+
+/** `busy`, or disabled in the demo, for a control that connects or changes a real account. */
+const realBusy = (busy: Html | null): Html | null => (inDemo() ? html`disabled` : busy);
 
 /** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
 const confirming = signal<string | null>(null);
@@ -306,7 +329,7 @@ define('connect.copyLinks', (_args, element) => {
     if (element instanceof HTMLInputElement) copying.value = element.checked;
 });
 
-define('connect.addAccount', ([place]) => {
+defineReal('connect.addAccount', ([place]) => {
     if (typeof place !== 'string') return;
     adding.value = adding.value === place ? null : place;
     naming.value = null;
@@ -317,7 +340,7 @@ define('connect.addCancel', () => {
     naming.value = null;
 });
 
-define('connect.addMailbox', ([place, provider]) => {
+defineReal('connect.addMailbox', ([place, provider]) => {
     if (typeof place !== 'string' || !isProvider(provider)) return;
     const name = mailboxProviders.find(([each]) => each === provider)![1];
     void askLink(place, `Connect a ${name} mailbox`, null, (how) =>
@@ -325,11 +348,11 @@ define('connect.addMailbox', ([place, provider]) => {
     );
 });
 
-define('connect.addLinkedIn', ([place]) => {
+defineReal('connect.addLinkedIn', ([place]) => {
     if (typeof place === 'string') naming.value = place;
 });
 
-define('connect.makeLinkedIn', ([place]) => {
+defineReal('connect.makeLinkedIn', ([place]) => {
     const name = typedOf('linkedin-name');
     if (typeof place !== 'string' || !name) return;
     const copy = copying.value;
@@ -340,7 +363,7 @@ define('connect.makeLinkedIn', ([place]) => {
     });
 });
 
-define('connect.reconnect', ([place, channel, id]) => {
+defineReal('connect.reconnect', ([place, channel, id]) => {
     const account = listedAccount(channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     signedOut.value = signedOut.value.filter((each) => each !== account.id);
@@ -349,7 +372,7 @@ define('connect.reconnect', ([place, channel, id]) => {
     );
 });
 
-define('connect.pause', ([place, id]) => {
+defineReal('connect.pause', ([place, id]) => {
     const account = listedAccount('linkedin', id);
     if (typeof place === 'string' && account)
         void ask(place, `Pause ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
@@ -357,7 +380,7 @@ define('connect.pause', ([place, id]) => {
         );
 });
 
-define('connect.resume', ([place, id]) => {
+defineReal('connect.resume', ([place, id]) => {
     const account = listedAccount('linkedin', id);
     if (typeof place === 'string' && account)
         void ask(place, `Resume ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
@@ -365,7 +388,7 @@ define('connect.resume', ([place, id]) => {
         );
 });
 
-define('connect.unblock', ([place, id]) => {
+defineReal('connect.unblock', ([place, id]) => {
     const account = listedAccount('email', id);
     if (typeof place === 'string' && account)
         void ask(place, `Unblock ${accountTitle(account)}`, { channel: 'email', id: account.id }, () =>
@@ -373,7 +396,7 @@ define('connect.unblock', ([place, id]) => {
         );
 });
 
-define('connect.delete', ([place, channel, id]) => {
+defineReal('connect.delete', ([place, channel, id]) => {
     const account = listedAccount(channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     void ask(
@@ -388,7 +411,7 @@ define('connect.delete', ([place, channel, id]) => {
     );
 });
 
-define('connect.limits', ([place, id]) => {
+defineReal('connect.limits', ([place, id]) => {
     const account = listedAccount('email', id);
     if (typeof place !== 'string' || !account) return;
     if (limiting.value?.place === place && limiting.value.id === account.id) {
@@ -400,7 +423,7 @@ define('connect.limits', ([place, id]) => {
     );
 });
 
-define('connect.setLimit', ([place, id]) => {
+defineReal('connect.setLimit', ([place, id]) => {
     const account = listedAccount('email', id);
     const text = typedOf(`limit:${typeof id === 'string' ? id : ''}`);
     if (typeof place !== 'string' || !account || !/^\d{1,10}$/.test(text)) return;
@@ -411,7 +434,7 @@ define('connect.setLimit', ([place, id]) => {
     );
 });
 
-define('connect.again', () => {
+defineReal('connect.again', () => {
     const shown = actDialog.value;
     if (shown?.again != null) void ask(shown.place, shown.title, shown.account, shown.again);
 });
@@ -646,13 +669,15 @@ define('connect.type', (args, element) => {
 });
 
 define('connect.install', ([program]) => {
+    // The Reply CLI is the Reply account's program: placing or updating it is off in the demo, an AI's program is not.
+    if (inDemo() && program === setup.value?.reply.cli.install) return;
     if (typeof program === 'string')
         void doing(`Installing ${program}…`, () => here().desktop.setup.installProgram(program));
 });
 
-define('connect.reply', () => void doing('Signing in to Reply…', () => here().desktop.setup.connectReply()));
+defineReal('connect.reply', () => void doing('Signing in to Reply…', () => here().desktop.setup.connectReply()));
 
-define('connect.replyKey', () => {
+defineReal('connect.replyKey', () => {
     const key = typedOf('reply');
     if (key)
         void doing('Connecting Reply with the key…', async () => {
@@ -671,7 +696,7 @@ define('connect.providerKey', ([provider, remove]) => {
         });
 });
 
-define('connect.plugin', ([id]) => {
+defineReal('connect.plugin', ([id]) => {
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     if (!plugin) return;
     const keys = ['token', 'target', 'server'].map((name) => `plugin:${plugin.id}:${name}`);
@@ -686,7 +711,7 @@ define('connect.plugin', ([id]) => {
     });
 });
 
-define('connect.pluginServerClear', ([id]) => {
+defineReal('connect.pluginServerClear', ([id]) => {
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     if (plugin?.serverLabel)
         void doing(`Configuring ${plugin.label}…`, () =>
@@ -702,7 +727,7 @@ define('connect.disconnectCancel', () => {
     confirming.value = null;
 });
 
-define('connect.disconnectConfirm', ([id]) => {
+defineReal('connect.disconnectConfirm', ([id]) => {
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     confirming.value = null;
     if (plugin) void doing(`Disconnecting ${plugin.label}…`, () => here().desktop.setup.disconnectPlugin(plugin.id));
@@ -780,12 +805,13 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
     const below = typeof state.belowMinimum === 'string' ? state.belowMinimum : null;
     const offering = state.signedIn && state.cli.found && below === null;
     // Every act is off while one is being asked for.
-    const asks = busy ?? (actDialog.value?.asking === true ? html`disabled` : null);
+    const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
+    const real = realBusy(busy);
     const cli = state.cli.found
         ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
         : html`<span class="meta">The Reply CLI was not found.</span> ${
                   state.cli.install
-                      ? html`<button class="btn sm" type="button" ${busy} ${act('connect.install', state.cli.install)}>
+                      ? html`<button class="btn sm" type="button" ${real} ${act('connect.install', state.cli.install)}>
                             Install
                         </button>`
                       : null
@@ -793,6 +819,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
     return html`<div class="card" ${label ? html`role="region" aria-label="${label}"` : null}>
         <div class="hd"><b>Reply</b></div>
         <div class="bd">
+            ${notInDemo()}
             <div class="setrow"><div class="grow">${cli}</div></div>
             ${
                 state.cli.found && below !== null
@@ -803,7 +830,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                                   ? html`<button
                                         class="btn sm"
                                         type="button"
-                                        ${busy}
+                                        ${real}
                                         ${act('connect.install', state.cli.install)}
                                     >
                                         Update
@@ -818,14 +845,14 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
                     <span class="meta">${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span>
                 </div>
-                ${state.cli.found ? html`<button class="btn sm p" type="button" ${busy} ${act('connect.reply')}>Sign in</button>` : null}
+                ${state.cli.found ? html`<button class="btn sm p" type="button" ${real} ${act('connect.reply')}>Sign in</button>` : null}
             </div>
             ${
                 state.cli.found
                     ? html`<div class="setrow">
                           <div class="grow meta">Or an API key, for an account the browser sign-in does not reach:</div>
                           ${secret('reply', 'Reply API key')}
-                          <button class="btn sm" type="button" ${busy} ${act('connect.replyKey')}>Connect</button>
+                          <button class="btn sm" type="button" ${real} ${act('connect.replyKey')}>Connect</button>
                       </div>`
                     : null
             }
@@ -895,7 +922,8 @@ function runtimeWords(plugin: DesktopPlugin): string {
     return `The runtime reads it as valid, with ${grants}.`;
 }
 
-function plugin(each: DesktopPlugin, busy: Html | null, refused: boolean): Html {
+function plugin(each: DesktopPlugin, busyReal: Html | null, refused: boolean): Html {
+    const busy = realBusy(busyReal);
     return html`<div class="setrow plugin" data-id="${each.id}">
         <div class="grow">
             <b>${each.label}</b> <span class="meta">${each.description}</span>
@@ -962,6 +990,7 @@ function plugins(state: DesktopSetup, busy: Html | null): Html {
             <span class="meta">Where Jason tells you something waits, and where the journal goes.</span>
         </div>
         <div class="bd">
+            ${notInDemo()}
             ${
                 refused
                     ? html`<div class="note am" role="alert">

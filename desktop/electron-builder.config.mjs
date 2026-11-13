@@ -46,9 +46,9 @@ export function electronChecksums() {
 /** The chat's three lists and its instruction text, packaged inside the application beside package.json. */
 export const chatFiles = Object.freeze(['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
 
-/** What a pack of one architecture finds in its bundle folder: the executable, its two notices and the skills. */
+/** What a pack of one architecture finds in its bundle folder: the executable, its two notices, the skills and the demo provider's package. */
 export function bundleFiles(platform) {
-    return [platform === 'win32' ? 'jason.exe' : 'jason', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills'];
+    return [platform === 'win32' ? 'jason.exe' : 'jason', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills', 'plugins'];
 }
 
 const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;

@@ -11,6 +11,7 @@ const top = {
     platform: true,
     onCommand: true,
     theme: true,
+    mode: true,
     pairing: true,
     chat: true,
     links: true,
@@ -18,6 +19,8 @@ const top = {
     fullAccess: true,
 } as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
+// Live or Demo, the installation the desktop runs on: read once as the page loads, and set, which starts it again.
+const mode = { get: true, set: true, startOver: true } as const satisfies Record<keyof JasonDesktop['mode'], true>;
 const chat = {
     send: true,
     stop: true,
@@ -73,21 +76,23 @@ const status = {
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
     Exactly<keyof typeof theme, keyof JasonDesktop['theme']>,
+    Exactly<keyof typeof mode, keyof JasonDesktop['mode']>,
     Exactly<keyof typeof chat, keyof JasonDesktop['chat']>,
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof fullAccess, keyof JasonDesktop['fullAccess']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true, true, true, true]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
                     name !== 'theme' &&
+                    name !== 'mode' &&
                     name !== 'pairing' &&
                     name !== 'chat' &&
                     name !== 'links' &&
@@ -95,6 +100,7 @@ describe('the desktop seam', () => {
                     name !== 'fullAccess',
             ),
             ...Object.keys(theme).map((name) => `theme.${name}`),
+            ...Object.keys(mode).map((name) => `mode.${name}`),
             ...Object.keys(pairing).map((name) => `pairing.${name}`),
             ...Object.keys(chat).map((name) => `chat.${name}`),
             ...Object.keys(links).map((name) => `links.${name}`),
@@ -105,6 +111,9 @@ describe('the desktop seam', () => {
             'onCommand',
             'theme.get',
             'theme.set',
+            'mode.get',
+            'mode.set',
+            'mode.startOver',
             'pairing.paired',
             'chat.send',
             'chat.stop',

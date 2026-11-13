@@ -69,9 +69,17 @@ test('the two backgrounds are the starting page’s own', () => {
 
 test('whether the installation is new is decided in the main module before Electron makes its profile, on either start', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const decided = main.indexOf('const installationWasNew = isNewInstallation(');
-    const firstKeep = main.indexOf('    keepElectronUnderData();');
-    assert.ok(decided > 0 && firstKeep > 0 && decided < firstKeep);
+    // Decided where the installation is chosen, which a start runs before it places Electron's profile.
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    assert.ok(choose.includes('installationWasNew = isNewInstallation('));
+    const start = main.slice(main.indexOf('function startDesktop('));
+    const chosen = start.indexOf('chooseInstallation(uninstalling');
+    const firstKeep = start.indexOf('\n    keepElectronUnderData();');
+    assert.ok(chosen > 0 && firstKeep > chosen);
+    // Before the choice the profile is placed only by the start a refused link makes, which quits and reads nothing.
+    const before = start.slice(0, chosen);
+    assert.equal(before.split('keepElectronUnderData();').length - 1, 1);
+    assert.ok(before.includes("keepElectronUnderData();\n        startLog().warn('deep_link_refused', { Code: fromArgs.reason });\n        app.exit(1);\n        return;"));
     assert.ok(main.includes('run(links, installationWasNew)'));
 });
 
