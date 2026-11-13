@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
+import type { DesktopSetup } from '../platform/desktop';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
@@ -20,9 +21,14 @@ const sentence = 'Not in the demo: accounts are connected in your own installati
 
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-async function renderAt(kept: 'live' | 'demo', panel: 'Connect' | 'Accounts'): Promise<StubDesktop> {
+async function renderAt(
+    kept: 'live' | 'demo',
+    panel: 'Connect' | 'Accounts',
+    reply: Partial<DesktopSetup['reply']> = {},
+): Promise<StubDesktop> {
     const desktop = chatDesktop({
         ...setupFound,
+        reply: { ...setupFound.reply, ...reply },
         plugins: setupFound.plugins.map((each) => (each.id === 'ntfy' ? { ...each, binding: true } : each)),
     });
     desktop.modeKept = kept;
@@ -139,6 +145,42 @@ describe('The Connect panel in the demo', () => {
         expect(button(keys, 'Keep').disabled).toBe(false);
         expect(words(ai)).not.toContain(sentence);
         expect(words(keys)).not.toContain(sentence);
+    });
+});
+
+describe('The Reply CLI in the demo', () => {
+    const missing = { cli: { found: false, version: null, install: 'reply-cli' } };
+    const old = {
+        cli: { found: true, version: '0.1.0', install: 'reply-cli' },
+        belowMinimum: 'This Reply CLI is older than the one Jason needs.',
+    };
+    const installs = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'setup.installProgram');
+
+    it('turns off Install when the CLI is missing, with the sentence, and runs nothing', async () => {
+        const desktop = await renderAt('demo', 'Connect', missing);
+        const install = button(replyCard(), 'Install');
+        expect(install.disabled).toBe(true);
+        expect(within(replyCard()).getAllByRole('note').map(words)).toContain(sentence);
+        install.disabled = false;
+        fireEvent.click(install);
+        expect(installs(desktop)).toEqual([]);
+    });
+
+    it('turns off Update when the CLI is below the minimum, and runs nothing', async () => {
+        const desktop = await renderAt('demo', 'Connect', old);
+        const update = button(replyCard(), 'Update');
+        expect(update.disabled).toBe(true);
+        update.disabled = false;
+        fireEvent.click(update);
+        expect(installs(desktop)).toEqual([]);
+    });
+
+    it('keeps both on in Live', async () => {
+        await renderAt('live', 'Connect', missing);
+        expect(button(replyCard(), 'Install').disabled).toBe(false);
+        cleanup();
+        await renderAt('live', 'Connect', old);
+        expect(button(replyCard(), 'Update').disabled).toBe(false);
     });
 });
 

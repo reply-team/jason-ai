@@ -669,6 +669,8 @@ define('connect.type', (args, element) => {
 });
 
 define('connect.install', ([program]) => {
+    // The Reply CLI is the Reply account's program: placing or updating it is off in the demo, an AI's program is not.
+    if (inDemo() && program === setup.value?.reply.cli.install) return;
     if (typeof program === 'string')
         void doing(`Installing ${program}…`, () => here().desktop.setup.installProgram(program));
 });
@@ -809,7 +811,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
         ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
         : html`<span class="meta">The Reply CLI was not found.</span> ${
                   state.cli.install
-                      ? html`<button class="btn sm" type="button" ${busy} ${act('connect.install', state.cli.install)}>
+                      ? html`<button class="btn sm" type="button" ${real} ${act('connect.install', state.cli.install)}>
                             Install
                         </button>`
                       : null
@@ -828,7 +830,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                                   ? html`<button
                                         class="btn sm"
                                         type="button"
-                                        ${busy}
+                                        ${real}
                                         ${act('connect.install', state.cli.install)}
                                     >
                                         Update
