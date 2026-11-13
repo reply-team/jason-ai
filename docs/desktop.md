@@ -305,11 +305,15 @@ model's to decide.
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
 **New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
 approval or a question waiting, an approval approved or rejected, a question answered, a campaign created, started,
-paused or archived, work that stopped or expired, a provider block holding work. Consecutive lines of the same kind and
-campaign fold into one with a count, and the Feed keeps the newest 500. A line carries a kind, ids, a count and a moment
-and never a person's words, a subject or a name; the campaign's name on it opens that campaign's conversation, and an
-approval or a question opens Needs you on that item. When the window loads, the desktop reads what it missed with `jason
-journal list`.
+paused or archived, work that stopped or expired, a provider block holding work, a message, a reply or an invitation that
+went out, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability specialist.
+Consecutive lines of the same kind and campaign fold into one with a count; a message that went out and an invitation
+that went out are not the same kind of line, so sends that alternate with other lines are shown one by one. The Feed keeps
+the newest 500. A line carries a kind, ids, a count and a moment, and for a send or finished work which one it was, and
+never a person's words, a subject or a name; the campaign's name on it opens that campaign's conversation, and an
+approval or a question opens Needs you on that item. When the window loads, the desktop reads what it missed with
+`jason journal list`. Of the work that finished, a catch-up takes at most the newest hundred items, and keeps the sends
+and the role work among them; older ones stay in the journal and are not shown again.
 
 **A line never starts a turn.** The agent hears the lines it has not yet been given only with your next message there,
 at most 50, as records Jason took from the journal: information, never instructions. The Feed cannot be renamed,
