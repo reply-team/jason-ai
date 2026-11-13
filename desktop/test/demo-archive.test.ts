@@ -29,7 +29,7 @@ import {
     type PlacingOutcome,
 } from '../src/demo-archive.ts';
 import { claimDemoFolder, demoMarkerName, demoMarkerText, hasDemoMarker, markPlacedFolder } from '../src/demo-folders.ts';
-import { asideMarker, carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, importedBy, leftByAMaking, leftByAPlacing, leftRuntimeStops, placingInFlight, requestStartOver } from '../src/demo-over.ts';
+import { asideMarker, carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, importedBy, leftByAMaking, leftByAPlacing, leftRuntimeStops, noteLeftStopped, placingInFlight, requestStartOver } from '../src/demo-over.ts';
 import { stopDemoRuntime, stopLeftDemoRuntime } from '../src/demo-runtime.ts';
 import { cliAt } from '../src/cli.ts';
 import { markerPath, readMarker, type DemoPlaces } from '../src/demo-seed.ts';
@@ -669,11 +669,12 @@ test('a demo runtime a crashed placing or making left is stopped, and the start 
         const acts: string[] = [];
         const outcome = await stopLeftDemoRuntime({
             stop: async () => (acts.push('stop'), (alive = false), { kind: 'stopped' }),
+            note: () => (acts.push('note'), noteLeftStopped(w.request)),
             startAgain: () => acts.push('start again'),
             refuse: () => acts.push('refuse'),
         });
         assert.equal(outcome, 'started-again');
-        assert.deepEqual(acts, ['stop', 'start again']);
+        assert.deepEqual(acts, ['stop', 'note', 'start again']);
         // The start after it carries the request out.
         carry();
         assert.equal(existsSync(w.places.data) || existsSync(w.places.harnessRoot) || existsSync(w.request), false);
@@ -691,7 +692,7 @@ test('a left demo runtime that cannot be stopped refuses as before: nothing is s
     const w = leftRunning(t, true);
     for (const stop of [async () => ({ kind: 'failed', exit: 1 }) as const, async () => ({ kind: 'another' }) as const, async () => Promise.reject(new Error('x'))]) {
         const acts: string[] = [];
-        const outcome = await stopLeftDemoRuntime({ stop, startAgain: () => acts.push('start again'), refuse: () => acts.push('refuse') });
+        const outcome = await stopLeftDemoRuntime({ stop, note: () => acts.push('note'), startAgain: () => acts.push('start again'), refuse: () => acts.push('refuse') });
         assert.equal(outcome, 'refused');
         assert.deepEqual(acts, ['refuse']);
     }
@@ -725,6 +726,7 @@ test('the stop of a left demo runtime asks the demo’s own runtime and never th
     });
     const outcome = await stopLeftDemoRuntime({
         stop: () => stopDemoRuntime({ platform: process.platform, executable, person, env: { JASON_DATA_DIR: person } }, cliFor),
+        note: () => undefined,
         startAgain: () => undefined,
         refuse: () => assert.fail('the demo’s runtime was stopped'),
     });
@@ -732,4 +734,29 @@ test('the stop of a left demo runtime asks the demo’s own runtime and never th
     assert.ok(asked.some((ask) => ask.args.join(' ') === 'runtime stop'));
     assert.deepEqual([...new Set(asked.map((ask) => ask.data))], [demo], 'every verb ran on the demo’s data directory');
     assert.ok(existsSync(join(person, 'run', 'runtime.json')), 'the person’s runtime is as it was');
+});
+
+test('a left demo runtime is stopped once for a request: one that comes back after the stop is refused as before, with no second start', async (t) => {
+    const w = leftRunning(t, true);
+    let alive = true;
+    const carry = () => carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => alive, exists: existsSync, marked: hasDemoMarker });
+    const starts: string[] = [];
+    const once = () =>
+        stopLeftDemoRuntime({
+            stop: async () => ((alive = false), { kind: 'stopped' }),
+            note: () => noteLeftStopped(w.request),
+            startAgain: () => starts.push('start again'),
+            refuse: () => starts.push('refuse'),
+        });
+    assert.equal(leftRuntimeStops(readFileSync(w.request, 'utf8'), 1, () => false), true);
+    await once();
+    assert.deepEqual(starts, ['start again']);
+    // The runtime is back by the next start (something started it again): the request says a stop was already made.
+    alive = true;
+    assert.throws(carry, (error: unknown) => error instanceof CarryOutRefused && error.reason === 'runtime_alive');
+    assert.equal(leftRuntimeStops(readFileSync(w.request, 'utf8'), 1, () => false), false, 'no second stop and start');
+    assert.ok(existsSync(w.request), 'the request is kept for the next demo start');
+    // Noting it twice writes the line once.
+    noteLeftStopped(w.request);
+    assert.equal(readFileSync(w.request, 'utf8').split(/\r?\n/).filter((line) => line === 'stopped').length, 1);
 });

@@ -229,6 +229,7 @@ test('a start that finds a demo runtime a crashed making or placing left stops i
     assert.ok(stop.includes('await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });'));
     assert.equal(stop.includes('stopOwnRuntime('), false, 'the person’s runtime is never asked to stop');
     assert.ok(stop.includes('bundles: desktopPaths(runOn.data).bundle'), 'with the jason the demo’s runtime runs from');
+    assert.ok(stop.includes('note: () => noteLeftStopped(desktopPaths(runOn.person).demoStartOver),'), 'once for a request');
 });
 
 const noPreparation = { prepare: () => undefined };

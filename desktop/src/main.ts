@@ -40,7 +40,7 @@ import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bri
 import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftRuntimeStops, placingInFlight, requestStartOver } from './demo-over.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftRuntimeStops, noteLeftStopped, placingInFlight, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
 import { processIsRunning } from './own-runtime.ts';
 import { applyMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterRun, keepFirstStart, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
@@ -1083,6 +1083,8 @@ async function stopLeftRuntimeAndStart(log: Logger): Promise<void> {
             log.info('demo_runtime_stopped', { Outcome: outcome.kind });
             return outcome;
         },
+        // Once for this request: a runtime back by the next start is refused as any other.
+        note: () => noteLeftStopped(desktopPaths(runOn.person).demoStartOver),
         startAgain: again,
         refuse: () => {
             log.warn('demo_start_over_not_carried_out', { Cause: 'runtime_alive' });

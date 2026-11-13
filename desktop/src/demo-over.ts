@@ -112,10 +112,22 @@ export function placingInFlight(text: string | null, self: number, running: (pid
  */
 export function leftRuntimeStops(text: string | null, self: number, running: (pid: number) => boolean): boolean {
     if (text === null || !(leftByAMaking(text) || leftByAPlacing(text))) return false;
+    // Once for a request: a runtime that is back by the next start is refused as any other (`noteLeftStopped`).
+    if (text.split('\n').includes(leftStoppedLine)) return false;
     const asking = askedBy(text);
     const importing = importedBy(text);
     if (asking !== null && asking !== self && running(asking)) return false;
     return importing === null || !running(importing);
+}
+
+/** The line that says a left demo runtime was already stopped for this request, and the desktop started again. */
+export const leftStoppedLine = 'stopped';
+
+/** Adds `leftStoppedLine` to the request at `file`, once; throws when it cannot. */
+export function noteLeftStopped(file: string): void {
+    const text = readFileSync(file, 'utf8');
+    if (text.split('\n').includes(leftStoppedLine)) return;
+    writeFileSync(file, `${text.endsWith('\n') || text === '' ? text : `${text}\n`}${leftStoppedLine}\n`);
 }
 
 /** The process that asked, or null when the text does not say. */
