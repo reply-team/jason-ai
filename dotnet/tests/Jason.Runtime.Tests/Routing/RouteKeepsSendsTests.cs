@@ -87,7 +87,7 @@ public class RouteKeepsSendsTests
     /// The same move goes through once nothing is left to cancel or to read there. The provider has said it holds the send
     /// no longer: a cancel of it succeeded; a cancel of it failed with the answer its document declares as nothing to
     /// cancel, the send already went or the provider holds none under the reference; a status read of it succeeded and
-    /// says it went, or that it can no longer be cancelled, and the same two answers free a send with no moment known.
+    /// says it went, or that it can no longer be cancelled, and the same answers free a send with no moment known.
     /// Its moment has passed, the provider's own where its result names one, though its arguments named a later one; or
     /// its own result does not say the provider can cancel it, whether it says false or says nothing, which the
     /// operation's document reads as false. Or another route of the campaign still names the plugin and account. A cancel
@@ -106,6 +106,7 @@ public class RouteKeepsSendsTests
     [InlineData("its moment passed", true)]
     [InlineData("the provider's own moment passed", true)]
     [InlineData("no moment known", false)]
+    [InlineData("no moment known, cancelled", true)]
     [InlineData("no moment known, a status read says it went", true)]
     [InlineData("no moment known, its cancel found nothing pending", true)]
     [InlineData("another route names the account", true)]
@@ -130,7 +131,7 @@ public class RouteKeepsSendsTests
             after switch
             {
                 "its moment passed" => Moment(Noon.AddMinutes(-5)),
-                "no moment known" or "no moment known, a status read says it went" or "no moment known, its cancel found nothing pending"
+                "no moment known" or "no moment known, cancelled" or "no moment known, a status read says it went" or "no moment known, its cancel found nothing pending"
                     or "the provider took it for a moment of its own" => null,
                 _ => Later,
             },
@@ -148,7 +149,7 @@ public class RouteKeepsSendsTests
             });
         switch (after)
         {
-            case "cancelled":
+            case "cancelled" or "no moment known, cancelled":
                 await CancelAsync(api, campaign, send, WorkItemStatus.Succeeded);
                 break;
             case "its cancel found nothing pending" or "no moment known, its cancel found nothing pending":

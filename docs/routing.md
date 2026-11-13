@@ -387,8 +387,9 @@ when it will send is never read as a moment. A send whose result does not say th
 false or absent, is held for nothing a cancel could reach, so no route is kept for it. Everything asked is the runtime's own record: the
 send's arguments and result, the provenance of its succeeded attempt, and the campaign's cancels and status reads of it.
 The moment is compared with the runtime's clock, in the database, so only the sends still held, dated or not, are read. Every door a
-change comes through refuses one that would strand a send, so a send no route reaches can only be left so by a start
-(which has no routes in force to keep), or by settings edited while the runtime was stopped. A start says each such
+change comes through refuses one that would strand a held send, so a send no route reaches was left so by a start
+(which has no routes in force to keep), by settings edited while the runtime was stopped, or by a change made while the
+send was still on its way to the provider, before it was held. A start says each such
 send once in the log, as a warning naming its work item, its campaign and the plugin it ran at, and nothing it says to a
 person; its cancel and its status read are refused at the claim (§7, check 14). After the start, while the routes in force name nothing,
 the guard reads nothing: there is nothing it could refuse.
