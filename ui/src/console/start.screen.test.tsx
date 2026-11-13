@@ -138,7 +138,7 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
     });
 
-    it("says under the box, in the founder's words, that this interface is optional", async () => {
+    it("says under the box that this interface is optional", async () => {
         renderConsole(stubDesktop());
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?', level: 1 }));
         const note = screen.getByRole('note');

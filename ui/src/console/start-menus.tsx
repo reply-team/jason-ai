@@ -127,7 +127,7 @@ export function AccessButton({
     takeBack: () => void;
     buttonRef: RefObject<HTMLButtonElement>;
 }) {
-    // The menu lists them in the founder's order; what each offers or refuses is `modeChoices`'s.
+    // The menu lists them in the order the design gives; what each offers or refuses is `modeChoices`'s.
     const order: readonly DesktopChatMode[] = ['full_access', 'ask_first', 'auto_edit', 'plan_only'];
     const choices = [...modeChoices(hostOf(chat))].sort((a, b) => order.indexOf(a.mode) - order.indexOf(b.mode));
     const current = choices.find((each) => each.mode === chat.mode)?.label ?? '';
