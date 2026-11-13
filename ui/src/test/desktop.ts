@@ -186,6 +186,13 @@ export interface StubDesktop extends JasonDesktop {
     /** The theme the desktop keeps, as `theme.get` answers it; null when it was never told one. */
     themeKept: 'system' | 'light' | 'dark' | null;
     /**
+     * The mode this run is on, as `mode.get` answers it; Live unless a test says Demo. `mode.set` keeps the mode it is
+     * given and answers null, as the desktop does before it starts again, or a refusal the test set by name.
+     */
+    modeKept: 'live' | 'demo';
+    /** The sentence `mode.get` answers when a test says the demo could not be opened; null otherwise. */
+    modeUnopened: string | null;
+    /**
      * Calls the test refuses, by name, with the sentence: a chat call answers it as a value (`{ refused }`), as the
      * desktop does; a setup call rejects with it.
      */
@@ -334,12 +341,21 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const stub: StubDesktop = {
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
+        mode: {
+            get: () => Promise.resolve({ mode: stub.modeKept, unopened: stub.modeUnopened }),
+            set: answering('mode.set', (mode) => {
+                stub.modeKept = mode === 'demo' ? 'demo' : 'live';
+                return null;
+            }),
+        },
         pairing: { paired: call('pairing.paired') },
         calls,
         refuse,
         actAnswers,
         status,
         themeKept: null,
+        modeKept: 'live',
+        modeUnopened: null,
         kept,
         names,
         keep,
