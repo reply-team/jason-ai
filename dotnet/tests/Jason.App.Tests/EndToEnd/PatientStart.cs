@@ -189,6 +189,70 @@ internal static partial class PatientStart
         return said;
     }
 
+    /// <summary>How many of the runtime's last log lines a failed start's message carries.</summary>
+    public const int LastLines = 20;
+
+    /// <summary>
+    /// What a failed start's message says after the verb's answer: the last <see cref="LastLines"/> lines of the runtime's
+    /// own log, each by its time and message template alone, as a start that gives up says its first ones. A start that
+    /// went silent is then read from the failure's message, after the folder it names is gone.
+    /// </summary>
+    public static string LogTail(JasonPaths paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        var tail = new Queue<string>();
+        var earlier = 0;
+        var notes = new List<string>();
+        if (!Directory.Exists(paths.LogsDirectory))
+        {
+            notes.Add("(no log directory)");
+        }
+        else
+        {
+            foreach (var file in Directory.EnumerateFiles(paths.LogsDirectory).Order(StringComparer.Ordinal))
+            {
+                try
+                {
+                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var reader = new StreamReader(stream);
+                    while (reader.ReadLine() is { } text)
+                    {
+                        if (TimeAndTemplate(text) is not { } line)
+                        {
+                            continue;
+                        }
+
+                        tail.Enqueue(line);
+                        if (tail.Count > LastLines)
+                        {
+                            tail.Dequeue();
+                            earlier++;
+                        }
+                    }
+                }
+                catch (IOException)
+                {
+                    notes.Add("(a log file could not be read)");
+                }
+            }
+
+            if (tail.Count == 0 && notes.Count == 0)
+            {
+                notes.Add("(the log holds no lines)");
+            }
+        }
+
+        var said = new List<string> { string.Create(CultureInfo.InvariantCulture, $"The runtime's own log, its last {LastLines} lines (time and message template of each):") };
+        if (earlier > 0)
+        {
+            said.Add(string.Create(CultureInfo.InvariantCulture, $"({earlier} earlier lines not said)"));
+        }
+
+        said.AddRange(tail);
+        said.AddRange(notes);
+        return string.Join(Environment.NewLine, said);
+    }
+
     private static string? TimeAndTemplate(string text)
     {
         try
