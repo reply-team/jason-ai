@@ -2061,7 +2061,7 @@ public partial class ReleaseWorkflowTests
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var building = (YamlMappingNode)jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Value;
-        Assert.Equal("version", Scalar(building, "needs"));
+        Assert.Equal(["version", DemoJob], Needs(building));
 
         var decided = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "version"), "steps")).Children.Cast<YamlMappingNode>()
             .Single(step => Scalar(step, "id") == "version");
@@ -4140,11 +4140,14 @@ public partial class ReleaseWorkflowTests
         }
     }
 
-    /// <summary>Whether a step really asks an executable what version it is, rather than talking about it.</summary>
+    /// <summary>
+    /// Whether a step really asks an executable what version it is, rather than talking about it, or telling the desktop's
+    /// prepare script the version to publish a bundle at, which asks no executable anything.
+    /// </summary>
     private static bool Checks(string step) =>
         step.Split('\n')
             .Select(line => line.Trim())
-            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
+            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#') && !line.StartsWith("node scripts/prepare.mjs ", StringComparison.Ordinal));
 
     /// <summary>
     /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it

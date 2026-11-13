@@ -121,6 +121,15 @@ inputs:
     required: false
     default: 'false'
 
+  demo-archive:
+    description: >
+      The archive of the demo's sample the release's demo job made, as a path in the workspace: each desktop package this
+      call builds carries it at resources/bundle/demo/jason-demo.zip, and the desktop places it at a demo's first start
+      instead of making the sample there. Each package is read back and held to carrying it byte for byte. The default,
+      none, is a pull request's: its packages carry no archive, are held to carrying none, and make the sample live.
+    required: false
+    default: ''
+
 outputs:
   executable:
     description: The published executable, for the caller's smoke test.
@@ -343,10 +352,13 @@ runs:
         JASON_SIGNTOOL: ${{ steps.desktop-signing.outputs.signtool }}
         JASON_SIGNING_DLIB: ${{ steps.desktop-signing.outputs.dlib }}
         JASON_SIGNING_METADATA: ${{ steps.desktop-signing.outputs.metadata }}
+        DEMO_ARCHIVE: ${{ inputs.demo-archive }}
       run: |
         npm ci --ignore-scripts
         if ($LASTEXITCODE -ne 0) { throw "npm ci exited with $LASTEXITCODE" }
-        node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version $env:VERSION --executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+        # A release's call carries the demo's sample its demo job made; any other call carries none.
+        $demo = if ($env:DEMO_ARCHIVE) { @('--demo', (Join-Path $env:GITHUB_WORKSPACE $env:DEMO_ARCHIVE)) } else { @() }
+        node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version $env:VERSION --executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE) @demo
         if ($LASTEXITCODE -ne 0) { throw "prepare.mjs exited with $LASTEXITCODE" }
         $env:JASON_VERSION = $env:VERSION
         $env:JASON_WINDOWS_SIGN = '1'
@@ -371,7 +383,10 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        DEMO_ARCHIVE: ${{ inputs.demo-archive }}
       run: |
+        # A release's call carries the demo's sample its demo job made; any other call carries none.
+        $demo = if ($env:DEMO_ARCHIVE) { @('--demo', (Join-Path $env:GITHUB_WORKSPACE $env:DEMO_ARCHIVE)) } else { @() }
         $dist = 'desktop/dist'
         $installer = "$dist/jason-desktop-windows-x64-setup.exe"
         $opened = Join-Path $env:RUNNER_TEMP 'jason-desktop-installer'
@@ -425,7 +440,7 @@ runs:
 
         # The package read back against the configuration it was built from: the feed app-update.yml asks and the
         # publisher an update must be signed by, and the fuses as Jason.exe carries them.
-        node desktop/scripts/check-package.mjs --app $app --platform win32
+        node desktop/scripts/check-package.mjs --app $app --platform win32 @demo
         if ($LASTEXITCODE -ne 0) { throw "The application the installer carries is not what it was configured to be: its feed or its fuses." }
 
         Write-Host (Get-Content -LiteralPath "$dist/latest.yml" -Raw)
@@ -779,6 +794,7 @@ runs:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
         IDENTITY: ${{ steps.identity.outputs.identity }}
         KEYCHAIN: ${{ steps.identity.outputs.keychain }}
+        DEMO_ARCHIVE: ${{ inputs.demo-archive }}
       run: |
         arm64="$GITHUB_WORKSPACE/artifacts/publish/osx-arm64/jason"
         if [ ! -f "$arm64" ]; then
@@ -786,8 +802,11 @@ runs:
           exit 1
         fi
         npm ci --ignore-scripts
-        node scripts/prepare.mjs --rid osx-arm64 --output bundles/arm64 --version "$VERSION" --executable "$arm64"
-        node scripts/prepare.mjs --rid osx-x64 --output bundles/x64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE"
+        # A release's call carries the demo's sample its demo job made; any other call carries none.
+        demo=()
+        if [ -n "$DEMO_ARCHIVE" ]; then demo=(--demo "$GITHUB_WORKSPACE/$DEMO_ARCHIVE"); fi
+        node scripts/prepare.mjs --rid osx-arm64 --output bundles/arm64 --version "$VERSION" --executable "$arm64" "${demo[@]}"
+        node scripts/prepare.mjs --rid osx-x64 --output bundles/x64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE" "${demo[@]}"
         JASON_VERSION="$VERSION" CSC_NAME="$IDENTITY" CSC_KEYCHAIN="$KEYCHAIN" CSC_IDENTITY_AUTO_DISCOVERY=false \
           APPLE_KEYCHAIN_PROFILE=jason-notary APPLE_KEYCHAIN="$KEYCHAIN" npm run package -- --mac --arm64 --x64
 
@@ -806,7 +825,11 @@ runs:
         VERSION: ${{ inputs.version }}
         KEYCHAIN: ${{ steps.identity.outputs.keychain }}
         TEAM_ID: ${{ inputs.apple-team-id }}
+        DEMO_ARCHIVE: ${{ inputs.demo-archive }}
       run: |
+        # A release's call carries the demo's sample its demo job made; any other call carries none.
+        demo=()
+        if [ -n "$DEMO_ARCHIVE" ]; then demo=(--demo "$GITHUB_WORKSPACE/$DEMO_ARCHIVE"); fi
         [ -n "$TEAM_ID" ] || { echo "::error title=Desktop::TEAM_ID is empty: the packages cannot be held to the release's team."; exit 1; }
         dist=desktop/dist
         entitlements=dotnet/src/Jason.App/jason.entitlements
@@ -841,7 +864,7 @@ runs:
           xcrun stapler validate "$app"
           shipped="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
           [ "$shipped" = "$VERSION" ] || { echo "::error title=Desktop::The $arch application says it is $shipped, and the release is $VERSION."; exit 1; }
-          node desktop/scripts/check-package.mjs --app "$app" --platform darwin || { echo "::error title=Desktop::The $arch application is not what it was configured to be: its feed or its fuses."; exit 1; }
+          node desktop/scripts/check-package.mjs --app "$app" --platform darwin "${demo[@]}" || { echo "::error title=Desktop::The $arch application is not what it was configured to be: its feed or its fuses."; exit 1; }
 
           cmp "$nested" "$GITHUB_WORKSPACE/artifacts/publish/$rid/jason" || { echo "::error title=Desktop::The $arch application's jason is not the executable its call signed."; exit 1; }
           codesign --verify --strict --verbose=2 "$nested"
@@ -858,7 +881,7 @@ runs:
           codesign --verify --deep --strict --verbose=2 "$unzipped/Jason.app"
           xcrun stapler validate "$unzipped/Jason.app"
           cmp "$unzipped/Jason.app/Contents/Resources/bundle/jason" "$nested"
-          node desktop/scripts/check-package.mjs --app "$unzipped/Jason.app" --platform darwin || { echo "::error title=Desktop::The $arch application inside the zip is not what it was configured to be: its feed or its fuses."; exit 1; }
+          node desktop/scripts/check-package.mjs --app "$unzipped/Jason.app" --platform darwin "${demo[@]}" || { echo "::error title=Desktop::The $arch application inside the zip is not what it was configured to be: its feed or its fuses."; exit 1; }
 
           codesign --verify --strict --verbose=2 "$dmg"
           [ "$(team "$dmg")" = "$TEAM_ID" ] || { echo "::error title=Desktop::The $arch dmg is not signed by the release's team."; exit 1; }
@@ -924,9 +947,13 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        DEMO_ARCHIVE: ${{ inputs.demo-archive }}
       run: |
         npm ci --ignore-scripts
-        node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE"
+        # A release's call carries the demo's sample its demo job made; any other call carries none.
+        demo=()
+        if [ -n "$DEMO_ARCHIVE" ]; then demo=(--demo "$GITHUB_WORKSPACE/$DEMO_ARCHIVE"); fi
+        node scripts/prepare.mjs --rid linux-x64 --output bundles/x64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE" "${demo[@]}"
         JASON_VERSION="$VERSION" npm run package -- --linux --x64
 
     # Each Linux package read back. The deb's control fields name the package, the version as dpkg spells it and the
@@ -945,7 +972,11 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
+        DEMO_ARCHIVE: ${{ inputs.demo-archive }}
       run: |
+        # A release's call carries the demo's sample its demo job made; any other call carries none.
+        demo=()
+        if [ -n "$DEMO_ARCHIVE" ]; then demo=(--demo "$GITHUB_WORKSPACE/$DEMO_ARCHIVE"); fi
         dist=desktop/dist
         deb="$dist/jason-desktop-linux-x64.deb"
         appimage="$GITHUB_WORKSPACE/$dist/jason-desktop-linux-x64.AppImage"
@@ -974,7 +1005,7 @@ runs:
         opened="$RUNNER_TEMP/jason-desktop-deb"
         rm -rf "$opened"
         dpkg-deb --extract "$deb" "$opened"
-        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb || { echo "::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile."; exit 1; }
+        node desktop/scripts/check-package.mjs --app "$opened/opt/Jason" --platform linux --form deb "${demo[@]}" || { echo "::error title=Desktop::The deb's application is not what it was configured to be: its feed, its fuses, its updater or its AppArmor profile."; exit 1; }
         control="$RUNNER_TEMP/jason-desktop-deb-control"
         rm -rf "$control"
         dpkg-deb --control "$deb" "$control"
@@ -991,7 +1022,7 @@ runs:
         rm -rf "$extracted"
         mkdir -p "$extracted"
         (cd "$extracted" && "$appimage" --appimage-extract > /dev/null)
-        node desktop/scripts/check-package.mjs --app "$extracted/squashfs-root" --platform linux --form appimage || { echo "::error title=Desktop::The AppImage's application is not what it was configured to be: its feed, its fuses or its updater."; exit 1; }
+        node desktop/scripts/check-package.mjs --app "$extracted/squashfs-root" --platform linux --form appimage "${demo[@]}" || { echo "::error title=Desktop::The AppImage's application is not what it was configured to be: its feed, its fuses or its updater."; exit 1; }
         carries "$extracted/squashfs-root" AppImage
 
         pwsh -NoProfile -File .github/scripts/Assert-UpdateFeed.ps1 -Feed "$feed" -Version "$VERSION" -Expect jason-desktop-linux-x64.deb,jason-desktop-linux-x64.AppImage || { echo "::error title=Desktop::latest-linux.yml does not describe the files beside it as they will be published."; exit 1; }

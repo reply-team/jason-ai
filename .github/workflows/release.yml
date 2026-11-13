@@ -3,7 +3,8 @@
 # published, the Linux one first running the critical tier at the tag and then building the desktop's Linux packages,
 # the macOS one, in a job of its own that runs no test, signing and notarizing its executable, and the Windows one, in a
 # job of its own that runs no test either, signing its executable through Artifact Signing, and one job that archives
-# the plugins' packages from the tag's tree; then the release job — the only one that may write to this repository — assembles the manifest and the
+# the plugins' packages from the tag's tree; before the three platforms, one Linux job makes the demo's sample that every
+# desktop package carries; then the release job — the only one that may write to this repository — assembles the manifest and the
 # checksums and publishes the release at once, with its notes and its assets, and a last job asks the Homebrew tap to
 # bump its formula. The release pull request into main, and its run on every platform, come before the tag: the tag is
 # that merge.
@@ -127,9 +128,70 @@ jobs:
         with:
           sdk-version: latest
 
+  # The demo's sample, made once for the three platforms' desktops: the release's jason, published here for Linux with
+  # the demo provider's package beside it, runs the desktop's own code, headless, which makes the demo installation and
+  # seeds it as a demo's first start would; the runtime is stopped and `jason export` writes the archive every desktop
+  # package carries and places at a demo's first start. An installation records its folders, and they travel in the
+  # archive, so the sample is made in a home with a plain name of its own, /home/demo, and the archive is unpacked and
+  # held to carrying no folder of this runner, the database's bytes included. The job fails, and with it the release,
+  # when the sample is not whole or a folder of the runner travels; the three jobs that build a desktop wait for it.
+  # Its artifact is named outside jason-*, which the release job downloads, so it is never a release asset of its own.
+  demo:
+    name: The demo's sample
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Publish the release's jason for Linux, with the demo provider beside it
+        working-directory: desktop
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          node scripts/prepare.mjs --rid linux-x64 --output bundles/demo --version "$VERSION"
+
+      - name: Make the demo's sample and export it
+        run: |
+          sudo mkdir /home/demo
+          sudo chown "$(id -u):$(id -g)" /home/demo
+          node --experimental-strip-types .github/scripts/make-demo-archive.mts --bundle desktop/bundles/demo --home /home/demo --output "$RUNNER_TEMP/demo/jason-demo.zip"
+
+      - name: Hold the archive to carrying no folder of this runner
+        run: |
+          archive="$RUNNER_TEMP/demo/jason-demo.zip"
+          unpacked="$RUNNER_TEMP/demo-unpacked"
+          rm -rf "$unpacked"
+          mkdir -p "$unpacked"
+          unzip -q "$archive" -d "$unpacked"
+          for path in "$HOME" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" "$RUNNER_TOOL_CACHE"; do
+            if grep -r -a -l -F -- "$path" "$unpacked"; then
+              echo "::error title=Demo::The archive carries $path, a folder of this runner, in the files above."
+              exit 1
+            fi
+          done
+          grep -q -F '"home": "/home/demo"' "$unpacked/export.json" || { echo "::error title=Demo::The archive was not made in /home/demo."; exit 1; }
+          echo "jason-demo.zip: $(stat -c %s "$archive") bytes, carrying no folder of this runner"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: demo-archive
+          path: ${{ runner.temp }}/demo/jason-demo.zip
+          if-no-files-found: error
+          retention-days: 7
+
   build:
     name: ${{ matrix.rid }}
-    needs: version
+    needs: [version, demo]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -176,6 +238,12 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
 
+      # The demo's sample, made once by the demo job, which the desktop's packages carry.
+      - uses: actions/download-artifact@v7
+        with:
+          name: demo-archive
+          path: artifacts/demo
+
       # And the desktop's Linux packages, an AppImage and a deb, which nothing signs: built around the executable this
       # call publishes, read back, and started once each under a virtual display, before anything is published.
       - name: Package
@@ -185,6 +253,7 @@ jobs:
           rid: ${{ matrix.rid }}
           version: ${{ needs.version.outputs.version }}
           desktop: true
+          demo-archive: artifacts/demo/jason-demo.zip
 
       - name: Smoke-test the published executable
         shell: pwsh
@@ -231,7 +300,7 @@ jobs:
 
   macos:
     name: osx-arm64
-    needs: version
+    needs: [version, demo]
     runs-on: macos-latest
     permissions:
       contents: read
@@ -479,6 +548,12 @@ jobs:
           # A reading: what happened is printed above, and the job goes on whatever it was.
           exit 0
 
+      # The demo's sample, made once by the demo job, which the desktop's packages carry.
+      - uses: actions/download-artifact@v7
+        with:
+          name: demo-archive
+          path: artifacts/demo
+
       # The desktop's Mac packages carry an executable for each architecture, so the action runs a second time for
       # osx-x64: published, signed, notarized and assessed as the osx-arm64 one was, then the desktop built around the
       # two and verified. That executable is never published on its own: its upload is named outside jason-*, which the
@@ -491,6 +566,7 @@ jobs:
           version: ${{ needs.version.outputs.version }}
           artifact: desktop-osx-x64-executable
           desktop: true
+          demo-archive: artifacts/demo/jason-demo.zip
           sign-macos: true
           apple-developer-id-p12-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           apple-developer-id-p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
@@ -532,7 +608,7 @@ jobs:
 
   windows:
     name: win-x64
-    needs: version
+    needs: [version, demo]
     runs-on: windows-latest
     # The one job that may ask for an OIDC token, which the federated credential trades for the Azure sign-in that
     # signs; the workflow grants none, so no other job can. It builds this platform, and the package action signs its
@@ -553,6 +629,12 @@ jobs:
         with:
           sdk-version: ${{ needs.version.outputs.sdk }}
 
+      # The demo's sample, made once by the demo job, which the desktop's packages carry.
+      - uses: actions/download-artifact@v7
+        with:
+          name: demo-archive
+          path: artifacts/demo
+
       - name: Package
         id: package
         uses: ./.github/actions/package
@@ -564,6 +646,7 @@ jobs:
           sign-windows: true
           # And the desktop's Windows installer, built and signed while the sign-in holds.
           desktop: true
+          demo-archive: artifacts/demo/jason-demo.zip
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
           azure-signing-account: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
