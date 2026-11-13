@@ -120,7 +120,8 @@ test('the start that stops the carried runtime exits 0 when none of its own runs
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     const branch = main.slice(main.indexOf('const uninstalling = uninstallStart('), main.indexOf('} else if (!app.requestSingleInstanceLock('));
-    assert.ok(branch.includes('} else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {'));
+    assert.ok(branch.includes('const stoppingRuntime = uninstalling === null && stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform });'));
+    assert.ok(branch.includes('} else if (stoppingRuntime) {'));
     assert.ok(branch.includes('void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));'));
     const from = start.indexOf('export async function runStopRuntime(');
     const run = start.slice(from, start.indexOf('\n}\n', from));

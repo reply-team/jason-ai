@@ -143,15 +143,26 @@ test('a packaged desktop starts again with nothing after the program, an unpacka
 });
 
 // The one ordering guard left on the main module's text: what runs before Electron resolves any path cannot be run here.
-test('the main module reads the record before any path is resolved, and only then points the process at the run', () => {
+test('a start reads the record before it resolves any path, and only then points the process at the run', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const chosen = main.indexOf('const personDirectory = dataDirectory(process.env, homedir());');
-    const started = main.indexOf('const runOn: StartRun = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {');
-    const entered = main.indexOf('const personEnvironment = enterRun(process.env, runOn);');
-    const firstPath = main.indexOf('const installationWasNew = isNewInstallation(');
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    const chosen = choose.indexOf('const personDirectory = dataDirectory(process.env, homedir());');
+    const started = choose.indexOf('runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {');
+    const entered = choose.indexOf('personEnvironment = enterRun(process.env, runOn);');
+    const firstPath = choose.indexOf('installationWasNew = isNewInstallation(');
     assert.ok(chosen > 0 && started > chosen && entered > started && firstPath > entered);
-    // Nothing before the choice resolves the data directory at the module's top level.
-    assert.equal(main.slice(main.indexOf('const unsandboxed'), chosen).includes('dataDirectory('), false);
+    // In the start, nothing between the link's decision and the choice resolves a path, and the profile, the logs and
+    // the lock follow the choice.
+    const start = main.slice(main.indexOf('function startDesktop('));
+    const decided = start.indexOf('const fromArgs = linkIn(');
+    const choice = start.indexOf('chooseInstallation(uninstalling');
+    const between = start.slice(start.indexOf('    const uninstalling = uninstallStart('), choice);
+    for (const path of ['dataDirectory(', 'startLog(', 'keepElectronUnderData(', 'desktopPaths(']) assert.equal(between.includes(path), false, path);
+    assert.ok(decided > 0 && choice > decided);
+    for (const after of ['keepElectronUnderData();\n    const early = startLog();', 'app.requestSingleInstanceLock(']) assert.ok(start.indexOf(after) > choice, after);
+    // Nothing at the module's top resolves the data directory before a start chooses, but the sandbox's refusal.
+    const top = main.slice(main.indexOf('const unsandboxed'), main.indexOf('function chooseInstallation('));
+    assert.equal(top.replace(/if \(unsandboxed !== null\) \{[\s\S]*?\} else \{/, '').includes('dataDirectory('), false);
 });
 
 const noPreparation = { prepare: () => undefined };

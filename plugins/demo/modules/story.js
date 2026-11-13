@@ -52,9 +52,9 @@ export const story = {
   ],
   "companies": [
     {
-      "key": "tamarack-ridge",
-      "name": "Tamarack Ridge Freight",
-      "domain": "tamarackridgefreight.example",
+      "key": "thistlegrove",
+      "name": "Thistlegrove Freight",
+      "domain": "thistlegrovefreight.example",
       "city": "Duluth, MN",
       "region": "Upper Midwest",
       "trucks": 140
@@ -92,9 +92,9 @@ export const story = {
       "trucks": 45
     },
     {
-      "key": "saltmarsh",
-      "name": "Saltmarsh Trucking",
-      "domain": "saltmarshtrucking.example",
+      "key": "brinemoor",
+      "name": "Brinemoor Trucking",
+      "domain": "brinemoortrucking.example",
       "city": "Savannah, GA",
       "region": "Southeast",
       "trucks": 120
@@ -132,9 +132,9 @@ export const story = {
       "trucks": 38
     },
     {
-      "key": "juniper-spoke",
-      "name": "Juniper Spoke Logistics",
-      "domain": "juniperspoke.example",
+      "key": "fernhollow",
+      "name": "Fernhollow Logistics",
+      "domain": "fernhollowlogistics.example",
       "city": "Raleigh, NC",
       "region": "Southeast",
       "trucks": 55
@@ -203,12 +203,12 @@ export const story = {
       "first_name": "Gwen",
       "last_name": "Halvorsen",
       "title": "Director of Operations",
-      "company": "tamarack-ridge",
+      "company": "thistlegrove",
       "time_zone": "America/Chicago",
       "channels": [
         {
           "channel": "email",
-          "value": "gwen.halvorsen@tamarackridgefreight.example"
+          "value": "gwen.halvorsen@thistlegrovefreight.example"
         },
         {
           "channel": "phone",
@@ -223,7 +223,7 @@ export const story = {
           "channel": "email",
           "approval": "given",
           "subject": "Planning 140 trucks without the whiteboard",
-          "body": "Hi Gwen,\n\nI have been reading about Tamarack Ridge Freight: a fleet of about 140 trucks that runs grain and building-supply loads across three states. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Upper Midwest cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "body": "Hi Gwen,\n\nI have been reading about Thistlegrove Freight: a fleet of about 140 trucks that runs grain and building-supply loads across three states. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Upper Midwest cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -242,12 +242,12 @@ export const story = {
       "first_name": "Marcus",
       "last_name": "Teague",
       "title": "Dispatch Manager",
-      "company": "tamarack-ridge",
+      "company": "thistlegrove",
       "time_zone": "America/Chicago",
       "channels": [
         {
           "channel": "email",
-          "value": "marcus.teague@tamarackridgefreight.example"
+          "value": "marcus.teague@thistlegrovefreight.example"
         },
         {
           "channel": "phone",
@@ -261,8 +261,8 @@ export const story = {
           "operation": "message.send",
           "channel": "email",
           "approval": "given",
-          "subject": "A question about dispatch at Tamarack Ridge Freight",
-          "body": "Hi Marcus,\n\nI have been reading about Tamarack Ridge Freight: a fleet of about 140 trucks that runs grain and building-supply loads across three states. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Upper Midwest cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "subject": "A question about dispatch at Thistlegrove Freight",
+          "body": "Hi Marcus,\n\nI have been reading about Thistlegrove Freight: a fleet of about 140 trucks that runs grain and building-supply loads across three states. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Upper Midwest cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -274,12 +274,12 @@ export const story = {
       "first_name": "Ruth",
       "last_name": "Okafor",
       "title": "Owner",
-      "company": "tamarack-ridge",
+      "company": "thistlegrove",
       "time_zone": "America/Chicago",
       "channels": [
         {
           "channel": "email",
-          "value": "ruth.okafor@tamarackridgefreight.example"
+          "value": "ruth.okafor@thistlegrovefreight.example"
         },
         {
           "channel": "phone",
@@ -294,7 +294,7 @@ export const story = {
           "channel": "email",
           "approval": "given",
           "subject": "Fewer empty miles across the Upper Midwest",
-          "body": "Hi Ruth,\n\nI have been reading about Tamarack Ridge Freight: a fleet of about 140 trucks that runs grain and building-supply loads across three states. You probably see the cost of a late plan more than anyone: overtime, empty miles and the calls that follow.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Upper Midwest cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "body": "Hi Ruth,\n\nI have been reading about Thistlegrove Freight: a fleet of about 140 trucks that runs grain and building-supply loads across three states. You probably see the cost of a late plan more than anyone: overtime, empty miles and the calls that follow.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Upper Midwest cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -711,12 +711,12 @@ export const story = {
       "first_name": "Curtis",
       "last_name": "Langford",
       "title": "VP of Operations",
-      "company": "saltmarsh",
+      "company": "brinemoor",
       "time_zone": "America/New_York",
       "channels": [
         {
           "channel": "email",
-          "value": "curtis.langford@saltmarshtrucking.example"
+          "value": "curtis.langford@brinemoortrucking.example"
         },
         {
           "channel": "phone",
@@ -730,8 +730,8 @@ export const story = {
           "operation": "message.send",
           "channel": "email",
           "approval": "given",
-          "subject": "Saltmarsh Trucking and next-day route planning",
-          "body": "Hi Curtis,\n\nI have been reading about Saltmarsh Trucking: a fleet of about 120 trucks that moves port containers on tight appointment windows. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Southeast cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "subject": "Brinemoor Trucking and next-day route planning",
+          "body": "Hi Curtis,\n\nI have been reading about Brinemoor Trucking: a fleet of about 120 trucks that moves port containers on tight appointment windows. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Southeast cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -750,12 +750,12 @@ export const story = {
       "first_name": "Simone",
       "last_name": "Achebe",
       "title": "Dispatch Manager",
-      "company": "saltmarsh",
+      "company": "brinemoor",
       "time_zone": "America/New_York",
       "channels": [
         {
           "channel": "email",
-          "value": "simone.achebe@saltmarshtrucking.example"
+          "value": "simone.achebe@brinemoortrucking.example"
         },
         {
           "channel": "phone",
@@ -770,7 +770,7 @@ export const story = {
           "channel": "email",
           "approval": "given",
           "subject": "Planning 120 trucks without the whiteboard",
-          "body": "Hi Simone,\n\nI have been reading about Saltmarsh Trucking: a fleet of about 120 trucks that moves port containers on tight appointment windows. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Southeast cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "body": "Hi Simone,\n\nI have been reading about Brinemoor Trucking: a fleet of about 120 trucks that moves port containers on tight appointment windows. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Southeast cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -782,12 +782,12 @@ export const story = {
       "first_name": "Wade",
       "last_name": "Holloway",
       "title": "Terminal Manager",
-      "company": "saltmarsh",
+      "company": "brinemoor",
       "time_zone": "America/New_York",
       "channels": [
         {
           "channel": "email",
-          "value": "wade.holloway@saltmarshtrucking.example"
+          "value": "wade.holloway@brinemoortrucking.example"
         },
         {
           "channel": "phone",
@@ -801,8 +801,8 @@ export const story = {
           "operation": "message.send",
           "channel": "email",
           "approval": "given",
-          "subject": "A question about dispatch at Saltmarsh Trucking",
-          "body": "Hi Wade,\n\nI have been reading about Saltmarsh Trucking: a fleet of about 120 trucks that moves port containers on tight appointment windows. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Southeast cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "subject": "A question about dispatch at Brinemoor Trucking",
+          "body": "Hi Wade,\n\nI have been reading about Brinemoor Trucking: a fleet of about 120 trucks that moves port containers on tight appointment windows. I suspect a good part of your morning goes into the plan before the first truck rolls.\n\nTillerwave builds the next day's routes for a regional fleet in a few minutes, with your drivers' hours, your customers' windows and the loads already booked, and lets a dispatcher move a stop by hand when the road says otherwise. Fleets of your size in the Southeast cut empty miles by around a tenth in their first quarter.\n\nWould a 20-minute look at your own lanes be worth it before you plan Q1?\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -1219,12 +1219,12 @@ export const story = {
       "first_name": "Mitchell",
       "last_name": "Crane",
       "title": "Founder",
-      "company": "juniper-spoke",
+      "company": "fernhollow",
       "time_zone": "America/New_York",
       "channels": [
         {
           "channel": "email",
-          "value": "mitchell.crane@juniperspoke.example"
+          "value": "mitchell.crane@fernhollowlogistics.example"
         },
         {
           "channel": "phone",
@@ -1238,8 +1238,8 @@ export const story = {
           "operation": "message.send",
           "channel": "email",
           "approval": "waiting",
-          "subject": "A free route-planning pilot for Juniper Spoke Logistics",
-          "body": "Hi Mitchell,\n\nJuniper Spoke Logistics grew from 30 to 55 vans in a year, and last-mile work like that lives or dies on the route sheet. We are opening a free 30-day pilot of Tillerwave's route planner for ten delivery firms of 20 to 80 vehicles this winter.\n\nThe pilot plans your real stops every evening, you keep your own dispatch as the check, and at the end you see the miles and the late arrivals side by side. No contract, and nothing to install on the vans.\n\nWould you like one of the ten places for Juniper Spoke Logistics? A reply with a good day for a 15-minute call is all it takes.\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "subject": "A free route-planning pilot for Fernhollow Logistics",
+          "body": "Hi Mitchell,\n\nFernhollow Logistics grew from 30 to 55 vans in a year, and last-mile work like that lives or dies on the route sheet. We are opening a free 30-day pilot of Tillerwave's route planner for ten delivery firms of 20 to 80 vehicles this winter.\n\nThe pilot plans your real stops every evening, you keep your own dispatch as the check, and at the end you see the miles and the late arrivals side by side. No contract, and nothing to install on the vans.\n\nWould you like one of the ten places for Fernhollow Logistics? A reply with a good day for a 15-minute call is all it takes.\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -1251,12 +1251,12 @@ export const story = {
       "first_name": "Lucia",
       "last_name": "Ferrante",
       "title": "Head of Operations",
-      "company": "juniper-spoke",
+      "company": "fernhollow",
       "time_zone": "America/New_York",
       "channels": [
         {
           "channel": "email",
-          "value": "lucia.ferrante@juniperspoke.example"
+          "value": "lucia.ferrante@fernhollowlogistics.example"
         },
         {
           "channel": "phone",
@@ -1270,8 +1270,8 @@ export const story = {
           "operation": "message.send",
           "channel": "email",
           "approval": "waiting",
-          "subject": "A free route-planning pilot for Juniper Spoke Logistics",
-          "body": "Hi Lucia,\n\nJuniper Spoke Logistics grew from 30 to 55 vans in a year, and last-mile work like that lives or dies on the route sheet. We are opening a free 30-day pilot of Tillerwave's route planner for ten delivery firms of 20 to 80 vehicles this winter.\n\nThe pilot plans your real stops every evening, you keep your own dispatch as the check, and at the end you see the miles and the late arrivals side by side. No contract, and nothing to install on the vans.\n\nWould you like one of the ten places for Juniper Spoke Logistics? A reply with a good day for a 15-minute call is all it takes.\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "subject": "A free route-planning pilot for Fernhollow Logistics",
+          "body": "Hi Lucia,\n\nFernhollow Logistics grew from 30 to 55 vans in a year, and last-mile work like that lives or dies on the route sheet. We are opening a free 30-day pilot of Tillerwave's route planner for ten delivery firms of 20 to 80 vehicles this winter.\n\nThe pilot plans your real stops every evening, you keep your own dispatch as the check, and at the end you see the miles and the late arrivals side by side. No contract, and nothing to install on the vans.\n\nWould you like one of the ten places for Fernhollow Logistics? A reply with a good day for a 15-minute call is all it takes.\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
@@ -1283,12 +1283,12 @@ export const story = {
       "first_name": "Devon",
       "last_name": "Ashby",
       "title": "Fleet Supervisor",
-      "company": "juniper-spoke",
+      "company": "fernhollow",
       "time_zone": "America/New_York",
       "channels": [
         {
           "channel": "email",
-          "value": "devon.ashby@juniperspoke.example"
+          "value": "devon.ashby@fernhollowlogistics.example"
         },
         {
           "channel": "phone",
@@ -1302,8 +1302,8 @@ export const story = {
           "operation": "message.send",
           "channel": "email",
           "approval": "waiting",
-          "subject": "A free route-planning pilot for Juniper Spoke Logistics",
-          "body": "Hi Devon,\n\nJuniper Spoke Logistics grew from 30 to 55 vans in a year, and last-mile work like that lives or dies on the route sheet. We are opening a free 30-day pilot of Tillerwave's route planner for ten delivery firms of 20 to 80 vehicles this winter.\n\nThe pilot plans your real stops every evening, you keep your own dispatch as the check, and at the end you see the miles and the late arrivals side by side. No contract, and nothing to install on the vans.\n\nWould you like one of the ten places for Juniper Spoke Logistics? A reply with a good day for a 15-minute call is all it takes.\n\nDana Whitfield\nTillerwave Dispatch Software",
+          "subject": "A free route-planning pilot for Fernhollow Logistics",
+          "body": "Hi Devon,\n\nFernhollow Logistics grew from 30 to 55 vans in a year, and last-mile work like that lives or dies on the route sheet. We are opening a free 30-day pilot of Tillerwave's route planner for ten delivery firms of 20 to 80 vehicles this winter.\n\nThe pilot plans your real stops every evening, you keep your own dispatch as the check, and at the end you see the miles and the late arrivals side by side. No contract, and nothing to install on the vans.\n\nWould you like one of the ten places for Fernhollow Logistics? A reply with a good day for a 15-minute call is all it takes.\n\nDana Whitfield\nTillerwave Dispatch Software",
           "note": null
         }
       ],
