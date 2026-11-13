@@ -204,7 +204,15 @@ that going back to your own installation is how to reach it, because each outlas
 Your AI's own keys and hosts, which are the chat's and not an account of the demo, work as they do in your installation.
 
 **Full access is not offered in the demo.** The mode menu shows it off with "Not in the demo: Full access is for your own
-installation.", and the standing choice does not apply there. <!-- H8: what else the chat's fence refuses in a demo run, written when it lands. -->
+installation.", and the standing choice does not apply there, to a new chat or to one reopened. No chat of a demo run
+enters it by any path, the menu and the page's call included.
+
+**The chat refuses your own installation, whole.** In a demo run the chat's fence holds your own data directory and your own
+harness root, each refused whole in every access mode: no folder inside either is open, and no card covers them. A read,
+a write or a command that names them is refused with a sentence saying the path belongs to your own installation and that
+the chat runs in the demo. The match is by path segment, so `~/.jason` never covers `~/.jason-demo` and `~/Jason` never
+covers `~/Jason-demo`, in either direction. In your own installation the chat's fence holds the data directory alone, as
+before. Codex's turns are unchanged: they run in Codex's read-only sandbox, in the demo as in your own installation.
 
 **The chat.** The chat works in the demo as anywhere: the AI you connected runs `jason` against the demo installation,
 where it can do no harm to anybody. Nothing is connected for you, and the chat says so as it does in your own
