@@ -1,7 +1,10 @@
 import { computed, signal } from '@preact/signals-react';
+import { Bridge, type BridgePair } from '../platform/bridge';
+import { replace } from '../router';
 import type { UiSession } from './types';
 
 const key = 'jason.ui.session';
+const bridgeKey = 'jason.ui.bridge';
 
 type Stored = Pick<UiSession, 'token' | 'token_id' | 'actor_id' | 'instance_id'>;
 
@@ -12,6 +15,8 @@ export class Session {
     readonly actorId = signal<string | null>(null);
     readonly instanceId = signal<string | null>(null);
     readonly paired = computed(() => this.token.value !== null);
+    /** The desktop's bridge this tab holds, when the desktop opened the tab; null otherwise. */
+    readonly bridge = signal<Bridge | null>(null);
 
     /**
      * Reads the stored pairing; then, when the link carries a ticket, trades it at the door, wipes it from the address
@@ -19,10 +24,82 @@ export class Session {
      */
     async bootstrap(): Promise<void> {
         this.restore();
-        const { ticket, hash } = splitTicket(location.hash);
-        if (!ticket) return;
-        history.replaceState(null, '', location.pathname + location.search + hash);
-        await this.pair(ticket);
+        const { ticket, bridge, hash } = splitFragment(location.hash);
+        if (ticket || bridge) history.replaceState(null, '', location.pathname + location.search + hash);
+        if (ticket) await this.pair(ticket);
+        await this.openBridge(bridge);
+        // A link that carries the desktop's code was made to show its chat: the tab lands on the Chat screen.
+        if (bridge && this.bridge.value) replace({ screen: 'chat' });
+    }
+
+    /**
+     * The desktop's bridge: a code in the link (`d=<port>.<code>`) is traded once at the bridge for a secret, which this
+     * tab keeps in sessionStorage with the port. With no code, a pair kept by an earlier load is tried once, and dropped
+     * when the bridge does not take it.
+     */
+    private async openBridge(code: { port: number; code: string } | null): Promise<void> {
+        if (code) {
+            try {
+                const response = await fetch(`http://127.0.0.1:${code.port}/pair`, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ code: code.code }),
+                });
+                const answer = response.ok ? ((await response.json()) as { secret?: unknown }) : null;
+                if (answer && typeof answer.secret === 'string') {
+                    const pair: BridgePair = { port: code.port, secret: answer.secret };
+                    this.keepBridge(pair);
+                    this.bridge.value = this.made(pair);
+                }
+            } catch {
+                // The desktop is not there: the screen says what it says without a bridge.
+            }
+            return;
+        }
+        const kept = this.keptBridge();
+        if (!kept) return;
+        const bridge = this.made(kept);
+        if (await bridge.alive()) this.bridge.value = bridge;
+        else this.dropBridge();
+    }
+
+    private made(pair: BridgePair): Bridge {
+        const bridge: Bridge = new Bridge(pair, undefined, () => {
+            if (this.bridge.value === bridge) this.dropBridge();
+        });
+        return bridge;
+    }
+
+    private keptBridge(): BridgePair | null {
+        try {
+            const raw = sessionStorage.getItem(bridgeKey);
+            if (!raw) return null;
+            const pair = JSON.parse(raw) as Partial<BridgePair>;
+            return typeof pair.port === 'number' && typeof pair.secret === 'string'
+                ? { port: pair.port, secret: pair.secret }
+                : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private keepBridge(pair: BridgePair): void {
+        try {
+            sessionStorage.setItem(bridgeKey, JSON.stringify(pair));
+        } catch {
+            // Then the bridge lasts for this load only.
+        }
+    }
+
+    /** Forgets the kept pair, and the bridge this tab held. */
+    dropBridge(): void {
+        try {
+            sessionStorage.removeItem(bridgeKey);
+        } catch {
+            // Nothing was kept.
+        }
+        this.bridge.value?.close();
+        this.bridge.value = null;
     }
 
     async pair(ticket: string): Promise<void> {
@@ -120,6 +197,29 @@ export function splitTicket(hash: string): { ticket: string | null; hash: string
     query.delete('t');
     const rest = query.toString();
     return { ticket, hash: hash.slice(0, at) + (rest ? '?' + rest : '') };
+}
+
+/**
+ * The fragment's two codes, each taken out of it: the runtime's ticket (`t`) and the desktop bridge's pairing code
+ * (`d=<port>.<code>`). A `d` that is not a loopback port and a code is dropped from the address and not used.
+ */
+export function splitFragment(hash: string): {
+    ticket: string | null;
+    bridge: { port: number; code: string } | null;
+    hash: string;
+} {
+    const at = hash.indexOf('?');
+    if (at < 0) return { ticket: null, bridge: null, hash };
+    const query = new URLSearchParams(hash.slice(at + 1));
+    const ticket = query.get('t');
+    const raw = query.get('d');
+    query.delete('t');
+    query.delete('d');
+    const rest = query.toString();
+    const match = raw === null ? null : /^(\d{1,5})\.([A-Za-z0-9_-]{8,128})$/.exec(raw);
+    const port = match ? Number(match[1]) : 0;
+    const bridge = match && port >= 1 && port <= 65535 ? { port, code: match[2]! } : null;
+    return { ticket, bridge, hash: hash.slice(0, at) + (rest ? '?' + rest : '') };
 }
 
 export const session = new Session();
