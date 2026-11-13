@@ -174,6 +174,13 @@ public static class AttemptErrors
     public const string SearchRouteMismatch = "search_route_mismatch";
 
     /// <summary>
+    /// The work names a thread under <c>args.thread</c> that its campaign's own lines say was seen at a plugin and an
+    /// account, and none of them is the plugin and binding the work is routed to: a thread is held only by the provider
+    /// account it was seen at, so it is read, answered and filed there or not at all.
+    /// </summary>
+    public const string ThreadRouteMismatch = "thread_route_mismatch";
+
+    /// <summary>
     /// The work names an audience by its number under <c>args.audience</c> that its campaign does not hold: a campaign's
     /// audiences are numbered from 1, in the order the claim made them.
     /// </summary>

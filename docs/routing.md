@@ -183,17 +183,17 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the twenty-six answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the twenty-seven answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last nineteen are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last twenty are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
 value is suppressed, whether the routed plugin has pinned the person an operation that works by the pin
 alone acts on, whether the send a read or a take-back names is this campaign's, whether it kept the provider's reference, whether it was
 made under the route the item is routed to, the same three questions of the search a status read or a stop names, whether an audience named
 by its number is one the campaign holds, whether the composed input satisfies the schema, whether the definition it carries satisfies the
 schema the routed plugin declares for one, whether the routed plugin takes an argument
-the operation names per channel on the channel the input names, whether it writes a template on that channel where the message is one, whether an earlier attempt that lost its answer may be repeated under the routed plugin, whether another search of the campaign has not ended, whether the operation needs a person's approval, and whether an open provider block holds it — which turns on the sending account the input names. So `route resolve --operation campaign.enroll` answers `usable: true` against a
+the operation names per channel on the channel the input names, whether it writes a template on that channel where the message is one, whether an earlier attempt that lost its answer may be repeated under the routed plugin, whether the campaign saw the thread the operation names at the plugin and account it is routed to, whether another search of the campaign has not ended, whether the operation needs a person's approval, and whether an open provider block holds it — which turns on the sending account the input names. So `route resolve --operation campaign.enroll` answers `usable: true` against a
 plugin that implements it, and every item of that operation is still parked for a person at the
 claim.
 
@@ -395,7 +395,7 @@ Nothing falls back. An operation the routed plugin cannot perform ends the work 
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the twenty-six, in the order they are checked
+### At the claim — the twenty-seven, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
@@ -432,6 +432,12 @@ succeed and a read tells the truth. An item it holds **waits** on the
 block, with no attempt, until the block clears or a trial gets past it. It is asked after the approval, so a person
 is asked about work while the provider refuses it, and work a person releases still waits for the block.
 
+The twenty-seventh, `thread_route_mismatch`, is the thread's own reference check, and it stands apart from the send's
+and the search's (rows 12 to 17) twice over: it was added after the rest, so it is numbered last and no other number
+moved, and it is **asked after row 23 and before row 24**, because the three that wait or park would otherwise ask a
+person to approve, or hold on another account's block, a reply that could only be refused. It is a refusal like those
+before it, `permanent` and final.
+
 | # | Code | Class | What it means, and what to change |
 |---|---|---|---|
 | 1 | `operation_unknown` | permanent | this build publishes no contract for the operation the item names. The item was written by a build that did; nothing but a different build will run it |
@@ -460,6 +466,7 @@ is asked about work while the provider refuses it, and work a person releases st
 | 24 | `search_unfinished` | — | **not a failure**: the operation is `audience.search`, and another search of the campaign has not ended — a search whose row is not ended, running or held at the provider, another `audience.search` item of the campaign running now, or one open again with no row after an attempt of it started and ended ambiguous, whose start may have acted although its answer was lost, so that it may be running at the provider. A campaign runs one search at a time: a second one would spend beside the first, and the provider refuses only a second search of the same definition. The item waits as `waiting`, with no attempt, its last error naming the search in the way, and is claimed again a search cadence later, the held cadence where the provider holds that search; nobody is asked to approve it meanwhile. Of two searches whose starts both lost their answers, the older goes first and the newer waits behind it. A search item that has ended — failed, cancelled or expired — is in nobody's way, even one whose start may have acted: what it may have started is a person's to find at the provider (row 23). Let that search end, or stop it with `audience.search_cancel`; one whose answer was lost settles at its own next attempt, which reads the provider's searches first and starts none of its own if one was started |
 | 25 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved, unless a standing approval covers it: then it runs in the same claim, under a row the person who set the standing approval decided. `docs/work-execution.md` §Approvals |
 | 26 | `provider_blocked` | — | **not a failure**: an open block of the routed plugin and binding holds the work — the account's, which covers every sending account under it, or the block of the sending account the input names at `/args/sender/external_id`. Only the operations whose contract says `dispatch.under_provider_block: waits` are held: every `reach: act` operation, `campaign.pause` and `optout.record`. The item waits as `waiting`, its `wait.blocked_by` naming the block, with no attempt; one item at a time is the block's trial and runs, an act wherever one can run, and what an act answers decides the block; a control's answer decides nothing but `blocked`. Nothing is to change on the item: what clears a block is on the provider's side. `docs/work-execution.md` §Provider blocks |
+| 27 | `thread_route_mismatch` | permanent | the operation names a thread — its input schema names `thread`, today `conversation.get`, `conversation.reply`, `conversation.classify`, `conversation.close` and `conversation.reopen` — and the campaign's own `inbound_reply_observed` lines name that thread, but none of them at the plugin and the binding the item is routed to. A thread is held only by the provider account it was seen at. A read or a filing of a thread is routed where the campaign saw it, whatever its own operation resolves to — the rule a send's cancel has (row 14): for each plugin and account the lines name, newest first, the operation's own route where it names them, then the campaign's route for `conversation.list`, then any of the campaign's routes and the global ones, channel routes included, in the order of precedence — so it is refused here only where no route names any of them any more. A reply is routed by its channel, as any `conversation.reply` is, and refused here where that channel's route names another plugin or account than the thread was seen at, before a person is asked to approve it. A line names its plugin; its account is the binding the read that found the thread ran under — the inbound read's attempt, or the events source the stored event was read from — compared by the plugin's id and the binding's identity; a line whose read left no record of an account names its plugin alone. A thread no line of the campaign names never meets this check. Route the operation, or its channel, to the plugin and account that saw the thread, then create a new item |
 
 Two of these are worth a second sentence. `input_invalid` and `definition_invalid` are the only ones classed
 `validation` — they are the ones a planner can fix by editing the item; `provider_answer_lost` is the only one classed `ambiguous`, because

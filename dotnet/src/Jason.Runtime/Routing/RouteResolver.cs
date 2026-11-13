@@ -101,14 +101,54 @@ public static class RouteResolver
         WhereItRan(snapshot, campaignId, operation, sendOperation, sendChannel, pluginId, bindingIdentity);
 
     /// <summary>
+    /// The route of a read of one thread, or of filing it — classifying, closing or reopening it: the route active now that
+    /// names a plugin and an account the campaign's own lines say the thread was seen at, since the thread is held there.
+    /// <paramref name="seen"/> holds those, newest first, and each is asked in turn by the rule a search and a send have:
+    /// the operation's own route where it names it, then the campaign's route for <paramref name="listOperation"/>, the
+    /// read that finds a campaign's threads, then every route in the order of precedence, channel routes included; the first
+    /// sighting a route names wins, so a thread seen at two accounts over time is read at the newest one a route still names.
+    /// Where no route names any, the operation's own route, which the claim then refuses as held elsewhere.
+    /// </summary>
+    public static Resolution? ForThread(RouteSnapshot snapshot, string campaignId, string operation, string listOperation, IReadOnlyList<ThreadSeen> seen)
+    {
+        ArgumentNullException.ThrowIfNull(seen);
+
+        foreach (var sighting in seen)
+        {
+            if (Naming(snapshot, campaignId, operation, listOperation, madeChannel: null, sighting.Names) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return Resolve(snapshot, campaignId, operation, channel: null);
+    }
+
+    /// <summary>
     /// The one rule behind <see cref="ForSearch"/> and <see cref="ForSend"/>: the route that names the plugin and the
     /// account the work named by its reference ran under, by the work's own route first, then the route of the operation
     /// that made it, then every route in the order of precedence, else the work's own route.
     /// </summary>
     private static Resolution? WhereItRan(RouteSnapshot snapshot, string campaignId, string operation, string madeOperation, string? madeChannel, string pluginId, string? bindingIdentity)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(pluginId);
+
+        return Naming(snapshot, campaignId, operation, madeOperation, madeChannel, route =>
+                string.Equals(route.PluginId, pluginId, StringComparison.Ordinal)
+                && string.Equals(route.BindingIdentity, bindingIdentity, StringComparison.Ordinal))
+            ?? Resolve(snapshot, campaignId, operation, channel: null);
+    }
+
+    /// <summary>
+    /// The first route <paramref name="names"/> accepts: the operation's own route, then the route of
+    /// <paramref name="madeOperation"/> by <paramref name="madeChannel"/>, then each of the campaign's routes and each global
+    /// one in the order of precedence — at each scope its channel routes (operations ordinally, then channels ordinally,
+    /// <see cref="RouteSet.ChannelRoutes"/>), its operation routes (ordinally), then its default, the campaign's scope before
+    /// the global one. Null where none does.
+    /// </summary>
+    private static Resolution? Naming(RouteSnapshot snapshot, string campaignId, string operation, string madeOperation, string? madeChannel, Func<Route, bool> names)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
 
         var own = Resolve(snapshot, campaignId, operation, channel: null);
         if (Names(own))
@@ -131,11 +171,8 @@ public static class RouteResolver
             .. snapshot.Global.Operations.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => new Resolution(entry.Value, RouteScope.GlobalOperation)),
             .. snapshot.Global.Default is { } globalDefault ? [new Resolution(globalDefault, RouteScope.GlobalDefault)] : Array.Empty<Resolution>(),
         ];
-        return every.FirstOrDefault(Names) ?? own;
+        return every.FirstOrDefault(Names);
 
-        bool Names(Resolution? candidate) =>
-            candidate is not null
-            && string.Equals(candidate.Route.PluginId, pluginId, StringComparison.Ordinal)
-            && string.Equals(candidate.Route.BindingIdentity, bindingIdentity, StringComparison.Ordinal);
+        bool Names(Resolution? candidate) => candidate is not null && names(candidate.Route);
     }
 }

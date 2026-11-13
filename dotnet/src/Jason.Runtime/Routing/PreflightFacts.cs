@@ -48,6 +48,11 @@ namespace Jason.Runtime.Routing;
 /// itself, from the answer it ended with, or null where there is no such attempt: the input its claim composed did not
 /// carry them yet.
 /// </param>
+/// <param name="Thread">
+/// The plugins and accounts the campaign's own lines say the thread the work names under <c>args.thread</c> was seen at,
+/// newest first, read only for an operation whose arguments name a thread; null where they name none, or where no line of
+/// the campaign names the thread, which the runtime then knows nothing about.
+/// </param>
 public sealed record PreflightFacts(
     WorkItem Item,
     Campaign Campaign,
@@ -61,7 +66,8 @@ public sealed record PreflightFacts(
     PinsLearned? Learned = null,
     NamedSearch? Search = null,
     NamedAudience? Audience = null,
-    string? SearchInTheWay = null)
+    string? SearchInTheWay = null,
+    IReadOnlyList<ThreadSeen>? Thread = null)
 {
     /// <summary>What an entity no plugin has pinned yet has: nothing, stated once rather than allocated per claim.</summary>
     public static IReadOnlyDictionary<string, string> NoPins { get; } = new Dictionary<string, string>(StringComparer.Ordinal);

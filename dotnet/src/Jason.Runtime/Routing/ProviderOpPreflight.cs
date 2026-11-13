@@ -56,8 +56,9 @@ public sealed record PreflightVerdict(
 }
 
 /// <summary>
-/// Everything that can stop a provider work item, decided before a child process exists. Twenty-six checks in one
-/// order: what the runtime cannot do at all, then what the planner got wrong, then whether another search of the campaign
+/// Everything that can stop a provider work item, decided before a child process exists. Twenty-seven checks in one
+/// order: what the runtime cannot do at all, then what the planner got wrong — the twenty-seventh, a thread seen at
+/// another account, numbered last and asked among these — then whether another search of the campaign
 /// is in the way, then the approval it owes a person, and last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
 /// before the reasons that need their attention, nobody is asked to approve work that would have been refused
 /// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
@@ -83,7 +84,11 @@ public static class ProviderOpPreflight
     /// <summary>The kind of the pin by which a provider knows a person.</summary>
     private const string ContactPin = "contact";
 
-    /// <summary>The twenty-six, in the order they are checked. The first that fails is the one the attempt records.</summary>
+    /// <summary>
+    /// The twenty-seven, in the published order: the order they are checked in, but for the twenty-seventh, which was added
+    /// after the rest and numbered last so that no number moved, and is asked after the twenty-third. The first that fails
+    /// is the one the attempt records.
+    /// </summary>
     /// <remarks>
     /// Checks 7, 19 and 20 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
     /// one of the reasons an item cannot run: it is what each answers when a pattern of the schema it measures against
@@ -117,6 +122,7 @@ public static class ProviderOpPreflight
         AttemptErrors.SearchUnfinished,
         AttemptErrors.ApprovalRequired,
         AttemptErrors.ProviderBlocked,
+        AttemptErrors.ThreadRouteMismatch,
     ];
 
     /// <summary>
@@ -173,7 +179,7 @@ public static class ProviderOpPreflight
             : verdict;
     }
 
-    /// <summary>The twenty-six checks, in the published order: the first that fails is the verdict.</summary>
+    /// <summary>The twenty-seven checks, in the published order, the twenty-seventh after the twenty-third: the first that fails is the verdict.</summary>
     private static PreflightVerdict InOrder(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes, PatternTiming timing)
     {
         var operation = facts.Item.Operation ?? string.Empty;
@@ -359,6 +365,22 @@ public static class ProviderOpPreflight
             return Refused(resolution, AttemptErrors.ProviderAnswerLost, unsettled, failureClass: FailureClass.Ambiguous);
         }
 
+        // Twenty-seventh, asked here, after the twenty-third and before the three that wait or park: a thread is held only
+        // by the provider account it was seen at, so work on a thread the campaign's lines say was seen goes only to a route
+        // that names one of the plugins and accounts they say. A read or a filing of it was routed there wherever a route
+        // still names one, so this refuses it only where none does; a reply is routed by its channel, so this refuses it
+        // wherever that channel's route holds another account. Asked before the approval and the block, so nobody is asked
+        // to approve, and no block holds, a reply that could only be refused. A thread no line names asks nothing.
+        if (CanonicalInput.NamesAThread(contract)
+            && facts.Thread is { Count: > 0 } seen
+            && !seen.Any(sighting => sighting.Names(route)))
+        {
+            return Refused(
+                resolution,
+                AttemptErrors.ThreadRouteMismatch,
+                $"This campaign saw the thread '{CanonicalInput.NamedThread(facts.Item)}' at another plugin or account than '{operation}' is routed to, and a thread is held only where it was seen, so it is acted on there or not at all. Route the operation, or the channel, to that plugin and account.");
+        }
+
         var plan = new ProviderOpPlan(
             plugin,
             plugins.Id,
@@ -441,8 +463,9 @@ public static class ProviderOpPreflight
     /// Where the work is routed: by its campaign's route for its operation and the channel its call names, except a read
     /// or a stop of a search the campaign made with a reference, which goes where that search ran
     /// (<see cref="RouteResolver.ForSearch"/>), and a read or a cancel of a send the campaign made with a reference, which
-    /// goes where that send ran (<see cref="RouteResolver.ForSend"/>), whatever its own operation resolves to now. The
-    /// claim reads its facts by the same answer.
+    /// goes where that send ran (<see cref="RouteResolver.ForSend"/>), whatever its own operation resolves to now, and a
+    /// read or a filing of a thread the campaign's lines say was seen, which goes where it was seen
+    /// (<see cref="RouteResolver.ForThread"/>). The claim reads its facts by the same answer.
     /// <para>
     /// The channel is the value of the argument the operation's document names for its route
     /// (<see cref="OperationContract.RouteChannel"/>), read from <c>context.input</c> as the item holds it before a child
@@ -467,6 +490,16 @@ public static class ProviderOpPreflight
             && CanonicalInput.MakesASend(send.Operation))
         {
             return RouteResolver.ForSend(routes, facts.Campaign.PublicId, contract.Id, send.Operation!, send.Channel, sentAt, send.BindingIdentity);
+        }
+
+        // A read of a thread, or filing it, goes where the campaign's lines say the thread was seen. A reply does not: it
+        // is routed by the channel it is sent on, as a send is, and the thread's check refuses it where that route does
+        // not name where the thread was seen.
+        if (CanonicalInput.NamesAThread(contract)
+            && contract.RouteChannelArgument is null
+            && facts.Thread is { Count: > 0 } seen)
+        {
+            return RouteResolver.ForThread(routes, facts.Campaign.PublicId, contract.Id, ThreadSightings.ListOperation, seen);
         }
 
         return RouteResolver.Resolve(routes, facts.Campaign.PublicId, contract.Id, contract.RouteChannel(facts.Item.Context[WorkItemService.InputKey]));

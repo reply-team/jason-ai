@@ -64,6 +64,11 @@ nothing: its person is not this one.
   without it the reply answers the thread's latest message. A LinkedIn reply cannot name one, and is refused before
   your code runs if it does.
 
+A reply is routed by its channel, as any reply is. Where the campaign's own `inbound_reply_observed` lines name the
+thread under `args.thread` and that route names none of the plugins and accounts they say it was seen at, the reply is
+refused before a person is asked about it: `thread_route_mismatch`, permanent ([routing](../../routing.md), the
+claim's row 27). A thread is held only by the account it was seen at. A thread no line names is routed as before.
+
 ## What to return
 
 ```json

@@ -245,7 +245,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twenty-six pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the twenty-seven pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -607,7 +607,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twenty-six provider checks follow.
+existed. It is the same rule the twenty-seven provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -936,7 +936,7 @@ settings at all and are never refused for this reason.
 | `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the twenty-six pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the twenty-seven pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -959,8 +959,7 @@ declares for one. A plugin never sees a work item's context. A search the claim 
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
 ([campaign manager](campaign-manager.md) §10).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-six checks,
-in this order, and the first that answers is the one that decides:
+**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-seven checks, in this order, and the first that answers is the one that decides, the twenty-seventh numbered last but asked after the twenty-third:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
@@ -968,7 +967,7 @@ contract_incompatible → binding_invalid → contact_required → no_channel_va
 contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
 search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
 argument_unsupported → template_not_offered → provider_answer_lost → search_unfinished →
-approval_required → provider_blocked
+approval_required → provider_blocked → thread_route_mismatch
 ```
 
 The first twenty-three are refusals and all of them are final: twenty are `permanent`, `input_invalid` and
@@ -986,7 +985,11 @@ twenty-fifth is not a refusal either: `approval_required` parks the
 item for a person (§Approvals above), and it is asked after every refusal so that nobody is asked to approve work
 that would have been refused anyway. The twenty-sixth, `provider_blocked`, is not a refusal either: it parks work an
 open provider block holds — the operations whose document says `dispatch.under_provider_block: waits`, nothing else —
-as `waiting`, with no attempt, until the block clears or a trial gets past it (§Provider blocks below). [docs/routing.md](routing.md) says what each one means and what to
+as `waiting`, with no attempt, until the block clears or a trial gets past it (§Provider blocks below). The
+twenty-seventh, `thread_route_mismatch`, is a `permanent` refusal again: work on a thread the campaign saw at another
+plugin or account than the item is routed to. It was added after the rest and numbered last, so no number moved, and it
+is asked right after `provider_answer_lost`, so nobody is asked to approve, and no block holds, work that could only be
+refused. [docs/routing.md](routing.md) says what each one means and what to
 change.
 
 Three of those checks measure a document against a schema — the binding against the plugin's (7), the

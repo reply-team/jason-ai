@@ -43,6 +43,8 @@ public static class CanonicalInput
     /// </summary>
     private const string SearchKey = "search";
 
+    private const string ThreadKey = "thread";
+
     /// <summary>
     /// The root key of an audience's definition, the provider's own shape: the runtime composes it from
     /// <c>args.definition</c>, or from the audience <c>args.audience</c> names, and the plugin reads it there and nowhere
@@ -310,6 +312,33 @@ public static class CanonicalInput
 
     /// <summary>The work item the arguments name under <c>args.search</c>, or null where they name none.</summary>
     public static string? NamedSearch(WorkItem item) => Named(item, SearchKey);
+
+    /// <summary>
+    /// Whether the operation acts on one conversation thread at the provider: its arguments name the thread under
+    /// <c>args.thread</c>, by the provider's own identifier.
+    /// </summary>
+    public static bool NamesAThread(OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+
+        return contract.ArgumentSchema["properties"] is JsonObject properties && properties.ContainsKey(ThreadKey);
+    }
+
+    /// <summary>
+    /// The provider's identifier of the thread the arguments name under <c>args.thread.external_id</c>, or null where they
+    /// name none.
+    /// </summary>
+    public static string? NamedThread(WorkItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        return item.Context[WorkItemService.InputKey] is JsonObject arguments
+            && arguments[ThreadKey] is JsonObject thread
+            && thread["external_id"] is JsonValue named
+            && named.GetValueKind() == JsonValueKind.String
+            ? named.GetValue<string>()
+            : null;
+    }
 
     /// <summary>
     /// The audience the arguments name by its number under <c>args.audience</c>, or null where they name none: creation
