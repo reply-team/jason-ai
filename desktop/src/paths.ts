@@ -11,6 +11,8 @@ export interface DesktopPaths {
     settings: string;
     /** `<data>/desktop/mode`: the record of the mode, Live or Demo, one word; read and written in the person's directory only, also during a demo run (`mode.ts`). */
     mode: string;
+    /** `<data>/desktop/demo-start-over`: a request that the next demo start remove the demo's two folders first; written in the person's directory only (`demo-over.ts`). */
+    demoStartOver: string;
     /** `<data>/desktop/full-access.json`: the standing choice of Full access, the main process's alone (`full-access-standing.ts`). */
     fullAccess: string;
     /** `<data>/desktop/chat/`: the chat's working folder. */
@@ -79,6 +81,7 @@ export function desktopPaths(data: string): DesktopPaths {
         desktop,
         settings: join(desktop, 'settings.json'),
         mode: join(desktop, 'mode'),
+        demoStartOver: join(desktop, 'demo-start-over'),
         fullAccess: join(desktop, 'full-access.json'),
         chat: join(desktop, 'chat'),
         chatFull: join(desktop, 'chat-full'),

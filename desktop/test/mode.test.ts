@@ -370,6 +370,7 @@ test('a demo run offers nothing that outlasts it, Remove What Jason Placed inclu
     }
     assert.equal(menu.removal!.label, 'Remove What Jason Placed: not in the demo. Go back to your own installation for this.');
     assert.deepEqual(menu.back, { label: 'Back to Your Own Installation', enabled: true });
+    assert.deepEqual(menu.startOver, { label: 'Start the Demo Over', enabled: true });
     // Where the platform offers no Remove What Jason Placed (Windows keeps its uninstaller), there is no line for it.
     assert.equal(demoMenu('demo', false)!.removal, null);
 });

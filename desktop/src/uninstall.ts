@@ -43,6 +43,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, rmdirSy
 import { join, posix, win32 } from 'node:path';
 import { bundleEntries } from './bundle-copy.ts';
 import { hasDemoMarker } from './demo-folders.ts';
+import { asidesOf, removeMarkedLast } from './demo-over.ts';
 import { inert } from './inert.ts';
 import type { Logger } from './log.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
@@ -474,7 +475,9 @@ async function demoStep(
         { what: 'The demo’s data directory', has: 'with the sample campaigns in it', path: demo.data },
         { what: 'The demo’s harness root', has: 'with the sample folders in it', path: demo.harnessRoot },
     ].map((one) => ({ ...one, kind: demoKind(one.path), shown: inert(one.path) }));
-    if (folders.every((one) => one.kind === 'absent')) {
+    // What a start over left beside the demo's folders (`<folder>.removing-*`), taken off only when it carries the mark.
+    const leftovers = [demo.data, demo.harnessRoot].flatMap((folder) => asidesOf(folder));
+    if (folders.every((one) => one.kind === 'absent') && leftovers.length === 0) {
         into.untouched.push('No demo was set up: the demo’s data directory and harness root were not there');
         return into.ended('demo', 'absent');
     }
@@ -498,6 +501,24 @@ async function demoStep(
         } else if (one.kind === 'unread') {
             into.failed.push(`${one.what}, ${one.shown}, which could not be read: deleting the folder takes it off`);
             came.add('unread');
+        }
+    }
+    for (const path of leftovers) {
+        const shown = inert(path);
+        if (person.some((other) => overlaps(deps.platform, other, path))) {
+            into.left.push(`${shown}, which holds or lies inside a folder of your own installation: it was left`);
+            came.add('unsafe');
+        } else if (demoKind(path) !== 'folder' || !hasDemoMarker(path)) {
+            into.left.push(`${shown}, which is not a folder this application made (it carries no mark of the demo’s): it was left`);
+            came.add('unmarked');
+        } else {
+            try {
+                removeMarkedLast(path);
+                into.removed.push(`A copy of the demo’s folder a start over left, ${shown}`);
+            } catch {
+                into.failed.push(`A copy of the demo’s folder a start over left, ${shown}, which could not be taken off: deleting the folder takes it off`);
+                came.add('failed');
+            }
         }
     }
     if (takeable.length > 0) {
