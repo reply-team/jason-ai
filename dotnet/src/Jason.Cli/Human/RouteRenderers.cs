@@ -32,7 +32,7 @@ public static class RouteRenderers
 
         var lines = new List<string>
         {
-            Line("Operation:", string.Create(CultureInfo.InvariantCulture, $"{resolution.Operation} v{resolution.OperationVersion}")),
+            Line("Operation:", string.Create(CultureInfo.InvariantCulture, $"{OnChannel(resolution.Operation, resolution.Channel)} v{resolution.OperationVersion}")),
             Line("Campaign:", resolution.CampaignId),
             Line("Plugin:", Plugin(resolution)),
             Line("Scope:", resolution.Scope is null ? null : RenderText.Snake(resolution.Scope.Value)),
@@ -65,10 +65,10 @@ public static class RouteRenderers
 
         var table = new HumanTable("SCOPE", "CAMPAIGN", "OPERATION", "PLUGIN", "BINDING");
         var rows = 0;
-        rows += Rows(table, "global", campaign: null, routes.Global.Default, routes.Global.Operations);
+        rows += Rows(table, "global", campaign: null, routes.Global.Default, routes.Global.Operations, routes.Global.Channels);
         foreach (var campaign in routes.Campaigns)
         {
-            rows += Rows(table, "campaign", campaign.CampaignId, campaign.Default, campaign.Operations);
+            rows += Rows(table, "campaign", campaign.CampaignId, campaign.Default, campaign.Operations, campaign.Channels);
         }
 
         var snapshots = $"snapshot {routes.RoutingSnapshotId} over plugins {routes.PluginSnapshotId}";
@@ -77,7 +77,21 @@ public static class RouteRenderers
             : RenderText.Lines([table.Render(), string.Empty, snapshots]);
     }
 
-    private static int Rows(HumanTable table, string scope, string? campaign, RouteDto? fallback, IReadOnlyDictionary<string, RouteDto>? operations)
+    /// <summary>
+    /// A route of one channel of an operation is named <c>message.send on linkedin</c> wherever a route is shown, so it
+    /// never reads as the operation's own route, which is the bare operation. The word is the words of a sentence, the
+    /// way the table's other cell for a fallback is bracketed: nothing published is spelled with a space.
+    /// </summary>
+    public static string OnChannel(string operation, string? channel) =>
+        string.IsNullOrEmpty(channel) ? operation : $"{operation} on {channel}";
+
+    private static int Rows(
+        HumanTable table,
+        string scope,
+        string? campaign,
+        RouteDto? fallback,
+        IReadOnlyDictionary<string, RouteDto>? operations,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, RouteDto>>? channels)
     {
         var rows = 0;
         if (fallback is not null)
@@ -90,6 +104,15 @@ public static class RouteRenderers
         {
             table.Row(scope, campaign, operation, route.PluginId, RenderText.Compact(route.Binding));
             rows++;
+        }
+
+        foreach (var (operation, byChannel) in channels ?? new Dictionary<string, IReadOnlyDictionary<string, RouteDto>>(StringComparer.Ordinal))
+        {
+            foreach (var (channel, route) in byChannel ?? new Dictionary<string, RouteDto>(StringComparer.Ordinal))
+            {
+                table.Row(scope, campaign, OnChannel(operation, channel), route.PluginId, RenderText.Compact(route.Binding));
+                rows++;
+            }
         }
 
         return rows;

@@ -187,7 +187,10 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 
 ### `system`
 
-- `system.info`: what `jason runtime status` shows.
+- `system.info`: what `jason runtime status` shows. Its `routes` section counts the global overrides and the campaign
+  routes, the routes that name a channel among them, and says in `channel_route_count` how many name one. A runtime older
+  than channel routes has no such member, which is how `jason route set` and `jason route unset` know that `--channel`
+  would be ignored there and decline to send it.
 - `system.shutdown`: `jason runtime stop` sends it.
 - `system.drain`: stop claiming; `jason update apply` sends it.
 - `system.resume`: claim again. No command sends it.
@@ -400,9 +403,13 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 ### `route`
 
 - `route.resolve`: what would perform this operation for this campaign, and, when the route cannot be run, why not.
-- `route.list`: every route, or the global set plus one campaign's.
-- `route.set`: sends one campaign's work, or one of its operations, to a plugin.
-- `route.unset`: takes one campaign route away.
+  Takes the `channel` a call of the operation names for its route, and answers it back: the plugin that call reaches,
+  which may be a channel route (`scope` `campaign_channel` or `global_channel`). A channel the operation's document does
+  not let a route name, or a blank one, is refused `validation_failed` on `channel`.
+- `route.list`: every route, or the global set plus one campaign's. The global set and each campaign answer `channels`
+  beside `operations`: operation, then channel, then the route.
+- `route.set`: sends one campaign's work, or one of its operations, or one channel of an operation, to a plugin.
+- `route.unset`: takes one campaign route away: the default, an operation's own route, or with `channel` that channel's.
 
   Either is refused `409` with the code `route_orphans_search`, and changes nothing, when it would take the last of the
   search's campaign's routes and the global ones naming the plugin and account a search still followed ran under away
@@ -413,7 +420,8 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 
 - `operation.describe`: what a canonical operation takes for a campaign — its argument schema and, for one that carries
   an audience's definition, the schema the plugin the campaign's route names declares for it, with that schema's keys.
-  The route is resolved now and held to the route's half of the claim; nothing is invoked.
+  The route is resolved now and held to the route's half of the claim; nothing is invoked. Takes the `channel` a call
+  names for its route, for the operations a route can name a channel of, and describes the plugin that channel goes to.
 
 ### `suppression`
 

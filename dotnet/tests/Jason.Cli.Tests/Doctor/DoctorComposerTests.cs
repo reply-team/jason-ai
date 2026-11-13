@@ -1125,6 +1125,159 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// A channel route is counted and listed like the others: the operation, the channel, the plugin and whether it binds
+    /// an account, never which account or its identity. The channel is one of the contract's words or it is written as a
+    /// key nobody chose; a plugin this installation does not hold is written so too; the operation's own routes carry no
+    /// channel member at all; and the status check says how many routes name a channel.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S4, "a route's account never travels")]
+    public async Task The_routes_section_lists_channel_routes_with_their_channel_and_never_their_account()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(Path.Combine(dir.Paths.PluginsDirectory, "reply"));
+        File.WriteAllText(Path.Combine(dir.Paths.PluginsDirectory, "reply", "plugin.yaml"), "id: reply");
+        var routes = new JsonObject
+        {
+            ["routing_snapshot_id"] = RoutingSnapshot,
+            ["plugin_snapshot_id"] = PluginSnapshot,
+            ["global"] = new JsonObject
+            {
+                ["default"] = null,
+                ["operations"] = new JsonObject { ["message.send"] = Route("reply", null, null) },
+                ["channels"] = new JsonObject
+                {
+                    ["message.send"] = new JsonObject
+                    {
+                        ["email"] = Route("reply", new JsonObject { ["account"] = "SENTINEL_GLOBAL_CHANNEL_ACCOUNT" }, RouteIdentity),
+                        ["SENTINEL_CHANNEL"] = Route("reply", null, null),
+                    },
+                },
+            },
+            ["campaigns"] = new JsonArray(new JsonObject
+            {
+                ["campaign_id"] = RoutedCampaign,
+                ["default"] = null,
+                ["operations"] = new JsonObject(),
+                ["channels"] = new JsonObject
+                {
+                    ["message.send"] = new JsonObject { ["linkedin"] = Route("sentinelsocial", new JsonObject { ["seat"] = "SENTINEL_CAMPAIGN_CHANNEL_ACCOUNT" }, RouteIdentity) },
+                },
+            }),
+        };
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) => operation == Operations.RouteList ? Respond(HttpStatusCode.OK, routes.ToJsonString()) : null;
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var section = Section(bundle, "routes");
+        Assert.Equal(
+            new JsonArray(
+                Row("message.send", "reply", false),
+                ChannelRow("message.send", "email", "reply", true),
+                ChannelRow("message.send", SettingKey.Hidden, "reply", false)).ToJsonString(),
+            section["global"]!.ToJsonString());
+        var shown = Assert.Single(section["campaigns"]!.AsArray())!["routes"]!.AsArray();
+        var campaignRoute = Assert.Single(shown)!.AsObject();
+        Assert.Equal(("message.send", "linkedin", true), (Text(campaignRoute["operation"]), Text(campaignRoute["channel"]), campaignRoute["binds_account"]!.GetValue<bool>()));
+        Assert.Equal(SettingKey.Hidden, Text(campaignRoute["plugin_id"]));
+        Assert.Equal(4, bundle.Contents.Single(entry => entry.Name == "routes").Items);
+
+        var checks = Section(bundle, "status")["checks"]!.AsArray();
+        Assert.Equal("Routed: default none, 3 of them by channel.", Text(checks.Single(check => Text(check!["name"]) == "route")!["fact"]));
+        Assert.Equal("ok", Text(checks.Single(check => Text(check!["name"]) == "binding")!["state"]));
+        AssertAbsent(bundle, "SENTINEL_GLOBAL_CHANNEL_ACCOUNT", "SENTINEL_CAMPAIGN_CHANNEL_ACCOUNT", RouteIdentity, "SENTINEL_CHANNEL", "sentinelsocial");
+    }
+
+    /// <summary>
+    /// A plugin that only a channel route names is as much the person's as one the other routes name: where its id turns up
+    /// in the journal's entries it is written as the plugin's alias, never as it is.
+    /// </summary>
+    [Fact]
+    public async Task A_plugin_only_a_channel_route_names_is_an_alias_where_the_journal_names_it()
+    {
+        const string Own = "sentinelsocial";
+        using var dir = new TempPaths();
+        var routes = new JsonObject
+        {
+            ["routing_snapshot_id"] = RoutingSnapshot,
+            ["plugin_snapshot_id"] = PluginSnapshot,
+            ["global"] = new JsonObject
+            {
+                ["default"] = null,
+                ["operations"] = new JsonObject(),
+                ["channels"] = new JsonObject { ["message.send"] = new JsonObject { ["linkedin"] = Route(Own, null, null) } },
+            },
+            ["campaigns"] = new JsonArray(),
+        };
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) =>
+        {
+            if (operation == Operations.RouteList)
+            {
+                return Respond(HttpStatusCode.OK, routes.ToJsonString());
+            }
+
+            if (operation != Operations.JournalList)
+            {
+                return null;
+            }
+
+            var entry = runtime.Entry(0);
+            entry["kind"] = "routes_updated";
+            entry["key"] = "message.send/linkedin";
+            entry["new"] = new JsonObject { ["plugin"] = Own, ["binding"] = null, ["channel"] = "linkedin" };
+            return Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(entry), ["next_cursor"] = null }.ToJsonString());
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
+
+        Assert.Matches("^<plugin-[0-9]+>$", Text(Section(bundle, "journal_entries")["entries"]![0]!["new"]!["plugin"]));
+        AssertAbsent(bundle, Own);
+    }
+
+    /// <summary>
+    /// With the journal asked for, a <c>routes_updated</c> line keyed <c>&lt;operation&gt;/&lt;channel&gt;</c> is carried
+    /// with the journal's values as every line is, its key whole; without it, nothing of the line travels, its key
+    /// included.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_routes_updated_line_keyed_by_operation_and_channel_travels_only_with_the_journal(bool includeJournal)
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) =>
+        {
+            if (operation != Operations.JournalList)
+            {
+                return null;
+            }
+
+            var entry = runtime.Entry(0);
+            entry["kind"] = "routes_updated";
+            entry["key"] = "message.send/linkedin";
+            entry["new"] = new JsonObject { ["plugin"] = "fake-provider", ["binding"] = new JsonObject { ["seat"] = "SENTINEL_JOURNALED_SEAT" }, ["channel"] = "linkedin" };
+            return Respond(HttpStatusCode.OK, new JsonObject { ["items"] = new JsonArray(entry), ["next_cursor"] = null }.ToJsonString());
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal);
+
+        if (includeJournal)
+        {
+            var carried = Section(bundle, "journal_entries")["entries"]![0]!;
+            Assert.Equal("message.send/linkedin", Text(carried["key"]));
+            Assert.Equal("linkedin", Text(carried["new"]!["channel"]));
+        }
+        else
+        {
+            AssertAbsent(bundle, "message.send/linkedin", "SENTINEL_JOURNALED_SEAT");
+            Assert.DoesNotContain("journal_entries", Keys(bundle.Document));
+        }
+    }
+
+    /// <summary>
     /// The desktop keeps each conversation of its chat as a record under <c>desktop/conversations/</c> in the data
     /// directory: what the person and the agent said, the hosts' session ids, a campaign's name as the title. No bundle
     /// carries any of it, its count or its size included, the journal asked for or not, and the list of what a bundle
@@ -1339,6 +1492,9 @@ public sealed class DoctorComposerTests
 
     private static JsonObject Row(string operation, string pluginId, bool bindsAccount) =>
         new() { ["operation"] = operation, ["plugin_id"] = pluginId, ["binds_account"] = bindsAccount };
+
+    private static JsonObject ChannelRow(string operation, string channel, string pluginId, bool bindsAccount) =>
+        new() { ["operation"] = operation, ["plugin_id"] = pluginId, ["binds_account"] = bindsAccount, ["channel"] = channel };
 
     // ---- loopback only, and what is never carried ---------------------------------------------------------------
 

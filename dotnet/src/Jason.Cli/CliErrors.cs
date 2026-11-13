@@ -83,6 +83,12 @@ public static class CliErrors
     /// <summary>What is here could not be moved aside, or the archive could not be placed in full.</summary>
     public const string ImportUnwritable = "import_unwritable";
 
+    /// <summary>
+    /// The runtime that is running is older than the channel in the request: it would ignore the channel and act on the
+    /// operation's own route, so nothing was sent.
+    /// </summary>
+    public const string RuntimeTooOld = "runtime_too_old";
+
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
 }

@@ -26,7 +26,7 @@ public static class OperationRenderers
 
         var lines = new List<string>
         {
-            Line("Operation:", string.Create(CultureInfo.InvariantCulture, $"{description.Operation} v{description.Version}")),
+            Line("Operation:", string.Create(CultureInfo.InvariantCulture, $"{RouteRenderers.OnChannel(description.Operation, description.Channel)} v{description.Version}")),
             Line("Plugin:", $"{description.PluginId} {description.PluginVersion}"),
             string.Empty,
             "arguments:",
