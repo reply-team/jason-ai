@@ -13,7 +13,7 @@ import { chats, conversations, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting } from './start';
 
 // The desktop's console: the top bar above every panel in both modes, its switch asking the desktop through the seam;
-// in Demo one short sentence says the data is sample, in Live a mark; the start screen offers the demo in one line.
+// in Demo one short sentence says the data is sample, in Live a mark.
 
 async function renderConsole(kept: 'live' | 'demo', unopened: string | null = null): Promise<StubDesktop> {
     const desktop = stubDesktop();
@@ -159,24 +159,19 @@ describe('Live in the desktop', () => {
         await waitFor(() => expect(modeSets(desktop)).toEqual([{ name: 'mode.set', args: ['demo'] }]));
     });
 
-    it('offers the demo in one line on the start screen, which switches to Demo through the seam', async () => {
-        const desktop = await renderConsole('live');
-        const button = await waitFor(() => {
-            expect(offer()).not.toBeNull();
-            return offer()!;
-        });
-        expect(button.closest('.start')).not.toBeNull();
-        fireEvent.click(button);
-        await waitFor(() => expect(modeSets(desktop)).toEqual([{ name: 'mode.set', args: ['demo'] }]));
+    it('offers no demo on the start screen, the bar’s switch being the way in', async () => {
+        await renderConsole('live');
+        await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
+        expect(offer()).toBeNull();
     });
 
-    it('says the desktop’s refusal beside the offer when the mode could not be kept', async () => {
+    it('says the desktop’s refusal in the bar when the mode could not be kept', async () => {
         const desktop = await renderConsole('live');
         desktop.refuse.set('mode.set', 'The mode could not be saved, so Jason stays as it is.');
-        fireEvent.click(await waitFor(() => offer()!));
-        const said = await waitFor(() => screen.getByText('The mode could not be saved, so Jason stays as it is.'));
-        expect(said.getAttribute('role')).toBe('alert');
-        expect(said.closest('.start')).not.toBeNull();
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
+        fireEvent.click(within(group).getByRole('button', { name: 'Demo' }));
+        const alert = await waitFor(() => within(strip()!).getByRole('alert'));
+        expect(alert.textContent).toBe('The mode could not be saved, so Jason stays as it is.');
     });
 });
 
@@ -192,7 +187,7 @@ describe('A demo the desktop could not open', () => {
         expect(strip()!.contains(said)).toBe(true);
         expect(strip()!.nextElementSibling?.classList.contains('shell')).toBe(true);
         expect(strip()!.querySelector('.mode-mark strong')?.textContent).toBe('Live');
-        expect(offer()).not.toBeNull();
+        expect(offer()).toBeNull();
     });
 
     it('is closed by the person, and the console is Live as before', async () => {

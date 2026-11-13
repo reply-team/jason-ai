@@ -39,7 +39,6 @@ export const en = {
     'mode.switch': 'Data',
     'mode.switch.demo': 'Demo',
     'mode.switch.live': 'Live',
-    'mode.offer': 'See Jason with sample data',
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',

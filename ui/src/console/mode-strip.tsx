@@ -38,7 +38,7 @@ export function ModeStrip() {
                     </button>
                 </span>
             )}
-            {demo && refusal !== null && (
+            {refusal !== null && (
                 <span className="mode-strip-refusal" role="alert">
                     {refusal}
                 </span>

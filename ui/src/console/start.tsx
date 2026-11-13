@@ -1,8 +1,6 @@
 import { effect, signal } from '@preact/signals-react';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import { fullAccessStanding } from '../platform/full-access';
-import { t } from '../platform/i18n';
-import { mode, modeRefusal, switchMode } from '../platform/mode';
 import { hostOf, sendTurn, startChat } from './chat';
 import { fullAccessLine, newChat } from './chat-model';
 import * as connect from './connect';
@@ -135,18 +133,6 @@ export function StartPanel() {
                             This interface is optional: everything here can also be done from a terminal with your AI,
                             through Jason's CLI and API.
                         </p>
-                        {mode.value === 'live' && (
-                            <p className="start-demo">
-                                <button className="btn sm" type="button" onClick={() => void switchMode('demo')}>
-                                    {t('mode.offer')}
-                                </button>
-                                {modeRefusal.value !== null && (
-                                    <span className="start-demo-refusal" role="alert">
-                                        {modeRefusal.value}
-                                    </span>
-                                )}
-                            </p>
-                        )}
                     </div>
                 </div>
                 {card && <Painted className="start-ai" view={connect.aiCardView} />}

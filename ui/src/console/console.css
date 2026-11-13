@@ -1239,13 +1239,3 @@ body,
         display: inline;
     }
 }
-/* The start screen's one line offering the demo. */
-.jc-console .start .start-demo {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-}
-.jc-console .start .start-demo-refusal {
-    color: var(--amber);
-}
