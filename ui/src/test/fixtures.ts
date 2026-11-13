@@ -235,6 +235,7 @@ import journalListOli from '../../../docs/api/fixtures/journal.list/oli.json';
 import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
+import routeListChannelRoutes from '../../../docs/api/fixtures/route.list/channel-routes.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
 import routeResolveElsewhere from '../../../docs/api/fixtures/route.resolve/elsewhere.json';
 import routeResolveElsewhereFirst from '../../../docs/api/fixtures/route.resolve/elsewhere-first.json';
@@ -812,6 +813,7 @@ export const fixtures = {
     'journal.list/summer': journalListSummer satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
+    'route.list/channel-routes': routeListChannelRoutes satisfies Exchange<object, Routes>,
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,
     'route.resolve/elsewhere': routeResolveElsewhere satisfies Exchange<RouteResolveRequest, RouteResolution>,
     'route.resolve/elsewhere-first': routeResolveElsewhereFirst satisfies Exchange<

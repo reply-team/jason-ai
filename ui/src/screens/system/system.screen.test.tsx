@@ -6,6 +6,7 @@ import { renderApp } from '../../test/render-app';
 import { route } from '../../router';
 import { stubDesktop } from '../../test/desktop';
 import { fullAccessStanding } from '../../platform/full-access';
+import { routeCounts } from './route-counts';
 
 function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'aged' = 'two') {
     const fake = new FakeApi()
@@ -20,7 +21,27 @@ function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'a
     return { fake, rendered };
 }
 
+describe('route counts', () => {
+    it('says how many go by channel only when some do', () => {
+        const counts = { global_override_count: 1, campaign_route_count: 3 };
+        expect(routeCounts(counts)).toBe('1 global · 3 per campaign');
+        expect(routeCounts({ ...counts, channel_route_count: 0 })).toBe('1 global · 3 per campaign');
+        expect(routeCounts({ ...counts, channel_route_count: 2 })).toBe(
+            '1 global · 3 per campaign · 2 of them by channel',
+        );
+    });
+});
+
 describe('System', () => {
+    it('shows the recorded route counts without a channel clause when none go by channel', async () => {
+        systemFake();
+        const routes = fixtures['system.info/with-ui'].response.routes;
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        expect(routes.channel_route_count).toBe(0);
+        expect(screen.getByText('0 global · 0 per campaign')).toBeTruthy();
+        expect(screen.queryByText(/by channel/)).toBeNull();
+    });
+
     it('shows the runtime, the port, the dispatcher and this UI', async () => {
         systemFake();
         const info = fixtures['system.info/with-ui'].response;
