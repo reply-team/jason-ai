@@ -20,8 +20,9 @@ const table = new Set([
     'chat.rename',
 ]);
 
-/** What the bridge answers a member outside its table. Held in one place until the bridge's own answer is known. */
-const outsideTheTable = () => new Response('', { status: 403 });
+/** What the bridge answers a member outside its table. Held in one place. */
+const outsideTheTable = () =>
+    Response.json({ refused: "That is done in Jason Desktop's own window." }, { status: 403 });
 
 export interface StandIn {
     fetch: typeof fetch;
