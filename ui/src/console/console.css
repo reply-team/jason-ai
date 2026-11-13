@@ -1143,7 +1143,8 @@ body,
     margin: 0 auto;
     padding: 0 20px;
 }
-/* Demo: the strip heads the window above the sidebar and the dock, and the shell takes the height that is left. */
+/* Demo, or a demo that could not be opened: the strip heads the window above the sidebar and the dock, and the shell
+   takes the height that is left. */
 .jc-console.demo {
     display: flex;
     flex-direction: column;
@@ -1188,13 +1189,21 @@ body,
     background: transparent;
     color: inherit;
 }
+.jc-console .mode-unopened-close {
+    flex: none;
+    padding: 2px 10px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+}
 .jc-console .mode-switch button.on {
     background: var(--amber);
     color: var(--amber-2);
 }
 /* A narrow window takes the strip's short form. */
 @media (max-width: 1000px) {
-    .jc-console .mode-strip-long {
+    .jc-console .mode-strip:not(.mode-unopened) .mode-strip-long {
         display: none;
     }
     .jc-console .mode-strip-short {

@@ -18,8 +18,7 @@ import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
-import { mode } from '../platform/mode';
-import { ModeStrip } from './mode-strip';
+import { ModeStrip, stripShown } from './mode-strip';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -322,7 +321,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     return (
         <div
             ref={root}
-            className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}${mode.value === 'demo' ? ' demo' : ''}`}
+            className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}${stripShown() ? ' demo' : ''}`}
         >
             <ModeStrip />
             <div className="shell">

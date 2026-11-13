@@ -190,6 +190,8 @@ export interface StubDesktop extends JasonDesktop {
      * given and answers null, as the desktop does before it starts again, or a refusal the test set by name.
      */
     modeKept: 'live' | 'demo';
+    /** The sentence `mode.get` answers when a test says the demo could not be opened; null otherwise. */
+    modeUnopened: string | null;
     /**
      * Calls the test refuses, by name, with the sentence: a chat call answers it as a value (`{ refused }`), as the
      * desktop does; a setup call rejects with it.
@@ -340,7 +342,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
         mode: {
-            get: () => Promise.resolve(stub.modeKept),
+            get: () => Promise.resolve({ mode: stub.modeKept, unopened: stub.modeUnopened }),
             set: answering('mode.set', (mode) => {
                 stub.modeKept = mode === 'demo' ? 'demo' : 'live';
                 return null;
@@ -353,6 +355,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         status,
         themeKept: null,
         modeKept: 'live',
+        modeUnopened: null,
         kept,
         names,
         keep,

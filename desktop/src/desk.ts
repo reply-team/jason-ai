@@ -14,6 +14,7 @@ import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
+import { demoMenuLine } from './mode.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
@@ -42,6 +43,11 @@ export interface DeskDeps {
      * Windows keeps its uninstaller.
      */
     removal: Pick<RemovalDeps, 'scope' | 'remove'> | null;
+    /**
+     * Whether this run is the demo's: the update, the start at logon and the jason command are then not offered, each
+     * line saying so (`demoMenuLine`), since each would write something of the demo that outlasts the run.
+     */
+    demo: boolean;
 }
 
 /** The Command Line submenu's one line where this start carries no jason that outlasts it. */
@@ -147,22 +153,25 @@ export class Desk {
                 checked: opens && login.isOn(),
                 click: (item) => void login.set(item.checked).finally(() => this.renderMenu()),
             },
-            {
-                label: 'Start the Runtime at Logon',
-                type: 'checkbox',
-                enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
-                checked: this.autostartOn === true,
-                click: (item) =>
-                    void autostart?.set(item.checked).then((now) => {
-                        this.autostartOn = now;
-                        this.renderMenu();
-                    }),
-            },
+            this.deps.demo
+                ? { label: demoMenuLine('autostart'), enabled: false }
+                : {
+                    label: 'Start the Runtime at Logon',
+                    type: 'checkbox',
+                    enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
+                    checked: this.autostartOn === true,
+                    click: (item) =>
+                        void autostart?.set(item.checked).then((now) => {
+                            this.autostartOn = now;
+                            this.renderMenu();
+                        }),
+                },
         ];
     }
 
     /** The update item, and under it, unclickable, where the previous version is kept while it is. */
     private updateItems(): MenuItemConstructorOptions[] {
+        if (this.deps.demo) return [{ label: demoMenuLine('updates'), enabled: false }];
         const { updates } = this.deps;
         const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
         let kept: string | null = null;
@@ -190,6 +199,7 @@ export class Desk {
      * state allows. A development build shows it and places nothing: its executable is the checkout's, not an install's.
      */
     private commandItem(): MenuItemConstructorOptions {
+        if (this.deps.demo) return { label: 'Command Line', submenu: [{ label: demoMenuLine('command'), enabled: false }] };
         const command = this.deps.command;
         if (command === null) return { label: 'Command Line', submenu: [{ label: uncarriedLine, enabled: false }] };
         let status: CommandStatus;

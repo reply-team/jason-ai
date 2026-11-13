@@ -513,9 +513,11 @@ export interface JasonDesktop {
         /**
          * Which installation this run of the desktop is on: `live`, the person's own, or `demo`, the second installation
          * of sample data beside it, as the record in the person's installation said when the desktop started. The page
-         * reads it once as it loads.
+         * reads it once as it loads. `unopened` is the desktop's sentence when the record said Demo and the demo's
+         * directory could not be made or used, so this run is on the person's own installation and the record says Live
+         * again; null otherwise.
          */
-        get(): Promise<'live' | 'demo'>;
+        get(): Promise<{ mode: 'live' | 'demo'; unopened: string | null }>;
         /**
          * Writes the mode to the record in the person's installation and then starts the desktop again, which runs on
          * the installation it names: null once written and the new start asked for; the desktop's refusal, with nothing

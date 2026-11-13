@@ -103,6 +103,8 @@ export const templates = {
     // The mode: Live or Demo.
     mode_set: 'The mode was set to {Mode}; the desktop starts again on that installation',
     mode_write_failed: 'The mode {Mode} could not be written; the desktop was not started again',
+    demo_unopened: 'The demo data directory could not be made or used; this run is on the person’s own installation and the mode is Live again',
+    demo_runtime_stopped: 'The demo runtime was asked to stop as the demo run quit: {Outcome}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

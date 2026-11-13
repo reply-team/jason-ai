@@ -7,8 +7,8 @@
  * but one of the two words reads as the default. A switch writes the record and starts the desktop again.
  */
 
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 export type Mode = 'live' | 'demo';
 
@@ -69,6 +69,59 @@ export interface RunsOn {
 export function runsOn(person: string, record: Mode, installerStart: boolean): RunsOn {
     const mode = installerStart ? 'live' : record;
     return { person, data: mode === 'demo' ? demoDirectory(person) : person, mode };
+}
+
+/** What the first screen says when this start meant the demo and opened the person's own installation instead. */
+export const demoUnopened = 'The demo could not be opened, so Jason opened your own installation.';
+
+/** A start's installation, and why it is not the demo the record named; null when it is what the record named. */
+export interface StartRun extends RunsOn {
+    unopened: string | null;
+}
+
+/**
+ * What the page is told of the run: its mode, and the sentence that says the demo the record named could not be opened,
+ * null when the run is on the installation the record named.
+ */
+export interface ModeAnswer {
+    mode: Mode;
+    unopened: string | null;
+}
+
+/** Makes the demo's directory when it is not there and proves it is a folder this account can write in; throws when not. */
+export function openDirectory(directory: string): void {
+    mkdirSync(directory, { recursive: true });
+    if (!statSync(directory).isDirectory()) throw new Error('not a folder');
+    const probe = join(directory, `.mode-probe-${process.pid}`);
+    writeFileSync(probe, '');
+    rmSync(probe, { force: true });
+}
+
+/**
+ * The installation a start runs on (`runsOn`), with the demo's directory opened first: one that cannot be made or used
+ * makes the start the person's own, sets the record back to Live (a record that cannot be set back changes nothing of
+ * that) and says so.
+ */
+export function startOn(person: string, record: Mode, installerStart: boolean, deps: { open(directory: string): void; keep(mode: Mode): void }): StartRun {
+    const run = runsOn(person, record, installerStart);
+    if (run.mode !== 'demo') return { ...run, unopened: null };
+    try {
+        deps.open(run.data);
+        return { ...run, unopened: null };
+    } catch {
+        try {
+            deps.keep('live');
+        } catch {
+            // The record stays as it was; this start is the person's all the same.
+        }
+        return { person, data: person, mode: 'live', unopened: demoUnopened };
+    }
+}
+
+/** What a demo run's menu says where the person's installation offers an update, the start at logon or the PATH command. */
+export function demoMenuLine(item: 'updates' | 'autostart' | 'command'): string {
+    const what = { updates: 'Updates', autostart: 'Start the Runtime at Logon', command: 'The jason command' }[item];
+    return `${what}: not in the demo. Go back to your own installation for this.`;
 }
 
 /**

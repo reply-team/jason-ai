@@ -13,6 +13,12 @@ export const mode = signal<Mode>('live');
 /** Why the last switch did not happen, in the desktop's words; null when none failed. */
 export const modeRefusal = signal<string | null>(null);
 
+/**
+ * The desktop's sentence when the record said Demo and the demo could not be opened, so this load is the person's own
+ * installation; null otherwise, and in a browser.
+ */
+export const modeUnopened = signal<string | null>(null);
+
 /** What the desktop offers for the mode; a desktop older than this page offers none of it. */
 export interface DesktopModeSeam {
     get?: () => Promise<unknown>;
@@ -23,11 +29,13 @@ export interface DesktopModeSeam {
 let seam: DesktopModeSeam | null = null;
 
 /**
- * Reads the mode once, as the page loads, from the desktop's seam; a desktop without the member, or whose answer fails
- * or is no mode, is Live, and so is a browser. Never throws.
+ * Reads the mode once, as the page loads, from the desktop's seam: `{ mode, unopened }`, or a bare word from a desktop
+ * that answers one. A desktop without the member, or whose answer fails or is no mode, is Live, and so is a browser.
+ * Never throws.
  */
 export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mode> {
     modeRefusal.value = null;
+    modeUnopened.value = null;
     seam = desktop === undefined ? null : (desktop.mode ?? {});
     let kept: unknown;
     try {
@@ -35,7 +43,11 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
     } catch {
         kept = null;
     }
-    mode.value = kept === 'demo' ? 'demo' : 'live';
+    const answer =
+        kept !== null && typeof kept === 'object' ? (kept as { mode?: unknown; unopened?: unknown }) : { mode: kept };
+    mode.value = answer.mode === 'demo' ? 'demo' : 'live';
+    if (mode.value === 'live' && typeof answer.unopened === 'string' && answer.unopened !== '')
+        modeUnopened.value = answer.unopened;
     return mode.value;
 }
 

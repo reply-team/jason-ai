@@ -24,7 +24,7 @@ import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummar
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
-import type { applyMode, Mode } from '../src/mode.ts';
+import type { applyMode, Mode, ModeAnswer } from '../src/mode.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
@@ -125,10 +125,10 @@ type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStandi
 // A link reaches the page as the page the desktop parsed it to, never as the address.
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
 
-// The mode reaches the page as the desktop keeps it, one of two words, and setting it answers as the desktop does: null
-// once written and the desktop starting again, or the desktop's refusal when the record could not be written.
+// The mode reaches the page as the desktop keeps it, one of two words, with the sentence of a demo that could not be
+// opened, and setting it answers as the desktop does: null once written and the desktop starting again, or the desktop's refusal when the record could not be written.
 type ModeIsTheSeam = [
-    Holds<Equal<Mode, Awaited<ReturnType<JasonDesktop['mode']['get']>>>>,
+    Holds<Equal<ModeAnswer, Awaited<ReturnType<JasonDesktop['mode']['get']>>>>,
     Holds<Equal<Mode, Parameters<JasonDesktop['mode']['set']>[0]>>,
     Holds<Equal<ReturnType<typeof applyMode>, Awaited<ReturnType<JasonDesktop['mode']['set']>>>>,
 ];

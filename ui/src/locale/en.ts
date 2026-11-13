@@ -40,6 +40,8 @@ export const en = {
     'mode.switch.demo': 'Demo',
     'mode.switch.live': 'Live',
     'mode.offer': 'See Jason with sample data',
+    'mode.unopened': 'Demo not opened',
+    'mode.unopened.close': 'Close',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
 } as const;

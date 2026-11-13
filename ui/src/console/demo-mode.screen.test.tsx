@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
-import { loadMode, mode, modeRefusal } from '../platform/mode';
+import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
@@ -15,9 +15,10 @@ import { startDraft, startMaking, startWaiting } from './start';
 // The desktop's console in Demo: the strip above every panel, its two buttons asking the desktop through the seam; in
 // Live no strip, and the start screen offers the demo in one line.
 
-async function renderConsole(kept: 'live' | 'demo'): Promise<StubDesktop> {
+async function renderConsole(kept: 'live' | 'demo', unopened: string | null = null): Promise<StubDesktop> {
     const desktop = stubDesktop();
     desktop.modeKept = kept;
+    desktop.modeUnopened = unopened;
     // The page reads the mode once as it loads, before the console is drawn (`mount.tsx`).
     await loadMode(desktop);
     const fake = new FakeApi()
@@ -62,6 +63,7 @@ beforeEach(() => {
 afterEach(() => {
     mode.value = 'live';
     modeRefusal.value = null;
+    modeUnopened.value = null;
 });
 
 describe('Demo in the desktop', () => {
@@ -155,5 +157,30 @@ describe('Live in the desktop', () => {
         const said = await waitFor(() => screen.getByText('The mode could not be saved, so Jason stays as it is.'));
         expect(said.getAttribute('role')).toBe('alert');
         expect(said.closest('.start')).not.toBeNull();
+    });
+});
+
+describe('A demo the desktop could not open', () => {
+    const unopened = 'The demo could not be opened, so Jason opened your own installation.';
+    const note = () => screen.queryByRole('status', { name: 'Demo not opened' });
+
+    it('says so above the console on the first screen, in the desktop’s words, with no demo strip', async () => {
+        await renderConsole('live', unopened);
+        await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
+        const said = note()!;
+        expect(said.textContent).toMatch(/^The demo could not be opened, so Jason opened your own installation\./);
+        const console = document.querySelector('.jc-console')!;
+        expect(said.parentElement).toBe(console);
+        expect(said.nextElementSibling?.classList.contains('shell')).toBe(true);
+        expect(strip()).toBeNull();
+        expect(offer()).not.toBeNull();
+    });
+
+    it('is closed by the person, and the console is Live as before', async () => {
+        await renderConsole('live', unopened);
+        const said = await waitFor(() => note()!);
+        fireEvent.click(within(said).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(note()).toBeNull());
+        expect(document.querySelector('.jc-console')!.classList.contains('demo')).toBe(false);
     });
 });

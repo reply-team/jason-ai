@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, demoDirectory, modeUnkept, parseMode, readMode, relaunchOptions, runsOn, writeMode, type Mode } from '../src/mode.ts';
+import { applyMode, defaultMode, demoDirectory, demoMenuLine, demoUnopened, modeUnkept, openDirectory, parseMode, readMode, relaunchOptions, runsOn, startOn, writeMode, type Mode } from '../src/mode.ts';
 import { desktopPaths } from '../src/paths.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'mode-'));
@@ -145,7 +145,9 @@ test('a packaged desktop starts again with nothing after the program, an unpacka
 test('the main module reads the record before any path is resolved, and only then names the demo’s directory', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const chosen = main.indexOf('const personDirectory = dataDirectory(process.env, homedir());');
-    assert.ok(main.indexOf('const runOn: RunsOn = runsOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart);') > chosen);
+    assert.ok(main.indexOf('const runOn: StartRun = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {') > chosen);
+    // A demo directory that cannot be opened sets the PERSON'S record back to Live.
+    assert.ok(main.includes('keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),'));
     const named = main.indexOf('if (runOn.mode === \'demo\') process.env.JASON_DATA_DIR = runOn.data;');
     const firstPath = main.indexOf('const installationWasNew = isNewInstallation(');
     assert.ok(chosen > 0 && named > chosen && firstPath > named);
@@ -155,11 +157,57 @@ test('the main module reads the record before any path is resolved, and only the
     assert.ok(main.includes('uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform }) !== null ||'));
 });
 
-test('the main process answers mode.get with this run’s mode, writes the person’s record and starts again', () => {
+test('the main process answers mode.get with this run’s mode and whether the demo could not be opened, writes the person’s record and starts again', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    assert.ok(main.includes("handle(ipcMain, 'mode.get', origin, () => runOn.mode, refused);"));
+    assert.ok(main.includes("handle(ipcMain, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);"));
     assert.ok(main.includes("handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);"));
     assert.ok(main.includes('writeMode(desktopPaths(runOn.person).mode, mode);'));
     assert.ok(main.includes('app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath)));'));
     assert.equal(main.includes('webContents.reload()'), false);
+});
+
+test('a demo start whose directory can be made and used runs on it, the directory made', () => {
+    const person = join(folder(), '.jason');
+    writeMode(desktopPaths(person).mode, 'demo');
+    const run = startOn(person, 'demo', false, { open: openDirectory, keep: (mode) => writeMode(desktopPaths(person).mode, mode) });
+    assert.deepEqual(run, { person, data: `${person}-demo`, mode: 'demo', unopened: null });
+    assert.ok(existsSync(`${person}-demo`));
+    assert.deepEqual(readdirSync(`${person}-demo`), [], 'nothing is left in it by the check');
+    assert.equal(readMode(desktopPaths(person).mode), 'demo');
+});
+
+test('a demo start whose directory cannot be made falls back to the person’s, sets the record back to live and says so', () => {
+    const person = join(folder(), '.jason');
+    writeMode(desktopPaths(person).mode, 'demo');
+    // A file where the demo's directory would be: it can be neither made nor used.
+    writeFileSync(`${person}-demo`, 'not a folder');
+    const run = startOn(person, 'demo', false, { open: openDirectory, keep: (mode) => writeMode(desktopPaths(person).mode, mode) });
+    assert.deepEqual(run, { person, data: person, mode: 'live', unopened: demoUnopened });
+    assert.equal(readMode(desktopPaths(person).mode), 'live');
+    assert.match(demoUnopened, /demo could not be opened/);
+});
+
+test('a demo directory that refuses its use falls back the same way, and a record that cannot be set back still falls back', () => {
+    const person = join(folder(), '.jason');
+    const kept: Mode[] = [];
+    const refuse = () => {
+        throw new Error('EACCES');
+    };
+    assert.deepEqual(startOn(person, 'demo', false, { open: refuse, keep: (mode) => void kept.push(mode) }), { person, data: person, mode: 'live', unopened: demoUnopened });
+    assert.deepEqual(kept, ['live']);
+    assert.deepEqual(startOn(person, 'demo', false, { open: refuse, keep: refuse }), { person, data: person, mode: 'live', unopened: demoUnopened });
+});
+
+test('a live start and an installer start look at no demo directory', () => {
+    const person = join(folder(), '.jason');
+    const opened: string[] = [];
+    const deps = { open: (dir: string) => void opened.push(dir), keep: () => assert.fail('nothing is set back') };
+    assert.deepEqual(startOn(person, 'live', false, deps), { person, data: person, mode: 'live', unopened: null });
+    assert.deepEqual(startOn(person, 'demo', true, deps), { person, data: person, mode: 'live', unopened: null });
+    assert.deepEqual(opened, []);
+});
+
+test('the demo’s menu says, where an update, the PATH command or the start at logon would be, to go back to your own installation', () => {
+    for (const item of ['updates', 'autostart', 'command'] as const) assert.match(demoMenuLine(item), /go back to your own installation/i);
+    assert.notEqual(demoMenuLine('updates'), demoMenuLine('autostart'));
 });

@@ -103,7 +103,10 @@ them on.
 - `<data>/desktop/mode`: which installation the desktop runs on, one word, `live` or `demo`; a file that is missing or
   says anything else is Live. For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
   `~/.jason-demo`), and this file stays in `<data>`. The window's Demo and Live buttons write it and start the desktop
-  again; the runtime of the installation it leaves keeps running.
+  again. Quitting a demo run, the switch to Live included, stops the demo's runtime first; your own runtime is never
+  stopped by either. A demo run offers no update, no start at logon and no `jason` command on the PATH: each says to go
+  back to your own installation. When the demo's directory cannot be made or used, the desktop opens your own
+  installation instead, sets this file back to `live` and says so at the top of the window.
 - `<data>/desktop/chat/`: the chat's working folder. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.

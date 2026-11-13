@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { stubDesktop } from '../test/desktop';
 import { FakeApi } from '../test/fake-api';
 import { renderApp } from '../test/render-app';
-import { loadMode, mode, modeRefusal, switchMode } from './mode';
+import { loadMode, mode, modeRefusal, modeUnopened, switchMode } from './mode';
 
 // The mode is which installation the desktop runs on, and the page learns it from the desktop alone, once, as it loads.
 // A browser shows whatever runtime it is paired with: Live to the page, whatever its address says, and no strip.
@@ -11,6 +11,7 @@ import { loadMode, mode, modeRefusal, switchMode } from './mode';
 afterEach(() => {
     mode.value = 'live';
     modeRefusal.value = null;
+    modeUnopened.value = null;
     history.replaceState(null, '', '/ui/');
 });
 
@@ -22,6 +23,23 @@ describe('the mode read as the page loads', () => {
         expect(mode.value).toBe('demo');
         desktop.modeKept = 'live';
         expect(await loadMode(desktop)).toBe('live');
+    });
+
+    it('carries the desktop’s sentence when the demo could not be opened, and the run is Live', async () => {
+        const desktop = stubDesktop();
+        desktop.modeUnopened = 'The demo could not be opened, so Jason opened your own installation.';
+        expect(await loadMode(desktop)).toBe('live');
+        expect(modeUnopened.value).toBe('The demo could not be opened, so Jason opened your own installation.');
+        desktop.modeUnopened = null;
+        await loadMode(desktop);
+        expect(modeUnopened.value).toBeNull();
+    });
+
+    it('takes a bare word from a desktop that answers one, and says nothing unopened', async () => {
+        expect(await loadMode({ mode: { get: () => Promise.resolve('demo') } })).toBe('demo');
+        expect(modeUnopened.value).toBeNull();
+        expect(await loadMode({ mode: { get: () => Promise.resolve({ mode: 'sample', unopened: 7 }) } })).toBe('live');
+        expect(modeUnopened.value).toBeNull();
     });
 
     it('in a desktop without the member, or whose answer fails or is no mode, is Live', async () => {
