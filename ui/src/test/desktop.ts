@@ -188,6 +188,8 @@ export interface StubDesktop extends JasonDesktop {
     status: DesktopSetup;
     /** The theme the desktop keeps, as `theme.get` answers it; null when it was never told one. */
     themeKept: 'system' | 'light' | 'dark' | null;
+    /** Whether the desktop keeps the daily trends shown, as `dailyTrends.get` answers it; null when never told. */
+    dailyTrendsKept: boolean | null;
     /**
      * The mode this run is on, as `mode.get` answers it; Live unless a test says Demo. `mode.set` keeps the mode it is
      * given and answers null, as the desktop does before it starts again, or a refusal the test set by name.
@@ -360,6 +362,13 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const stub: StubDesktop = {
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
+        dailyTrends: {
+            get: () => Promise.resolve(stub.dailyTrendsKept),
+            set: (on: boolean) => {
+                stub.dailyTrendsKept = on;
+                return call('dailyTrends.set')(on);
+            },
+        },
         mode: {
             get: () =>
                 Promise.resolve({ mode: stub.modeKept, unopened: stub.modeUnopened, preparing: stub.modePreparing }),
@@ -396,6 +405,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         actAnswers,
         status,
         themeKept: null,
+        dailyTrendsKept: null,
         modeKept: 'live',
         modeUnopened: null,
         modePreparing: false,

@@ -47,6 +47,7 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload['setup'], keyof JasonDesktop['setup']>>,
     Holds<Equal<keyof DesktopPreload['links'], keyof JasonDesktop['links']>>,
     Holds<Equal<keyof DesktopPreload['theme'], keyof JasonDesktop['theme']>>,
+    Holds<Equal<keyof DesktopPreload['dailyTrends'], keyof JasonDesktop['dailyTrends']>>,
     Holds<Equal<keyof DesktopPreload['mode'], keyof JasonDesktop['mode']>>,
     Holds<Equal<keyof DesktopPreload['openIn'], keyof JasonDesktop['openIn']>>,
     Holds<Equal<keyof DesktopPreload['pairing'], keyof JasonDesktop['pairing']>>,
@@ -69,6 +70,7 @@ type DeclaredCalls =
     | Calls<JasonDesktop['setup'], 'setup'>
     | Calls<JasonDesktop['links'], 'links'>
     | Calls<JasonDesktop['theme'], 'theme'>
+    | Calls<JasonDesktop['dailyTrends'], 'dailyTrends'>
     | Calls<JasonDesktop['mode'], 'mode'>
     | Calls<JasonDesktop['openIn'], 'openIn'>
     | Calls<JasonDesktop['pairing'], 'pairing'>

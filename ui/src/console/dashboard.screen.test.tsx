@@ -7,7 +7,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { chatDesktop, journalLine, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
-import { fixtures } from '../test/fixtures';
+import { fixtures, type FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import * as dashboard from './dashboard';
@@ -18,6 +18,8 @@ import { chats, lines } from './state';
 // reads of its own over one period: the counts and the replies a role judged, by category. The counts are recorded for
 // the window that ends at the moment these rows fix.
 
+const now = new Date('2026-10-16T09:00:00Z');
+
 type Options = {
     approvals?: 'approval.list/pending' | 'approval.list/empty';
     none?: boolean;
@@ -25,6 +27,11 @@ type Options = {
     unread?: boolean;
     /** The recording reply.count answers with, whatever window the page asks; every campaign's by default. */
     replies?: 'reply.count/every-campaign' | 'reply.count/archived-named' | 'reply.count/until-before-since';
+    /**
+     * The daily trends are on, and the two 24-hour windows are answered from recordings: the last window with the first
+     * of the pair, the one before with the second. Without it the desktop keeps them off, so no row asks for them.
+     */
+    trends?: 'rising' | 'falling' | 'level' | 'last-refused';
     /** campaign.activity answers any window with the recorded 30 days' answer: for rows that choose another period. */
     anyWindow?: boolean;
 };
@@ -42,6 +49,44 @@ function renderConsole(options: Options = {}) {
     else fake.answer('campaign.activity', 'campaign.activity/all-30-days');
     fake.answerAnyRequest('reply.count', options.replies ?? 'reply.count/every-campaign');
     if (options.anyWindow) fake.answerAnyRequest('campaign.activity', 'campaign.activity/all-30-days');
+    if (options.trends) {
+        const sinceOf = (body: object) => (body as { since: string }).since;
+        const pairs = {
+            rising: [
+                'campaign.activity/all-7-days',
+                'campaign.activity/all-today',
+                'reply.count/every-campaign',
+                'reply.count/archived-named',
+            ],
+            falling: [
+                'campaign.activity/all-today',
+                'campaign.activity/all-7-days',
+                'reply.count/archived-named',
+                'reply.count/every-campaign',
+            ],
+            level: [
+                'campaign.activity/all-7-days',
+                'campaign.activity/all-7-days',
+                'reply.count/every-campaign',
+                'reply.count/every-campaign',
+            ],
+            'last-refused': [
+                'campaign.activity/all-7-days',
+                'campaign.activity/all-today',
+                'reply.count/until-before-since',
+                'reply.count/archived-named',
+            ],
+        } as const;
+        const [lastCounts, beforeCounts, lastReplies, beforeReplies] = pairs[options.trends];
+        const back = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString();
+        const pick = (last: FixtureName, before: FixtureName, main: FixtureName) => (body: object) =>
+            sinceOf(body) === back(24) ? last : sinceOf(body) === back(48) ? before : main;
+        fake.answerAnyRequest('campaign.activity', pick(lastCounts, beforeCounts, 'campaign.activity/all-30-days'));
+        fake.answerAnyRequest(
+            'reply.count',
+            pick(lastReplies, beforeReplies, options.replies ?? 'reply.count/every-campaign'),
+        );
+    }
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -54,8 +99,10 @@ function renderConsole(options: Options = {}) {
     );
     fake.answer('system.info', 'system.info/with-ui');
     const journal = stubStream();
-    render(<Console api={fake} desktop={chatDesktop()} stream={journal.stream} />);
-    return { fake, journal };
+    const desktop = chatDesktop();
+    desktop.dailyTrendsKept = options.trends ? null : false;
+    render(<Console api={fake} desktop={desktop} stream={journal.stream} />);
+    return { fake, journal, desktop };
 }
 
 const side = () => document.querySelector<HTMLElement>('.side')!;
@@ -482,6 +529,212 @@ describe('the period', () => {
         const total = attention.approvals.value.length + attention.questions.value.length;
         choose('year');
         await waitFor(() => expect(part('Needs you', 'b')).toBe(String(total)));
+    });
+});
+
+const matchesWindow = (body: object, window: { since: string; until: string }) =>
+    (body as { since: string }).since === window.since && (body as { until: string }).until === window.until;
+
+describe('the daily trends', () => {
+    const trendIn = (label: string) => dash().querySelector<HTMLElement>(`[data-tile="${label}"] .dash-trend`);
+
+    it('shows the last 24 hours against the 24 before them beside the four counts, with the tooltip', async () => {
+        renderConsole({ trends: 'rising' });
+        await open();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        await waitFor(() => expect(trendIn('Interested')).toBeTruthy());
+        expect(words(trendIn('Contacted')!)).toBe('+4');
+        expect(words(trendIn('Replied')!)).toBe('+2');
+        expect(words(trendIn('Interested')!)).toBe('+1');
+        expect(trendIn('Contacted')!.classList.contains('up')).toBe(true);
+        expect(trendIn('Contacted')!.getAttribute('title')).toBe('Last 24 hours against the 24 before them.');
+        // Meetings booked holds a dash here, so there is no number to put a trend beside; Needs you and Bounce rate have none.
+        expect(trendIn('Meetings booked')).toBeNull();
+        expect(trendIn('Needs you')).toBeNull();
+        expect(trendIn('Bounce rate')).toBeNull();
+    });
+
+    it('shows a minus and red for a fall, and a neutral ±0 for none', async () => {
+        renderConsole({ trends: 'falling' });
+        await open();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        expect(words(trendIn('Contacted')!)).toBe('\u22124');
+        expect(trendIn('Contacted')!.classList.contains('down')).toBe(true);
+        // A category present before and absent in the last 24 hours is a fall, so both sides are filled with none.
+        await waitFor(() => expect(dash().querySelector('.dash-categories .dash-trend')).toBeTruthy());
+        const rows = [...dash().querySelectorAll('.dash-categories tbody tr')].map((each) => [
+            words(each.querySelector('td')!),
+            words(each.querySelectorAll('td')[1]!),
+        ]);
+        expect(rows).toEqual([
+            ['Interested', '1 \u22121'],
+            ['Wrong person', '1 \u22121'],
+        ]);
+    });
+
+    it('drops a late trend answer: one read held while the Dashboard is opened again does not overwrite the newer', async () => {
+        const { fake } = renderConsole({ trends: 'level' });
+        const back = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString();
+        let late = false;
+        // Once released, the held read answers with a rise; the newer read answered with none.
+        fake.answerAnyRequest('campaign.activity', (body) => {
+            const since = (body as { since: string }).since;
+            if (since === back(24)) return 'campaign.activity/all-7-days';
+            if (since === back(48)) return late ? 'campaign.activity/all-today' : 'campaign.activity/all-7-days';
+            return 'campaign.activity/all-30-days';
+        });
+        let first = true;
+        const release = fake.hold('campaign.activity', (body) => {
+            const held = first && (body as { since: string }).since === back(48);
+            if (held) first = false;
+            return held;
+        });
+        await open();
+        await settled();
+        dashboard.watching(false);
+        dashboard.watching(true);
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        expect(words(trendIn('Contacted')!)).toBe('±0');
+        late = true;
+        release();
+        await settled();
+        expect(words(trendIn('Contacted')!)).toBe('±0');
+        dashboard.watching(false);
+    });
+
+    it('lets a click on the switch before the desktop answered stand over its answer', async () => {
+        const { desktop } = renderConsole({ trends: 'rising' });
+        let answer: (value: boolean | null) => void = () => {};
+        desktop.dailyTrends.get = () => new Promise<boolean | null>((resolve) => (answer = resolve));
+        await open();
+        const box = dash().querySelector<HTMLInputElement>('input[data-change="dash.trends"]')!;
+        box.checked = false;
+        fireEvent.change(box);
+        answer(true);
+        await settled();
+        expect(dashboard.trendsOn.value).toBe(false);
+        expect(dash().querySelector<HTMLInputElement>('input[data-change="dash.trends"]')!.checked).toBe(false);
+        expect(dash().querySelector('.dash-trend')).toBeNull();
+    });
+
+    it('forgets the previous open’s trends when it is opened again', async () => {
+        renderConsole({ trends: 'rising' });
+        await open();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        dashboard.watching(false);
+        dashboard.watching(true);
+        expect(dashboard.trendReads.value).toBeNull();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        dashboard.watching(false);
+    });
+
+    it('shows ±0 when both windows hold the same', async () => {
+        renderConsole({ trends: 'level' });
+        await open();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        expect(words(trendIn('Contacted')!)).toBe('±0');
+        expect(trendIn('Contacted')!.classList.contains('flat')).toBe(true);
+    });
+
+    it('gives the reply rate no trend, and each category’s conversations one on the card', async () => {
+        renderConsole({ trends: 'rising' });
+        await open();
+        await waitFor(() => expect(trendIn('Replied')).toBeTruthy());
+        expect(trendIn('Replied')!.parentElement!.querySelector('.rel .dash-trend')).toBeNull();
+        await waitFor(() => expect(dash().querySelector('.dash-categories .dash-trend')).toBeTruthy());
+        const rows = [...dash().querySelectorAll('.dash-categories tbody tr')].map((each) => [
+            words(each.querySelector('td')!),
+            words(each.querySelectorAll('td')[1]!),
+        ]);
+        expect(rows).toEqual([
+            ['Interested', '1 +1'],
+            ['Wrong person', '1 +1'],
+        ]);
+    });
+
+    it('asks the two adjacent windows from this second, whatever the period', async () => {
+        const { fake } = renderConsole({ trends: 'rising' });
+        await open();
+        const windows = [
+            { since: '2026-10-15T09:00:00.000Z', until: '2026-10-16T09:00:00.000Z' },
+            { since: '2026-10-14T09:00:00.000Z', until: '2026-10-15T09:00:00.000Z' },
+        ];
+        const asked = (operation: string) =>
+            fake.calls.filter((each) => each.operation === operation).map((each) => each.body);
+        await waitFor(() => expect(asked('reply.count')).toEqual(expect.arrayContaining(windows)));
+        expect(asked('campaign.activity')).toEqual(
+            expect.arrayContaining(windows.map((window) => ({ exclude_archived_contacts: true, ...window }))),
+        );
+        const select = dash().querySelector<HTMLSelectElement>('select[data-change="dash.period"]')!;
+        select.value = '3m';
+        fireEvent.change(select);
+        // The trends do not depend on the period: a change of it reads the new period and not the two windows again.
+        await waitFor(() =>
+            expect(asked('reply.count')).toContainEqual({
+                since: '2026-07-16T00:00:00.000Z',
+                until: '2026-10-16T09:00:00.000Z',
+            }),
+        );
+        for (const window of windows)
+            expect(asked('reply.count').filter((each) => matchesWindow(each, window))).toHaveLength(1);
+    });
+
+    it('shows no trend for a number whose window could not be read, and the number itself stays', async () => {
+        renderConsole({ trends: 'last-refused' });
+        await open();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        expect(trendIn('Interested')).toBeNull();
+        expect(part('Interested', 'b')).toBe('1');
+    });
+
+    it('is a switch, on, that hides the trends and tells the desktop when it is turned off', async () => {
+        const { desktop } = renderConsole({ trends: 'rising' });
+        await open();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        const box = dash().querySelector<HTMLInputElement>('input[data-change="dash.trends"]')!;
+        expect(box.checked).toBe(true);
+        expect(words(box.parentElement!)).toBe('Show daily trends');
+        box.checked = false;
+        fireEvent.change(box);
+        await waitFor(() => expect(trendIn('Contacted')).toBeNull());
+        expect(dash().querySelector('.dash-categories .dash-trend')).toBeNull();
+        expect(desktop.calls.filter((each) => each.name === 'dailyTrends.set')).toEqual([
+            { name: 'dailyTrends.set', args: [false] },
+        ]);
+        expect(dash().querySelector<HTMLInputElement>('input[data-change="dash.trends"]')!.checked).toBe(false);
+    });
+
+    it('opens off, and asks for no trend at all, when the desktop kept that the person turned them off', async () => {
+        const { fake } = renderConsole();
+        await open();
+        await waitFor(() => expect(part('Contacted', 'b')).toBe('11'));
+        expect(dash().querySelector<HTMLInputElement>('input[data-change="dash.trends"]')!.checked).toBe(false);
+        expect(dash().querySelector('.dash-trend')).toBeNull();
+        expect(fake.calls.filter((each) => each.operation === 'reply.count')).toHaveLength(1);
+    });
+
+    it('is on and unremembered in a browser tab whose seam has no such member', async () => {
+        const { desktop } = renderConsole({ trends: 'rising' });
+        delete (desktop as unknown as Record<string, unknown>)['dailyTrends'];
+        dashboard.watching(false);
+        dashboard.watching(true);
+        await open();
+        await waitFor(() => expect(trendIn('Contacted')).toBeTruthy());
+        const stored = JSON.stringify({ ...localStorage });
+        const box = dash().querySelector<HTMLInputElement>('input[data-change="dash.trends"]')!;
+        expect(box.checked).toBe(true);
+        box.checked = false;
+        fireEvent.change(box);
+        await waitFor(() => expect(trendIn('Contacted')).toBeNull());
+        expect(desktop.calls.filter((each) => each.name === 'dailyTrends.set')).toEqual([]);
+        // Not remembered: opened again, the switch is on, and nothing was stored in the page either.
+        dashboard.watching(false);
+        dashboard.watching(true);
+        await waitFor(() =>
+            expect(dash().querySelector<HTMLInputElement>('input[data-change="dash.trends"]')!.checked).toBe(true),
+        );
+        expect(JSON.stringify({ ...localStorage })).toBe(stored);
+        dashboard.watching(false);
     });
 });
 

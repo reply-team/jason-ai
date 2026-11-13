@@ -551,6 +551,12 @@ export interface JasonDesktop {
          */
         set(choice: 'system' | 'light' | 'dark'): Promise<void>;
     };
+    dailyTrends: {
+        /** Whether the desktop keeps the Dashboard's daily trends as shown (true) or hidden (false), or null when the person never chose; the page reads null as shown. */
+        get(): Promise<boolean | null>;
+        /** Tells the desktop the person's choice, which it keeps. The page calls it whenever the switch is flipped. */
+        set(on: boolean): Promise<void>;
+    };
     mode: {
         /**
          * Which installation this run of the desktop is on: `live`, the person's own, or `demo`, the second installation

@@ -26,6 +26,11 @@ export interface DesktopSettings {
      * this run's own data directory: never in the window and never in the person's folders. Absent until one was used.
      */
     openIn?: PlaceId;
+    /**
+     * Whether the Dashboard shows its daily trends: the last 24 hours against the 24 before them. Told by the page whenever
+     * the person flips the switch and kept here. Absent until one was told, which the page reads as on.
+     */
+    dailyTrends?: boolean;
 }
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -55,11 +60,12 @@ export function parseSettings(text: string | null): DesktopSettings {
     } catch {
         return { ...defaultSettings };
     }
-    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown };
+    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown; daily_trends?: unknown };
     return {
         feed: typeof value.feed === 'string' && isFeed(value.feed) ? value.feed : null,
         skillsDeployedFor: typeof value.skills_deployed_for === 'string' ? value.skills_deployed_for : null,
         theme: isTheme(value.theme) ? value.theme : null,
+        ...(typeof value.daily_trends === 'boolean' ? { dailyTrends: value.daily_trends } : {}),
         ...(isPlace(value.open_in) && !notFolderPlaces.includes(value.open_in) ? { openIn: value.open_in } : {}),
     };
 }
@@ -87,12 +93,32 @@ export function settingsAtStart(file: string, newInstallation: boolean): Desktop
 /** Writes the settings whole, through a file beside them renamed over them. */
 export function writeSettings(file: string, settings: DesktopSettings): void {
     mkdirSync(dirname(file), { recursive: true });
-    const body: Record<string, string> = {};
+    const body: Record<string, string | boolean> = {};
     if (settings.feed !== null) body.feed = settings.feed;
     if (settings.skillsDeployedFor !== null) body.skills_deployed_for = settings.skillsDeployedFor;
     if (settings.theme !== null) body.theme = settings.theme;
     if (settings.openIn !== undefined) body.open_in = settings.openIn;
+    if (settings.dailyTrends !== undefined) body.daily_trends = settings.dailyTrends;
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, file);
 }
+
+/**
+ * The page tells the desktop whether the Dashboard's daily trends are shown. Anything but true or false is refused and
+ * nothing is written; the choice is written with the other settings kept beside it. Returns the settings now held.
+ */
+export function applyDailyTrends(
+    on: unknown,
+    settings: DesktopSettings,
+    write: (next: DesktopSettings) => void,
+): DesktopSettings {
+    if (typeof on !== 'boolean') throw new Error('That is not a choice of the daily trends.');
+    if (settings.dailyTrends === on) return settings;
+    const next = { ...settings, dailyTrends: on };
+    write(next);
+    return next;
+}
+
+/** What the page is told of the switch: the person's choice, or null when none was ever told, which the page reads as on. */
+export const keptDailyTrends = (settings: DesktopSettings): boolean | null => settings.dailyTrends ?? null;
