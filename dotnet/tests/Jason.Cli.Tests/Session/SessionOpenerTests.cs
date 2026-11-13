@@ -236,6 +236,30 @@ public sealed class SessionOpenerTests : IDisposable
         var script = printed["script"]!.GetValue<string>();
         Assert.StartsWith("#!/bin/sh\nrm -f -- \"$0\"\n", script, StringComparison.Ordinal);
         Assert.Contains("cd -- '" + _run.CampaignFolder + "' || exit 1", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("JASON_DATA_DIR", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A CLI that runs with <c>JASON_DATA_DIR</c> has the macOS script export the data directory it uses, so the host's own
+    /// <c>jason</c> commands reach this installation and not the default one; a blank value is no data directory, as it
+    /// is to the CLI itself.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task On_macos_the_script_carries_the_data_directory_only_when_the_cli_runs_with_one(bool set)
+    {
+        _run.Terminals.Platform = TerminalPlatform.MacOs;
+        _run.Programs.AddProgram("claude");
+        _run.Variables[JasonPaths.DataDirectoryVariable] = set ? _run.DataDirectory : "  ";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1", "--dry-run");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var script = JsonNode.Parse(_run.Output.ToString())!["script"]!.GetValue<string>();
+        var exports = script.Split('\n').Where(line => line.StartsWith("export ", StringComparison.Ordinal)).ToArray();
+        string[] expected = set ? ["export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory)] : [];
+        Assert.Equal(expected, exports);
     }
 
     /// <summary>
@@ -635,6 +659,9 @@ public sealed class SessionOpenerTests : IDisposable
             Directory.CreateDirectory(CampaignFolder);
             Campaign = CopyPromptTests.Fixture("campaign.get", "in-project-with-folder").Replace(RecordedFolder, CampaignFolder, StringComparison.Ordinal);
         }
+
+        /// <summary>The data directory the CLI under test runs on.</summary>
+        public string DataDirectory => _dir.Paths.Root;
 
         /// <summary>The campaign's folder as the recorded exchange names it.</summary>
         public const string RecordedFolder = "~/Jason/projects/acme-corp/campaigns/q3-leads";

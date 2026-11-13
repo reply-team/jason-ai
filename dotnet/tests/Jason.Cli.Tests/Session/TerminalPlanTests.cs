@@ -105,6 +105,94 @@ public sealed class TerminalPlanTests : IDisposable
         Assert.Equal(expected, launch.Script);
     }
 
+    /// <summary>
+    /// Terminal is started by the system, not by the CLI, so nothing of the CLI's environment reaches the script's shell: a
+    /// CLI that runs with <c>JASON_DATA_DIR</c> has the script export it, in one line before the <c>exec</c>, so the
+    /// host's own <c>jason</c> commands reach the installation the session was opened from.
+    /// </summary>
+    [Fact]
+    public void The_macos_script_exports_the_data_directory_the_cli_runs_with_before_the_exec()
+    {
+        var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, dataDirectory: "/Users/marta/jason-test");
+
+        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring", "export JASON_DATA_DIR='/Users/marta/jason-test'"), launch.Script);
+    }
+
+    /// <summary>
+    /// A CLI with no data directory of its own exports nothing, and the script is today's byte for byte. Empty and blank
+    /// count as unset, as they do where the CLI resolves its data directory (<c>JasonPaths.FromEnvironment</c>).
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void The_macos_script_exports_nothing_when_the_cli_runs_with_no_data_directory(string? dataDirectory)
+    {
+        var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, dataDirectory);
+
+        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring", exportLine: null), launch.Script);
+        Assert.Equal(launch.Script, TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item).Script);
+    }
+
+    /// <summary>
+    /// The data directory is a path a person gave, so it is quoted by the one function that quotes the folder and the
+    /// host's words: a space, an apostrophe, a dollar sign and a line break each stay inside the single quotes.
+    /// </summary>
+    [Theory]
+    [InlineData("/Users/marta/jason test", "'/Users/marta/jason test'")]
+    [InlineData("/Users/marta/marta's jason", "'/Users/marta/marta'\\''s jason'")]
+    [InlineData("/Users/marta/$HOME/jason", "'/Users/marta/$HOME/jason'")]
+    [InlineData("/Users/marta/jason\nrm -rf ~", "'/Users/marta/jason\nrm -rf ~'")]
+    public void The_exported_data_directory_is_quoted_like_every_other_word_of_the_script(string dataDirectory, string quoted)
+    {
+        var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, dataDirectory);
+
+        Assert.Equal(quoted, TerminalPlan.ShellQuote(dataDirectory));
+        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring", "export JASON_DATA_DIR=" + quoted), launch.Script);
+    }
+
+    /// <summary>The data directory is the one thing of the environment the script carries: no other variable is named in it.</summary>
+    [Fact]
+    public void The_macos_script_names_no_other_variable()
+    {
+        var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
+        var without = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item).Script!;
+
+        var with = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, "/Users/marta/jason-test").Script!;
+
+        var added = with.Split('\n').Except(without.Split('\n')).ToArray();
+        Assert.Equal(["export JASON_DATA_DIR='/Users/marta/jason-test'"], added);
+        Assert.Equal(without.Split('\n').Length + 1, with.Split('\n').Length);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(with, @"\bexport\b"));
+        Assert.DoesNotContain("JASON_", without, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// On Windows and Linux the terminal is a child of the CLI and inherits its environment, the data directory included;
+    /// the launch there is the same with a data directory as without one.
+    /// </summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Windows)]
+    [InlineData(TerminalPlatform.Linux)]
+    public void On_windows_and_linux_the_launch_is_the_same_with_a_data_directory(TerminalPlatform os)
+    {
+        var terminal = os == TerminalPlatform.Windows ? new TerminalFound("conhost", "C:/Windows/System32/conhost.exe") : new TerminalFound("kitty", "/usr/bin/kitty");
+
+        var without = TerminalPlan.Compose(os, terminal, "/home/marta/Jason", ["/usr/local/bin/codex", Prompt], Item);
+        var with = TerminalPlan.Compose(os, terminal, "/home/marta/Jason", ["/usr/local/bin/codex", Prompt], Item, "/home/marta/jason-test");
+
+        Assert.Equal(without.Argv, with.Argv);
+        Assert.Equal(without.WorkingDirectory, with.WorkingDirectory);
+        Assert.Null(with.Script);
+        Assert.Null(with.ScriptName);
+    }
+
     [Theory]
     [InlineData("plain", "'plain'")]
     [InlineData("", "''")]
@@ -263,6 +351,20 @@ public sealed class TerminalPlanTests : IDisposable
         Assert.Equal(["-e", "/usr/local/bin/codex", Prompt], start.ArgumentList);
         Assert.Equal("/home/marta/Jason", start.WorkingDirectory);
     }
+
+    /// <summary>The macOS script for <c>/opt/homebrew/bin/claude 'Go.'</c> at <paramref name="folder"/>, with the export line before the <c>exec</c> or none.</summary>
+    private static string MacScript(string folder, string? exportLine) => string.Join(
+        "\n",
+        new[]
+        {
+            "#!/bin/sh",
+            "rm -f -- \"$0\"",
+            "rmdir -- \"${0%/*}\" 2>/dev/null",
+            "cd -- '" + folder + "' || exit 1",
+            exportLine,
+            "exec '/opt/homebrew/bin/claude' 'Go.'",
+            string.Empty,
+        }.OfType<string>());
 
     private string Folder(string name) => Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
 

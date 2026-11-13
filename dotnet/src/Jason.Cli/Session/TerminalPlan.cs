@@ -1,3 +1,5 @@
+using Jason.Contracts.Discovery;
+
 namespace Jason.Cli.Session;
 
 /// <summary>The three operating systems a terminal is composed for; a parameter of the plan, never read in it.</summary>
@@ -59,7 +61,13 @@ public static class TerminalPlan
     /// <paramref name="folder"/>. The host's words are passed as they are, one argument each, with no shell of Jason's
     /// between; only macOS's script is read by a shell, Terminal's, and every word in it is single-quoted.
     /// </summary>
-    public static TerminalLaunch Compose(TerminalPlatform os, TerminalFound terminal, string folder, IReadOnlyList<string> host, string itemId)
+    /// <param name="dataDirectory">
+    /// The data directory the CLI runs with when <c>JASON_DATA_DIR</c> names one, else null (empty and blank are none, as
+    /// they are to the CLI). On Windows and Linux the terminal is the CLI's own child and inherits the variable, so the
+    /// launch there does not change; on macOS Terminal is started by the system and its shell carries nothing of the CLI's
+    /// environment, so the script exports this one variable before the <c>exec</c>, and nothing else.
+    /// </param>
+    public static TerminalLaunch Compose(TerminalPlatform os, TerminalFound terminal, string folder, IReadOnlyList<string> host, string itemId, string? dataDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(terminal);
         ArgumentException.ThrowIfNullOrEmpty(folder);
@@ -77,7 +85,7 @@ public static class TerminalPlan
                 return new TerminalLaunch(terminal.Name, [terminal.Program, .. LinuxForm(terminal.Program, folder), .. host], folder, null, null);
             case TerminalPlatform.MacOs:
                 var name = ScriptNameFor(itemId);
-                return new TerminalLaunch(terminal.Name, [terminal.Program, "-a", "Terminal", name], folder, Script(folder, host), name);
+                return new TerminalLaunch(terminal.Name, [terminal.Program, "-a", "Terminal", name], folder, Script(folder, host, dataDirectory), name);
             default:
                 throw new ArgumentOutOfRangeException(nameof(os), os, null);
         }
@@ -108,7 +116,11 @@ public static class TerminalPlan
         };
     }
 
-    /// <summary>One word in single quotes, each apostrophe written as <c>'\''</c>: nothing inside single quotes is special to a POSIX shell.</summary>
+    /// <summary>
+    /// One word in single quotes, each apostrophe written as <c>'\''</c>: nothing inside single quotes is special to a POSIX
+    /// shell, a space, a dollar sign and a line break included. The folder, the host's words and the data directory are
+    /// quoted by it and by nothing else.
+    /// </summary>
     public static string ShellQuote(string word)
     {
         ArgumentNullException.ThrowIfNull(word);
@@ -116,17 +128,27 @@ public static class TerminalPlan
     }
 
     /// <summary>
-    /// The script Terminal runs: it removes itself and its folder first, enters the folder or stops, and replaces itself
-    /// with the host.
+    /// The script Terminal runs: it removes itself and its folder first, enters the folder or stops, exports the data
+    /// directory where the CLI runs with one, and replaces itself with the host.
     /// </summary>
-    private static string Script(string folder, IReadOnlyList<string> host) => string.Join(
-        "\n",
-        "#!/bin/sh",
-        "rm -f -- \"$0\"",
-        "rmdir -- \"${0%/*}\" 2>/dev/null",
-        "cd -- " + ShellQuote(folder) + " || exit 1",
-        "exec " + string.Join(' ', host.Select(ShellQuote)),
-        string.Empty);
+    private static string Script(string folder, IReadOnlyList<string> host, string? dataDirectory)
+    {
+        List<string> lines =
+        [
+            "#!/bin/sh",
+            "rm -f -- \"$0\"",
+            "rmdir -- \"${0%/*}\" 2>/dev/null",
+            "cd -- " + ShellQuote(folder) + " || exit 1",
+        ];
+        if (!string.IsNullOrWhiteSpace(dataDirectory))
+        {
+            lines.Add("export " + JasonPaths.DataDirectoryVariable + "=" + ShellQuote(dataDirectory));
+        }
+
+        lines.Add("exec " + string.Join(' ', host.Select(ShellQuote)));
+        lines.Add(string.Empty);
+        return string.Join("\n", lines);
+    }
 
     private static string ScriptNameFor(string itemId)
     {
