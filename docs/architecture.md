@@ -1115,7 +1115,13 @@ campaign operation override
 
 A campaign default intentionally masks global operation-specific routes; preserving a global
 exception inside that campaign requires an explicit campaign operation override. This
-precedence is part of the accepted composition model. The exact configuration format is
+precedence is part of the accepted composition model.
+
+An operation whose contract names the argument a route reads its channel from (`message.send`, `conversation.reply`
+and `sender.list`) may also be routed per channel, so that one campaign sends email through one plugin and LinkedIn
+messages through another. A channel route sits above its operation's own route at its scope, a plugin that reads no
+events may not take one, and the rest of routing keeps its rule unchanged: masking is exact and nothing falls back to
+another plugin. The levels, the scopes and the checks are in [`docs/routing.md`](routing.md). The exact configuration format is
 deferred; whether operation-family wildcard patterns are part of the first schema is
 unresolved.
 
@@ -1770,7 +1776,7 @@ original chat session.
 | DEC-OPS-003 | Canonical operations are published in subsets chosen by the role sentences they retire and the chain they complete, each copied from the vendor-neutral catalogue with its properties unsoftened; an operation on the catalogue's protective floor runs `auto`, and the claim's own guards do not block it. |
 | DEC-MCP-001 | MCP is an AI-agent tool, not the accepted deterministic Runtime transport. |
 | DEC-ROUTE-001 | Plugin routing selects the plugin implementation at global and campaign scopes; binding separately selects provider identity/workspace context. |
-| DEC-ROUTE-002 | Routing precedence is campaign operation override → campaign default → global operation override → global default. |
+| DEC-ROUTE-002 | Routing precedence is campaign operation override → campaign default → global operation override → global default; a route that names a channel under an operation sits above that operation's own route at its scope (`docs/routing.md` §2). |
 | DEC-BIND-001 | Plugin binding is separate from routing and supplies opaque, non-secret provider identity/workspace context. |
 | DEC-BIND-002 | The Reply plugin, not Runtime or `host.exec`, interprets Reply CLI profile semantics. |
 | DEC-ADP-001 | Official and community provider plugins use one public JavaScript package model. |
