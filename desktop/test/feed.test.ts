@@ -94,7 +94,7 @@ test('a journal line becomes a Feed line of identifiers, its kind and its moment
     });
 });
 
-test('a decided line (an approval given or declined, a question answered, a campaign archived) keeps ids and a moment, never the option chosen', () => {
+test('a decided line (an approval approved or rejected, a question answered, a campaign archived) keeps ids and a moment, never the option chosen', () => {
     for (const kind of ['approval_approved', 'approval_rejected', 'decision_answered', 'campaign_archived'] as const) {
         const made = lineOf(journal({ kind, work_item_id: wi(4), new: { decision_id: 'dec_1', chosen_option: 'Send the discount offer' } }));
         assert.deepEqual(made, { kind: 'line', journal_kind: kind, journal_id: jrn(1), at: '2026-11-11T10:00:00.000Z', campaign_id: cmp(1), work_item_id: wi(4), count: 1 });
