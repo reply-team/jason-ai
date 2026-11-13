@@ -30,6 +30,9 @@ export interface BridgeSeam {
     chat: Pick<JasonDesktop['chat'], 'list' | 'open' | 'create' | 'send' | 'stop' | 'rename' | 'onEvent'>;
 }
 
+/** A request the bridge could not take: a fault of this page, said with its status. */
+export const badRequest = 'Jason Desktop could not take that request';
+
 /** The sentence for a member outside the table. */
 export const notInTab = "That is done in Jason Desktop's own window.";
 
@@ -63,11 +66,19 @@ export class Bridge {
     /** One call. A member outside the table is refused here; the bridge's refusal sentence comes back as an error. */
     async call(member: BridgeMember, args: unknown[] = []): Promise<unknown> {
         if (!(bridgeMembers as readonly string[]).includes(member)) throw new Error(notInTab);
-        const response = await this.doFetch(`${this.base}/call`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: `Bearer ${this.pair.secret}` },
-            body: JSON.stringify({ member, args }),
-        });
+        let response: Response;
+        try {
+            response = await this.doFetch(`${this.base}/call`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', authorization: `Bearer ${this.pair.secret}` },
+                body: JSON.stringify({ member, args }),
+            });
+        } catch {
+            // The bridge refused the request before reading it (its Host and Origin checks answer with nothing the page
+            // can read) or is not there: the pair is of no use.
+            this.onGone();
+            throw new BridgeGone();
+        }
         if (response.status === 401) {
             this.onGone();
             throw new BridgeGone();
@@ -79,6 +90,7 @@ export class Bridge {
         };
         if (typeof body.refused === 'string') throw new Error(body.refused);
         if (response.status === 403) throw new Error(notInTab);
+        if (response.status === 400 || response.status === 413) throw new Error(`${badRequest} (${response.status}).`);
         if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : notInTab);
         return body.result ?? null;
     }

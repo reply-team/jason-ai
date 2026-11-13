@@ -161,4 +161,41 @@ describe('what the bridge answers besides a result', () => {
         await vi.waitFor(() => expect(stand.asked.filter((each) => each.path === '/events')).toHaveLength(2));
         bridge.close();
     });
+
+    it('lets go of the pair when the bridge cannot be reached or refuses before reading (a TypeError)', async () => {
+        const gone = vi.fn();
+        const fetched = vi.fn(async () => {
+            throw new TypeError('Failed to fetch');
+        });
+        await expect(new Bridge(pair, fetched as never, gone).call('chat.list')).rejects.toThrow(
+            'The connection to Jason Desktop is gone.',
+        );
+        expect(gone).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces a request the bridge could not take, with its status, and keeps the pair', async () => {
+        const gone = vi.fn();
+        for (const status of [400, 413]) {
+            const fetched = vi.fn(async () => new Response('', { status }));
+            await expect(new Bridge(pair, fetched as never, gone).call('chat.list')).rejects.toThrow(
+                `Jason Desktop could not take that request (${status}).`,
+            );
+        }
+        expect(gone).not.toHaveBeenCalled();
+    });
+
+    it('is refused by the stand-in as a body that is not a call, and a member outside its table', async () => {
+        const stand = standInBridge(stubDesktop());
+        const headers = { authorization: `Bearer ${standInSecret}` };
+        const bad = await stand.fetch('http://127.0.0.1:43210/call', { method: 'POST', headers, body: '{"member":1}' });
+        expect(bad.status).toBe(400);
+        const out = await stand.fetch('http://127.0.0.1:43210/call', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ member: 'chat.answer', args: [] }),
+        });
+        expect(out.status).toBe(403);
+        const events = await stand.fetch('http://127.0.0.1:43210/events', { headers });
+        expect(events.headers.get('content-type')).toBe('application/x-ndjson');
+    });
 });

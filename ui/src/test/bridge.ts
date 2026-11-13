@@ -20,6 +20,9 @@ const table = new Set([
     'chat.rename',
 ]);
 
+/** What the bridge answers a member outside its table. Held in one place until the bridge's own answer is known. */
+const outsideTheTable = () => new Response('', { status: 403 });
+
 export interface StandIn {
     fetch: typeof fetch;
     /** What was asked, in order: the path, and the member of a call. */
@@ -57,14 +60,14 @@ export function standInBridge(desktop: StubDesktop, port = 43210): StandIn {
         const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {};
         if (url.pathname === '/pair') {
             state.asked.push({ path: '/pair' });
-            if (state.spent || body['code'] !== standInCode) return new Response('{}', { status: 403 });
+            if (state.spent || body['code'] !== standInCode) return new Response('', { status: 401 });
             state.spent = true;
             return Response.json({ secret: standInSecret });
         }
         const headers = new Headers(init?.headers);
         if (!known || headers.get('authorization') !== `Bearer ${standInSecret}`) {
             state.asked.push({ path: url.pathname, member: '(not known)' });
-            return new Response('{}', { status: 401 });
+            return new Response('', { status: 401 });
         }
         if (url.pathname === '/events') {
             state.asked.push({ path: '/events' });
@@ -74,13 +77,14 @@ export function standInBridge(desktop: StubDesktop, port = 43210): StandIn {
                     state.push({ heartbeat: true });
                 },
             });
-            return new Response(stream, { status: 200 });
+            return new Response(stream, { status: 200, headers: { 'content-type': 'application/x-ndjson' } });
         }
-        const member = String(body['member']);
+        if (typeof body['member'] !== 'string' || !Array.isArray(body['args']))
+            return new Response('', { status: 400 });
+        const member = body['member'];
         const args = (body['args'] as unknown[]) ?? [];
         state.asked.push({ path: '/call', member, args });
-        if (!table.has(member))
-            return Response.json({ refused: "That is done in Jason Desktop's own window." }, { status: 403 });
+        if (!table.has(member)) return outsideTheTable();
         const [part, name] = member.split('.') as [string, string];
         const target = (desktop as unknown as Record<string, Record<string, (...a: unknown[]) => unknown>>)[part]![
             name
