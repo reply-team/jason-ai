@@ -179,8 +179,15 @@ it can reach nothing outside its process: a message approved in the demo is answ
 Choosing it writes the mode and starts the desktop again on the demo; while the sample is made the window says it is
 being prepared, which takes a moment the first time. In the demo a strip heads every screen: the data is sample, nothing
 in it is real and nothing is sent to anyone, with a **Demo** and a **Live** button, and **Live**, or **Back to Your Own
-Installation** in the tray and the Jason menu, takes you back to your own installation. **Start the demo over** removes
-the demo's two folders and makes the sample again, so what you did in it is gone and the story moves from its start.
+Installation** in the tray and the Jason menu, takes you back to your own installation. **Start the Demo Over**, beside it
+in the same menus, asks once ("Start the demo over?": everything you did in the demo is removed and it starts again from
+the beginning; your own installation is not touched), stops the demo's runtime, leaves a request in your own installation's
+`desktop/` folder and starts the desktop again. The next start carries the request out before anything names the demo's
+directory: it takes each of the demo's two folders out of the demo's name with one rename, deletes the renamed copies as far
+as it can, and then makes and fills the sample again, so what you did in it is gone and the story moves from its start. A
+copy it could not delete is left, marked, and removed by the next start over, by Remove What Jason Placed or by the
+uninstall. If the start cannot carry the request out, it keeps it and opens your own installation, and the next demo start
+tries again.
 
 **What the sample holds.** An invented seller and one project with four campaigns in different states (two running,
 one paused, one a draft), fifty-four invented people at `.example` addresses, twenty-eight messages already approved and
@@ -196,6 +203,9 @@ deleting an account, and connecting or disconnecting a notification channel. Upd
 that going back to your own installation is how to reach it, because each outlasts the run or removes an installation.
 Your AI's own keys and hosts, which are the chat's and not an account of the demo, work as they do in your installation.
 
+**Full access is not offered in the demo.** The mode menu shows it off with "Not in the demo: Full access is for your own
+installation.", and the standing choice does not apply there. <!-- H8: what else the chat's fence refuses in a demo run, written when it lands. -->
+
 **The chat.** The chat works in the demo as anywhere: the AI you connected runs `jason` against the demo installation,
 where it can do no harm to anybody. Nothing is connected for you, and the chat says so as it does in your own
 installation when no AI is. No AI role runs in the demo's runtime: the responder is off and the campaign manager keeps
@@ -204,14 +214,18 @@ fails for lack of one.
 
 **Its two folders.** The demo's data directory and its harness root are each your own with `-demo` after the name, beside
 yours: `~/.jason` gives `~/.jason-demo` and `~/Jason` gives `~/Jason-demo`, whatever `JASON_DATA_DIR` and `Harness:Root`
-name for you. The demo's harness root is set in the demo's own settings file, never inside either data directory. Which
+name for you. The demo's harness root is set in the demo's own settings file, never inside either data directory. It is
+made from your harness root as it stands when the demo is set up, so if you change `Harness:Root` later, Remove What
+Jason Placed and the uninstall take off the `-demo` folder of the new root and the old one stays behind. Each of the two
+folders carries a mark file, `.jason-demo-folder`, written when the desktop makes it: a folder of the same name without the
+mark is never used, written into or removed, and the desktop opens your own installation instead. Which
 installation the desktop runs on is one word, `live` or `demo`, in `<data>/desktop/mode` of your own installation (see
 Its own files, above), and a start is Live unless it says `demo`.
 
 **Quitting and switching.** Quitting a demo run, or switching to Live, stops the demo's runtime first; your own runtime is
 never stopped by either. **Remove What Jason Placed** and the Windows uninstall take the demo's two folders off too,
-the demo's runtime stopped first (see Taking it off, below); so does Start the demo over, which then makes the sample
-again. Removing the two folders is all that removing the demo means.
+the demo's runtime stopped first, and with them any `<folder>.removing-*` copy a start over left beside either, when it
+carries the demo's mark (see Taking it off, below). Removing the two folders is all that removing the demo means.
 
 **From a terminal.** The demo installation is a real installation, so the `jason` command line reaches it by naming its
 data directory: set `JASON_DATA_DIR` to the demo's data directory, and every verb you type then reads and changes the demo
@@ -651,14 +665,14 @@ updater's cache named above. The demo's two folders are not your data: the remov
 - **Windows.** Remove Jason from Installed apps in Settings. The uninstaller stops the runtime the application carries and
   removes nothing when it does not stop, then takes off the PATH command's files that are its own, Open Jason at Login,
   the `jason-desktop://` link registration when it names this application, and the runtime's logon start when that start
-  names this application's `jason`, then the demo's two folders, and names what it leaves.
+  names this application's `jason`, then the demo's two folders and any marked `<folder>.removing-*` copy beside them, and names what it leaves.
 - **macOS and Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   Windows uninstall's steps: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
   Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
   files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
   them. It last takes off the demo's two folders, its data directory and its harness root, which are yours with `-demo`
   after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
-  one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
+  one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It also takes off any `<folder>.removing-*` copy a start over left beside either folder, when that copy carries the mark. If you changed `Harness:Root` since the demo was set up, it takes off the `-demo` folder of the new root, and the old `-demo` folder stays. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
   the application: move Jason.app to the Trash, or `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
 - **On macOS and Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
   Jason.app on macOS, `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason`
