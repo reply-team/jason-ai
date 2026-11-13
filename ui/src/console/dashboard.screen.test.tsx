@@ -249,6 +249,15 @@ describe('the Dashboard', () => {
         expect(part('Interested', 'b')).toBe('–');
         expect(words(dash().querySelector('.dash-categories .bd')!)).toBe('The replies could not be read.');
     });
+
+    it('shows no reply rate when nobody was contacted', async () => {
+        renderConsole({ unread: true });
+        const panel = await open();
+        await settled();
+        dashboard.activity.value = { total: { contacted: 0, replied: 0 }, byCampaign: {} };
+        await waitFor(() => expect(part('Replied', 'b')).toBe('0'));
+        expect(tile(panel, 'Replied').querySelector('.rel')).toBeNull();
+    });
 });
 
 describe('the categories card', () => {
@@ -389,15 +398,6 @@ describe('the period', () => {
         const total = attention.approvals.value.length + attention.questions.value.length;
         choose('year');
         await waitFor(() => expect(part('Needs you', 'b')).toBe(String(total)));
-    });
-
-    it('shows no reply rate when nobody was contacted', async () => {
-        renderConsole({ unread: true });
-        const panel = await open();
-        await settled();
-        dashboard.activity.value = { total: { contacted: 0, replied: 0 }, byCampaign: {} };
-        await waitFor(() => expect(part('Replied', 'b')).toBe('0'));
-        expect(tile(panel, 'Replied').querySelector('.rel')).toBeNull();
     });
 });
 
