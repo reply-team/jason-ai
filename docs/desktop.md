@@ -171,14 +171,19 @@ lists each key and each card's grant.
 The top bar has an **Open in** split button, in your own installation and in [the demo](#the-demo) alike. Its main part
 opens a folder in the place you used last, and its arrow lists every place available on this computer:
 
-- **Editors** that are installed: VS Code, Cursor, Antigravity, Windsurf and Zed, each found by its registered handler or
-  command on your system. One that is not installed is not listed.
+- **Editors** that are installed: VS Code, Cursor, Antigravity, Windsurf and Zed, each found the way your system
+  installs it: on Windows its program under your or the machine's programs folder, or beside the folder of a command on the
+  PATH; on macOS its application in an Applications folder, else a command on the PATH; on Linux a command on the PATH. One
+  that is not found is not listed.
 - **Claude Code** and **Codex**, each as a new session in a terminal window, for the hosts the desktop already finds.
 - **A plain terminal**, in a new window.
-- **The file manager**, and **Copy path**, which puts the folder's path on the clipboard.
+- **The file manager** (File Explorer on Windows, Finder on macOS), and **Copy path**, which puts the folder's path on the
+  clipboard.
 
-**The default** is Claude Code, until you use another place; the place you used last then becomes the default. The desktop
-keeps it in its own settings, in the data directory of the installation it runs on, and never in the window or in your folders.
+**The default** is Claude Code, until you use another place; the place you used last, if it is still available, then becomes
+the default. Copy path is never the default, and a terminal is always there if nothing else is. The desktop keeps the choice
+in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
+your folders.
 
 **Which folder opens.** The campaign's own folder, the one the installation records for it, only while that campaign's chat is in
 front; otherwise the harness root, and the desktop starts the command line with the harness root as its working folder. In the demo these are the demo's folders, and a terminal opened there works with the demo's data,
@@ -190,7 +195,14 @@ entries run `jason session open` on the folder, with the environment of the inst
 a terminal works with the demo's data; no first input is sent to the host, so the session is yours to begin. Typed by hand,
 the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). In the demo, an editor is started with
 your own environment, not the demo's, and the desktop says so after one opens: an editor's own terminal may work with
-your own installation, not the demo.
+your own installation, not the demo. A successful open says "Opened {folder} in {place}.", with "Jason there works with the
+same data as this window." after a terminal, and in your own installation after an editor or the file manager too; Copy
+path says "Copied the path of {folder}.". In the demo the menu also says "Opens the demo's own folder. A terminal there
+works with the demo's data."
+
+Two folders are refused for the file manager with a sentence that points to Copy path: on Windows one whose path holds a
+comma, which File Explorer reads as a separator, and on macOS one named like an application, which could be started rather
+than shown.
 
 **What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
 and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
