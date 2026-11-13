@@ -28,7 +28,7 @@ export type DesktopFeedKind =
     | 'campaign_archived'
     | 'workitem_succeeded';
 
-/** The operations whose success the Feed shows, as a send that went out. */
+/** The operations whose success the Feed shows, as a send the provider took. */
 export type DesktopFeedOperation = 'message.send' | 'conversation.reply' | 'social_invitation.send';
 
 /** The shipped roles whose finished work the Feed shows. */

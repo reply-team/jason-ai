@@ -195,7 +195,7 @@ desktop does not narrow, so it may read the records.
   `decision_raised`, `campaign_created`, `campaign_started`, `campaign_paused`, `workitem_failed`, `workitem_expired`,
   `provider_blocked`, `approval_approved`, `approval_rejected`, `decision_answered` and `campaign_archived`, each a kind
   the runtime writes itself (a test reads them from the runtime's source), and `workitem_succeeded` for two things alone:
-  a send that went out (the operation `message.send`, `conversation.reply` or `social_invitation.send`) and the finished
+  a send the provider took (sent or scheduled; the operation `message.send`, `conversation.reply` or `social_invitation.send`) and the finished
   work of a role that is shipped and shown (`planner`, `researcher`, `copywriter`, `analyst` or
   `deliverability-specialist`; not the manager and the responder, whose results already reach the Feed as approvals,
   questions and sends, nor the personalizer and the critic, which work message by message). The desktop checks each line
