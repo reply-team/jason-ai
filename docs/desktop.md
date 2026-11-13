@@ -252,7 +252,7 @@ a tab the desktop opened shows the chat; any other tab's Chat screen says how to
 not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
 `127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
 which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is
-still answered in this window." The runtime gains no route for it and knows nothing of it; its page may connect to a port on
+still answered in this window." The runtime gains no route for it and knows nothing of it; its page may connect to any port on
 `127.0.0.1`, which is how the tab reaches the desktop. Browser is offered in your own installation and in the demo alike.
 
 ## The demo
