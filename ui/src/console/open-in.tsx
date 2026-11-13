@@ -163,6 +163,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                             place.id === 'terminal' ? t('openIn.terminal') : undefined,
                         ),
                     )}
+                    {mode.value === 'demo' && <div className="open-in-note">{t('openIn.demoNote')}</div>}
                 </div>
             )}
         </div>

@@ -123,6 +123,7 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
             '',
             '',
             '',
+            ...(kept === 'demo' ? ['open-in-note'] : []),
         ]);
         expect(within(menu()).getByText('Agents')).not.toBeNull();
         expect(within(menu()).getByText('Editors')).not.toBeNull();
@@ -177,6 +178,16 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(opens(desktop)[0]!.args).toEqual(['copy', undefined]);
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(1));
         expect(mainPart().textContent).toBe('Open in Claude Code');
+    });
+
+    it('carries our note in the demo’s menu, and none in Live', async () => {
+        await renderConsole(kept);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(arrow());
+        const note = menu().querySelector('.open-in-note');
+        if (kept === 'demo')
+            expect(note?.textContent).toBe("Opens the demo's own folder. A terminal there works with the demo's data.");
+        else expect(note).toBeNull();
     });
 
     it('says what was opened after it opens, and that Jason there works with the same data where that is true', async () => {

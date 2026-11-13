@@ -52,6 +52,7 @@ export const en = {
     'openIn.session': 'A new session in a terminal',
     'openIn.terminal': 'New terminal',
     'openIn.copy': 'Copy path',
+    'openIn.demoNote': "Opens the demo's own folder. A terminal there works with the demo's data.",
     'openIn.opened': 'Opened {folder} in {place}.',
     'openIn.sameData': 'Jason there works with the same data as this window.',
     'openIn.copied': 'Copied the path of {folder}.',
