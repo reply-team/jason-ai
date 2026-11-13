@@ -29,7 +29,8 @@ import {
     type PlacingOutcome,
 } from '../src/demo-archive.ts';
 import { claimDemoFolder, demoMarkerName, demoMarkerText, hasDemoMarker, markPlacedFolder } from '../src/demo-folders.ts';
-import { asideMarker, carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, importedBy, leftByAMaking, leftByAPlacing, placingInFlight, requestStartOver } from '../src/demo-over.ts';
+import { asideMarker, carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, importedBy, leftByAMaking, leftByAPlacing, leftRuntimeStops, placingInFlight, requestStartOver } from '../src/demo-over.ts';
+import { stopDemoRuntime, stopLeftDemoRuntime } from '../src/demo-runtime.ts';
 import { cliAt } from '../src/cli.ts';
 import { markerPath, readMarker, type DemoPlaces } from '../src/demo-seed.ts';
 import { fileLines, LogHold } from '../src/log.ts';
@@ -643,4 +644,92 @@ test('a root the import made that cannot be removed is left marked, and a later 
     requestStartOver(w.request, 4242);
     carry();
     assert.deepEqual(readdirSync(w.root).filter((name) => name.includes(asideMarker)), []);
+});
+
+/**
+ * A demo runtime that a crashed making or placing left running: the run that asked has gone and so has the import, and
+ * the runtime the import started (or the making's own) still runs on the demo's data directory, holding the carry-out back.
+ */
+function leftRunning(t: { after(fn: () => void): void }, placing: boolean) {
+    const w = world(t);
+    claimDemoFolder(w.places.data);
+    claimDemoFolder(w.places.harnessRoot);
+    requestStartOver(w.request, 4242, true, placing, placing ? 5150 : null);
+    return w;
+}
+
+test('a demo runtime a crashed placing or making left is stopped, and the start over carried out after it; never while either still runs', async (t) => {
+    for (const placing of [true, false]) {
+        const w = leftRunning(t, placing);
+        let alive = true;
+        const carry = () => carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => alive, exists: existsSync, marked: hasDemoMarker });
+        assert.throws(carry, (error: unknown) => error instanceof CarryOutRefused && error.reason === 'runtime_alive');
+        const text = readFileSync(w.request, 'utf8');
+        assert.equal(leftRuntimeStops(text, 1, () => false), true);
+        const acts: string[] = [];
+        const outcome = await stopLeftDemoRuntime({
+            stop: async () => (acts.push('stop'), (alive = false), { kind: 'stopped' }),
+            startAgain: () => acts.push('start again'),
+            refuse: () => acts.push('refuse'),
+        });
+        assert.equal(outcome, 'started-again');
+        assert.deepEqual(acts, ['stop', 'start again']);
+        // The start after it carries the request out.
+        carry();
+        assert.equal(existsSync(w.places.data) || existsSync(w.places.harnessRoot) || existsSync(w.request), false);
+    }
+    // Not while the run that asked, or its import, still runs; not for Start the Demo Over's own request; not for none.
+    const w = leftRunning(t, true);
+    const text = readFileSync(w.request, 'utf8');
+    assert.equal(leftRuntimeStops(text, 1, (pid) => pid === 4242), false);
+    assert.equal(leftRuntimeStops(text, 1, (pid) => pid === 5150), false);
+    assert.equal(leftRuntimeStops('pid=4242\n', 1, () => false), false);
+    assert.equal(leftRuntimeStops(null, 1, () => false), false);
+});
+
+test('a left demo runtime that cannot be stopped refuses as before: nothing is started again and the request stays', async (t) => {
+    const w = leftRunning(t, true);
+    for (const stop of [async () => ({ kind: 'failed', exit: 1 }) as const, async () => ({ kind: 'another' }) as const, async () => Promise.reject(new Error('x'))]) {
+        const acts: string[] = [];
+        const outcome = await stopLeftDemoRuntime({ stop, startAgain: () => acts.push('start again'), refuse: () => acts.push('refuse') });
+        assert.equal(outcome, 'refused');
+        assert.deepEqual(acts, ['refuse']);
+    }
+    assert.ok(existsSync(w.request) && existsSync(w.places.data) && existsSync(w.places.harnessRoot));
+});
+
+test('the stop of a left demo runtime asks the demo’s own runtime and never the person’s', async (t) => {
+    const root = scratch(t);
+    const person = join(root, '.jason');
+    const demo = join(root, '.jason-demo');
+    const executable = join(root, 'bundle', 'jason');
+    mkdirSync(join(root, 'bundle'));
+    writeFileSync(executable, '');
+    // Both installations have a runtime running from the carried jason.
+    for (const [data, instance] of [[person, 'ins_person'], [demo, 'ins_demo']] as const) {
+        mkdirSync(join(data, 'run'), { recursive: true });
+        writeFileSync(join(data, 'run', 'runtime.json'), JSON.stringify({ pid: process.pid, instance_id: instance, installed_image: executable }));
+    }
+    const asked: { data: string | undefined; args: readonly string[] }[] = [];
+    let demoUp = true;
+    const cliFor = (_file: string, env: Record<string, string>): Cli => ({
+        async run(args) {
+            asked.push({ data: env.JASON_DATA_DIR, args });
+            if (args[1] === 'stop') {
+                demoUp = false;
+                rmSync(join(demo, 'run', 'runtime.json'));
+                return { exit: 0, stdout: '{}', stderr: '' };
+            }
+            return { exit: 0, stdout: JSON.stringify({ instance_id: env.JASON_DATA_DIR === demo && demoUp ? 'ins_demo' : 'ins_person' }), stderr: '' };
+        },
+    });
+    const outcome = await stopLeftDemoRuntime({
+        stop: () => stopDemoRuntime({ platform: process.platform, executable, person, env: { JASON_DATA_DIR: person } }, cliFor),
+        startAgain: () => undefined,
+        refuse: () => assert.fail('the demo’s runtime was stopped'),
+    });
+    assert.equal(outcome, 'started-again');
+    assert.ok(asked.some((ask) => ask.args.join(' ') === 'runtime stop'));
+    assert.deepEqual([...new Set(asked.map((ask) => ask.data))], [demo], 'every verb ran on the demo’s data directory');
+    assert.ok(existsSync(join(person, 'run', 'runtime.json')), 'the person’s runtime is as it was');
 });

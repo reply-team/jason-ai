@@ -40,11 +40,11 @@ import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bri
 import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, placingInFlight, requestStartOver } from './demo-over.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftRuntimeStops, placingInFlight, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
 import { processIsRunning } from './own-runtime.ts';
 import { applyMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterRun, keepFirstStart, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
-import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
+import { holdDemoQuit, stopDemoRuntime, stopLeftDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
 import { claimDemoFolder, hasDemoMarker, markPlacedFolder } from './demo-folders.ts';
 import { beginPlacing, clearPlaced, demoArchiveOf, placingPlan, placingWords, projectsWhole, settlePlacing, writeSampleWhole, type PlacingOutcome, type PlacingPlan } from './demo-archive.ts';
@@ -867,6 +867,8 @@ let pathReadAtStart: Promise<string> | null = null;
 let prepareLive: (demo: string) => void = () => undefined;
 /** The desktop's log, held while the prepared demo is placed: `<data>/logs/` is a part an import places. */
 const logHold = new LogHold();
+/** Whether this start only stops a demo runtime a crashed making or placing left, and starts again (`stopLeftDemoRuntime`). */
+let leftDemoRuntime = false;
 /** Why the start over the run before asked for was not carried out at this start, as a code; null when nothing was refused. */
 let startOverNotCarriedOut: string | null = null;
 let installationWasNew!: boolean;
@@ -916,12 +918,20 @@ function chooseInstallation(installerStart: boolean): void {
                 marked: hasDemoMarker,
             });
         } catch (error) {
-            refused = true;
-            startOverNotCarriedOut = error instanceof CarryOutRefused ? error.reason : 'failed';
-            try {
-                writeMode(desktopPaths(personDirectory).mode, 'live');
-            } catch {
-                // The record stays as it was; this start is the person's all the same.
+            // A demo runtime that a crashed making or placing left is the one thing holding the request back, and nothing
+            // else would ever stop it: this start stays on the demo, opens no window, stops it and starts again
+            // (`stopLeftDemoRuntime`). Any other refusal makes this start the person's own.
+            const reason = error instanceof CarryOutRefused ? error.reason : 'failed';
+            if (reason === 'runtime_alive' && leftRuntimeStops(readText(desktopPaths(personDirectory).demoStartOver), process.pid, processIsRunning)) {
+                leftDemoRuntime = true;
+            } else {
+                refused = true;
+                startOverNotCarriedOut = reason;
+                try {
+                    writeMode(desktopPaths(personDirectory).mode, 'live');
+                } catch {
+                    // The record stays as it was; this start is the person's all the same.
+                }
             }
         }
     }
@@ -984,6 +994,10 @@ function startDesktop(): void {
         void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
     } else if (!app.requestSingleInstanceLock(fromArgs.kind === 'link' ? { link: fromArgs.raw } : undefined)) {
         app.quit();
+    } else if (leftDemoRuntime) {
+        // The demo's instance lock is held, so no demo run is open; the runtime a crashed making or placing left is
+        // stopped through the demo's own stop, and the desktop starts again, which carries the request out.
+        void app.whenReady().then(() => stopLeftRuntimeAndStart(startLog()));
     } else {
         // The prepared demo is placed from here, the first instant this start is the only one, beside the window's own
         // start and before this start's log is opened (`demo-archive.ts`).
@@ -1042,5 +1056,43 @@ function beginDemoPlacement(): Promise<PlacingOutcome> | null {
         // Then the import's own process, which may outlive this run: a start while it still writes waits for it (`importedBy`).
         spawned: (pid) => requestStartOver(request, process.pid, true, true, pid),
         hold: () => logHold.hold(),
+    });
+}
+
+/**
+ * The start that only stops the demo runtime a crashed making or placing left (`leftDemoRuntime`): the demo's own stop,
+ * by the demo's run file with the jason this application carries, never the person's runtime; then the desktop starts
+ * again on the demo. A stop that fails refuses as a carry-out refuses: the record set to Live, the person told, and the
+ * desktop started again on their own installation, the request kept for the next demo start.
+ */
+async function stopLeftRuntimeAndStart(log: Logger): Promise<void> {
+    const form = linuxForm();
+    const packaged = bundleDirectory();
+    const executable = join(carriedOf({ form, packaged, version: bundleVersion(packaged), bundles: desktopPaths(runOn.data).bundle }).bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
+    const env = withoutMount(withPath(process.env, process.env.PATH ?? ''), mountOf(form, process.env));
+    const again = () =>
+        relaunchAsPerson({
+            env: process.env,
+            person: personEnvironment,
+            relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
+            quit: () => app.quit(),
+        });
+    await stopLeftDemoRuntime({
+        stop: async () => {
+            const outcome = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
+            log.info('demo_runtime_stopped', { Outcome: outcome.kind });
+            return outcome;
+        },
+        startAgain: again,
+        refuse: () => {
+            log.warn('demo_start_over_not_carried_out', { Cause: 'runtime_alive' });
+            try {
+                writeMode(desktopPaths(runOn.person).mode, 'live');
+            } catch {
+                // The record stays as it was.
+            }
+            dialog.showErrorBox('Jason', demoUnopened);
+            again();
+        },
     });
 }

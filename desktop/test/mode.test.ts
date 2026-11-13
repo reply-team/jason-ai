@@ -216,6 +216,21 @@ test('the prepared demo is placed from the first instant a start is the only one
     assert.ok(choose.indexOf('carryOutStartOver({') < choose.indexOf('demoPlacing ='), 'a start over is carried out first, so the plan sees the folders it left');
 });
 
+test('a start that finds a demo runtime a crashed making or placing left stops it through the demo’s own stop and starts again', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    const caught = choose.indexOf('} catch (error) {', choose.indexOf('carryOutStartOver({'));
+    const left = choose.indexOf("if (reason === 'runtime_alive' && leftRuntimeStops(readText(desktopPaths(personDirectory).demoStartOver), process.pid, processIsRunning)) {");
+    assert.ok(caught > 0 && left > caught, 'decided on the carry-out’s own refusal');
+    // Only after the demo's instance lock is won, and only the demo's runtime: by the demo's directory, never the person's.
+    const start = main.slice(main.indexOf('function startDesktop('));
+    assert.ok(start.indexOf('} else if (leftDemoRuntime) {') > start.indexOf('app.requestSingleInstanceLock('));
+    const stop = main.slice(main.indexOf('async function stopLeftRuntimeAndStart('));
+    assert.ok(stop.includes('await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });'));
+    assert.equal(stop.includes('stopOwnRuntime('), false, 'the person’s runtime is never asked to stop');
+    assert.ok(stop.includes('bundles: desktopPaths(runOn.data).bundle'), 'with the jason the demo’s runtime runs from');
+});
+
 const noPreparation = { prepare: () => undefined };
 
 test('a new installation’s first start opens on the demo; any other start goes by its record or the default', () => {

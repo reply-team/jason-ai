@@ -104,6 +104,20 @@ export function placingInFlight(text: string | null, self: number, running: (pid
     return (asking !== null && asking !== self && running(asking)) || (importing !== null && running(importing));
 }
 
+/**
+ * Whether a carry-out refused for a live demo runtime alone may stop that runtime first (`stopLeftDemoRuntime`): the
+ * request was left by a making or a placing, and neither the run that left it nor its import still runs, so the runtime
+ * is one a crash or a kill left behind, which nothing else would ever stop. Start the Demo Over's own request stops
+ * nothing here: its run stopped the demo's runtime before it asked.
+ */
+export function leftRuntimeStops(text: string | null, self: number, running: (pid: number) => boolean): boolean {
+    if (text === null || !(leftByAMaking(text) || leftByAPlacing(text))) return false;
+    const asking = askedBy(text);
+    const importing = importedBy(text);
+    if (asking !== null && asking !== self && running(asking)) return false;
+    return importing === null || !running(importing);
+}
+
 /** The process that asked, or null when the text does not say. */
 export function askedBy(text: string): number | null {
     const found = /^pid=(\d+)$/m.exec(text);
