@@ -38,7 +38,7 @@ name: CI
 # main, as a success where a rule skipped it: a skipped job reports success, and a matrix row that is absent would not
 # report at all.
 # A platform is three kinds of job: its package (`<rid> package`), its tests in parts that run side by side
-# (`<rid> tests: <part>`, the whole suite in six parts or the critical tier in one), and its check under the platform's
+# (`<rid> tests: <part>`, the whole suite in eight parts or the critical tier in one), and its check under the platform's
 # own name, which the rulesets require and which is green only when the package and every part of that platform this run
 # made succeeded. The parts' and the package's checks are reported too, and no ruleset requires them.
 # Wherever the suite runs, a test that fails is run again, alone, at most twice, by the test platform's own repeat
@@ -309,16 +309,23 @@ jobs:
           PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest","name":"linux-x64"},{"rid":"win-x64","os":"windows-latest","name":"win-x64"},{"rid":"osx-arm64","os":"macos-latest","name":"osx-arm64"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
           # The parts a platform's tests are run in, each on a runner of its own: the critical tier in one part, and the
-          # whole suite in six, by test project and, for the runtime's tests, by namespace, each namespace with every
-          # namespace inside it. The part marked rest runs every namespace of its projects that no other part names.
+          # whole suite in eight, by test project and, for the runtime's tests, by namespace, each namespace with every
+          # namespace inside it, or by the start of a class's name, with a wildcard after it. A part names namespaces or
+          # classes, never both. A test runs in the one part that names it most closely: the part whose class pattern
+          # matches its class, else the part that names the deepest namespace around it, else the part marked rest, which
+          # names nothing. So the plugins' tests are three parts: the classes of the Reply plugin's tests whose names start
+          # as listed, the rest of that namespace, and the rest of the plugins' namespace; and a class added later lands in
+          # one part without anyone naming it.
           PARTS: >-
-            [{"part":"the critical tier","tier":"true","projects":"","namespaces":"","rest":"false"},
-            {"part":"App","tier":"false","projects":"Jason.App.Tests","namespaces":"","rest":"false"},
-            {"part":"Cli, Contracts and PluginHost","tier":"false","projects":"Jason.Cli.Tests Jason.Contracts.Tests Jason.PluginHost.Tests","namespaces":"","rest":"false"},
-            {"part":"Runtime 1 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Plugins","rest":"false"},
-            {"part":"Runtime 2 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Execution Jason.Runtime.Tests.Dispatch Jason.Runtime.Tests.Hosting Jason.Runtime.Tests.Integration","rest":"false"},
-            {"part":"Runtime 3 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Documentation Jason.Runtime.Tests.Notifications Jason.Runtime.Tests.Routing Jason.Runtime.Tests.Configuration Jason.Runtime.Tests.Profiles Jason.Runtime.Tests.WorkItems","rest":"false"},
-            {"part":"Runtime 4 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"","rest":"true"}]
+            [{"part":"the critical tier","tier":"true","projects":"","namespaces":"","classes":"","rest":"false"},
+            {"part":"App","tier":"false","projects":"Jason.App.Tests","namespaces":"","classes":"","rest":"false"},
+            {"part":"Cli, Contracts and PluginHost","tier":"false","projects":"Jason.Cli.Tests Jason.Contracts.Tests Jason.PluginHost.Tests","namespaces":"","classes":"","rest":"false"},
+            {"part":"Runtime 1 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Plugins","classes":"","rest":"false"},
+            {"part":"Runtime 2 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"","classes":"Jason.Runtime.Tests.Plugins.Reply.ReplyMessage* Jason.Runtime.Tests.Plugins.Reply.ReplySocial* Jason.Runtime.Tests.Plugins.Reply.ReplyStub*","rest":"false"},
+            {"part":"Runtime 3 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Plugins.Reply","classes":"","rest":"false"},
+            {"part":"Runtime 4 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Execution Jason.Runtime.Tests.Dispatch Jason.Runtime.Tests.Hosting Jason.Runtime.Tests.Integration","classes":"","rest":"false"},
+            {"part":"Runtime 5 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Documentation Jason.Runtime.Tests.Notifications Jason.Runtime.Tests.Routing Jason.Runtime.Tests.Configuration Jason.Runtime.Tests.Profiles Jason.Runtime.Tests.WorkItems","classes":"","rest":"false"},
+            {"part":"Runtime 6 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"","classes":"","rest":"true"}]
         run: |
           # Documentation is Markdown a build compiles nothing of: outside the C# tree, the workflows and the plugins, a
           # plain file before and after. Read is documentation, run is code: a page a test merely reads (the publication,
@@ -537,15 +544,27 @@ jobs:
           $kept = @($kept | ForEach-Object { @{ rid = $_.rid; os = $_.os; name = $(if ($draft) { "$($_.rid) (critical tier)" } else { $_.rid }) } })
 
           # The test jobs: every platform that runs, in each part of what it tests, the tier's one part or the whole suite's
-          # six. The rest's namespaces to leave out are every namespace another part of the same projects names, so a
-          # namespace added later lands in the rest without anyone naming it.
+          # eight. A part leaves out every name another part of the same projects gives inside what it runs: a part that
+          # names namespaces, each namespace named inside one of its own and each class pattern of a namespace inside or
+          # equal to one of its own; a part that names classes, nothing; the rest, every name the others give. So a test
+          # runs in the one part that names it most closely, and a namespace or a class added later lands in a part
+          # without anyone naming it.
           $parts = @($env:PARTS | ConvertFrom-Json | Where-Object { $_.tier -ceq $(if ($tier) { 'true' } else { 'false' }) })
+          function Names([string] $list) { @($list.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)) }
+          function Within([string] $name, [string] $outer) { $name -ceq $outer -or $name.StartsWith("$outer.", [StringComparison]::Ordinal) }
           $tests = @(foreach ($platform in $kept) {
             foreach ($part in $parts) {
-              $others = if ($part.rest -ceq 'true') {
-                @($parts | Where-Object { $_.rest -cne 'true' -and $_.projects -ceq $part.projects } | ForEach-Object { "$($_.namespaces)".Split(' ', [StringSplitOptions]::RemoveEmptyEntries) })
-              } else { @() }
-              [ordered] @{ rid = $platform.rid; os = $platform.os; part = $part.part; projects = $part.projects; namespaces = $part.namespaces; not_namespaces = ($others -join ' ') }
+              $rest = $part.rest -ceq 'true'
+              $holds = Names $part.namespaces
+              $others = @($parts | Where-Object { $_.part -cne $part.part -and $_.projects -ceq $part.projects })
+              $notNamespaces = @(foreach ($name in @($others | ForEach-Object { Names $_.namespaces })) {
+                if ($rest -or @($holds | Where-Object { $name -cne $_ -and (Within $name $_) }).Count -gt 0) { $name }
+              })
+              $notClasses = @(foreach ($pattern in @($others | ForEach-Object { Names $_.classes })) {
+                $space = $pattern.Substring(0, $pattern.LastIndexOf('.'))
+                if ($rest -or @($holds | Where-Object { Within $space $_ }).Count -gt 0) { $pattern }
+              })
+              [ordered] @{ rid = $platform.rid; os = $platform.os; part = $part.part; projects = $part.projects; namespaces = $part.namespaces; classes = $part.classes; not_namespaces = ($notNamespaces -join ' '); not_classes = ($notClasses -join ' ') }
             }
           })
 
@@ -921,8 +940,9 @@ jobs:
 
   # A platform's tests, in parts that run side by side, each on a runner of its own, each building the tree as the package
   # does: the version job decides the parts (PARTS, beside the platforms), and every part of a platform together is the
-  # whole suite. Runtime's tests are four parts by namespace, the fourth everything the first three do not name, so a new
-  # namespace lands there; App's are a part alone; Cli's, Contracts' and PluginHost's are one part together. A draft's
+  # whole suite, each test in one part. Runtime's tests are six parts by namespace and by the start of a class's name, the
+  # plugins' tests three of them, and the sixth everything the first five do not name, so a new namespace lands there
+  # unless a part names one around it; App's are a part alone; Cli's, Contracts' and PluginHost's are one part together. A draft's
   # push, a pull request into a release branch and the version pull request test the critical tier alone, as one part.
   # A test that fails is run again, alone, at most twice: one that passes on a repeat keeps its part green and is named on
   # the run's summary, and one that fails every attempt fails its part (.github/scripts/Invoke-Tests.ps1).
@@ -981,7 +1001,9 @@ jobs:
           PROJECTS: ${{ matrix.projects }}
           NAMESPACES: ${{ matrix.namespaces }}
           NOT_NAMESPACES: ${{ matrix.not_namespaces }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE
+          CLASSES: ${{ matrix.classes }}
+          NOT_CLASSES: ${{ matrix.not_classes }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE
 
       - name: Test the critical tier (offline)
         if: needs.version.outputs.tier == 'true'
@@ -992,7 +1014,9 @@ jobs:
           PROJECTS: ${{ matrix.projects }}
           NAMESPACES: ${{ matrix.namespaces }}
           NOT_NAMESPACES: ${{ matrix.not_namespaces }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
+          CLASSES: ${{ matrix.classes }}
+          NOT_CLASSES: ${{ matrix.not_classes }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
 
   # The manifest declares consoleAllocationPolicy, which Windows 11 24H2 (build 26100) introduced. A loader that
   # rejected a manifest carrying a setting it does not know would not start jason.exe at all, and every other Windows

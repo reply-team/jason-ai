@@ -355,6 +355,23 @@ that is not that attempt does not call them.
   verdicts do. The line then names the decision as `decision_id` and the person as `answered_by`, their actor; both are
   null where no decision is named.
   `jason reply record` sends it, and `--decision` names the question.
+- `reply.count`: how many replies roles have judged, by the category word each verdict names, for each campaign asked
+  and in total. It counts verdicts, not replies as they arrive: a reply nobody has judged yet is not in it, and the
+  category is the skills' word, which the runtime counts as written and never interprets. So its `replies` is not
+  `campaign.activity`'s `replied`, which counts people by their first reply, and the two are not to be compared.
+  The request names `campaign_ids`, or none for every campaign not archived, as `campaign.activity` does; an archived
+  campaign named is counted. `since`, included, and `until`, not included, are both required and are held to each
+  reply's own `message_at`, to the millisecond, never to the moment the verdict was recorded: two windows that meet count
+  every reply once between them, and a reply judged days later counts in the window it arrived in. One reply is one
+  message of one thread of one plugin in one campaign, counted once, under the latest verdict recorded on it there; a
+  reply whose person has since been removed from the campaign is counted all the same. A row carries the campaign's
+  `replies`, its `threads` — the conversations, a plugin and a thread together, that hold at least one reply counted —
+  and `categories`, one entry per word with its own `replies` and `threads`. Every reply counted is under exactly one
+  word, so the categories' `replies` add up to the row's. Their `threads` need not: one conversation holding replies of
+  two categories is a thread of each, and one thread of the campaign. The entries are listed by `replies`, most first,
+  then by the word in ordinal order. `total` adds the campaigns' rows up, a conversation counted in
+  each campaign whose verdicts name it. A window that ends before it starts is `validation_failed`, and a campaign
+  that does not exist `campaign_not_found`. `jason reply count` sends it.
 
 ### `report`
 
@@ -469,6 +486,7 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 - **People**: `contact.list` and `contact.get`, with a contact's channels and custom fields; `contact.threads` and
   `contact.thread` for their conversations, read from the provider when asked and kept nowhere.
 - **Work**: `workitem.list`, `workitem.get` and `workitem.count`.
+- **Replies judged**: `reply.count`, the verdicts roles recorded on replies, counted by category over a window.
 - **What waits for a person**: `approval.list` and `approval.get` for work that reaches a real person and waits for a
   person's approval, `decision.list` and `decision.get` for the questions roles have asked.
 - **Blocks**: `block.list` and `block.get`, for what a provider said it refuses until a person clears the cause.

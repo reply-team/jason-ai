@@ -384,6 +384,7 @@ public class DefaultActorTests
         ["decision", "get", "dec_A"],
         ["decision", "raise", "wi_A", "--attempt", "att_A", "--question", "Which tone?"],
         ["reply", "record", "cmp_A", "--plugin", "mailbox", "--thread", "thr_A", "--message", "msg_A", "--message-at", "2026-10-12T00:00:00Z", "--category", "interested", "--confidence", "0.9", "--reaction", "draft"],
+        ["reply", "count", "cmp_A", "--since", "2026-10-12T00:00:00Z", "--until", "2026-10-13T00:00:00Z"],
         ["report", "get", "rpt_A"],
         ["report", "list"],
         ["journal", "append", "cmp_A", "--kind", "observation"],

@@ -5,7 +5,8 @@ using Jason.Contracts.Api;
 namespace Jason.Cli.Commands;
 
 /// <summary>
-/// The <c>reply</c> verb group: a role's verdict on one reply it read, recorded as a line of the campaign's chronicle.
+/// The <c>reply</c> verb group: a role's verdict on one reply it read, recorded as a line of the campaign's chronicle,
+/// and the verdicts counted by their category over a window.
 /// The verdict names the reply by the provider's identifiers and never carries a word of it.
 /// </summary>
 public static class ReplyCommands
@@ -17,8 +18,9 @@ public static class ReplyCommands
 
         // The noun is read from the operation it stands for: the bare word is also a vendor's name, which the runtime's
         // vendor-neutrality guard refuses as a literal anywhere in the sources, and the verb map is one-to-one anyway.
-        var reply = new Command(Operations.ReplyRecord[..Operations.ReplyRecord.IndexOf('.', StringComparison.Ordinal)], "Record a verdict on a reply: what kind it is, how sure, what to do about it and which goal it steers to.");
+        var reply = new Command(Operations.ReplyRecord[..Operations.ReplyRecord.IndexOf('.', StringComparison.Ordinal)], "Verdicts on replies: record one, what kind of reply it is, how sure, what to do about it and which goal it steers to; or count the judged replies by category.");
         reply.Subcommands.Add(Record(env, actor));
+        reply.Subcommands.Add(Count(env, actor));
         return reply;
     }
 
@@ -88,6 +90,38 @@ public static class ReplyCommands
 
             return OperationRunner.RunAsync(
                 env, Operations.ReplyRecord, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.Entry), cancellationToken);
+        });
+
+        return command;
+    }
+
+    private static Command Count(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "count",
+            "How many replies roles have judged in a window, by the category word each verdict names, per campaign and in total, "
+            + "and in how many threads. A reply is counted under its latest verdict and dated by its own moment; a reply nobody has "
+            + "judged is not counted, so this is not campaign activity's replied.");
+        var ids = CampaignCommands.CampaignIds();
+        var since = VerbOptions.Moment("--since", "The window's start, included, as ISO-8601 UTC, or now.");
+        since.Required = true;
+        var until = VerbOptions.Moment("--until", "The window's end, not included, as ISO-8601 UTC, or now.");
+        until.Required = true;
+        var human = VerbOptions.Human();
+        command.Arguments.Add(ids);
+        command.Options.Add(since);
+        command.Options.Add(until);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
+            var body = RequestBody.Empty()
+                .Set("campaign_ids", CampaignCommands.Ids(parseResult.GetValue(ids)))
+                .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
+                .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System));
+            return OperationRunner.RunAsync(
+                env, Operations.ReplyCount, body, CampaignCommands.Named(env, parseResult.GetValue(human), ReplyRenderers.Count), cancellationToken);
         });
 
         return command;
