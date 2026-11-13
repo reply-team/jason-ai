@@ -137,6 +137,7 @@ export async function askFeed(): Promise<void> {
 
 /** The stream started afresh, after a resume the runtime refused: the desktop reads back what the page missed. */
 export function catchUpFeed(): void {
+    if (inTab()) return;
     here()
         .desktop.chat.feed([], { catchUp: true })
         .catch(() => undefined);
@@ -144,6 +145,7 @@ export function catchUpFeed(): void {
 
 /** Hands the desktop a line of the journal's stream when the Feed takes its kind; the desktop checks it again. */
 export function handLine(line: JournalEntry): void {
+    if (inTab()) return;
     const handed = toFeedLine(line);
     if (handed === null) return;
     here()
@@ -217,6 +219,7 @@ async function newChatHost(): Promise<string | undefined> {
 
 /** The take-back in the mode menu: the desktop forgets the standing choice; the chat stays in the mode it is in. */
 export function takeBackChoice(id: string): void {
+    if (inTab()) return;
     takeBackStanding(here().desktop)
         .then((refused) => {
             if (refused !== null) changeChat(id, (chat) => told(chat, refused));
@@ -238,6 +241,7 @@ export async function openConversation(id: string): Promise<string | null> {
 
 /** "Start afresh": the desktop drops the hosts' sessions and keeps the conversation; a refusal is said in the chat. */
 export function restartChat(id: string): void {
+    if (inTab()) return;
     here()
         .desktop.chat.restart(id)
         .then((answer) => {
@@ -271,6 +275,7 @@ export function renameChat(id: string, title: string): void {
  * chat in the desktop's words.
  */
 export function chooseMode(id: string, mode: DesktopChatMode): void {
+    if (inTab()) return;
     const chat = chats.value[id];
     if (!chat) return;
     // A change to a narrower mode while a turn runs stops that turn, as Stop does: leaving Full access, leaving Auto-edit
@@ -294,6 +299,7 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
  * reload or a restart, finds no card to approve. A refusal is said in the chat in the desktop's words, and nothing is sent.
  */
 export function approvePlan(id: string): void {
+    if (inTab()) return;
     const chat = chats.value[id];
     const host = chat ? hostOf(chat) : null;
     if (!chat || !host || !livePlan(chat, host.id)) return;
@@ -322,6 +328,7 @@ const nameLength = 60;
 
 /** Removes the conversation, asked twice: its tab closes and the list follows; a refusal is said in the chat. */
 export function removeChat(id: string): void {
+    if (inTab()) return;
     changeChat(id, (chat) => ({ ...chat, removing: false }));
     here()
         .desktop.chat.remove(id)
@@ -356,6 +363,8 @@ export function heldHostOf(chat: Chat): DesktopHost | null {
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
 export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode): void {
+    // A chat in Full access takes no message from a tab, whichever way the message came.
+    if (inTab() && chats.value[id]?.mode === 'full_access') return;
     const chat = chats.value[id];
     const words = text.trim();
     if (!chat || chat.running || !words) return;
@@ -397,6 +406,8 @@ define('chat.suggest', ([id, text]) => {
 });
 
 define('chat.approvePlan', ([id]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id === 'string') approvePlan(id);
 });
 
@@ -412,6 +423,8 @@ define('chat.keepPlanning', ([id], element) => {
 });
 
 define('chat.answer', ([id, request, answer]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string' || typeof request !== 'string') return;
     if (answer !== 'allow' && answer !== 'always' && answer !== 'deny') return;
     changeChat(id, (chat) => answered(chat, request, answer));
@@ -421,15 +434,21 @@ define('chat.answer', ([id, request, answer]) => {
 });
 
 define('feed.campaign', ([id]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string') return;
     const name = campaigns.value.find((each) => each.id === id)?.name ?? id;
     here().dock.chat({ id, name });
 });
 
-define('feed.needs', () => here().dock.show('needs'));
+define('feed.needs', () => {
+    if (!inTab()) here().dock.show('needs');
+});
 
 /** The Open folder button of the notice that says a Full access folder is kept: the desktop opens that folder alone. */
 define('chat.openFolder', ([id, name]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string' || typeof name !== 'string') return;
     here()
         .desktop.chat.openFolder(name)
@@ -440,6 +459,8 @@ define('chat.openFolder', ([id, name]) => {
 });
 
 define('chat.attach', ([id, campaignId]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string' || typeof campaignId !== 'string') return;
     here()
         .desktop.chat.attach(id, campaignId)

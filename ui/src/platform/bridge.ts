@@ -41,6 +41,9 @@ export interface BridgePair {
     secret: string;
 }
 
+/** The longest wait before the event stream is opened again. */
+const maxWaitMs = 30_000;
+
 type Listener = (...args: never[]) => void;
 type Fetch = typeof fetch;
 
@@ -49,6 +52,8 @@ export class Bridge {
     private readonly listeners = new Map<string, Set<Listener>>();
     private readonly reopened = new Set<() => void>();
     private closed = false;
+    private failures = 0;
+    private cut = false;
     private stream: AbortController | null = null;
 
     constructor(
@@ -133,39 +138,57 @@ export class Bridge {
         this.stream = null;
     }
 
-    /** Reads the bridge's event lines until closed; a line is `{channel, args}`, a heartbeat is skipped. */
+    /**
+     * Reads the bridge's event lines until closed; a line is `{channel, args}`, a heartbeat is skipped. A stream that
+     * ends, or cannot be opened, is opened again after a wait that doubles with each failure, from the first wait up to
+     * thirty seconds, and starts over after a stream that worked; a 401 ends it for good and lets the pair go.
+     */
     private async listen(): Promise<void> {
         if (this.stream) return;
         const stream = (this.stream = new AbortController());
+        let worked = false;
         try {
             const response = await this.doFetch(`${this.base}/events`, {
                 headers: { authorization: `Bearer ${this.pair.secret}` },
                 signal: stream.signal,
             });
-            if (!response.ok || !response.body) return;
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let rest = '';
-            for (;;) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                rest += decoder.decode(value, { stream: true });
-                const lines = rest.split('\n');
-                rest = lines.pop() ?? '';
-                for (const line of lines) this.deliver(line);
+            if (response.status === 401) {
+                this.closed = true;
+                this.onGone();
+                return;
+            }
+            if (response.ok && response.body) {
+                worked = true;
+                this.failures = 0;
+                // A stream that was cut and is open again: what the tab drew may be behind.
+                if (this.cut) {
+                    this.cut = false;
+                    for (const handler of this.reopened) handler();
+                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let rest = '';
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    rest += decoder.decode(value, { stream: true });
+                    const lines = rest.split('\n');
+                    rest = lines.pop() ?? '';
+                    for (const line of lines) this.deliver(line);
+                }
             }
         } catch {
             // A closed or broken stream ends the events; the tab opens again to read the conversation anew.
         } finally {
             if (this.stream === stream) this.stream = null;
         }
-        // The bridge ended the stream (a full queue, or a second stream): open it again and say so.
-        if (!stream.signal.aborted && !this.closed && [...this.listeners.values()].some((each) => each.size > 0)) {
-            await new Promise((resolve) => setTimeout(resolve, this.reopenAfterMs));
-            if (this.closed || this.stream) return;
-            void this.listen();
-            for (const handler of this.reopened) handler();
-        }
+        if (stream.signal.aborted || this.closed || ![...this.listeners.values()].some((each) => each.size > 0)) return;
+        if (worked) this.cut = true;
+        else this.failures += 1;
+        const wait = Math.min(this.reopenAfterMs * 2 ** Math.max(0, this.failures - 1), maxWaitMs);
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        if (this.closed || this.stream) return;
+        void this.listen();
     }
 
     private deliver(line: string): void {

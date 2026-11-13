@@ -199,3 +199,58 @@ describe('what the bridge answers besides a result', () => {
         expect(events.headers.get('content-type')).toBe('application/x-ndjson');
     });
 });
+
+describe('the event stream that cannot be opened', () => {
+    const subscribed = (fetched: unknown, gone = vi.fn()) => {
+        const bridge = new Bridge(pair, fetched as never, gone, 10);
+        bridge.seam().chat.onEvent(() => undefined);
+        return { bridge, gone };
+    };
+
+    it('lets go of the pair on a 401 and does not try again', async () => {
+        const fetched = vi.fn(async () => new Response('', { status: 401 }));
+        const { gone } = subscribed(fetched);
+        await vi.waitFor(() => expect(gone).toHaveBeenCalledTimes(1));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        expect(fetched).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits longer after each failure, up to a limit, and does not read the chats anew while it fails', async () => {
+        const stamps: number[] = [];
+        const fetched = vi.fn(async () => {
+            stamps.push(Date.now());
+            return new Response('', { status: 500 });
+        });
+        const { bridge } = subscribed(fetched);
+        const reread = vi.fn();
+        bridge.onReopen(reread);
+        await vi.waitFor(() => expect(stamps.length).toBeGreaterThanOrEqual(4), { timeout: 2000 });
+        bridge.close();
+        const gaps = stamps.slice(1).map((stamp, at) => stamp - stamps[at]!);
+        expect(gaps[1]!).toBeGreaterThan(gaps[0]! * 1.5);
+        expect(gaps[2]!).toBeGreaterThan(gaps[1]! * 1.5);
+        expect(reread).not.toHaveBeenCalled();
+    });
+
+    it('starts the waits over after a stream that worked, and reads the chats anew once it is open again', async () => {
+        const desktop = stubDesktop();
+        const stand = standInBridge(desktop);
+        let fail = 0;
+        const fetched = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).endsWith('/events') && fail > 0) {
+                fail -= 1;
+                return new Response('', { status: 500 });
+            }
+            return stand.fetch(input, init);
+        });
+        const { bridge } = subscribed(fetched);
+        const reread = vi.fn();
+        bridge.onReopen(reread);
+        await vi.waitFor(() => expect(stand.asked.some((each) => each.path === '/events')).toBe(true));
+        fail = 2;
+        stand.end();
+        await vi.waitFor(() => expect(reread).toHaveBeenCalledTimes(1), { timeout: 2000 });
+        expect(stand.asked.filter((each) => each.path === '/events')).toHaveLength(2);
+        bridge.close();
+    });
+});

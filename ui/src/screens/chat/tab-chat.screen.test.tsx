@@ -157,6 +157,51 @@ describe('what a tab never says yes to', () => {
         expect(called('chat.send')).toEqual([]);
     });
 
+    it('sends nothing from a suggestion chip in a Full access chat', async () => {
+        await shown({ mode: 'full_access' });
+        const chip = await waitFor(() => screen.getByRole('button', { name: 'How are my agents doing?' }));
+        fireEvent.click(chip);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(called('chat.send')).toEqual([]);
+    });
+
+    it('sends a suggestion chip in a chat in Ask first', async () => {
+        await shown();
+        fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'How are my agents doing?' })));
+        await waitFor(() => expect(called('chat.send')).toHaveLength(1));
+    });
+
+    it('sends nothing from the outbox of a Full access chat', async () => {
+        await shown({ mode: 'full_access' });
+        flush(() => {
+            chats.value = { ...chats.value, conv_1: { ...chats.value['conv_1']!, outbox: 'queued words' } };
+        });
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(called('chat.send')).toEqual([]);
+    });
+
+    it('calls nothing when a chat.answer, an attach, a plan approval or an open folder is dispatched', async () => {
+        await shown();
+        const root = document.querySelector<HTMLElement>('.tab-chat')!;
+        for (const [action, args] of [
+            ['chat.answer', ['conv_1', 'req_1', 'allow']],
+            ['chat.approvePlan', ['conv_1']],
+            ['chat.attach', ['conv_1', 'cmp_1']],
+            ['chat.openFolder', ['conv_1', 'spring']],
+            ['feed.needs', []],
+        ] as const) {
+            const button = document.createElement('button');
+            button.dataset['action'] = action;
+            button.dataset['args'] = JSON.stringify(args);
+            root.append(button);
+            fireEvent.click(button);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const members = stand.asked.map((each) => each.member);
+        for (const member of ['chat.answer', 'chat.attach', 'chat.openFolder', 'chat.setMode', 'chat.send'])
+            expect(members).not.toContain(member);
+    });
+
     it('calls nothing outside the table on any of it', async () => {
         await shown();
         const outside = stand.asked.filter(
