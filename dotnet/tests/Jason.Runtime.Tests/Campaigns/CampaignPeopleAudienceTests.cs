@@ -61,8 +61,8 @@ public class CampaignPeopleAudienceTests
             var theirs = await CampaignPeople.ByMoment(db, spring, count, CampaignWorld.Since, CampaignWorld.Until, first.Id).ToListAsync(Ct);
             Assert.Equal(whole.Where(person => landed.Contains(person.ContactId)).OrderBy(person => person.ContactId), theirs.OrderBy(person => person.ContactId));
 
-            var moments = await CampaignPeople.MomentsAsync(db, spring, count, CampaignWorld.Since, CampaignWorld.Until, null, Ct);
-            var theirMoments = await CampaignPeople.MomentsAsync(db, spring, count, CampaignWorld.Since, CampaignWorld.Until, first.Id, Ct);
+            var moments = await CampaignPeople.MomentsAsync(db, spring, count, CampaignWorld.Since, CampaignWorld.Until, null, withoutArchived: false, Ct);
+            var theirMoments = await CampaignPeople.MomentsAsync(db, spring, count, CampaignWorld.Since, CampaignWorld.Until, first.Id, withoutArchived: false, Ct);
             Assert.Equal(
                 moments.Where(moment => landed.Contains(moment.ContactId)).OrderBy(moment => moment.ContactId).ThenBy(moment => moment.Ms),
                 theirMoments.OrderBy(moment => moment.ContactId).ThenBy(moment => moment.Ms));
@@ -70,10 +70,10 @@ public class CampaignPeopleAudienceTests
 
         Assert.Equal(
             new ActivityCounts(world.Spring.Id, People: 5, Added: 2, WorkedOn: 2, Contacted: 0, Replied: 1, OptedOut: 0, Removed: 1),
-            Assert.Single(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, first.Id, Ct)).Value);
+            Assert.Single(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, first.Id, withoutArchived: false, Ct)).Value);
         Assert.Equal(
             new ActivityCounts(0, People: 5, Added: 2, WorkedOn: 2, Contacted: 0, Replied: 1, OptedOut: 0, Removed: 1),
-            await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, first.Id, Ct));
+            await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, first.Id, withoutArchived: false, Ct));
     }
 
     /// <summary>An audience nobody landed under counts nobody, in every count, and lists nobody.</summary>
@@ -87,9 +87,9 @@ public class CampaignPeopleAudienceTests
 
         Assert.Empty(await CampaignPeople.SummaryCountsAsync(db, spring, empty.Id, withoutArchived: false, Ct));
         Assert.Equal(new SummaryCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.SummaryTotalAsync(db, spring, empty.Id, withoutArchived: false, Ct));
-        Assert.Empty(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, Ct));
-        Assert.Equal(new ActivityCounts(0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, Ct));
-        Assert.Empty(await CampaignPeople.MomentsAsync(db, spring, CampaignActivityFilter.People, CampaignWorld.Since, CampaignWorld.Until, empty.Id, Ct));
+        Assert.Empty(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
+        Assert.Equal(new ActivityCounts(0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
+        Assert.Empty(await CampaignPeople.MomentsAsync(db, spring, CampaignActivityFilter.People, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
         foreach (var filter in Enum.GetValues<CampaignSummaryFilter>())
         {
             Assert.Empty(await CampaignPeople.Matching(db, spring, filter, empty.Id).ToListAsync(Ct));

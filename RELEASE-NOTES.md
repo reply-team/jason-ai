@@ -23,7 +23,7 @@ replaces the title and the body together.
 
 ## What is new since 0.37.0
 
-This release lets one campaign send each channel through the plugin that suits it, and gives the desktop's chat and its page the controls people asked for: Full access answered once, Auto-edit, a plan card, an Accounts page, and an approval card that shows the message as written.
+This release lets one campaign send each channel through the plugin that suits it, and gives the desktop's chat and its page the controls people asked for: Full access answered once, Auto-edit, a plan card, an Accounts page, and an approval card that shows the message as written; and it makes the desktop's Feed say what was decided and what was done, finds people by what their custom fields hold, and lets a campaign's counts and its list of people leave archived people out, as its summary already could.
 
 - **A campaign can send email through one plugin and LinkedIn messages through another.** A route may now name a channel under an operation, for `message.send`, `conversation.reply` and the `sender.list` filter: `jason route set --campaign <id> --operation message.send --channel linkedin ...`, or `Channels` under the operation's entry in `Routes:Operations` in `settings.json`. A channel route is looked for before the operation's own route, in this order: the campaign's channel route, its operation route, its default; then the global channel route, the global operation route, the global default. A campaign's own route or default therefore still hides a global channel route, and a call that names no channel never takes a channel route. What follows the send:
   - **A cancel and a status read of a send go where the send ran,** so a campaign with two plugins can cancel all its sends, not half.
@@ -45,10 +45,15 @@ This release lets one campaign send each channel through the plugin that suits i
   - On macOS and Linux, Codex's read-only mode has no network by the vendor's own description, while the run file is readable there.
   - On every system a Codex command can read the rest of the data directory, a plugin's secret kept in `settings.json` among it, and the line under the Codex composer says so, system by system.
   - The desktop's window no longer keeps its pairing with the runtime on disk, on any system. At its first start this version ends every UI pairing and removes what earlier versions stored, so a browser you paired with `jason ui open` must be paired again once.
+- **The Feed shows what was decided:** an approval approved or rejected, a question answered, and a campaign archived. The rows read "Approved", "Rejected", "A question was answered" and "Agent archived"; none of them waits on you, so none leads to Needs you. A row holds the ids, the kind and the moment, never who decided, the reason they gave or the option a question was answered with, and the AI that answers a Feed turn is handed the same and nothing more.
+- **The Feed shows a send and role work that finished.** A message, a reply or an invitation the provider took reads "A message was sent or scheduled", "A reply was sent" or "An invitation was sent or scheduled"; the finished work of the planner, the researcher, the copywriter, the analyst and the deliverability specialist reads "A plan is ready", "Research finished", "Copy was written", "An analysis is ready" and "A deliverability check finished". The manager's and the responder's work already reaches the Feed as approvals, questions and sends, and the personalizer's and the critic's, which work message by message, are left out so they cannot fill the Feed; a role a person registered is never shown, and its name never reaches the Feed or a Feed turn. When the window loads, the desktop reads them back from the newest hundred finished work items, beside the Feed's other lines.
+- **People search finds a person by the value of a custom field,** beside a name, a company, a title and a channel value: `--query` on `jason contact list` and `jason campaign list-contacts`, the API's `contact.list` and `campaign.list_contacts`, and the People page. Every text and every number in the custom fields is searched, at any depth: a text folded as the other terms are, so `munchen` finds `München`, and a number as it is written, so `1e5` is found by `1e5` and not by `100000`. A field's name is not searched, so a field named `industry` holding `retail` is found by `retail` and not by `industry`. The provider's record of a person that an audience search keeps beside the custom fields, under `provider_record`, is not searched, and neither is any field of that name at the top of the custom fields. A contact whose stored custom fields cannot be read gives the search nothing to match in them and no longer stops a search that does not return it; a list that returns such a contact is refused as before, naming `contacts.custom_json`.
+- **A campaign's list of people, its activity counts and its Results can leave archived people out.** `campaign.list_contacts`, `campaign.activity` and `campaign.activity_by_period` take `exclude_archived_contacts`, as `campaign.summary` already did, and `jason campaign list-contacts`, `jason campaign activity` and `jason campaign activity-by-period` take `--exclude-archived-contacts`. Without it each answers as before. A count and the list it opens still agree. The page now sends it wherever it shows a campaign's numbers or people: the Agents table in both views, an open campaign's numbers, its People tab and its Results, every read of the Performance page, and the desktop's campaigns panel. A campaign's Inbox and What happened still show what happened with archived people.
 
 ## Fixed since 0.37.0
 
 - **Editing a parked item's input no longer leaves its question about the old text.** In 0.37.0 an edit of the arguments of work awaiting approval left the approval pending about the old arguments, and approving it went on to fail at the claim. Now the edit withdraws that approval in the same save and the work goes back to the queue, where the claim asks again about what it says. An approval or a rejection of the withdrawn question answers `approval_not_pending`, and an edit that races an approval writes nothing and answers `concurrent_update`. A standing approval or the campaign's allowance never lets an edited item go.
+- **`jason session open` on macOS opens the session on the installation it was typed in.** Terminal is started by the system, not by the CLI, so its shell carried nothing of the CLI's environment: with `JASON_DATA_DIR` set, the session's own `jason` commands reached the installation in `~/.jason` instead. The script Terminal runs now exports the data directory the CLI uses, made absolute, and nothing else; without `JASON_DATA_DIR` it is the script of 0.37.0. Windows and Linux are not changed: there the terminal process is the CLI's own child and inherits the variable; a Linux terminal that hands the command to a server already running is under Known issues.
 
 ## Upgrading from 0.37.0
 
@@ -63,6 +68,10 @@ Nothing stops, with one exception below, and no setting is renamed.
 - **Codex on Windows needs its elevated sandbox for the chat.** Have an administrator run `codex sandbox setup --elevated` once, or chat on Claude Code; until then the chat declines a Codex message and says so. A Codex chat signed in with an OpenAI key is declined on Windows too.
 - **A browser paired with `jason ui open` pairs again once,** after the desktop's first start of this version.
 - **Out of the box nothing changes in the chat:** Ask first stays the default, and Full access asks each time until you choose Always.
+- **Update the desktop and Jason together.** The Feed's new rows are drawn by the page of this release; a page of an older release does not know them.
+- **The page's numbers of a campaign no longer count archived people,** where 0.37.0 counted them on the Agents page, in an open campaign's People tab, in Results and on the Performance page; the People page is unchanged. The API and the CLI answer as before unless asked.
+- **A search with text now finds more people:** a text that only a custom field's value holds finds that person, where 0.37.0 found nobody.
+- **The member `exclude_archived_contacts` on `campaign.list_contacts`, `campaign.activity` and `campaign.activity_by_period`, and `--exclude-archived-contacts` on their verbs, need a runtime of this version:** an older runtime ignores the member and counts archived people. Restart the runtime if it was updated without a restart.
 - **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to load one again, is in [Applying an older
   release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release).
 - **From 0.36.x or earlier,** the notes of each release in between apply as well.
@@ -91,6 +100,10 @@ A thread is matched to its plugin, not to its account: a reply routed to another
 A threshold set while nobody is on the campaign says at once that the reserve is low, since a count of nobody is under
 any threshold, and wakes the manager for nothing. Set it once a search's people have landed.
 
+The audience reserve counts a campaign's archived members nobody started work for, while the page's count of new
+people leaves them out, so the reserve can read higher than the page and the notice that the reserve is low can come
+later than the page suggests.
+
 Routes changed while the runtime was stopped, the settings file edited by hand say, are not refused at the next start,
 which has no routes in force to keep, and a search whose start is under way when a route changes is not counted yet. A
 deferred send stranded that way is logged once at the start, by its work item, campaign and plugin, and every later change
@@ -114,6 +127,23 @@ In a Codex chat a command can read what you can, a plugin's secret written in `s
 The Windows check of Codex's sandbox has been proven against a stand-in only where the elevated setup is missing. On the one real machine checked before this release, a command inside the elevated sandbox was refused Jason's run file and could still read Jason's settings file; the check now rests on the run file, and has not been run on a real machine since. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
 
 On a Mac and on Linux, a read-only Codex turn can read the runtime's run file, so if the loopback interface is reachable from it, a command in a Codex chat could reach Jason's runtime. Codex's read-only mode has no network by the vendor's own description; that has not been probed.
+
+A Feed row for a send says the provider took it: a send it accepted for a later moment, or for its own queue, appears
+at once and can still be cancelled until it goes.
+
+The Feed folds a line only into the one just before it, of the same kind, campaign, operation and role, so sends that
+alternate with other lines, an approval and its send say, or two campaigns sending at once, are shown one by one and
+fill the Feed's 500 lines and the fifty a Feed turn is given sooner.
+
+When the window loads, the desktop reads back the newest hundred finished work items of any kind since the Feed's
+newest line and keeps the sends and the five roles' work among them, so on a busy installation, where a campaign's
+reads finish at every cadence, fewer than a hundred of these may come back. Older ones are not shown, no gap is said
+for them, and they stay in the journal (`jason journal list --kind workitem_succeeded`). A catch-up whose read fails,
+or that finds the Feed holding no line yet, brings in no sends.
+
+A people search with text reads the custom fields of every contact it scans, one at a time, the pickers that search as
+you type included; on a large installation a search takes longer than a search by name alone did. No measurement has
+been made.
 
 A desktop start whose runtime does not start skips the reset of what an earlier page kept, until a start that starts the runtime.
 
@@ -186,7 +216,8 @@ On Windows, `jason session open` starts the console host, which hands the window
 your default terminal; where your default terminal is the console host itself, you get a plain console window; neither
 is yet measured on a machine.
 
-The macOS form of `jason session open`, a script opened in Terminal, has not been watched on a Mac.
+The macOS form of `jason session open`, a script opened in Terminal, has not been watched on a Mac, nor has the data
+directory it now carries.
 
 Antigravity CLI's hook route has not been run on an account. The host also reads your own global `AGENTS.md` and
 `GEMINI.md` under `~/.gemini` for every role.
@@ -196,7 +227,9 @@ each toast, since the registration rewrites a key that is Jason's and names anot
 that names another installation alone, so nothing is lost.
 
 On Linux, kitty, foot, gnome-terminal, xfce4-terminal, mate-terminal and wezterm are started in the form each takes;
-any other terminal program is given the host after `-e` as separate arguments.
+any other terminal program is given the host after `-e` as separate arguments. The terminal process is the CLI's own
+child and inherits its `JASON_DATA_DIR`; a terminal that hands the command to a server of its own already running may
+start the agent host in that server's environment instead, and whether any does has not been determined.
 
 Under Windows PowerShell 5.1 and cmd.exe the inner quotes of `--value '{"host":"codex"}'` are lost, so give the value in a file:
 `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`.

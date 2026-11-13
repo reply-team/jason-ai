@@ -555,10 +555,11 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
 /** One line in the desktop's words for something the page alone says of the conversation. */
 const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
 
-/** A line of the Feed: the kind in words, how many it stands for, its campaign as a link, its age. */
-function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html {
+/** A line of the Feed, or nothing for a line the page does not know: the kind in words, how many it stands for, its campaign as a link, its age. */
+function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html | null {
     const names = new Map(campaigns.value.map((each) => [each.id, each.name]));
     const row = toFeedRow(entry.line, names, clock.value);
+    if (row === null) return null;
     return html`<div class="feed-line" data-id="${row.id}">
         ${svg(row.icon, 14)}<b>${row.words}</b>${row.count === null ? null : html`<span class="meta">${row.count}</span>`}
         <button class="btn sm" type="button" ${act('feed.campaign', row.campaignId)}>${row.campaign}</button>
@@ -574,7 +575,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             <h2>The Feed</h2>
             <p>
                 What happens in your agents comes here: a reply, an approval or a question waiting, an agent created,
-                started or paused, work that stopped, a provider block holding work. Ask about any of it below.
+                started or paused, a message or an invitation sent or scheduled, a reply sent, work that finished or
+                stopped, a provider block holding work. Ask about any of it below.
             </p>
         </div>`;
     if (chat.entries.length === 0)

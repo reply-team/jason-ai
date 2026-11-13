@@ -6,10 +6,11 @@ namespace Jason.Runtime.Contacts;
 
 /// <summary>
 /// One text that finds a person by any part of what they are known by: a name (the whole name included), a company, a
-/// title, any channel value. Compared folded on both sides, so case, accents and script never decide; the characters a
-/// pattern would read as wildcards are escaped, so they match as written; a text that is a phone number once its spaces,
-/// dots, dashes and brackets go also matches by its digits, which is how a stored number is kept; and a pasted LinkedIn
-/// link matches by the profile path its key ends with, whichever spelling of the link was pasted.
+/// title, any channel value, the value of any custom field and never its key (<see cref="CustomValues"/>). Compared
+/// folded on both sides, so case, accents and script never decide; the characters a pattern would read as wildcards are
+/// escaped, so they match as written; a text that is a phone number once its spaces, dots, dashes and brackets go also
+/// matches by its digits, which is how a stored number is kept; and a pasted LinkedIn link matches by the profile path
+/// its key ends with, whichever spelling of the link was pasted.
 /// </summary>
 internal static class ContactSearch
 {
@@ -28,6 +29,9 @@ internal static class ContactSearch
         // The profile path ends a stored key, so "/in/ada" never finds "/in/ada-lovelace". It is folded as the column is,
         // or a name written outside ASCII would never find itself.
         var profileEnd = profile is null ? null : "%" + TextFold.Escaped(TextFold.Text(profile));
+        // A custom field is found by its values alone, never by its key; a text that would run from one value into the
+        // next is never looked for there.
+        var inCustom = !pattern.Contains(CustomValues.Separator, StringComparison.Ordinal);
 
         return query.Where(contact =>
             EF.Functions.Like(TextFold.Fold(contact.FirstName), pattern, Escape)
@@ -35,6 +39,7 @@ internal static class ContactSearch
             || EF.Functions.Like(TextFold.Fold((contact.FirstName ?? string.Empty) + " " + (contact.LastName ?? string.Empty)), pattern, Escape)
             || EF.Functions.Like(TextFold.Fold(contact.Company), pattern, Escape)
             || EF.Functions.Like(TextFold.Fold(contact.Title), pattern, Escape)
+            || (inCustom && EF.Functions.Like(CustomValues.Of(contact.Custom), pattern, Escape))
             || contact.Channels.Any(entry => EF.Functions.Like(TextFold.Fold(entry.Value), pattern, Escape))
             || (digits != null && contact.Channels.Any(entry => entry.Value.Contains(digits)))
             || (profileEnd != null && contact.Channels.Any(entry => entry.Channel == ChannelRules.LinkedIn

@@ -153,6 +153,72 @@ describe('the Feed', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
     });
 
+    it('draws a row of a send that was taken and a row of role work that finished, in their words, neither leading to Needs you', async () => {
+        const { desktop } = renderConsole();
+        await waitFor(() => feedButton());
+        const id = (await desktop.chat.list()).find((each) => each.main === true)!.id;
+        desktop.keep({
+            id,
+            main: true,
+            title: 'Feed',
+            entries: [
+                kept({
+                    journal_kind: 'workitem_succeeded',
+                    journal_id: 'jrn_01JD0000000000000000000011',
+                    operation: 'message.send',
+                    count: 2,
+                }),
+                kept({
+                    journal_kind: 'workitem_succeeded',
+                    journal_id: 'jrn_01JD0000000000000000000012',
+                    role: 'researcher',
+                }),
+            ],
+        });
+        fireEvent.click(feedButton());
+        const sent = await waitFor(() => found('[data-id="jrn_01JD0000000000000000000011"]'));
+        expect(within(sent).getByText('A message was sent or scheduled')).toBeTruthy();
+        expect(within(sent).getByText('x2')).toBeTruthy();
+        expect(within(sent).queryByRole('button', { name: 'Needs you' })).toBeNull();
+        const done = found('[data-id="jrn_01JD0000000000000000000012"]');
+        expect(within(done).getByText('Research finished')).toBeTruthy();
+        expect(within(done).queryByRole('button', { name: 'Needs you' })).toBeNull();
+    });
+
+    it('draws the lines it knows and skips a kept line of a kind, an operation or a role it does not', async () => {
+        const { desktop } = renderConsole();
+        await waitFor(() => feedButton());
+        const id = (await desktop.chat.list()).find((each) => each.main === true)!.id;
+        desktop.keep({
+            id,
+            main: true,
+            title: 'Feed',
+            entries: [
+                kept({ journal_kind: 'campaign_started', journal_id: 'jrn_01JD0000000000000000000021' }),
+                kept({
+                    journal_kind: 'a_kind_a_newer_desktop_kept' as DesktopLineEntry['journal_kind'],
+                    journal_id: 'jrn_01JD0000000000000000000022',
+                }),
+                kept({
+                    journal_kind: 'workitem_succeeded',
+                    journal_id: 'jrn_01JD0000000000000000000023',
+                    operation: 'contact.list' as never,
+                }),
+                kept({
+                    journal_kind: 'workitem_succeeded',
+                    journal_id: 'jrn_01JD0000000000000000000024',
+                    role: 'manager' as never,
+                }),
+                kept({ journal_kind: 'campaign_paused', journal_id: 'jrn_01JD0000000000000000000025' }),
+            ],
+        });
+        fireEvent.click(feedButton());
+        await waitFor(() => found('[data-id="jrn_01JD0000000000000000000021"]'));
+        found('[data-id="jrn_01JD0000000000000000000025"]');
+        for (const skipped of [22, 23, 24])
+            expect(document.querySelector(`[data-id="jrn_01JD00000000000000000000${skipped}"]`)).toBeNull();
+    });
+
     it('opens Needs you from an approval or a question row', async () => {
         const desktop = stubDesktop();
         renderConsole(desktop);
@@ -172,7 +238,11 @@ describe('the Feed', () => {
         const id = (await desktop.chat.list()).find((each) => each.main === true)!.id;
         fireEvent.click(feedButton());
         await waitFor(() => screen.getByRole('heading', { name: 'The Feed' }));
-        expect(screen.getByText(/work that stopped, a provider block holding work\./)).toBeTruthy();
+        expect(
+            screen.getByText(
+                /a message or an invitation sent or scheduled, a reply sent, work that finished or stopped, a provider block holding work\./,
+            ),
+        ).toBeTruthy();
         flush(() => {
             for (let n = 1; n <= 3; n++)
                 desktop.emit(id, {

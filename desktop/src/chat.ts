@@ -89,7 +89,7 @@ import {
     type FullAccessAnswer,
 } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
-import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from './feed.ts';
+import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
 import type { DesktopPaths } from './paths.ts';
@@ -1148,8 +1148,8 @@ export class Chat {
      * (`lineOf`) or left out, a journal line it took already is left out, and the rest go at its end (`take`), each said
      * as a `line` event. Nothing else happens: no turn starts, in any mode, and a turn that runs goes on; the lines reach
      * the agent with the person's next message. An ask that carries `catchUp`, which the page makes at each load and when
-     * its stream started afresh, also reads back one page of the lines written since a few seconds before the newest kept
-     * one (`jason journal list`), when the Feed kept one and no read runs already; those go in before the lines handed
+     * its stream started afresh, also reads back two pages of the lines written since a few seconds before the newest kept
+     * one (`jason journal list`: the Feed's kinds, and the succeeded work apart), when the Feed kept one and no read runs already; those go in before the lines handed
      * while it reads, which are checked at once and wait, the newest two hundred of them, with a gap for the rest. A page
      * that was not all of them leaves a gap before them too.
      */
@@ -1244,17 +1244,34 @@ export class Chat {
     /**
      * Reads back the lines written since `since`, a few seconds before the newest kept line's moment, at or after which
      * the runtime answers (the lines already taken among them, left out as such): one page, newest first, put in oldest
-     * first, within its own time limit. Then the lines handed meanwhile go in, after a gap when some of them were let go.
-     * A read that fails or runs out of time puts nothing in and leaves no gap of its own.
+     * first, within its own time limit; beside it, in the same time, one page of the succeeded work since then, of which
+     * the sends and the listed roles' work go in among the rest by their ids. Then the lines handed meanwhile go in, after
+     * a gap when some of them were let go. A failed or timed out read of the Feed's kinds puts nothing in, the succeeded
+     * work with it, and leaves no gap of its own, so the next catch-up reads the same span again; a failed read of the
+     * succeeded work leaves only its sends and role work out of this catch-up.
      */
     async #catchUp(feed: Conversation, since: string): Promise<void> {
         try {
+            const limitMs = this.#options.feedReadLimitMs ?? feedReadLimitMs;
             const args = ['journal', 'list', ...feedKinds.flatMap((kind) => ['--kind', kind]), '--since', since, '--limit', String(catchUpLimit)];
-            const answer = await this.#readJson(args, this.#options.feedReadLimitMs ?? feedReadLimitMs);
+            // A second request, for succeeded work alone and one page of its own, so that a campaign's reads, which succeed
+            // every cadence, cannot crowd the other kinds out of the first. The journal cannot filter by operation or
+            // role, so the desktop does, in `lineOf`: of the newest `catchUpLimit` succeeded items since `since`, those
+            // that are a send or the work of a listed role are kept. Sends older than that page are not caught up, and
+            // no gap is said for them: a gap on every catch-up of a busy campaign would say nothing.
+            const [answer, succeeded] = await Promise.all([
+                this.#readJson(args, limitMs),
+                this.#readJson(['journal', 'list', '--kind', succeededKind, '--since', since, '--limit', String(catchUpLimit)], limitMs),
+            ]);
+            const more = answer !== null && typeof answer.next_cursor === 'string' && answer.next_cursor !== '';
+            // Each line read is made a Feed line by the same check as a line the page hands, or left out.
+            const lines = (page: Record<string, unknown> | null): LineEntry[] =>
+                page !== null && Array.isArray(page.items) ? (page.items as unknown[]).map(lineOf).filter((line): line is LineEntry => line !== null) : [];
+            // The gate is the first read's alone: the succeeded page goes in beneath it, never by itself, or the Feed's newest
+            // moment would move past a span of the other kinds that was not read, with no gap said for it.
             if (answer !== null && Array.isArray(answer.items)) {
-                const more = typeof answer.next_cursor === 'string' && answer.next_cursor !== '';
-                // Each line read is made a Feed line by the same check as a line the page hands, or left out.
-                const read = (answer.items as unknown[]).map(lineOf).filter((line): line is LineEntry => line !== null);
+                // Newest first within each page; merged by journal id (a ULID sorts by moment) and put in oldest first.
+                const read = [...lines(answer), ...lines(succeeded)].sort((a, b) => (a.journal_id < b.journal_id ? 1 : a.journal_id > b.journal_id ? -1 : 0));
                 this.#takeLines(feed, read.reverse(), more);
             }
         } catch {

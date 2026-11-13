@@ -523,6 +523,10 @@ and `campaign list-contacts` to one of the campaign's audiences
 and no other, each count by its own definition. An audience is one campaign's, so the read names that campaign alone;
 one nobody landed under answers zeros, and a number the campaign holds none under is refused, `audience_unknown`. A
 member added any other way is in no audience.
+`--exclude-archived-contacts` (`exclude_archived_contacts`) on the same four leaves out the people whose own record is
+archived: archiving a person cancels their open work and keeps their memberships, so without it an archived member is
+counted and listed as before. With it on every read, a count and the list it opens still agree, now and in a period,
+and one campaign's list holds the people `contact.list` lists for that campaign without `--include-archived`.
 
 Now:
 

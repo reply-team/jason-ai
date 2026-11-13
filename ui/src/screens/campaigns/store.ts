@@ -24,6 +24,13 @@ import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
 import { periodWindow } from '../../time/periods';
 
+/**
+ * What every read of a campaign's people or counts on the campaign screens adds, the Results and the Performance page
+ * included: archived people left out, as the People page leaves them out while Archived is not ticked, so a number and
+ * the list it opens are of the same people.
+ */
+export const archivedLeftOut = { exclude_archived_contacts: true } as const;
+
 /** What the table shows: the view, its period, and the campaigns it lists. */
 export type Table = { view: CampaignView; period: Period; filters: CampaignFilters };
 
@@ -89,8 +96,12 @@ async function countPage(
     if (ids.length === 0) return {};
     const counts =
         table.view === 'summary'
-            ? await api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: ids })
-            : await api.call<CampaignActivityResponse>('campaign.activity', { campaign_ids: ids, ...tableWindow });
+            ? await api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: ids, ...archivedLeftOut })
+            : await api.call<CampaignActivityResponse>('campaign.activity', {
+                  campaign_ids: ids,
+                  ...tableWindow,
+                  ...archivedLeftOut,
+              });
     return Object.fromEntries(counts.campaigns.map((row) => [row.campaign_id, row])) as
         Record<string, CampaignSummaryRow> | Record<string, CampaignActivityRow>;
 }
@@ -227,9 +238,19 @@ export async function count(
     try {
         const row =
             table.view === 'summary'
-                ? (await api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id] })).campaigns[0]
-                : (await api.call<CampaignActivityResponse>('campaign.activity', { campaign_ids: [id], ...window }))
-                      .campaigns[0];
+                ? (
+                      await api.call<CampaignSummaryResponse>('campaign.summary', {
+                          campaign_ids: [id],
+                          ...archivedLeftOut,
+                      })
+                  ).campaigns[0]
+                : (
+                      await api.call<CampaignActivityResponse>('campaign.activity', {
+                          campaign_ids: [id],
+                          ...window,
+                          ...archivedLeftOut,
+                      })
+                  ).campaigns[0];
         if (mine === counting && row) counted.value = { id, key: numbersKey(table), row };
     } catch (error) {
         if (mine === counting) fail(error, panelFailure);
@@ -297,10 +318,11 @@ export async function loadResults(api: Api, id: string, period: Period, now: Dat
     forget('results');
     try {
         const [summed, active] = await Promise.all([
-            api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id] }),
+            api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id], ...archivedLeftOut }),
             api.call<CampaignActivityResponse>('campaign.activity', {
                 campaign_ids: [id],
                 ...periodWindow(period, now, zone),
+                ...archivedLeftOut,
             }),
         ]);
         const [row, counts] = [summed.campaigns[0], active.campaigns[0]];
@@ -381,7 +403,7 @@ export function membersBody(
     query: PeopleQuery,
     window: { since: string; until: string },
 ): Record<string, unknown> {
-    const body: Record<string, unknown> = { campaign_id: id, limit: memberPage };
+    const body: Record<string, unknown> = { campaign_id: id, limit: memberPage, ...archivedLeftOut };
     if (table.view === 'summary') {
         if (query.filter) body['summary'] = query.filter;
     } else Object.assign(body, { activity: query.filter ?? 'people', ...window });

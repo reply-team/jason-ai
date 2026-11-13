@@ -212,12 +212,13 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.remove_contacts`
 - `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
   a member a search brought in carries its `source`: the audience, as `{id, number}` like every answer that names one,
-  the search and when they landed.
+  the search and when they landed; `exclude_archived_contacts` leaves out the people whose own record is archived.
 - `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole;
   `exclude_archived_contacts` leaves out the people whose own record is archived.
 - `campaign.activity`: for the same campaigns, what happened to their people between `since`, included, and `until`,
-  not included, whole.
-- `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time.
+  not included, whole; `exclude_archived_contacts` leaves out the people whose own record is archived.
+- `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time; `exclude_archived_contacts`
+  leaves out the people whose own record is archived.
 
   The four take `audience`, the number of one of the campaign's audiences, and then read only the people a search landed
   under it, each count by its own definition, in the one campaign they name; an audience nobody landed under answers
@@ -251,10 +252,12 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   membership carries `standing`: the counts of `campaign.summary` that count the person in that campaign now, read from
   the same definitions ([docs/work-execution.md](work-execution.md), "A campaign's people, counted"); `contact.list` and
   `campaign.list_contacts` carry the same.
-- `contact.list`: `query` finds any part of a name, a company, a title or any channel value. `summary` keeps the people
-  one count of `campaign.summary` counts in at least one campaign not archived, or in the one `campaign_id` names, and
-  composes with `query`, `order`, `include_archived` and the paging; with `channel` or `value` it is refused as
-  `validation_failed`.
+- `contact.list`: `query` finds any part of a name, a company, a title, any channel value or the value of any custom
+  field — a text at any depth, folded as the rest are, or a number as it is written, never a field's name — and
+  `campaign.list_contacts` finds by the same. The provider's record an audience search keeps beside the fields, as
+  `provider_record` in `custom`, is not searched. `summary` keeps the people one count of `campaign.summary` counts in at
+  least one campaign not archived, or in the one `campaign_id` names, and composes with `query`, `order`,
+  `include_archived` and the paging; with `channel` or `value` it is refused as `validation_failed`.
 - `contact.update`: Jason's own record of the person; the provider's contact is a `provider_op` work item.
 - `contact.archive`
 - `contact.threads`: a person's threads, read from the provider when a person asks, outside any work item.

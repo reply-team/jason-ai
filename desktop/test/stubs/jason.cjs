@@ -106,11 +106,24 @@ if (args[0] === 'status') {
         process.stderr.write('No runtime answered.\n');
         process.exit(3);
     }
+    // STUB_JOURNAL_FAILS_KIND=<kind> fails a request that names that kind alone; STUB_JOURNAL_FAILS_EXCEPT=<kind> fails every
+    // request that does not name it: one of the Feed's two reads failing, the other not.
+    const named = args.flatMap((arg, i) => (arg === '--kind' ? [args[i + 1]] : []));
+    if (
+        (process.env.STUB_JOURNAL_FAILS_KIND && named.includes(process.env.STUB_JOURNAL_FAILS_KIND)) ||
+        (process.env.STUB_JOURNAL_FAILS_EXCEPT && !named.includes(process.env.STUB_JOURNAL_FAILS_EXCEPT))
+    ) {
+        process.stderr.write('No runtime answered.\n');
+        process.exit(3);
+    }
     let items = [];
     try {
         items = JSON.parse(readFileSync(process.env.STUB_JOURNAL_FILE, 'utf8'));
     } catch {}
     // STUB_JOURNAL_SLEEP holds the answer back that many milliseconds, as a slow runtime does.
+    // As the runtime does, a request that names kinds gets lines of those kinds only.
+    const asked = args.flatMap((arg, i) => (arg === '--kind' ? [args[i + 1]] : []));
+    if (asked.length > 0) items = items.filter((item) => asked.includes(item.kind));
     const answer = () => print({ items, next_cursor: process.env.STUB_JOURNAL_MORE === 'yes' ? 'jrn_next' : null });
     if (process.env.STUB_JOURNAL_SLEEP) setTimeout(answer, Number(process.env.STUB_JOURNAL_SLEEP));
     else answer();

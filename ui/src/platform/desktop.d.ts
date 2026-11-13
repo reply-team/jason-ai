@@ -7,8 +7,10 @@
 export {};
 
 /**
- * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, a campaign created, started or
- * paused, and work that stopped. Each is a kind the runtime writes itself.
+ * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, an approval approved or
+ * rejected, a question answered, a campaign created, started, paused or archived, work that stopped, and work that
+ * succeeded where it was a send or the work of one of five roles (`DesktopFeedOperation`, `DesktopFeedRole`). Each is a
+ * kind the runtime writes itself.
  */
 export type DesktopFeedKind =
     | 'inbound_reply_observed'
@@ -19,7 +21,18 @@ export type DesktopFeedKind =
     | 'campaign_paused'
     | 'workitem_failed'
     | 'workitem_expired'
-    | 'provider_blocked';
+    | 'provider_blocked'
+    | 'approval_approved'
+    | 'approval_rejected'
+    | 'decision_answered'
+    | 'campaign_archived'
+    | 'workitem_succeeded';
+
+/** The operations whose success the Feed shows, as a send the provider took. */
+export type DesktopFeedOperation = 'message.send' | 'conversation.reply' | 'social_invitation.send';
+
+/** The shipped roles whose finished work the Feed shows. */
+export type DesktopFeedRole = 'planner' | 'researcher' | 'copywriter' | 'analyst' | 'deliverability-specialist';
 
 /**
  * A journal line as the page hands it to the Feed: its id, moment, kind, campaign and work item, as `journal.list` and
@@ -31,6 +44,9 @@ export interface DesktopFeedLine {
     kind: DesktopFeedKind;
     campaign_id: string;
     work_item_id: string | null;
+    /** On a `workitem_succeeded` line alone: the operation or the role, one of them, from the closed lists; else absent. */
+    work_item_operation?: DesktopFeedOperation;
+    work_item_role?: DesktopFeedRole;
 }
 
 /**
@@ -45,6 +61,9 @@ export interface DesktopLineEntry {
     at: string;
     campaign_id: string;
     work_item_id?: string;
+    /** On a `workitem_succeeded` line, exactly one of these two; else neither. */
+    operation?: DesktopFeedOperation;
+    role?: DesktopFeedRole;
     count: number;
     /** Present, and true, once a turn of the Feed was given the line with this count; a fold that raises it removes it. */
     given?: true;

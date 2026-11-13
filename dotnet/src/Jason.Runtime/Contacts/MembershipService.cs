@@ -270,8 +270,16 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
             memberships = CampaignPeople.LandedUnder(db, memberships, landedUnder);
         }
 
+        // Asked to, the memberships of a person whose own record is archived are left out, as the counts leave them out:
+        // the people a count's list shows are still the people the count counts.
+        var withoutArchived = request.ExcludeArchivedContacts == true;
+        if (withoutArchived)
+        {
+            memberships = OfPeopleNotArchived(memberships);
+        }
+
         var (people, next) = request.Activity is { } happened
-            ? await ByMomentAsync(ids, happened, period, text, request.Cursor, limit, audience, cancellationToken).ConfigureAwait(false)
+            ? await ByMomentAsync(ids, happened, period, text, request.Cursor, limit, audience, withoutArchived, cancellationToken).ConfigureAwait(false)
             : await ByIdAsync(memberships, text, request.Cursor, limit, cancellationToken).ConfigureAwait(false);
 
         var loaded = await db.Contacts.AsNoTracking()
@@ -349,6 +357,10 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                         membership.Landing.SearchWorkItem!.PublicId,
                         membership.Landing.LandedAt)));
 
+    /// <summary>The memberships among these of a person whose own record is not archived.</summary>
+    internal static IQueryable<CampaignContact> OfPeopleNotArchived(IQueryable<CampaignContact> memberships) =>
+        memberships.Where(membership => membership.Contact!.ArchivedAt == null);
+
     internal sealed record ListedMembership(int ContactId, int CampaignId, MembershipState State, DateTime AddedAt, DateTime UpdatedAt, ListedSource? Source);
 
     internal sealed record ListedSource(string Audience, int Number, string Search, DateTime LandedAt);
@@ -409,6 +421,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         string? cursor,
         int limit,
         int? audience,
+        bool withoutArchived,
         CancellationToken cancellationToken)
     {
         // A person's place is the latest moment it happened to them, so a page needs only what happened since the earliest
@@ -422,7 +435,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         {
             // Compared as spans: near the calendar's start, top - span would fall before it.
             var from = top - period.Since <= span ? period.Since : top - span;
-            fetched = await PageByMoment(db, campaigns, count, from, period.Until, text, after, limit + 1, audience)
+            fetched = await PageByMoment(db, campaigns, count, from, period.Until, text, after, limit + 1, audience, withoutArchived)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
             if (fetched.Count > limit || from == period.Since)
@@ -450,9 +463,10 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         string? text,
         (long Ms, string PublicId)? after,
         int take,
-        int? audience = null)
+        int? audience = null,
+        bool withoutArchived = false)
     {
-        var rows = CampaignPeople.ByMoment(db, campaigns, count, from, until, audience);
+        var rows = CampaignPeople.ByMoment(db, campaigns, count, from, until, audience, withoutArchived);
         if (text is not null)
         {
             var found = ContactSearch.Apply(db.Contacts, text);

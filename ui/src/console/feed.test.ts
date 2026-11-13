@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { JournalEntry } from '../api/types';
 import type { DesktopFeedKind, DesktopLineEntry } from '../platform/desktop';
-import { feedKinds, toFeedLine, toFeedRow } from './feed';
+import { feedKinds, feedOperations, feedRoles, toFeedLine, toFeedRow } from './feed';
 
 const now = Date.parse('2026-11-11T10:30:00.000Z');
 
@@ -53,7 +53,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
     });
 
     it('hands nothing for a kind the Feed does not take, or a line about no campaign', () => {
-        for (const kind of ['contacts_added', 'notification_sent', 'approval_approved', 'toString', 'constructor']) {
+        for (const kind of ['contacts_added', 'notification_sent', 'approval_superseded', 'toString', 'constructor']) {
             expect(toFeedLine(line({ kind }))).toBeNull();
         }
         expect(toFeedLine(line({ campaign_id: null }))).toBeNull();
@@ -61,17 +61,21 @@ describe('the Feed as the page hands it lines and draws them', () => {
 
     it('has words and an icon for every kind the Feed takes', () => {
         expect([...feedKinds].sort()).toEqual([
+            'approval_approved',
+            'approval_rejected',
             'approval_requested',
+            'campaign_archived',
             'campaign_created',
             'campaign_paused',
             'campaign_started',
+            'decision_answered',
             'decision_raised',
             'inbound_reply_observed',
             'provider_blocked',
             'workitem_expired',
             'workitem_failed',
         ] satisfies DesktopFeedKind[]);
-        const words = feedKinds.map((kind) => toFeedRow(kept({ journal_kind: kind }), new Map(), now).words);
+        const words = feedKinds.map((kind) => toFeedRow(kept({ journal_kind: kind }), new Map(), now)!.words);
         expect(words).toEqual([
             'A reply arrived',
             'An approval waits',
@@ -82,12 +86,116 @@ describe('the Feed as the page hands it lines and draws them', () => {
             'Work stopped',
             'Work stopped',
             'A provider block holds work',
+            'Approved',
+            'Rejected',
+            'A question was answered',
+            'Agent archived',
         ]);
+    });
+
+    it("words a send that was taken and a role's finished work from two closed lists, one to one with the desktop's", () => {
+        expect([...feedOperations].sort()).toEqual(['conversation.reply', 'message.send', 'social_invitation.send']);
+        expect([...feedRoles].sort()).toEqual([
+            'analyst',
+            'copywriter',
+            'deliverability-specialist',
+            'planner',
+            'researcher',
+        ]);
+        const said = (fields: Partial<DesktopLineEntry>) =>
+            toFeedRow(kept({ journal_kind: 'workitem_succeeded', ...fields }), new Map(), now)!;
+        expect(
+            feedOperations.map((operation) => [
+                said({ operation }).words,
+                said({ operation }).icon,
+                said({ operation }).needs,
+            ]),
+        ).toEqual([
+            ['A message was sent or scheduled', 'chat', false],
+            ['A reply was sent', 'chat', false],
+            ['An invitation was sent or scheduled', 'chat', false],
+        ]);
+        expect(feedRoles.map((role) => [said({ role }).words, said({ role }).icon, said({ role }).needs])).toEqual([
+            ['A plan is ready', 'work', false],
+            ['Research finished', 'work', false],
+            ['Copy was written', 'work', false],
+            ['An analysis is ready', 'work', false],
+            ['A deliverability check finished', 'work', false],
+        ]);
+    });
+
+    it('draws nothing, and throws nothing, for a kept line of a kind, an operation or a role the page does not know', () => {
+        const unknown = [
+            kept({ journal_kind: 'a_kind_a_newer_desktop_kept' as DesktopLineEntry['journal_kind'] }),
+            kept({ journal_kind: 'toString' as DesktopLineEntry['journal_kind'] }),
+            kept({
+                journal_kind: 'workitem_succeeded',
+                operation: 'contact.list' as never,
+            }),
+            kept({ journal_kind: 'workitem_succeeded', role: 'manager' as never }),
+            kept({ journal_kind: 'workitem_succeeded' }),
+        ];
+        for (const entry of unknown) expect(toFeedRow(entry, new Map(), now), JSON.stringify(entry)).toBeNull();
+        // The lines beside it are still drawn.
+        expect(toFeedRow(kept({ journal_kind: 'campaign_started' }), new Map(), now)?.words).toBe('Agent started');
+    });
+
+    it("hands a succeeded work item only as a listed send or a listed role's work, and only those two members of it", () => {
+        const sent = line({
+            kind: 'workitem_succeeded',
+            work_item_id: 'wi_01JD0000000000000000000001',
+            work_item_operation: 'message.send',
+            work_item_kind: 'provider_op',
+        });
+        expect(toFeedLine(sent)).toEqual({
+            id: sent.id,
+            ts: sent.ts,
+            kind: 'workitem_succeeded',
+            campaign_id: sent.campaign_id,
+            work_item_id: 'wi_01JD0000000000000000000001',
+            work_item_operation: 'message.send',
+        });
+        const researched = toFeedLine(
+            line({
+                kind: 'workitem_succeeded',
+                work_item_role: 'researcher',
+                work_item_kind: 'ai_role',
+                reason: 'Because I said so',
+            }),
+        );
+        expect(researched).toMatchObject({ kind: 'workitem_succeeded', work_item_role: 'researcher' });
+        expect(researched).not.toHaveProperty('work_item_operation');
+        expect(JSON.stringify(researched)).not.toContain('Ada');
+        // Reads, a manager's, a responder's, a personalizer's, a critic's and a registered role's work, none of them taken.
+        for (const fields of [
+            { work_item_operation: 'contact.list' },
+            { work_item_operation: 'conversation.list' },
+            { work_item_operation: 'message.sendx' },
+            { work_item_role: 'manager' },
+            { work_item_role: 'responder' },
+            { work_item_role: 'personalizer' },
+            { work_item_role: 'critic' },
+            { work_item_role: "Ada's closer" },
+            { work_item_operation: 'contact.list', work_item_role: 'researcher' },
+            { work_item_operation: 'message.send', work_item_role: 'researcher' },
+            { work_item_operation: 'toString' },
+            { work_item_role: 'constructor' },
+            {},
+        ]) {
+            expect(toFeedLine(line({ kind: 'workitem_succeeded', ...fields })), JSON.stringify(fields)).toBeNull();
+        }
+        expect(
+            toFeedLine(line({ kind: 'workitem_succeeded', campaign_id: null, work_item_operation: 'message.send' })),
+        ).toBeNull();
+        // Another kind never carries the members.
+        expect(toFeedLine(line({ kind: 'workitem_failed', work_item_operation: 'message.send' }))).not.toHaveProperty(
+            'work_item_operation',
+        );
     });
 
     it('names the campaign as the console read it, else by its id, says the count and the age, and which lines lead to Needs you', () => {
         const names = new Map([['cmp_01JD0000000000000000000001', 'Spring']]);
-        expect(toFeedRow(kept({ count: 3 }), names, now)).toEqual({
+        expect(toFeedRow(kept({ count: 3 }), names, now)!).toEqual({
             id: 'jrn_01JD0000000000000000000001',
             kind: 'inbound_reply_observed',
             words: 'A reply arrived',
@@ -98,10 +206,18 @@ describe('the Feed as the page hands it lines and draws them', () => {
             age: '30 min',
             needs: false,
         });
-        const unnamed = toFeedRow(kept({ campaign_id: 'cmp_01JD0000000000000000000009' }), names, now);
+        const unnamed = toFeedRow(kept({ campaign_id: 'cmp_01JD0000000000000000000009' }), names, now)!;
         expect([unnamed.campaign, unnamed.count]).toEqual(['cmp_01JD0000000000000000000009', null]);
-        expect(toFeedRow(kept({ journal_kind: 'approval_requested' }), names, now).needs).toBe(true);
-        expect(toFeedRow(kept({ journal_kind: 'decision_raised' }), names, now).needs).toBe(true);
-        expect(toFeedRow(kept({ journal_kind: 'workitem_failed' }), names, now).needs).toBe(false);
+        expect(toFeedRow(kept({ journal_kind: 'approval_requested' }), names, now)!.needs).toBe(true);
+        expect(toFeedRow(kept({ journal_kind: 'decision_raised' }), names, now)!.needs).toBe(true);
+        expect(toFeedRow(kept({ journal_kind: 'workitem_failed' }), names, now)!.needs).toBe(false);
+        for (const decided of [
+            'approval_approved',
+            'approval_rejected',
+            'decision_answered',
+            'campaign_archived',
+        ] as const) {
+            expect(toFeedRow(kept({ journal_kind: decided }), names, now)!.needs).toBe(false);
+        }
     });
 });

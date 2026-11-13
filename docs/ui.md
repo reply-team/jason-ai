@@ -108,9 +108,12 @@ and the ids keep `campaign`, and so does the rest of this page, which describes 
 Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
 **Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this browser's time
 zone (`jason campaign activity`). A person may be in several columns, and each column's name says on hover what it
-counts. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
-`--include-archived`); the view, the period and both filters are part of the page's address. Every number opens its
-campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
+counts. A campaign's numbers, in the table and once it is open, its People tab and its Results leave archived people
+out (`--exclude-archived-contacts`), as People does while Archived is not ticked; its Inbox and What happened still
+show what happened with them. A search finds a campaign by its name, and the archived ones appear on request
+(`jason campaign list --query`, `--include-archived`); the view, the period and both filters are part of the page's
+address. Every number opens its campaign with exactly the people it counts (`jason campaign list-contacts --summary`,
+or `--activity` with the period),
 each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
 opens the person's panel in place, with the page's address left as the campaign's, and a failure shows the reason the
 runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
@@ -155,7 +158,8 @@ tab.
 
 The whole operation over time, from the same counts as the Agents page's Activity: what happened to people today, in the last
 7, 30 or 90 days, across every campaign not archived or the ones chosen, each person counted once however many campaigns
-count them (`jason campaign activity` and its `total`). Two charts show contacted and replied people by the hour today,
+count them (`jason campaign activity` and its `total`), archived people left out of every number, chart and list
+(`--exclude-archived-contacts`). Two charts show contacted and replied people by the hour today,
 by the day over 7 or 30 days and by the week over 90, in this browser's time zone (`jason campaign activity-by-period`):
 a person counted on two days stands in both bars and once in the number above them. A count's tile lists its people
 under the tiles, the latest to whom it happened first, grouped by that day, each with the campaigns that count them and
@@ -169,13 +173,13 @@ Three tabs over the same filters: **Now** is what is running and what waits for 
 will run, soonest first and grouped by day, and **Done** is what finished, newest first, with a chip that narrows it to
 failures. Each tab's number is `jason workitem count` for that tab's statuses and filters. The filters are a campaign
 and a person, each a search that opens on the first few and asks the runtime as you type (`jason campaign list
---query`, `jason contact list --query`: any part of a name, company, title, email, phone or profile link), a kind, a
-role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a day at a time. They are part of the page's address,
-so a bookmark or a link from another screen keeps them. Opening an item shows what the runtime recorded about it: its
-facts, its attempts, its input and its history; a failure is shown as the error the runtime recorded, with its class
-and the attempts it used. Open work can take a new priority, start and due time, or be cancelled with a reason,
-through `jason workitem update` and `jason workitem cancel`; work waiting for your approval can be approved or rejected
-right there, as on Attention.
+--query`, `jason contact list --query`: any part of a name, company, title, email, phone, profile link or custom
+field's value), a kind, a role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a
+day at a time. They are part of the page's address, so a bookmark or a link from another screen keeps them. Opening an
+item shows what the runtime recorded about it: its facts, its attempts, its input and its history; a failure is shown as
+the error the runtime recorded, with its class and the attempts it used. Open work can take a new priority, start and
+due time, or be cancelled with a reason, through `jason workitem update` and `jason workitem cancel`; work waiting for
+your approval can be approved or rejected right there, as on Attention.
 
 ## People
 
@@ -237,7 +241,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
-  folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked
+  folder, readable by your account alone, which removes itself and its folder when it runs. Terminal's shell starts
+  without the CLI's environment, so where `jason` runs with `JASON_DATA_DIR` set the script exports that variable, and
+  nothing else, for the host's own `jason` commands to reach the same installation. This is composed and checked
   by tests here; it has not been watched on a Mac.
 - **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, and gives it the host in the
   form that program documents, decided by its file name: `kitty` and `foot` take the host's words after the program,

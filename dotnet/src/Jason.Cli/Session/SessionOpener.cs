@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Human;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Hosts;
 using Jason.Contracts.Json;
 using Jason.Contracts.Programs;
@@ -123,7 +124,7 @@ public static class SessionOpener
         TerminalLaunch launch;
         try
         {
-            launch = TerminalPlan.Compose(terminals.Platform, terminal, where, [.. program, .. AgentHosts.InteractiveArguments(host, prompt)], item.Id);
+            launch = TerminalPlan.Compose(terminals.Platform, terminal, where, [.. program, .. AgentHosts.InteractiveArguments(host, prompt)], item.Id, DataDirectory(env));
         }
         catch (ArgumentException)
         {
@@ -246,6 +247,14 @@ public static class SessionOpener
 
     private static string? Variable(CliEnvironment env, string name) =>
         env.Variables is { } variables ? variables.GetValueOrDefault(name) : Environment.GetEnvironmentVariable(name);
+
+    /// <summary>
+    /// The data directory this CLI runs on when <c>JASON_DATA_DIR</c> names one, else null: an empty or blank value names
+    /// none, as it does where the data directory is resolved. The directory is the one the CLI uses, made absolute, since
+    /// the terminal starts in another folder than the CLI.
+    /// </summary>
+    private static string? DataDirectory(CliEnvironment env) =>
+        string.IsNullOrWhiteSpace(Variable(env, JasonPaths.DataDirectoryVariable)) ? null : env.Paths.Root;
 
     /// <summary>The person's home folder, where a host starts when no folder is recorded: never the folder the CLI runs in.</summary>
     private static string Home(CliEnvironment env) => env.Identity?.Home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

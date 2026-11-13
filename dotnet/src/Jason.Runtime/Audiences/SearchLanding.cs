@@ -547,7 +547,7 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
             {
                 try
                 {
-                    custom["provider_record"] = JsonNode.Parse(raw);
+                    custom[Contact.ProviderRecordKey] = JsonNode.Parse(raw);
                 }
                 catch (JsonException)
                 {
@@ -559,7 +559,7 @@ public sealed class SearchLanding(JournalWriter journal, ExternalIdStore identif
             // left out, and the person lands with the rest.
             if (Encoding.UTF8.GetByteCount(custom.ToJsonString(null)) > ContactValidation.MaxCustomBytes)
             {
-                custom.Remove("provider_record");
+                custom.Remove(Contact.ProviderRecordKey);
             }
 
             return custom;

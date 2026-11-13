@@ -483,15 +483,15 @@ contacts answer one key, the oldest live one. A person found is never changed, a
 address the directory did not hold is not added to them; a person found
 nowhere becomes a contact, with their names, title and company where the contact's rules take them, their channels, and
 what the contact has no field for under `custom`: `location`, `company_domain`, `company_size`, `company_industry` and the
-provider's own record as `provider_record`, left out where it would take the contact over its 64 KiB of `custom`. Each
-is pinned under `contact` by the attempt whose answer carried the page, as any pin is
-([routing](routing.md) §11): a different identifier later is recorded beside the pin. Each becomes a member of the
-campaign, except a person the campaign already holds, who stays as they are, a person removed from it, who stays
+provider's own record as `provider_record`, left out where it would take the contact over its 64 KiB of `custom`, and
+never looked into by a search of people. Each is pinned under `contact` by the attempt whose answer carried the page, as
+any pin is ([routing](routing.md) §11): a different identifier later is recorded beside the pin. Each becomes a member
+of the campaign, except a person the campaign already holds, who stays as they are, a person removed from it, who stays
 removed, and a person the directory archived, who is never made again. Membership is local: nothing here enrols anyone
 at the provider. For each membership a search made, one row in `audience_landings` — the membership, the audience, the
-search, the read that carried the page, the moment — written once and never changed by a removal or an add-back;
-nothing is added to the membership itself. `jason campaign list-contacts` names it as the member's `source`: the
-audience's id and number, the search and when the person landed.
+search, the read that carried the page, the moment — written once and never changed by a removal or an add-back; nothing
+is added to the membership itself. `jason campaign list-contacts` names it as the member's `source`: the audience's id
+and number, the search and when the person landed.
 
 **What the chronicle says**, by `system:dispatcher`, each kind with its document under
 [`contracts/journal/`](contracts/journal), facts and never a person's words:
