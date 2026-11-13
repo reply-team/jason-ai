@@ -9,8 +9,9 @@
  * demo start tries again.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { demoMarkerName } from './demo-folders.ts';
 import type { DemoPlaces } from './demo-seed.ts';
 
 /** The request file's text: the asking run's process id, so a start that is not that run waits for it to end. */
@@ -18,6 +19,23 @@ export const startOverRequestText = (pid: number): string => `pid=${pid}\n`;
 
 /** What an aside copy's name carries after the folder's own: `<folder>.removing-<time>`. */
 export const asideMarker = '.removing-';
+
+/** How long a request names the asking run: the quit is capped at 15 s, so after this the pid says nothing. */
+export const requestYoungMs = 120_000;
+
+/** How long a carry-out waits for the asking run to end before it refuses for that reason alone. */
+export const askingWaitMs = 5_000;
+
+/** Why a carry-out was refused: a code, never a path. */
+export type RefusalReason = 'asking_alive' | 'runtime_alive' | 'foreign' | 'not_taken_away' | 'places';
+
+export class CarryOutRefused extends Error {
+    readonly reason: RefusalReason;
+    constructor(reason: RefusalReason, message: string) {
+        super(message);
+        this.reason = reason;
+    }
+}
 
 /** Leaves the request at `file`, naming the asking process; throws when it cannot. */
 export function requestStartOver(file: string, pid: number = process.pid): void {
@@ -36,6 +54,12 @@ export interface CarryOutDeps {
     requested(): boolean;
     /** The text of the request. */
     requestText(): string;
+    /** How old the request file is, in milliseconds. */
+    requestAgeMs(): number;
+    /** Waits, synchronously, for at most this long. */
+    wait(ms: number): void;
+    /** How long to wait for the asking run; `askingWaitMs` when absent. */
+    askingWaitMs?: number;
     /** Whether a process is running. */
     running(pid: number): boolean;
     /** The process doing the carrying out. */
@@ -63,18 +87,24 @@ export interface CarryOutDeps {
 export function carryOutStartOver(deps: CarryOutDeps): void {
     if (!deps.requested()) return;
     const asking = askedBy(deps.requestText());
-    if (asking !== null && asking !== deps.self && deps.running(asking)) throw new Error('The run that asked is still ending.');
-    if (deps.runtimeAlive()) throw new Error('A demo runtime is still running.');
+    // The asking run is honoured only while the request is young: an older request is of a run that has long gone, and its
+    // process id may be anyone's now. A young one is waited for a few seconds, then refused.
+    if (asking !== null && asking !== deps.self && deps.requestAgeMs() <= requestYoungMs) {
+        const limit = deps.askingWaitMs ?? askingWaitMs;
+        for (let waited = 0; deps.running(asking) && waited < limit; waited += 250) deps.wait(250);
+        if (deps.running(asking)) throw new CarryOutRefused('asking_alive', 'The run that asked is still ending.');
+    }
+    if (deps.runtimeAlive()) throw new CarryOutRefused('runtime_alive', 'A demo runtime is still running.');
     const folders = [deps.places.data, deps.places.harnessRoot];
     const foreign = folders.find((folder) => deps.exists(folder) && !deps.marked(folder));
-    if (foreign !== undefined) throw new Error(`The folder ${foreign} is not one the demo made, so it was left.`);
+    if (foreign !== undefined) throw new CarryOutRefused('foreign', `The folder ${foreign} is not one the demo made, so it was left.`);
     const moved: string[] = [];
     for (const folder of folders) {
         if (!deps.exists(folder)) continue;
         try {
             moved.push(deps.setAside(folder));
         } catch {
-            throw new Error(`The folder ${folder} could not be taken away.`);
+            throw new CarryOutRefused('not_taken_away', `The folder ${folder} could not be taken away.`);
         }
     }
     // What an earlier carry-out left: removed only when it still carries the marker, as far as it goes.
@@ -87,6 +117,19 @@ export function carryOutStartOver(deps: CarryOutDeps): void {
         }
     }
     deps.dropRequest();
+}
+
+/**
+ * Removes a marked folder with its marker last: every other entry first, then the marker, then the folder. A removal that
+ * stops part-way (a file held open on Windows) leaves the marker, so the copy is still known as the demo's and a later
+ * carry-out, Remove What Jason Placed or the uninstall can finish it. Throws at the first entry it cannot remove.
+ */
+export function removeMarkedLast(folder: string, remove: (path: string) => void = (path) => rmSync(path, { recursive: true, force: true }), marker: string = demoMarkerName): void {
+    for (const name of readdirSync(folder)) {
+        if (name !== marker) remove(join(folder, name));
+    }
+    remove(join(folder, marker));
+    rmdirSync(folder);
 }
 
 /** The aside copies (`<folder>.removing-*`) that lie beside a folder, as paths; none when the parent cannot be read. */
@@ -111,6 +154,14 @@ export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: 
                 return '';
             }
         },
+        requestAgeMs: (): number => {
+            try {
+                return Date.now() - statSync(file).mtimeMs;
+            } catch {
+                return Infinity;
+            }
+        },
+        wait: (ms: number): void => void Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
         running,
         self: process.pid,
         places,
@@ -120,7 +171,7 @@ export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: 
             return aside;
         },
         asides: asidesOf,
-        removeTree: (folder: string): void => rmSync(folder, { recursive: true, force: true }),
+        removeTree: removeMarkedLast,
         dropRequest: (): void => rmSync(file, { force: true }),
     };
 }

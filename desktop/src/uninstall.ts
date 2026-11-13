@@ -43,7 +43,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, rmdirSy
 import { join, posix, win32 } from 'node:path';
 import { bundleEntries } from './bundle-copy.ts';
 import { hasDemoMarker } from './demo-folders.ts';
-import { asidesOf } from './demo-over.ts';
+import { asidesOf, removeMarkedLast } from './demo-over.ts';
 import { inert } from './inert.ts';
 import type { Logger } from './log.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
@@ -513,7 +513,7 @@ async function demoStep(
             came.add('unmarked');
         } else {
             try {
-                rmSync(path, { recursive: true, force: true });
+                removeMarkedLast(path);
                 into.removed.push(`A copy of the demo’s folder a start over left, ${shown}`);
             } catch {
                 into.failed.push(`A copy of the demo’s folder a start over left, ${shown}, which could not be taken off: deleting the folder takes it off`);

@@ -34,7 +34,7 @@ import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutOnDisk, carryOutStartOver, requestStartOver } from './demo-over.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
 import { processIsRunning } from './own-runtime.ts';
 import { applyMode, demoDirectory, demoMenu, demoUnopened, enterRun, offersOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
@@ -310,6 +310,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         timedOut: () => log.warn('demo_runtime_stop_timed_out', {}),
     });
     if (runOn.unopened !== null) log.warn('demo_unopened', {});
+    if (startOverNotCarriedOut !== null) log.warn('demo_start_over_not_carried_out', { Cause: startOverNotCarriedOut });
     // The count and the re-pair loop begin at the first pairing that succeeds: the start's, or a Reload's after a start
     // that failed.
     const begin = atFirstPairing(() => {
@@ -453,7 +454,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             relaunch: () => modeDeps.relaunch(),
         });
         if (outcome.kind === 'refused') {
-            log.warn('demo_start_over_refused', {});
+            log.warn('demo_start_over_refused', { Cause: outcome.reason });
             return { refused: outcome.why };
         }
         log.info('demo_start_over', {});
@@ -465,7 +466,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                 if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
             },
             () => {
-                log.warn('demo_start_over_refused', {});
+                log.warn('demo_start_over_refused', { Cause: 'threw' });
                 dialog.showErrorBox('Jason', 'The demo could not be started over.');
             },
         );
@@ -727,6 +728,8 @@ const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), proc
 let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
 let demoWhere!: DemoPlaces;
+/** Why the start over the run before asked for was not carried out at this start, as a code; null when nothing was refused. */
+let startOverNotCarriedOut: string | null = null;
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
 if (unsandboxed !== null) {
@@ -761,15 +764,16 @@ function chooseInstallation(installerStart: boolean): void {
     if (readMode(desktopPaths(personDirectory).mode) === 'demo' && !installerStart) {
         try {
             const problem = placesProblem(demoWhere, personDirectory, personHarness);
-            if (problem !== null) throw new Error(problem);
+            if (problem !== null) throw new CarryOutRefused('places', problem);
             carryOutStartOver({
                 ...carryOutOnDisk(desktopPaths(personDirectory).demoStartOver, demoWhere, processIsRunning),
                 runtimeAlive: () => demoRuntimeAlive(desktopPaths(demoWhere.data).runFile),
                 exists: (folder) => existsSync(folder),
                 marked: hasDemoMarker,
             });
-        } catch {
+        } catch (error) {
             refused = true;
+            startOverNotCarriedOut = error instanceof CarryOutRefused ? error.reason : 'failed';
             try {
                 writeMode(desktopPaths(personDirectory).mode, 'live');
             } catch {

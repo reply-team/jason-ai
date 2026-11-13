@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { knownDesktopEntries } from '../src/chat-hosts.ts';
 import { claimDemoFolder, hasDemoMarker } from '../src/demo-folders.ts';
-import { askedBy, carryOutOnDisk, carryOutStartOver, requestStartOver } from '../src/demo-over.ts';
+import { askedBy, carryOutOnDisk, CarryOutRefused, carryOutStartOver, removeMarkedLast, requestStartOver, requestYoungMs } from '../src/demo-over.ts';
 import { demoRuntimeAlive } from '../src/demo-alive.ts';
 import { prepareDemo } from '../src/demo-start.ts';
 import { fileLogger } from '../src/log.ts';
@@ -423,6 +423,7 @@ function carry(d: ReturnType<typeof disk>, over: Partial<Parameters<typeof carry
     carryOutStartOver({
         ...carryOutOnDisk(d.request, d.demo, () => false),
         runtimeAlive: () => false,
+        wait: () => undefined,
         exists: existsSync,
         marked: hasDemoMarker,
         ...over,
@@ -543,12 +544,13 @@ test('the request waits for the run that asked and for a live demo runtime, and 
 
 test('a demo runtime is alive when its run file names a running process or cannot be read, and not otherwise', () => {
     const file = '/x/run/runtime.json';
-    const on = (text: string | null, running: boolean) => ({ exists: () => text !== null, read: () => text ?? '', running: () => running });
+    const on = (text: string | null, running: boolean, written = 2_000) => ({ exists: () => text !== null, read: () => text ?? '', running: () => running, modifiedMs: () => written, bootMs: () => 1_000 });
     assert.equal(demoRuntimeAlive(file, on(null, true)), false, 'no run file');
     assert.equal(demoRuntimeAlive(file, on('{"pid":77}', true)), true);
     assert.equal(demoRuntimeAlive(file, on('{"pid":77}', false)), false);
     assert.equal(demoRuntimeAlive(file, on('{', false)), true, 'unreadable is not known to be dead');
     assert.equal(demoRuntimeAlive(file, on('{"pid":"x"}', false)), true);
+    assert.equal(demoRuntimeAlive(file, on('{"pid":77}', true, 500)), false, 'a run file older than the boot names no runtime, whoever has the pid now');
 });
 
 test('preparing the demo under a live runtime removes, copies and writes nothing', () => {
@@ -558,6 +560,90 @@ test('preparing the demo under a live runtime removes, copies and writes nothing
     assert.deepEqual(calls, []);
     prepareDemo('/d', { ...deps, runtimeAlive: () => false });
     assert.deepEqual(calls, ['harness', 'place', 'route', 'settings']);
+});
+
+test('a request older than two minutes ignores the asking pid; a young one is waited for, then refused with a code', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        requestStartOver(d.request, 4242);
+        const waits: number[] = [];
+        // Young and the pid stays: waited for a bounded time, then refused by a code.
+        let refusal: unknown;
+        try {
+            carry(d, { running: () => true, wait: (ms) => void waits.push(ms), askingWaitMs: 1_000, requestAgeMs: () => 5_000 });
+        } catch (error) {
+            refusal = error;
+        }
+        assert.ok(refusal instanceof CarryOutRefused && refusal.reason === 'asking_alive');
+        assert.equal(waits.reduce((a, b) => a + b, 0), 1_000, 'the wait is bounded');
+        // Young and the pid ends while waited for: it goes through at once.
+        let polls = 0;
+        const young = disk();
+        try {
+            claimBoth(young);
+            requestStartOver(young.request, 4242);
+            carry(young, { running: () => (polls += 1) < 3, requestAgeMs: () => 5_000 });
+            assert.ok(!existsSync(young.demo.data) && !existsSync(young.request));
+        } finally {
+            rmSync(young.root, { recursive: true, force: true });
+        }
+        // Old: the pid is anyone's now, and is not looked at.
+        carry(d, { running: () => true, requestAgeMs: () => requestYoungMs + 1 });
+        assert.ok(!existsSync(d.demo.data) && !existsSync(d.request));
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('every refusal of a carry-out carries a code', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        requestStartOver(d.request, 1);
+        const reason = (over: Partial<Parameters<typeof carryOutStartOver>[0]>): string => {
+            try {
+                carry(d, { requestAgeMs: () => 0, ...over });
+            } catch (error) {
+                return error instanceof CarryOutRefused ? error.reason : 'none';
+            }
+            return 'carried';
+        };
+        assert.equal(reason({ runtimeAlive: () => true, running: () => false }), 'runtime_alive');
+        assert.equal(reason({ marked: () => false }), 'foreign');
+        assert.equal(reason({ setAside: () => { throw new Error('EPERM'); } }), 'not_taken_away');
+        const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
+        assert.ok(main.includes("log.warn('demo_start_over_not_carried_out', { Cause: startOverNotCarriedOut })"));
+        assert.ok(main.includes("log.warn('demo_start_over_refused', { Cause: outcome.reason })"));
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('a copy is removed with its marker last: a removal that stops part-way leaves it marked, and a later one finishes it', () => {
+    const d = disk();
+    try {
+        const copy = join(d.root, 'jason-demo.removing-1');
+        claimDemoFolder(copy);
+        mkdirSync(join(copy, 'a'));
+        writeFileSync(join(copy, 'a', 'one.txt'), 'x');
+        writeFileSync(join(copy, 'z.txt'), 'y');
+        // The second entry cannot be removed (a file held open on Windows): the marker is still there.
+        const taken: string[] = [];
+        const holdZ = (path: string): void => {
+            if (path.endsWith('z.txt')) throw new Error('EBUSY');
+            taken.push(path);
+            rmSync(path, { recursive: true, force: true });
+        };
+        assert.throws(() => removeMarkedLast(copy, holdZ), /EBUSY/);
+        assert.ok(hasDemoMarker(copy), 'the marker is the last thing to go');
+        assert.ok(!taken.some((path) => path.endsWith('.jason-demo-folder')));
+        // Released: a later removal finishes it.
+        removeMarkedLast(copy);
+        assert.equal(existsSync(copy), false);
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
 });
 
 test('the request is a known entry of the person\'s desktop folder, so the chat host is refused it', () => {

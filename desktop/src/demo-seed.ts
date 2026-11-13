@@ -477,7 +477,7 @@ export interface StartOverDeps {
     relaunch(): void;
 }
 
-export type StartOverOutcome = { kind: 'started-over' } | { kind: 'refused'; why: string };
+export type StartOverOutcome = { kind: 'started-over' } | { kind: 'refused'; why: string; reason: 'foreign' | 'stop_failed' | 'request_failed' };
 
 /**
  * "Start the demo over": the demo's runtime is stopped, a request is left in the person's own folder and the desktop starts
@@ -489,12 +489,12 @@ export type StartOverOutcome = { kind: 'started-over' } | { kind: 'refused'; why
 export async function startDemoOver(deps: StartOverDeps): Promise<StartOverOutcome> {
     const folders = [deps.places.data, deps.places.harnessRoot];
     const foreign = folders.find((folder) => deps.exists(folder) && !deps.marked(folder));
-    if (foreign !== undefined) return { kind: 'refused', why: `The folder ${foreign} is not one the demo made, so nothing was removed. Move it away or remove it yourself, then start the demo over.` };
-    if (!(await deps.stopRuntime())) return { kind: 'refused', why: 'The sample could not be stopped, so it was left as it is.' };
+    if (foreign !== undefined) return { kind: 'refused', why: `The folder ${foreign} is not one the demo made, so nothing was removed. Move it away or remove it yourself, then start the demo over.`, reason: 'foreign' };
+    if (!(await deps.stopRuntime())) return { kind: 'refused', why: 'The sample could not be stopped, so it was left as it is.', reason: 'stop_failed' };
     try {
         deps.request();
     } catch {
-        return { kind: 'refused', why: 'The request to start the demo over could not be written, so the demo was left as it is.' };
+        return { kind: 'refused', why: 'The request to start the demo over could not be written, so the demo was left as it is.', reason: 'request_failed' };
     }
     deps.relaunch();
     return { kind: 'started-over' };
