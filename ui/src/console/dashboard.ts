@@ -185,6 +185,7 @@ function periodControl(): Html {
                       />`
                 : null
         }
+        ${rangeHint()}
     </span>`;
 }
 
@@ -201,7 +202,6 @@ function header(waiting: number): Html {
         <div>
             <h1>${greetingFor(hour)}</h1>
             <p>${mode.value === 'demo' ? t('dash.sub.demo') : t('dash.sub.live')}</p>
-            ${rangeHint()}
         </div>
         <div class="acts">
             ${periodControl()}

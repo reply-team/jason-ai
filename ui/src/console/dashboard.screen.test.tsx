@@ -399,7 +399,8 @@ describe('the period', () => {
             fireEvent.change(input);
             await settled();
         }
-        await waitFor(() => expect(words(dash().querySelector('.dash-range-hint')!)).toBe(line));
+        await waitFor(() => expect(words(dash().querySelector('.dash-period-pick .dash-range-hint')!)).toBe(line));
+        expect(dash().querySelector('.dash-period-pick .dash-range-hint')!.getAttribute('role')).toBe('status');
         expect(part('Contacted', 'b')).toBe('–');
     });
 
