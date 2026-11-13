@@ -15,6 +15,7 @@ import { registerChat } from '../src/chat-ipc.ts';
 import { fullAccessConsent } from '../src/chat-modes.ts';
 import { writeStanding } from '../src/full-access-standing.ts';
 import { invokeChannels, withMembers, type Handler, type InvokeMember, type IpcRegistrar } from '../src/ipc.ts';
+import { isOwnPage } from '../src/descriptor.ts';
 import { fileLogger } from '../src/log.ts';
 import { bench, memoryLog, outsideStandIn, placeSandboxFiles } from './harness.ts';
 
@@ -564,6 +565,14 @@ test('the link carries d=<port>.<code> inside the fragment\'s query, after the t
     assert.equal(bridgeLink('http://127.0.0.1:41234/ui/#/attention?t=TICKET', 50123, 'C'.repeat(22)), `http://127.0.0.1:41234/ui/#/attention?t=TICKET&d=50123.${'C'.repeat(22)}`);
     assert.equal(bridgeLink('http://127.0.0.1:41234/ui/#/attention', 50123, 'C'.repeat(22)), `http://127.0.0.1:41234/ui/#/attention?d=50123.${'C'.repeat(22)}`);
     assert.equal(bridgeLink('http://127.0.0.1:41234/ui/', 50123, 'C'.repeat(22)), `http://127.0.0.1:41234/ui/#/?d=50123.${'C'.repeat(22)}`);
+});
+
+test('the opener of the tab opens only a page of the runtime\'s own UI at the runtime\'s origin', () => {
+    assert.equal(isOwnPage(`${runtime}/ui/#/attention?t=T&d=50123.${'C'.repeat(22)}`, runtime), true);
+    assert.equal(isOwnPage(`${runtime}/ui/`, runtime), true);
+    for (const url of [`${runtime}/v1/status`, `${runtime}/uix/`, 'http://127.0.0.1:9999/ui/', 'https://example.com/ui/', `http://user@127.0.0.1:41234/ui/`, 'http://localhost:41234/ui/', 'file:///ui/', 'not a link']) {
+        assert.equal(isOwnPage(url, runtime), false, url);
+    }
 });
 
 test('the tab is opened at the link the CLI printed, held to the runtime\'s origin and /ui/, with a code that pairs once', async (t) => {

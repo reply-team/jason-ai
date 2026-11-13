@@ -27,6 +27,8 @@ export const templates = {
     link_opened: 'An https link was handed to the system browser',
     link_refused: 'A link that is not https was refused',
     link_open_failed: 'The system browser was asked to open a link and did not',
+    own_page_opened: "Jason's own page was handed to the system browser",
+    own_page_refused: "A link that is not Jason's own page was refused",
     ipc_refused: 'A call on {Channel} from outside {Origin} was refused',
     cli_exited: 'jason {Verb} exited {Exit} after {ElapsedMs} ms',
     program_exited: '{Program} {Verb} exited {Exit} after {ElapsedMs} ms',

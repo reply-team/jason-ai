@@ -114,6 +114,22 @@ const killTaken = /\{[^}]*\bkill\b[^}]*\}\s*=\s*process\b/;
 const openPath = /\bshell\s*\.\s*openPath\b/;
 const openExternal = /\bshell\s*\.\s*openExternal\b/g;
 
+/**
+ * The two openers inside main.ts's `lockNavigation` that hand a URL to the system browser, each by the name of the
+ * function it is written in, each calling it once, with what it opens.
+ */
+export const navigationOpeners: Readonly<Record<string, string>> = {
+    leave: 'an https link, and nothing else',
+    ownPage: "a page of the runtime's own UI at its origin, under /ui/: the chat in a browser tab",
+};
+
+/** The opener an `openExternal` call at `index` is written in: the nearest `const <name> = (` before it, or null. */
+function openerAt(text: string, from: number, index: number): string | null {
+    let name: string | null = null;
+    for (const match of text.slice(from, index).matchAll(/\bconst\s+(\w+)\s*=\s*\(/g)) name = match[1] ?? null;
+    return name;
+}
+
 /** The body of main.ts's `lockNavigation`, the one place a URL is handed to the system browser. */
 function lockNavigationBody(text: string): { start: number; end: number } | null {
     const start = text.indexOf('function lockNavigation(');
@@ -189,10 +205,19 @@ export function processViolations(path: string, text: string): string[] {
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);
     const lock = path === 'src/main.ts' ? lockNavigationBody(text) : null;
+    const opened = new Map<string, number>();
     for (const match of text.matchAll(openExternal)) {
         if (lock === null || match.index < lock.start || match.index > lock.end) {
             found.push(`${path} hands a URL to the system browser outside main.ts's navigation lock`);
+            continue;
         }
+        const opener = openerAt(text, lock.start, match.index);
+        if (opener === null || !(opener in navigationOpeners)) {
+            found.push(`${path} hands a URL to the system browser in the navigation lock outside its named openers, ${Object.keys(navigationOpeners).join(' and ')}`);
+            continue;
+        }
+        opened.set(opener, (opened.get(opener) ?? 0) + 1);
+        if (opened.get(opener) === 2) found.push(`${path} hands a URL to the system browser more than once in ${opener}`);
     }
     return found;
 }

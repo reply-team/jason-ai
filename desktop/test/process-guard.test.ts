@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, listeningModules, listingCallers, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
+import { ipcModule, listeningModules, listingCallers, navigationOpeners, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -145,6 +145,24 @@ test('shell.openPath is refused everywhere, and shell.openExternal anywhere but 
     const locked = 'function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\n';
     assert.deepEqual(processViolations('src/main.ts', locked), []);
     assert.notDeepEqual(processViolations('src/main.ts', `${locked}\nfunction other() {\n    void shell.openExternal('https://x');\n}\n`), []);
+});
+
+test('inside the navigation lock a URL reaches the system browser only through its two named openers, each once', () => {
+    assert.deepEqual(Object.keys(navigationOpeners).sort(), ['leave', 'ownPage']);
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    assert.equal([...main.matchAll(/\bshell\s*\.\s*openExternal\b/g)].length, 2, 'main.ts hands a URL to the system browser in two places');
+    assert.match(main, /const ownPage = \(url: string\): Promise<void> => \{\s*const here = origin\(\);\s*if \(here === null \|\| !isOwnPage\(url, here\)\)/, 'ownPage holds the address to the runtime\'s own page first');
+    const lock = (body: string) => `function lockNavigation(contents) {\n${body}\n}\n`;
+    const both = '    const leave = (url) => void shell.openExternal(url);\n    const ownPage = (url) => void shell.openExternal(url);';
+    assert.deepEqual(processViolations('src/main.ts', lock(both)), []);
+    for (const planted of [
+        `${both}\n    const other = (url) => void shell.openExternal(url);`,
+        `${both}\n    const guard = (event, url) => 0;\n    contents.setWindowOpenHandler(({ url }) => void shell.openExternal(url));`,
+        '    const ownPage = (url) => { void shell.openExternal(url); void shell.openExternal(url); };',
+        '    void shell.openExternal(url);',
+    ]) {
+        assert.notDeepEqual(processViolations('src/main.ts', lock(planted)), [], planted);
+    }
 });
 
 test('utilityProcess is refused everywhere', () => {

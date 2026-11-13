@@ -32,11 +32,11 @@ import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
-import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
+import { isOwnPage, loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember } from './ipc.ts';
-import { BridgeHolder, BrowserBridge } from './browser-bridge.ts';
+import { BridgeHolder, BrowserBridge, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
@@ -127,10 +127,12 @@ function showStarting(window: BrowserWindow, message: string, failed: boolean): 
 /**
  * Locks the window to the runtime's origin: a navigation elsewhere is refused, and a link or `window.open` that leaves
  * it goes to the system browser only when it is https. Of what the page asks for, only writing to the clipboard is
- * granted, and only at the runtime's origin; no other permission, no webview. Answers the one way to the system
- * browser, which the Reply card's links take too: it opens an https URL and refuses any other, logging neither.
+ * granted, and only at the runtime's origin; no other permission, no webview. Answers the two ways to the system
+ * browser: `leave`, which the Reply card's links take too, opens an https URL and refuses any other, logging neither;
+ * `ownPage` opens a page of the runtime's own UI at its origin, the chat in a tab, and refuses any other address. The
+ * page names neither address: `ownPage` is handed only the link the main process made from what the CLI printed.
  */
-function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): (url: string) => Promise<void> {
+function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): { leave: (url: string) => Promise<void>; ownPage: (url: string) => Promise<void> } {
     const leave = (url: string): Promise<void> => {
         if (!isHttps(url)) {
             log.warn('link_refused', {});
@@ -138,6 +140,20 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
         }
         return shell.openExternal(url).then(
             () => log.info('link_opened', {}),
+            (error: unknown) => {
+                log.warn('link_open_failed', {});
+                throw error;
+            },
+        );
+    };
+    const ownPage = (url: string): Promise<void> => {
+        const here = origin();
+        if (here === null || !isOwnPage(url, here)) {
+            log.warn('own_page_refused', {});
+            return Promise.reject(new Error("Only Jason's own page goes to the browser this way."));
+        }
+        return shell.openExternal(url).then(
+            () => log.info('own_page_opened', {}),
             (error: unknown) => {
                 log.warn('link_open_failed', {});
                 throw error;
@@ -160,7 +176,7 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
     });
     contents.session.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, origin())));
     contents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin()));
-    return leave;
+    return { leave, ownPage };
 }
 
 /**
@@ -304,7 +320,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         current?.webContents.send(eventChannels[channel], ...args);
         bridges.publish(channel, args);
     };
-    const toBrowser = lockNavigation(window.webContents, origin, log);
+    const { leave: toBrowser, ownPage } = lockNavigation(window.webContents, origin, log);
     // A link waits for the page that takes it: a page that goes, by a load or a reload, takes no more until the next asks.
     handle(seam, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     window.webContents.on('did-start-navigation', (details) => {
@@ -636,6 +652,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         start: (line) => startDetached(line, editorEnvironment(env, personEnvironment, process.platform)),
         copy: (text) => clipboard.writeText(text),
         terminalFlags,
+        // The chat in a tab of the system's browser: the bridge is opened on the first ask, and the link is the one the CLI
+        // printed for the runtime's own page, with the bridge's code in its fragment (`browser-bridge.ts`).
+        browser: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),
         log: (event, fields) => log.info(event, fields),
     });
     handle(seam, 'openIn.targets', origin, (campaignId) => openIn.targets(campaignId), refused);
