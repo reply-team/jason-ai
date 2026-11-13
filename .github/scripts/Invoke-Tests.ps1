@@ -24,6 +24,12 @@ Namespaces whose tests alone are run, each with every namespace inside it.
 .PARAMETER NotNamespaces
 Namespaces whose tests are not run, each with every namespace inside it.
 
+.PARAMETER Classes
+Classes whose tests alone are run, each a full class name, or the start of one with * after it.
+
+.PARAMETER NotClasses
+Classes whose tests are not run, named as Classes names them.
+
 .PARAMETER Critical
 Runs the critical tier alone: the tests that carry the Critical trait.
 
@@ -41,6 +47,8 @@ param(
     [string[]] $Projects = @(),
     [string[]] $Namespaces = @(),
     [string[]] $NotNamespaces = @(),
+    [string[]] $Classes = @(),
+    [string[]] $NotClasses = @(),
     [switch] $Critical,
     [Parameter(Mandatory)] [string] $Version,
     [Parameter(Mandatory)] [string] $Results,
@@ -56,14 +64,19 @@ $repeats = 2
 $Projects = @($Projects | Where-Object { $_ })
 $Namespaces = @($Namespaces | Where-Object { $_ })
 $NotNamespaces = @($NotNamespaces | Where-Object { $_ })
+$Classes = @($Classes | Where-Object { $_ })
+$NotClasses = @($NotClasses | Where-Object { $_ })
 foreach ($name in $Projects) {
     if ($name -cnotmatch '^Jason\.[A-Za-z]+\.Tests$') { throw "'$name' is not the name of a test project." }
 }
 
-# A namespace filter names one namespace exactly; the one inside it is named with .* after it.
+# A namespace filter names one namespace exactly; the one inside it is named with .* after it. A class filter is handed
+# on as it is given: a full class name, or the start of one with * after it.
 $filters = @(
     $Namespaces | ForEach-Object { '--filter-namespace', $_, '--filter-namespace', "$_.*" }
     $NotNamespaces | ForEach-Object { '--filter-not-namespace', $_, '--filter-not-namespace', "$_.*" }
+    $Classes | ForEach-Object { '--filter-class', $_ }
+    $NotClasses | ForEach-Object { '--filter-not-class', $_ }
     if ($Critical) { '--filter-trait', 'Category=Critical' }
 )
 
