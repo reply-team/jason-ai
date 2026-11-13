@@ -15,10 +15,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Tests.Plugins.Demo;
 
 /// <summary>
-/// The demo provider, <c>plugins/demo</c>, through the real plugin host: the package the demo installation routes every
-/// operation to. It requests nothing of the plugin fence, so nothing it does can leave its process; it answers each
-/// operation it performs in that operation's own document; and it reports the sample story's written replies as events,
-/// by its own cursor, counted from the moment the installation names under <c>Plugins:Config:demo:story_start</c>.
+/// The demo provider, <c>plugins/demo</c>, through the real plugin host: the package the demo installation routes each
+/// operation it performs to. It requests nothing of the plugin fence, so nothing it does can leave its process; it
+/// answers each operation it performs in that operation's own document; and it reports the sample story's written
+/// replies as events, by its own cursor, counted from the moment the installation names under
+/// <c>Plugins:Config:demo:story_start</c>.
 /// </summary>
 public sealed class DemoPackageTests
 {
@@ -87,15 +88,18 @@ public sealed class DemoPackageTests
     }
 
     /// <summary>
-    /// The proof that the demo sends to nobody: the package requests no program, no host, no variable, no file and no
-    /// Runtime API family, so the plugin host hands it none, whatever a person's settings grant, and a send made to it
-    /// cannot leave its process. Granting it everything changes nothing, because a grant only narrows a request.
+    /// The proof that the demo sends to nobody: the package requests no program, no host, no variable, no file, no
+    /// journal kind and no Runtime API family, so the plugin host hands it none, whatever a person's settings grant, and
+    /// a send made to it cannot leave its process. Everything a person can write is granted here — every list's star, an
+    /// explicit program, host, variable and kind, every API family and a directory — and the load reads each explicit
+    /// entry and refuses it as unrequested, hands nothing, and the package still loads and answers.
     /// </summary>
     [Fact]
     public async Task It_requests_no_host_and_no_program_so_the_fence_gives_it_nothing_whatever_is_granted()
     {
         var manifest = ManifestReader.Read(File.ReadAllText(Path.Combine(Shipped, "plugin.yaml")), Id, Shipped, new ManifestBounds(3_600_000, 512)).Manifest!;
         Assert.Equal(new CapabilityRequests(null, null, null, null, null), manifest.Capabilities);
+        Assert.Empty(manifest.Subscriptions);
 
         await using var api = await StartAsync(storyStart: null, grantEverything: true);
         var registry = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
@@ -108,6 +112,19 @@ public sealed class DemoPackageTests
         Assert.Null(plugin.Capabilities.Api);
         Assert.Null(plugin.Capabilities.Files);
         Assert.Null(plugin.Capabilities.Subscriptions);
+
+        // Every explicit entry was read and refused: a star over nothing requested names nothing to refuse.
+        string[] refused =
+        [
+            "grants.exec[1]", "grants.http[1]", "grants.env[1]",
+            .. OperationFamilies.All.Select((_, index) => $"grants.api[{index}]"),
+            "grants.files[0]", "grants.subscriptions[1]",
+        ];
+        Assert.All(plugin.Problems, problem => Assert.Equal("grant_unrequested", problem.Code));
+        Assert.Equal(refused.Order(StringComparer.Ordinal), plugin.Problems.Select(problem => problem.Path).Order(StringComparer.Ordinal));
+
+        // And under all of it the package still answers.
+        Succeeded("sender.list", await InvokeAsync(api, "sender.list", SenderList(null)));
 
         // And no line of the package names a host function that reaches out.
         foreach (var file in Directory.EnumerateFiles(Shipped, "*.js", SearchOption.AllDirectories))
@@ -366,6 +383,31 @@ public sealed class DemoPackageTests
         Failed("conversation.reply", await InvokeAsync(api, "conversation.reply", Reply("demo-thread-none", Text(person["contact_id"]), Email(person))), "conversation_not_found");
     }
 
+    /// <summary>
+    /// The thread's address is held in every case, the pin's being right included: a person whose pin is the thread's
+    /// person but whose address on the channel is another — an address changed since — is refused, and nothing is sent.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_under_the_right_pin_from_another_address_is_refused()
+    {
+        var person = PersonWithReplies();
+        var thread = "demo-thread-" + Text(person["replies"]![0]!["send"]);
+        await using var api = await StartAsync(storyStart: DateTimeOffset.UtcNow);
+
+        Failed("conversation.reply", await InvokeAsync(api, "conversation.reply", Reply(thread, Text(person["contact_id"]), "changed.address@elsewhere.example")), "thread_contact_mismatch");
+    }
+
+    /// <summary>Before the story starts no thread exists, so a reply into one is refused as the reads refuse it.</summary>
+    [Fact]
+    public async Task Before_the_story_starts_a_reply_finds_no_thread()
+    {
+        var person = PersonWithReplies();
+        var thread = "demo-thread-" + Text(person["replies"]![0]!["send"]);
+        await using var api = await StartAsync(storyStart: null);
+
+        Failed("conversation.reply", await InvokeAsync(api, "conversation.reply", Reply(thread, Text(person["contact_id"]), Email(person))), "conversation_not_found");
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // The events: written replies, by the package's own cursor.
     // -----------------------------------------------------------------------------------------------------------------
@@ -444,6 +486,81 @@ public sealed class DemoPackageTests
     }
 
     /// <summary>
+    /// The demo's own first read: the runtime reads the account at its start, before the seed has started the story, and
+    /// keeps the cursor that read gave; the seed then writes the moment and reloads, and the next read, from that cursor,
+    /// returns every reply that has landed since. The cursor keeps the depth the first read asked for, so a read that
+    /// asked for less returns only the replies at or after its own <c>since</c>.
+    /// </summary>
+    [Fact]
+    public async Task The_first_read_after_the_start_returns_every_landed_reply_from_the_cursor_taken_before_it()
+    {
+        var start = ToTheMillisecond(DateTimeOffset.UtcNow.AddSeconds(-300));
+        var written = Written(start);
+        var shallowSince = written[1].At;
+        await using var api = await StartAsync(storyStart: null);
+
+        var deep = Page(await ReadAsync(api, ReadInput(since: DateTimeOffset.UtcNow.AddDays(-30))));
+        var shallow = Page(await ReadAsync(api, ReadInput(since: shallowSince)));
+        Assert.Empty(deep["events"]!.AsArray());
+        Assert.Empty(shallow["events"]!.AsArray());
+
+        await StartTheStoryAsync(api, start);
+        var before = DateTimeOffset.UtcNow;
+        var fromDeep = Ids(Page(await ReadAsync(api, ReadInput(cursor: Text(deep["cursor"])))));
+        var fromShallow = Ids(Page(await ReadAsync(api, ReadInput(cursor: Text(shallow["cursor"])))));
+        var after = DateTimeOffset.UtcNow;
+
+        var landed = written.Where(entry => entry.At <= before).Select(entry => entry.Id).ToList();
+        Assert.True(landed.Count >= 3, "the story landed too few replies in five minutes");
+        Assert.All(landed, id => Assert.Contains(id, fromDeep));
+        Assert.All(fromDeep, id => Assert.True(written.Single(entry => entry.Id == id).At <= after));
+        Assert.Equal(fromDeep.Where(id => written.Single(entry => entry.Id == id).At >= shallowSince), fromShallow);
+        Assert.DoesNotContain(written[0].Id, fromShallow);
+    }
+
+    /// <summary>A read by date that ends stops before its <c>until</c>, landed replies after it included, and its cursor keeps the end.</summary>
+    [Fact]
+    public async Task A_read_with_an_until_stops_before_it_and_its_cursor_keeps_the_end()
+    {
+        var start = ToTheMillisecond(DateTimeOffset.UtcNow.AddHours(-1));
+        var written = Written(start);
+        await using var api = await StartAsync(storyStart: start);
+
+        var page = Page(await ReadAsync(api, ReadInput(since: start.AddDays(-1), until: written[3].At)));
+
+        Assert.Equal(written.Take(3).Select(entry => entry.Id), Ids(page));
+        Assert.False(page["has_more"]!.GetValue<bool>());
+        var rest = Page(await ReadAsync(api, ReadInput(cursor: Text(page["cursor"]))));
+        Assert.Empty(rest["events"]!.AsArray());
+    }
+
+    /// <summary>
+    /// A reply still ahead at one read is returned by the next read from the same cursor once its moment has come, and
+    /// exactly once: the story is started a few seconds before its first reply is due, read, and read again after it.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_that_lands_between_two_reads_is_returned_by_the_second_once()
+    {
+        await using var api = await StartAsync(storyStart: null);
+        var earliest = Written(DateTimeOffset.UnixEpoch)[0];
+        var start = ToTheMillisecond(DateTimeOffset.UtcNow - (earliest.At - DateTimeOffset.UnixEpoch) + TimeSpan.FromSeconds(5));
+        var due = start + (earliest.At - DateTimeOffset.UnixEpoch);
+        await StartTheStoryAsync(api, start);
+
+        var readAt = DateTimeOffset.UtcNow;
+        var first = Page(await ReadAsync(api, ReadInput(since: start.AddDays(-1))));
+        Assert.True(readAt < due, "the reload outlasted the margin before the first reply was due");
+        Assert.Empty(first["events"]!.AsArray());
+
+        await Task.Delay(due - DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(250), Ct);
+        var second = Page(await ReadAsync(api, ReadInput(cursor: Text(first["cursor"]))));
+        Assert.Equal([earliest.Id], Ids(second));
+
+        var third = Page(await ReadAsync(api, ReadInput(cursor: Text(second["cursor"]))));
+        Assert.DoesNotContain(earliest.Id, Ids(third));
+    }
+
+    /// <summary>
     /// A reply exists only for a person the package knows, and only in the thread of a send the story says went: every
     /// event names a contact of the story and that person's own thread, and nobody the package made a contact for is
     /// ever named, so a reply to somebody never written to cannot reach a campaign.
@@ -497,21 +614,45 @@ public sealed class DemoPackageTests
                 TestPlugins.Copy(Shipped, paths.PluginPackageDirectory(Id));
                 if (grantEverything)
                 {
-                    TestPlugins.Grant(paths, Id, exec: ["*"], http: ["*"], env: ["*"], api: ["read"]);
+                    TestPlugins.Grant(
+                        paths,
+                        Id,
+                        exec: ["*", "node"],
+                        http: ["*", "api.example.com"],
+                        env: ["*", "HOME"],
+                        api: [.. OperationFamilies.All],
+                        files: [Path.Combine(Path.GetTempPath(), "jason-demo-fence-" + Guid.NewGuid().ToString("N"))]);
+                    var granted = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
+                    granted["Plugins"]!["Grants"]![Id]!["Subscriptions"] = new JsonArray("*", "inbound_reply_observed");
+                    File.WriteAllText(paths.UserSettingsFile, granted.ToJsonString());
                 }
 
                 if (storyStart is { } start)
                 {
-                    var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
-                    settings["Plugins"] ??= new JsonObject();
-                    settings["Plugins"]!["Config"] = new JsonObject
-                    {
-                        [Id] = new JsonObject { ["story_start"] = start.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture) },
-                    };
-                    File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString());
+                    WriteStoryStart(paths, start);
                 }
             },
             configureServices: services => services.AddSingleton<IPluginHostLocator>(new JasonDllLocator()));
+
+    /// <summary>The moment the story starts, written where the seed writes it: the package's configuration.</summary>
+    private static void WriteStoryStart(JasonPaths paths, DateTimeOffset start)
+    {
+        var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
+        settings["Plugins"] ??= new JsonObject();
+        settings["Plugins"]!["Config"] = new JsonObject
+        {
+            [Id] = new JsonObject { ["story_start"] = start.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture) },
+        };
+        File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString());
+    }
+
+    /// <summary>The story started on a running runtime as the seed starts it: the moment written, then a reload.</summary>
+    private static async Task StartTheStoryAsync(RuntimeApiFixture api, DateTimeOffset start)
+    {
+        WriteStoryStart(api.Paths, start);
+        var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { Reason = "the story starts" }, Ct);
+        Assert.Equal(PluginStatus.Valid, Assert.Single(reloaded.Plugins, listed => listed.Id == Id).Status);
+    }
 
     private static async Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, string operation, JsonObject input, int attempt = 1)
     {
@@ -644,11 +785,25 @@ public sealed class DemoPackageTests
         };
     }
 
-    private static JsonObject ReadInput(DateTimeOffset? since = null, string? cursor = null, int limit = 100) => new()
+    private static JsonObject ReadInput(DateTimeOffset? since = null, string? cursor = null, int limit = 100, DateTimeOffset? until = null) => new()
     {
         ["cursor"] = cursor,
         ["since"] = since?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture),
-        ["until"] = null,
+        ["until"] = until?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture),
         ["limit"] = limit,
     };
+
+    /// <summary>The story's written replies under a start, in the order they land, each with the event id it is read as.</summary>
+    private static List<(string Id, DateTimeOffset At)> Written(DateTimeOffset start) =>
+        [.. People()
+            .SelectMany(person => person["replies"]!.AsArray()
+                .Select(reply => reply!.AsObject())
+                .GroupBy(reply => Text(reply["send"]), StringComparer.Ordinal)
+                .SelectMany(thread => thread.Select((reply, index) => (
+                    Id: "demo-reply-" + thread.Key + "-" + (index + 1),
+                    At: start.AddSeconds(reply["offset_seconds"]!.GetValue<int>())))))
+            .OrderBy(entry => entry.At)
+            .ThenBy(entry => entry.Id, StringComparer.Ordinal)];
+
+    private static List<string> Ids(JsonObject page) => [.. page["events"]!.AsArray().Select(found => Text(found!["id"]))];
 }
