@@ -37,6 +37,10 @@ name: CI
 # Every check the main branch's ruleset requires reports on every ready pull request into main and on every push to
 # main, as a success where a rule skipped it: a skipped job reports success, and a matrix row that is absent would not
 # report at all.
+# A platform is three kinds of job: its package (`<rid> package`), its tests in parts that run side by side
+# (`<rid> tests: <part>`, the whole suite in six parts or the critical tier in one), and its check under the platform's
+# own name, which the rulesets require and which is green only when the package and every part of that platform this run
+# made succeeded. The parts' and the package's checks are reported too, and no ruleset requires them.
 # Wherever the suite runs, a test that fails is run again, alone, at most twice, by the test platform's own repeat
 # (.github/scripts/Invoke-Tests.ps1): one that passes on a repeat keeps its job green and is named on the run's summary
 # and among its annotations, and one that fails every attempt fails its job. On Windows, a job that builds leaves its
@@ -81,6 +85,7 @@ jobs:
       macos: ${{ steps.legs.outputs.macos }}
       tier: ${{ steps.legs.outputs.tier }}
       platforms: ${{ steps.legs.outputs.platforms }}
+      tests: ${{ steps.legs.outputs.tests }}
       updates: ${{ steps.legs.outputs.updates }}
       rids: ${{ steps.legs.outputs.rids }}
       skipping: ${{ steps.legs.outputs.skipping }}
@@ -303,6 +308,17 @@ jobs:
           FOUND: ${{ steps.earlier.outputs.found }}
           PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest","name":"linux-x64"},{"rid":"win-x64","os":"windows-latest","name":"win-x64"},{"rid":"osx-arm64","os":"macos-latest","name":"osx-arm64"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
+          # The parts a platform's tests are run in, each on a runner of its own: the critical tier in one part, and the
+          # whole suite in six, by test project and, for the runtime's tests, by namespace, each namespace with every
+          # namespace inside it. The part marked rest runs every namespace of its projects that no other part names.
+          PARTS: >-
+            [{"part":"the critical tier","tier":"true","projects":"","namespaces":"","rest":"false"},
+            {"part":"App","tier":"false","projects":"Jason.App.Tests","namespaces":"","rest":"false"},
+            {"part":"Cli, Contracts and PluginHost","tier":"false","projects":"Jason.Cli.Tests Jason.Contracts.Tests Jason.PluginHost.Tests","namespaces":"","rest":"false"},
+            {"part":"Runtime 1 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Plugins","rest":"false"},
+            {"part":"Runtime 2 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Execution Jason.Runtime.Tests.Dispatch Jason.Runtime.Tests.Hosting Jason.Runtime.Tests.Integration","rest":"false"},
+            {"part":"Runtime 3 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Documentation Jason.Runtime.Tests.Notifications Jason.Runtime.Tests.Routing Jason.Runtime.Tests.Configuration Jason.Runtime.Tests.Profiles Jason.Runtime.Tests.WorkItems","rest":"false"},
+            {"part":"Runtime 4 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"","rest":"true"}]
         run: |
           # Documentation is Markdown a build compiles nothing of: outside the C# tree, the workflows and the plugins, a
           # plain file before and after. Read is documentation, run is code: a page a test merely reads (the publication,
@@ -520,6 +536,19 @@ jobs:
           # creates its own. A ready leg is, the tier's included where the tier is the ready run.
           $kept = @($kept | ForEach-Object { @{ rid = $_.rid; os = $_.os; name = $(if ($draft) { "$($_.rid) (critical tier)" } else { $_.rid }) } })
 
+          # The test jobs: every platform that runs, in each part of what it tests, the tier's one part or the whole suite's
+          # six. The rest's namespaces to leave out are every namespace another part of the same projects names, so a
+          # namespace added later lands in the rest without anyone naming it.
+          $parts = @($env:PARTS | ConvertFrom-Json | Where-Object { $_.tier -ceq $(if ($tier) { 'true' } else { 'false' }) })
+          $tests = @(foreach ($platform in $kept) {
+            foreach ($part in $parts) {
+              $others = if ($part.rest -ceq 'true') {
+                @($parts | Where-Object { $_.rest -cne 'true' -and $_.projects -ceq $part.projects } | ForEach-Object { "$($_.namespaces)".Split(' ', [StringSplitOptions]::RemoveEmptyEntries) })
+              } else { @() }
+              [ordered] @{ rid = $platform.rid; os = $platform.os; part = $part.part; projects = $part.projects; namespaces = $part.namespaces; not_namespaces = ($others -join ' ') }
+            }
+          })
+
           function Word([bool] $yes) { if ($yes) { 'true' } else { 'false' } }
           "set=$set" >> $env:GITHUB_OUTPUT
           "full=$(Word ($set -eq 'everything'))" >> $env:GITHUB_OUTPUT
@@ -528,6 +557,7 @@ jobs:
           "macos=$(Word ($set -eq 'everything'))" >> $env:GITHUB_OUTPUT
           "tier=$(Word $tier)" >> $env:GITHUB_OUTPUT
           "platforms=$(@{ include = $kept } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
+          "tests=$(@{ include = $tests } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
           "updates=$(@{ include = $keptUpdates } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
           "rids=$(@($kept | ForEach-Object { $_.rid }) -join ',')" >> $env:GITHUB_OUTPUT
           "skipping=$(Word ($skipped.Count -gt 0))" >> $env:GITHUB_OUTPUT
@@ -555,7 +585,7 @@ jobs:
 
           # Which case this run took, and why, in its log and on its summary page, with the paths a pull request into main
           # that is not the release's, or a push to main whose tree no run recorded, changes against its base.
-          $legs = "platforms -> $(@($kept | ForEach-Object { $_.rid }) -join ', '); tests -> $(if ($tier) { 'the critical tier' } elseif ($set -in 'tested', 'none') { 'none' } else { 'the whole suite' }); updates -> $(@($keptUpdates | ForEach-Object { $_.rid }) -join ', '); skipped by rule -> $(@($skipped | ForEach-Object { $_.check }) -join ', ')"
+          $legs = "platforms -> $(@($kept | ForEach-Object { $_.rid }) -join ', '); tests -> $(if ($tier) { 'the critical tier' } elseif ($set -in 'tested', 'none') { 'none' } else { 'the whole suite' }); parts -> $(if ($kept.Count -gt 0) { @($parts | ForEach-Object { $_.part }) -join ', ' }); updates -> $(@($keptUpdates | ForEach-Object { $_.rid }) -join ', '); skipped by rule -> $(@($skipped | ForEach-Object { $_.check }) -join ', ')"
           $saw = @(if ($null -ne $seen) { "changed against the base -> $(Some $seen)" })
           Write-Host "set -> ${set}; $why"
           Write-Host $legs
@@ -623,8 +653,71 @@ jobs:
           VERSION: ${{ needs.version.outputs.release }}
         run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title "The suite under a release's version"
 
-  build-test-publish:
+  # A platform's check, under the platform's own name, which the rulesets require: green only when every job of that
+  # platform this run made succeeded, its package and each part of its tests. It waits for all of them and runs even
+  # when one failed or the run was cancelled, so it is never skipped in place of a failure; it reads this run's jobs, each
+  # by its latest attempt, and fails on a job of its platform that did not succeed, that is missing, or that it cannot
+  # read. The jobs of another platform are not its business: a red win-x64 leaves linux-x64 green.
+  platform:
     name: ${{ matrix.name }}
+    needs: [version, build-test-publish, tests]
+    if: always() && needs.version.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    # It checks nothing out; its token reads this run's jobs, and nothing more.
+    permissions:
+      actions: read
+    strategy:
+      fail-fast: false
+      # linux-x64, win-x64 and osx-arm64 when every check runs; linux-x64 alone on the Linux set and on the version pull
+      # request, and named so on a draft's push.
+      matrix: ${{ fromJSON(needs.version.outputs.platforms) }}
+    steps:
+      - name: Every job of this platform succeeded
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
+          RID: ${{ matrix.rid }}
+          TESTS: ${{ needs.version.outputs.tests }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The jobs this platform is made of: its package, and each part of its tests the version job decided.
+          $expected = @("$env:RID package") + @(@(($env:TESTS | ConvertFrom-Json).include) | Where-Object { $_ -and $_.rid -ceq $env:RID } | ForEach-Object { "$($_.rid) tests: $($_.part)" })
+          if ($expected.Count -lt 2) { throw "the version job decided no tests for $env:RID, so nothing says its tests passed" }
+
+          # This run's jobs, each by its latest attempt. A list that cannot be read fails the check: a check nobody could
+          # read is not one that passed.
+          $listed = gh api --paginate "repos/$env:REPOSITORY/actions/runs/$env:RUN/jobs?filter=latest&per_page=100" --jq '.jobs[] | [.name, .status, (.conclusion // "")] | @tsv'
+          if ($LASTEXITCODE -ne 0) { throw "the API did not list this run's jobs" }
+          $jobs = @($listed | Where-Object { $_ } | ForEach-Object { $fields = "$_".Split("`t"); [pscustomobject] @{ name = $fields[0]; status = "$($fields[1])"; conclusion = "$($fields[2])" } })
+
+          $said = @()
+          $failed = @()
+          foreach ($name in $expected) {
+            $found = @($jobs | Where-Object { $_.name -ceq $name })
+            $state = if ($found.Count -eq 0) { 'not run' }
+              elseif ($found.Count -gt 1) { "listed $($found.Count) times" }
+              elseif ($found[0].status -cne 'completed') { $found[0].status }
+              elseif ($found[0].conclusion -cne 'success') { if ($found[0].conclusion) { $found[0].conclusion } else { 'completed with no conclusion' } }
+              else { 'success' }
+            if ($state -cne 'success') { $failed += "$name ($state)" }
+            $said += "| $name | $state |"
+          }
+
+          $summary = @("### $env:RID", '', '| Job | Result |', '| --- | --- |') + $said
+          $summary | ForEach-Object { Write-Host $_ }
+          if ($env:GITHUB_STEP_SUMMARY) { $summary + @('') | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+          if ($failed.Count -gt 0) {
+            Write-Host "::error title=$env:RID::not every job of $env:RID succeeded: $($failed -join ', ')"
+            exit 1
+          }
+          exit 0
+
+  # A platform's package: the build, the packaged executable, its smoke test and its own uninstall. The jobs that use the
+  # archive wait for this one alone, not for the tests.
+  build-test-publish:
+    name: ${{ matrix.rid }} package
     needs: version
     if: needs.version.outputs.build == 'true'
     runs-on: ${{ matrix.os }}
@@ -637,8 +730,7 @@ jobs:
       # request.
       matrix: ${{ fromJSON(needs.version.outputs.platforms) }}
     steps:
-      # The whole history and its tags: the journal's kind documents are compared with the last published release's,
-      # read from its tag, and a test that finds no tag under CI fails rather than skip.
+      # The whole history and its tags, as the test jobs check out: the same tree, built the same way.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -687,26 +779,6 @@ jobs:
           Write-Host "win-x64 on this host: $(if ($refused) { 'refused' } else { 'let through' })"
           # A pwsh step ends with the last native command's exit code, which here is the refusal's own.
           exit 0
-
-      # A draft's push, a pull request into a release branch and the version pull request test the critical tier alone, a
-      # few minutes where the whole suite takes many; every other run tests the whole suite, the same build under the
-      # same version. A test that fails is run again, alone, at most twice: one that passes on a repeat keeps the job green
-      # and is named on the run's summary, and one that fails every attempt fails the job (.github/scripts/Invoke-Tests.ps1).
-      - name: Test (offline)
-        if: needs.version.outputs.tier != 'true'
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-          TITLE: ${{ matrix.name }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE
-
-      - name: Test the critical tier (offline)
-        if: needs.version.outputs.tier == 'true'
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-          TITLE: ${{ matrix.name }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
 
       # The publish, the archive, the checksum and the manifest fragment: the same action release.yml runs on
       # a tag, so the packaging is exercised on every pull request long before a tag exists.
@@ -846,6 +918,81 @@ jobs:
           }
 
           Write-Host "the published executable took itself off this runner and left nothing of its own behind"
+
+  # A platform's tests, in parts that run side by side, each on a runner of its own, each building the tree as the package
+  # does: the version job decides the parts (PARTS, beside the platforms), and every part of a platform together is the
+  # whole suite. Runtime's tests are four parts by namespace, the fourth everything the first three do not name, so a new
+  # namespace lands there; App's are a part alone; Cli's, Contracts' and PluginHost's are one part together. A draft's
+  # push, a pull request into a release branch and the version pull request test the critical tier alone, as one part.
+  # A test that fails is run again, alone, at most twice: one that passes on a repeat keeps its part green and is named on
+  # the run's summary, and one that fails every attempt fails its part (.github/scripts/Invoke-Tests.ps1).
+  tests:
+    name: '${{ matrix.rid }} tests: ${{ matrix.part }}'
+    needs: version
+    if: needs.version.outputs.build == 'true'
+    runs-on: ${{ matrix.os }}
+    # Its token reads the repository for the checkout, and nothing more.
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.version.outputs.tests) }}
+    steps:
+      # The whole history and its tags: the journal's kind documents are compared with the last published release's,
+      # read from its tag, and a test that finds no tag under CI fails rather than skip.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
+
+      # As the package job does, and for the same reason.
+      - name: Leave the workspace and the temporary directories out of the real-time scan
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, [IO.Path]::GetTempPath()) | Where-Object { $_ } | Select-Object -Unique
+          if (-not (Get-Command Add-MpPreference -ErrorAction SilentlyContinue)) {
+            Write-Host "::warning title=Real-time scan::this runner has no Add-MpPreference, so nothing was left out of a scan"
+            exit 0
+          }
+          try {
+            Add-MpPreference -ExclusionPath $paths
+            Write-Host "left out of the real-time scan: $($paths -join ', ')"
+          } catch {
+            Write-Host "::warning title=Real-time scan::the paths could not be left out of the scan, and the job runs scanned: $($_.Exception.Message)"
+          }
+          exit 0
+
+      - name: Restore
+        run: dotnet restore dotnet/Jason.slnx
+
+      - name: Build (warnings are errors)
+        run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
+
+      - name: Test (offline)
+        if: needs.version.outputs.tier != 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TITLE: '${{ matrix.rid }} tests: ${{ matrix.part }}'
+          PROJECTS: ${{ matrix.projects }}
+          NAMESPACES: ${{ matrix.namespaces }}
+          NOT_NAMESPACES: ${{ matrix.not_namespaces }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE
+
+      - name: Test the critical tier (offline)
+        if: needs.version.outputs.tier == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TITLE: '${{ matrix.rid }} tests: ${{ matrix.part }}'
+          PROJECTS: ${{ matrix.projects }}
+          NAMESPACES: ${{ matrix.namespaces }}
+          NOT_NAMESPACES: ${{ matrix.not_namespaces }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
 
   # The manifest declares consoleAllocationPolicy, which Windows 11 24H2 (build 26100) introduced. A loader that
   # rejected a manifest carrying a setting it does not know would not start jason.exe at all, and every other Windows
