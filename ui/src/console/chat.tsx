@@ -654,10 +654,6 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
     return html`${dropped}${parts}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
 }
 
-/**
- * A chat's thread, drawn again only when what it shows changed: typing in the box changes the chat, and must neither
- * draw the thread afresh, closing what the person opened in it, nor read its Markdown again.
- */
 /** What the plan card shows beyond the entries and the host: whether it is live, on another host, approving or approved. */
 function cardOf(chat: Chat, host: DesktopHost | null): string {
     // An approved card is no longer the last entry once the go is said, and still shows that it was approved.
@@ -665,6 +661,10 @@ function cardOf(chat: Chat, host: DesktopHost | null): string {
     return `${livePlan(chat, host?.id ?? null)} ${planElsewhere(chat, host?.id ?? null)} ${chat.plan}`;
 }
 
+/**
+ * A chat's thread, drawn again only when what it shows changed: typing in the box changes the chat, and must neither
+ * draw the thread afresh, closing what the person opened in it, nor read its Markdown again.
+ */
 function threadOf(chatId: string) {
     let last: { chat: Chat; host: DesktopHost | null; named: unknown; now: number; card: string; view: Html } | null =
         null;
