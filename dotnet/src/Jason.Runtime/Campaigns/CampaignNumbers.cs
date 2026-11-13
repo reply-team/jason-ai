@@ -49,8 +49,9 @@ public sealed class CampaignNumbers(JasonDbContext db)
         var campaigns = await CampaignsAsync(request.CampaignIds, cancellationToken).ConfigureAwait(false);
         var ids = campaigns.Select(campaign => campaign.Id).ToList();
         var audience = await AudienceAsync(db, campaigns, request.Audience, cancellationToken).ConfigureAwait(false);
-        var counts = await CampaignPeople.ActivityCountsAsync(db, ids, since, until, audience, cancellationToken).ConfigureAwait(false);
-        var t = await CampaignPeople.ActivityTotalAsync(db, ids, since, until, audience, cancellationToken).ConfigureAwait(false);
+        var withoutArchived = request.ExcludeArchivedContacts == true;
+        var counts = await CampaignPeople.ActivityCountsAsync(db, ids, since, until, audience, withoutArchived, cancellationToken).ConfigureAwait(false);
+        var t = await CampaignPeople.ActivityTotalAsync(db, ids, since, until, audience, withoutArchived, cancellationToken).ConfigureAwait(false);
         return new CampaignActivityResponse(
             [.. campaigns.Select(campaign => counts.TryGetValue(campaign.Id, out var c)
                 ? new CampaignActivityRow(campaign.PublicId, c.People, c.Added, c.WorkedOn, c.Contacted, c.Replied, c.OptedOut, c.Removed)
@@ -85,7 +86,9 @@ public sealed class CampaignNumbers(JasonDbContext db)
         var buckets = ActivityBuckets.Cut(since, until, request.Period!.Value, zone);
         var campaigns = await CampaignsAsync(request.CampaignIds, cancellationToken).ConfigureAwait(false);
         var audience = await AudienceAsync(db, campaigns, request.Audience, cancellationToken).ConfigureAwait(false);
-        var moments = await CampaignPeople.MomentsAsync(db, [.. campaigns.Select(campaign => campaign.Id)], request.Count!.Value, since, until, audience, cancellationToken)
+        var withoutArchived = request.ExcludeArchivedContacts == true;
+        var moments = await CampaignPeople.MomentsAsync(
+                db, [.. campaigns.Select(campaign => campaign.Id)], request.Count!.Value, since, until, audience, withoutArchived, cancellationToken)
             .ConfigureAwait(false);
 
         var starts = buckets.Select(bucket => Milliseconds(bucket.Start)).ToArray();

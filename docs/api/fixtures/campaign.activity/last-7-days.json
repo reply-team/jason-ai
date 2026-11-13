@@ -8,7 +8,8 @@
       "cmp_3"
     ],
     "since": "2026-10-10T00:00:00.000Z",
-    "until": "2026-10-16T09:00:00.000Z"
+    "until": "2026-10-16T09:00:00.000Z",
+    "exclude_archived_contacts": true
   },
   "status": 200,
   "response": {

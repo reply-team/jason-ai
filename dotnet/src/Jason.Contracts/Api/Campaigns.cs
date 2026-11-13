@@ -143,10 +143,11 @@ public sealed record CampaignSummaryTotal(int People, int Waiting, int Failed, i
 public sealed record CampaignSummaryResponse(IReadOnlyList<CampaignSummaryRow> Campaigns, CampaignSummaryTotal Total);
 
 /// <summary>
-/// The campaigns and the audience as <see cref="CampaignSummaryRequest"/> names them, and the period: <c>since</c>
-/// included, <c>until</c> not, both required.
+/// The campaigns, the audience and <c>exclude_archived_contacts</c> as <see cref="CampaignSummaryRequest"/> names them,
+/// and the period: <c>since</c> included, <c>until</c> not, both required.
 /// </summary>
-public sealed record CampaignActivityRequest(IReadOnlyList<string>? CampaignIds, DateTimeOffset? Since, DateTimeOffset? Until, int? Audience = null);
+public sealed record CampaignActivityRequest(
+    IReadOnlyList<string>? CampaignIds, DateTimeOffset? Since, DateTimeOffset? Until, int? Audience = null, bool? ExcludeArchivedContacts = null);
 
 /// <summary>
 /// What happened to one campaign's people in the period, each count a number of people, removed ones included:
@@ -161,9 +162,9 @@ public sealed record CampaignActivityTotal(int People, int Added, int WorkedOn, 
 public sealed record CampaignActivityResponse(IReadOnlyList<CampaignActivityRow> Campaigns, CampaignActivityTotal Total);
 
 /// <summary>
-/// One Activity count over time: the campaigns and the audience as <see cref="CampaignSummaryRequest"/> names them, the
-/// count, the period each bucket is (an hour, a day or a week), the window (<c>since</c> included, <c>until</c> not) and the
-/// IANA zone the buckets are cut in, UTC when absent.
+/// One Activity count over time: the campaigns, the audience and <c>exclude_archived_contacts</c> as
+/// <see cref="CampaignSummaryRequest"/> names them, the count, the period each bucket is (an hour, a day or a week), the
+/// window (<c>since</c> included, <c>until</c> not) and the IANA zone the buckets are cut in, UTC when absent.
 /// </summary>
 public sealed record CampaignActivityByPeriodRequest(
     IReadOnlyList<string>? CampaignIds,
@@ -172,7 +173,8 @@ public sealed record CampaignActivityByPeriodRequest(
     DateTimeOffset? Since,
     DateTimeOffset? Until,
     string? Zone = null,
-    int? Audience = null);
+    int? Audience = null,
+    bool? ExcludeArchivedContacts = null);
 
 /// <summary>
 /// The count with this bucket as its period, people counted once within it across the campaigns asked: a person counted

@@ -30,7 +30,10 @@ export async function reload(): Promise<void> {
         if (mine !== generation) return;
         const ids = page.items.map((each) => each.id);
         const counts = ids.length
-            ? await api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: ids })
+            ? await api.call<CampaignSummaryResponse>('campaign.summary', {
+                  campaign_ids: ids,
+                  ...store.archivedLeftOut,
+              })
             : { campaigns: [] };
         if (mine !== generation) return;
         summary.value = Object.fromEntries(counts.campaigns.map((row) => [row.campaign_id, row]));

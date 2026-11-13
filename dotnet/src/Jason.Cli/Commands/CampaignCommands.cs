@@ -378,6 +378,7 @@ public static class CampaignCommands
         var until = VerbOptions.Moment("--until", "With --activity: the period's end, not included, as ISO-8601 UTC, or now.");
         var query = new Option<string?>("--query") { Description = "Only people found by this text: a name, company, title, any channel value or the value of any custom field, never its name nor the provider's record kept beside the fields." };
         var audience = AudienceOption();
+        var withoutArchived = ExcludeArchivedContactsOption();
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
@@ -389,6 +390,7 @@ public static class CampaignCommands
         command.Options.Add(until);
         command.Options.Add(query);
         command.Options.Add(audience);
+        command.Options.Add(withoutArchived);
         command.Options.Add(limit);
         command.Options.Add(cursor);
         command.Options.Add(human);
@@ -407,6 +409,7 @@ public static class CampaignCommands
                 .Set("audience", parseResult.GetValue(audience))
                 .Set("limit", parseResult.GetValue(limit))
                 .Set("cursor", parseResult.GetValue(cursor));
+            ExcludeArchivedContacts(body, parseResult.GetValue(withoutArchived));
 
             return OperationRunner.RunAsync(env, Operations.CampaignListContacts, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Members), cancellationToken);
         });
@@ -422,10 +425,7 @@ public static class CampaignCommands
             + "A person may be in several counts; campaign list-contacts --summary lists who.");
         var ids = CampaignIds();
         var audience = AudienceOption();
-        var withoutArchived = new Option<bool>("--exclude-archived-contacts")
-        {
-            Description = "Leave out archived contacts, whom contact list shows only with --include-archived; by default they are counted.",
-        };
+        var withoutArchived = ExcludeArchivedContactsOption();
         var human = VerbOptions.Human();
         command.Arguments.Add(ids);
         command.Options.Add(audience);
@@ -436,11 +436,7 @@ public static class CampaignCommands
         {
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty().Set("campaign_ids", Ids(parseResult.GetValue(ids))).Set("audience", parseResult.GetValue(audience));
-            if (parseResult.GetValue(withoutArchived))
-            {
-                body.Set("exclude_archived_contacts", true);
-            }
-
+            ExcludeArchivedContacts(body, parseResult.GetValue(withoutArchived));
             return OperationRunner.RunAsync(env, Operations.CampaignSummary, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Summary), cancellationToken);
         });
 
@@ -460,11 +456,13 @@ public static class CampaignCommands
         var until = VerbOptions.Moment("--until", "The period's end, not included, as ISO-8601 UTC, or now.");
         until.Required = true;
         var audience = AudienceOption();
+        var withoutArchived = ExcludeArchivedContactsOption();
         var human = VerbOptions.Human();
         command.Arguments.Add(ids);
         command.Options.Add(since);
         command.Options.Add(until);
         command.Options.Add(audience);
+        command.Options.Add(withoutArchived);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
@@ -475,6 +473,7 @@ public static class CampaignCommands
                 .Set("since", VerbOptions.ResolveMoment(parseResult.GetValue(since), TimeProvider.System))
                 .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System))
                 .Set("audience", parseResult.GetValue(audience));
+            ExcludeArchivedContacts(body, parseResult.GetValue(withoutArchived));
             return OperationRunner.RunAsync(env, Operations.CampaignActivity, body, Named(env, parseResult.GetValue(human), CampaignRenderers.Activity), cancellationToken);
         });
 
@@ -504,6 +503,7 @@ public static class CampaignCommands
             Description = "The IANA time zone the hours, days and weeks are cut in, such as Europe/Kyiv; this machine's when absent.",
         };
         var audience = AudienceOption();
+        var withoutArchived = ExcludeArchivedContactsOption();
         var human = VerbOptions.Human();
         command.Arguments.Add(ids);
         command.Options.Add(count);
@@ -512,6 +512,7 @@ public static class CampaignCommands
         command.Options.Add(until);
         command.Options.Add(zone);
         command.Options.Add(audience);
+        command.Options.Add(withoutArchived);
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
         {
@@ -524,6 +525,7 @@ public static class CampaignCommands
                 .Set("until", VerbOptions.ResolveMoment(parseResult.GetValue(until), TimeProvider.System))
                 .Set("zone", parseResult.GetValue(zone) ?? ThisMachinesZone())
                 .Set("audience", parseResult.GetValue(audience));
+            ExcludeArchivedContacts(body, parseResult.GetValue(withoutArchived));
             return OperationRunner.RunAsync(env, Operations.CampaignActivityByPeriod, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.ActivityByPeriod), cancellationToken);
         });
         return command;
@@ -687,6 +689,24 @@ public static class CampaignCommands
         Description = "Only the people a search landed under this audience of the campaign, by its number, each count by its own "
             + "definition; name that one campaign alone. 'jason campaign audience <campaign-id>' lists its audiences.",
     };
+
+    /// <summary>
+    /// <c>--exclude-archived-contacts</c>, said in the same words on every people read that takes it: the summary, the list and
+    /// the two reads behind the activity counts.
+    /// </summary>
+    private static Option<bool> ExcludeArchivedContactsOption() => new("--exclude-archived-contacts")
+    {
+        Description = "Leave out archived contacts, whom contact list shows only with --include-archived; by default they are included.",
+    };
+
+    /// <summary>Sends <c>exclude_archived_contacts</c> only when the flag is given, so a request without it is what it always was.</summary>
+    private static void ExcludeArchivedContacts(JsonObject body, bool given)
+    {
+        if (given)
+        {
+            body.Set("exclude_archived_contacts", true);
+        }
+    }
 
     /// <summary><c>--project</c> takes a project's id, as every verb that names a project does.</summary>
     private static Option<string?> ProjectOption(string description) => new("--project") { Description = description };

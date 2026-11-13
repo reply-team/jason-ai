@@ -147,6 +147,11 @@ describe('the console', () => {
         const spring = within(panel('Agents')).getByText('Spring').closest('tr')!;
         expect(within(spring).getByText('Active')).toBeTruthy();
         expect(within(spring).getByText('22')).toBeTruthy();
+        // Counted as the browser's Agents page counts them: archived people left out.
+        expect(fake.sent('campaign.summary')).toEqual({
+            campaign_ids: ['cmp_1', 'cmp_2', 'cmp_3'],
+            exclude_archived_contacts: true,
+        });
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
     });

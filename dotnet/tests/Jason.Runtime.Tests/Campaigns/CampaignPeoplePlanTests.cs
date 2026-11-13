@@ -122,7 +122,8 @@ public partial class CampaignPeoplePlanTests
     /// <summary>
     /// The pages of people EF composes from a filter's memberships, so no SQL string shows them: by id, the plain list past a
     /// cursor, a summary count's, a search and one audience's, and the memberships of one audience's page; by moment, an
-    /// activity count's searched past a cursor, a plain one and one audience's.
+    /// activity count's searched past a cursor, a plain one and one audience's; and the plain list, a summary count's and
+    /// an activity count's with archived people left out.
     /// </summary>
     private static IEnumerable<IQueryable> ComposedPages(Jason.Runtime.Persistence.JasonDbContext db)
     {
@@ -140,6 +141,9 @@ public partial class CampaignPeoplePlanTests
             MembershipService.PageByMoment(db, [.. campaign], CampaignActivityFilter.People, since, until, "ada", (1_792_000_000_000, "cnt_01"), 51),
             MembershipService.PageByMoment(db, [.. campaign], CampaignActivityFilter.Replied, since, until, null, null, 51),
             MembershipService.PageByMoment(db, [.. campaign], CampaignActivityFilter.Replied, since, until, null, null, 51, audience: 7),
+            MembershipService.PageById(db, MembershipService.OfPeopleNotArchived(members), null, null, 51),
+            MembershipService.PageById(db, MembershipService.OfPeopleNotArchived(CampaignPeople.Matching(db, campaign, CampaignSummaryFilter.New)), null, null, 51),
+            MembershipService.PageByMoment(db, [.. campaign], CampaignActivityFilter.Replied, since, until, null, null, 51, withoutArchived: true),
         ];
     }
 

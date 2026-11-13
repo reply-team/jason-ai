@@ -7,7 +7,8 @@
     "since": "2026-10-10T00:00:00.000Z",
     "until": "2026-10-16T09:00:00.000Z",
     "limit": 50,
-    "cursor": "MTc5MTc5OTIwMDAwMHxjbnRfMDFLN1FOMDAwMDAwMDAwMDAwMDAwMDA1NTA"
+    "cursor": "MTc5MTc5OTIwMDAwMHxjbnRfMDFLN1FOMDAwMDAwMDAwMDAwMDAwMDA1NTA",
+    "exclude_archived_contacts": true
   },
   "status": 200,
   "response": {

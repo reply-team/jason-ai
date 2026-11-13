@@ -4,7 +4,8 @@
   "request": {
     "campaign_ids": [
       "cmp_101"
-    ]
+    ],
+    "exclude_archived_contacts": true
   },
   "status": 200,
   "response": {

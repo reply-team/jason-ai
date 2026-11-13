@@ -53,9 +53,9 @@ public class CampaignInboxExchangesTests
 
         var shown = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "inbox", new { limit = 100 }, Ct);
         Assert.Equal([seed.LatAm, seed.ReEngage], shown.Items.Select(c => c.Id).Order(StringComparer.Ordinal));
-        Assert.Equal(2, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-all", new { campaign_ids = shown.Items.Select(c => c.Id) }, Ct)).Campaigns.Count);
+        Assert.Equal(2, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-all", new { campaign_ids = shown.Items.Select(c => c.Id), exclude_archived_contacts = true }, Ct)).Campaigns.Count);
         Assert.Equal(CampaignStatus.Active, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "inbox", new { campaign_id = seed.LatAm }, Ct)).Status);
-        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-one", new { campaign_ids = new[] { seed.LatAm } }, Ct)).Campaigns);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-one", new { campaign_ids = new[] { seed.LatAm }, exclude_archived_contacts = true }, Ct)).Campaigns);
 
         var lines = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-campaign-replies", new { campaign_id = seed.LatAm, kinds = replied, limit = 50 }, Ct);
         Assert.Equal([null, seed.Paula, seed.Mateo], lines.Items.Select(e => e.ContactId));
@@ -67,7 +67,7 @@ public class CampaignInboxExchangesTests
 
         // The paused campaign, in which no reply was observed: its panel and its empty lines, after which nothing is read.
         Assert.Equal(CampaignStatus.Paused, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "inbox-quiet", new { campaign_id = seed.ReEngage }, Ct)).Status);
-        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-quiet", new { campaign_ids = new[] { seed.ReEngage } }, Ct)).Campaigns);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "inbox-quiet", new { campaign_ids = new[] { seed.ReEngage }, exclude_archived_contacts = true }, Ct)).Campaigns);
         Assert.Empty((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-campaign-replies-none", new { campaign_id = seed.ReEngage, kinds = replied, limit = 50 }, Ct)).Items);
     }
 
