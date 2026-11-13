@@ -177,7 +177,7 @@ export interface OpenInDeps {
     /** The agent hosts the desktop finds. */
     hosts(): { claude: boolean; codex: boolean };
     /** The bundled `jason`. */
-    cli: { run(args: readonly string[]): Promise<{ exit: number; stdout: string; stderr: string }> };
+    cli: { run(args: readonly string[], options?: { cwd?: string }): Promise<{ exit: number; stdout: string; stderr: string }> };
     /** The harness root of this run's installation: the demo's in a demo run. */
     harnessRoot(): string;
     isDirectory(path: string): boolean;
@@ -252,7 +252,9 @@ export class OpenIn {
             deps.copy(folder);
         } else if (target === 'claude' || target === 'codex' || target === 'terminal') {
             const scope = campaignId === undefined || campaignId === null ? null : String(campaignId);
-            const answer = await deps.cli.run(['session', 'open', ...deps.terminalFlags(target, scope)]);
+            // With no campaign the verb takes its project from the working folder before it falls back to the harness root, so
+            // the harness root is also its working folder: it can find no project there.
+            const answer = await deps.cli.run(['session', 'open', ...deps.terminalFlags(target, scope)], scope === null ? { cwd: folder } : undefined);
             if (answer.exit !== 0) {
                 refusal = { refused: cliSentence(answer.stdout) ?? (answer.exit === 3 ? "Jason's runtime is not running." : 'A terminal could not be opened.') };
             }

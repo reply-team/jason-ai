@@ -92,6 +92,7 @@ test('the terminal entries name the folder by the campaign and the place by a ho
 interface Bench {
     openIn: OpenIn;
     cliCalls: string[][];
+    cwds: (string | undefined)[];
     started: Line[];
     copied: string[];
     kept: PlaceId[];
@@ -102,6 +103,7 @@ interface Bench {
 
 function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boolean }; campaigns?: Record<string, unknown>; root?: string; folders?: string[]; failStart?: string; cliExit?: number; cliOut?: string; remembered?: PlaceId | null } = {}): Bench {
     const cliCalls: string[][] = [];
+    const cwds: (string | undefined)[] = [];
     const started: Line[] = [];
     const copied: string[] = [];
     const kept: PlaceId[] = [];
@@ -114,8 +116,9 @@ function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boo
         probes: options.probes ?? windows,
         hosts: () => options.hosts ?? { claude: true, codex: true },
         cli: {
-            run: (args) => {
+            run: (args, given) => {
                 cliCalls.push([...args]);
+                if (args[0] === 'session') cwds.push(given?.cwd);
                 if (args[0] === 'campaign') {
                     const record = campaigns[args[2] ?? ''];
                     return Promise.resolve(record === undefined ? { exit: 1, stdout: '{"error":{"code":"not_found","message":"No such campaign."}}', stderr: '' } : { exit: 0, stdout: JSON.stringify(record), stderr: '' });
@@ -141,7 +144,7 @@ function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boo
         },
         log: (event, fields) => void logged.push(`${event}:${fields.Place}`),
     };
-    return { openIn: new OpenIn(deps), cliCalls, started, copied, kept, flagsGiven, remembered, logged };
+    return { openIn: new OpenIn(deps), cwds, cliCalls, started, copied, kept, flagsGiven, remembered, logged };
 }
 
 test('with no campaign the folder is the harness root, and the answer carries its name and not its path', async () => {
@@ -222,6 +225,8 @@ test('the three terminals run the bundled jason session open, with the flags of 
         ['session', 'open', '--campaign', 'cmp_01', '--host', 'codex'],
         ['session', 'open', '--campaign', 'cmp_01', '--shell'],
     ]);
+    // No campaign: the harness root is the verb's working folder; a campaign is named by its flag and the folder is left.
+    assert.deepEqual(b.cwds, ['C:\\Jason', undefined, undefined]);
     assert.deepEqual(b.flagsGiven, [['claude', null], ['codex', 'cmp_01'], ['terminal', 'cmp_01']]);
     assert.deepEqual(b.started, []);
 });
