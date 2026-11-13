@@ -257,9 +257,9 @@ function fittedEntry(entry: KeptEntry): KeptEntry {
             return text === entry.text ? entry : { kind: entry.kind, text };
         }
         case 'text': {
+            // A plan cut to fit is no plan: the person would approve words they cannot read whole.
             const text = fitted(entry.text);
-            if (text === entry.text) return entry;
-            return entry.plan === true ? { kind: 'text', text, plan: true } : { kind: 'text', text };
+            return text === entry.text ? entry : { kind: 'text', text };
         }
         case 'step': {
             const text = fitted(entry.text);

@@ -1505,16 +1505,15 @@ export class Chat {
     /**
      * At a turn's end: every earlier plan's mark is taken off, and the turn's last words are marked its plan when the turn
      * ran in Plan only and ended well, not stopped, the chat is in Plan only still, it is not the Feed, and those words are
-     * the conversation's last entry. Whether it marked them. The Feed has no plan card: its turns carry lines others wrote.
+     * the conversation's last entry. The Feed has no plan card: its turns carry lines others wrote. Keeping the record
+     * takes the mark off again where it cuts the words to fit.
      */
-    #markPlan(conversation: Conversation, running: Running, endedWell: boolean): boolean {
+    #markPlan(conversation: Conversation, running: Running, endedWell: boolean): void {
         unmarkPlans(conversation.entries);
-        if (!endedWell || running.stopped || running.mode !== 'plan_only' || conversation.main === true) return false;
-        if (this.#modeOf(conversation) !== 'plan_only') return false;
+        if (!endedWell || running.stopped || running.mode !== 'plan_only' || conversation.main === true) return;
+        if (this.#modeOf(conversation) !== 'plan_only') return;
         const last = conversation.entries.at(-1);
-        if (last?.kind !== 'text') return false;
-        last.plan = true;
-        return true;
+        if (last?.kind === 'text') last.plan = true;
     }
 
     /** Writes the record within its bound; one that cannot be written is said, and the conversation goes on in memory. */
@@ -2012,8 +2011,11 @@ export class Chat {
                 const error = this.#ending(resolved.label, last.exit, last.result, running.stopped, last.host, scrub);
                 if (error !== null) conversation.entries.push({ kind: 'error', text: error });
                 if (handed?.kind === 'pick') conversation.entries.push({ kind: 'pick', campaignIds: [...handed.campaignIds] });
-                const planned = this.#markPlan(conversation, running, error === null && handed === null);
+                this.#markPlan(conversation, running, error === null && handed === null);
                 this.#keep(conversation);
+                // The mark as kept: a plan too long to keep whole is cut, and loses it.
+                const kept = conversation.entries.at(-1);
+                const planned = kept?.kind === 'text' && kept.plan === true;
                 this.#setupTurns.delete(conversation.id);
                 this.#running.delete(conversation.id);
                 this.#options.ended?.({ host: resolved.host, exit: last.exit.code ?? -1, durationMs: Date.now() - begun, steps, requests });

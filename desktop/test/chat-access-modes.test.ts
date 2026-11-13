@@ -8,6 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
+import { cutMark } from '../src/chat-conversations.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { codexWindowsSandbox } from '../src/chat-hosts.ts';
 import { codexAutoEdit, feedAutoEdit, feedFullAccess, fullAccessOffered, fullAccessSentence, planModeMoved, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
@@ -931,4 +932,18 @@ test('a Full access box answered from the menu while the approval is pending nev
     assert.equal((await later).mode, 'full_access');
     assert.deepEqual(done(await ran), { kind: 'done', error: null });
     assert.deepEqual(r.started, ['plan_only', 'plan_only', 'ask_first']);
+});
+
+test('a plan too long to keep whole is no plan: its end says no plan and nothing is marked, in memory or on the record', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'plan_only');
+    // Over the kept text's limit, so the record keeps only its end behind the cut mark.
+    plan(r, [{ say: 'Read the replies. ', repeat: 8000 }]);
+    assert.deepEqual(done(await r.turn(id, 'plan it', claude)), { kind: 'done', error: null });
+    const last = r.chat.open(id).entries.at(-1);
+    assert.ok(last?.kind === 'text' && last.text.startsWith(cutMark), 'the words were cut to fit');
+    assert.deepEqual(marked(r.chat.open(id).entries), []);
+    assert.deepEqual(marked(recordOf(r, id).entries), []);
+    assert.deepEqual(marked(r.again().open(id).entries), [], 'nor after a restart');
 });

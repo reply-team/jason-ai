@@ -621,5 +621,10 @@ test('Plan only says the AI how it is left, the plan card included, and a go app
         'Plan only is on, and only the person leaves it, from the menu beside the message box or by approving your plan. Give your plan as your answer.',
     );
     assert.equal(planModeMoved, "The chat's mode changed before the plan was approved, so nothing was sent.");
+    // The page declares the same sentence for the refusal it says itself, and its stub desktop refuses with it: one text.
+    const page = join(import.meta.dirname, '..', '..', 'ui', 'src');
+    const declared = readFileSync(join(page, 'console', 'chat-model.ts'), 'utf8').match(/export const planModeMoved =\s*("[^"]*");/);
+    assert.equal(declared === null ? null : JSON.parse(declared[1]!), planModeMoved, 'the page declares the sentence the desktop refuses with');
+    assert.ok(readFileSync(join(page, 'test', 'desktop.ts'), 'utf8').includes(JSON.stringify(planModeMoved)), 'and its stub desktop refuses with it');
     assert.equal(planRefusal, 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.', 'unchanged');
 });
