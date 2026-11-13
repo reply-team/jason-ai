@@ -1,37 +1,71 @@
-import { parseRoute } from '../router';
-import { registry, textOf } from '../platform/slots';
-import { pendingMark } from '../shell/attention-mark';
+import { signal } from '@preact/signals-react';
+import { parseRoute, route } from '../router';
+import { registry } from '../platform/slots';
 import { info } from '../shell/shell';
 import { act, define } from './actions';
 import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
-import { chats, conversations, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
+import { attention } from './needs';
+import { activePanel, chats, conversations, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
-// The console's sidebar: the Feed first, a new chat, the other conversations the desktop keeps, newest first, the
-// console's own panels, and the browser shell's screens that the console has no panel of its own for, shown in the page
-// panel.
+// The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), the Feed,
+// Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
+// conversations under "Recent", and Settings in the foot beside the version.
 
-const panels: readonly { panel: PanelName; label: string; icon: IconName }[] = [
-    { panel: 'needs', label: 'Needs you', icon: 'att' },
-    { panel: 'campaigns', label: 'Agents', icon: 'camp' },
-    { panel: 'activity', label: 'Activity', icon: 'pulse' },
-    { panel: 'connect', label: 'Connect', icon: 'plug' },
+/** Which of the sidebar's two menus is open. */
+const open = signal<'create' | 'more' | null>(null);
+
+/** Closes whichever menu is open. */
+export function closeMenus(): void {
+    open.value = null;
+}
+
+/** The address of a screen the browser shell registers, or null when this build has none. */
+function pageOf(id: string): string | null {
+    return (
+        registry
+            .list('screen')
+            .find((each) => each.id === id)
+            ?.href() ?? null
+    );
+}
+
+/** What More holds: each opens a panel of the console's own or a registered screen in the page panel. */
+const more: readonly { label: string; hint: string; icon: IconName; panel?: PanelName; screen?: string }[] = [
+    { label: 'Performance', hint: 'Counts of what happened, over a period', icon: 'perf', screen: 'performance' },
+    { label: 'Activity', hint: 'The latest lines of the journal', icon: 'pulse', panel: 'activity' },
+    { label: 'Work items', hint: 'Work waiting, running and finished', icon: 'work', screen: 'workitems' },
+    { label: 'Connect', hint: 'The AI and Reply', icon: 'plug', panel: 'connect' },
+    { label: 'System', hint: 'The runtime and this installation', icon: 'ops', screen: 'system' },
 ];
 
-/** The browser screens the console's own panels stand in for. */
-const ownPanels = new Set(['chat', 'attention', 'campaigns']);
+/** More is active while one of its screens is in front. */
+function moreActive(): boolean {
+    const front = activePanel.value;
+    if (front === 'activity' || front === 'connect') return true;
+    return front === 'page' && ['performance', 'workitems', 'system'].includes(route.value.screen);
+}
 
-const icons: Readonly<Record<string, IconName>> = {
-    people: 'people',
-    performance: 'perf',
-    workitems: 'work',
-    system: 'ops',
-    accounts: 'plug',
-    settings: 'gear',
-};
+/** How many approvals and questions wait on a person: the number the Needs you panel shows. */
+export function waitingCount(): number {
+    return attention.approvals.value.length + attention.questions.value.length;
+}
 
-define('side.new', () => here().dock.chat());
+define('side.menu', ([which]) => {
+    if (which !== 'create' && which !== 'more') return;
+    open.value = open.value === which ? null : which;
+});
+define('side.close', () => closeMenus());
+// Start is made or brought forward as the window does it; no chat is made until the person sends one.
+define('side.start', () => {
+    closeMenus();
+    here().dock.show('start');
+});
+define('side.new', () => {
+    closeMenus();
+    here().dock.chat();
+});
 define('side.feed', () => {
     const id = feedId.value;
     if (id === null) return;
@@ -48,33 +82,94 @@ define('side.chat', ([id]) => {
     });
 });
 define('side.show', ([panel]) => {
+    closeMenus();
     if (panel === 'needs' || panel === 'campaigns' || panel === 'activity' || panel === 'connect')
         here().dock.show(panel);
 });
 define('side.page', ([hash]) => {
+    closeMenus();
     if (typeof hash === 'string') here().dock.page(parseRoute(hash));
 });
 
 /** Where the build's own files are served from: the runtime serves the build under /ui/. */
 const assets = import.meta.env.BASE_URL;
 
+const entry = (title: string, hint: string, action: Html, icon: IconName): Html =>
+    html`<button class="menuitem" type="button" role="menuitem" ${action}>
+        ${svg(icon, 15)}<span class="mt">${title}</span><span class="ms">${hint}</span>
+    </button>`;
+
 export function sideView(): Html {
-    const marked = pendingMark.value;
-    const screens = registry.list('screen').filter((each) => !ownPanels.has(each.id));
+    const count = waitingCount();
     // A long version is cut with an ellipsis at the sidebar's width; the title keeps all of it.
     const version = `Jason ${info.value?.runtime_version ?? '…'}`;
     const feed = feedId.value;
-    return html`<div class="brand">
+    const menu = open.value;
+    const pageRow = (id: string, label: string, icon: IconName): Html | null => {
+        const href = pageOf(id);
+        return href === null
+            ? null
+            : html`<button class="item" type="button" ${act('side.page', href)}>
+                  ${svg(icon, 15)}<span>${label}</span>
+              </button>`;
+    };
+    const accounts = pageOf('accounts');
+    const settings = pageOf('settings');
+    return html`${
+            menu === null
+                ? null
+                : html`<button
+                      class="menu-away"
+                      type="button"
+                      tabindex="-1"
+                      aria-hidden="true"
+                      ${act('side.close')}
+                  ></button>`
+        }
+        <div class="brand">
             <img class="mark" src="${assets}favicon.svg" alt="" />
             <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
             <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
             <span class="alpha">Alpha</span>
         </div>
-        ${
-            feed === null
-                ? null
-                : html`<nav class="list" aria-label="Feed">
-                      <button
+        <div class="menuwrap create">
+            <div class="newrow">
+                <button class="newbtn" type="button" ${act('side.start')}>${svg('plus', 15)}New GTM agent</button>
+                <button
+                    class="caret"
+                    type="button"
+                    aria-label="More to create"
+                    aria-haspopup="menu"
+                    aria-expanded="${menu === 'create' ? 'true' : 'false'}"
+                    ${act('side.menu', 'create')}
+                >
+                    ${svg('chev', 15)}
+                </button>
+            </div>
+            ${
+                menu === 'create'
+                    ? html`<div class="menu" role="menu" aria-label="Create">
+                          ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus')}
+                          ${entry('New chat', 'Talk with Jason, about no campaign', act('side.new'), 'chat')}
+                          ${
+                              accounts === null
+                                  ? null
+                                  : entry(
+                                        'Connect an account',
+                                        'Link the accounts Jason works through',
+                                        act('side.page', accounts),
+                                        'plug',
+                                    )
+                          }
+                      </div>`
+                    : null
+            }
+        </div>
+        <nav class="list" aria-label="Menu">
+            ${
+                feed === null
+                    ? null
+                    : html`<button
                           class="item"
                           type="button"
                           ${feed === currentChat.value ? html`aria-current="true"` : null}
@@ -82,10 +177,49 @@ export function sideView(): Html {
                       >
                           ${svg('pulse', 15)}<span>Feed</span>
                           ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
-                      </button>
-                  </nav>`
-        }
-        <button class="newbtn" type="button" ${act('side.new')}>${svg('plus', 15)}New chat</button>
+                      </button>`
+            }
+            <button class="item" type="button" ${act('side.show', 'needs')}>
+                ${svg('att', 15)}<span>Needs you</span>
+                ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
+            </button>
+            ${pageRow('people', 'People', 'people')}
+            <button class="item" type="button" ${act('side.show', 'campaigns')}>
+                ${svg('camp', 15)}<span>Agents</span>
+            </button>
+            ${pageRow('accounts', 'Accounts', 'plug')}
+            <div class="menuwrap">
+                <button
+                    class="item"
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded="${menu === 'more' ? 'true' : 'false'}"
+                    ${moreActive() ? html`aria-current="true"` : null}
+                    ${act('side.menu', 'more')}
+                >
+                    ${svg('more', 15)}<span>More</span>
+                </button>
+                ${
+                    menu === 'more'
+                        ? html`<div class="menu" role="menu" aria-label="More">
+                              ${more.map((each) => {
+                                  const href = each.screen === undefined ? null : pageOf(each.screen);
+                                  if (each.screen !== undefined && href === null) return null;
+                                  return entry(
+                                      each.label,
+                                      each.hint,
+                                      each.panel !== undefined
+                                          ? act('side.show', each.panel)
+                                          : act('side.page', href ?? ''),
+                                      each.icon,
+                                  );
+                              })}
+                          </div>`
+                        : null
+                }
+            </div>
+        </nav>
+        <div class="recent">Recent</div>
         <nav class="list" aria-label="Conversations">
             ${conversations.value
                 .filter((conversation) => conversation.main !== true)
@@ -104,23 +238,14 @@ export function sideView(): Html {
                         </button>`,
                 )}
         </nav>
-
-        <nav class="list" aria-label="Console">
-            ${panels.map(
-                (each) =>
-                    html`<button class="item" type="button" ${act('side.show', each.panel)}>
-                        ${svg(each.icon, 15)}<span>${each.label}</span>
-                        ${each.panel === 'needs' && marked ? html`<span class="dot w" aria-label="Something waits for you"></span>` : null}
-                    </button>`,
-            )}
-        </nav>
-        <nav class="list" aria-label="Pages">
-            ${screens.map(
-                (each) =>
-                    html`<button class="item" type="button" ${act('side.page', each.href())}>
-                        ${svg(icons[each.id] ?? 'work', 15)}<span>${textOf(each.label)}</span>
-                    </button>`,
-            )}
-        </nav>
+        ${
+            settings === null
+                ? null
+                : html`<div class="foot-links">
+                      <button class="item" type="button" ${act('side.page', settings)}>
+                          ${svg('gear', 15)}<span>Settings</span>
+                      </button>
+                  </div>`
+        }
         <div class="sfoot meta" title="${version}">${version}</div>`;
 }

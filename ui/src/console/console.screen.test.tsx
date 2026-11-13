@@ -45,7 +45,14 @@ function pending(fake: FakeApi): FakeApi {
 
 /** Shows a panel of the dock the way a person does, from the sidebar. */
 function show(name: string): void {
-    fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name }));
+    const side = within(document.querySelector<HTMLElement>('.side')!);
+    // What has no row of its own is under More: the menu opens, and the entry is chosen by its title.
+    if (['Activity', 'Connect'].includes(name)) {
+        fireEvent.click(side.getByRole('button', { name: 'More' }));
+        fireEvent.click(side.getByRole('menuitem', { name: new RegExp(`^${name}`) }));
+        return;
+    }
+    fireEvent.click(side.getByRole('button', { name }));
 }
 
 const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
@@ -219,7 +226,7 @@ describe('the console', () => {
 
     it('describes the Activity panel by the roles, not by agents', async () => {
         renderConsole(pending(new FakeApi()));
-        await waitFor(() => screen.getByRole('button', { name: 'Activity' }));
+        await waitFor(() => screen.getByRole('button', { name: 'More' }));
         show('Activity');
         const activity = await waitFor(() => panel('Activity'));
         expect(words(activity)).toContain('What Jason and its roles do, as the journal records it.');

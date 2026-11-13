@@ -53,7 +53,9 @@ function renderConnect(status: DesktopSetup, firstReadMs = 0): StubDesktop {
 
 async function openConnect(): Promise<HTMLElement> {
     await waitFor(() => screen.getByRole('button', { name: 'Send' }));
-    fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Connect' }));
+    const side = within(document.querySelector<HTMLElement>('.side')!);
+    fireEvent.click(side.getByRole('button', { name: 'More' }));
+    fireEvent.click(side.getByRole('menuitem', { name: /^Connect/ }));
     return waitFor(() => {
         const panel = screen.getByRole('heading', { name: 'Connect', level: 1 }).closest<HTMLElement>('.painted')!;
         expect(panel.querySelector('.plugin')).not.toBeNull();
