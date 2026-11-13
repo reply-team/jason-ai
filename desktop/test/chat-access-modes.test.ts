@@ -711,6 +711,19 @@ test('Auto-edit is never on a record: a restart opens the chat in Ask first, and
     assert.equal(r.chat.open(id).mode, 'ask_first');
 });
 
+test('leaving Plan only for Auto-edit is leaving Plan only: the record says Ask first, and a restart opens it there', async (t) => {
+    const r = rig(t);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'plan_only');
+    await r.turn(id, 'hello', claude);
+    const read = () => JSON.parse(readFileSync(join(r.b.paths.conversations, `${id}.json`), 'utf8'));
+    assert.equal(read().mode, 'plan_only');
+    await r.chat.setMode(id, 'auto_edit', 'claude');
+    assert.equal(r.chat.open(id).mode, 'auto_edit');
+    assert.equal(read().mode, undefined);
+    assert.equal(r.again().open(id).mode, 'ask_first');
+});
+
 test('leaving Auto-edit for Ask first while its turn runs stops that turn; a change from Auto-edit to Full access does not', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();

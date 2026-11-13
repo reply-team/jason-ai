@@ -64,7 +64,7 @@ import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permiss
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
-import { realPathOf } from './chat-real-path.ts';
+import { entryOf, realPathOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
@@ -877,7 +877,9 @@ export class Chat {
         else this.#fullAccess.delete(conversation.id);
         if (to === 'auto_edit') this.#autoEdit.add(conversation.id);
         else this.#autoEdit.delete(conversation.id);
-        if (to !== 'full_access' && to !== 'auto_edit') {
+        // The record keeps Plan only alone: entering Auto-edit leaves Plan only, so its record says Ask first, and a
+        // restart opens the chat there.
+        if (to !== 'full_access') {
             const before = conversation.mode;
             if (to === 'plan_only') conversation.mode = 'plan_only';
             else delete conversation.mode;
@@ -1700,6 +1702,7 @@ export class Chat {
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     real: realPathOf,
+                    entry: entryOf,
                 };
                 this.#broker.openTurn(replyTo, id, scope, running.mode);
                 const secret = newSecret();

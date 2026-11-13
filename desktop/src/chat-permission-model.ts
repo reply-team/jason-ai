@@ -3,7 +3,7 @@
 // what to put on the person's card. The platform is passed in, so both platforms' path rules are tested on either.
 
 import { posix, win32 } from 'node:path';
-import { fileCommandsOf } from './chat-auto-edit.ts';
+import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
 import { heldByWhatRuns, programName, readLiteral, type HeldReason, type LiteralCommand } from './chat-literal.ts';
 import { powerShellRunsInFullAccess } from './chat-modes.ts';
 import { serverName } from './chat-permission-endpoint.ts';
@@ -35,6 +35,12 @@ export interface ChatScope {
     deniedOperations: readonly string[];
     /** The real path of an existing path, links, junctions and short names followed; null when nothing is there. */
     real: (path: string) => string | null;
+    /**
+     * What is at a path, its last component not followed: null when nothing is there, `unresolved` for a link or a
+     * junction that leads nowhere or an entry that cannot be read, `present` otherwise. Auto-edit alone reads it; absent,
+     * Auto-edit runs nothing unasked.
+     */
+    entry?: (path: string) => 'present' | 'unresolved' | null;
 }
 
 export type Judgement =
@@ -1263,13 +1269,18 @@ export function autoEditJudgement(tool: string, input: Record<string, unknown>, 
 
 /**
  * True when a command is read literally, with no `~` taken (`readLiteral`), as file commands alone, every operand of
- * which lies strictly inside the chat folder (`chatFolderPlace`), no operand of a later command at or under one an
- * earlier `mv` or `cp` of it named, nothing under a guarded name, no jason of the agent's own, and none of Ask first's
+ * which lies strictly inside the chat folder (`chatFolderPlace`), and so does the path a `mv` or a `cp` writes when its
+ * last operand is a folder: that folder's path with each source's name after it, judged for every copy and move as one
+ * more operand whatever the last operand is now, since an earlier part of the same command may make it a folder. No
+ * operand of a later command lies at or under one an earlier `mv` or `cp` of it named or wrote, nothing under a guarded
+ * name, no `mv` to a name that begins a guarded path of two parts (`.github`, whatever the folder moved there holds), no
+ * file named like a program the shell may run from the chat folder in place of the system's, and none of Ask first's
  * refusals over the words as the shell passes them on. The judgement is made before the command runs: a later command
  * is judged against the folder as it is now, and a move or a copy could put a link where it looks, so what follows one
  * may not look there.
  */
 function editsOnlyTheChatFolder(command: string, scope: ChatScope): boolean {
+    if (scope.entry === undefined) return false;
     const reading = readLiteral('Bash', command, { platform: scope.platform, home: null });
     if (reading.held) return false;
     const files = fileCommandsOf(reading.commands);
@@ -1277,20 +1288,76 @@ function editsOnlyTheChatFolder(command: string, scope: ChatScope): boolean {
     const chat = { spelled: spelled(scope.chat, scope), located: located(scope.chat, scope) };
     const moved: string[] = [];
     const places: string[] = [];
+    const placeOf = (operand: string): string | null => {
+        const place = chatFolderPlace(operand, scope, chat);
+        return place === null || moved.some((earlier) => inside(scope, earlier, place)) ? null : place;
+    };
     for (const file of files) {
         const named: string[] = [];
         for (const operand of file.operands) {
-            const place = chatFolderPlace(operand, scope, chat);
-            if (place === null || moved.some((earlier) => inside(scope, earlier, place))) return false;
+            const place = placeOf(operand);
+            if (place === null) return false;
             named.push(place);
         }
+        if (file.program === 'mv' || file.program === 'cp') {
+            const destination = (file.operands.at(-1) ?? '').replace(/[\\/]+$/, '');
+            const into: string[] = [named.at(-1) ?? ''];
+            for (const source of file.operands.slice(0, -1)) {
+                const name = source.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? '';
+                const written = destination === '' || name === '' ? null : placeOf(`${destination}/${name}`);
+                if (written === null) return false;
+                named.push(written);
+                into.push(written);
+            }
+            if (file.program === 'mv' && into.some((place) => beginsGuardedPath(scope, guardedParts(scope, place).parts))) return false;
+            moved.push(...named);
+        }
         places.push(...named);
-        if (file.program === 'mv' || file.program === 'cp') moved.push(...named);
     }
+    if (places.some((place) => namesProgramHere(scope, chat.located, place))) return false;
+    if (shadowed(scope, new Set(files.map((file) => file.program)))) return false;
     const resolved = reading.commands.map((each) => each.words.join(' ')).join('\n');
     if (refusalOver(resolved, places, scope) !== null) return false;
     if (guardedPlace(places, scope) !== undefined || namesLocalJason(resolved, scope)) return false;
     return true;
+}
+
+/** True when the last component of a path is the first of a guarded name of more than one part. */
+function beginsGuardedPath(scope: ChatScope, parts: readonly string[]): boolean {
+    const last = parts.at(-1);
+    if (last === undefined) return false;
+    return guardedNames.some(({ name }) => name.includes('/') && foldName(scope.platform, name.split('/')[0] ?? '') === foldName(scope.platform, last));
+}
+
+/**
+ * True when a file name is one the shell may run as a program from the chat folder: one of the six, compared as the
+ * platform folds names, with one of Windows' program extensions on Windows; or jason, as `namesLocalJason` reads it.
+ */
+function isProgramFile(scope: ChatScope, name: string): boolean {
+    if (isJasonFile(scope, name)) return true;
+    const match = /^(.*?)(?:\.([^.]*))?$/.exec(foldName(scope.platform, name));
+    if (match === null || !Object.hasOwn(fileGrammars, match[1] ?? '')) return false;
+    return match[2] === undefined || (scope.platform === 'win32' && programExtensions.includes(match[2]));
+}
+
+/** True when a located path lies directly in the chat folder under a program's name (`isProgramFile`). */
+function namesProgramHere(scope: ChatScope, chat: string, place: string): boolean {
+    const parts = partsBelow(scope, chat, place);
+    return parts.length === 1 && isProgramFile(scope, parts[0] ?? '');
+}
+
+/**
+ * True when a file named like one of the programs the command runs is already in the folder the shell runs in, where a
+ * search path that holds the current folder would run it in place of the system's: the bare name, and on Windows each
+ * program extension. The volume folds the name where the platform does.
+ */
+function shadowed(scope: ChatScope, programs: ReadonlySet<string>): boolean {
+    const paths = pathsOf(scope.platform);
+    for (const program of programs) {
+        const names = [program, ...(scope.platform === 'win32' ? programExtensions.map((extension) => `${program}.${extension}`) : [])];
+        if (names.some((name) => scope.entry?.(paths.join(scope.cwd, name)) !== null)) return true;
+    }
+    return false;
 }
 
 /** A name Windows opens as a device in any folder, with any extension: `nul`, `con.txt`, `COM1`. */
@@ -1301,7 +1368,9 @@ const deviceName = /^(con|prn|aux|nul|com[0-9]|lpt[0-9]|conin\$|conout\$)(\..*)?
  * component is taken, since the system reads `link/..` as the parent of where the link leads and a spelling as the
  * parent of the link. On Windows, a name the system reads as another (a trailing dot or space, a stream, a device form)
  * and a device's name are not taken either. Inside twice over: as spelled, and as located, through links, junctions and
- * short names, compared as the platform folds case.
+ * short names, compared as the platform folds case. A link or a junction that leads nowhere, at the path or at any
+ * folder above it in the chat folder, is not taken: the real path reader cannot follow it, so where it leads is not
+ * known, and a `touch` or a `cp` through it would write there.
  */
 function chatFolderPlace(operand: string, scope: ChatScope, chat: { spelled: string; located: string }): string | null {
     const parts = operand.split(/[\\/]/);
@@ -1310,6 +1379,11 @@ function chatFolderPlace(operand: string, scope: ChatScope, chat: { spelled: str
     const native = nativeSpelling(operand, scope);
     const lexical = spelled(native, scope);
     if (!strictlyInside(scope, chat.spelled, lexical)) return null;
+    const paths = pathsOf(scope.platform);
+    for (let at = lexical; strictlyInside(scope, chat.spelled, at); at = paths.dirname(at)) {
+        const state = scope.entry?.(at);
+        if (state !== null && state !== 'present') return null;
+    }
     const place = located(native, scope);
     return strictlyInside(scope, chat.located, place) ? place : null;
 }
