@@ -14,6 +14,7 @@ import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
+import type { DemoMenu } from './mode.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
 export interface DeskDeps {
@@ -42,6 +43,13 @@ export interface DeskDeps {
      * Windows keeps its uninstaller.
      */
     removal: Pick<RemovalDeps, 'scope' | 'remove'> | null;
+    /**
+     * In a demo run, what is drawn in place of the update, the start at logon, the jason command and Remove What Jason
+     * Placed, each a line saying to go back to the person's own installation, and the way back (`demoMenu`); null in Live.
+     */
+    demo: DemoMenu | null;
+    /** Back to Your Own Installation: switches to Live and starts the desktop again. */
+    back(): void;
 }
 
 /** The Command Line submenu's one line where this start carries no jason that outlasts it. */
@@ -147,22 +155,25 @@ export class Desk {
                 checked: opens && login.isOn(),
                 click: (item) => void login.set(item.checked).finally(() => this.renderMenu()),
             },
-            {
-                label: 'Start the Runtime at Logon',
-                type: 'checkbox',
-                enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
-                checked: this.autostartOn === true,
-                click: (item) =>
-                    void autostart?.set(item.checked).then((now) => {
-                        this.autostartOn = now;
-                        this.renderMenu();
-                    }),
-            },
+            this.deps.demo !== null
+                ? this.deps.demo.autostart
+                : {
+                    label: 'Start the Runtime at Logon',
+                    type: 'checkbox',
+                    enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
+                    checked: this.autostartOn === true,
+                    click: (item) =>
+                        void autostart?.set(item.checked).then((now) => {
+                            this.autostartOn = now;
+                            this.renderMenu();
+                        }),
+                },
         ];
     }
 
     /** The update item, and under it, unclickable, where the previous version is kept while it is. */
     private updateItems(): MenuItemConstructorOptions[] {
+        if (this.deps.demo !== null) return [this.deps.demo.updates];
         const { updates } = this.deps;
         const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
         let kept: string | null = null;
@@ -190,6 +201,7 @@ export class Desk {
      * state allows. A development build shows it and places nothing: its executable is the checkout's, not an install's.
      */
     private commandItem(): MenuItemConstructorOptions {
+        if (this.deps.demo !== null) return { label: 'Command Line', submenu: [this.deps.demo.command] };
         const command = this.deps.command;
         if (command === null) return { label: 'Command Line', submenu: [{ label: uncarriedLine, enabled: false }] };
         let status: CommandStatus;
@@ -236,7 +248,15 @@ export class Desk {
     }
 
     /** Remove What Jason Placed: in the Jason menu and the tray's, beside the other acts on the installation. */
+    /** In a demo run, the way back to the person's own installation, which needs no page: none in Live. */
+    private backItems(): MenuItemConstructorOptions[] {
+        const demo = this.deps.demo;
+        if (demo === null) return [];
+        return [{ type: 'separator' }, { label: demo.back.label, enabled: demo.back.enabled, click: () => this.deps.back() }];
+    }
+
     private removalItems(): MenuItemConstructorOptions[] {
+        if (this.deps.demo !== null) return this.deps.demo.removal === null ? [] : [this.deps.demo.removal];
         if (this.removal === null) return [];
         return [{ label: removeLabel, enabled: app.isPackaged && !this.removing(), click: () => void this.removeAct() }];
     }
@@ -282,6 +302,7 @@ export class Desk {
             ...this.updateItems(),
             this.commandItem(),
             ...this.removalItems(),
+            ...this.backItems(),
             { type: 'separator' },
             ...(process.platform === 'darwin' ? ([{ role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }] as MenuItemConstructorOptions[]) : []),
             { label: 'Quit Jason', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
@@ -315,6 +336,7 @@ export class Desk {
                 ...this.updateItems(),
                 this.commandItem(),
                 ...this.removalItems(),
+                ...this.backItems(),
                 { type: 'separator' },
                 { label: 'Quit Jason', click: () => app.quit() },
             ]),

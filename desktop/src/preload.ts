@@ -44,6 +44,10 @@ const desktop = {
         get: () => ipcRenderer.invoke('jason:theme.get'),
         set: (choice: 'system' | 'light' | 'dark') => ipcRenderer.invoke('jason:theme.set', choice),
     },
+    mode: {
+        get: () => ipcRenderer.invoke('jason:mode.get'),
+        set: (mode: 'live' | 'demo') => ipcRenderer.invoke('jason:mode.set', mode),
+    },
     pairing: {
         paired: (tokenId: string) => ipcRenderer.invoke('jason:pairing.paired', tokenId),
     },
