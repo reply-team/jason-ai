@@ -12,7 +12,7 @@ public class UiServingTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public const string Csp = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+    public const string Csp = "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
 
     [Fact]
     public async Task With_nothing_installed_the_page_is_404_ui_not_installed_and_system_info_says_so()

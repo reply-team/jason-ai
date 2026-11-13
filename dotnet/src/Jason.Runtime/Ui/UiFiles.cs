@@ -6,7 +6,7 @@ namespace Jason.Runtime.Ui;
 /// <summary>The headers every answer under <c>/ui</c> carries, and the content types of the files a build may hold. Anything else is not served.</summary>
 public static class UiFiles
 {
-    public const string ContentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+    public const string ContentSecurityPolicy = "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
 
     private static readonly Dictionary<string, string> ContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
