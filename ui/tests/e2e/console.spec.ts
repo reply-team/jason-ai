@@ -151,7 +151,7 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     const { url } = await jason.uiOpen();
     const first = await page.goto(url);
     expect(first?.headers()['content-security-policy']).toBe(
-        "default-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+        "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'",
     );
     await expect(page.getByRole('heading', { name: 'Who do you want to reach?', level: 1 })).toBeVisible();
     await expect(page.locator('.dv-dockview')).toBeVisible();

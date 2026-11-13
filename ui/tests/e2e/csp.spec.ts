@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 
-const policy = "default-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+const policy = "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
 
 test('the bundle runs under the policy the runtime sends: no refused resource, no page error', async ({
     page,
