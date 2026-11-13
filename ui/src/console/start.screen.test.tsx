@@ -4,6 +4,7 @@ import { session } from '../api/session';
 import type { DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
+import { mode } from '../platform/mode';
 import { route } from '../router';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
@@ -159,6 +160,22 @@ describe('the start screen', () => {
         // A window opened again in this browser reads the choice back; nothing of it went to the runtime.
         expect(noteWasClosed('live')).toBe(true);
         expect(noteWasClosed('demo')).toBe(false);
+    });
+
+    it('keeps the note closed in one mode and shown in the other', async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => screen.getByRole('note'));
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        expect(screen.queryByRole('note')).toBeNull();
+        flush(() => {
+            mode.value = 'demo';
+        });
+        await waitFor(() => screen.getByRole('note'));
+        flush(() => {
+            mode.value = 'live';
+        });
+        await waitFor(() => expect(screen.queryByRole('note')).toBeNull());
+        mode.value = 'live';
     });
 
     it("marks the title Alpha, as the sidebar's brand does", async () => {
