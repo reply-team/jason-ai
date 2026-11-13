@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { t } from '../platform/i18n';
 import { mode, modeRefusal, modeUnopened, switchMode, type Mode } from '../platform/mode';
 
@@ -11,7 +12,7 @@ const modes: readonly Mode[] = ['demo', 'live'];
  * is said there too. On the right, in this order: `data-slot="open-in"`, the one place a control for opening the
  * work elsewhere goes, then the Demo | Live switch, the mode in force marked, asking the desktop through the seam.
  */
-export function ModeStrip() {
+export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
     const unopened = modeUnopened.value;
     const refusal = modeRefusal.value;
     const demo = mode.value === 'demo';
@@ -44,7 +45,9 @@ export function ModeStrip() {
                 </span>
             )}
             <span className="mode-spacer" />
-            <div className="mode-open-in" data-slot="open-in" />
+            <div className="mode-open-in" data-slot="open-in">
+                {openIn}
+            </div>
             <div className="mode-switch" role="group" aria-label={t('mode.switch')}>
                 {modes.map((each) => (
                     <button

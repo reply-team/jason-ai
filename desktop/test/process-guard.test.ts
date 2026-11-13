@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, listingCallers, processModules, processViolations, runFileCalls, signalLines } from './process-rules.ts';
+import { ipcModule, listingCallers, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -147,6 +147,23 @@ test("an agent host's model listing is one call: codex app-server, started only 
     for (const path of ['src/chat.ts', 'src/setup.ts', 'src/main.ts']) {
         assert.notDeepEqual(processViolations(path, "import { startListing } from './chat-process.ts';"), [], path);
     }
+});
+
+test('the detached start of Open in is called only by main.ts, and a planted call anywhere else fires the rule', () => {
+    assert.deepEqual(Object.keys(startDetachedCallers), ['src/main.ts']);
+    const planted = (call: string) => `import { startDetached } from './open-in-start.ts';\n${call}\n`;
+    assert.deepEqual(processViolations('src/main.ts', planted('start: (line) => startDetached(line, env),')), []);
+    for (const path of ['src/chat.ts', 'src/setup.ts', 'src/open-in.ts', 'src/ipc.ts']) {
+        const found = processViolations(path, planted("await startDetached({ file: 'x', args: [] }, env);"));
+        assert.equal(found.length, 2, path);
+        assert.ok(found.some((line) => /starts a detached program/.test(line)), path);
+    }
+    // The module itself is named in no other form either: a re-export, a namespace import, a require or a dynamic import.
+    for (const form of ["export { startDetached as go } from './open-in-start.ts';", "import * as s from './open-in-start';", "const s = require('./open-in-start.ts');", "const s = await import('./open-in-start.ts');"]) {
+        assert.notDeepEqual(processViolations('src/ipc.ts', form + '\n'), [], form);
+        assert.ok(processViolations('src/ipc.ts', form + '\n').some((line) => /imports the detached starter's module/.test(line)), form);
+    }
+    assert.deepEqual(processViolations('src/main.ts', "import { startDetached } from './open-in-start.ts';\n"), []);
 });
 
 test('a process is signalled only on two lines: a look whether a process runs, with signal 0, and the end of a chat turn', () => {

@@ -111,6 +111,9 @@ export const templates = {
     demo_start_over_not_carried_out: 'The start over asked by the run before was not carried out ({Cause}); this run is on the person’s own installation and the request is kept',
     demo_seed_failed: 'The demo sample failed at {Step} ({Code})',
     demo_seed_step: 'The demo sample: {Step}',
+    open_in: 'The folder was opened in {Place}',
+    open_in_refused: 'The folder could not be opened in {Place}',
+    open_in_remember_failed: 'The place Open in used last could not be kept',
 } as const;
 
 export type TemplateName = keyof typeof templates;

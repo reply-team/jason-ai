@@ -17,6 +17,11 @@ import { loggedModels, loggedTurns } from './chat-log.ts';
 import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
+import { OpenIn, type PlaceId } from './open-in.ts';
+import { isFolder, systemProbes } from './open-in-probes.ts';
+import { editorEnvironment, openInHarnessRoot } from './open-in-env.ts';
+import { startDetached } from './open-in-start.ts';
+import { terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
@@ -593,6 +598,33 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         },
     });
     registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
+    // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
+    // place used last is kept in this run's own settings.
+    const openIn = new OpenIn({
+        probes: systemProbes(env),
+        hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
+        cli,
+        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), desktopPaths(runOn.person).installationSettings)),
+        isDirectory: isFolder,
+        remembered: () => settings.openIn ?? null,
+        remember: (id: PlaceId) => {
+            settings = { ...settings, openIn: id };
+            try {
+                writeSettings(paths.settings, settings);
+            } catch {
+                log.warn('open_in_remember_failed', {});
+            }
+        },
+        // An editor or the file manager keeps the environment it is started with for its whole life: the person's, not a
+        // demo run's. The terminals are started by `jason session open` and keep the run's.
+        start: (line) => startDetached(line, editorEnvironment(env, personEnvironment, process.platform)),
+        copy: (text) => clipboard.writeText(text),
+        terminalFlags,
+        log: (event, fields) => log.info(event, fields),
+    });
+    handle(ipcMain, 'openIn.targets', origin, (campaignId) => openIn.targets(campaignId), refused);
+    handle(ipcMain, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".
     // Nor does a listing of Codex's models: it is ended the way a turn's host is, and the asks that wait are dropped.
     window.on('closed', () => {
