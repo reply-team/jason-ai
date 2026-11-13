@@ -76,6 +76,14 @@ describe('the shortcut and its name', () => {
         expect(press('j', { ctrlKey: true })).toBe(false);
     });
 
+    it('is the K key by its place too, so a layout that types another letter there opens it', () => {
+        expect(press('л', { ctrlKey: true, code: 'KeyK' })).toBe(true);
+        expect(press('л', { metaKey: true, code: 'KeyK' })).toBe(true);
+        expect(press('л', { ctrlKey: true })).toBe(false);
+        expect(press('л', { ctrlKey: true, code: 'KeyJ' })).toBe(false);
+        expect(press('л', { code: 'KeyK' })).toBe(false);
+    });
+
     it('names the key by the system the window is on', () => {
         expect(hintFor('darwin')).toBe('mac');
         expect(hintFor('win32')).toBe('other');

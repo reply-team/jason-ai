@@ -72,15 +72,24 @@ export function hintFor(platform: string): 'mac' | 'other' {
     return platform === 'darwin' ? 'mac' : 'other';
 }
 
-/** Whether a key press is the palette's shortcut: K with Meta or Ctrl, and no Alt or Shift. */
+/**
+ * Whether a key press is the palette's shortcut: the K key with Meta or Ctrl, and no Alt or Shift. The key is taken by
+ * the letter it types or by its place on the keyboard, so a layout that types another letter there (Cyrillic, say) works.
+ */
 export function isShortcut(event: {
     key: string;
+    code?: string;
     ctrlKey: boolean;
     metaKey: boolean;
     altKey: boolean;
     shiftKey: boolean;
 }): boolean {
-    return event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+    return (
+        (event.key.toLowerCase() === 'k' || event.code === 'KeyK') &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey
+    );
 }
 
 /** The selection after an arrow key: it wraps at both ends, and stays at the first where there is nothing to select. */
