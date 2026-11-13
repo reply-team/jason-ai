@@ -24,6 +24,7 @@ const icons = {
     pulse: html`<path d="M3 12h4l3-8 4 16 3-8h4" />`,
     up: html`<path d="M12 19V5M5 12l7-7 7 7" />`,
     stop: html`<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />`,
+    search: html`<circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" />`,
     chat: html`<path d="M4 5h16v11H9l-5 4z" />`,
     theme: html`<circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 010 18z" fill="currentColor" />`,
     globe: html`<circle cx="12" cy="12" r="9" /><path
