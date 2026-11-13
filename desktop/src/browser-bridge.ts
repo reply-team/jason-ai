@@ -507,6 +507,11 @@ export async function openTab(deps: TabDeps): Promise<string | null> {
         deps.log?.warn('bridge_tab_refused', { Why: 'no_link' });
         return "Jason's page could not be opened in a browser.";
     }
-    await deps.open(bridgeLink(link, bridge.port, bridge.mint()));
+    try {
+        await deps.open(bridgeLink(link, bridge.port, bridge.mint()));
+    } catch {
+        deps.log?.warn('bridge_tab_refused', { Why: 'not_opened' });
+        return "The system's browser could not be opened.";
+    }
     return null;
 }

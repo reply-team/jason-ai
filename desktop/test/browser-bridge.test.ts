@@ -593,7 +593,11 @@ test('the tab is opened at the link the CLI printed, held to the runtime\'s orig
     }
     assert.equal(typeof (await openTab({ ...deps, origin: () => null, cli: cli(`${runtime}/ui/#/?t=T`) })), 'string');
     assert.equal(typeof (await openTab({ ...deps, bridge: async () => null, cli: cli(`${runtime}/ui/#/?t=T`) })), 'string');
+    assert.equal(typeof (await openTab({ ...deps, cli: { run: async () => ({ exit: 3, stdout: '', stderr: '' }) } })), 'string');
     assert.equal(opened.length, 1);
+    // A browser the system could not open is said in a sentence, not thrown at the page.
+    const failing = { ...deps, cli: cli(`${runtime}/ui/#/?t=T`), open: () => Promise.reject(new Error('no browser')) };
+    assert.equal(await openTab(failing), "The system's browser could not be opened.");
 });
 
 // --- what is written ---------------------------------------------------------------------------------------------------
