@@ -87,13 +87,15 @@ public class RouteKeepsSendsTests
     /// The same move goes through once nothing is left to cancel or to read there. The provider has said it holds the send
     /// no longer: a cancel of it succeeded; a cancel of it failed with the answer its document declares as nothing to
     /// cancel, the send already went or the provider holds none under the reference; a status read of it succeeded and
-    /// says it went, or that it can no longer be cancelled. Its moment has passed, the provider's own where its result
-    /// names one, though its arguments named a later one; it named no moment at all; or its own result does not say the
-    /// provider can cancel it, whether it says false or says nothing, which the operation's document reads as false. Or
-    /// another route of the campaign still names the plugin and account. A cancel that failed for any other reason, a
-    /// cancel still to run, and a status read that says the send is still queued and cancellable leave it held; so does a
-    /// send the provider took for a later moment of its own with no moment in its arguments, and one whose result says the
-    /// provider can cancel it, as every other row here has: the move is still refused.
+    /// says it went, or that it can no longer be cancelled, and the same two answers free a send with no moment known.
+    /// Its moment has passed, the provider's own where its result names one, though its arguments named a later one; or
+    /// its own result does not say the provider can cancel it, whether it says false or says nothing, which the
+    /// operation's document reads as false. Or another route of the campaign still names the plugin and account. A cancel
+    /// that failed for any other reason, a cancel still to run, and a status read that says the send is still queued and
+    /// cancellable leave it held; so does a send the provider took for a later moment of its own with no moment in its
+    /// arguments, a send that can be cancelled and names no moment at all, which the provider holds for its own sending
+    /// schedule, and one whose result says the provider can cancel it, as every other row here has: the move is still
+    /// refused.
     /// </summary>
     [Theory]
     [InlineData("cancelled", true)]
@@ -103,7 +105,9 @@ public class RouteKeepsSendsTests
     [InlineData("a status read says it can no longer be cancelled", true)]
     [InlineData("its moment passed", true)]
     [InlineData("the provider's own moment passed", true)]
-    [InlineData("no moment", true)]
+    [InlineData("no moment known", false)]
+    [InlineData("no moment known, a status read says it went", true)]
+    [InlineData("no moment known, its cancel found nothing pending", true)]
     [InlineData("another route names the account", true)]
     [InlineData("the provider cannot cancel it", true)]
     [InlineData("the provider says nothing of cancelling it", true)]
@@ -126,7 +130,8 @@ public class RouteKeepsSendsTests
             after switch
             {
                 "its moment passed" => Moment(Noon.AddMinutes(-5)),
-                "no moment" or "the provider took it for a moment of its own" => null,
+                "no moment known" or "no moment known, a status read says it went" or "no moment known, its cancel found nothing pending"
+                    or "the provider took it for a moment of its own" => null,
                 _ => Later,
             },
             after switch
@@ -146,7 +151,7 @@ public class RouteKeepsSendsTests
             case "cancelled":
                 await CancelAsync(api, campaign, send, WorkItemStatus.Succeeded);
                 break;
-            case "its cancel found nothing pending":
+            case "its cancel found nothing pending" or "no moment known, its cancel found nothing pending":
                 await CancelAsync(api, campaign, send, WorkItemStatus.Failed, "send_not_pending");
                 break;
             case "its cancel found no such send":
@@ -161,7 +166,7 @@ public class RouteKeepsSendsTests
             case "its cancel is still to run":
                 await CancelAsync(api, campaign, send, WorkItemStatus.Scheduled);
                 break;
-            case "a status read says it went":
+            case "a status read says it went" or "no moment known, a status read says it went":
                 await StatusReadAsync(api, campaign, send, "sent", cancelable: false);
                 break;
             case "a status read says it can no longer be cancelled":
@@ -279,6 +284,37 @@ public class RouteKeepsSendsTests
             Assert.DoesNotContain(said, refused.Message, StringComparison.Ordinal);
             Assert.DoesNotContain(said, detail.Message, StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// A send the provider holds for its own sending schedule has no moment to name: the refusal names none for it and
+    /// gives the ways out that exist, a cancel or a status read once it has gone. Where dated sends hold the same account
+    /// too, it says both: the latest moment of the dated ones, and how many have none.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_for_sends_with_no_moment_known_names_none_for_them_and_says_both_kinds_where_both_hold()
+    {
+        await using var api = await StartAsync();
+        var campaign = await CampaignAsync(api);
+        await SetAsync(api, campaign, Mailer);
+        var undated = await SentAsync(api, campaign, Mailer, "email", sendAfter: null);
+
+        var alone = Assert.Single((await api.PostErrorAsync(Operations.RouteSet, Set(campaign, Social), HttpStatusCode.Conflict, Ct)).Details!);
+
+        Assert.Equal(RouteActivator.SendField(campaign, undated), alone.Field);
+        Assert.Contains("for its own sending schedule with no moment known", alone.Message, StringComparison.Ordinal);
+        Assert.Contains("Cancel them with message.cancel, or read their status with message.status once they have gone; then change the route.", alone.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("until", alone.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-", alone.Message, StringComparison.Ordinal);
+
+        var dated = await SentAsync(api, campaign, Mailer, "email", Later);
+        var both = Assert.Single((await api.PostErrorAsync(Operations.RouteSet, Set(campaign, Social), HttpStatusCode.Conflict, Ct)).Details!);
+
+        Assert.Equal(RouteActivator.SendField(campaign, undated), both.Field);
+        Assert.Contains("2 send(s)", both.Message, StringComparison.Ordinal);
+        Assert.Contains(dated, both.Message, StringComparison.Ordinal);
+        Assert.Contains($"holds 1 of them until {Later} at the latest and 1 for its own sending schedule with no moment known", both.Message, StringComparison.Ordinal);
+        Assert.Contains($"or change the route after {Later}, once the 1 with no moment known have been read as gone with message.status.", both.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

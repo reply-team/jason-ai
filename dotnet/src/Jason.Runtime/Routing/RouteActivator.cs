@@ -185,8 +185,10 @@ public sealed class RouteActivator(
     /// (<see cref="HeldSends"/>), that the routes active now reach and <paramref name="candidate"/> would not is a problem
     /// of the set: it would go out at its moment with nowhere to cancel it. The sends of one campaign held at one plugin
     /// and account are one problem, named by the latest of them, saying how many there are, the latest moment among them
-    /// and the two ways out; it names them by their work items and says nothing a send says to a person. Answers how
-    /// many sends the problems hold back.
+    /// and the two ways out; it names them by their work items and says nothing a send says to a person. A send held for
+    /// the provider's own schedule has no moment to name and no moment after which the route is free: its ways out are a
+    /// cancel, or a status read once it has gone; where a problem holds both kinds, it says both. Answers how many sends
+    /// the problems hold back.
     /// <para>
     /// A send the active routes do not reach either is not this change's doing, and refuses nothing. After the start it
     /// cannot be new either: every door a change comes through afterwards refuses one that would strand a send, so a send
@@ -227,9 +229,13 @@ public sealed class RouteActivator(
 
         foreach (var held in stranded)
         {
-            var ordered = held.OrderBy(send => send.Moment).ThenBy(send => send.WorkItem, StringComparer.Ordinal).ToList();
+            // A send with no moment known goes last: the provider holds it for a schedule of its own, after every dated one.
+            var ordered = held
+                .OrderBy(send => send.Moment is null)
+                .ThenBy(send => send.Moment)
+                .ThenBy(send => send.WorkItem, StringComparer.Ordinal)
+                .ToList();
             var latest = ordered[^1];
-            var until = SecondAfter(latest.Moment).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
             var named = ordered.Count <= ListedSends
                 ? string.Join(", ", ordered.Select(send => send.WorkItem))
                 : string.Join(", ", ordered.TakeLast(ListedSends).Select(send => send.WorkItem)) + string.Create(CultureInfo.InvariantCulture, $" and {ordered.Count - ListedSends} more");
@@ -238,10 +244,36 @@ public sealed class RouteActivator(
                 RouteProblemCodes.OrphansSend,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"campaign '{held.Key.Campaign}' holds {ordered.Count} send(s) ({named}) that ran at '{held.Key.PluginId}' under an account neither the campaign's other routes nor the global ones would name, and the provider holds the latest of them until {until}, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}, or change the route after {until}.")));
+                    $"campaign '{held.Key.Campaign}' holds {ordered.Count} send(s) ({named}) that ran at '{held.Key.PluginId}' under an account neither the campaign's other routes nor the global ones would name, {WaysOut(ordered)}")));
         }
 
         return stranded.Sum(held => held.Count());
+    }
+
+    /// <summary>
+    /// What a problem says of how long the provider holds its sends, and the ways out that exist for them: a dated send
+    /// is free once its moment passes, so the route may change after the latest; a send held for the provider's own
+    /// schedule has no such moment, so it is cancelled, or read once it has gone.
+    /// </summary>
+    private static string WaysOut(IReadOnlyList<HeldSend> sends)
+    {
+        var dated = sends.Where(send => send.Moment is not null).ToList();
+        var undated = sends.Count - dated.Count;
+        var until = dated.Count > 0
+            ? SecondAfter(dated.Max(send => send.Moment!.Value)).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
+            : null;
+        return (until, undated) switch
+        {
+            (not null, 0) => string.Create(
+                CultureInfo.InvariantCulture,
+                $"and the provider holds the latest of them until {until}, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}, or change the route after {until}."),
+            (null, _) => string.Create(
+                CultureInfo.InvariantCulture,
+                $"and the provider holds them for its own sending schedule with no moment known, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}, or read their status with {HeldSends.Status} once they have gone; then change the route."),
+            _ => string.Create(
+                CultureInfo.InvariantCulture,
+                $"and the provider holds {dated.Count} of them until {until} at the latest and {undated} for its own sending schedule with no moment known, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}; or change the route after {until}, once the {undated} with no moment known have been read as gone with {HeldSends.Status}."),
+        };
     }
 
     /// <summary>

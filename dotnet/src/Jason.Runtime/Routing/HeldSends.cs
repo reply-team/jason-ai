@@ -8,11 +8,13 @@ namespace Jason.Runtime.Routing;
 
 /// <summary>
 /// The sends a route change must not strand: a send of a campaign that is not archived, which succeeded with the
-/// provider's reference, which the provider holds for a moment still to come, and whose own result says the provider can
-/// cancel it: <c>cancelable: true</c>, read as the operation's document defines the flag, where "absent reads as false",
-/// so a result that says nothing holds nothing, as one that says false does. The moment is the one the provider took it
-/// for, its result's <c>accepted_for</c>, where it names one, and otherwise the <c>send_after</c> its arguments named; a
-/// send with neither is held for nothing the runtime knows of. A send lets its route go as soon as the provider has said
+/// provider's reference, and whose own result says the provider can cancel it: <c>cancelable: true</c>, read as the
+/// operation's document defines the flag, where "absent reads as false", so a result that says nothing holds nothing, as
+/// one that says false does. Its moment is the one the provider took it for, its result's <c>accepted_for</c>, where it
+/// names one, and otherwise the <c>send_after</c> its arguments named; an estimate the provider gives is never read as a
+/// moment. A send whose moment has passed is held no longer. A send with no moment known still holds: the provider holds
+/// it for a sending schedule of its own, the ordinary case of a message queued outside sending hours, so it may go at any
+/// time and only the provider's own word frees it. A send lets its route go as soon as the provider has said
 /// it holds the send no longer: a cancel of it succeeded; a cancel of it ended with the answer that there was nothing to
 /// cancel (<see cref="NothingToCancel"/>); or a status read of it that succeeded says it is final
 /// (<see cref="FinalStates"/>) or can no longer be cancelled. A cancel or a read still to run, or one that failed for any
@@ -40,10 +42,10 @@ internal static class HeldSends
 
     /// <summary>
     /// One read, bounded by the moment: only a send held for a moment after the caller's clock, which is passed in so the
-    /// clock stays the caller's and never the database's, reaches the question of what released it. The operations that
+    /// clock stays the caller's and never the database's, or for none known, reaches the question of what released it. The operations that
     /// make a send are passed as a JSON array, the catalog's own answer, so no list of them is written here; so are the
     /// answers that release one. SQLite's date functions read the contract's <c>Z</c> and <c>±hh:mm</c> forms and its
-    /// fraction, and a moment they cannot read is NULL and names no moment. The moment comes back in UTC to the
+    /// fraction, and a moment they cannot read is NULL and is no moment known. The moment comes back in UTC to the
     /// millisecond. An archived campaign's cancel is cancelled by the dispatch, never run, so its sends keep nothing.
     /// </summary>
     private const string Sql = """
@@ -62,7 +64,7 @@ internal static class HeldSends
               AND json_type(s.result_json, '$.items[0].cancelable') = 'true'
               AND json_extract(a.provenance_json, '$.external_ids_returned.send') IS NOT NULL
         ) AS held
-        WHERE julianday(Moment) > julianday({1})
+        WHERE (julianday(Moment) IS NULL OR julianday(Moment) > julianday({1}))
           AND PluginId IS NOT NULL
           AND NOT EXISTS (
               SELECT 1 FROM work_items AS k
@@ -86,7 +88,10 @@ internal static class HeldSends
 
     private static readonly string Final = JsonSerializer.Serialize(FinalStates);
 
-    /// <summary>Every send the provider still holds for a moment after <paramref name="now"/>, in campaign order.</summary>
+    /// <summary>
+    /// Every send the provider still holds for a moment after <paramref name="now"/>, or for one of its own, in campaign
+    /// order.
+    /// </summary>
     public static async Task<IReadOnlyList<HeldSend>> ReadAsync(JasonDbContext db, DateTimeOffset now, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -101,7 +106,9 @@ internal static class HeldSends
                 row.Campaign,
                 row.WorkItem,
                 row.Operation,
-                DateTimeOffset.ParseExact(row.Moment, "yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal),
+                row.Moment is { } moment
+                    ? DateTimeOffset.ParseExact(moment, "yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal)
+                    : null,
                 row.PluginId,
                 row.BindingIdentity))
             .ToList();
@@ -109,10 +116,10 @@ internal static class HeldSends
 }
 
 /// <summary>
-/// A send a route change must not strand: its campaign, its work item and operation, the moment it is held for, and where
-/// it ran. Nothing the send says to a person is kept here: not its recipient, its subject or its text.
+/// A send a route change must not strand: its campaign, its work item and operation, the moment it is held for (none where
+/// the provider holds it for a schedule of its own), and where it ran. Nothing the send says to a person is kept here: not its recipient, its subject or its text.
 /// </summary>
-internal sealed record HeldSend(string Campaign, string WorkItem, string Operation, DateTimeOffset Moment, string PluginId, string? BindingIdentity);
+internal sealed record HeldSend(string Campaign, string WorkItem, string Operation, DateTimeOffset? Moment, string PluginId, string? BindingIdentity);
 
-/// <summary>One row of the read: the moment in UTC to the millisecond, as the database wrote it.</summary>
-internal sealed record HeldSendRow(string Campaign, string WorkItem, string Operation, string Moment, string PluginId, string? BindingIdentity);
+/// <summary>One row of the read: the moment in UTC to the millisecond, as the database wrote it, or none known.</summary>
+internal sealed record HeldSendRow(string Campaign, string WorkItem, string Operation, string? Moment, string PluginId, string? BindingIdentity);
