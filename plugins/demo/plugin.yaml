@@ -1,0 +1,28 @@
+manifest_version: 1
+id: demo
+version: 1.0.0
+kind: provider
+name: Demo provider
+description: >-
+  A provider that reaches nobody, for Jason's demo installation: it takes sends and delivers them to no one, lists two
+  invented sending accounts, and reports the written replies of a sample story. Its people are invented.
+homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/demo
+contracts:
+  protocol: [1]
+  operations: [1]
+  # The runtime's own reader asks this package for the account's events: the sample story's written replies.
+  events: [1]
+operations: [message.send, social_invitation.send, conversation.reply, sender.list, conversation.get, conversation.list]
+entry:
+  module: main.js
+  function: invoke
+# No `capabilities`, on purpose and for good: no program, no host, no variable, no file, no Runtime API. The plugin host
+# hands a package only what its manifest requests and a person grants, so this one can reach nothing outside its own
+# process, and that is why a send made to it goes to nobody.
+#
+# No `arguments`: it takes no `send_after`, so every send is answered as gone at once, and nothing is ever held for a
+# later moment that `message.status` or `message.cancel` would read, which is why it performs neither.
+#
+# A send's reference is made from the work item's key alone, so a repeat under the same key is answered with the
+# reference the first attempt gave, and nothing is sent twice, since nothing is sent at all.
+settles_by_key: [message.send, social_invitation.send]

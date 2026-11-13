@@ -27,6 +27,8 @@
     <None Include="../../../plugins/journal-forwarder/**" LinkBase="Fixtures/plugins/journal-forwarder" CopyToOutputDirectory="PreserveNewest" />
     <!-- The slack notification package, linked the same way. -->
     <None Include="../../../plugins/slack/**" LinkBase="Fixtures/plugins/slack" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The demo provider, linked the same way: its tests run the package the desktop carries. -->
+    <None Include="../../../plugins/demo/**" LinkBase="Fixtures/plugins/demo" CopyToOutputDirectory="PreserveNewest" />
     <!-- The one table of LinkedIn profile links, which the migration that re-keys stored links is fed. -->
     <Compile Include="../Jason.Contracts.Tests/Channels/LinkedInKeyVectors.cs" Link="LinkedInKeyVectors.cs" />
   </ItemGroup>
