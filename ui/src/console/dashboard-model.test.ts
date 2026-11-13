@@ -6,6 +6,7 @@ import {
     greetingFor,
     needsSubline,
     progressOf,
+    rangeProblem,
     rateOf,
     startingRange,
     threadsIn,
@@ -193,5 +194,16 @@ describe('progress and cutting', () => {
         const long = 'x'.repeat(120);
         expect(cut(long, 90)).toBe(`${'x'.repeat(89)}…`);
         expect(cut(long, 90)).toHaveLength(90);
+    });
+});
+
+describe('why a custom range asks for nothing', () => {
+    const now = new Date('2026-10-16T09:00:00Z');
+    it('names an empty field, a backwards range and a range not yet begun, and nothing for one that asks', () => {
+        expect(rangeProblem({ from: '', to: '2026-09-30' }, now, 'UTC')).toBe('empty');
+        expect(rangeProblem({ from: '2026-09-01', to: '' }, now, 'UTC')).toBe('empty');
+        expect(rangeProblem({ from: '2026-10-02', to: '2026-10-01' }, now, 'UTC')).toBe('backwards');
+        expect(rangeProblem({ from: '2026-10-17', to: '2026-10-20' }, now, 'UTC')).toBe('future');
+        expect(rangeProblem({ from: '2026-10-01', to: '2026-10-30' }, now, 'UTC')).toBeNull();
     });
 });

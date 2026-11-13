@@ -177,3 +177,13 @@ export function tilesOf(input: {
         { label: t('dash.tile.bounce'), value: null, sub: null },
     ];
 }
+
+/** Why a custom range asks for nothing: a day is missing, From is after To, or the range has not begun. Null when it asks. */
+export type RangeProblem = 'empty' | 'backwards' | 'future';
+
+export function rangeProblem(range: CustomRange, now: Date, zone: string): RangeProblem | null {
+    if (!range.from || !range.to) return 'empty';
+    if (range.from > range.to) return 'backwards';
+    if (range.from > dayOf(now, zone)) return 'future';
+    return null;
+}

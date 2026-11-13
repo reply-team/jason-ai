@@ -380,6 +380,40 @@ describe('the period', () => {
         expect(asked(fake, 'reply.count')).toHaveLength(calls);
     });
 
+    it.each([
+        ['', '2026-09-30', 'Choose both a From date and a To date.'],
+        ['2026-10-20', '2026-10-10', 'Choose a From date that is not after To.'],
+        ['2026-11-01', '2026-11-30', 'Choose dates that are not in the future.'],
+    ])('says why a custom range from %s to %s asks for nothing', async (from, to, line) => {
+        renderConsole({ anyWindow: true });
+        await open();
+        choose('custom');
+        await waitFor(() => expect(dash().querySelector('input[aria-label="From"]')).toBeTruthy());
+        expect(dash().querySelector('.dash-range-hint')).toBeNull();
+        for (const [label, value] of [
+            ['From', from],
+            ['To', to],
+        ] as const) {
+            const input = dash().querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+            input.value = value;
+            fireEvent.change(input);
+            await settled();
+        }
+        await waitFor(() => expect(words(dash().querySelector('.dash-range-hint')!)).toBe(line));
+        expect(part('Contacted', 'b')).toBe('–');
+    });
+
+    it('has no range line for a range that asks, nor outside Custom', async () => {
+        renderConsole({ anyWindow: true });
+        await open();
+        choose('custom');
+        await waitFor(() => expect(dash().querySelector('input[aria-label="From"]')).toBeTruthy());
+        expect(dash().querySelector('.dash-range-hint')).toBeNull();
+        choose('7d');
+        await waitFor(() => expect(dash().querySelector('input[aria-label="From"]')).toBeNull());
+        expect(dash().querySelector('.dash-range-hint')).toBeNull();
+    });
+
     it('does not remember the choice: the Dashboard opens on thirty days again', async () => {
         renderConsole({ anyWindow: true });
         await open();

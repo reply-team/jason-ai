@@ -15,6 +15,7 @@ import {
     isDashboardPeriod,
     periodWords,
     progressOf,
+    rangeProblem,
     startingRange,
     tilesOf,
     type ActivityRead,
@@ -187,6 +188,12 @@ function periodControl(): Html {
     </span>`;
 }
 
+function rangeHint(): Html | null {
+    if (period.value !== 'custom') return null;
+    const problem = rangeProblem(custom.value, new Date(), zone);
+    return problem === null ? null : html`<p class="dash-range-hint" role="status">${t(`dash.range.${problem}`)}</p>`;
+}
+
 function header(waiting: number): Html {
     // The installation knows no person's name, so the greeting has none and no comma.
     const hour = new Date(clock.value).getHours();
@@ -194,6 +201,7 @@ function header(waiting: number): Html {
         <div>
             <h1>${greetingFor(hour)}</h1>
             <p>${mode.value === 'demo' ? t('dash.sub.demo') : t('dash.sub.live')}</p>
+            ${rangeHint()}
         </div>
         <div class="acts">
             ${periodControl()}
