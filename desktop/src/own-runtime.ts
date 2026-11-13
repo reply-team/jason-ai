@@ -51,12 +51,18 @@ export interface RuntimeLook {
     unreadable?: true;
 }
 
+/** What the person is told when it is the demo's runtime, the sample installation's own and not theirs, that would not stop. */
+export const demoRuntimeWords = 'the demo’s runtime, the sample installation’s own and not yours, is running and did not stop';
+
+/** What a person does about it: quit the demo from its own window, or stop its runtime on the demo’s data directory. */
+export const demoRuntimeNext = 'Open Jason in the demo and quit it, or stop that runtime with jason runtime stop run with JASON_DATA_DIR set to the demo’s data directory.';
+
 /** What came of stopping this application's runtime: only `none`, `another` and `stopped` let an update or an uninstall go on. */
 export type StopOutcome =
     | { kind: 'none' }
     | { kind: 'another' }
     | { kind: 'stopped' }
-    | { kind: 'failed'; exit: number }
+    | { kind: 'failed'; exit: number; demo?: true }
     | Unanswered;
 
 /** A runtime that may be running and did not answer, with what a person is told to look at. */
@@ -65,6 +71,8 @@ export interface Unanswered {
     pid: number | null;
     runFile: string;
     unreadable?: true;
+    /** Set when the runtime that did not answer is the demo's, not the person's (`stopWithDemo`). */
+    demo?: true;
 }
 
 /** `jason runtime status` answers at once or not at all; this bounds a runtime that takes the request and never answers. */

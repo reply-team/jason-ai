@@ -455,6 +455,10 @@ function capture(how: Capture | undefined, answer: Record<string, unknown> | nul
 export interface StartOverDeps {
     /** The places to remove, and the file removal; the seed's own dependencies, nothing of it is run here. */
     seed: Pick<SeedDeps, 'places' | 'removeTree'>;
+    /** Whether a folder is there at all. */
+    exists(folder: string): boolean;
+    /** Whether a folder carries the demo's marker (`hasDemoMarker`): only such a folder is ever removed. */
+    marked(folder: string): boolean;
     /** Stops the demo installation's runtime; resolves false when it could not be stopped. */
     stopRuntime(): Promise<boolean>;
     /** Starts the desktop again on the demo: its start finds no marker, makes the demo ready, starts its runtime and seeds. */
@@ -467,12 +471,15 @@ export type StartOverOutcome = { kind: 'started-over' } | { kind: 'refused'; why
  * "Start the demo over": the demo's runtime is stopped, its two folders are removed and the desktop starts again on the
  * demo. The seed needs a running runtime, which only a start brings up, so the sample is made by that start (the folder
  * has no marker, so it is seeded, behind the preparing page). Nothing of the person's own installation is touched: only
- * the two folders `places` names are removed, and only once the runtime that ran on them has stopped.
+ * the two folders `places` names are removed, only when it carries the demo's marker, and only once the runtime that ran on them has stopped.
  */
 export async function startDemoOver(deps: StartOverDeps): Promise<StartOverOutcome> {
+    const folders = [deps.seed.places.data, deps.seed.places.harnessRoot];
+    // A folder of the demo's name that carries no marker is not the desktop's to remove: it is left, and named, before anything stops.
+    const foreign = folders.find((folder) => deps.exists(folder) && !deps.marked(folder));
+    if (foreign !== undefined) return { kind: 'refused', why: `The folder ${foreign} is not one the demo made, so nothing was removed. Move it away or remove it yourself, then start the demo over.` };
     if (!(await deps.stopRuntime())) return { kind: 'refused', why: 'The sample could not be stopped, so it was left as it is.' };
-    deps.seed.removeTree(deps.seed.places.data);
-    deps.seed.removeTree(deps.seed.places.harnessRoot);
+    for (const folder of folders) if (deps.exists(folder)) deps.seed.removeTree(folder);
     deps.relaunch();
     return { kind: 'started-over' };
 }

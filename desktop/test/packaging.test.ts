@@ -274,12 +274,13 @@ test('beside app.asar: the bundle of the architecture built, and the licence wit
     assert.throws(() => bundleFolder(4), /universal/);
 });
 
-test('a bundle is the executable with its licence and notices, version.json and the skills, at the package’s version', (t) => {
-    assert.deepEqual(bundleFiles('win32'), ['jason.exe', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills']);
-    assert.deepEqual(bundleFiles('darwin'), ['jason', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills']);
+test('a bundle is the executable with its licence and notices, version.json, the skills and the demo provider, at the package’s version', (t) => {
+    assert.deepEqual(bundleFiles('win32'), ['jason.exe', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills', 'plugins']);
+    assert.deepEqual(bundleFiles('darwin'), ['jason', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills', 'plugins']);
     const folder = temporary(t);
     for (const name of ['jason.exe', 'LICENSE', 'THIRD-PARTY-NOTICES']) writeFileSync(join(folder, name), 'x');
     mkdirSync(join(folder, 'skills'));
+    mkdirSync(join(folder, 'plugins'));
     assert.throws(() => checkBundle(folder, '0.34.0', 'win32'), /has no version\.json/);
     writeFileSync(join(folder, 'version.json'), JSON.stringify({ version: '0.34.0-rc.1' }));
     assert.throws(() => checkBundle(folder, '0.34.0', 'win32'), /prepared as 0\.34\.0-rc\.1, and the package is built at 0\.34\.0/);

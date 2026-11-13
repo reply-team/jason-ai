@@ -342,18 +342,42 @@ test('"Start the demo over" removes the demo\'s two folders and nothing else, th
     const removed: string[] = [];
     let relaunched = 0;
     const seed = { ...run.deps, removeTree: (path: string) => void removed.push(path), readText: (file: string) => (file === run.deps.markerFile ? null : run.deps.readText(file)) };
-    const outcome = await startDemoOver({ seed, stopRuntime: async () => true, relaunch: () => void (relaunched += 1) });
+    const outcome = await startDemoOver({ seed, exists: () => true, marked: () => true, stopRuntime: async () => true, relaunch: () => void (relaunched += 1) });
     assert.deepEqual(outcome, { kind: 'started-over' });
     assert.deepEqual(removed.slice(0, 2).sort(), [places.data, places.harnessRoot].sort());
     assert.ok(!removed.includes(own.data) && !removed.includes(own.harness));
     assert.equal(relaunched, 1);
 });
 
+test('"Start the demo over" removes a folder only when it carries the marker: one without it is left and named, and nothing is stopped', async () => {
+    const run = await seeded();
+    const removed: string[] = [];
+    let stopped = 0;
+    let relaunched = 0;
+    const outcome = await startDemoOver({
+        seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) },
+        exists: () => true,
+        marked: (folder) => folder !== places.harnessRoot,
+        stopRuntime: async () => { stopped += 1; return true; },
+        relaunch: () => void (relaunched += 1),
+    });
+    assert.equal(outcome.kind, 'refused');
+    assert.ok(outcome.kind === 'refused' && outcome.why.includes(places.harnessRoot));
+    assert.deepEqual(removed, [], 'the marked folder is not removed either: the act is refused whole');
+    assert.equal(stopped, 0);
+    assert.equal(relaunched, 0);
+    // A folder that is not there is nothing to remove, and is not refused.
+    const absent: string[] = [];
+    const again = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void absent.push(path) }, exists: (folder) => folder === places.data, marked: () => true, stopRuntime: async () => true, relaunch: () => undefined });
+    assert.equal(again.kind, 'started-over');
+    assert.deepEqual(absent, [places.data]);
+});
+
 test('"Start the demo over" leaves everything as it is when the demo\'s runtime cannot be stopped', async () => {
     const run = await seeded();
     const removed: string[] = [];
     let relaunched = 0;
-    const outcome = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) }, stopRuntime: async () => false, relaunch: () => void (relaunched += 1) });
+    const outcome = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) }, exists: () => true, marked: () => true, stopRuntime: async () => false, relaunch: () => void (relaunched += 1) });
     assert.equal(outcome.kind, 'refused');
     assert.deepEqual(removed, []);
     assert.equal(relaunched, 0);
