@@ -491,7 +491,7 @@ public partial class ReleaseWorkflowTests
         var test = Scalar(testing, "run")!;
         Assert.StartsWith("./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION ", test, StringComparison.Ordinal);
         Assert.Equal("${{ needs.version.outputs.release }}", Scalar(Mapping(testing, "env"), "VERSION"));
-        foreach (var narrowing in new[] { "-Projects", "-Namespaces", "-NotNamespaces", "-Critical", "filter" })
+        foreach (var narrowing in new[] { "-Projects", "-Namespaces", "-NotNamespaces", "-Classes", "-NotClasses", "-Critical", "filter" })
         {
             Assert.DoesNotContain(narrowing, test, StringComparison.OrdinalIgnoreCase);
         }
@@ -608,22 +608,28 @@ public partial class ReleaseWorkflowTests
             "linux-x64 tests: the critical tier",
             "linux-x64 tests: App",
             "linux-x64 tests: Cli, Contracts and PluginHost",
-            "linux-x64 tests: Runtime 1 of 4",
-            "linux-x64 tests: Runtime 2 of 4",
-            "linux-x64 tests: Runtime 3 of 4",
-            "linux-x64 tests: Runtime 4 of 4",
+            "linux-x64 tests: Runtime 1 of 6",
+            "linux-x64 tests: Runtime 2 of 6",
+            "linux-x64 tests: Runtime 3 of 6",
+            "linux-x64 tests: Runtime 4 of 6",
+            "linux-x64 tests: Runtime 5 of 6",
+            "linux-x64 tests: Runtime 6 of 6",
             "win-x64 tests: App",
             "win-x64 tests: Cli, Contracts and PluginHost",
-            "win-x64 tests: Runtime 1 of 4",
-            "win-x64 tests: Runtime 2 of 4",
-            "win-x64 tests: Runtime 3 of 4",
-            "win-x64 tests: Runtime 4 of 4",
+            "win-x64 tests: Runtime 1 of 6",
+            "win-x64 tests: Runtime 2 of 6",
+            "win-x64 tests: Runtime 3 of 6",
+            "win-x64 tests: Runtime 4 of 6",
+            "win-x64 tests: Runtime 5 of 6",
+            "win-x64 tests: Runtime 6 of 6",
             "osx-arm64 tests: App",
             "osx-arm64 tests: Cli, Contracts and PluginHost",
-            "osx-arm64 tests: Runtime 1 of 4",
-            "osx-arm64 tests: Runtime 2 of 4",
-            "osx-arm64 tests: Runtime 3 of 4",
-            "osx-arm64 tests: Runtime 4 of 4",
+            "osx-arm64 tests: Runtime 1 of 6",
+            "osx-arm64 tests: Runtime 2 of 6",
+            "osx-arm64 tests: Runtime 3 of 6",
+            "osx-arm64 tests: Runtime 4 of 6",
+            "osx-arm64 tests: Runtime 5 of 6",
+            "osx-arm64 tests: Runtime 6 of 6",
         ];
 
         var jobs = Mapping(Parse(Read(Ci)), "jobs");

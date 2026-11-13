@@ -1675,20 +1675,22 @@ public class CiRunsTests
 
     /// <summary>
     /// The whole suite runs in parts, and together they are all of it: every test project is in a part, either whole and in
-    /// one part alone, or split by namespace over parts that hold that project alone. A split project's parts name
-    /// namespaces it declares, none named twice and none inside another, and exactly one of them is the rest, which names
-    /// none and runs every namespace the others do not, so it holds tests of its own and a namespace added later lands
-    /// there. The critical tier is one part, the whole solution under the tier's switch.
+    /// one part alone, or split over parts that hold that project alone. A split project's parts each name namespaces it
+    /// declares or patterns of the classes in one of them, never both, and no name twice; exactly one of them is the rest,
+    /// which names nothing and runs what no other part names, so it holds tests of its own. A class pattern is a namespace
+    /// the project declares and the start of a class name directly in it, with one wildcard at its end: it matches a class
+    /// the project declares, no namespace starts with it, and no pattern starts another, so a class matches at most one.
+    /// The critical tier is one part, the whole solution under the tier's switch.
     /// </summary>
     [Fact]
-    public void The_whole_suite_s_parts_hold_every_test_project_once_whole_or_split_by_namespace_with_one_rest()
+    public void The_whole_suite_s_parts_hold_every_test_project_once_whole_or_split_with_one_rest()
     {
         var parts = Parts();
         var tier = Assert.Single(parts, part => part["tier"] == "true");
-        Assert.Equal(("the critical tier", "", "", "false"), (tier["part"], tier["projects"], tier["namespaces"], tier["rest"]));
+        Assert.Equal(("the critical tier", "", "", "", "false"), (tier["part"], tier["projects"], tier["namespaces"], tier["classes"], tier["rest"]));
 
         var whole = parts.Where(part => part["tier"] == "false").ToList();
-        Assert.Equal(6, whole.Count);
+        Assert.Equal(8, whole.Count);
         Assert.Equal(whole.Count + 1, parts.Select(part => part["part"]).Distinct(StringComparer.Ordinal).Count());
 
         var tests = Path.Combine(RepositoryRoot(), "dotnet", "tests");
@@ -1702,35 +1704,53 @@ public class CiRunsTests
             var holding = whole.Where(part => Words(part["projects"]).Contains(project, StringComparer.Ordinal)).ToList();
             if (holding.Count == 1)
             {
-                Assert.True(holding[0]["namespaces"] == "" && holding[0]["rest"] == "false", $"{project} is in the part '{holding[0]["part"]}' alone, which must run it whole");
+                Assert.True(
+                    holding[0]["namespaces"] == "" && holding[0]["classes"] == "" && holding[0]["rest"] == "false",
+                    $"{project} is in the part '{holding[0]["part"]}' alone, which must run it whole");
                 continue;
             }
 
             Assert.All(holding, part => Assert.True(part["projects"] == project, $"the part '{part["part"]}' splits {project} and holds another project too"));
             var rest = Assert.Single(holding, part => part["rest"] == "true");
-            Assert.Equal("", rest["namespaces"]);
-            var named = holding.Where(part => part != rest).SelectMany(part => Words(part["namespaces"])).ToList();
-            Assert.All(holding.Where(part => part != rest), part => Assert.True(Words(part["namespaces"]).Length > 0, $"the part '{part["part"]}' names no namespace of {project}"));
-            Assert.Equal(named.Count, named.Distinct(StringComparer.Ordinal).Count());
-            Assert.All(named, name => Assert.DoesNotContain(named, other => Inside(other, name) && other != name));
+            Assert.Equal(("", ""), (rest["namespaces"], rest["classes"]));
+            var others = holding.Where(part => part != rest).ToList();
+            Assert.All(others, part => Assert.True(
+                Words(part["namespaces"]).Length > 0 != Words(part["classes"]).Length > 0,
+                $"the part '{part["part"]}' must name namespaces of {project} or classes of it, one of the two"));
+
+            var namespaces = others.SelectMany(part => Words(part["namespaces"])).ToList();
+            var patterns = others.SelectMany(part => Words(part["classes"])).ToList();
+            Assert.Equal(namespaces.Count, namespaces.Distinct(StringComparer.Ordinal).Count());
+            Assert.Equal(patterns.Count, patterns.Distinct(StringComparer.Ordinal).Count());
 
             var declared = Namespaces(Path.Combine(tests, project));
-            Assert.All(named, name => Assert.True(declared.Any(it => Inside(it, name)), $"{project} declares no namespace {name}, so its part would run nothing"));
+            var classes = Classes(Path.Combine(tests, project));
+            Assert.All(namespaces, name => Assert.True(declared.Any(it => Inside(it, name)), $"{project} declares no namespace {name}, so its part would run nothing"));
+            foreach (var pattern in patterns)
+            {
+                Assert.Matches(@"^[A-Za-z0-9_.]+\.[A-Za-z0-9_]+\*$", pattern);
+                var prefix = pattern[..^1];
+                Assert.True(declared.Contains(prefix[..prefix.LastIndexOf('.')]), $"{project} declares no namespace that the pattern {pattern} names");
+                Assert.True(classes.Any(name => name.StartsWith(prefix, StringComparison.Ordinal)), $"{project} declares no class the pattern {pattern} matches, so its part would run nothing of it");
+                Assert.DoesNotContain(declared, name => name.StartsWith(prefix, StringComparison.Ordinal));
+                Assert.DoesNotContain(patterns, other => other != pattern && other.StartsWith(prefix, StringComparison.Ordinal));
+            }
+
             Assert.True(
-                declared.Any(it => !named.Any(name => Inside(it, name))),
+                declared.Any(it => !namespaces.Any(name => Inside(it, name))),
                 $"every namespace of {project} is named by a part, so its rest runs nothing");
         }
     }
 
     /// <summary>
-    /// The rest of a split project runs exactly what its other parts do not: the script is handed, for the rest, every
-    /// namespace the others are handed, to leave out, and nothing else. Run through the script with a stand-in for
-    /// <c>dotnet</c>, the namespaces the runtime's first three parts include, each with every namespace inside it, are the
-    /// namespaces its fourth leaves out, each with every namespace inside it — so the four together run every test of the
-    /// project once.
+    /// Each part leaves out exactly what a more specific part of its project names inside what it runs: a part that names
+    /// namespaces leaves out every namespace another part names inside them and every pattern of the classes in them; a part
+    /// that names classes leaves out nothing; the rest leaves out every name the others name. The deciding step works this
+    /// out from the parts it is given, and the script hands each name to the test platform, a namespace with every
+    /// namespace inside it, as the parts are run on a runner.
     /// </summary>
     [Fact]
-    public void The_fourth_part_of_the_runtime_s_tests_leaves_out_exactly_what_the_first_three_run()
+    public void Each_part_leaves_out_exactly_what_a_more_specific_part_of_its_project_runs()
     {
         var decided = Decide(Kinds["a push to main"].Run);
         var parts = Parts().Where(part => part["tier"] == "false").ToList();
@@ -1739,39 +1759,78 @@ public class CiRunsTests
         foreach (var leg in legs)
         {
             var part = Assert.Single(parts, candidate => candidate["part"] == leg["part"]);
-            Assert.Equal(part["projects"], leg["projects"]);
-            Assert.Equal(part["namespaces"], leg["namespaces"]);
-            var left = part["rest"] == "true"
-                ? parts.Where(other => other["rest"] == "false" && other["projects"] == part["projects"]).SelectMany(other => Words(other["namespaces"]))
-                : Enumerable.Empty<string>();
-            Assert.Equal(left.Order(StringComparer.Ordinal), Words(leg["not_namespaces"]).Order(StringComparer.Ordinal));
+            Assert.Equal((part["projects"], part["namespaces"], part["classes"]), (leg["projects"], leg["namespaces"], leg["classes"]));
+            var others = parts.Where(other => other != part && other["projects"] == part["projects"]).ToList();
+            var holds = Words(part["namespaces"]);
+            var rest = part["rest"] == "true";
+            var namespaces = others.SelectMany(other => Words(other["namespaces"]))
+                .Where(name => rest || holds.Any(outer => name != outer && Inside(name, outer)));
+            var classes = others.SelectMany(other => Words(other["classes"]))
+                .Where(pattern => rest || holds.Any(outer => Inside(pattern[..pattern.LastIndexOf('.')], outer)));
+            Assert.Equal(namespaces.Order(StringComparer.Ordinal), Words(leg["not_namespaces"]).Order(StringComparer.Ordinal));
+            Assert.Equal(classes.Order(StringComparer.Ordinal), Words(leg["not_classes"]).Order(StringComparer.Ordinal));
         }
 
-        var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
-        List<string> Filters(string part, string kind)
-        {
-            var leg = Assert.Single(legs, candidate => candidate["rid"] == "linux-x64" && candidate["part"] == part);
-            var call = Assert.Single(RunTests(step, [[]], environment: Told(leg)).Calls);
-            var words = call.Split(' ');
-            return [.. words.Select((word, at) => (word, at)).Where(pair => pair.word == kind).Select(pair => words[pair.at + 1])];
-        }
-
-        var run = new[] { "Runtime 1 of 4", "Runtime 2 of 4", "Runtime 3 of 4" }.SelectMany(part => Filters(part, "--filter-namespace")).ToList();
-        var leftOut = Filters("Runtime 4 of 4", "--filter-not-namespace");
-        Assert.NotEmpty(run);
-        Assert.All(run, name => Assert.True(run.Contains(name.EndsWith(".*", StringComparison.Ordinal) ? name[..^2] : $"{name}.*", StringComparer.Ordinal), $"{name} is named without its pair"));
-        Assert.Equal(run.Order(StringComparer.Ordinal), leftOut.Order(StringComparer.Ordinal));
-        Assert.Empty(Filters("Runtime 4 of 4", "--filter-namespace"));
+        var filters = RuntimeFilters.Value["linux-x64"];
+        Assert.Contains("--filter-not-namespace Jason.Runtime.Tests.Plugins.Reply", filters["Runtime 1 of 6"]);
+        Assert.Contains("--filter-not-namespace Jason.Runtime.Tests.Plugins.Reply.*", filters["Runtime 1 of 6"]);
+        Assert.DoesNotContain(filters["Runtime 2 of 6"], filter => filter.StartsWith("--filter-not-", StringComparison.Ordinal));
+        Assert.All(Words(parts.Single(part => part["part"] == "Runtime 2 of 6")["classes"]), pattern => Assert.Contains($"--filter-not-class {pattern}", filters["Runtime 3 of 6"]));
+        Assert.DoesNotContain(filters["Runtime 6 of 6"], filter => !filter.StartsWith("--filter-not-", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// Each part runs its own projects and namespaces through the script, one <c>dotnet test</c> per project, with the
-    /// platform's repeat: a part that names projects runs each, a part that names namespaces includes each with every
-    /// namespace inside it, and the rest leaves the others' out the same way. Run as a runner runs the step, with a
-    /// stand-in for <c>dotnet</c>.
+    /// Every class of a split project runs in exactly one part on each platform, as the filters the script hands the test
+    /// platform select it: a namespace filter names a namespace exactly or, ending in a wildcard, every name that starts
+    /// with what comes before it; a class filter does the same over a class's full name; a test is run when it matches one of
+    /// its part's include filters, there being any, and none of its exclude filters. No part mixes the two kinds of include,
+    /// so the answer does not depend on how the platform joins them.
     /// </summary>
     [Fact]
-    public void Each_part_runs_its_projects_and_namespaces_with_the_platform_s_repeat()
+    public void Every_class_of_a_split_project_runs_in_exactly_one_part()
+    {
+        var project = Path.Combine(RepositoryRoot(), "dotnet", "tests", "Jason.Runtime.Tests");
+        var classes = Classes(project);
+        Assert.True(classes.Count > 100, $"only {classes.Count} classes were found");
+        foreach (var rid in new[] { "linux-x64", "win-x64", "osx-arm64" })
+        {
+            var filters = RuntimeFilters.Value[rid];
+            Assert.All(filters, pair => Assert.False(
+                pair.Value.Any(filter => filter.StartsWith("--filter-namespace ", StringComparison.Ordinal)) && pair.Value.Any(filter => filter.StartsWith("--filter-class ", StringComparison.Ordinal)),
+                $"the part '{pair.Key}' includes by namespace and by class at once"));
+            Assert.All(classes, name => Assert.Single(filters, pair => Runs(pair.Value, name)));
+        }
+    }
+
+    /// <summary>
+    /// A class added later lands in exactly one part without anyone naming it: a class whose name a part's pattern matches
+    /// in that part; a class no pattern matches in the part of the deepest namespace a part names around it; and a class
+    /// in a namespace no part names, the project's own included, in the rest.
+    /// </summary>
+    [Theory]
+    [InlineData("Jason.Runtime.Tests.Plugins.Reply.ReplyNewOperationTests", "Runtime 3 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.Reply.ReplyMessageNewTests", "Runtime 2 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.Reply.Deeper.ReplyMessageTests", "Runtime 3 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.PluginNewTests", "Runtime 1 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.Newcomer.NewTests", "Runtime 1 of 6")]
+    [InlineData("Jason.Runtime.Tests.Dispatch.NewTests", "Runtime 4 of 6")]
+    [InlineData("Jason.Runtime.Tests.WorkItems.NewTests", "Runtime 5 of 6")]
+    [InlineData("Jason.Runtime.Tests.Newcomer.NewTests", "Runtime 6 of 6")]
+    [InlineData("Jason.Runtime.Tests.NewTests", "Runtime 6 of 6")]
+    public void A_class_added_later_lands_in_exactly_one_part(string name, string part)
+    {
+        Assert.All(RuntimeFilters.Value, platform => Assert.Equal(part, Assert.Single(platform.Value, pair => Runs(pair.Value, name)).Key));
+    }
+
+
+    /// <summary>
+    /// Each part runs its own projects, namespaces and classes through the script, one <c>dotnet test</c> per project, with
+    /// the platform's repeat: a part that names projects runs each, a part that names namespaces includes each with every
+    /// namespace inside it, a part that names classes includes each pattern, and each leaves out what it is told to the same
+    /// way. Run as a runner runs the step, with a stand-in for <c>dotnet</c>.
+    /// </summary>
+    [Fact]
+    public void Each_part_runs_its_projects_namespaces_and_classes_with_the_platform_s_repeat()
     {
         var decided = Decide(Kinds["a push to main"].Run);
         var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
@@ -1783,7 +1842,9 @@ public class CiRunsTests
 
             var filters = string.Concat(
                 Words(leg["namespaces"]).Select(name => $"--filter-namespace {name} --filter-namespace {name}.* ")
-                    .Concat(Words(leg["not_namespaces"]).Select(name => $"--filter-not-namespace {name} --filter-not-namespace {name}.* ")));
+                    .Concat(Words(leg["not_namespaces"]).Select(name => $"--filter-not-namespace {name} --filter-not-namespace {name}.* "))
+                    .Concat(Words(leg["classes"]).Select(pattern => $"--filter-class {pattern} "))
+                    .Concat(Words(leg["not_classes"]).Select(pattern => $"--filter-not-class {pattern} ")));
             var expected = Words(leg["projects"]).Select((project, at) =>
                 $"test --project dotnet/tests/{project}/{project}.csproj --configuration Release --no-build -p:Version={TestedVersion} --results-directory <results>/{at + 1} -- {filters}--retry-failed-tests 2 --report-xunit-trx");
             Assert.Equal(expected, tests.Calls);
@@ -1802,7 +1863,7 @@ public class CiRunsTests
         var decided = Decide(Kinds[kind].Run);
         var platforms = Legs(decided.Outputs["platforms"]);
         var parts = Parts().Where(part => part["tier"] == decided.Outputs["tier"]).Select(part => part["part"]).ToList();
-        Assert.Equal(decided.Outputs["tier"] == "true" ? 1 : 6, parts.Count);
+        Assert.Equal(decided.Outputs["tier"] == "true" ? 1 : 8, parts.Count);
 
         Assert.Equal(
             platforms.SelectMany(platform => parts.Select(part => $"{platform["rid"]} on {platform["os"]}: {part}")),
@@ -1871,18 +1932,18 @@ public class CiRunsTests
     /// </summary>
     [Theory]
     [InlineData("every job of the platform succeeded", null, "completed", "success", 0)]
-    [InlineData("a part failed", "linux-x64 tests: Runtime 2 of 4", "completed", "failure", 1)]
+    [InlineData("a part failed", "linux-x64 tests: Runtime 4 of 6", "completed", "failure", 1)]
     [InlineData("a part was cancelled", "linux-x64 tests: App", "completed", "cancelled", 1)]
-    [InlineData("a part was skipped", "linux-x64 tests: Runtime 4 of 4", "completed", "skipped", 1)]
-    [InlineData("a part timed out", "linux-x64 tests: Runtime 1 of 4", "completed", "timed_out", 1)]
+    [InlineData("a part was skipped", "linux-x64 tests: Runtime 6 of 6", "completed", "skipped", 1)]
+    [InlineData("a part timed out", "linux-x64 tests: Runtime 1 of 6", "completed", "timed_out", 1)]
     [InlineData("a part has not finished", "linux-x64 tests: Cli, Contracts and PluginHost", "in_progress", "", 1)]
-    [InlineData("a part is missing", "linux-x64 tests: Runtime 3 of 4", "missing", "", 1)]
+    [InlineData("a part is missing", "linux-x64 tests: Runtime 3 of 6", "missing", "", 1)]
     [InlineData("a part is listed twice", "linux-x64 tests: App", "twice", "", 1)]
     [InlineData("the package failed", "linux-x64 package", "completed", "failure", 1)]
     [InlineData("the package is missing", "linux-x64 package", "missing", "", 1)]
     [InlineData("the API did not list the jobs", null, "unreadable", "", 1)]
     [InlineData("no part was decided for the platform", null, "undecided", "", 1)]
-    [InlineData("another platform's part failed", "win-x64 tests: Runtime 1 of 4", "completed", "failure", 0)]
+    [InlineData("another platform's part failed", "win-x64 tests: Runtime 2 of 6", "completed", "failure", 0)]
     [InlineData("another platform's package failed", "win-x64 package", "completed", "failure", 0)]
     public void A_platform_s_check_is_green_only_when_its_package_and_every_part_succeeded(string what, string? job, string status, string conclusion, int exit)
     {
@@ -1921,7 +1982,7 @@ public class CiRunsTests
 
         if (exit == 0)
         {
-            Assert.Contains("| linux-x64 tests: Runtime 4 of 4 | success |", verdict.Summary, StringComparison.Ordinal);
+            Assert.Contains("| linux-x64 tests: Runtime 6 of 6 | success |", verdict.Summary, StringComparison.Ordinal);
             Assert.Contains("| linux-x64 package | success |", verdict.Summary, StringComparison.Ordinal);
             Assert.DoesNotContain("win-x64", verdict.Summary, StringComparison.Ordinal);
         }
@@ -1954,7 +2015,68 @@ public class CiRunsTests
             ["PROJECTS"] = leg["projects"],
             ["NAMESPACES"] = leg["namespaces"],
             ["NOT_NAMESPACES"] = leg["not_namespaces"],
+            ["CLASSES"] = leg["classes"],
+            ["NOT_CLASSES"] = leg["not_classes"],
         };
+
+    /// <summary>
+    /// The filters the script hands the test platform for each part that runs the runtime's tests, by platform and part,
+    /// each as the option and its value: what a runner's step makes of the parts a push to main decides.
+    /// </summary>
+    private static readonly Lazy<Dictionary<string, Dictionary<string, List<string>>>> RuntimeFilters = new(() =>
+    {
+        var decided = Decide(Kinds["a push to main"].Run);
+        var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
+        return Legs(decided.Outputs["tests"])
+            .Where(leg => Words(leg["projects"]).Contains("Jason.Runtime.Tests", StringComparer.Ordinal))
+            .GroupBy(leg => leg["rid"], StringComparer.Ordinal)
+            .ToDictionary(
+                platform => platform.Key,
+                platform => platform.ToDictionary(
+                    leg => leg["part"],
+                    leg =>
+                    {
+                        var words = Assert.Single(RunTests(step, [[]], environment: Told(leg)).Calls).Split(' ');
+                        return words.Select((word, at) => (word, at)).Where(pair => pair.word.StartsWith("--filter-", StringComparison.Ordinal))
+                            .Select(pair => $"{pair.word} {words[pair.at + 1]}").ToList();
+                    },
+                    StringComparer.Ordinal),
+                StringComparer.Ordinal);
+    });
+
+    /// <summary>
+    /// Whether a part handed <paramref name="filters"/> runs the tests of the class <paramref name="name"/>, a full name: it
+    /// matches one of the include filters of each kind the part has, and none of its exclude filters. A filter's value names
+    /// a namespace or a class exactly, or, ending in a wildcard, every name that starts with what comes before it.
+    /// </summary>
+    private static bool Runs(List<string> filters, string name)
+    {
+        var space = name[..name.LastIndexOf('.')];
+        List<string> Values(string option) => [.. filters.Where(filter => filter.StartsWith(option + " ", StringComparison.Ordinal)).Select(filter => filter[(option.Length + 1)..])];
+        static bool Match(string value, string candidate) =>
+            value.EndsWith('*') ? candidate.StartsWith(value[..^1], StringComparison.Ordinal) : candidate == value;
+
+        var namespaces = Values("--filter-namespace");
+        var classes = Values("--filter-class");
+        return (namespaces.Count == 0 || namespaces.Any(value => Match(value, space)))
+            && (classes.Count == 0 || classes.Any(value => Match(value, name)))
+            && !Values("--filter-not-namespace").Any(value => Match(value, space))
+            && !Values("--filter-not-class").Any(value => Match(value, name));
+    }
+
+    /// <summary>The full names of the classes a test project's own sources declare, its build output aside.</summary>
+    private static HashSet<string> Classes(string project) =>
+        [.. Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(segment => segment is "bin" or "obj"))
+            .SelectMany(file =>
+            {
+                var text = File.ReadAllText(file);
+                var space = Regex.Match(text, @"^namespace\s+([A-Za-z0-9_.]+)", RegexOptions.Multiline);
+                return space.Success
+                    ? Regex.Matches(text, @"^\s*(?:(?:public|internal|private|protected|sealed|static|abstract|partial|file)\s+)*(?:class|record)\s+(\w+)", RegexOptions.Multiline)
+                        .Select(match => $"{space.Groups[1].Value}.{match.Groups[1].Value}")
+                    : [];
+            })];
 
     /// <summary>
     /// The platform job's step run as a runner runs it, for <paramref name="rid"/>, told the parts the version job decided,
@@ -2001,7 +2123,7 @@ public class CiRunsTests
     }
 
     /// <summary>What a part of the tests that names no project and no namespace is told.</summary>
-    private static readonly Dictionary<string, string> Unnamed = new(StringComparer.Ordinal) { ["PROJECTS"] = "", ["NAMESPACES"] = "", ["NOT_NAMESPACES"] = "" };
+    private static readonly Dictionary<string, string> Unnamed = new(StringComparer.Ordinal) { ["PROJECTS"] = "", ["NAMESPACES"] = "", ["NOT_NAMESPACES"] = "", ["CLASSES"] = "", ["NOT_CLASSES"] = "" };
 
     /// <summary>The version a test step is told the build carries. Made up.</summary>
     private const string TestedVersion = "0.0.0-dev";
