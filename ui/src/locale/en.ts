@@ -26,6 +26,16 @@ export const en = {
     'settings.theme.system': 'Same as the system',
     'settings.theme.light': 'Light',
     'settings.theme.dark': 'Dark',
+    'start.placeholder': 'Tell Jason what you sell and who you want to reach.',
+    'start.placeholder.site': 'A website link is enough to start.',
+    'start.send': 'Send',
+    'start.note.lead': 'This interface is optional.',
+    'start.note.body':
+        'It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
+    'start.access.header': 'What new chats start with on this computer',
+    'start.model.header': 'Model for this new chat',
+    'start.model.default': '{host} default',
+    'start.note.close': 'Close',
     'chat.title': 'Chat',
     'chat.desktop':
         'The chat with the AI is part of the desktop application. It starts the AI on this computer and asks you before the AI acts, which a browser tab cannot do.',
