@@ -369,7 +369,9 @@ export function dataRules(
         ...(grant === undefined ? [] : [paths.join(desktop, 'chat'), ...grant.present.filter((name) => name !== grant.id).map((name) => paths.join(desktop, 'chat-full', name))]),
         ...whole,
     ];
-    return targets.flatMap((target) => {
+    // On macOS each folder is also named under the data volume's prefix, which shows the same folder (a firmlink).
+    const spellings = platform === 'darwin' ? targets.flatMap((target) => [target, posix.join('/System/Volumes/Data', posix.resolve(target))]) : targets;
+    return spellings.flatMap((target) => {
         const rule = rulePath(platform, target);
         return [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`];
     });

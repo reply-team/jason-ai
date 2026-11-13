@@ -73,6 +73,12 @@ export interface LiteralContext {
      * folder the rest of the judgement takes for the home folder, so a `~` is held.
      */
     home: string | null;
+    /**
+     * Whether a directory change to a relative literal target sets the folder too, read from the folder before it, rather
+     * than leave it unknown. Only a reading for refusals takes it: what a command reaches is then known, and what is
+     * held stays held.
+     */
+    relativeDirectories?: boolean;
 }
 
 const held = (reason: HeldReason): LiteralReading => ({ held: true, reason });
@@ -614,7 +620,8 @@ function withDirectories(parsed: readonly Parsed[], powerShell: boolean, context
             // A change in a pipeline runs in a subshell of its own; one that is not joined to the next command by `&&`
             // may fail while the next runs all the same, in the folder it started in.
             const target = directoryTarget(words, powerShell, context.home);
-            if (target !== null && isAbsolute(target, powerShell, context.platform) && next === 'and' && input !== 'pipe') cwd = target;
+            const absolute = target !== null && isAbsolute(target, powerShell, context.platform);
+            if (target !== null && (absolute || context.relativeDirectories === true) && next === 'and' && input !== 'pipe') cwd = absolute || cwd === null ? target : `${cwd}/${target}`;
             else unknown = true;
         } else if (cwd !== null && next !== 'and' && next !== 'pipe' && next !== 'end') {
             // After `||`, `;` or a newline the next command runs whether or not the change took place.
@@ -641,12 +648,30 @@ const eInterpreters = /^(ruby|lua|luajit|julia|rscript|osascript|groovy)[0-9.]*$
  * registry's code among them. A closed list: a program it misses runs.
  */
 const runners = new Set(
-    ('. source eval exec xargs env sudo doas su pkexec runuser nohup setsid at batch crontab schtasks ssh wsl start '
-        + 'start-process saps invoke-expression iex invoke-command icm start-job sajb start-threadjob invoke-item ii '
-        + 'register-scheduledtask timeout nice ionice stdbuf time command builtin watch flock script caffeinate chroot '
-        + 'taskset strace ltrace unbuffer parallel systemd-run busybox chronic runas psexec winrs wscript cscript mshta '
-        + 'rundll32 regsvr32 forfiles conhost fc r let mapfile readarray compgen complete add-type % foreach-object foreach '
-        + 'invoke-wmimethod iwmi wmic npx pnpx bunx uvx hyperfine valgrind').split(' '),
+    ('. source eval exec xargs env ssh invoke-expression iex invoke-command icm start-job sajb start-threadjob timeout nice '
+        + 'ionice stdbuf time command builtin watch flock script caffeinate chroot taskset strace ltrace unbuffer parallel '
+        + 'busybox chronic fc r let mapfile readarray compgen complete add-type % foreach-object foreach npx pnpx bunx uvx '
+        + 'hyperfine valgrind').split(' '),
+);
+
+/**
+ * The programs that hand a file, an address or a command to the system's own opener, launcher, session, service manager,
+ * scheduler or another user's or system's environment: what they start runs outside this process's environment, so
+ * outside the fence the chat's host is given, the data directory it names included. Windows', macOS' and Linux's. This
+ * is a list, not a rule: a program it does not name is not recognised as one. A literal reading holds them as runners
+ * (`heldByWhatRuns`), and the permission model never lets "always" cover one (`runsAnotherProgram`).
+ */
+export const systemLaunchers: ReadonlySet<string> = new Set(
+    ('start start-process saps invoke-item ii explorer pcalua scriptrunner msiexec cmstp control hh infdefaultinstall wt '
+        + 'presentationhost msdt syncappvpublishingserver odbcconf rundll32 regsvr32 wscript cscript mshta forfiles conhost '
+        + 'runas psexec winrs wmic invoke-wmimethod iwmi invoke-cimmethod sc schtasks at batch crontab register-scheduledtask '
+        + 'start-scheduledtask new-scheduledtask register-scheduledjob start-service new-service set-service new-pssession '
+        + 'enter-pssession wsl sudo doas su pkexec runuser nohup setsid systemd-run '
+        + 'open launchctl osascript automator shortcuts screen tmux byobu dtach '
+        + 'abduco xdg-open gio gvfs-open kde-open kde-open5 kde-open6 kioclient kioclient5 kioclient6 gnome-open exo-open '
+        + 'gtk-launch mimeopen see run-mailcap sensible-browser x-www-browser www-browser xdg-terminal-exec x-terminal-emulator '
+        + 'gnome-terminal konsole kstart kstart5 systemctl dbus-send gdbus busctl qdbus flatpak-spawn wslview daemonize '
+        + 'start-stop-daemon').split(' '),
 );
 
 /** The builtins that change how a later word or program is read, bash's and zsh's. */
@@ -840,7 +865,7 @@ export function heldByWhatRuns(commands: readonly LiteralCommand[]): HeldReason 
         const args = command.words.slice(1);
         if (program === commandPrompt || (/\.(bat|cmd)[. ]*$/i.test(first) && command.words.length > 1)) return 'command_prompt';
         if (takesCode(command)) return 'inline_code';
-        if (runners.has(program)) return 'runner';
+        if (runners.has(program) || systemLaunchers.has(program)) return 'runner';
         if (program === 'git' && gitRuns(args)) return 'runner';
         if (program === 'find' && command.words.some((word) => /^-(exec|execdir|ok|okdir)$/.test(word))) return 'runner';
         if (startsGiven(program, args)) return 'runner';

@@ -215,3 +215,178 @@ test('in the person\'s own installation nothing changes: a scope with no person\
     // The person's harness root is the chat's in their own installation: an added folder is read without a card.
     assert.deepEqual(judge('Read', { file_path: '/Users/someone/Jason/Northwind/AGENTS.md' }, liveMac()), { verdict: 'allow' });
 });
+
+// ---- Every fenced folder, in the person's own installation as in a demo run: a path in its one spelling ------------------
+
+/** The person's own installation's scope on Windows' semantics. */
+function liveWindows(): ChatScope {
+    const { personsOwn: _demoOnly, ...rest } = demoWindows();
+    return {
+        ...rest,
+        cwd: 'C:\\Users\\someone\\.jason\\desktop\\chat',
+        chat: 'C:\\Users\\someone\\.jason\\desktop\\chat',
+        added: ['C:\\Users\\someone\\Jason\\Northwind'],
+        data: 'C:\\Users\\someone\\.jason',
+        protectedFiles: ['C:\\Users\\someone\\.jason\\config\\settings.json', 'C:\\Users\\someone\\.jason\\run\\runtime.json'],
+    };
+}
+
+const linuxOf = (scope: ChatScope): ChatScope => ({ ...scope, platform: 'linux' });
+const host = /another computer/;
+
+/** What one request comes to in a mode: refused with its sentence, a card with what "always" would cover, or allowed. */
+type Outcome = { refused: string } | { card: string | null } | 'allowed';
+
+async function outcome(mode: ChatMode, scope: ChatScope, tool: string, input: Record<string, unknown>): Promise<Outcome> {
+    let card: { remember?: string | null } | undefined;
+    const broker = new PermissionBroker({
+        emit: (_chat, event) => {
+            if (event.kind === 'permission') card = event;
+        },
+        newId: () => 'req',
+    });
+    made.push(broker);
+    broker.openTurn('chat_a', 'turn_1', scope, mode);
+    const pending = broker.ask('turn_1', tool, input);
+    await new Promise((resolve) => setImmediate(resolve));
+    if (card !== undefined) {
+        broker.endAll();
+        await pending;
+        return { card: card.remember ?? null };
+    }
+    const answer = await pending;
+    return answer.behavior === 'deny' ? { refused: answer.message } : 'allowed';
+}
+
+/** Refused in the mode, by its broker and in Full access by its hook too, with a sentence the pattern matches. */
+async function refusedIn(mode: ChatMode, scope: ChatScope, tool: string, input: Record<string, unknown>, sentence: RegExp): Promise<void> {
+    const said = `${mode} ${scope.platform} ${tool} ${JSON.stringify(input)}`;
+    const got = await outcome(mode, scope, tool, input);
+    assert.ok(typeof got === 'object' && 'refused' in got, `${said}: ${JSON.stringify(got)}`);
+    // Plan only refuses every writer and every command before reading its path.
+    if (!(mode === 'plan_only' && /plan/i.test(got.refused))) assert.match(got.refused, sentence, said);
+    if (mode === 'full_access') assert.equal(broker(scope).hook('turn_1', tool, input, null).decision, 'deny', said);
+}
+
+/** A broker with one Full access turn open on the scope, for its hook. */
+function broker(scope: ChatScope): PermissionBroker {
+    const made_ = new PermissionBroker({ emit: () => undefined, newId: () => 'req' });
+    made.push(made_);
+    made_.openTurn('chat_a', 'turn_1', scope, 'full_access');
+    return made_;
+}
+
+for (const mode of modes) {
+    test(`${mode}: a path that names a host, whatever the host, is never read or walked, in a demo run and in the person's own installation`, async () => {
+        for (const scope of [demoWindows(), liveWindows()]) {
+            for (const path of [
+                '\\\\localhost\\C$\\Users\\someone\\.jason\\run\\runtime.json',
+                '//localhost/c$/Users/someone/.jason/config/settings.json',
+                '\\\\?\\UNC\\localhost\\c$\\Users\\someone\\.jason\\run\\runtime.json',
+                '\\\\127.0.0.1\\c$\\Users\\someone\\Jason',
+                '\\\\server\\share\\notes.md',
+            ]) {
+                await refusedIn(mode, scope, 'Read', { file_path: path }, host);
+                await refusedIn(mode, scope, 'Grep', { pattern: 'token', path }, host);
+                await refusedIn(mode, scope, 'Glob', { pattern: '**/*.json', path }, host);
+                await refusedIn(mode, scope, 'LS', { path }, host);
+            }
+            for (const command of ["cat '//localhost/c$/Users/someone/.jason/run/runtime.json'", 'cat //server/share/notes.md', 'curl file://server/share/notes.md', "cat '\\\\localhost\\c$\\Users\\someone\\.jason\\run\\runtime.json'"]) {
+                await refusedIn(mode, scope, 'Bash', { command }, host);
+            }
+        }
+        for (const scope of [demoMac(), liveMac(), linuxOf(demoMac())]) {
+            await refusedIn(mode, scope, 'Read', { file_path: '/net/server/share/notes.md' }, host);
+            await refusedIn(mode, scope, 'LS', { path: '/net/server/share' }, host);
+            await refusedIn(mode, scope, 'Bash', { command: 'cat /net/server/share/notes.md' }, host);
+        }
+    });
+
+    test(`${mode}: a command that hands a file or a command to the system's opener or scheduler is never run unasked, nor covered by "always"`, async () => {
+        const launches: [ChatScope, string[]][] = [
+            [demoWindows(), ['explorer.exe s.bat', 'start s.bat', 'pcalua -a s.bat', 'wt s.bat', 'schtasks /run /tn x', 'msiexec /i s.msi']],
+            [liveWindows(), ['explorer s.bat']],
+            [demoMac(), ['open s.command', 'launchctl submit -l x -- ./s.sh', 'osascript s.scpt', 'tmux new-session -d ./s.sh', 'automator s.workflow']],
+            [liveMac(), ['open s.command']],
+            [linuxOf(demoMac()), ['xdg-open s.desktop', 'gio launch s.desktop', 'gtk-launch s', 'systemd-run --user ./s.sh', 'kde-open s.desktop', 'dbus-send --session --dest=x /x x.y']],
+        ];
+        for (const [scope, commands] of launches) {
+            for (const command of commands) {
+                const said = `${mode} ${scope.platform} ${command}`;
+                const got = await outcome(mode, scope, 'Bash', { command });
+                // Refused where Ask first refuses (Plan only refuses every command), and otherwise a card no "always" covers.
+                if (mode === 'plan_only') assert.ok(typeof got === 'object' && 'refused' in got, `${said}: ${JSON.stringify(got)}`);
+                else assert.deepEqual(got, { card: null }, said);
+                if (mode === 'full_access') {
+                    assert.equal(broker(scope).hook('turn_1', 'Bash', { command }, null).decision, 'ask', said);
+                    assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'held', said);
+                }
+            }
+        }
+    });
+
+    test(`${mode}: a fenced folder is matched in its one spelling: the data volume's prefix on macOS, Windows' trailing dots, spaces and streams`, async () => {
+        for (const [scope, sentence] of [[demoMac(), persons], [liveMac(), ownData]] as const) {
+            await refusedIn(mode, scope, 'Read', { file_path: '/System/Volumes/Data/Users/someone/.jason/config/settings.json' }, sentence);
+            await refusedIn(mode, scope, 'Bash', { command: 'cat /System/Volumes/Data/Users/someone/.jason/run/runtime.json' }, sentence);
+            await refusedIn(mode, scope, 'Grep', { pattern: 'token', path: '/system/volumes/data/Users/someone/.jason' }, /installation/);
+        }
+        await refusedIn(mode, demoMac(), 'Write', { file_path: '/System/Volumes/Data/Users/someone/Jason/Northwind/notes.md', content: 'x' }, persons);
+        for (const [scope, sentence] of [[demoWindows(), persons], [liveWindows(), ownData]] as const) {
+            for (const file_path of [
+                'C:\\Users\\someone\\.jason.\\run\\runtime.json',
+                'C:\\Users\\someone\\.jason \\run\\runtime.json',
+                'C:\\Users\\someone\\.jason::$INDEX_ALLOCATION\\run\\runtime.json',
+                'C:\\Users\\someone\\.jason\\run\\runtime.json.',
+                'C:\\Users\\someone\\.jason\\config\\settings.json:x',
+            ]) {
+                await refusedIn(mode, scope, 'Read', { file_path }, sentence);
+            }
+        }
+        await refusedIn(mode, demoWindows(), 'Read', { file_path: 'C:\\Users\\someone\\Jason. \\Northwind\\AGENTS.md' }, persons);
+    });
+
+    test(`${mode}: a fenced folder is matched under the home folder's spellings at any depth, and in a file tool's ~ path`, async () => {
+        const deep = '/Users/someone/Documents/Jason';
+        for (const command of ['cat ~/Documents/Jason/Northwind/AGENTS.md', 'cat $HOME/Documents/Jason/Northwind/AGENTS.md', 'echo x > $HOME/Documents/Jason/Northwind/notes.md', 'cat "${HOME}/Documents/Jason/Northwind/AGENTS.md"']) {
+            await refusedIn(mode, demoMac(deep), 'Bash', { command }, persons);
+        }
+        for (const command of ['type %USERPROFILE%\\Documents\\Jason\\Northwind\\AGENTS.md', 'cat $USERPROFILE/Documents/Jason/Northwind/AGENTS.md']) {
+            await refusedIn(mode, { ...demoWindows(), personsOwn: ['C:\\Users\\someone\\.jason', 'C:\\Users\\someone\\Documents\\Jason'] }, 'Bash', { command }, persons);
+        }
+        for (const [scope, sentence] of [[demoMac(), persons], [liveMac(), ownData], [demoWindows(), persons], [liveWindows(), ownData]] as const) {
+            await refusedIn(mode, scope, 'Read', { file_path: '~/.jason/run/runtime.json' }, sentence);
+            await refusedIn(mode, scope, 'Write', { file_path: '~/.jason/desktop/mode', content: 'live' }, sentence);
+            await refusedIn(mode, scope, 'Grep', { pattern: 'token', path: '~/.jason/config' }, sentence);
+        }
+        await refusedIn(mode, demoMac(deep), 'Read', { file_path: '~/Documents/Jason/Northwind/AGENTS.md' }, persons);
+    });
+
+    test(`${mode}: a relative path after a directory change is read from the folder the change sets`, async () => {
+        for (const [scope, sentence] of [[demoMac(), persons], [liveMac(), ownData]] as const) {
+            for (const command of ['cd ~ && cat .jason/config/settings.json', 'cd /Users/someone && cat .jason/run/runtime.json', 'cd ../../.. && cat .jason/run/runtime.json', 'cd .. && cd ../.. && cat .jason/run/runtime.json']) {
+                await refusedIn(mode, scope, 'Bash', { command }, sentence);
+            }
+        }
+        await refusedIn(mode, demoMac(), 'Bash', { command: 'cd /Users/someone && cat Jason/Northwind/AGENTS.md' }, persons);
+        await refusedIn(mode, demoWindows(), 'Bash', { command: 'cd /c/Users/someone && cat Jason/Northwind/AGENTS.md' }, persons);
+    });
+
+    test(`${mode}: where the reader cannot see the path, a command that could reach a fenced folder is never run unasked, nor covered by "always"`, async () => {
+        // A variable joined at run time, another person's ~, a home built from two variables, a change to a folder named by
+        // a variable: the text does not say where they lead.
+        for (const [scope, command] of [
+            [demoMac(), 'X=~/.ja; cat ${X}son/run/runtime.json'],
+            [demoMac(), 'cat ~someone/.jason/run/runtime.json'],
+            [demoMac(), 'cd "$HOME" && cat .jason/run/runtime.json'],
+            [demoWindows(), 'cat $HOMEDRIVE$HOMEPATH/.jason/run/runtime.json'],
+            [liveMac(), 'X=~/.ja; cat ${X}son/run/runtime.json'],
+        ] as const) {
+            const said = `${mode} ${command}`;
+            const got = await outcome(mode, scope, 'Bash', { command });
+            if (mode === 'plan_only') assert.ok(typeof got === 'object' && 'refused' in got, said);
+            else assert.ok(typeof got === 'object' && ('refused' in got || got.card === null), `${said}: ${JSON.stringify(got)}`);
+            if (mode === 'full_access') assert.notEqual(fullAccessJudgement('Bash', { command }, scope).outcome, 'runs', said);
+        }
+    });
+}

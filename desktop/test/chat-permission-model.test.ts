@@ -139,14 +139,14 @@ test('on Windows, after \\\\?\\ or \\\\.\\ only a drive or UNC follows; any othe
     assert.deepEqual(read(windows(), '\\\\.\\C:\\Users\\someone\\.jason\\desktop\\chat\\a.md'), { verdict: 'allow' });
 });
 
-test('a write to a network path is refused, this machine\'s admin share included; a read of one stays a card', () => {
+test('a read or a write of a network path is refused, this machine\'s admin share included', () => {
     for (const path of ['\\\\server\\share\\file.txt', '\\\\?\\UNC\\server\\share\\file.txt', '\\\\localhost\\C$\\Users\\someone\\Jason\\Northwind\\AGENTS.md',
         '//127.0.0.1/c$/Users/someone/.jason/desktop/chat/a.md']) {
         assert.equal(write(windows(), path).verdict, 'deny', path);
-        assert.equal(read(windows(), path).verdict, 'ask', path);
+        assert.match((read(windows(), path) as { message?: string }).message ?? '', /another computer/, path);
     }
     assert.equal(write(mac(), '/net/server/share/file.txt').verdict, 'deny');
-    assert.equal(read(mac(), '/net/server/share/file.txt').verdict, 'ask');
+    assert.equal(read(mac(), '/net/server/share/file.txt').verdict, 'deny');
 });
 
 test('on Windows, a component that ends in a dot or a space, or carries a colon, is a card wherever it lies', () => {
@@ -305,10 +305,10 @@ test('on Windows, the \\\\?\\ form and an 8.3 short name are the same path', () 
     assert.deepEqual(read(windows(), '\\\\?\\C:\\Users\\someone\\.jason\\desktop\\chat\\a.md'), { verdict: 'allow' });
 });
 
-test('on Windows, a UNC path is outside every folder of the chat and gets a card; its \\\\?\\UNC form is the same', () => {
+test('on Windows, a UNC path is outside every folder of the chat and is refused; its \\\\?\\UNC form is the same', () => {
     const plain = read(windows(), '\\\\server\\share\\file.txt');
     const long = read(windows(), '\\\\?\\UNC\\server\\share\\file.txt');
-    assert.equal(plain.verdict, 'ask');
+    assert.equal(plain.verdict, 'deny');
     assert.deepEqual(long, plain);
 });
 
@@ -1248,8 +1248,9 @@ test('on Windows a guarded name with a trailing dot or space or a stream suffix 
     for (const path of [`${winChat}\\CLAUDE.local.md.`, `${winChat}\\AGENTS.override.md `, `${winChat}\\CLAUDE.md::$DATA`, `${winChat}\\AGENTS.md. .`, 'CLAUDE.local.md:x']) {
         assert.deepEqual(write(windows(), path), { verdict: 'deny', message: instructionsRefusal }, path);
     }
-    assert.deepEqual(write(windows(), `${winCampaign}\\.jason.\\marker.json`), guardCard(markerTitle, `${winCampaign}\\.jason.\\marker.json`));
-    assert.deepEqual(write(windows(), `${winCampaign}\\AGENTS.md:stream`), guardCard(instructionsTitle, `${winCampaign}\\AGENTS.md:stream`));
+    // The card names the file as Windows opens it.
+    assert.deepEqual(write(windows(), `${winCampaign}\\.jason.\\marker.json`), guardCard(markerTitle, `${winCampaign}\\.jason\\marker.json`));
+    assert.deepEqual(write(windows(), `${winCampaign}\\AGENTS.md:stream`), guardCard(instructionsTitle, `${winCampaign}\\AGENTS.md`));
     // Any other name so spelled keeps the spelling's card.
     assert.equal((write(windows(), `${winChat}\\notes.md.`) as { title?: string }).title, 'Use a path Windows reads as another name');
     assert.deepEqual(run(windows(), 'cp notes.md CLAUDE.local.md.'), { verdict: 'deny', message: instructionsRefusal });
@@ -1279,7 +1280,8 @@ test('a file named jason, with or without a program\'s extension, directly in a 
     const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
     for (const [scope, path] of [[windows(), `${winChat}\\jason.cmd`], [windows(), `${winChat}\\JASON.exe`], [windows(), `${winCampaign}\\jason.ps1`],
         [windows(), `${winChat}\\jason.bat.`], [mac(), `${macChat}/jason`], [mac(), `${macProject}/Jason`], [linux, `${macChat}/jason`]] as const) {
-        assert.deepEqual(write(scope, path), guardCard(jasonFileTitle, path), `${scope.platform} ${path}`);
+        // The card names the file as the system opens it: on Windows without its trailing dot.
+        assert.deepEqual(write(scope, path), guardCard(jasonFileTitle, scope.platform === 'win32' ? path.replace(/\.$/, '') : path), `${scope.platform} ${path}`);
     }
     for (const [scope, path] of [[mac(), `${macChat}/notes/jason`], [mac(), `${macChat}/jason.md`], [linux, `${macChat}/Jason`], [mac(), `${macChat}/jasonx`]] as const) {
         assert.deepEqual(write(scope, path), { verdict: 'allow' }, `${scope.platform} ${path}`);

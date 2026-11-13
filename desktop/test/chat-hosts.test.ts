@@ -222,7 +222,10 @@ const targetsOf = (rules: readonly string[]) => [...new Set(rules.map((rule) => 
 
 test('the data rules refuse every entry of the data directory but desktop, and every entry of desktop but the chat folder', () => {
     const rules = dataRules('darwin', '/Users/a/.jason', ['config', 'run', 'jason.db', 'desktop', 'Desktop'], ['settings.json', 'chat', 'provider-keys', 'notes.txt']);
-    assert.deepEqual(targetsOf(rules), [
+    // On macOS each folder is named under the data volume's prefix too, the same folder by a firmlink.
+    const plain = targetsOf(rules).filter((target) => !target.startsWith('//System/Volumes/Data/'));
+    assert.deepEqual(targetsOf(rules).filter((target) => target.startsWith('//System/Volumes/Data/')), plain.map((target) => `//System/Volumes/Data${target.slice(1)}`));
+    assert.deepEqual(plain, [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
         ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode'].map((name) => `//Users/a/.jason/desktop/${name}`),
