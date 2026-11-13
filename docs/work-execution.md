@@ -979,7 +979,7 @@ the unsettled attempt ran under, or the input
 composed now is not the one it was composed with, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
 nothing ever falls back to another plugin. The twenty-seventh, `thread_route_mismatch`, is the last of those refusals
-to be asked: work on a thread the campaign saw at another plugin or account than the item is routed to, refused before
+to be asked: work on a thread the campaign saw at another plugin than the item is routed to, refused before
 the three that wait or park, so nobody is asked to approve, and no block holds, work that could only be refused. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The

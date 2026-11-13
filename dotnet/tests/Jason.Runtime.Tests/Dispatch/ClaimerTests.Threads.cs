@@ -15,10 +15,12 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
-/// A thread is held by the provider account it was seen at. A read of a thread, and filing it — classifying, closing,
-/// reopening — goes to the plugin and account the campaign's own lines say it was seen at, while a route still names them;
-/// a reply is routed by its channel, as a send is; and either is refused before a child exists where its route does not
-/// name where the thread was seen. A thread no line of the campaign names is routed as it always was.
+/// A thread is held by the provider it was seen at. A read of a thread, and filing it — classifying, closing, reopening —
+/// goes to the plugin the campaign's own lines say it was seen at, at the account they say where a route names it, while
+/// a route still names the plugin; a reply is routed by its channel, as a send is; and either is refused before a child
+/// exists where its route does not name the plugin the thread was seen at. The account is never refused on: another
+/// account of the same plugin is the provider's to refuse. An id held at more than one plugin goes where the operation's
+/// own route says, or nowhere. A thread no line of the campaign names is routed as it always was.
 /// </summary>
 public partial class ClaimerTests
 {
@@ -61,9 +63,9 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// A line whose read left no record of its account names its plugin under any account: refusing on an account the
-    /// runtime cannot know would refuse every such thread. So a filing of a thread such a line names at the social plugin
-    /// goes to the route that names that plugin, and one such a line names at a plugin no route names is refused.
+    /// A line whose read left no record of its account is still a sighting of its plugin: a filing of a thread such a line
+    /// names at the social plugin goes to the route that names that plugin, and one such a line names at a plugin no route
+    /// names is refused, as for any line.
     /// </summary>
     [Theory]
     [InlineData(Social, true)]
@@ -104,7 +106,8 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// A thread seen at two accounts over time is read at the newer one, though the read's own route names the older.
+    /// A thread seen at two accounts of one plugin over time is read at the newer one, though the read's own route names the
+    /// older: of the routes that name the plugin, the one that names the newest account a route still names.
     /// </summary>
     [Fact]
     public async Task A_thread_seen_at_two_accounts_over_time_is_read_at_the_newest()
@@ -115,25 +118,29 @@ public partial class ClaimerTests
         db.Campaigns.Add(campaign);
         await db.SaveChangesAsync(Ct);
         await SeenByInboundReadAsync(db, campaign, "th-both", Mailer, "sha256:" + Mailer);
-        await SeenByEventsAsync(db, campaign, "th-both", Social, "sha256:" + Social);
+        await SeenByEventsAsync(db, campaign, "th-both", Mailer, "sha256:second-mailbox");
         OnThread(db, campaign, "conversation.get", "th-both");
         await db.SaveChangesAsync(Ct);
 
-        using var harness = ThreadHarness(campaign);
+        var routes = ThreadRoutes();
+        Route second = new(Mailer, new JsonObject { ["seat"] = "second" }, "sha256:second-mailbox");
+        routes = routes with { Channels = new Dictionary<string, IReadOnlyDictionary<string, Route>>(routes.Channels!, StringComparer.Ordinal)
+        {
+            ["message.send"] = new Dictionary<string, Route>(StringComparer.Ordinal) { ["email"] = second },
+        } };
+        using var harness = ThreadHarness(campaign, routes);
         var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
 
-        Assert.Equal((Social, "sha256:" + Social), (work.Plan!.Plugin.Manifest.Id, work.Plan.BindingIdentity));
+        Assert.Equal((Mailer, "sha256:second-mailbox", RouteScope.CampaignChannel), (work.Plan!.Plugin.Manifest.Id, work.Plan.BindingIdentity, work.Plan.Scope));
     }
 
     /// <summary>
-    /// A thread whose plugin and account no route names any more is not followed anywhere: the work resolves by its own
-    /// route, and the thread's check refuses it, permanently, before a child exists. The same is true of an account the
-    /// route's plugin holds beside the one the thread was seen at.
+    /// A thread seen at a plugin no route names any more is not followed anywhere: the work resolves by its own route, and
+    /// the thread's check refuses it, permanently, before a child exists.
     /// </summary>
     [Theory]
-    [InlineData("conversation.get", Social, "sha256:retired-seat")]
-    [InlineData("conversation.close", Social, "sha256:retired-seat")]
-    [InlineData("conversation.get", Mailer, "sha256:another-mailbox")]
+    [InlineData("conversation.get", "retired", "sha256:retired-seat")]
+    [InlineData("conversation.close", "retired", "sha256:retired-seat")]
     public async Task A_thread_seen_where_no_route_names_any_more_is_refused_before_a_child_exists(string operation, string plugin, string identity)
     {
         using var database = new TestDatabase();
@@ -155,6 +162,185 @@ public partial class ClaimerTests
         var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(row => row.WorkItemId == item.Id, Ct);
         Assert.Null(attempt.StartedAt);
         Assert.Equal((Mailer, RouteScope.CampaignOperation), (attempt.Provenance!.PluginId, attempt.Provenance.RouteScope));
+    }
+
+    /// <summary>
+    /// A thread seen at an account of a plugin that no route names, beside accounts of that plugin that routes do name, is
+    /// not refused: the account is known only by the identity of the whole binding, which carries more than the account, so
+    /// the claim refuses on the plugin alone, and the read goes to a route that names the plugin. Another account of the
+    /// plugin really is then the provider's to refuse, as a thread it does not hold.
+    /// </summary>
+    [Theory]
+    [InlineData("conversation.get", Mailer, "sha256:another-mailbox", RouteScope.CampaignOperation)]
+    [InlineData("conversation.close", Social, "sha256:retired-seat", RouteScope.CampaignChannel)]
+    public async Task A_thread_seen_at_another_account_of_a_routed_plugin_goes_to_that_plugin(string operation, string plugin, string identity, RouteScope scope)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+        await SeenByEventsAsync(db, campaign, "th-moved", plugin, identity);
+        var item = OnThread(db, campaign, operation, "th-moved");
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = ThreadHarness(campaign);
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal((item.PublicId, plugin, "sha256:" + plugin, scope), (work.WorkItemPublicId, work.Plan!.Plugin.Manifest.Id, work.Plan.BindingIdentity, work.Plan.Scope));
+    }
+
+    /// <summary>
+    /// A line the events store wrote from a source that names no binding says a route with no binding: of the routes that
+    /// name the plugin, the read goes to the one with no binding, though a route of the plugin with a binding comes first.
+    /// </summary>
+    [Fact]
+    public async Task A_thread_an_events_source_with_no_binding_saw_is_read_where_no_binding_is_named()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+        await SeenByEventsAsync(db, campaign, "th-unbound", Social, EventSource.NoBinding);
+        OnThread(db, campaign, "conversation.get", "th-unbound");
+        await db.SaveChangesAsync(Ct);
+
+        var routes = ThreadRoutes();
+        var operations = new Dictionary<string, Route>(routes.Operations, StringComparer.Ordinal) { [ThreadSightings.ListOperation] = routes.Operations["conversation.get"] };
+        routes = routes with { Default = new Route(Social, null, null), Operations = operations };
+        using var harness = ThreadHarness(campaign, routes);
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal((Social, (string?)null, RouteScope.CampaignDefault), (work.Plan!.Plugin.Manifest.Id, work.Plan.BindingIdentity, work.Plan.Scope));
+    }
+
+    /// <summary>
+    /// A thread id two plugins hold — an email thread at the mailer, a LinkedIn thread at the social plugin, the social
+    /// one seen later — says by its id alone neither thread. A read or a filing goes where the operation's own route says,
+    /// never to the newest sighting; a reply goes by its channel, as any reply.
+    /// </summary>
+    [Fact]
+    public async Task A_thread_id_two_plugins_hold_is_read_where_the_operation_s_own_route_says()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+        await SeenByInboundReadAsync(db, campaign, "123", Mailer, "sha256:" + Mailer);
+        await SeenByEventsAsync(db, campaign, "123", Social, "sha256:" + Social);
+        var item = OnThread(db, campaign, "conversation.close", "123");
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = ThreadHarness(campaign);
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal((item.PublicId, Mailer, "sha256:" + Mailer, RouteScope.CampaignOperation), (work.WorkItemPublicId, work.Plan!.Plugin.Manifest.Id, work.Plan.BindingIdentity, work.Plan.Scope));
+    }
+
+    /// <summary>A reply on a thread id two plugins hold goes by its channel: the channel's route names one of them.</summary>
+    [Theory]
+    [InlineData("email", Mailer, RouteScope.CampaignOperation)]
+    [InlineData("linkedin", Social, RouteScope.CampaignChannel)]
+    public async Task A_reply_on_a_thread_id_two_plugins_hold_goes_by_its_channel(string channel, string plugin, RouteScope scope)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+        await SeenByInboundReadAsync(db, campaign, "123", Mailer, "sha256:" + Mailer);
+        await SeenByEventsAsync(db, campaign, "123", Social, "sha256:" + Social);
+        var item = Replying(db, campaign, channel, "123");
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = ThreadHarness(campaign);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(row => row.WorkItemId == item.Id, Ct);
+        Assert.Equal((plugin, scope), (approval.PluginId, approval.RouteScope));
+    }
+
+    /// <summary>
+    /// Where the operation's own route names none of the plugins that hold the id, nothing says which thread is meant: the
+    /// read or the filing is refused, saying the id is held at more than one plugin, rather than sent to the newest.
+    /// </summary>
+    [Fact]
+    public async Task A_thread_id_two_plugins_hold_is_refused_where_the_own_route_names_neither()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+        await SeenByInboundReadAsync(db, campaign, "123", Mailer, "sha256:" + Mailer);
+        await SeenByEventsAsync(db, campaign, "123", Social, "sha256:" + Social);
+        var item = OnThread(db, campaign, "conversation.reopen", "123");
+        await db.SaveChangesAsync(Ct);
+
+        var routes = ThreadRoutes();
+        var operations = new Dictionary<string, Route>(routes.Operations, StringComparer.Ordinal)
+        {
+            ["conversation.reopen"] = new(Archive, new JsonObject { ["seat"] = Archive }, "sha256:" + Archive),
+        };
+        using var harness = ThreadHarness(campaign, routes with { Operations = operations });
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(row => row.Id == item.Id, Ct);
+        Assert.Equal((WorkItemStatus.Failed, AttemptErrors.ThreadRouteMismatch), (stored.Status, stored.LastError!.Code));
+        Assert.Contains("more than one plugin", stored.LastError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A reply goes to the plugin its thread was seen at under whichever binding its channel's route names: a binding
+    /// edited in a field that is not the account, or another account of the plugin, is the provider's to answer, so the
+    /// reply is parked for the person's approval as any reply.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_under_another_binding_of_the_plugin_that_saw_the_thread_is_parked_as_any_reply()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+        await SeenByInboundReadAsync(db, campaign, "th-mail", Mailer, "sha256:before-the-flag-moved");
+        var item = Replying(db, campaign, "email", "th-mail");
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = ThreadHarness(campaign);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(row => row.Id == item.Id, Ct);
+        Assert.Equal(WorkItemStatus.AwaitingApproval, stored.Status);
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(row => row.WorkItemId == item.Id, Ct);
+        Assert.Equal((Mailer, "sha256:" + Mailer), (approval.PluginId, approval.BindingIdentity));
+    }
+
+    /// <summary>A reply to a thread only another campaign saw is routed by its channel and parked as any reply.</summary>
+    [Fact]
+    public async Task A_reply_to_a_thread_only_another_campaign_saw_is_parked_as_any_reply()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var other = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.AddRange(campaign, other);
+        await db.SaveChangesAsync(Ct);
+        await SeenByEventsAsync(db, other, "th-theirs", Social, "sha256:" + Social);
+        var item = Replying(db, campaign, "email", "th-theirs");
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = ThreadHarness(campaign);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(row => row.WorkItemId == item.Id, Ct);
+        Assert.Equal((Mailer, RouteScope.CampaignOperation), (approval.PluginId, approval.RouteScope));
     }
 
     /// <summary>A thread no line of the campaign names is one the runtime knows nothing about: routed by the work's own route, as before.</summary>
@@ -295,11 +481,14 @@ public partial class ClaimerTests
             });
     }
 
-    private static Harness ThreadHarness(Campaign campaign) =>
+    /// <summary>A third plugin that performs the thread operations, which no line of the rows here names.</summary>
+    private const string Archive = "archive";
+
+    private static Harness ThreadHarness(Campaign campaign, RouteSet? routes = null) =>
         new(
             plugin: TestPlugins.Loaded(Mailer, OnAThread),
-            routes: snapshot => Routes(snapshot, campaign.PublicId, ThreadRoutes(), null),
-            others: [TestPlugins.Loaded(Social, OnAThread)]);
+            routes: snapshot => Routes(snapshot, campaign.PublicId, routes ?? ThreadRoutes(), null),
+            others: [TestPlugins.Loaded(Social, OnAThread), TestPlugins.Loaded(Archive, OnAThread)]);
 
     /// <summary>
     /// A line of the campaign saying the thread moved, as the inbound read writes it: under the read's own work item and

@@ -33,7 +33,7 @@ internal static class ThreadSightings
         LEFT JOIN event_sources AS src ON src.id = e.source_id
         """;
 
-    private const string OfThread = Select + """
+    internal const string OfThread = Select + """
 
         WHERE j.campaign_id = {0} AND j.kind = 'inbound_reply_observed' AND json_extract(j.new_json, '$.thread') = {1}
         ORDER BY j.id DESC
@@ -69,7 +69,7 @@ internal static class ThreadSightings
     /// <summary>
     /// The plugin and account one line says. A line whose read left no record of its account — no attempt of the plugin it
     /// names, no source of the event it names, which only a row no build of this runtime writes could be — is known by its
-    /// plugin alone, and names any account of it, as a line was compared before accounts were.
+    /// plugin alone: a sighting of that plugin all the same, which names no account a read could prefer.
     /// </summary>
     private static ThreadSeen? Seen(SightingRow row)
     {
@@ -104,16 +104,29 @@ internal static class ThreadSightings
 /// <summary>
 /// A plugin and an account a thread was seen at: the plugin's id and the identity of the binding its read ran under, null
 /// for a route that names no binding. <paramref name="AccountKnown"/> is false only for a line whose read left no record
-/// of its account; such a sighting names every account of its plugin.
+/// of its account. The claim refuses on the plugin alone (<see cref="NamesThePlugin"/>); the account only orders the
+/// routes a read prefers (<see cref="Names"/>).
 /// </summary>
 public sealed record ThreadSeen(string PluginId, string? BindingIdentity, bool AccountKnown)
 {
-    /// <summary>Whether <paramref name="route"/> names this plugin and account: the plugin's id, and the binding by its identity.</summary>
+    /// <summary>
+    /// Whether <paramref name="route"/> names this plugin and this account exactly: the plugin's id, and the binding by its
+    /// identity. A sighting whose account is not known names no route so.
+    /// </summary>
     public bool Names(Route route)
     {
         ArgumentNullException.ThrowIfNull(route);
 
-        return string.Equals(route.PluginId, PluginId, StringComparison.Ordinal)
-            && (!AccountKnown || string.Equals(route.BindingIdentity, BindingIdentity, StringComparison.Ordinal));
+        return AccountKnown
+            && NamesThePlugin(route)
+            && string.Equals(route.BindingIdentity, BindingIdentity, StringComparison.Ordinal);
+    }
+
+    /// <summary>Whether <paramref name="route"/> names this plugin, under any binding.</summary>
+    public bool NamesThePlugin(Route route)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+
+        return string.Equals(route.PluginId, PluginId, StringComparison.Ordinal);
     }
 }

@@ -366,9 +366,9 @@ public sealed class Responder(
     }
 
     /// <summary>
-    /// The read of the thread, where the thread was seen: the plugin the line names and the account its read ran under,
-    /// taken from the line itself, when a route active now names them (<see cref="RouteResolver.ForThread"/>) and that
-    /// plugin performs the read; none when no route names them, or when the thread's identifier is one the operation's
+    /// The read of the thread, where the thread was seen: the plugin the line names, and by preference the account its read
+    /// ran under, taken from the line itself, when a route active now names that plugin (<see cref="RouteResolver.ForThread"/>)
+    /// and it performs the read; none when no route names it, or when the thread's identifier is one the operation's
     /// input refuses — validation refuses before anything is added, so nothing is left behind. The claim routes the read
     /// by the same rule, over the campaign's lines of the thread.
     /// </summary>
@@ -378,7 +378,7 @@ public sealed class Responder(
         if (seen is null
             || !string.Equals(seen.PluginId, reply.Plugin, StringComparison.Ordinal)
             || RouteResolver.ForThread(routes.Snapshot, campaign.PublicId, ReadOperation, ThreadSightings.ListOperation, [seen]) is not { } resolution
-            || !seen.Names(resolution.Route)
+            || !seen.NamesThePlugin(resolution.Route)
             || ProviderOpPreflight.Routable(plugins.Snapshot, ReadContract, resolution.Route) is not null)
         {
             return null;

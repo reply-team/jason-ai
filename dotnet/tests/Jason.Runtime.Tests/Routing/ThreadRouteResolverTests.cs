@@ -5,10 +5,11 @@ using Jason.Runtime.Routing;
 namespace Jason.Runtime.Tests.Routing;
 
 /// <summary>
-/// A read of a thread goes where the thread was seen: for each plugin and account the campaign's lines say, newest first,
-/// the read's own route where it names them, then the campaign's route for the list read, then every route in the order of
-/// precedence, channel routes included; the first sighting a route names wins, and where none is named the read's own
-/// route answers, for the claim to refuse.
+/// A read of a thread goes where the thread was seen. Where the sightings name one plugin: for each account they say,
+/// newest first, the read's own route where it names the plugin and account, then the campaign's route for the list read,
+/// then every route in the order of precedence, channel routes included; then, the same walk for a route that names the
+/// plugin under any binding. Where they name more than one plugin, the read's own route. Where none is named, the read's
+/// own route answers, for the claim to refuse.
 /// </summary>
 public class ThreadRouteResolverTests
 {
@@ -60,9 +61,12 @@ public class ThreadRouteResolverTests
         Assert.Equal(("social", "sha256:social", RouteScope.CampaignChannel), (resolution!.Route.PluginId, resolution.Route.BindingIdentity, resolution.Scope));
     }
 
-    /// <summary>Where no route names the plugin and account any more, the read's own route answers, and the claim refuses it.</summary>
+    /// <summary>
+    /// Where no route names the account any more, a route that names the plugin under another binding answers: the claim
+    /// refuses on the plugin alone, and another account of it is the provider's to refuse.
+    /// </summary>
     [Fact]
-    public void Otherwise_the_read_s_own_route()
+    public void Then_a_route_that_names_the_plugin_under_another_binding()
     {
         var snapshot = Snapshot(new RouteSet(
             null,
@@ -70,39 +74,74 @@ public class ThreadRouteResolverTests
 
         var resolution = RouteResolver.ForThread(snapshot, Campaign, Get, List, [AtSocial]);
 
+        Assert.Equal(("social", "sha256:another-seat"), (resolution!.Route.PluginId, resolution.Route.BindingIdentity));
+    }
+
+    /// <summary>Where no route names the plugin any more, the read's own route answers, and the claim refuses it.</summary>
+    [Fact]
+    public void Otherwise_the_read_s_own_route()
+    {
+        var snapshot = Snapshot(new RouteSet(
+            null,
+            new Dictionary<string, Route>(StringComparer.Ordinal) { [Get] = Route("mailer"), ["message.send"] = Route("archive") }));
+
+        var resolution = RouteResolver.ForThread(snapshot, Campaign, Get, List, [AtSocial]);
+
         Assert.Equal(("mailer", RouteScope.CampaignOperation), (resolution!.Route.PluginId, resolution.Scope));
-        Assert.False(AtSocial.Names(resolution.Route));
+        Assert.False(AtSocial.NamesThePlugin(resolution.Route));
     }
 
     /// <summary>
-    /// A thread seen at two accounts over time is read at the newer, even though the read's own route names the older: the
-    /// sightings are asked in turn, and every step is asked of the newest before the older is asked at all.
+    /// An id seen at two plugins is two threads, and only the read's own route says which is meant: it answers, never the
+    /// newest sighting, whichever plugin it names.
     /// </summary>
     [Fact]
-    public void A_thread_seen_at_two_accounts_over_time_is_read_at_the_newest_a_route_names()
+    public void An_id_seen_at_two_plugins_takes_the_read_s_own_route()
     {
-        var older = new ThreadSeen("mailer", "sha256:mailer", AccountKnown: true);
+        var atMailer = new ThreadSeen("mailer", "sha256:mailer", AccountKnown: true);
         var snapshot = Snapshot(new RouteSet(
             null,
             new Dictionary<string, Route>(StringComparer.Ordinal) { [Get] = Route("mailer"), ["message.send"] = Route("social") }));
 
-        Assert.Equal("social", RouteResolver.ForThread(snapshot, Campaign, Get, List, [AtSocial, older])!.Route.PluginId);
-        Assert.Equal("mailer", RouteResolver.ForThread(snapshot, Campaign, Get, List, [older, AtSocial])!.Route.PluginId);
+        Assert.Equal("mailer", RouteResolver.ForThread(snapshot, Campaign, Get, List, [AtSocial, atMailer])!.Route.PluginId);
+        Assert.Equal("mailer", RouteResolver.ForThread(snapshot, Campaign, Get, List, [atMailer, AtSocial])!.Route.PluginId);
+    }
+
+    /// <summary>
+    /// A thread seen at two accounts of one plugin over time is read at the newer, even though the read's own route names
+    /// the older: the sightings are asked in turn, and every step is asked of the newest before the older is asked at all.
+    /// </summary>
+    [Fact]
+    public void A_thread_seen_at_two_accounts_over_time_is_read_at_the_newest_a_route_names()
+    {
+        var older = new ThreadSeen("social", "sha256:older", AccountKnown: true);
+        var snapshot = Snapshot(new RouteSet(
+            null,
+            new Dictionary<string, Route>(StringComparer.Ordinal) { [Get] = Route("social", "sha256:older"), ["message.send"] = Route("social") }));
+
+        Assert.Equal("sha256:social", RouteResolver.ForThread(snapshot, Campaign, Get, List, [AtSocial, older])!.Route.BindingIdentity);
+        Assert.Equal("sha256:older", RouteResolver.ForThread(snapshot, Campaign, Get, List, [older, AtSocial])!.Route.BindingIdentity);
 
         // The newest no route names any more gives way to the next.
         var retired = new ThreadSeen("social", "sha256:retired", AccountKnown: true);
-        Assert.Equal("mailer", RouteResolver.ForThread(snapshot, Campaign, Get, List, [retired, older])!.Route.PluginId);
+        Assert.Equal("sha256:older", RouteResolver.ForThread(snapshot, Campaign, Get, List, [retired, older])!.Route.BindingIdentity);
     }
 
-    /// <summary>A sighting whose account was never recorded names its plugin under any account.</summary>
+    /// <summary>
+    /// A sighting names a route exactly by its plugin and binding identity, and its plugin under any binding; one whose
+    /// account was never recorded names no route exactly, and its plugin as any does.
+    /// </summary>
     [Fact]
-    public void A_sighting_with_no_recorded_account_names_its_plugin_alone()
+    public void A_sighting_names_its_account_exactly_and_its_plugin_under_any_binding()
     {
         var unknown = new ThreadSeen("social", null, AccountKnown: false);
 
-        Assert.True(unknown.Names(Route("social", "sha256:any")));
-        Assert.False(unknown.Names(Route("mailer")));
-        Assert.False(new ThreadSeen("social", null, AccountKnown: true).Names(Route("social", "sha256:any")));
+        Assert.False(unknown.Names(Route("social", "sha256:any")));
+        Assert.True(unknown.NamesThePlugin(Route("social", "sha256:any")));
+        Assert.False(unknown.NamesThePlugin(Route("mailer")));
+        Assert.True(AtSocial.Names(Route("social")));
+        Assert.False(AtSocial.Names(Route("social", "sha256:another")));
+        Assert.True(AtSocial.NamesThePlugin(Route("social", "sha256:another")));
         Assert.True(new ThreadSeen("social", null, AccountKnown: true).Names(new Route("social", null, null)));
     }
 

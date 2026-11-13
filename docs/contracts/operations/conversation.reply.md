@@ -65,9 +65,10 @@ nothing: its person is not this one.
   your code runs if it does.
 
 A reply is routed by its channel, as any reply is. Where the campaign's own `inbound_reply_observed` lines name the
-thread under `args.thread` and that route names none of the plugins and accounts they say it was seen at, the reply is
-refused before a person is asked about it: `thread_route_mismatch`, permanent ([routing](../../routing.md), the
-claim's row 27). A thread is held only by the account it was seen at. A thread no line names is routed as before.
+thread under `args.thread` and that route names none of the plugins they say it was seen at, the reply is refused
+before a person is asked about it: `thread_route_mismatch`, permanent ([routing](../../routing.md), the claim's row
+27). A thread is held only by the provider it was seen at; another account of that plugin is the provider's to refuse.
+A thread no line names is routed as before.
 
 ## What to return
 

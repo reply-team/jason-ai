@@ -15,10 +15,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
-/// The responder's read of a thread goes where the line says the thread was seen: the plugin it names and the account its
-/// read ran under, taken from the line itself, when a route active now names them and that plugin performs the read. So a
-/// reply seen at a campaign's second plugin is not answered blind, and one seen at an account no route names is read
-/// nowhere, as a reply at a plugin no route named was before.
+/// The responder's read of a thread goes where the line says the thread was seen: the plugin it names, and by preference
+/// the account its read ran under, taken from the line itself, when a route active now names that plugin and it performs
+/// the read. So a reply seen at a campaign's second plugin is not answered blind, one seen at another account of a routed
+/// plugin is read at that plugin, and one seen at a plugin no route names is read nowhere, as before.
 /// </summary>
 public class ResponderThreadRouteTests
 {
@@ -57,13 +57,13 @@ public class ResponderThreadRouteTests
     }
 
     /// <summary>
-    /// A reply seen at an account no route names any more — of the second plugin, or of the first beside the one the read is
-    /// routed to — is read nowhere: the responder is created ready, with no read, and finds the thread itself.
+    /// A reply seen at a plugin no route names any more is read nowhere: the responder is created ready, with no read, and
+    /// finds the thread itself.
     /// </summary>
     [Theory]
-    [InlineData(Social, "sha256:retired-seat", true)]
-    [InlineData(Mailer, "sha256:another-mailbox", false)]
-    public async Task A_reply_seen_at_an_account_no_route_names_is_read_nowhere(string plugin, string identity, bool byEvents)
+    [InlineData("retired", "sha256:retired-seat", true)]
+    [InlineData("retired", "sha256:retired-seat", false)]
+    public async Task A_reply_seen_at_a_plugin_no_route_names_is_read_nowhere(string plugin, string identity, bool byEvents)
     {
         using var harness = new DispatchHarness(Noon);
         Routed(harness);
@@ -84,6 +84,33 @@ public class ResponderThreadRouteTests
         Assert.Null((string?)responder.Context["inbound_reply"]!["read"]);
         Assert.Equal(WorkItemStatus.Created, responder.Status);
         Assert.False(await db.WorkItems.AnyAsync(item => item.Operation == Responder.ReadOperation, Ct));
+    }
+
+    /// <summary>
+    /// A reply seen at another account of a plugin a route names is read at that plugin: the account is known only by the
+    /// identity of the whole binding, which carries more than the account, so it orders the routes and refuses nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(Mailer, "sha256:another-mailbox", false)]
+    [InlineData(Social, "sha256:retired-seat", true)]
+    public async Task A_reply_seen_at_another_account_of_a_routed_plugin_is_read_at_that_plugin(string plugin, string identity, bool byEvents)
+    {
+        using var harness = new DispatchHarness(Noon);
+        Routed(harness);
+        var campaign = await CampaignAsync(harness);
+        if (byEvents)
+        {
+            await SeenByEventsAsync(harness, campaign, "th-moved", plugin, identity);
+        }
+        else
+        {
+            await SeenByInboundReadAsync(harness, campaign, "th-moved", plugin, identity);
+        }
+
+        Assert.Equal(1, await harness.RespondAsync(Ct));
+
+        var claimed = Assert.Single(await harness.ClaimAsync(Ct));
+        Assert.Equal((Responder.ReadOperation, plugin, "sha256:" + plugin), (claimed.Plan!.Contract.Id, claimed.Plan.Plugin.Manifest.Id, claimed.Plan.BindingIdentity));
     }
 
     /// <summary>A reply the inbound read saw at the account the read is routed to is read there, as it always was.</summary>

@@ -102,20 +102,36 @@ public static class RouteResolver
 
     /// <summary>
     /// The route of a read of one thread, or of filing it — classifying, closing or reopening it: the route active now that
-    /// names a plugin and an account the campaign's own lines say the thread was seen at, since the thread is held there.
-    /// <paramref name="seen"/> holds those, newest first, and each is asked in turn by the rule a search and a send have:
-    /// the operation's own route where it names it, then the campaign's route for <paramref name="listOperation"/>, the
-    /// read that finds a campaign's threads, then every route in the order of precedence, channel routes included; the first
-    /// sighting a route names wins, so a thread seen at two accounts over time is read at the newest one a route still names.
-    /// Where no route names any, the operation's own route, which the claim then refuses as held elsewhere.
+    /// names the plugin the campaign's own lines say the thread was seen at, since the thread is held there.
+    /// <paramref name="seen"/> holds the sightings, newest first.
+    /// <list type="bullet">
+    /// <item>Where they name one plugin, a route that names a sighting's plugin and account exactly is preferred, each
+    /// sighting asked in turn, newest first, so a thread seen at two accounts over time is read at the newest one a route
+    /// still names; then a route that names the plugin under any binding. Each is asked by the rule a search and a send
+    /// have: the operation's own route, then the campaign's route for <paramref name="listOperation"/>, the read that finds
+    /// a campaign's threads, then every route in the order of precedence, channel routes included.</item>
+    /// <item>Where they name more than one plugin, the id is held at each, and only the operation's own route says which
+    /// thread is meant: it is that route, never the newest sighting, and the claim refuses it where it names none of
+    /// them.</item>
+    /// </list>
+    /// Where no route names the plugin, the operation's own route, which the claim then refuses as held elsewhere.
     /// </summary>
     public static Resolution? ForThread(RouteSnapshot snapshot, string campaignId, string operation, string listOperation, IReadOnlyList<ThreadSeen> seen)
     {
         ArgumentNullException.ThrowIfNull(seen);
 
-        foreach (var sighting in seen)
+        var plugins = seen.Select(sighting => sighting.PluginId).Distinct(StringComparer.Ordinal).ToList();
+        if (plugins.Count == 1)
         {
-            if (Naming(snapshot, campaignId, operation, listOperation, madeChannel: null, sighting.Names) is { } found)
+            foreach (var sighting in seen)
+            {
+                if (Naming(snapshot, campaignId, operation, listOperation, madeChannel: null, sighting.Names) is { } exact)
+                {
+                    return exact;
+                }
+            }
+
+            if (Naming(snapshot, campaignId, operation, listOperation, madeChannel: null, seen[0].NamesThePlugin) is { } found)
             {
                 return found;
             }
