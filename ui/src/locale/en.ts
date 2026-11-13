@@ -38,7 +38,16 @@ export const en = {
     'start.note.close': 'Close',
     'chat.title': 'Chat',
     'chat.desktop':
-        'The chat with the AI is part of the desktop application. It starts the AI on this computer and asks you before the AI acts, which a browser tab cannot do.',
+        'The chat with the AI is part of the desktop application. It starts the AI on this computer and asks you before the AI acts, which a browser tab cannot do. The chat can be opened in this tab from Jason Desktop: Open in, then the browser.',
+    'chat.tab.answered': 'This is answered in Jason Desktop.',
+    'chat.tab.full': 'This chat is in Full access. Send messages to it from Jason Desktop.',
+    'chat.tab.auto': 'This chat is in Auto-edit. Send messages to it from Jason Desktop.',
+    'chat.tab.other': 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.',
+    'chat.tab.list': 'Chats',
+    'chat.tab.new': 'New chat',
+    'chat.tab.empty': 'No chats yet.',
+    'chat.tab.pick': 'Choose a chat, or start a new one.',
+    'chat.tab.running': 'running',
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
