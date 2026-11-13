@@ -370,8 +370,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
-    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets.
-    const removal = removalOffered(process.platform)
+    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. Never in
+    // a demo run: an act that removes an installation never runs with the demo's directory in this process's environment.
+    const removal = !inDemo && removalOffered(process.platform)
         ? placedRemoval({
               platform: process.platform,
               home,

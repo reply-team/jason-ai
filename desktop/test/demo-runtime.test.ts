@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { DemoQuit, demoRuntimeDeps, stopDemoRuntime } from '../src/demo-runtime.ts';
+import { demoMenuLine } from '../src/mode.ts';
 import { desktopPaths } from '../src/paths.ts';
 
 const ok = (stdout: string): CliResult => ({ exit: 0, stdout, stderr: '' });
@@ -126,4 +127,16 @@ test('a demo run offers no update, no PATH command and no start at logon, and ma
     assert.ok(main.includes('demo: inDemo });'));
     const desk = readFileSync(new URL('../src/desk.ts', import.meta.url), 'utf8');
     for (const item of ['updates', 'autostart', 'command']) assert.ok(desk.includes(`demoMenuLine('${item}')`), item);
+});
+
+test('a demo run offers no Remove What Jason Placed: it is never made, and the menu says to go back to your own installation', () => {
+    assert.equal(demoMenuLine('removal'), 'Remove What Jason Placed: not in the demo. Go back to your own installation for this.');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    // The act is built only off the demo, so it never runs with the demo's directory in the process's environment.
+    assert.ok(main.includes('const removal = !inDemo && removalOffered(process.platform)'));
+    assert.ok(main.indexOf('const inDemo = runOn.mode') < main.indexOf('const removal = !inDemo'));
+    const desk = readFileSync(new URL('../src/desk.ts', import.meta.url), 'utf8');
+    assert.ok(desk.includes("if (this.deps.demo && removalOffered(process.platform)) return [{ label: demoMenuLine('removal'), enabled: false }];"));
+    const items = desk.slice(desk.indexOf('private removalItems'));
+    assert.ok(items.indexOf("demoMenuLine('removal')") < items.indexOf('removeLabel'), 'the demo line comes before the act is offered');
 });
