@@ -433,7 +433,7 @@ Answer each such line once; a line said again after the search moved is a new ho
 
 **How a search ended** is its line's `ended_as`, beside the provider's last word for it, `state`. `finished`: it found
 the count it was asked for. `exhausted`: the provider ran out of people for the definition, so a top-up under that
-audience finds nobody, and more people mean another audience, which is the planner's. `cancelled`: a stop ended it.
+audience finds nobody, and more people mean another audience, which is the planner's. `cancelled`: a stop ended it. Where `ended_by` is a status read, or a stop that failed, the provider no longer had the search; it may still be running there under another account or profile, so tell the person to check the provider before another search spends.
 `stalled`: its reads landed nobody for the runtime's stall bound, and it is read no more. A top-up that finished asks
 nothing more of you: its people are in the reserve. A stall whose `state` is a hold — `paused`, `paused_for_credits` or
 `paused_for_limit` — came after the search stayed held for the runtime's long bound for a hold, a week unless set:
