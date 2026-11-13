@@ -37,7 +37,7 @@ import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
-import { fileLines, fileLogger, limitsFrom, LogHold, type Logger } from './log.ts';
+import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
 import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, placingInFlight, requestStartOver } from './demo-over.ts';
@@ -235,7 +235,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
-    const pathRead = loginPath(pathOf(process.env), home);
+    // A start that places the demo began reading it already, for the import and the runtime it starts.
+    const pathRead = pathReadAtStart ?? loginPath(pathOf(process.env), home);
     process.env.PATH = await pathRead;
     const form = linuxForm();
     // Every child gets the person's PATH and libraries: nothing of an AppImage's mount, which the AppRun put on them.
@@ -512,6 +513,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         desk.setDemo(demoMenu(runOn.mode, removalOffered(process.platform), on));
         toPage('mode.preparing', on);
     };
+    // The import is already running: the switch, the way back and Start the Demo Over wait for it from the first menu.
+    if (placement !== null) setPreparing(true);
     showWindow = () => desk.show();
     const repointed = (async () => {
         if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
@@ -701,7 +704,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // The prepared demo, placed from the first instant of this start, is waited for before the runtime is started; a
         // placing that failed has been taken away and the demo prepared for its sample to be made, as before.
         if (placement !== null) {
-            setPreparing(true);
             try {
                 await settlePlacing(placement, {
                     log,
@@ -860,6 +862,8 @@ let demoWhere!: DemoPlaces;
 let demoPlacing: PlacingPlan = { kind: 'none' };
 let placement: Promise<PlacingOutcome> | null = null;
 let carriedAtStart: Carried | null = null;
+/** The login shell's PATH, begun by a start that places the demo, so the import and the runtime it starts have it too. */
+let pathReadAtStart: Promise<string> | null = null;
 let prepareLive: (demo: string) => void = () => undefined;
 /** The desktop's log, held while the prepared demo is placed: `<data>/logs/` is a part an import places. */
 const logHold = new LogHold();
@@ -1003,7 +1007,9 @@ function startDesktop(): void {
         if (fromArgs.kind === 'link') linkArrived(fromArgs.raw, links, early);
         app.on('activate', () => showWindow());
         app.on('window-all-closed', () => app.quit());
-        void app.whenReady().then(() => run(links, installationWasNew));
+        // However the run ends, and as the application quits, every line still held is written (`log.ts`).
+        releaseAtQuit(app, logHold);
+        void app.whenReady().then(() => releasedAfter(logHold, () => run(links, installationWasNew)));
     }
 }
 
@@ -1018,15 +1024,23 @@ function beginDemoPlacement(): Promise<PlacingOutcome> | null {
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
     carriedAtStart = carriedOf({ form, packaged, version, bundles: desktopPaths(runOn.data).bundle });
-    if (carriedAtStart.uncopied !== null || version === null) return Promise.resolve({ kind: 'failed', step: 'executable', code: 'none' });
-    const env = withoutMount(withPath(process.env, process.env.PATH ?? ''), mountOf(form, process.env));
+    // A start whose jason is not carried places nothing; it shows why it cannot start, as before.
+    if (carriedAtStart.uncopied !== null || version === null) return null;
+    const executable = join(carriedAtStart.bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
+    // The import, and the runtime it starts, which serves the whole run, get the login shell's PATH as every child does:
+    // it is read here, the import waiting for it, and the run uses the same reading.
+    const pathRead = loginPath(pathOf(process.env), homedir());
+    pathReadAtStart = pathRead;
+    const request = desktopPaths(runOn.person).demoStartOver;
     return beginPlacing({
-        cli: cliAt(join(carriedAtStart.bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env),
+        cli: { run: async (args, options) => cliAt(executable, withoutMount(withPath(process.env, await pathRead), mountOf(form, process.env))).run(args, options) },
         archive: demoPlacing.archive,
         places: demoWhere,
         // A making's request that names a placing: a second start while it runs carries nothing out (`carryOutStartOver`)
         // and prepares nothing (`placingInFlight`); a next start after a run cut short starts the demo over.
-        request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true, true),
+        request: () => requestStartOver(request, process.pid, true, true),
+        // Then the import's own process, which may outlive this run: a start while it still writes waits for it (`importedBy`).
+        spawned: (pid) => requestStartOver(request, process.pid, true, true, pid),
         hold: () => logHold.hold(),
     });
 }

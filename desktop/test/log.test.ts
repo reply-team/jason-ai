@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { defaultLimits, fileLines, fileLogger, fileName, holesOf, limitsFrom, lineOf, LogHold, templates, type Logger } from '../src/log.ts';
+import { defaultLimits, fileLines, fileLogger, fileName, heldLimit, holesOf, limitsFrom, lineOf, LogHold, releaseAtQuit, releasedAfter, templates, type Logger } from '../src/log.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
     const directory = mkdtempSync(join(tmpdir(), 'jason-desktop-log-'));
@@ -151,4 +151,46 @@ test('a log that is never held writes at once', (t) => {
     const hold = new LogHold();
     hold.logger(() => fileLines(directory)).info('link_opened', {});
     assert.equal(lines(directory).length, 1);
+});
+
+test('a held log keeps at most its limit of lines, and says at the release how many more were said', (t) => {
+    const directory = join(scratch(t), 'logs');
+    const hold = new LogHold();
+    hold.hold();
+    const log = hold.logger(() => fileLines(directory));
+    for (let index = 0; index < heldLimit + 5; index++) log.info('cli_exited', { Verb: 'status', Exit: 0, ElapsedMs: index });
+    hold.release();
+    const read = lines(directory);
+    assert.equal(read.length, heldLimit + 1);
+    assert.equal(read[heldLimit - 1]?.ElapsedMs, heldLimit - 1, 'the first lines are the ones kept, in order');
+    assert.equal(read[heldLimit]?.EventName, 'log_held_dropped');
+    assert.equal(read[heldLimit]?.Count, 5);
+    assert.equal(read[heldLimit]?.Limit, heldLimit);
+});
+
+test('a start that throws while the log is held still writes every held line, the one that explains it included', async (t) => {
+    const directory = join(scratch(t), 'logs');
+    const hold = new LogHold();
+    hold.hold();
+    const log = hold.logger(() => fileLines(directory));
+    await assert.rejects(
+        releasedAfter(hold, async () => {
+            log.info('desktop_started', { Version: '0.41.0', Platform: 'win32', DataDirectory: 'D' });
+            log.error('window_load_failed', { Step: 'load', Exit: -1 });
+            throw new Error('the start failed before the placing ended');
+        }),
+    );
+    assert.deepEqual(lines(directory).map((line) => line.EventName), ['desktop_started', 'window_load_failed']);
+});
+
+test('a quit while the log is held writes every held line as the application quits', (t) => {
+    const directory = join(scratch(t), 'logs');
+    const hold = new LogHold();
+    hold.hold();
+    const listeners: (() => void)[] = [];
+    releaseAtQuit({ on: (event, listener) => (assert.equal(event, 'will-quit'), listeners.push(listener)) }, hold);
+    hold.logger(() => fileLines(directory)).warn('demo_runtime_stop_timed_out', {});
+    assert.throws(() => readdirSync(directory));
+    for (const listener of listeners) listener();
+    assert.deepEqual(lines(directory).map((line) => line.EventName), ['demo_runtime_stop_timed_out']);
 });

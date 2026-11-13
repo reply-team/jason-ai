@@ -11,13 +11,13 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { demoMarkerName } from './demo-folders.ts';
+import { demoMarkerName, markPlacedFolder } from './demo-folders.ts';
 import type { DemoPlaces } from './demo-seed.ts';
 import type { Logger } from './log.ts';
 
 /** The request file's text: the asking run's process id, so a start that is not that run waits for it to end. */
-export const startOverRequestText = (pid: number, making = false, placing = false): string =>
-    `pid=${pid}\n${making ? `${makingLine}\n` : ''}${placing ? `${placingLine}\n` : ''}`;
+export const startOverRequestText = (pid: number, making = false, placing = false, importPid: number | null = null): string =>
+    `pid=${pid}\n${making ? `${makingLine}\n` : ''}${placing ? `${placingLine}\n` : ''}${importPid === null ? '' : `import=${importPid}\n`}`;
 
 /**
  * The line that says a request was left by a making of the sample (`openOnTheSample`), not by Start the Demo Over: the
@@ -38,6 +38,19 @@ export const placingLine = 'placing';
 /** Whether a request was left by a placing of the prepared demo. */
 export const leftByAPlacing = (text: string): boolean => text.split('\n').includes(placingLine);
 
+/**
+ * The process of the placing's `jason import`, which the request names once it has started: a child that outlives the run
+ * that started it (a crash, a kill) still writes into the demo's folders until it ends. Null when the text names none.
+ */
+export function importedBy(text: string): number | null {
+    const found = /^import=(\d+)$/m.exec(text);
+    const pid = found === null ? NaN : Number(found[1]);
+    return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
+}
+
+/** How long a request names its import: the import's own limit, with room; after this the process id says nothing. */
+export const importYoungMs = 300_000;
+
 /** What an aside copy's name carries after the folder's own: `<folder>.removing-<time>`. */
 export const asideMarker = '.removing-';
 
@@ -48,7 +61,7 @@ export const requestYoungMs = 120_000;
 export const askingWaitMs = 5_000;
 
 /** Why a carry-out was refused: a code, never a path. */
-export type RefusalReason = 'asking_alive' | 'runtime_alive' | 'foreign' | 'not_taken_away' | 'places';
+export type RefusalReason = 'asking_alive' | 'import_alive' | 'runtime_alive' | 'foreign' | 'not_taken_away' | 'places';
 
 export class CarryOutRefused extends Error {
     readonly reason: RefusalReason;
@@ -58,10 +71,13 @@ export class CarryOutRefused extends Error {
     }
 }
 
-/** Leaves the request at `file`, naming the asking process and whether a making or a placing left it; throws when it cannot. */
-export function requestStartOver(file: string, pid: number = process.pid, making = false, placing = false): void {
+/**
+ * Leaves the request at `file`, naming the asking process, whether a making or a placing left it and the placing's import
+ * once it runs; throws when it cannot.
+ */
+export function requestStartOver(file: string, pid: number = process.pid, making = false, placing = false, importPid: number | null = null): void {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, startOverRequestText(pid, making, placing));
+    writeFileSync(file, startOverRequestText(pid, making, placing, importPid));
 }
 
 /**
@@ -84,7 +100,8 @@ export function dropStartOver(file: string, log: Pick<Logger, 'warn'>): void {
 export function placingInFlight(text: string | null, self: number, running: (pid: number) => boolean): boolean {
     if (text === null || !leftByAPlacing(text)) return false;
     const asking = askedBy(text);
-    return asking !== null && asking !== self && running(asking);
+    const importing = importedBy(text);
+    return (asking !== null && asking !== self && running(asking)) || (importing !== null && running(importing));
 }
 
 /** The process that asked, or null when the text does not say. */
@@ -118,6 +135,8 @@ export interface CarryOutDeps {
     /** The aside copies of a folder that are there. */
     asides(folder: string): string[];
     removeTree(folder: string): void;
+    /** Writes the marker into an aside copy of a root a placing's import made, so a removal cut short is collected later. */
+    mark?(folder: string): void;
     dropRequest(): void;
 }
 
@@ -145,6 +164,14 @@ export function carryOutStartOver(deps: CarryOutDeps): void {
         for (let waited = 0; deps.running(asking) && waited < limit; waited += 250) deps.wait(250);
         if (deps.running(asking)) throw new CarryOutRefused('asking_alive', 'The run that asked is still ending.');
     }
+    // A placing's import that outlived its run still writes into the demo: it is waited for the same few seconds, then
+    // refused, and the request kept, so the start after it ends carries it out.
+    const importing = importedBy(text);
+    if (importing !== null && importing !== deps.self && deps.requestAgeMs() <= importYoungMs) {
+        const limit = deps.askingWaitMs ?? askingWaitMs;
+        for (let waited = 0; deps.running(importing) && waited < limit; waited += 250) deps.wait(250);
+        if (deps.running(importing)) throw new CarryOutRefused('import_alive', 'The demo is still being placed.');
+    }
     if (deps.runtimeAlive()) throw new CarryOutRefused('runtime_alive', 'A demo runtime is still running.');
     const folders = [deps.places.data, deps.places.harnessRoot];
     // A placing's request names the harness root as the import's own, made where nothing stood: it is the demo's while
@@ -156,10 +183,20 @@ export function carryOutStartOver(deps: CarryOutDeps): void {
     const moved: string[] = [];
     for (const folder of folders) {
         if (!deps.exists(folder)) continue;
+        const unmarked = !deps.marked(folder);
+        let aside: string;
         try {
-            moved.push(deps.setAside(folder));
+            aside = deps.setAside(folder);
         } catch {
             throw new CarryOutRefused('not_taken_away', `The folder ${folder} could not be taken away.`);
+        }
+        moved.push(aside);
+        if (unmarked) {
+            try {
+                deps.mark?.(aside);
+            } catch {
+                // Removed below all the same; only a removal cut short would then be left.
+            }
         }
     }
     // What an earlier carry-out left: removed only when it still carries the marker, as far as it goes.
@@ -227,6 +264,7 @@ export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: 
         },
         asides: asidesOf,
         removeTree: removeMarkedLast,
+        mark: markPlacedFolder,
         dropRequest: (): void => rmSync(file, { force: true }),
     };
 }

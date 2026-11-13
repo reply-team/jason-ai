@@ -115,6 +115,7 @@ export const templates = {
     demo_seed_step: 'The demo sample: {Step}',
     demo_start_over_request_unremoved: 'The request to start the demo over could not be taken away once the sample was whole ({Code}); the next start makes the sample again',
     demo_archive_placed: 'The prepared demo was placed by jason import in {ElapsedMs} ms',
+    log_held_dropped: '{Count} lines said while the log was held were not kept: a hold keeps at most {Limit}',
     demo_archive_unplaced: 'The prepared demo was not placed, at the step {Step} ({Code}); the sample is made at this start instead',
     open_in: 'The folder was opened in {Place}',
     open_in_refused: 'The folder could not be opened in {Place}',
@@ -292,10 +293,13 @@ export function fileLines(directory: string, limits: LogLimits = defaultLimits):
  * folder, `<data>/logs/`, is one of the parts an import places, and one that is there when it begins is moved aside. While
  * the hold stands no line reaches the disk and no file is opened; each line is kept with the moment it was said, and when
  * the hold is let go every kept line is written in the order it was said, whichever logger said it, and every line after
- * that is written at once. A hold never taken writes at once.
+ * that is written at once. A hold never taken writes at once. It keeps at most `heldLimit` lines; those said after them
+ * are counted, and the release says how many after the kept ones (`log_held_dropped`). The start lets it go after the
+ * placing, after a run that ended any other way (`releasedAfter`), and as the application quits (`releaseAtQuit`).
  */
 export class LogHold {
     private held: { sink: () => LineSink; level: Level; name: TemplateName; fields: Readonly<Record<string, unknown>>; at: Date }[] | null = null;
+    private dropped: { sink: () => LineSink; count: number; at: Date } | null = null;
 
     /** From now on, lines are kept until `release`. */
     hold(): void {
@@ -305,8 +309,11 @@ export class LogHold {
     /** Writes every kept line, in order, each with its own moment; nothing when nothing is held. */
     release(): void {
         const kept = this.held;
+        const dropped = this.dropped;
         this.held = null;
+        this.dropped = null;
         for (const line of kept ?? []) line.sink()(line.level, line.name, line.fields, line.at);
+        if (dropped !== null) dropped.sink()('Warning', 'log_held_dropped', { Count: dropped.count, Limit: heldLimit }, dropped.at);
     }
 
     /** A logger on this hold, whose lines go to the sink `open` makes, opened once, at its first line that is written. */
@@ -316,7 +323,9 @@ export class LogHold {
         const say = (level: Level, name: TemplateName, fields: Readonly<Record<string, unknown>>) => {
             const at = clock();
             if (this.held === null) sink()(level, name, fields, at);
-            else this.held.push({ sink, level, name, fields: { ...fields }, at });
+            else if (this.held.length < heldLimit) this.held.push({ sink, level, name, fields: { ...fields }, at });
+            else if (this.dropped === null) this.dropped = { sink, count: 1, at };
+            else this.dropped.count += 1;
         };
         return {
             info: (name, fields) => say('Information', name, fields),
@@ -344,4 +353,21 @@ export function limitsFrom(settingsText: string | null): LogLimits {
         retainedFileCountLimit: Number.isInteger(count) && (count as number) >= 1 ? (count as number) : defaultLimits.retainedFileCountLimit,
         fileSizeLimitBytes: Number.isInteger(size) && (size as number) >= 1024 * 1024 ? (size as number) : defaultLimits.fileSizeLimitBytes,
     };
+}
+
+/** How many lines a hold keeps: a start says a few dozen while the demo is placed. */
+export const heldLimit = 1000;
+
+/** Runs `act` and lets the hold go when it ends, however it ends: a start that fails keeps the lines that explain it. */
+export async function releasedAfter<T>(hold: LogHold, act: () => Promise<T>): Promise<T> {
+    try {
+        return await act();
+    } finally {
+        hold.release();
+    }
+}
+
+/** Lets the hold go as the application quits, a quit while the demo is still placed included. */
+export function releaseAtQuit(app: { on(event: 'will-quit', listener: () => void): unknown }, hold: LogHold): void {
+    app.on('will-quit', () => hold.release());
 }

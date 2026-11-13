@@ -37,6 +37,13 @@ export const demoArchiveOf = (bundle: string): string => join(bundle, 'demo', 'j
 /** How old a prepared demo may be when it is placed, in days: an older one is not placed, and the sample is made instead. */
 export const archiveFreshDays = 21;
 
+/**
+ * How far ahead of this machine's clock an archive's moment may be and still be placed: a day, the clocks of two machines
+ * being apart by a time zone set wrong. Beyond it this clock cannot say how old the archive is, and the sample is made, its
+ * story then starting by this clock.
+ */
+export const archiveSkewMs = 24 * 60 * 60 * 1000;
+
 /** How long the import may take, its start of the runtime included, before it is taken as failed. */
 export const placingLimitMs = 180_000;
 
@@ -138,9 +145,10 @@ export function exportedAtOf(file: string): Date {
     return new Date(at);
 }
 
-/** Pure: whether an archive made at `made` may be placed at `now`: at most `archiveFreshDays` old. */
+/** Pure: whether an archive made at `made` may be placed at `now`: at most `archiveFreshDays` old, and at most `archiveSkewMs` ahead. */
 export function isFresh(made: Date, now: Date): boolean {
-    return now.getTime() - made.getTime() <= archiveFreshDays * 24 * 60 * 60 * 1000;
+    const age = now.getTime() - made.getTime();
+    return age <= archiveFreshDays * 24 * 60 * 60 * 1000 && age >= -archiveSkewMs;
 }
 
 /** What the desktop itself may hold in a demo data directory an archive is placed into: its marker and its own folder. */
@@ -217,6 +225,8 @@ export interface PlacingStart {
     request(): void;
     /** Holds the log (`LogHold.hold`). */
     hold(): void;
+    /** Told the import's process id once it has started, to name it in the request (`importedBy`). */
+    spawned?(pid: number): void;
     /** Milliseconds, for the time the import took. */
     now?: () => number;
 }
@@ -234,8 +244,20 @@ export function beginPlacing(start: PlacingStart): Promise<PlacingOutcome> {
     start.hold();
     const now = start.now ?? Date.now;
     const began = now();
-    return start.cli.run(['import', start.archive, '--root', start.places.harnessRoot], { timeoutMs: placingLimitMs }).then(
-        (result): PlacingOutcome => (result.exit === 0 ? { kind: 'placed', elapsedMs: Math.max(0, Math.round(now() - began)) } : { kind: 'failed', step: 'import', code: codeOfResult(result) }),
+    const spawned = (pid: number): void => {
+        try {
+            start.spawned?.(pid);
+        } catch {
+            // The request still names the placing; only an import that outlives its run goes unnamed.
+        }
+    };
+    return start.cli.run(['import', start.archive, '--root', start.places.harnessRoot], { timeoutMs: placingLimitMs, spawned }).then(
+        (result): PlacingOutcome => {
+            const elapsedMs = Math.max(0, Math.round(now() - began));
+            if (result.exit === 0) return { kind: 'placed', elapsedMs };
+            // An import that never answered is ended at the limit, which the helper says as it says a start that failed.
+            return { kind: 'failed', step: 'import', code: result.exit === -1 && elapsedMs >= placingLimitMs ? 'timed_out' : codeOfResult(result) };
+        },
         (): PlacingOutcome => ({ kind: 'failed', step: 'import', code: 'thrown' }),
     );
 }

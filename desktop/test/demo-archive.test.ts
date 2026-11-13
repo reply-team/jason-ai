@@ -12,12 +12,14 @@ import { crc32, deflateRawSync } from 'node:zlib';
 import type { Cli, CliResult } from '../src/cli.ts';
 import {
     archiveFreshDays,
+    archiveSkewMs,
     beginPlacing,
     clearPlaced,
     demoArchiveOf,
     exportedAtOf,
     holdsNothing,
     PlacingFailed,
+    placingLimitMs,
     placingPlan,
     projectsWhole,
     sampleUnprepared,
@@ -27,7 +29,8 @@ import {
     type PlacingOutcome,
 } from '../src/demo-archive.ts';
 import { claimDemoFolder, demoMarkerName, demoMarkerText, hasDemoMarker, markPlacedFolder } from '../src/demo-folders.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftByAMaking, leftByAPlacing, placingInFlight, requestStartOver } from '../src/demo-over.ts';
+import { asideMarker, carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, importedBy, leftByAMaking, leftByAPlacing, placingInFlight, requestStartOver } from '../src/demo-over.ts';
+import { cliAt } from '../src/cli.ts';
 import { markerPath, readMarker, type DemoPlaces } from '../src/demo-seed.ts';
 import { fileLines, LogHold } from '../src/log.ts';
 
@@ -550,4 +553,94 @@ test('a placing whose projects are not all linked is a failed one: its runtime i
     assert.equal(lines.at(-1)?.EventName, 'demo_archive_unplaced');
     assert.equal(lines.at(-1)?.Step, 'unlinked');
     assert.equal(lines.at(-1)?.Code, 'none');
+});
+
+test('an archive whose moment is ahead of this machine’s clock is placed within a day of skew, and is stale beyond it', (t) => {
+    const w = world(t);
+    assert.equal(archiveSkewMs, day);
+    const ahead = (by: number) => {
+        writeFileSync(w.archive, zip([{ name: 'export.json', data: record(new Date(now.getTime() + by).toISOString()) }]));
+        return placingPlan({ archive: w.archive, places: w.places, now });
+    };
+    assert.equal(ahead(day).kind, 'place');
+    // Beyond a day, this clock cannot say how old the archive is; the making's story starts by this clock, so it is made.
+    assert.deepEqual(ahead(day + 1), { kind: 'make', step: 'archive_stale' });
+});
+
+test('an import killed at the limit says so by a code of its own, and one that never started by another', async (t) => {
+    const w = world(t);
+    const ending = (elapsed: number) => {
+        let clock = 0;
+        return beginPlacing({
+            cli: { run: async () => ({ exit: -1, stdout: '', stderr: 'killed' }) },
+            archive: w.archive,
+            places: w.places,
+            request: () => undefined,
+            hold: () => undefined,
+            now: () => ((clock += elapsed), clock),
+        });
+    };
+    assert.deepEqual(await ending(placingLimitMs), { kind: 'failed', step: 'import', code: 'timed_out' });
+    assert.deepEqual(await ending(10), { kind: 'failed', step: 'import', code: 'unstarted' });
+});
+
+test('the import’s own process is named in the request as it starts, from the process the CLI helper started', async (t) => {
+    const w = world(t);
+    const pids: number[] = [];
+    await beginPlacing({
+        cli: { run: async (_args, options) => (options?.spawned?.(777), { exit: 0, stdout: '{}', stderr: '' }) },
+        archive: w.archive,
+        places: w.places,
+        request: () => requestStartOver(w.request, 4242, true, true),
+        spawned: (pid) => (pids.push(pid), requestStartOver(w.request, 4242, true, true, pid)),
+        hold: () => undefined,
+    });
+    assert.deepEqual(pids, [777]);
+    assert.equal(importedBy(readFileSync(w.request, 'utf8')), 777);
+    // The helper names the real child.
+    let named = 0;
+    const result = await cliAt(process.execPath, process.env as Record<string, string>, ['-e', '']).run([], { spawned: (pid) => void (named = pid) });
+    assert.equal(result.exit, 0);
+    assert.ok(Number.isSafeInteger(named) && named > 0 && named !== process.pid);
+});
+
+test('an import that outlives the run that started it is waited for, and a start over is refused while it runs', (t) => {
+    const w = world(t);
+    claimDemoFolder(w.places.data);
+    mkdirSync(join(w.places.harnessRoot, 'projects'), { recursive: true });
+    // The run that placed is gone (a crash, a kill); its import, 5150, still writes.
+    requestStartOver(w.request, 4242, true, true, 5150);
+    const text = readFileSync(w.request, 'utf8');
+    assert.equal(placingInFlight(text, 1, (pid) => pid === 5150), true, 'a second start prepares nothing while the import runs');
+    let waited = 0;
+    assert.throws(
+        () => carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, (pid) => pid === 5150), runtimeAlive: () => false, wait: () => void (waited += 1), askingWaitMs: 1000, exists: existsSync, marked: hasDemoMarker }),
+        (error: unknown) => error instanceof CarryOutRefused && error.reason === 'import_alive',
+    );
+    assert.ok(waited > 0, 'it was waited for first');
+    assert.ok(existsSync(w.places.data) && existsSync(w.places.harnessRoot) && existsSync(w.request), 'nothing was removed and the request stays');
+    // Once it has ended, the next start carries the request out.
+    assert.equal(placingInFlight(text, 1, () => false), false);
+    carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => false, exists: existsSync, marked: hasDemoMarker });
+    assert.equal(existsSync(w.places.data) || existsSync(w.places.harnessRoot), false);
+});
+
+test('a root the import made that cannot be removed is left marked, and a later carry-out removes it', (t) => {
+    const w = world(t);
+    claimDemoFolder(w.places.data);
+    mkdirSync(join(w.places.harnessRoot, 'projects'), { recursive: true });
+    requestStartOver(w.request, 4242, true, true);
+    const carry = (removeTree?: (folder: string) => void) =>
+        carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => false, exists: existsSync, marked: hasDemoMarker, ...(removeTree ? { removeTree } : {}) });
+    carry(() => {
+        throw new Error('held open');
+    });
+    const asides = readdirSync(w.root).filter((name) => name.includes(asideMarker));
+    assert.equal(asides.length, 2);
+    for (const aside of asides) assert.ok(hasDemoMarker(join(w.root, aside)), `${aside} is marked`);
+    // The next Start the Demo Over collects them.
+    claimDemoFolder(w.places.data);
+    requestStartOver(w.request, 4242);
+    carry();
+    assert.deepEqual(readdirSync(w.root).filter((name) => name.includes(asideMarker)), []);
 });

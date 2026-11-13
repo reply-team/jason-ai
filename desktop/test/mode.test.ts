@@ -183,8 +183,15 @@ test('the prepared demo is placed from the first instant a start is the only one
     const lock = start.indexOf('app.requestSingleInstanceLock(');
     const placed = start.indexOf('placement = beginDemoPlacement();');
     const logged = start.indexOf('const early = startLog();');
-    const ran = start.indexOf('void app.whenReady().then(() => run(');
+    const ran = start.indexOf('void app.whenReady().then(() => releasedAfter(logHold, () => run(links, installationWasNew)));');
     assert.ok(lock > 0 && placed > lock && logged > placed && ran > logged, 'the lock, the import, the log, then the window');
+    // However the run ends, and at a quit, the held lines are written.
+    assert.ok(start.indexOf('releaseAtQuit(app, logHold);') > placed && start.indexOf('releaseAtQuit(app, logHold);') < ran);
+    // The import and the run share one reading of the login shell's PATH, which the import waits for.
+    const begin = main.slice(main.indexOf('function beginDemoPlacement('));
+    assert.ok(begin.includes('pathReadAtStart = pathRead;') && begin.includes('withPath(process.env, await pathRead)'));
+    assert.ok(main.includes('const pathRead = pathReadAtStart ?? loginPath(pathOf(process.env), home);'));
+    assert.ok(begin.includes('spawned: (pid) => requestStartOver(request, process.pid, true, true, pid),'), 'the import is named in the request');
     // Every log of a start is on the hold, the run's as well as the early one.
     assert.ok(main.includes('return logHold.logger(() => fileLines(logs));'));
     assert.ok(main.includes('const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(paths.installationSettings))));'));
@@ -194,6 +201,9 @@ test('the prepared demo is placed from the first instant a start is the only one
     const settled = run.indexOf('await settlePlacing(placement, {');
     const runtime = run.indexOf('const started = await startInstallation({');
     assert.ok(window > 0 && settled > window && runtime > settled);
+    // The mark is on from the first menu while the import runs, not only from its end.
+    const marked = run.indexOf('if (placement !== null) setPreparing(true);');
+    assert.ok(marked > run.indexOf('const setPreparing = (on: boolean) => {') && marked < settled);
     assert.ok(run.includes("await showStarting(window, placement !== null ? placingWords : 'Starting Jason…', false);"));
     // The sample's marker is written by the placing's end alone, which writes it only once the import has succeeded.
     assert.equal(main.split('writeSampleWhole(').length - 1, 1, 'called once');
@@ -202,7 +212,7 @@ test('the prepared demo is placed from the first instant a start is the only one
     const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
     assert.ok(choose.indexOf('demoPlacing =') > 0 && choose.indexOf('demoPlacing =') < choose.indexOf('runOn = startOn('));
     assert.ok(choose.includes("prepare: (demo) => (demoPlacing.kind === 'place' || placingElsewhere ? undefined : prepareLive(demo)),"));
-    assert.ok(main.includes('request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true, true),'), 'a placing’s request is a making’s too');
+    assert.ok(main.includes('request: () => requestStartOver(request, process.pid, true, true),'), 'a placing’s request is a making’s too');
     assert.ok(choose.indexOf('carryOutStartOver({') < choose.indexOf('demoPlacing ='), 'a start over is carried out first, so the plan sees the folders it left');
 });
 
