@@ -271,10 +271,14 @@ jason session open --shell
 ```
 
 - **The folder.** `--campaign` opens at the campaign's recorded folder, else its project's, else the harness root;
-  `--project`, named by its id (`prj_…`) or its slug, at the project's folder, else the harness root; neither at the
-  harness root. Of the runtime it asks only `campaign.get`, `project.get` and `system.info`, and nothing is written there
-  or into any folder. The harness root counts only once it is a folder with the harness's marker; there is no fall back
-  to your home folder.
+  `--project`, named by its id (`prj_…`) or its slug, at the project's folder, else the harness root. With neither, the
+  project is taken from the folder the command runs in, as every verb that takes a project and is given none takes it
+  ([projects.md](projects.md), §6): the nearest marker above it names a project, or a campaign whose project it is, never
+  the campaign itself, and the line on stderr says so; it then opens at that project's folder, else the harness root.
+  Outside every harness folder, or where the marker is not in the folder the runtime records, it opens at the harness
+  root. Of the runtime it asks only `campaign.get`, `project.get` and `system.info`, and nothing is written there or into
+  any folder. The harness root counts only once it is a folder with the harness's marker; there is no fall back to your
+  home folder.
 - **The program.** `--host` names one of the host words; without it the host is the one the named preference
   `agent.interactive_host` names (`claude_code` while it is unset), read with `preference.list`; `--shell` opens the
   system's plain shell instead: Windows PowerShell from the system folder on Windows (never one found on the search
@@ -284,13 +288,19 @@ jason session open --shell
 - **The terminal** is the one an item's session uses, on each system as above, and the data directory reaches it the
   same way: on Windows and Linux the terminal inherits the CLI's environment, `JASON_DATA_DIR` included, and on macOS the
   script exports `JASON_DATA_DIR` alone. So `jason` in that window works with the installation the command was given.
+  On macOS this form, like an item's, is composed and checked by tests here and has not been watched on a Mac; `--shell`
+  there also rests on Terminal giving the script `SHELL`, your login shell, in its environment, with `/bin/sh` where it
+  does not.
 - **What it prints.** One object: `kind` (`folder`), `folder` (`level`, one of `campaign`, `project` and `harness_root`,
-  and `path`), `program` (`host` or `shell`), `host` (the host word, or null for a shell), `terminal` and `started`; with
-  `--dry-run` also `argv`, and on macOS `script`. A refusal of its own is the API's error envelope on stdout, said again
-  on stderr, with exit 1: `folder_not_recorded` (nothing in the chain has a folder), `folder_missing` (the recorded
-  folder is not on this machine), `preference_unreadable`, `host_unknown` (the preference names a word this `jason` does
-  not know), `host_not_found` (the host's program is not on the search path), `shell_not_found`, `terminal_not_found`
-  and `terminal_start_failed`. A campaign or project the runtime does not know is the runtime's own refusal,
+  and `path`), `host` (the host word, or null for a shell), `shell` (true when the plain shell was started), `program`
+  (the path of the program started, as in an item's answer: the host's, or the shell's, `/bin/sh` on macOS), `terminal`
+  and `started`; with `--dry-run` also `argv`, and on macOS `script`. A refusal of its own is the API's error envelope on
+  stdout, said again on stderr, with exit 1: `folder_not_recorded` (nothing in the chain has a folder, and the harness
+  root is not a folder with its marker; the line says what stands there), `folder_missing` (the recorded folder is not on
+  this machine), `preference_unreadable`, `host_unknown` (the preference names a word this `jason` does not know),
+  `host_not_found` (the host's program is not on the search path), `shell_not_found`, `terminal_not_found`,
+  `terminal_start_failed` and `runtime_error` (an answer of the runtime's that cannot be read). A request the runtime
+  took and did not answer in time is the one envelope, `request_timed_out`, and no second. A campaign or project the runtime does not know is the runtime's own refusal,
   `campaign_not_found` or `project_not_found`, printed as it came; no runtime is exit 3; flags that do not go together,
   an empty value or a host word this `jason` does not know are a usage error, exit 2.
 

@@ -11,8 +11,8 @@ explains it. Where the two seem to differ, the document is right and this page i
 
 `jason session open` starts the person's own agent host in a new terminal window: on one approval or question, at the
 campaign's folder, with the item's brief as its first input, which the UI's Open an AI session button does on Windows
-too; or at a folder, a campaign's, a project's or the harness root, with no first input, when no `--host` names
-another. This key says which host that is. It is the host the person types and works in, not the host a role runs on:
+too; or at a folder, a campaign's, a project's or the harness root, with no first input, when neither `--host` names
+another nor `--shell` asks for a plain shell. This key says which host that is. It is the host the person types and works in, not the host a role runs on:
 a role's host is its execution profile's, and this key changes nothing a role does.
 
 ## The value
