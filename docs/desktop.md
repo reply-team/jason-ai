@@ -78,7 +78,7 @@ shows before anything is typed and what you send waits, while the window is open
 - The **Feed**, the sidebar's first item, is the desktop's main chat (below).
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System and Settings, open in a page panel of the same
+- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light; one that
@@ -189,6 +189,8 @@ lists each key and each card's grant.
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
+  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts,
+  beside the notification channels as the runtime reports them; see [the browser UI](ui.md#accounts).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 

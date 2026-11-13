@@ -1027,6 +1027,27 @@ export function replyCardFor(chatId: string): () => Html {
     return view;
 }
 
+/** The place of the Accounts page's Reply card: its own, so a link asked there never shows on the Connect panel. */
+export const accountsPlace: Place = 'accounts';
+
+/**
+ * The Reply card alone for the Accounts page: the same card, with the same acts, at a place of its own. One function, so
+ * the region painting it is painted once.
+ */
+export function accountsReplyView(): Html {
+    const state = setup.value;
+    if (!state) {
+        const failure = setupError.value;
+        return failure
+            ? html`<div class="note am" role="alert">${failure}</div>`
+            : html`<div class="empty">Reading what is set up…</div>`;
+    }
+    return reply(state.reply, setupBusy.value === null ? null : html`disabled`, 'Reply accounts', accountsPlace);
+}
+
+/** The Accounts page stopped painting the card: a dialog it held open is dropped. */
+export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
+
 export function connectView(): Html {
     const state = setup.value;
     const busy = setupBusy.value;
