@@ -149,6 +149,40 @@ public class RoutesOptionsTests
     }
 
     /// <summary>
+    /// A settings key folds case, as every key of the configuration system does, so <c>channels</c> written in another
+    /// case is the same key and its routes are read. A channel is a value of the contract's, not a key of the file's: it
+    /// keeps its case, and the validator holds it to the contract's word.
+    /// </summary>
+    [Fact]
+    public void Channels_written_in_another_case_under_an_operation_is_read_as_Channels()
+    {
+        var options = Read("""{"Routes":{"Operations":{"message.send":{"channels":{"email":{"Plugin":"fake-provider"}}}}}}""");
+
+        var send = Assert.Contains("message.send", options.Operations);
+        Assert.Null(send.Plugin);
+        Assert.Equal("fake-provider", Assert.Contains("email", send.Channels).Plugin);
+        Assert.True(new RoutesOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    /// <summary>
+    /// The singular <c>Channel</c> is not a key of an operation's entry. It is ignored, as an unknown key is under every
+    /// part of <c>Routes</c> but a <c>Channels</c> where no operation stands: the operation keeps its own route, gains
+    /// no channel route, and the file is valid. This row records that, so a change to it is a decision.
+    /// </summary>
+    [Fact]
+    public void The_singular_Channel_under_an_operation_is_an_unknown_key_and_is_ignored()
+    {
+        var options = Read("""{"Routes":{"Operations":{"message.send":{"Plugin":"fake-provider","Channel":{"email":{"Plugin":"other-provider"}}}}}}""");
+
+        var send = Assert.Contains("message.send", options.Operations);
+        Assert.Equal("fake-provider", send.Plugin);
+        Assert.Null(send.Binding);
+        Assert.Empty(send.Channels);
+        Assert.Empty(options.MisplacedChannels);
+        Assert.True(new RoutesOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    /// <summary>
     /// The configuration system hands every scalar over as text, so what a binding value is — a number or a
     /// string — is decided here by pattern. A quoted value ending in a newline was read as a number: the binding
     /// is hashed into the identity an attempt records and measured against the plugin's declared schema, and
