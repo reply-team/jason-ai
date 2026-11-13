@@ -33,7 +33,7 @@ function pageOf(id: string): string | null {
 /** What More holds: each opens a panel of the console's own or a registered screen in the page panel. */
 const more: readonly { label: string; hint: string; icon: IconName; panel?: PanelName; screen?: string }[] = [
     { label: 'Performance', hint: "Replies and what's working", icon: 'perf', screen: 'performance' },
-    { label: 'Activity', hint: 'The latest lines of the journal', icon: 'pulse', panel: 'activity' },
+    { label: 'Activity', hint: 'What happened, line by line', icon: 'pulse', panel: 'activity' },
     { label: 'Work items', hint: 'Work waiting, running and finished', icon: 'work', screen: 'workitems' },
     { label: 'Connect', hint: 'The AI and Reply', icon: 'plug', panel: 'connect' },
     { label: 'System', hint: 'The runtime and this installation', icon: 'ops', screen: 'system' },
@@ -148,7 +148,7 @@ export function sideView(): Html {
                 menu === 'create'
                     ? html`<div class="menu" role="menu" aria-label="Create">
                           ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus')}
-                          ${entry('New chat', 'Talk with Jason, about no campaign', act('side.new'), 'chat')}
+                          ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat')}
                           ${
                               accounts === null
                                   ? null

@@ -101,7 +101,7 @@ describe('the sidebar', () => {
         expect(titles).toEqual(['New GTM agent', 'New chat', 'Connect an account']);
         expect(entries('Create').map((each) => each.querySelector('.ms')?.textContent)).toEqual([
             'Plan and run outreach',
-            'Talk with Jason, about no campaign',
+            'Talk with Jason, with no agent yet',
             'Link the accounts Jason works through',
         ]);
         // Escape and a click beside it close it.
