@@ -23,11 +23,20 @@ public sealed class RouteRegistry
         _snapshot = RouteSnapshot.Empty(clock.GetUtcNow(), plugins.Snapshot.Id);
     }
 
+    private int _activated;
+
     public RouteSnapshot Snapshot => Volatile.Read(ref _snapshot);
+
+    /// <summary>
+    /// Whether a snapshot has been activated in this process: false only before the first load activates one, the start,
+    /// whose routes in force are the empty snapshot the registry was made with.
+    /// </summary>
+    public bool Activated => Volatile.Read(ref _activated) != 0;
 
     public void Replace(RouteSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         Volatile.Write(ref _snapshot, snapshot);
+        Volatile.Write(ref _activated, 1);
     }
 }

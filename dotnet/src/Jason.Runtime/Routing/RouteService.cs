@@ -348,7 +348,7 @@ public sealed class RouteService(
                         : candidate.Refusals.All(problem => problem.Code == RouteProblemCodes.OrphansSearch)
                             ? DomainErrors.RouteOrphansSearch(candidate.Refusals)
                             : candidate.Refusals.All(problem => problem.Code == RouteProblemCodes.OrphansSend)
-                                ? DomainErrors.RouteOrphansSend(candidate.Refusals)
+                                ? DomainErrors.RouteOrphansSend(candidate.Refusals, candidate.StrandedSends)
                                 : DomainErrors.PluginReloadRejected(candidate.Refusals);
                 }
 
