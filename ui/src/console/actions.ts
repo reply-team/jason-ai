@@ -2,7 +2,7 @@ import { html, type Html } from './html';
 
 // The runtime's CSP allows no inline handler, so the console's markup names what a control does instead:
 // `data-action` for a click, `data-submit` on a form, `data-change` and `data-input` on a field, and `data-enter` on a
-// text box that sends with Enter. Each names an entry of one closed table of the console's own functions, and its
+// text box that sends with Enter, and `data-escape` on a text box that Escape closes. Each names an entry of one closed table of the console's own functions, and its
 // arguments travel in `data-args` as a JSON literal, parsed and never evaluated.
 
 /** A value an action takes: JSON, so that it survives the attribute it travels in. */
@@ -71,7 +71,13 @@ export function listen(root: HTMLElement): () => void {
         if (element) run(element.dataset['input'], element, event);
     };
     const keydown = (event: Event) => {
-        if (!(event instanceof KeyboardEvent) || event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+        if (!(event instanceof KeyboardEvent) || event.isComposing) return;
+        if (event.key === 'Escape') {
+            const element = closest(event, 'data-escape', root);
+            if (element && run(element.dataset['escape'], element, event)) event.preventDefault();
+            return;
+        }
+        if (event.key !== 'Enter' || event.shiftKey) return;
         const element = closest(event, 'data-enter', root);
         if (element && run(element.dataset['enter'], element, event)) event.preventDefault();
     };
