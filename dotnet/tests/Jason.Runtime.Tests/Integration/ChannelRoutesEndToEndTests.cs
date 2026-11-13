@@ -136,7 +136,10 @@ public class ChannelRoutesEndToEndTests
         Assert.Equal([email, mailReply, heldEmail], ActsAt(mailbox));
         Assert.Equal([linkedin, socialReply, heldLinkedin], ActsAt(profile));
 
-        // The replies are answered, so their routes go; each send route is now the last one naming its account.
+        // The replies are answered, so their routes go first. A route of any operation that names the account a send ran
+        // under keeps that send reachable, so while the LinkedIn reply route still named the LinkedIn account, taking the
+        // LinkedIn send route away would strand nothing and the guard would rightly let it through; the same holds for
+        // email. With the reply routes gone, each send route is the last one naming its account.
         await UnrouteOkAsync(host, campaign, "conversation.reply", "email");
         await UnrouteOkAsync(host, campaign, "conversation.reply", "linkedin");
 
