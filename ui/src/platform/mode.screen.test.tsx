@@ -6,7 +6,7 @@ import { renderApp } from '../test/render-app';
 import { loadMode, mode, modeRefusal, modeUnopened, switchMode } from './mode';
 
 // The mode is which installation the desktop runs on, and the page learns it from the desktop alone, once, as it loads.
-// A browser shows whatever runtime it is paired with: Live to the page, whatever its address says, and no strip.
+// A browser shows whatever runtime it is paired with: Live to the page, whatever its address says, and no bar.
 
 afterEach(() => {
     mode.value = 'live';
@@ -63,14 +63,14 @@ describe('the mode read as the page loads', () => {
 });
 
 describe('the browser shell', () => {
-    it('draws no strip, even at an address that names the demo', async () => {
+    it('draws no bar, even at an address that names the demo', async () => {
         history.replaceState(null, '', '/ui/?mode=demo');
         await loadMode();
         renderApp(
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => screen.getByRole('navigation'));
-        expect(screen.queryByRole('region', { name: 'Demo' })).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Mode bar' })).toBeNull();
     });
 });
 
