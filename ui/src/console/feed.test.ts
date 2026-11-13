@@ -53,7 +53,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
     });
 
     it('hands nothing for a kind the Feed does not take, or a line about no campaign', () => {
-        for (const kind of ['contacts_added', 'notification_sent', 'approval_approved', 'toString', 'constructor']) {
+        for (const kind of ['contacts_added', 'notification_sent', 'approval_superseded', 'toString', 'constructor']) {
             expect(toFeedLine(line({ kind }))).toBeNull();
         }
         expect(toFeedLine(line({ campaign_id: null }))).toBeNull();
@@ -61,10 +61,14 @@ describe('the Feed as the page hands it lines and draws them', () => {
 
     it('has words and an icon for every kind the Feed takes', () => {
         expect([...feedKinds].sort()).toEqual([
+            'approval_approved',
+            'approval_rejected',
             'approval_requested',
+            'campaign_archived',
             'campaign_created',
             'campaign_paused',
             'campaign_started',
+            'decision_answered',
             'decision_raised',
             'inbound_reply_observed',
             'provider_blocked',
@@ -82,6 +86,10 @@ describe('the Feed as the page hands it lines and draws them', () => {
             'Work stopped',
             'Work stopped',
             'A provider block holds work',
+            'An approval was given',
+            'An approval was declined',
+            'A question was answered',
+            'Agent archived',
         ]);
     });
 
@@ -103,5 +111,13 @@ describe('the Feed as the page hands it lines and draws them', () => {
         expect(toFeedRow(kept({ journal_kind: 'approval_requested' }), names, now).needs).toBe(true);
         expect(toFeedRow(kept({ journal_kind: 'decision_raised' }), names, now).needs).toBe(true);
         expect(toFeedRow(kept({ journal_kind: 'workitem_failed' }), names, now).needs).toBe(false);
+        for (const decided of [
+            'approval_approved',
+            'approval_rejected',
+            'decision_answered',
+            'campaign_archived',
+        ] as const) {
+            expect(toFeedRow(kept({ journal_kind: decided }), names, now).needs).toBe(false);
+        }
     });
 });

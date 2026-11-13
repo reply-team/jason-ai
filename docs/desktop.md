@@ -304,8 +304,8 @@ model's to decide.
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
 **New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
-approval or a question waiting, a campaign created, started or paused, work that stopped or expired, a provider block
-holding work. Consecutive lines of the same kind and campaign fold into one with a count, and the Feed keeps the newest
+approval or a question waiting, an approval given or declined, a question answered, a campaign created, started,
+paused or archived, work that stopped or expired, a provider block holding work. Consecutive lines of the same kind and campaign fold into one with a count, and the Feed keeps the newest
 500. A line carries a kind, ids, a count and a moment and never a person's words, a subject or a name; the campaign's name
 on it opens that campaign's conversation, and an approval or a question opens Needs you on that item. When the window
 loads, the desktop reads what it missed with `jason journal list`.
