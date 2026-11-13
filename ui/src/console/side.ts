@@ -8,11 +8,12 @@ import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
 import { attention } from './needs';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
-import { activePanel, chats, conversations, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
+import { closeFilterMenu, recentView } from './recent';
+import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), Search, the Feed,
 // Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
-// conversations under "Recent", and Settings in the foot in the foot.
+// conversations under "Recent", and Settings in the foot.
 
 /** Which of the sidebar's two menus is open. */
 const open = signal<'create' | 'more' | null>(null);
@@ -20,6 +21,7 @@ const open = signal<'create' | 'more' | null>(null);
 /** Closes whichever menu is open. */
 export function closeMenus(): void {
     open.value = null;
+    closeFilterMenu();
 }
 
 /** The address of a screen the browser shell registers, or null when this build has none. */
@@ -235,25 +237,7 @@ export function sideView(): Html {
                 }
             </div>
         </nav>
-        <div class="recent">Recent</div>
-        <nav class="list" aria-label="Conversations">
-            ${conversations.value
-                .filter((conversation) => conversation.main !== true)
-                .map(
-                    // A chat the console holds says its title as it is now; the list says it as the desktop kept it.
-                    (conversation) =>
-                        html`<button
-                            class="item"
-                            type="button"
-                            ${conversation.id === currentChat.value ? html`aria-current="true"` : null}
-                            ${act('side.chat', conversation.id)}
-                        >
-                            ${svg(conversation.campaignId === null ? 'chat' : 'camp', 15)}<span
-                                >${chats.value[conversation.id]?.title ?? conversation.title}</span
-                            >
-                        </button>`,
-                )}
-        </nav>
+        ${recentView()}
         ${
             settings === null
                 ? null

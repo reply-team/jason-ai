@@ -19,12 +19,14 @@ const icons = {
             d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"
         />`,
     plusc: html`<circle cx="12" cy="12" r="10" /><path d="M12 8v8M8 12h8" />`,
+    search: html`<circle cx="11" cy="11" r="7" /><path d="M16 16l5 5" />`,
+    filter: html`<path d="M3 5h18l-7 8v6l-4 2v-8z" />`,
+    check: html`<path d="M5 12l5 5 9-10" />`,
     chev: html`<path d="M6 9l6 6 6-6" />`,
     more: html`<circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" />`,
     pulse: html`<path d="M3 12h4l3-8 4 16 3-8h4" />`,
     up: html`<path d="M12 19V5M5 12l7-7 7 7" />`,
     stop: html`<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />`,
-    search: html`<circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" />`,
     chat: html`<path d="M4 5h16v11H9l-5 4z" />`,
     theme: html`<circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 010 18z" fill="currentColor" />`,
     globe: html`<circle cx="12" cy="12" r="9" /><path
