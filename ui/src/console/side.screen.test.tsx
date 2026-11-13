@@ -183,6 +183,25 @@ describe('the sidebar', () => {
         expect(more().getAttribute('aria-current')).toBeNull();
     });
 
+    it('makes More inactive again once Activity or Connect is left for Needs you or the Feed', async () => {
+        renderConsole();
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        fireEvent.click(more());
+        fireEvent.click(entries('More')[1]!);
+        await waitFor(() => expect(inFront()).toContain('Activity'));
+        expect(more().getAttribute('aria-current')).toBe('true');
+        fireEvent.click(side().getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        expect(more().getAttribute('aria-current')).toBeNull();
+        fireEvent.click(more());
+        fireEvent.click(entries('More')[3]!);
+        await waitFor(() => expect(inFront()).toContain('Connect'));
+        expect(more().getAttribute('aria-current')).toBe('true');
+        fireEvent.click(side().getByRole('button', { name: 'Agents' }));
+        await waitFor(() => expect(inFront()).toContain('Agents'));
+        expect(more().getAttribute('aria-current')).toBeNull();
+    });
+
     it('still reaches every screen it reached before: a panel in front, a page at the address its registered screen gives', async () => {
         renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
