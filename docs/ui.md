@@ -268,6 +268,7 @@ jason session open
 jason session open --campaign <campaign-id>
 jason session open --project <project-id-or-slug> --host codex
 jason session open --shell
+jason session open --here --host claude_code --resume <conversation-id>
 ```
 
 - **The folder.** `--campaign` opens at the campaign's recorded folder, else its project's, else the harness root;
@@ -278,31 +279,43 @@ jason session open --shell
   Outside every harness folder, or where the marker is not in the folder the runtime records, it opens at the harness
   root. Of the runtime it asks only `campaign.get`, `project.get` and `system.info`, and nothing is written there or into
   any folder. The harness root counts only once it is a folder with the harness's marker; there is no fall back to your
-  home folder.
+  home folder. `--here` opens at the folder the command runs in, as it is: no marker is read there, the runtime is asked
+  for no folder, and the folder only has to be there. It does not go with `--campaign` or `--project`.
 - **The program.** `--host` names one of the host words; without it the host is the one the named preference
   `agent.interactive_host` names (`claude_code` while it is unset), read with `preference.list`; `--shell` opens the
   system's plain shell instead: Windows PowerShell from the system folder on Windows (never one found on the search
   path), your login shell on macOS, and on Linux the program `SHELL` names by its absolute path, else `/bin/sh`. Nothing
-  follows the program on its command line. `--host` and `--shell` do not go together, nor `--campaign` and `--project`,
-  nor any of the four with `--approval` or `--question`.
+  follows the program on its command line but what `--resume` adds. `--host` and `--shell` do not go together, nor
+  `--campaign` and `--project`, nor any of the six with `--approval` or `--question`.
+- **Continuing a conversation.** `--resume <id>` has the host continue its own conversation of that id, the one the host
+  itself named, instead of starting a new one: Claude Code is started as `claude --resume <id>`, Codex as
+  `codex resume <id>`, each in the words its own `--help` gives, and nothing else is added. The id is a letter or digit
+  followed by at most 199 letters, digits, dots, underscores, colons or hyphens; anything else is a usage error. It takes
+  the host `--host` names, else the preference's, and does not go with `--shell`. Another host is refused with
+  `host_cannot_resume` as soon as the host is known, before its program or a terminal is looked for. What the session
+  then may do is that host's own permission settings' to decide; Jason copies nothing of the conversation and writes no
+  file for it.
 - **The terminal** is the one an item's session uses, on each system as above, and the data directory reaches it the
   same way: on Windows and Linux the terminal inherits the CLI's environment, `JASON_DATA_DIR` included, and on macOS the
   script exports `JASON_DATA_DIR` alone. So `jason` in that window works with the installation the command was given.
   On macOS this form, like an item's, is composed and checked by tests here and has not been watched on a Mac; `--shell`
   there also rests on Terminal giving the script `SHELL`, your login shell, in its environment, with `/bin/sh` where it
   does not.
-- **What it prints.** One object: `kind` (`folder`), `folder` (`level`, one of `campaign`, `project` and `harness_root`,
-  and `path`), `host` (the host word, or null for a shell), `shell` (true when the plain shell was started), `program`
-  (the path of the program started, as in an item's answer: the host's, or the shell's, `/bin/sh` on macOS), `terminal`
-  and `started`; with `--dry-run` also `argv`, and on macOS `script`. A refusal of its own is the API's error envelope on
+- **What it prints.** One object: `kind` (`folder`), `folder` (`level`, one of `campaign`, `project`, `harness_root` and
+  `here`, and `path`), `host` (the host word, or null for a shell), `shell` (true when the plain shell was started),
+  `program` (the path of the program started, as in an item's answer: the host's, or the shell's, `/bin/sh` on macOS),
+  with `--resume` also `resume` (the id), then `terminal` and `started`; with `--dry-run` also `argv`, the host's words
+  and the id among it, and on macOS `script`, where they are quoted as every word of it is. A refusal of its own is the API's error envelope on
   stdout, said again on stderr, with exit 1: `folder_not_recorded` (nothing in the chain has a folder, and the harness
-  root is not a folder with its marker; the line says what stands there), `folder_missing` (the recorded folder is not on
-  this machine), `preference_unreadable`, `host_unknown` (the preference names a word this `jason` does not know),
-  `host_not_found` (the host's program is not on the search path), `shell_not_found`, `terminal_not_found`,
+  root is not a folder with its marker; the line says what stands there), `folder_missing` (the recorded folder, or with
+  `--here` the folder the command runs in, is not on this machine), `preference_unreadable`, `host_unknown` (the
+  preference names a word this `jason` does not know), `host_cannot_resume` (`--resume` was given for a host Jason knows
+  no words to continue a conversation of), `host_not_found` (the host's program is not on the search path),
+  `shell_not_found`, `terminal_not_found`,
   `terminal_start_failed` and `runtime_error` (an answer of the runtime's that cannot be read). A request the runtime
   took and did not answer in time is the one envelope, `request_timed_out`, and no second. A campaign or project the runtime does not know is the runtime's own refusal,
   `campaign_not_found` or `project_not_found`, printed as it came; no runtime is exit 3; flags that do not go together,
-  an empty value or a host word this `jason` does not know are a usage error, exit 2.
+  an empty value, a host word this `jason` does not know or an id `--resume` does not take are a usage error, exit 2.
 
 ## Settings and Chat in the browser
 

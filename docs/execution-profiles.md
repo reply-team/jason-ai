@@ -512,7 +512,10 @@ status` says which of these hosts it detected on this machine and whether every 
 
 `jason session open`, and the UI's Open an AI session, start the host the named preference `agent.interactive_host`
 names in a terminal of the person's own, with the item's brief as its first message in the last column's form, or,
-opened at a folder with no item, with no first message and so no argument after the program; the session is the person's, under their own permissions for that host, and none of a launched role's confinement applies
+opened at a folder with no item, with no first message and so no argument after the program, unless `--resume <id>`
+asks the host to continue its own conversation of that id: Claude Code takes `--resume <id>` (Claude Code's help lists
+`-r, --resume [value]`) and Codex `resume <id>` (Codex's help lists `codex resume [OPTIONS] [SESSION_ID] [PROMPT]`),
+and the other hosts are refused with `host_cannot_resume`; the session is the person's, under their own permissions for that host, and none of a launched role's confinement applies
 to it ([ui.md](ui.md#open-an-ai-session)).
 
 A host's skills root is found by a marker under the home directory — a folder or a file the host keeps there, and only

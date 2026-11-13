@@ -75,6 +75,10 @@ namespace Jason.Cli;
 /// folder, which only an item's session falls back to; running the host <c>--host</c>
 /// names, else the preference's, or with <c>--shell</c> the system's plain shell. Of the runtime that form asks only
 /// <c>campaign.get</c>, <c>project.get</c>, <c>system.info</c> and, when no program is named, <c>preference.list</c>.
+/// <c>--here</c> opens it at the folder the command runs in, as it is, reading no marker there and asking the runtime
+/// for no folder. <c>--resume</c> has the host continue its own conversation of that id instead of starting a new one,
+/// by the words the host takes for it, kept beside its other words in <c>AgentHosts</c>; a host with no such words is
+/// refused before a terminal is looked for. Neither asks the runtime anything new.
 /// </para>
 /// <para>
 /// <c>export</c> is the tenth, a verb like <c>doctor</c>. It writes this installation's files — the database, the

@@ -156,6 +156,7 @@ launches runs in its attempt's work directory, which carries no marker, so nothi
 | `campaign list` | `--project`, a filter | yes; `--all-projects` lists every project's campaigns from anywhere |
 | `project get` | the id, or `--slug` | yes, when neither is given |
 | `session open` at a folder | `--project`, the folder it opens at, or `--campaign` | yes, when neither is given; elsewhere it opens at the harness root |
+| `session open --here` | none: it opens at the folder it runs in | never: no marker is read, the folder is taken as it is |
 | `campaign update` | `--project`, the project it moves to | never: a move addressed by where a shell stands is how the wrong campaign moves |
 | `project update` | the id | never: a rename names its project |
 | `project link` | the id | never: with `--path`, the project is the one the marker at that path names; with neither the id nor `--path`, the folder of the nearest project marker above the working directory is linked by its marker; never otherwise |
