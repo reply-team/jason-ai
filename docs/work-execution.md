@@ -959,18 +959,18 @@ declares for one. A plugin never sees a work item's context. A search the claim 
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
 ([campaign manager](campaign-manager.md) §10).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-seven checks, in this order, and the first that answers is the one that decides, the twenty-seventh numbered last but asked after the twenty-third:
+**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-seven checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
 contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
 search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
-argument_unsupported → template_not_offered → provider_answer_lost → search_unfinished →
-approval_required → provider_blocked → thread_route_mismatch
+argument_unsupported → template_not_offered → provider_answer_lost → thread_route_mismatch →
+search_unfinished → approval_required → provider_blocked
 ```
 
-The first twenty-three are refusals and all of them are final: twenty are `permanent`, `input_invalid` and
+The first twenty-four are refusals and all of them are final: twenty-one are `permanent`, `input_invalid` and
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
@@ -978,18 +978,16 @@ the routed package — by its id and digest for a send, by its id alone for a me
 the unsettled attempt ran under, or the input
 composed now is not the one it was composed with, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
-nothing ever falls back to another plugin. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
+nothing ever falls back to another plugin. The twenty-seventh, `thread_route_mismatch`, is the last of those refusals
+to be asked: work on a thread the campaign saw at another plugin or account than the item is routed to, refused before
+the three that wait or park, so nobody is asked to approve, and no block holds, work that could only be refused. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
 twenty-fifth is not a refusal either: `approval_required` parks the
 item for a person (§Approvals above), and it is asked after every refusal so that nobody is asked to approve work
 that would have been refused anyway. The twenty-sixth, `provider_blocked`, is not a refusal either: it parks work an
 open provider block holds — the operations whose document says `dispatch.under_provider_block: waits`, nothing else —
-as `waiting`, with no attempt, until the block clears or a trial gets past it (§Provider blocks below). The
-twenty-seventh, `thread_route_mismatch`, is a `permanent` refusal again: work on a thread the campaign saw at another
-plugin or account than the item is routed to. It was added after the rest and numbered last, so no number moved, and it
-is asked right after `provider_answer_lost`, so nobody is asked to approve, and no block holds, work that could only be
-refused. [docs/routing.md](routing.md) says what each one means and what to
+as `waiting`, with no attempt, until the block clears or a trial gets past it (§Provider blocks below). [docs/routing.md](routing.md) says what each one means and what to
 change.
 
 Three of those checks measure a document against a schema — the binding against the plugin's (7), the
@@ -1019,7 +1017,7 @@ holding it answers a repeat with the earlier send. A metered act settled by a re
 `campaign.enroll`, `campaign.activate` — is held the same way but for the package's digest: its recovery read finds
 the earlier act at the account whichever version of the package made it, so an update of the package in between lets
 the repeat through.
-While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code and is recorded
+While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code, and so does check 27, and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
 (`docs/routing.md`). An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code

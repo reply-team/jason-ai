@@ -159,6 +159,20 @@ public partial class ProviderOpPreflightTests
         scenario.Unsettled = true;
         met.Add(Refused(scenario, FailureClass.Ambiguous));
 
+        // Twenty-seventh, asked here: a filing of a thread the campaign's lines say was seen at an account no route names any
+        // more. It stands apart from the other references the work names, numbered after the rest so that no number moved,
+        // and it refuses before a child exists, and before the three that wait or park, like any of them. Where a line says
+        // the routed account, it asks nothing.
+        scenario.Unsettled = false;
+        scenario.Operation = Close;
+        scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, Close], binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["thread"] = new JsonObject { ["external_id"] = "th-1" } };
+        scenario.Thread = [new ThreadSeen(Scenario.PluginId, "sha256:east", AccountKnown: true)];
+        met.Add(Refused(scenario, FailureClass.Permanent));
+        scenario.Thread = [new ThreadSeen(Scenario.PluginId, "sha256:east", AccountKnown: true), new ThreadSeen(Scenario.PluginId, "sha256:west", AccountKnown: true)];
+        Assert.True(scenario.Check().Passed);
+        scenario.Thread = null;
+
         // Twenty-fourth, and the first that is not a refusal: a search while another of its campaign has not ended waits
         // behind it, and it is asked before the approval, so nobody is asked to approve a spend that cannot start now.
         scenario.Unsettled = false;
@@ -207,21 +221,10 @@ public partial class ProviderOpPreflightTests
         Assert.Same(block, held.Block);
         met.Add(held.Code!);
 
-        // Twenty-seventh: a filing of a thread the campaign's lines say was seen at an account no route names any more. It
-        // stands apart from the other references the work names, numbered after the rest so that no number moved, and it
-        // refuses before a child exists like any of them.
-        scenario.Blocks = null;
-        scenario.CampaignPins = PreflightFacts.NoPins;
-        scenario.Operation = Close;
-        scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, Close], binding: Scenario.BindingSchema);
-        scenario.Arguments = new JsonObject { ["thread"] = new JsonObject { ["external_id"] = "th-1" } };
-        scenario.Thread = [new ThreadSeen(Scenario.PluginId, "sha256:east", AccountKnown: true)];
-        met.Add(Refused(scenario, FailureClass.Permanent));
-
         // Every check in the published order, met one at a time, and then an item with nothing left wrong.
         Assert.Equal(ProviderOpPreflight.Codes, met);
 
-        scenario.Thread = [new ThreadSeen(Scenario.PluginId, "sha256:west", AccountKnown: true)];
+        scenario.Blocks = null;
         var verdict = scenario.Check();
         Assert.True(verdict.Passed);
         Assert.Null(verdict.Code);

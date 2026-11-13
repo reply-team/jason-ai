@@ -201,6 +201,40 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// The thread's check is asked before the block: a reply to a thread seen at the social plugin, routed by its channel
+    /// to the mailer while a block of the mailer's account is open, is refused for the thread rather than left waiting on
+    /// the block of an account that does not hold it.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_to_a_thread_seen_elsewhere_is_refused_rather_than_held_by_the_routed_account_s_block()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+        await SeenByEventsAsync(db, campaign, "th-social", Social, "sha256:" + Social);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        opener.Status = WorkItemStatus.Failed;
+        opener.FinishedAt = Noon;
+        db.WorkItems.Add(opener);
+        var block = BlockRows.Block(opener, Noon, Noon.AddHours(1), binding: "sha256:" + Mailer);
+        block.PluginId = Mailer;
+        db.ProviderBlocks.Add(block);
+        var item = Replying(db, campaign, "email", "th-social");
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = ThreadHarness(campaign);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(row => row.Id == item.Id, Ct);
+        Assert.Equal((WorkItemStatus.Failed, AttemptErrors.ThreadRouteMismatch), (stored.Status, stored.LastError!.Code));
+        Assert.False(await fresh.WorkItemWaits.AsNoTracking().AnyAsync(row => row.WorkItemId == item.Id, Ct));
+        Assert.Empty(await fresh.Approvals.AsNoTracking().Where(row => row.WorkItemId == item.Id).ToListAsync(Ct));
+    }
+
+    /// <summary>
     /// The campaign's routes: every thread operation and email sends through the mailer, by their operations; LinkedIn
     /// messages and LinkedIn replies through the social plugin, by channel routes. No route reads the campaign's threads.
     /// </summary>

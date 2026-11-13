@@ -58,7 +58,7 @@ public sealed record PreflightVerdict(
 /// <summary>
 /// Everything that can stop a provider work item, decided before a child process exists. Twenty-seven checks in one
 /// order: what the runtime cannot do at all, then what the planner got wrong — the twenty-seventh, a thread seen at
-/// another account, numbered last and asked among these — then whether another search of the campaign
+/// another account, numbered last and asked last among these — then whether another search of the campaign
 /// is in the way, then the approval it owes a person, and last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
 /// before the reasons that need their attention, nobody is asked to approve work that would have been refused
 /// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
@@ -85,9 +85,8 @@ public static class ProviderOpPreflight
     private const string ContactPin = "contact";
 
     /// <summary>
-    /// The twenty-seven, in the published order: the order they are checked in, but for the twenty-seventh, which was added
-    /// after the rest and numbered last so that no number moved, and is asked after the twenty-third. The first that fails
-    /// is the one the attempt records.
+    /// The twenty-seven, in the order they are checked: the published order. The first that fails is the one the attempt
+    /// records. A check's number is its name, <see cref="Numbers"/>, and is not its place here.
     /// </summary>
     /// <remarks>
     /// Checks 7, 19 and 20 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
@@ -119,11 +118,27 @@ public static class ProviderOpPreflight
         AttemptErrors.ArgumentUnsupported,
         AttemptErrors.TemplateNotOffered,
         AttemptErrors.ProviderAnswerLost,
+        AttemptErrors.ThreadRouteMismatch,
         AttemptErrors.SearchUnfinished,
         AttemptErrors.ApprovalRequired,
         AttemptErrors.ProviderBlocked,
-        AttemptErrors.ThreadRouteMismatch,
     ];
+
+    /// <summary>
+    /// The checks added after the rest were numbered, in the order they were added: each takes the next number free
+    /// wherever it is asked, so that no row's number, and no "check N" a page or a person cites, ever moves.
+    /// </summary>
+    private static readonly string[] NumberedAfterTheRest = [AttemptErrors.ThreadRouteMismatch];
+
+    /// <summary>
+    /// Each check's published number, its name from release to release: the place it is asked at among the checks numbered
+    /// together, and after them, the checks added later in the order they were added.
+    /// </summary>
+    public static IReadOnlyDictionary<string, int> Numbers { get; } =
+        Codes.Where(code => !NumberedAfterTheRest.Contains(code, StringComparer.Ordinal))
+            .Concat(NumberedAfterTheRest)
+            .Select((code, index) => (code, number: index + 1))
+            .ToDictionary(pair => pair.code, pair => pair.number, StringComparer.Ordinal);
 
     /// <summary>
     /// What checks 7, 19 and 20 answer when a pattern of the schema they measure against — the plugin's binding schema, the
@@ -149,12 +164,20 @@ public static class ProviderOpPreflight
 
     /// <summary>
     /// The refusals from <c>no_route</c> through <c>template_not_offered</c>, named by the last of them and counted by
-    /// its place, so a check added among them is among them: they say nothing of whether an earlier attempt acted. While the
-    /// work item carries one that may have reached the person, each keeps its code and is recorded ambiguous, with
-    /// <see cref="MayHaveActed"/>.
+    /// its place, so a check added among them is among them, and <c>thread_route_mismatch</c>, named: they say nothing of
+    /// whether an earlier attempt acted. While the work item carries one that may have reached the person, each keeps its
+    /// code and is recorded ambiguous, with <see cref="MayHaveActed"/>.
     /// </summary>
+    /// <remarks>
+    /// The thread's check is named rather than taken by its place because it is asked after <c>provider_answer_lost</c>,
+    /// which says itself that the earlier attempt may have acted and so is not among these, and a place counted past that
+    /// one would take it in too. Refused alone, work on a thread an earlier attempt may have acted on would read as though
+    /// nothing had happened, and a planner would create it again. No operation that names a thread is held to an unsettled
+    /// attempt today — <c>conversation.reply</c> is never repeated after a lost answer — so the name is here for the first
+    /// that will be.
+    /// </remarks>
     private static readonly HashSet<string> SilentOnTheEarlierAttempt =
-        new(Codes.Take(Codes.ToList().IndexOf(AttemptErrors.TemplateNotOffered) + 1).Skip(1), StringComparer.Ordinal);
+        new(Codes.Take(Codes.ToList().IndexOf(AttemptErrors.TemplateNotOffered) + 1).Skip(1).Append(AttemptErrors.ThreadRouteMismatch), StringComparer.Ordinal);
 
     /// <summary>
     /// The whole decision, in the published order, with every schema pattern matched under <paramref name="timing"/>.
@@ -179,7 +202,7 @@ public static class ProviderOpPreflight
             : verdict;
     }
 
-    /// <summary>The twenty-seven checks, in the published order, the twenty-seventh after the twenty-third: the first that fails is the verdict.</summary>
+    /// <summary>The twenty-seven checks, in the published order: the first that fails is the verdict.</summary>
     private static PreflightVerdict InOrder(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes, PatternTiming timing)
     {
         var operation = facts.Item.Operation ?? string.Empty;
