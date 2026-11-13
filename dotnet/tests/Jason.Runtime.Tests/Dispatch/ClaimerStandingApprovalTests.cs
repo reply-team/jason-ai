@@ -591,6 +591,41 @@ public partial class ClaimerTests
         Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
     }
 
+    /// <summary>
+    /// A draft put to a person and then edited while the question was open: the edit withdraws the question and the claim
+    /// asks again, and a standing approval in force that would cover the new text answers nothing, because somebody was
+    /// already asked about this work.
+    /// </summary>
+    [Fact]
+    public async Task Standing_ParkedThenEdited_IsAskedAgain_NotReleased()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var item = Drafted(db, reading, await VerdictAsync(db, reading, RunOf(reading)));
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await StandAsync(db, reading.Campaign);
+        var clock = new FixedClock(new DateTimeOffset(Noon));
+        await new WorkItemService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestOptions.PluginSettings()).UpdateAsync(
+            new WorkItemUpdateRequest(
+                item.PublicId, new JsonObject { [WorkItemService.InputKey] = ReplyingIn(InThread, "Thursday at 11 works.") }, null,
+                default, default, default, default, default, default, default, default, Operator, null),
+            Ct);
+        Assert.Equal(WorkItemStatus.Created, item.Status);
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        Assert.Equal(
+            [ApprovalStatus.Superseded, ApprovalStatus.Pending],
+            await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).Select(a => a.Status).ToListAsync(Ct));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).Status);
+        Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
+    }
+
     /// <summary>The draft runs in this claim under a standing approval, or it parks for a person saying why.</summary>
     private static async Task AssertReleasedOrParkedAsync(TestDatabase database, IReadOnlyList<ClaimedWork> claimed, string? parks)
     {

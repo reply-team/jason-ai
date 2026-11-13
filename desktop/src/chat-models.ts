@@ -50,15 +50,20 @@ export const modelShape = /^[A-Za-z0-9][A-Za-z0-9._:[\]/-]{0,99}$/;
 /** The Claude Code version from which `haiku` names a model that takes effort. */
 export const haikuEffortFrom = '2.1.293';
 
-/** Claude Code's models: the vendor's aliases, each with the levels it takes at the version read before the turn. */
+/**
+ * Claude Code's models: the vendor's aliases, each with the levels it takes at the version read before the turn. The id is
+ * what is passed to the host; the label is what the person reads. It names no version, since an alias "uses the latest
+ * Opus model" of the provider (https://code.claude.com/docs/en/model-config) and so moves with the provider and over
+ * time. The page's own first entry, "Default (recommended)", is no model: it passes none and the host chooses.
+ */
 export function claudeCodeModels(version: string | null): ModelOffer[] {
     const every: Effort[] = [...efforts];
     const haiku = version !== null && compareVersions(version, haikuEffortFrom) >= 0 ? every : [];
     return [
-        { id: 'opus', label: 'Opus', efforts: every },
-        { id: 'sonnet', label: 'Sonnet', efforts: every },
-        { id: 'haiku', label: 'Haiku', efforts: haiku },
-        { id: 'fable', label: 'Fable', efforts: [...every] },
+        { id: 'opus', label: 'Opus (latest)', efforts: every },
+        { id: 'sonnet', label: 'Sonnet (latest)', efforts: every },
+        { id: 'haiku', label: 'Haiku (latest)', efforts: haiku },
+        { id: 'fable', label: 'Fable (latest)', efforts: [...every] },
     ];
 }
 

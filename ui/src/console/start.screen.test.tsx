@@ -109,6 +109,16 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
     });
 
+    it('says on the first screen that this interface is optional, and why', async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?', level: 1 }));
+        const note = screen.getByText(/This interface is optional/);
+        expect(note.textContent).toMatch(/terminal/);
+        expect(note.textContent).toMatch(/with your AI/);
+        expect(note.textContent).toMatch(/CLI and API/);
+        expect(note.textContent).not.toMatch(/agent/);
+    });
+
     it('takes the focus into the box when the window opens, and says why Start does nothing for an empty box', async () => {
         renderConsole(stubDesktop());
         await waitFor(() => expect(document.activeElement).toBe(box()));

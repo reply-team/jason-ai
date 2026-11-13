@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_released",
+  "version": 1,
+  "case": "an edit of the work's input withdrew the question it was waiting on; the approval_superseded line of the same save says so",
+  "body": { "key": "status", "old": "awaiting_approval", "new": "created" },
+  "expect": "valid"
+}

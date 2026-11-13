@@ -156,6 +156,56 @@ public class ApprovalGateTests
     }
 
     /// <summary>
+    /// Edited while the person was still being asked: the edit withdraws the question, and the claim — not the edit —
+    /// asks again, about what the item now says. The claim is the one that decides it, exactly as it decides any work
+    /// back in the queue whose earlier question is over, and the account is asked for nothing meanwhile.
+    /// </summary>
+    [Fact]
+    public async Task An_input_edited_while_the_question_is_open_is_asked_again_by_the_claim_under_the_new_subject()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WithCampaign(ProviderCampaign, "Autumn outreach", "Active");
+        workspace.WithCampaign("seq_9922", "Another campaign entirely", "Active");
+        await using var api = await StartAsync(workspace);
+        var (campaign, contact) = await WorkAsync(api);
+        var item = await ItemAsync(api, campaign, contact);
+        Assert.Equal(0, (await ScanAsync(api)).Claimed);
+        var first = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
+
+        var edited = await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemUpdate,
+            new { work_item_id = item, set = new JsonObject { ["input"] = Enrolment("seq_9922") }, actor = new { type = "human", id = "grace" } },
+            Ct);
+        Assert.Equal(WorkItemStatus.Created, edited.Status);
+        Assert.Empty((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
+
+        Assert.Equal(0, (await ScanAsync(api)).Claimed);
+
+        var read = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.AwaitingApproval, read.Status);
+        Assert.Empty(read.Attempts!);
+        Assert.Empty(workspace.Calls);
+
+        var second = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.NotEqual(first.SubjectHash, second.SubjectHash);
+
+        // The claim met work with no live decision and asked as it asks about any: its reason is the first ask's.
+        Assert.Equal("approval_required", second.Reason);
+        var asked = await api.PostOkAsync<ApprovalDto>(Operations.ApprovalGet, new { approval_id = second.Id }, Ct);
+        Assert.Equal("seq_9922", (string?)asked.Subject["input"]!["args"]!["campaign"]!["external_id"]);
+
+        var withdrawn = await api.PostOkAsync<ApprovalDto>(Operations.ApprovalGet, new { approval_id = first.Id }, Ct);
+        Assert.Equal(ApprovalStatus.Superseded, withdrawn.Status);
+        Assert.Equal("grace", withdrawn.DecidedBy!.Id);
+        Assert.Equal("input_changed", withdrawn.DecisionReason);
+
+        Assert.Equal(
+            ["workitem_created", "workitem_awaiting_approval", "approval_requested", "workitem_context_updated", "approval_superseded", "workitem_released", "workitem_awaiting_approval", "approval_requested"],
+            await KindsAsync(api, item));
+    }
+
+    /// <summary>
     /// The other half of what a due date means, and it needs no code of its own: the expirer runs before the
     /// claim in every scan, so work whose date passed while it waited for a person is given up on rather than
     /// run late. The decision was given; the work was simply too late to do.

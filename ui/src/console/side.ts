@@ -27,6 +27,7 @@ const icons: Readonly<Record<string, IconName>> = {
     performance: 'perf',
     workitems: 'work',
     system: 'ops',
+    accounts: 'plug',
     settings: 'gear',
 };
 
@@ -67,6 +68,7 @@ export function sideView(): Html {
             <img class="mark" src="${assets}favicon.svg" alt="" />
             <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
             <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+            <span class="alpha">Alpha</span>
         </div>
         ${
             feed === null
