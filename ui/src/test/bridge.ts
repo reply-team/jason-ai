@@ -26,6 +26,8 @@ export interface StandIn {
     asked: { path: string; member?: string; args?: unknown[]; origin?: string | null }[];
     /** Sends a line down the event stream. */
     push(line: unknown): void;
+    /** Ends the event stream from the bridge's side. */
+    end(): void;
     /** Makes the bridge forget the secret, as a closed desktop does. */
     forget(): void;
     /** Whether the code is spent: a second pairing with it fails. */
@@ -39,6 +41,7 @@ export function standInBridge(desktop: StubDesktop, port = 43210): StandIn {
         asked: [],
         spent: false,
         push: (line) => controller?.enqueue(encoder.encode(JSON.stringify(line) + '\n')),
+        end: () => controller?.close(),
         forget: () => {
             known = false;
         },

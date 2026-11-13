@@ -131,3 +131,34 @@ describe('the events', () => {
         bridge.close();
     });
 });
+
+describe('what the bridge answers besides a result', () => {
+    it("carries a handler's refusal as a value, the way the window gets it", async () => {
+        const refusal = { refused: 'This chat is in Full access.' };
+        const fetched = vi.fn(async () => Response.json({ result: refusal }));
+        await expect(new Bridge(pair, fetched as never).seam().chat.send('c', 'x', {} as never)).resolves.toEqual(
+            refusal,
+        );
+    });
+
+    it('says a handler failure with its own message, and a refused member with the table sentence', async () => {
+        const failing = vi.fn(async () => Response.json({ error: 'Could not read the chat.' }, { status: 500 }));
+        await expect(new Bridge(pair, failing as never).call('chat.list')).rejects.toThrow('Could not read the chat.');
+        const refusing = vi.fn(async () => new Response('', { status: 403 }));
+        await expect(new Bridge(pair, refusing as never).call('chat.list')).rejects.toThrow(notInTab);
+    });
+
+    it('opens the stream again when the bridge ends it, and says so to those who read anew', async () => {
+        const desktop = stubDesktop();
+        const stand = standInBridge(desktop);
+        const bridge = new Bridge(pair, stand.fetch, undefined, 5);
+        const reopened = vi.fn();
+        bridge.onReopen(reopened);
+        bridge.seam().chat.onEvent(() => undefined);
+        await vi.waitFor(() => expect(stand.asked.filter((each) => each.path === '/events')).toHaveLength(1));
+        stand.end();
+        await vi.waitFor(() => expect(reopened).toHaveBeenCalledTimes(1));
+        await vi.waitFor(() => expect(stand.asked.filter((each) => each.path === '/events')).toHaveLength(2));
+        bridge.close();
+    });
+});

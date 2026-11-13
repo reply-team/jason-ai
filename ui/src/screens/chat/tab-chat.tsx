@@ -5,7 +5,7 @@ import { ChatPanel, openConversation, reloadConversations, startChat } from '../
 import { received } from '../../console/chat-model';
 import * as campaigns from '../../console/campaigns';
 import * as connect from '../../console/connect';
-import { bind, changeChat, conversations, conversationsFailure, type Dock } from '../../console/state';
+import { bind, changeChat, chats, conversations, conversationsFailure, type Dock } from '../../console/state';
 import { asDesktop, type Bridge } from '../../platform/bridge';
 import { followStanding } from '../../platform/full-access';
 import { t } from '../../platform/i18n';
@@ -42,6 +42,14 @@ export function TabChat({ bridge }: { bridge: Bridge }) {
                 if (listChanged.has(event.kind)) void reloadConversations();
             }),
             desktop.setup.onChanged(() => void connect.reload()),
+            // The event stream was cut and opened again: what the tab drew may be behind, so every chat is read anew.
+            bridge.onReopen(() => {
+                const held = Object.keys(chats.value);
+                chats.value = {};
+                void reloadConversations();
+                void connect.reload();
+                for (const id of held) void openConversation(id);
+            }),
         ];
         void campaigns.reload();
         void connect.reload();

@@ -44,6 +44,8 @@ type Fetch = typeof fetch;
 /** The bridge's address and a call over it, for one pair. */
 export class Bridge {
     private readonly listeners = new Map<string, Set<Listener>>();
+    private readonly reopened = new Set<() => void>();
+    private closed = false;
     private stream: AbortController | null = null;
 
     constructor(
@@ -51,6 +53,7 @@ export class Bridge {
         private readonly doFetch: Fetch = (...args) => fetch(...args),
         /** Called once when the bridge says it no longer knows the secret. */
         private readonly onGone: () => void = () => undefined,
+        private readonly reopenAfterMs = 1000,
     ) {}
 
     private get base(): string {
@@ -69,9 +72,14 @@ export class Bridge {
             this.onGone();
             throw new BridgeGone();
         }
-        const body = (await response.json().catch(() => ({}))) as { result?: unknown; refused?: unknown };
+        const body = (await response.json().catch(() => ({}))) as {
+            result?: unknown;
+            refused?: unknown;
+            error?: unknown;
+        };
         if (typeof body.refused === 'string') throw new Error(body.refused);
-        if (!response.ok) throw new Error(notInTab);
+        if (response.status === 403) throw new Error(notInTab);
+        if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : notInTab);
         return body.result ?? null;
     }
 
@@ -89,6 +97,7 @@ export class Bridge {
         let set = this.listeners.get(channel);
         if (!set) this.listeners.set(channel, (set = new Set()));
         set.add(listener);
+        this.closed = false;
         void this.listen();
         return () => {
             set.delete(listener);
@@ -96,8 +105,18 @@ export class Bridge {
         };
     }
 
+    /**
+     * Calls `handler` each time the event stream ended without being closed and was opened again: what the tab drew
+     * may have missed events, so it reads its conversations anew.
+     */
+    onReopen(handler: () => void): () => void {
+        this.reopened.add(handler);
+        return () => this.reopened.delete(handler);
+    }
+
     /** Ends the event stream. */
     close(): void {
+        this.closed = true;
         this.stream?.abort();
         this.stream = null;
     }
@@ -127,6 +146,13 @@ export class Bridge {
             // A closed or broken stream ends the events; the tab opens again to read the conversation anew.
         } finally {
             if (this.stream === stream) this.stream = null;
+        }
+        // The bridge ended the stream (a full queue, or a second stream): open it again and say so.
+        if (!stream.signal.aborted && !this.closed && [...this.listeners.values()].some((each) => each.size > 0)) {
+            await new Promise((resolve) => setTimeout(resolve, this.reopenAfterMs));
+            if (this.closed || this.stream) return;
+            void this.listen();
+            for (const handler of this.reopened) handler();
         }
     }
 
