@@ -507,8 +507,15 @@ describe('Plan only’s plan card', () => {
     const go = 'Go ahead with the plan in your last answer.';
 
     /** Puts the chat in Plan only, sends a turn, and ends it as the desktop ends a Plan only turn with a plan. */
-    async function planned(desktop: StubDesktop, words = hostile, mark = true): Promise<string> {
+    const codexWords =
+        'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
+    const otherHost =
+        'This plan came from another agent host; the one this chat is on now never saw it. Ask for the plan again to approve it.';
+
+    async function planned(desktop: StubDesktop, words = hostile, mark = true, host?: string): Promise<string> {
         await waitFor(() => menu());
+        if (host !== undefined)
+            fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: host } });
         choose('plan_only');
         await waitFor(() => expect(menu().value).toBe('plan_only'));
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Plan it' } });
@@ -635,18 +642,36 @@ describe('Plan only’s plan card', () => {
         expect(chats.value[id]!.running).toBe(false);
     });
 
-    it('on Codex says the approved plan still only reads, naming Claude Code, and follows a change of host', async () => {
+    it('on Codex says the approved plan still only reads, naming Claude Code, and sends the go to Codex', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = renderConsole(chatDesktop(status));
+        const id = await planned(desktop, hostile, true, 'codex');
+        await waitFor(() => expect(card()).not.toBeNull());
+        expect(card()!.textContent).toContain(codexWords);
+        fireEvent.click(approve()!);
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
+        expect(calls(desktop, 'chat.setMode').at(-1)!.args).toEqual([id, 'ask_first', 'codex']);
+        expect(calls(desktop, 'chat.send')[1]!.args).toEqual([id, go, { host: 'codex', mode: 'ask_first' }]);
+    });
+
+    it('a plan another host made is no card to approve: it says to ask for the plan again, until the chat is back on that host', async () => {
         const status = structuredClone(setupFound);
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         const desktop = renderConsole(chatDesktop(status));
         await planned(desktop);
-        await waitFor(() => expect(card()).not.toBeNull());
-        const codexWords =
-            'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
-        expect(card()!.textContent).not.toContain(codexWords);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        const before = calls(desktop, 'chat.setMode').length;
         fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
-        await waitFor(() => expect(card()!.textContent).toContain(codexWords));
-        expect(approve()).not.toBeNull();
+        await waitFor(() => expect(card()!.textContent).toContain(otherHost));
+        expect(approve()).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Keep planning' })).toBeNull();
+        expect(card()!.textContent).not.toContain(codexWords);
+        expect(card()!.querySelector('.plan-text')!.textContent).toBe(hostile);
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+        await waitFor(() => expect(approve()).not.toBeNull());
+        expect(card()!.textContent).not.toContain(otherHost);
+        expect(calls(desktop, 'chat.setMode').length).toBe(before);
     });
 
     it('Keep planning puts the card aside, keeps Plan only, asks the desktop nothing and gives the box the focus', async () => {

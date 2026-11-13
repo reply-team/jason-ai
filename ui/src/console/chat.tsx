@@ -19,6 +19,7 @@ import {
     hostChosen,
     kept,
     livePlan,
+    planElsewhere,
     lost,
     modeChoices,
     moded,
@@ -30,6 +31,7 @@ import {
     sendHeld,
     pickedFor,
     planApproved,
+    planOtherHost,
     planGo,
     planLine,
     codexPlanLine,
@@ -277,9 +279,8 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
  */
 export function approvePlan(id: string): void {
     const chat = chats.value[id];
-    if (!chat || !livePlan(chat)) return;
-    const host = hostOf(chat);
-    if (!host) return;
+    const host = chat ? hostOf(chat) : null;
+    if (!chat || !host || !livePlan(chat, host.id)) return;
     changeChat(id, (each) => ({ ...each, plan: 'approving' }));
     here()
         .desktop.chat.setMode(id, 'ask_first', host.id)
@@ -356,7 +357,8 @@ export function sendTurn(id: string, text: string, resent = false, mode?: Deskto
         return;
     }
     // A chat that named no host yet is on the one its turn runs on from now, so a hold on that host later holds the chat.
-    changeChat(id, (each) => said(each.host === null ? { ...each, host: host.id } : each, words, resent));
+    // The host the turn goes to is the one whose session has its answer, a plan included (`livePlan`).
+    changeChat(id, (each) => said({ ...each, host: each.host ?? host.id, turnHost: host.id }, words, resent));
     here()
         .desktop.chat.send(id, words, { ...turnOptions(onHost(chat, host.id), host), ...(mode ? { mode } : {}) })
         .then((answer) => {
@@ -389,7 +391,7 @@ define('chat.approvePlan', ([id]) => {
 define('chat.keepPlanning', ([id], element) => {
     if (typeof id !== 'string') return;
     const chat = chats.value[id];
-    if (!chat || !livePlan(chat)) return;
+    if (!chat || !livePlan(chat, hostOf(chat)?.id ?? null)) return;
     // The box is found before the thread is drawn again, which takes the pressed button out of the page.
     const box = element.closest('.chat-panel')?.querySelector<HTMLTextAreaElement>('textarea');
     changeChat(id, (each) => ({ ...each, plan: 'kept' }));
@@ -473,21 +475,24 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
 /**
  * A Plan only turn's plan, as a card: its words drawn as text, never as markup; a line saying what Approve and run does
  * on the host the go would go to now; and, while the card is live (`livePlan`), its two buttons. A card of the past,
- * approved or put aside, keeps the words and drops the buttons.
+ * approved or put aside, keeps the words and drops the buttons; one another host made says to ask for the plan again.
  */
 function planCard(chat: Chat, entry: Extract<Entry, { kind: 'text' }>, host: DesktopHost | null): Html {
     const last = entry === chat.entries.at(-1);
-    const live = last && host !== null && livePlan(chat);
+    const live = last && livePlan(chat, host?.id ?? null);
+    const elsewhere = last && planElsewhere(chat, host?.id ?? null);
     const approving = last && chat.plan === 'approving';
     // Only one plan is marked at a time, so the approved one is this one, whatever was said after it.
     const line =
         chat.plan === 'approved'
             ? planApproved
-            : live || approving
-              ? host !== null && codexHosts.has(host.id)
-                  ? codexPlanLine
-                  : planLine
-              : null;
+            : elsewhere
+              ? planOtherHost
+              : live || approving
+                ? host !== null && codexHosts.has(host.id)
+                    ? codexPlanLine
+                    : planLine
+                : null;
     return html`<div class="ask chat-plan">
         <div class="ask-h">${svg('journal', 14)}<b>Plan</b></div>
         <div class="said plan-text">${entry.text}</div>

@@ -34,6 +34,8 @@ import {
     afresh,
     codexPlanLine,
     livePlan,
+    planElsewhere,
+    planOtherHost,
     moded,
     planApproved,
     planGo,
@@ -665,6 +667,7 @@ describe('Plan only’s plan card, as the page keeps it', () => {
     const planning = (fields: Partial<Chat> = {}): Chat => ({
         ...newChat('c1', 'claude'),
         mode: 'plan_only',
+        turnHost: 'claude',
         ...fields,
     });
     /** A Plan only turn that ended well with these words last, as the desktop says it. */
@@ -680,18 +683,18 @@ describe('Plan only’s plan card, as the page keeps it', () => {
     it('marks the turn’s last words a plan only when the desktop says so, and live while nothing came after them', () => {
         const chat = planned(planning(), 'Read the replies first.');
         expect(chat.entries.at(-1)).toEqual({ kind: 'text', text: 'Read the replies first.', plan: true });
-        expect(livePlan(chat)).toBe(true);
+        expect(livePlan(chat, 'claude')).toBe(true);
         // A turn's end without the mark marks nothing: an older desktop, or a turn that was no plan.
         const plain = received(received(said(planning(), 'hi'), { kind: 'text', text: 'Hi' }), {
             kind: 'done',
             error: null,
         });
         expect(marks(plain)).toEqual([]);
-        expect(livePlan(plain)).toBe(false);
+        expect(livePlan(plain, 'claude')).toBe(false);
         // Nor for the Feed, whatever the desktop says.
         const feed = planned(planning({ main: true }), 'A plan');
         expect(marks(feed)).toEqual([]);
-        expect(livePlan(feed)).toBe(false);
+        expect(livePlan(feed, 'claude')).toBe(false);
         // Nor where the turn’s last thing was no words.
         const stepped = received(received(said(planning(), 'go'), { kind: 'step', text: 'Read a file' }), {
             kind: 'done',
@@ -709,17 +712,17 @@ describe('Plan only’s plan card, as the page keeps it', () => {
         expect(marks(failedLater)).toEqual([]);
 
         const chat = planned(planning(), 'Plan');
-        expect(livePlan(told(chat, 'A refusal.'))).toBe(false);
-        expect(livePlan(afresh(chat))).toBe(false);
-        expect(livePlan(said(chat, 'Something else'))).toBe(false);
-        expect(livePlan({ ...chat, running: true })).toBe(false);
-        expect(livePlan({ ...chat, waiting: 'later' })).toBe(false);
-        expect(livePlan({ ...chat, plan: 'kept' })).toBe(false);
-        expect(livePlan({ ...chat, plan: 'approving' })).toBe(false);
+        expect(livePlan(told(chat, 'A refusal.'), 'claude')).toBe(false);
+        expect(livePlan(afresh(chat), 'claude')).toBe(false);
+        expect(livePlan(said(chat, 'Something else'), 'claude')).toBe(false);
+        expect(livePlan({ ...chat, running: true }, 'claude')).toBe(false);
+        expect(livePlan({ ...chat, waiting: 'later' }, 'claude')).toBe(false);
+        expect(livePlan({ ...chat, plan: 'kept' }, 'claude')).toBe(false);
+        expect(livePlan({ ...chat, plan: 'approving' }, 'claude')).toBe(false);
         // Leaving Plan only ends the card, as the desktop ends it: back in Plan only it is no card.
         const left = moded(chat, 'ask_first');
         expect(marks(left)).toEqual([]);
-        expect(livePlan(moded(left, 'plan_only'))).toBe(false);
+        expect(livePlan(moded(left, 'plan_only'), 'claude')).toBe(false);
         expect(marks(received(chat, { kind: 'mode', mode: 'full_access' }))).toEqual([]);
     });
 
@@ -728,7 +731,7 @@ describe('Plan only’s plan card, as the page keeps it', () => {
         const approving = received({ ...chat, plan: 'approving' }, { kind: 'mode', mode: 'ask_first' });
         expect(marks(approving)).toEqual([approving.entries.length - 1]);
         const approved = moded({ ...approving, plan: 'approved' }, 'ask_first');
-        expect(livePlan(approved)).toBe(false);
+        expect(livePlan(approved, 'claude')).toBe(false);
         const going = said(approved, planGo);
         const over = received(received(going, { kind: 'text', text: 'Done.' }), { kind: 'done', error: null });
         expect(marks(over)).toEqual([]);
@@ -748,13 +751,33 @@ describe('Plan only’s plan card, as the page keeps it', () => {
                 { kind: 'user', text: 'Plan it' },
                 { kind: 'text', text: 'The plan', plan: true },
             ],
-            chosen: null,
+            chosen: { host: 'claude', model: null, effort: null },
         };
         const chat = fromRecord(record, 'claude');
         expect(chat.entries.at(-1)).toEqual({ kind: 'text', text: 'The plan', plan: true });
         expect(chat.plan).toBeNull();
-        expect(livePlan(chat)).toBe(true);
-        expect(livePlan(fromRecord({ ...record, mode: 'ask_first' }, 'claude'))).toBe(false);
+        expect(livePlan(chat, 'claude')).toBe(true);
+        expect(livePlan(fromRecord({ ...record, mode: 'ask_first' }, 'claude'), 'claude')).toBe(false);
+        // The plan's host is the one the record says the last turn went to.
+        expect(fromRecord(record, 'codex').turnHost).toBe('claude');
+        expect(livePlan(fromRecord({ ...record, chosen: null }, 'claude'), 'claude')).toBe(false);
+    });
+
+    it('is the plan of the host that made it alone: on another host it is no card to approve, until the chat is back on it', () => {
+        const chat = planned(planning(), 'Plan');
+        expect(livePlan(chat, 'claude')).toBe(true);
+        expect(planElsewhere(chat, 'claude')).toBe(false);
+        expect(livePlan(chat, 'codex')).toBe(false);
+        expect(planElsewhere(chat, 'codex')).toBe(true);
+        // No host found is neither: there is nothing to send the go to.
+        expect(livePlan(chat, null)).toBe(false);
+        expect(planElsewhere(chat, null)).toBe(false);
+        // A plan of the past is no plan elsewhere either.
+        expect(planElsewhere({ ...chat, plan: 'kept' }, 'codex')).toBe(false);
+        expect(planElsewhere(said(chat, 'More'), 'codex')).toBe(false);
+        expect(planOtherHost).toBe(
+            'This plan came from another agent host; the one this chat is on now never saw it. Ask for the plan again to approve it.',
+        );
     });
 
     it('says its sentences as ruled', () => {

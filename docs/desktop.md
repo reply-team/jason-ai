@@ -329,8 +329,9 @@ When a Plan only turn ends with an answer, the answer is shown as a plan card, a
 your last answer." as your message; it never enters Auto-edit or Full access, and if the chat's mode changed in between,
 from the menu or by a Full access box answered meanwhile, nothing is sent and the chat says so. The card is offered only
 while the plan is the chat's last word and the chat is still in Plan only, so a plan approved, or followed by another
-turn, is not offered again, after a reload or a restart either. Keep planning leaves the chat in Plan only and puts the
-cursor in the message box. On Codex the card says that the approved plan still only reads and that Claude Code carries
+turn, is not offered again, after a reload or a restart either. It is offered only on the agent host that made the
+plan: on another one, which never saw it, the card says to ask for the plan again. Keep planning leaves the chat in Plan
+only and puts the cursor in the message box. On Codex the card says that the approved plan still only reads and that Claude Code carries
 it out. The Feed has no plan card.
 
 **Auto-edit** is Ask first, except that six file commands run without a card when every path they name is inside the

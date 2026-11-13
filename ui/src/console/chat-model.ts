@@ -103,6 +103,11 @@ export interface Chat {
      * approved, or kept planning; null when they did neither. Never kept: a reopened page reads the desktop's mark alone.
      */
     plan: 'approving' | 'approved' | 'kept' | null;
+    /**
+     * The host the chat's last turn was sent to, as the desktop kept it (`chosen`); null before any. A plan is the answer
+     * of that host's session alone: another host's session never saw it (`livePlan`).
+     */
+    turnHost: string | null;
 }
 
 /** How much of a set-up chat's first message names it, as the desktop names it. */
@@ -143,6 +148,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         renaming: null,
         mode: 'ask_first',
         plan: null,
+        turnHost: null,
     };
 }
 
@@ -194,6 +200,7 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         running: record.running,
         // A desktop of an earlier version keeps no mode: its chats run as Ask first.
         mode: record.mode ?? 'ask_first',
+        turnHost: chosen?.host ?? null,
     };
 }
 
@@ -210,6 +217,10 @@ export const codexPlanLine =
 
 /** The plan card's line once it was approved in this page. */
 export const planApproved = 'Approved: the chat is in Ask first.';
+
+/** The plan card's line, with no buttons, while the chat is on another host than the one that made the plan. */
+export const planOtherHost =
+    'This plan came from another agent host; the one this chat is on now never saw it. Ask for the plan again to approve it.';
 
 /** Why the plan's go was not sent: the chat was in another mode by the time it was approved, as the desktop says it. */
 export const planModeMoved = "The chat's mode changed before the plan was approved, so nothing was sent.";
@@ -232,11 +243,22 @@ export function moded(chat: Chat, mode: DesktopChatMode): Chat {
 }
 
 /**
- * Whether the chat's plan card may be approved now: its last entry is a plan the desktop marked, the chat is still in
- * Plan only, no turn runs, nothing waits to be sent, it is not the Feed, and the person has neither approved it nor kept
- * planning. Anything after the plan, a message, an error or a note, makes it a plan of the past.
+ * Whether the chat's plan card may be approved now, with the go sent to `host`: its last entry is a plan the desktop
+ * marked, the chat is still in Plan only, no turn runs, nothing waits to be sent, it is not the Feed, the person has
+ * neither approved it nor kept planning, and `host` is the host that made it. Anything after the plan, a message, an
+ * error or a note, makes it a plan of the past; another host makes it one that host never saw (`planElsewhere`).
  */
-export function livePlan(chat: Chat): boolean {
+export function livePlan(chat: Chat, host: string | null): boolean {
+    return planStands(chat) && host !== null && host === chat.turnHost;
+}
+
+/** Whether the chat's plan would be live but `host` is not the host that made it: the card says to ask for it again. */
+export function planElsewhere(chat: Chat, host: string | null): boolean {
+    return planStands(chat) && host !== null && host !== chat.turnHost;
+}
+
+/** `livePlan` on whichever host. */
+function planStands(chat: Chat): boolean {
     const last = chat.entries.at(-1);
     return (
         last?.kind === 'text' &&

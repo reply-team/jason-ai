@@ -279,7 +279,8 @@ applies to the turns a person starts by sending, from the next one on.
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
   it stays with the chat after a restart, an update and Start afresh. A Plan only turn that ends with no error, not
   stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
-  the turn's `done`; an older page or desktop ignores the field. The mark goes from every entry at each turn's end, at
+  the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
+  fits them to the record takes the mark off. The mark goes from every entry at each turn's end, at
   Start afresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
   send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
   any host starts.
