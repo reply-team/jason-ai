@@ -188,14 +188,14 @@ public static class DomainErrors
 
     /// <summary>
     /// A campaign route write refused because it would leave sends the provider still holds for a moment to come with no
-    /// route to the account each ran under. The details name each send; nothing was written and the routes in force stay
-    /// active.
+    /// route to the account each ran under. Each detail covers one campaign's sends at one account; nothing was written
+    /// and the routes in force stay active.
     /// </summary>
     public static DomainException RouteOrphansSend(IReadOnlyList<ErrorDetail> details) =>
         new(
             StatusCodes.Status409Conflict,
             Routing.RouteProblemCodes.OrphansSend,
-            string.Create(CultureInfo.InvariantCulture, $"The route change was refused: {details.Count} send(s) still held for a later moment would have no route to the account each ran under; the routes in force stay active."),
+            string.Create(CultureInfo.InvariantCulture, $"The route change was refused: sends still held for a later moment at {details.Count} account(s) would have no route to the account they ran under; the routes in force stay active."),
             retryable: false,
             details);
 

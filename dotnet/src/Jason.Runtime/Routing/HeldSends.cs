@@ -8,7 +8,9 @@ namespace Jason.Runtime.Routing;
 
 /// <summary>
 /// The sends a route change must not strand: a send of a campaign that is not archived, which succeeded with the
-/// provider's reference, whose arguments name a <c>send_after</c> still to come, and which no succeeded cancel names. Its
+/// provider's reference, whose arguments name a <c>send_after</c> still to come, which no succeeded cancel names, and whose
+/// own result does not say the provider cannot cancel it (<c>cancelable: false</c>; a result that says nothing either way
+/// holds, since the provider may still cancel it). Its
 /// cancel and its status read go only where it ran (<see cref="RouteResolver.ForSend"/>), so while the provider holds it
 /// for that moment a route naming that plugin and account is what keeps it cancellable. All of it is the runtime's own
 /// record: the send's work item, the latest succeeded attempt's provenance and the campaign's cancels; nothing is asked of
@@ -40,6 +42,7 @@ internal static class HeldSends
           AND s.operation IN (SELECT value FROM json_each({0}))
           AND json_type(s.context_json, '$.input.send_after') = 'text'
           AND json_extract(a.provenance_json, '$.external_ids_returned.send') IS NOT NULL
+          AND json_type(s.result_json, '$.items[0].cancelable') IS NOT 'false'
           AND NOT EXISTS (
               SELECT 1 FROM work_items AS k
               WHERE k.campaign_id = s.campaign_id AND k.operation = {1} AND k.status = 'succeeded'
@@ -59,19 +62,26 @@ internal static class HeldSends
         ArgumentNullException.ThrowIfNull(db);
 
         var rows = await db.Database.SqlQueryRaw<HeldSendRow>(Sql, Makers, Cancel).ToListAsync(ct).ConfigureAwait(false);
-        return
-        [
-            .. rows
-                .Where(row => row.PluginId is not null
-                    && DateTimeOffset.TryParse(row.SendAfter, CultureInfo.InvariantCulture, DateTimeStyles.None, out var moment)
-                    && moment > now)
-                .Select(row => new HeldSend(row.Campaign, row.WorkItem, row.Operation, row.SendAfter, row.PluginId!, row.BindingIdentity)),
-        ];
+        var held = new List<HeldSend>();
+        foreach (var row in rows)
+        {
+            if (row.PluginId is { } plugin
+                && DateTimeOffset.TryParse(row.SendAfter, CultureInfo.InvariantCulture, DateTimeStyles.None, out var moment)
+                && moment > now)
+            {
+                held.Add(new HeldSend(row.Campaign, row.WorkItem, row.Operation, moment, plugin, row.BindingIdentity));
+            }
+        }
+
+        return held;
     }
 }
 
-/// <summary>A send a route change must not strand: its campaign, its work item and operation, its moment, and where it ran.</summary>
-internal sealed record HeldSend(string Campaign, string WorkItem, string Operation, string SendAfter, string PluginId, string? BindingIdentity);
+/// <summary>
+/// A send a route change must not strand: its campaign, its work item and operation, the moment it is held for, and where
+/// it ran. Nothing the send says to a person is kept here: not its recipient, its subject or its text.
+/// </summary>
+internal sealed record HeldSend(string Campaign, string WorkItem, string Operation, DateTimeOffset Moment, string PluginId, string? BindingIdentity);
 
 /// <summary>One row of the read, before its moment is compared.</summary>
 internal sealed record HeldSendRow(string Campaign, string WorkItem, string Operation, string SendAfter, string? PluginId, string? BindingIdentity);

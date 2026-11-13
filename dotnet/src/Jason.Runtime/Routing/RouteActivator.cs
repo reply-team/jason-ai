@@ -172,26 +172,37 @@ public sealed class RouteActivator(
     /// plugin and account it ran under. So a send the provider still holds for a moment to come, with no succeeded cancel
     /// (<see cref="HeldSends"/>), that the routes active now reach and <paramref name="candidate"/> would not is a problem
     /// of the set: it would go out at its moment with nowhere to cancel it. A send the active routes do not reach either
-    /// is not this change's doing, and refuses nothing.
+    /// is not this change's doing, and refuses nothing. The sends of one campaign held at one plugin and account are one
+    /// problem, named by the latest of them, saying how many there are, the latest moment among them and the two ways
+    /// out; it names them by their work items and says nothing a send says to a person.
     /// </summary>
     private async Task KeepSendsAsync(RouteSnapshot candidate, List<ErrorDetail> problems, CancellationToken cancellationToken)
     {
         var active = registry.Snapshot;
         var sends = await HeldSends.ReadAsync(db, clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        var stranded = sends
+            .Where(send => !Reaches(candidate, send) && Reaches(active, send))
+            .GroupBy(send => (send.Campaign, send.PluginId, send.BindingIdentity));
 
-        foreach (var send in sends)
+        foreach (var held in stranded)
         {
-            if (Reaches(candidate, send) || !Reaches(active, send))
-            {
-                continue;
-            }
-
+            var ordered = held.OrderBy(send => send.Moment).ThenBy(send => send.WorkItem, StringComparer.Ordinal).ToList();
+            var latest = ordered[^1];
+            var until = latest.Moment.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+            var named = ordered.Count <= ListedSends
+                ? string.Join(", ", ordered.Select(send => send.WorkItem))
+                : string.Join(", ", ordered.TakeLast(ListedSends).Select(send => send.WorkItem)) + string.Create(CultureInfo.InvariantCulture, $" and {ordered.Count - ListedSends} more");
             problems.Add(new ErrorDetail(
-                SendField(send.Campaign, send.WorkItem),
+                SendField(held.Key.Campaign, latest.WorkItem),
                 RouteProblemCodes.OrphansSend,
-                $"campaign '{send.Campaign}' holds send {send.WorkItem}, which ran at '{send.PluginId}' under an account neither the campaign's other routes nor the global ones would name, and the provider holds it for {send.SendAfter}, so its cancel and its status read would have nowhere to go before it goes out. Cancel it with {HeldSends.Cancel}, or let its moment pass, then change the route."));
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"campaign '{held.Key.Campaign}' holds {ordered.Count} send(s) ({named}) that ran at '{held.Key.PluginId}' under an account neither the campaign's other routes nor the global ones would name, and the provider holds the latest of them until {until}, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}, or change the route after {until}.")));
         }
     }
+
+    /// <summary>How many of the stranded sends a problem names by their work items: the latest ones, the rest counted.</summary>
+    private const int ListedSends = 5;
 
     /// <summary>
     /// Whether a cancel and a status read of the send would both find the very plugin and binding it ran under. The send's
