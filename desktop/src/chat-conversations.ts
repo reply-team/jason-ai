@@ -23,7 +23,8 @@ export type KeptAnswer = 'allow' | 'always' | 'deny' | 'gone';
  */
 export type KeptEntry =
     | { kind: 'user'; text: string }
-    | { kind: 'text'; text: string }
+    /** `plan` present, and true, on the last words of a Plan only turn that ended well while they are its live plan. */
+    | { kind: 'text'; text: string; plan?: true }
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: KeptAnswer | null }
     | { kind: 'error'; text: string }
@@ -114,9 +115,12 @@ function entryOf(value: unknown): KeptEntry | null {
     const entry = value as Record<string, unknown>;
     switch (entry.kind) {
         case 'user':
-        case 'text':
         case 'error':
             return isText(entry.text) ? { kind: entry.kind, text: entry.text } : null;
+        // A plan's mark is read only as true; any other value is no mark, and the words stand.
+        case 'text':
+            if (!isText(entry.text)) return null;
+            return entry.plan === true ? { kind: 'text', text: entry.text, plan: true } : { kind: 'text', text: entry.text };
         case 'step':
             if (!isText(entry.text)) return null;
             if (entry.detail === undefined) return { kind: 'step', text: entry.text };
@@ -248,10 +252,14 @@ function fitted(text: string): string {
 function fittedEntry(entry: KeptEntry): KeptEntry {
     switch (entry.kind) {
         case 'user':
-        case 'text':
         case 'error': {
             const text = fitted(entry.text);
             return text === entry.text ? entry : { kind: entry.kind, text };
+        }
+        case 'text': {
+            // A plan cut to fit is no plan: the person would approve words they cannot read whole.
+            const text = fitted(entry.text);
+            return text === entry.text ? entry : { kind: 'text', text };
         }
         case 'step': {
             const text = fitted(entry.text);

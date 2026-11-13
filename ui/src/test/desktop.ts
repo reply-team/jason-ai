@@ -388,7 +388,12 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 if (!record) return notKept;
                 // The desktop refuses what it does not pass to a host with a `done` that says why, and keeps nothing.
                 const { host, model, effort } = options as DesktopChatOptions;
-                const why = refusalOf(stub.status, options as DesktopChatOptions);
+                // A send approved for one mode is refused, as the desktop refuses it, while the chat is in another.
+                const approvedFor = (options as DesktopChatOptions).mode;
+                const why =
+                    approvedFor !== undefined && approvedFor !== record.mode
+                        ? "The chat's mode changed before the plan was approved, so nothing was sent."
+                        : refusalOf(stub.status, options as DesktopChatOptions);
                 if (why !== null) {
                     chatHandlers.forEach((handler) => handler(record.id, { kind: 'done', error: why }));
                     return null;

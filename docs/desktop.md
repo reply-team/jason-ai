@@ -324,6 +324,16 @@ passes only the allowed verbs that read, Claude Code starts in its plan mode wit
 other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
 refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
 
+When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
+**Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
+your last answer." as your message; it never enters Auto-edit or Full access, and if the chat's mode changed in between,
+from the menu or by a Full access box answered meanwhile, nothing is sent and the chat says so. The card is offered only
+while the plan is the chat's last word and the chat is still in Plan only, so a plan approved, or followed by another
+turn, is not offered again, after a reload or a restart either. It is offered only on the agent host that made the
+plan: on another one, which never saw it, the card says to ask for the plan again. Keep planning leaves the chat in Plan
+only and puts the cursor in the message box. On Codex the card says that the approved plan still only reads and that Claude Code carries
+it out. The Feed has no plan card.
+
 **Auto-edit** is Ask first, except that six file commands run without a card when every path they name is inside the
 chat's own folder: `mkdir`, `touch`, `mv`, `cp`, `rm` and `rmdir`, read word by word by Jason, never by the host's own
 accept-edits mode. Such a command runs only when every part of it is one of the six with only the options Jason lists
