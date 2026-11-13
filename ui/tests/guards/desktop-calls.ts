@@ -6,6 +6,10 @@ import ts from 'typescript';
 // page's source as TypeScript and holds every use of a member of that object to it: a member the bridge carries needs
 // nothing more; any other stands behind the question, in a branch, a function or a wrapper that names that member. The
 // members' list is the seam's own declaration, `JasonDesktop` in `src/platform/desktop.d.ts`, so it cannot drift.
+//
+// Its limit, in plain words: a function that asks `can('<member>')` anywhere in its body counts as behind the question
+// for every use of that member in that function, before the use or after it. So the guard holds the intent, that each
+// use has its question, and a reader holds the placement, that the question comes first and decides the use.
 
 export interface Members {
     /** The parts of the object and their members: `chat` and its `send`. */

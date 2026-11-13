@@ -83,6 +83,23 @@ describe('what each place can do', () => {
     });
 });
 
+describe('the Connect cards', () => {
+    it('draw all their acts by one question, which holds while no act of setup is in the bridge table', () => {
+        const acts = [...(members.parts.get('setup') ?? [])]
+            .filter((each) => !['status', 'onChanged'].includes(each))
+            .map((each) => `setup.${each}`);
+        expect(acts.length).toBeGreaterThan(10);
+        for (const act of acts) {
+            expect(
+                canIn('tab', act as DesktopMember),
+                `${act} entered the bridge table: the Connect cards then need a question per control, not one for all`,
+            ).toBe(false);
+        }
+        // The one question the cards ask stands for all of them.
+        expect(canIn('tab', 'setup.connectReply')).toBe(false);
+    });
+});
+
 describe('the object of a tab with a bridge', () => {
     it('has every member of the desktop, the whole shape', () => {
         const { desktop } = tabOver();
