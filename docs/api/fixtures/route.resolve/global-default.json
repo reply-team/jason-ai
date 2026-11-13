@@ -20,6 +20,7 @@
     "plugin_snapshot_id": "snp_1",
     "operation_version": 1,
     "usable": true,
-    "problems": []
+    "problems": [],
+    "channel": null
   }
 }

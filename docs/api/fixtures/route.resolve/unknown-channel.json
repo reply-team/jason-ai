@@ -1,0 +1,24 @@
+{
+  "operation": "route.resolve",
+  "case": "unknown-channel",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": "message.send",
+    "channel": "sms"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: channel: route_channel_unknown.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "channel",
+          "code": "route_channel_unknown",
+          "message": "'sms' is not a channel 'message.send' routes by; its argument 'channel' allows 'email', 'linkedin'."
+        }
+      ]
+    }
+  }
+}

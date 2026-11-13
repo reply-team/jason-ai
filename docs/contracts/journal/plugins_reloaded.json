@@ -49,11 +49,11 @@
                 "type": ["string", "null"],
                 "description": "The plugin the global default route names, or null where there is none."
               },
-              "override_count": { "type": "integer", "minimum": 0, "description": "How many global operation overrides there are." },
+              "override_count": { "type": "integer", "minimum": 0, "description": "How many global operation overrides there are, the global channel routes under an operation among them." },
               "campaign_route_count": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "How many campaign routes there are, each campaign's default and operation overrides together."
+                "description": "How many campaign routes there are, each campaign's default, operation overrides and channel routes together."
               }
             }
           },

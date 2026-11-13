@@ -866,8 +866,15 @@ public static partial class DoctorComposer
 
     // ---- runtime -------------------------------------------------------------------------------------------------
 
-    /// <summary>One route as a bundle carries it: the operation, or <c>default</c>; the plugin; and whether it binds an account.</summary>
-    private sealed record RouteShown(string Operation, string PluginId, bool BindsAccount);
+    /// <summary>
+    /// One route as a bundle carries it: the operation, or <c>default</c>; the plugin; and whether it binds an account. A
+    /// channel route says its channel beside its operation, and a route of an operation's own says nothing of one.
+    /// </summary>
+    private sealed record RouteShown(
+        string Operation,
+        string PluginId,
+        bool BindsAccount,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Channel = null);
 
     /// <summary>A campaign's own routes, by the campaign's public id.</summary>
     private sealed record CampaignRoutesShown(string CampaignId, IReadOnlyList<RouteShown> Routes);
@@ -890,10 +897,13 @@ public static partial class DoctorComposer
             return new Section(Routes, NotReadSection(failure ?? UnreadableAnswer), 0);
         }
 
-        RouteShown Shown(string operation, RouteDto route) =>
-            new(operation, SettingKey.Shown(route.PluginId ?? string.Empty, installed), route.Binding is not null);
+        RouteShown Shown(string operation, RouteDto route, string? channel = null) =>
+            new(operation, SettingKey.Shown(route.PluginId ?? string.Empty, installed), route.Binding is not null, channel);
 
-        List<RouteShown> Rows(RouteDto? fallback, IReadOnlyDictionary<string, RouteDto>? operations)
+        List<RouteShown> Rows(
+            RouteDto? fallback,
+            IReadOnlyDictionary<string, RouteDto>? operations,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<string, RouteDto>>? channels)
         {
             var rows = new List<RouteShown>();
             if (fallback is not null)
@@ -909,13 +919,24 @@ public static partial class DoctorComposer
                 }
             }
 
+            foreach (var (operation, byChannel) in channels ?? new Dictionary<string, IReadOnlyDictionary<string, RouteDto>>())
+            {
+                foreach (var (channel, route) in byChannel ?? new Dictionary<string, RouteDto>())
+                {
+                    if (route is not null)
+                    {
+                        rows.Add(Shown(OperationShown(operation), route, ChannelShown(operation, channel)));
+                    }
+                }
+            }
+
             return rows;
         }
 
-        var global = Rows(routes.Global.Default, routes.Global.Operations);
+        var global = Rows(routes.Global.Default, routes.Global.Operations, routes.Global.Channels);
         var campaigns = routes.Campaigns
             .Where(campaign => campaign is not null)
-            .Select(campaign => new CampaignRoutesShown(SettingKey.Shown(campaign.CampaignId ?? string.Empty, installed), Rows(campaign.Default, campaign.Operations)))
+            .Select(campaign => new CampaignRoutesShown(SettingKey.Shown(campaign.CampaignId ?? string.Empty, installed), Rows(campaign.Default, campaign.Operations, campaign.Channels)))
             .ToList();
         var shown = new RoutesShown(
             SettingKey.Shown(routes.RoutingSnapshotId ?? string.Empty, installed),
@@ -927,6 +948,13 @@ public static partial class DoctorComposer
         // An operation is shown when the catalogue knows it; no plugin id or public id is an operation.
         static string OperationShown(string operation) =>
             Jason.Contracts.Operations.OperationCatalog.Knows(operation) ? operation : SettingKey.Hidden;
+
+        // A channel is shown when the operation's own document lets a route name it, so it is one of the contract's words;
+        // anything else a route holds is a key nobody chose.
+        static string ChannelShown(string operation, string channel) =>
+            Jason.Contracts.Operations.OperationCatalog.Find(operation)?.RouteChannels is { } allowed && allowed.Contains(channel, StringComparer.Ordinal)
+                ? channel
+                : SettingKey.Hidden;
     }
 
     /// <summary>One subscribed kind as the bundle shows it: where its cursor stands, its chain, and its newest chains' records.</summary>

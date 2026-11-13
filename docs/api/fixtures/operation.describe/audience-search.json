@@ -146,6 +146,7 @@
           "typeahead": "industries"
         }
       }
-    }
+    },
+    "channel": null
   }
 }

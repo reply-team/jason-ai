@@ -1,0 +1,405 @@
+{
+  "operation": "operation.describe",
+  "case": "on-a-channel",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": "message.send",
+    "channel": "linkedin"
+  },
+  "status": 200,
+  "response": {
+    "operation": "message.send",
+    "version": 1,
+    "plugin_id": "other-tool",
+    "plugin_version": "1.0.0",
+    "arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "sender",
+        "message"
+      ],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": [
+            "email",
+            "linkedin"
+          ],
+          "description": "The contact's channel the message consumes: the address or the LinkedIn profile it goes to. Exactly that one channel is projected into `contacts[0].channels`."
+        },
+        "sender": {
+          "$ref": "#/$defs/sender"
+        },
+        "message": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "body"
+          ],
+          "description": "What goes out: one format of the channel's, and its text — final, exactly as the person approving it reads it, or a template the provider fills in for the person, on an email, a LinkedIn message or an InMail.",
+          "properties": {
+            "format": {
+              "type": "string",
+              "enum": [
+                "email",
+                "linkedin_message",
+                "linkedin_inmail",
+                "linkedin_voice"
+              ],
+              "description": "`email` on the email channel; on LinkedIn, a message to a connection, an InMail, or a voice message the provider speaks from the text."
+            },
+            "compose": {
+              "type": "string",
+              "enum": [
+                "text",
+                "template"
+              ],
+              "description": "`text`, or absent: the subject and the text are final and go out exactly as written. `template`: both are templates in the template standard the contracts README publishes, which the provider fills in for the person; an email, a LinkedIn message and an InMail may be one, a voice message may not. The bounds below hold a template as written. Its length is the length once the provider fills it in, within the call or later: a text found too long within the call fails `message_too_long`, and one found too long later fails the send then."
+            },
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 998,
+              "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+              "not": {
+                "pattern": "[\\n\\r\\u2028\\u2029]"
+              },
+              "description": "The subject: one line, something other than white space, at most 998 characters on an email and 200 on an InMail. Only those two formats take one, and both require it."
+            },
+            "body": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 12000,
+              "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+              "description": "The text as plain text, something other than white space — for a voice message the text the provider speaks: at most 12000 characters on an email, the most `conversation.get` reads back of one message; 8000 in a LinkedIn message, 1900 in an InMail and 1000 in a voice message, the most each holds."
+            }
+          },
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "compose"
+              ],
+              "properties": {
+                "compose": {
+                  "const": "template"
+                },
+                "format": {
+                  "enum": [
+                    "email",
+                    "linkedin_message",
+                    "linkedin_inmail"
+                  ]
+                },
+                "subject": {
+                  "format": "jason-template"
+                },
+                "body": {
+                  "format": "jason-template"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "compose": {
+                  "const": "text"
+                }
+              }
+            }
+          ]
+        },
+        "send_after": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9]([.][0-9]{1,3})?(Z|[+-][0-9]{2}:[0-9]{2})$",
+          "description": "The moment the provider sends it at, with its offset, written as `YYYY-MM-DDTHH:mm:ss` with a fraction of one to three digits where it names one and `Z` or `+hh:mm` or `-hh:mm`, `T` and `Z` in capitals. Absent, or a moment already past, means as soon as the provider can. Only a plugin whose manifest lists it for the channel takes it, and the claim refuses it on any other (`argument_unsupported`)."
+        }
+      },
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "channel",
+            "message"
+          ],
+          "properties": {
+            "channel": {
+              "const": "email"
+            },
+            "message": {
+              "type": "object",
+              "required": [
+                "format",
+                "subject"
+              ],
+              "properties": {
+                "format": {
+                  "const": "email"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "channel",
+            "message"
+          ],
+          "properties": {
+            "channel": {
+              "const": "linkedin"
+            },
+            "message": {
+              "type": "object",
+              "required": [
+                "format"
+              ],
+              "properties": {
+                "format": {
+                  "const": "linkedin_message"
+                },
+                "body": {
+                  "maxLength": 8000
+                }
+              },
+              "not": {
+                "type": "object",
+                "required": [
+                  "subject"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "channel",
+            "message"
+          ],
+          "properties": {
+            "channel": {
+              "const": "linkedin"
+            },
+            "message": {
+              "type": "object",
+              "required": [
+                "format",
+                "subject"
+              ],
+              "properties": {
+                "format": {
+                  "const": "linkedin_inmail"
+                },
+                "subject": {
+                  "maxLength": 200
+                },
+                "body": {
+                  "maxLength": 1900
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "channel",
+            "message"
+          ],
+          "properties": {
+            "channel": {
+              "const": "linkedin"
+            },
+            "message": {
+              "type": "object",
+              "required": [
+                "format"
+              ],
+              "properties": {
+                "format": {
+                  "const": "linkedin_voice"
+                },
+                "body": {
+                  "maxLength": 1000
+                }
+              },
+              "not": {
+                "type": "object",
+                "required": [
+                  "subject"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "$defs": {
+        "sender": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "external_id",
+            "address"
+          ],
+          "description": "The provider's account the message goes from, as `sender.list` listed it on the channel the message consumes: its identifier, and its address — null only for an account the provider holds no address for — so the person approving the message reads whose account it goes from.",
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            },
+            "address": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 500
+            }
+          }
+        },
+        "contact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "channels",
+            "external_ids"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "first_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "last_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "company": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "time_zone": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "channels": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "description": "Only the channel the message consumes, never the person's whole reachability.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "channel",
+                  "value",
+                  "primary"
+                ],
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "primary": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "contact": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              }
+            }
+          }
+        },
+        "campaign": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "status",
+            "external_ids"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "active",
+                "paused",
+                "archived"
+              ]
+            },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "campaign": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              },
+              "description": "Only this plugin's own pins reach it. The message names no campaign: it goes outside any of the provider's."
+            }
+          }
+        }
+      }
+    },
+    "definition": null,
+    "channel": "linkedin"
+  }
+}

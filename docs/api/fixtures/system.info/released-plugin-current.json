@@ -103,7 +103,8 @@
       "activated_at": "2026-10-16T09:00:00.000Z",
       "global_default_plugin": null,
       "global_override_count": 0,
-      "campaign_route_count": 0
+      "campaign_route_count": 0,
+      "channel_route_count": 0
     },
     "update": null,
     "skills": {
