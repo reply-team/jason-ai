@@ -10,7 +10,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -28,10 +28,15 @@ const values = (args: string[], flag: string) => {
     return end < 0 ? rest : rest.slice(0, end);
 };
 
-test('the three modes, Ask first first', () => {
-    assert.deepEqual(chatModes, ['ask_first', 'plan_only', 'full_access']);
-    assert.ok(isChatMode('plan_only'));
-    assert.ok(!isChatMode('auto_edit') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
+test('the four modes, Ask first first, then narrow to wide with Full access last', () => {
+    assert.deepEqual(chatModes, ['ask_first', 'plan_only', 'auto_edit', 'full_access']);
+    assert.ok(isChatMode('plan_only') && isChatMode('auto_edit'));
+    assert.ok(!isChatMode('acceptEdits') && !isChatMode('accept_edits') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
+});
+
+test('Auto-edit says in one sentence why Codex and the Feed have none', () => {
+    assert.equal(codexAutoEdit, 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.');
+    assert.equal(feedAutoEdit, 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.');
 });
 
 test('Ask first starts Claude Code as every turn did before the modes: no permission mode, the settings inline', () => {

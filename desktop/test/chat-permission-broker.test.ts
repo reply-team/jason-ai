@@ -464,3 +464,50 @@ test('a grant of a command never covers one whose word names a guarded file outs
         assert.equal(sent.at(-1)?.event.remember, null, target);
     }
 });
+
+/** The scope with what is in the folder read too, as Auto-edit needs: nothing there but what `real` names. */
+const editable: ChatScope = { ...scope, entry: () => null };
+
+test('in Auto-edit a file command in the chat folder is allowed by the model with no card, and the hook is never its way', async () => {
+    const { broker, sent, decided } = bench();
+    broker.openTurn('chat_a', 'turn_1', editable, 'auto_edit');
+    const input = { command: 'mkdir -p notes && touch notes/plan.md' };
+    assert.deepEqual(await broker.ask('turn_1', 'Bash', input), { behavior: 'allow', updatedInput: input });
+    assert.deepEqual(sent, []);
+    assert.deepEqual(decided, [{ outcome: 'allowed', by: 'model', mode: 'auto_edit' }]);
+});
+
+test('in Auto-edit anything else is Ask first\'s own card, title, detail and "always" alike, and Ask first\'s refusals stand', async () => {
+    const asked = bench();
+    asked.turn('chat_a', 'turn_1');
+    const edited = bench();
+    edited.broker.openTurn('chat_a', 'turn_1', editable, 'auto_edit');
+    for (const input of [{ command: 'git status' }, { command: 'rm -r notes' }, { command: 'touch /Users/someone/notes/plan.md' }, { command: 'mv a.md /Users/someone/notes/b.md' }]) {
+        void asked.broker.ask('turn_1', 'Bash', input);
+        void edited.broker.ask('turn_1', 'Bash', input);
+    }
+    await settle();
+    assert.equal(edited.sent.length, 4);
+    assert.deepEqual(edited.sent, asked.sent);
+    for (const input of [{ command: 'jason approval approve apr_1' }, { command: 'touch CLAUDE.md' }]) {
+        assert.deepEqual(await edited.broker.ask('turn_1', 'Bash', input), await asked.broker.ask('turn_1', 'Bash', input));
+    }
+    assert.equal(edited.sent.length, 4);
+    // The writer tools are judged as in Ask first: a write in the chat folder is the model's allow, one outside a card.
+    assert.deepEqual(await edited.broker.ask('turn_1', 'Write', { file_path: '/Users/someone/.jason/desktop/chat/a.md', content: 'x' }), {
+        behavior: 'allow',
+        updatedInput: { file_path: '/Users/someone/.jason/desktop/chat/a.md', content: 'x' },
+    });
+});
+
+test('in Auto-edit "always" covers what it covers in Ask first, and never a refusal', async () => {
+    const { broker, sent } = bench();
+    broker.openTurn('chat_a', 'turn_1', editable, 'auto_edit');
+    const first = broker.ask('turn_1', 'Bash', command);
+    await settle();
+    broker.answer('chat_a', 'req_1', { allow: true, always: true });
+    await first;
+    assert.deepEqual(await within(broker.ask('turn_1', 'Bash', command)), { behavior: 'allow', updatedInput: command });
+    assert.equal((await broker.ask('turn_1', 'Bash', { command: 'git status; jason approval approve apr_1' })).behavior, 'deny');
+    assert.equal(sent.filter((each) => each.event.kind === 'permission').length, 1);
+});

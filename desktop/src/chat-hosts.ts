@@ -185,9 +185,11 @@ export const searchRules: readonly string[] = searchVariables.flatMap((name) => 
 export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
 
 /**
- * The command line of one Claude Code turn, in the chat's mode. Ask first: no permission mode, the host's default. Plan
- * only: `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. Full
- * access: no permission mode either, the host's default, with the turn's settings file, whose hook answers each tool use
+ * The command line of one Claude Code turn, in the chat's mode. Ask first: no permission mode, the host's default.
+ * Auto-edit: exactly Ask first's, never the host's accept-edits mode; its six file commands reach the prompt tool as any
+ * other command does, and the desktop's judgement lets them run there (`autoEditJudgement`). Plan only:
+ * `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. Full access:
+ * no permission mode either, the host's default, with the turn's settings file, whose hook answers each tool use
  * (`fullAccessSettings`); what the hook asks about, and what the host asks about whatever the hook said, reaches the
  * prompt tool as in Ask first. Every deny rule is passed in every mode; Anthropic,
  * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
@@ -333,7 +335,7 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox,
  * which the desktop does not narrow, holds it (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {

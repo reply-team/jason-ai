@@ -726,6 +726,13 @@ masking text that short would mangle ordinary words. And a successful result is 
 yours to keep clean, so returning a configured value is a conformance failure of your plugin, not something the host
 catches.
 
+**Keep a secret out of `settings.json`.** A value under `Plugins:Config` there is in a file a command of the desktop's
+Codex chat can read, on every system, as any program you run can ([desktop.md](desktop.md)). Give a secret as a variable
+of the runtime's environment instead, `JASON_Plugins__Config__<id>__<field>`: that keeps it out of `settings.json` and
+out of the environment of a chat turn and of an AI role's agent. It does not keep it out of the place where you set the
+variable: a shell profile, a launchd or a systemd unit is a file a Codex command can read on macOS and Linux, and on
+Linux the runtime process's environment (`/proc/<pid>/environ`) is readable by your account.
+
 ### `host.log`
 
 ```js
