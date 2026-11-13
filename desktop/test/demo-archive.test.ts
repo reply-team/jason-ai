@@ -19,6 +19,7 @@ import {
     holdsNothing,
     PlacingFailed,
     placingPlan,
+    projectsWhole,
     sampleUnprepared,
     settlePlacing,
     writeSampleWhole,
@@ -254,6 +255,7 @@ async function placeOn(
         outcome = await settlePlacing(placing, {
             log,
             release: () => (order.push('release'), hold.release()),
+            linked: async () => (order.push('linked'), null),
             markRoot: () => (order.push('markRoot'), markPlacedFolder(w.places.harnessRoot)),
             seal: () => (order.push('seal'), writeSampleWhole(w.places.data)),
             drop: () => (order.push('drop'), dropStartOver(w.request, log)),
@@ -296,7 +298,7 @@ test('a fresh archive is placed by jason import, before any log line reaches the
     assert.ok(hasDemoMarker(w.places.harnessRoot));
     assert.deepEqual(seal(w.places.data), { version: 1, complete: true });
     assert.equal(existsSync(w.request), false);
-    assert.deepEqual(order, ['markRoot', 'seal', 'drop', 'release']);
+    assert.deepEqual(order, ['linked', 'markRoot', 'seal', 'drop', 'release']);
     // The lines said during the import are written after it, in order, then the placing's own.
     assert.deepEqual(lines.map((line) => line.EventName), ['desktop_started', 'deep_link_opened', 'demo_archive_placed']);
     assert.equal(lines[2]?.ElapsedMs, 1000);
@@ -459,6 +461,7 @@ test('a placing that fails before it settles is ended as failed, never left wait
     const outcome = await settlePlacing(failing, {
         log: hold.logger(() => () => undefined),
         release: () => order.push('release'),
+        linked: async () => (order.push('linked'), null),
         markRoot: () => order.push('markRoot'),
         seal: () => order.push('seal'),
         drop: () => order.push('drop'),
@@ -489,4 +492,62 @@ test('a second start while another run places the demo carries nothing out and p
     assert.equal(placingInFlight(text, 4242, () => true), false);
     assert.equal(placingInFlight(['pid=4242', 'making', ''].join('\n'), 1, () => true), false);
     assert.equal(placingInFlight(null, 1, () => true), false);
+});
+
+/** `jason project list` as the runtime answers it, page by page, each page's projects as given. */
+function projectList(pages: { id: string; default?: boolean; folder_path: string | null }[][], exit = 0) {
+    const asked: (readonly string[])[] = [];
+    const cli: Cli = {
+        async run(args) {
+            asked.push(args);
+            if (exit !== 0) return { exit, stdout: JSON.stringify({ error: { code: 'no_descriptor', message: 'no runtime', retryable: true } }), stderr: '' };
+            const at = args.includes('--cursor') ? Number(args[args.indexOf('--cursor') + 1]) : 0;
+            const items = (pages[at] ?? []).map((project) => ({ name: project.id, slug: project.id, default: project.default ?? false, ...project }));
+            return { exit: 0, stdout: JSON.stringify({ items, next_cursor: at + 1 < pages.length ? String(at + 1) : null }), stderr: '' };
+        },
+    };
+    return { cli, asked };
+}
+
+test('a placing is whole only when every project the archive carried is recorded at a folder under the demo’s root', async (t) => {
+    const root = join(scratch(t), 'Jason-demo');
+    const under = (name: string) => join(root, 'projects', name);
+    // Whole: the sample's project in the root, and the default project, which has no folder until one is needed.
+    const whole = projectList([[{ id: 'prj_d', default: true, folder_path: null }, { id: 'prj_1', folder_path: under('sample') }]]);
+    assert.equal(await projectsWhole(whole.cli, root), null);
+    assert.deepEqual(whole.asked[0], ['project', 'list', '--limit', '1000']);
+    // Every page is read.
+    const paged = projectList([[{ id: 'prj_1', folder_path: under('a') }], [{ id: 'prj_2', folder_path: join(scratch(t), 'build', 'Jason-demo', 'projects', 'b') }]]);
+    assert.equal(await projectsWhole(paged.cli, root), 'unlinked');
+    assert.deepEqual(paged.asked[1], ['project', 'list', '--limit', '1000', '--cursor', '1']);
+    // A project left at the folder it was recorded at where the archive was made, one with no folder at all, a folder
+    // beside the root whose name only begins as the root's does: none is under the root.
+    for (const folder of [join(scratch(t), 'build-home', 'Jason-demo', 'projects', 'sample'), null, `${root}-other${join('/', 'projects', 'x')}`]) {
+        assert.equal(await projectsWhole(projectList([[{ id: 'prj_1', folder_path: folder }]]).cli, root), 'unlinked', String(folder));
+    }
+    // A list the runtime does not answer is no proof either: its code is said.
+    assert.equal(await projectsWhole(projectList([], 3).cli, root), 'no_descriptor');
+});
+
+test('a placing whose projects are not all linked is a failed one: its runtime is stopped first, then what it placed is taken away, and the sample made', async (t) => {
+    const w = world(t);
+    const { cli } = importer(w.places);
+    let alive = true;
+    const { outcome, lines, order } = await placeOn(w, cli, {
+        linked: async () => 'unlinked',
+        runtimeAlive: () => alive,
+        stopRuntime: async () => {
+            alive = false;
+            // The stop comes before anything is taken away.
+            assert.ok(existsSync(join(w.places.data, 'state', 'jason.db')) && existsSync(w.places.harnessRoot));
+            return true;
+        },
+    });
+    assert.equal(outcome, 'made');
+    assert.deepEqual(order, ['clear', 'release', 'prepareLive']);
+    assert.equal(alive, false);
+    assert.equal(existsSync(markerPath(w.places.data)), false, 'no sample marker for a half-linked placing');
+    assert.equal(lines.at(-1)?.EventName, 'demo_archive_unplaced');
+    assert.equal(lines.at(-1)?.Step, 'unlinked');
+    assert.equal(lines.at(-1)?.Code, 'none');
 });

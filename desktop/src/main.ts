@@ -47,7 +47,7 @@ import { applyMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterR
 import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
 import { claimDemoFolder, hasDemoMarker, markPlacedFolder } from './demo-folders.ts';
-import { beginPlacing, clearPlaced, demoArchiveOf, placingPlan, placingWords, settlePlacing, writeSampleWhole, type PlacingOutcome, type PlacingPlan } from './demo-archive.ts';
+import { beginPlacing, clearPlaced, demoArchiveOf, placingPlan, placingWords, projectsWhole, settlePlacing, writeSampleWhole, type PlacingOutcome, type PlacingPlan } from './demo-archive.ts';
 import { openDemoDirectory, prepareDemo, writeDemoRoute } from './demo-start.ts';
 import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
@@ -705,6 +705,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             try {
                 await settlePlacing(placement, {
                     log,
+                    // The runtime the import started answers which folder each placed project is recorded at.
+                    linked: () => projectsWhole(cli, demoWhere.harnessRoot),
                     release: () => logHold.release(),
                     markRoot: () => markPlacedFolder(demoWhere.harnessRoot),
                     seal: () => writeSampleWhole(demoWhere.data),

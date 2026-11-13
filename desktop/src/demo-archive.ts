@@ -16,8 +16,9 @@
  *    to start the demo over is left first, naming a placing, so a start cut short makes the demo whole again at the next;
  *    the log is held (`LogHold`), since `<data>/logs/` is a part an import places; then `jason import` is started, beside
  *    the window's own start;
- * 3. the end (`settlePlacing`), awaited before the runtime is started: on success the harness root the import made is
- *    marked, the sample's marker (`demo-seed.json`) is written whole, the request is taken away and the held lines are
+ * 3. the end (`settlePlacing`), awaited before the runtime is started: an import that answered is whole only when every
+ *    project it placed is recorded at a folder under the demo's harness root (`projectsWhole`), since the import answers
+ *    success with a project it could not link; then the harness root the import made is marked, the sample's marker (`demo-seed.json`) is written whole, the request is taken away and the held lines are
  *    written; on any failure what the import placed is taken away, the held lines are written, the failure is logged by
  *    its step and its code, never a path, and the demo is prepared and its sample made at this start, as before.
  */
@@ -27,7 +28,7 @@ import { join } from 'node:path';
 import { crc32, inflateRawSync } from 'node:zlib';
 import type { Cli, CliResult } from './cli.ts';
 import { demoMarkerName } from './demo-folders.ts';
-import { markerPath, seedVersion, type DemoPlaces } from './demo-seed.ts';
+import { isWithin, markerPath, seedVersion, type DemoPlaces } from './demo-seed.ts';
 import type { Logger } from './log.ts';
 
 /** Where the application carries the prepared demo, under its bundle. */
@@ -241,6 +242,8 @@ export function beginPlacing(start: PlacingStart): Promise<PlacingOutcome> {
 
 export interface PlacingEnd {
     log: Logger;
+    /** Whether every placed project is recorded under the demo's root (`projectsWhole`): null when it is, else a code. */
+    linked(): Promise<string | null>;
     /** Writes every held line (`LogHold.release`). */
     release(): void;
     /** Marks the harness root the import made (`markPlacedFolder`). */
@@ -269,6 +272,14 @@ export class PlacingFailed extends Error {}
  */
 export async function settlePlacing(placing: Promise<PlacingOutcome>, deps: PlacingEnd): Promise<'placed' | 'made'> {
     let outcome: PlacingOutcome = await placing.catch((): PlacingOutcome => ({ kind: 'failed', step: 'import', code: 'thrown' }));
+    if (outcome.kind === 'placed') {
+        try {
+            const unlinked = await deps.linked();
+            if (unlinked !== null) outcome = { kind: 'failed', step: 'unlinked', code: unlinked === 'unlinked' ? 'none' : unlinked };
+        } catch (error) {
+            outcome = { kind: 'failed', step: 'unlinked', code: codeOfError(error) };
+        }
+    }
     if (outcome.kind === 'placed') {
         // The root first, the seal last: a sample is whole only once both of its folders are the demo's.
         try {
@@ -311,6 +322,34 @@ export async function settlePlacing(placing: Promise<PlacingOutcome>, deps: Plac
         throw new PlacingFailed(sampleUnprepared);
     }
     return 'made';
+}
+
+/**
+ * Whether every project the runtime holds after the import is recorded at a folder under the demo's harness root, read
+ * by `jason project list`, every page of it: null when each is, `unlinked` when one is recorded elsewhere (the folder it
+ * was recorded at where the archive was made) or has none, the default project aside, which has no folder until one is
+ * needed; the verb's code when the list is not answered.
+ */
+export async function projectsWhole(cli: Cli, root: string): Promise<string | null> {
+    let cursor: string | null = null;
+    for (let page = 0; page < 100; page++) {
+        const result = await cli.run(['project', 'list', '--limit', '1000', ...(cursor === null ? [] : ['--cursor', cursor])]);
+        if (result.exit !== 0) return codeOfResult(result);
+        let answer: { items?: unknown; next_cursor?: unknown };
+        try {
+            answer = JSON.parse(result.stdout.trim()) as { items?: unknown; next_cursor?: unknown };
+        } catch {
+            return 'unreadable';
+        }
+        if (!Array.isArray(answer.items)) return 'unreadable';
+        for (const item of answer.items as { default?: unknown; folder_path?: unknown }[]) {
+            const folder = item.folder_path;
+            if (typeof folder === 'string' ? !isWithin(root, folder) : item.default !== true) return 'unlinked';
+        }
+        if (typeof answer.next_cursor !== 'string' || answer.next_cursor === '') return null;
+        cursor = answer.next_cursor;
+    }
+    return 'unreadable';
 }
 
 /**
