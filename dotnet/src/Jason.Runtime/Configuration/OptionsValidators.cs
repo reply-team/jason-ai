@@ -370,7 +370,7 @@ public sealed class RoutesOptionsValidator(Func<IReadOnlySet<string>> installedP
         }
         else if (entry.Binding is not null)
         {
-            failures.Add($"{SettingKey.ShownPath(setting, installed.Value)}:Binding must be left out where Plugin is: an operation routed by its channels alone names no account of its own.");
+            failures.Add($"{SettingKey.ShownPath(setting, installed.Value)}:Binding must be left out where Plugin is left out: an operation routed by its channels alone names no account of its own.");
         }
 
         foreach (var (channel, route) in entry.Channels)

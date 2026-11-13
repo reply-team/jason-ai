@@ -128,7 +128,7 @@ public class RoutesOptionsTests
     [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":{"fax":{"Plugin":"fake-provider"}}}}}}""", "Routes:Operations:message.send:Channels:<key> must name a channel; the key written is 3 characters long and is not one.")]
     [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":{"Email":{"Plugin":"fake-provider"}}}}}}""", "Routes:Operations:message.send:Channels:<key> must name a channel; the key written is 5 characters long and is not one.")]
     [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":"email"}}}}""", "Routes:Operations:message.send:Channels must be a map of channels, each an object with Plugin and an optional Binding.")]
-    [InlineData("""{"Routes":{"Operations":{"message.send":{"Binding":{"workspace":"west"},"Channels":{"email":{"Plugin":"fake-provider"}}}}}}""", "Routes:Operations:message.send:Binding must be left out where Plugin is: an operation routed by its channels alone names no account of its own.")]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Binding":{"workspace":"west"},"Channels":{"email":{"Plugin":"fake-provider"}}}}}}""", "Routes:Operations:message.send:Binding must be left out where Plugin is left out: an operation routed by its channels alone names no account of its own.")]
     public void A_channel_route_that_could_never_be_right_is_named_with_its_line(string settings, string expected)
     {
         var result = new RoutesOptionsValidator().Validate(null, Read(settings));

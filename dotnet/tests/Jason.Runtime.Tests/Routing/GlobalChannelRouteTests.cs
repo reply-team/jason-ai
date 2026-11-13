@@ -243,8 +243,12 @@ public class GlobalChannelRouteTests
             Install(paths, Mailer, readsEvents: true);
             Install(paths, Deaf, readsEvents: false);
         });
-        await TestRoutes.WriteGlobalAsync(api, Routes(("message.send", null, Deaf), ("message.send", "email", Mailer)), Ct);
+        var section = JsonNode.Parse(Routes(("message.send", null, Deaf), ("message.send", "email", Mailer)))!.AsObject();
+        section["Operations"]!["message.send"]!["Channels"]!["email"]!["Binding"] = new JsonObject { ["seat"] = "sales-1", ["shared"] = true };
+        await TestRoutes.WriteGlobalAsync(api, section.ToJsonString(), Ct);
         var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+        var frozen = api.Resolve<RouteRegistry>().Snapshot.Global.ChannelRoute("message.send", "email")!;
+        Assert.NotNull(frozen.BindingIdentity);
         var campaign = await CampaignAsync(api);
 
         await TestRoutes.SetCampaignAsync(api, campaign, "message.send", Deaf, binding: null, Ct);
@@ -252,10 +256,41 @@ public class GlobalChannelRouteTests
         var routes = api.Resolve<RouteRegistry>().Snapshot;
         Assert.NotEqual(reloaded.RoutingSnapshotId, routes.Id);
         Assert.Equal(Deaf, routes.Global.Operations["message.send"].PluginId);
-        Assert.Equal(Mailer, routes.Global.ChannelRoute("message.send", "email")!.PluginId);
+        var kept = routes.Global.ChannelRoute("message.send", "email")!;
+        Assert.Equal(Mailer, kept.PluginId);
+        Assert.Equal(frozen.BindingIdentity, kept.BindingIdentity);
+        Assert.Equal("""{"seat":"sales-1","shared":true}""", kept.Binding!.ToJsonString());
         Assert.Equal(
             RouteScope.GlobalChannel,
             RouteResolver.Resolve(routes, PublicIdOfNoCampaign, "message.send", "email")!.Scope);
+    }
+
+    /// <summary>
+    /// A channel route is a route of one operation. Written under the default, or at the top of the section, it names
+    /// none: read as nothing, the default's plugin would quietly take every send on that channel. So it is refused at the
+    /// reload as a channel on no operation, whatever plugin it names, by its path — a key that is no channel written as a
+    /// placeholder — and both snapshots stay.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"Default":{"Plugin":"channel-mailer","Channels":{"linkedin":{"Plugin":"channel-mailer"}}}}""", "Routes:Default:Channels:linkedin")]
+    [InlineData("""{"Default":{"Plugin":"channel-mailer","Channels":{"SENTINEL_KEY":{"Plugin":"nobody"}}}}""", "Routes:Default:Channels:<key>")]
+    [InlineData("""{"Default":{"Plugin":"channel-mailer","Channels":"linkedin"}}""", "Routes:Default:Channels")]
+    [InlineData("""{"Default":{"Plugin":"channel-mailer"},"Channels":{"email":{"Plugin":"channel-mailer"}}}""", "Routes:Channels:email")]
+    [InlineData("""{"Default":{"Plugin":"channel-mailer"},"Channels":"email"}""", "Routes:Channels")]
+    public async Task A_channel_route_written_where_no_operation_stands_rejects_the_whole_reload(string section, string field)
+    {
+        await using var api = await StartAsync(paths => Install(paths, Mailer, readsEvents: true));
+        await TestRoutes.WriteGlobalAsync(api, """{"Default":{"Plugin":"channel-mailer"}}""", Ct);
+        var before = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+
+        await TestRoutes.WriteGlobalAsync(api, section, Ct);
+        var detail = await RefusedAsync(api);
+
+        Assert.Equal(field, detail.Field);
+        Assert.Equal(RouteProblemCodes.ChannelNotRoutable, detail.Code);
+        Assert.DoesNotContain("SENTINEL", detail.Message, StringComparison.Ordinal);
+        await KeptAsync(api, before);
+        Assert.Null(api.Resolve<RouteRegistry>().Snapshot.Global.Channels);
     }
 
     /// <summary>A campaign with no routes of its own, so a resolution reaches the global half.</summary>
