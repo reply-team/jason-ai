@@ -57,7 +57,18 @@ import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
-import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
+import {
+    changeChat,
+    chats,
+    clock,
+    conversations,
+    conversationsFailure,
+    feedId,
+    here,
+    inTab,
+    messageOf,
+    setup,
+} from './state';
 import {
     fullAccessStanding,
     readStandingAgain,
@@ -444,29 +455,35 @@ define('chat.attach', ([id, campaignId]) => {
 const withCode = (sentence: string): Html[] =>
     sentence.split('`').map((part, at) => (at % 2 ? html`<code>${part}</code>` : html`${part}`));
 
+/** In a browser tab a card is only shown: the desktop's own window answers it. */
+const answeredInDesktop = 'This is answered in Jason Desktop.';
+const tabFullAccess = 'This chat is in Full access. Send messages to it from Jason Desktop.';
+
 function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 'permission' }>): Html {
     const buttons =
-        entry.answer === null
-            ? html`<div class="ask-a">
-                  <button class="btn sm p" type="button" ${act('chat.answer', chat.id, entry.request, 'allow')}>
-                      Allow
-                  </button>
-                  ${
-                      entry.remember !== null
-                          ? html`<button
-                                class="btn sm"
-                                type="button"
-                                ${act('chat.answer', chat.id, entry.request, 'always')}
-                            >
-                                Allow for this chat: ${entry.remember}
-                            </button>`
-                          : null
-                  }
-                  <button class="btn sm" type="button" ${act('chat.answer', chat.id, entry.request, 'deny')}>
-                      Don't allow
-                  </button>
-              </div>`
-            : html`<div class="perm-done">${answerWords[entry.answer]}</div>`;
+        entry.answer === null && inTab()
+            ? html`<div class="perm-done">${answeredInDesktop}</div>`
+            : entry.answer === null
+              ? html`<div class="ask-a">
+                    <button class="btn sm p" type="button" ${act('chat.answer', chat.id, entry.request, 'allow')}>
+                        Allow
+                    </button>
+                    ${
+                        entry.remember !== null
+                            ? html`<button
+                                  class="btn sm"
+                                  type="button"
+                                  ${act('chat.answer', chat.id, entry.request, 'always')}
+                              >
+                                  Allow for this chat: ${entry.remember}
+                              </button>`
+                            : null
+                    }
+                    <button class="btn sm" type="button" ${act('chat.answer', chat.id, entry.request, 'deny')}>
+                        Don't allow
+                    </button>
+                </div>`
+              : html`<div class="perm-done">${answerWords[entry.answer]}</div>`;
     return html`<div class="ask perm">
         <div class="ask-h">${svg('shield', 14)}<b>${entry.title}</b></div>
         <pre class="perm-detail">${entry.detail}</pre>
@@ -500,26 +517,28 @@ function planCard(chat: Chat, entry: Extract<Entry, { kind: 'text' }>, host: Des
         <div class="said plan-text">${entry.text}</div>
         ${line === null ? null : html`<div class="ask-w">${line}</div>`}
         ${
-            live || approving
-                ? html`<div class="ask-a">
-                      <button
-                          class="btn sm p"
-                          type="button"
-                          ${approving ? html`disabled` : null}
-                          ${act('chat.approvePlan', chat.id)}
-                      >
-                          ${approving ? 'Approving…' : 'Approve and run'}
-                      </button>
-                      <button
-                          class="btn sm"
-                          type="button"
-                          ${approving ? html`disabled` : null}
-                          ${act('chat.keepPlanning', chat.id)}
-                      >
-                          Keep planning
-                      </button>
-                  </div>`
-                : null
+            (live || approving) && inTab()
+                ? html`<div class="perm-done">${answeredInDesktop}</div>`
+                : live || approving
+                  ? html`<div class="ask-a">
+                        <button
+                            class="btn sm p"
+                            type="button"
+                            ${approving ? html`disabled` : null}
+                            ${act('chat.approvePlan', chat.id)}
+                        >
+                            ${approving ? 'Approving…' : 'Approve and run'}
+                        </button>
+                        <button
+                            class="btn sm"
+                            type="button"
+                            ${approving ? html`disabled` : null}
+                            ${act('chat.keepPlanning', chat.id)}
+                        >
+                            Keep planning
+                        </button>
+                    </div>`
+                  : null
         }
     </div>`;
 }
@@ -532,7 +551,7 @@ const campaignName = (id: string): string => campaigns.value.find((each) => each
  * while the chat is about no campaign and no turn runs; an earlier one is drawn as text.
  */
 function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean): Html {
-    const open = last && chat.campaignId === null && !chat.running;
+    const open = last && chat.campaignId === null && !chat.running && !inTab();
     return html`<div class="ask chat-pick">
         <div class="ask-h">
             ${svg('camp', 14)}<b>${open ? 'Make this the conversation of' : 'Agents this chat made'}</b>
@@ -631,7 +650,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                         : "The AI's memory of this conversation was gone; it starts from the last messages.",
                 );
             case 'notice':
-                return entry.folder === null
+                return entry.folder === null || inTab()
                     ? noteLine(entry.text)
                     : html`<div class="note chat-note">
                           ${entry.text}
@@ -811,25 +830,35 @@ export function ChatControls({
                     ))}
                 </select>
             )}
-            <select
-                ref={modeMenu}
-                className="mode"
-                aria-label="Access mode"
-                disabled={chat.removing}
-                value={chat.mode}
-                onFocus={() => readStandingAgain(here().desktop)}
-                onChange={(event) =>
-                    event.target.value === takeBack ? takeBackChosen() : choose(event.target.value as DesktopChatMode)
-                }
-            >
-                {modeChoices(host, chat.main === true).map((each) => (
-                    <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
-                        {each.disabled === null ? each.label : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
-                    </option>
-                ))}
-                {/* While Always stands, its take-back follows the modes; choosing it leaves the mode as it is. */}
-                {fullAccessStanding.value !== null && <option value={takeBack}>{takeBackWords}</option>}
-            </select>
+            {inTab() ? (
+                <span className="mode mode-label" aria-label="Access mode">
+                    {modeChoices(host, chat.main === true).find((each) => each.mode === chat.mode)?.label ?? chat.mode}
+                </span>
+            ) : (
+                <select
+                    ref={modeMenu}
+                    className="mode"
+                    aria-label="Access mode"
+                    disabled={chat.removing}
+                    value={chat.mode}
+                    onFocus={() => readStandingAgain(here().desktop)}
+                    onChange={(event) =>
+                        event.target.value === takeBack
+                            ? takeBackChosen()
+                            : choose(event.target.value as DesktopChatMode)
+                    }
+                >
+                    {modeChoices(host, chat.main === true).map((each) => (
+                        <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
+                            {each.disabled === null
+                                ? each.label
+                                : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
+                        </option>
+                    ))}
+                    {/* While Always stands, its take-back follows the modes; choosing it leaves the mode as it is. */}
+                    {fullAccessStanding.value !== null && <option value={takeBack}>{takeBackWords}</option>}
+                </select>
+            )}
         </>
     );
 }
@@ -929,10 +958,12 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const standing = host ? onHost(chat, host.id) : chat;
     // "Another model" with no name typed yet: nothing is sent until a name is, or another choice made.
     const nameMissing = host !== null && sendHeld(standing, host);
+    // A chat in Full access takes no message from a tab; the desktop refuses it too.
+    const tabLocked = inTab() && chat.mode === 'full_access';
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         const current = chats.value[chatId];
-        if (!current || !host || sendHeld(onHost(current, host.id), host)) return;
+        if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
         if (current.running) {
             changeChat(chatId, kept);
             return;
@@ -1000,16 +1031,18 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </button>
                     </form>
                 )}
-                <button
-                    className="btn sm"
-                    type="button"
-                    disabled={chat.running || chat.removing}
-                    title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
-                    onClick={() => restartChat(chatId)}
-                >
-                    Start afresh
-                </button>
-                {chat.main ? null : (
+                {!inTab() && (
+                    <button
+                        className="btn sm"
+                        type="button"
+                        disabled={chat.running || chat.removing}
+                        title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
+                        onClick={() => restartChat(chatId)}
+                    >
+                        Start afresh
+                    </button>
+                )}
+                {chat.main || inTab() ? null : (
                     <button
                         ref={removeButton}
                         className="btn sm"
@@ -1050,7 +1083,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 Reply is not connected. It is an offer, so it is hidden only where the runtime says the campaign's enrolment is routed to
                 another plugin, or the campaign already runs; no route and a route that cannot be read leave it, and nothing shows
                 while the route is being read. */}
-            {chat.campaignId !== null &&
+            {!inTab() &&
+                chat.campaignId !== null &&
                 campaigns.value.find((each) => each.id === chat.campaignId)?.status === 'draft' &&
                 setup.value &&
                 !(setup.value.reply.signedIn && setup.value.reply.wired) &&
@@ -1084,9 +1118,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     <div className="note am">
                         No AI host that drives the chat was found on this machine. Connect lists the hosts and installs
                         one.{' '}
-                        <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
-                            Connect
-                        </button>
+                        {!inTab() && (
+                            <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
+                                Connect
+                            </button>
+                        )}
                     </div>
                 )}
                 {chat.waiting !== null && (
@@ -1115,11 +1151,12 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </div>
                     </div>
                 )}
+                {tabLocked && <div className="note am">{tabFullAccess}</div>}
                 {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                 <textarea
                     id="box"
                     rows={2}
-                    disabled={chat.removing}
+                    disabled={chat.removing || tabLocked}
                     placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}
                     aria-label="Your message"
                     value={chat.draft}
@@ -1167,7 +1204,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             type="submit"
                             title="Send"
                             aria-label="Send"
-                            disabled={!host || chat.removing || nameMissing}
+                            disabled={!host || chat.removing || nameMissing || tabLocked}
                             {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
                         >
                             ↑
