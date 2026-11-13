@@ -1,0 +1,52 @@
+{
+  "operation": "reply.count",
+  "case": "every-campaign",
+  "request": {
+    "since": "2026-09-14T00:00:00Z",
+    "until": "2026-09-14T12:00:00Z"
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "replies": 3,
+        "threads": 2,
+        "categories": [
+          {
+            "category": "interested",
+            "replies": 2,
+            "threads": 1
+          },
+          {
+            "category": "wrong_person",
+            "replies": 1,
+            "threads": 1
+          }
+        ]
+      },
+      {
+        "campaign_id": "cmp_2",
+        "replies": 0,
+        "threads": 0,
+        "categories": []
+      }
+    ],
+    "total": {
+      "replies": 3,
+      "threads": 2,
+      "categories": [
+        {
+          "category": "interested",
+          "replies": 2,
+          "threads": 1
+        },
+        {
+          "category": "wrong_person",
+          "replies": 1,
+          "threads": 1
+        }
+      ]
+    }
+  }
+}
