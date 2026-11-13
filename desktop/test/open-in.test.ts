@@ -241,6 +241,15 @@ test('on macOS a folder whose last name ends in .app, in any case, is not given 
         assert.equal(await b.openIn.open('copy'), null);
         assert.deepEqual(b.copied, [root]);
     }
+    for (const root of ['/Users/ada/Jason/sales-app', '/Users/ada/Jason/webapp']) {
+        const b = bench({ probes: mac, root, folders: [root] });
+        assert.equal(await b.openIn.open('files'), null, root);
+        assert.deepEqual(b.started, [{ file: '/usr/bin/open', args: ['-a', 'Finder', root] }], root);
+    }
+    for (const root of ['/Users/ada/Jason/Tool.app', '/Users/ada/Jason/x.APP']) {
+        const b = bench({ probes: mac, root, folders: [root] });
+        assert.match(((await b.openIn.open('files')) as { refused: string }).refused, /named like an application/, root);
+    }
 });
 
 test('a Windows editor found as an .exe on the PATH is started by that file, and a batch file is not', () => {

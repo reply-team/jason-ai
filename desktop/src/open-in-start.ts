@@ -5,8 +5,9 @@ import type { Line } from './open-in.ts';
 /**
  * Starts the program an "Open in" act names, an editor or the file manager, and leaves it running on its own: a file and
  * its arguments, no shell, no console, the standard streams closed, and the desktop's own environment less a parent
- * Claude Code session's markers, so an editor's terminal finds the installation this run is on (a demo run's included).
- * Answers null once the system has started it, or the sentence it could not be started with.
+ * Claude Code session's markers. The environment is the one its caller hands it, which for an editor or the file manager
+ * is the person's own (`editorEnvironment`), not a demo run's. Answers null once the system has started it, or the
+ * sentence it could not be started with.
  */
 export function startDetached(line: Line, env: Readonly<Record<string, string | undefined>>): Promise<string | null> {
     return new Promise((resolve) => {

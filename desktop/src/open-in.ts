@@ -286,7 +286,7 @@ export class OpenIn {
             const failed =
                 program === null
                     ? 'The file manager could not be found.'
-                    : deps.probes.platform === 'darwin' && /.app$/i.test(posix.basename(folder))
+                    : deps.probes.platform === 'darwin' && /\.app$/i.test(posix.basename(folder))
                       ? 'A folder named like an application might be started rather than shown. Use Copy path.'
                     : deps.probes.platform === 'win32' && folder.includes(',')
                       ? 'File Explorer cannot show a folder whose path holds a comma. Use Copy path.'
