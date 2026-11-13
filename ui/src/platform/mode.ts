@@ -50,6 +50,18 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
     unfollow?.();
     unfollow = null;
     seam = desktop === undefined ? null : (desktop.mode ?? {});
+    // The mark is followed before the mode is read, so a word the desktop sends between the two is not lost; a word
+    // heard before the answer outranks the answer's.
+    let heard: boolean | null = null;
+    try {
+        unfollow =
+            seam?.onPreparing?.((on) => {
+                heard = on === true;
+                if (mode.value === 'demo') modePreparing.value = heard;
+            }) ?? null;
+    } catch {
+        unfollow = null;
+    }
     let kept: unknown;
     try {
         kept = await seam?.get?.();
@@ -63,13 +75,10 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
     mode.value = answer.mode === 'demo' ? 'demo' : 'live';
     if (mode.value === 'live' && typeof answer.unopened === 'string' && answer.unopened !== '')
         modeUnopened.value = answer.unopened;
-    if (mode.value === 'demo') {
-        modePreparing.value = answer.preparing === true;
-        try {
-            unfollow = seam?.onPreparing?.((on) => (modePreparing.value = on === true)) ?? null;
-        } catch {
-            unfollow = null;
-        }
+    if (mode.value === 'demo') modePreparing.value = heard ?? answer.preparing === true;
+    else {
+        unfollow?.();
+        unfollow = null;
     }
     return mode.value;
 }

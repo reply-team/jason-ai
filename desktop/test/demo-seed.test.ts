@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { knownDesktopEntries } from '../src/chat-hosts.ts';
 import { claimDemoFolder, hasDemoMarker } from '../src/demo-folders.ts';
-import { askedBy, carryOutOnDisk, CarryOutRefused, carryOutStartOver, removeMarkedLast, requestStartOver, requestYoungMs } from '../src/demo-over.ts';
+import { askedBy, carryOutOnDisk, CarryOutRefused, carryOutStartOver, leftByAMaking, removeMarkedLast, requestStartOver, requestYoungMs } from '../src/demo-over.ts';
 import { demoRuntimeAlive } from '../src/demo-alive.ts';
 import { prepareDemo } from '../src/demo-start.ts';
 import { fileLogger } from '../src/log.ts';
@@ -802,6 +802,89 @@ test('a making leaves the request to start over first and takes it away only onc
     assert.deepEqual(marks, [true, false, true, false]);
 });
 
+/**
+ * What a start does with the request before it chooses (`chooseInstallation`): the carry-out, and on its refusal the
+ * record set to Live with the request kept. The record is the person's `desktop/mode`.
+ */
+function startWith(d: ReturnType<typeof disk>, over: Partial<Parameters<typeof carryOutStartOver>[0]>): string | null {
+    const record = join(d.person, 'desktop', 'mode');
+    try {
+        carry(d, over);
+        return null;
+    } catch (error) {
+        writeFileSync(record, 'live');
+        return error instanceof CarryOutRefused ? error.reason : 'failed';
+    }
+}
+
+test('a second start while the seed runs leaves the record demo and the request in place', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        mkdirSync(join(d.person, 'desktop'), { recursive: true });
+        const record = join(d.person, 'desktop', 'mode');
+        writeFileSync(record, 'demo');
+        // The running desktop's making left its request, naming that run.
+        const running = 4242;
+        requestStartOver(d.request, running, true);
+        assert.ok(leftByAMaking(readFileSync(d.request, 'utf8')));
+        let waited = 0;
+        // The run is alive and so is its demo runtime: a double-click, or a start from the tray, while it makes the sample.
+        const second = startWith(d, { running: (pid) => pid === running, runtimeAlive: () => true, wait: () => void (waited += 1) });
+        assert.equal(second, null, 'nothing refused');
+        assert.equal(readFileSync(record, 'utf8'), 'demo');
+        assert.ok(existsSync(d.request) && existsSync(d.demo.data) && existsSync(d.demo.harnessRoot), 'nothing carried out');
+        assert.equal(waited, 0, 'and the second start is not held');
+        // The same in a run whose making failed and that is still open, however old its request.
+        const later = startWith(d, { running: (pid) => pid === running, runtimeAlive: () => true, requestAgeMs: () => requestYoungMs * 10 });
+        assert.equal(later, null);
+        assert.equal(readFileSync(record, 'utf8'), 'demo');
+        // Once that run has gone, a real next start carries the request out and makes the sample whole.
+        assert.equal(startWith(d, { running: () => false, runtimeAlive: () => false }), null);
+        assert.ok(!existsSync(d.request) && !existsSync(d.demo.data));
+        assert.equal(readFileSync(record, 'utf8'), 'demo');
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('the case the guide states is unchanged: an old run or a demo runtime still alive at a real next start goes Live and keeps the request', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        mkdirSync(join(d.person, 'desktop'), { recursive: true });
+        const record = join(d.person, 'desktop', 'mode');
+        // Start the Demo Over's request, whose run is still ending.
+        writeFileSync(record, 'demo');
+        requestStartOver(d.request, 4242);
+        assert.equal(leftByAMaking(readFileSync(d.request, 'utf8')), false);
+        assert.equal(startWith(d, { running: (pid) => pid === 4242 }), 'asking_alive');
+        assert.equal(readFileSync(record, 'utf8'), 'live');
+        assert.ok(existsSync(d.request));
+        // A demo runtime still alive refuses it too.
+        writeFileSync(record, 'demo');
+        assert.equal(startWith(d, { running: () => false, runtimeAlive: () => true }), 'runtime_alive');
+        assert.equal(readFileSync(record, 'utf8'), 'live');
+        // A making's request whose run has gone, with a demo runtime a crash left running, is refused as before.
+        writeFileSync(record, 'demo');
+        requestStartOver(d.request, 4242, true);
+        assert.equal(startWith(d, { running: () => false, runtimeAlive: () => true }), 'runtime_alive');
+        assert.equal(readFileSync(record, 'utf8'), 'live');
+        assert.ok(existsSync(d.request));
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('the main module sets the record to Live only where the carry-out refused', () => {
+    const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    const write = "writeMode(desktopPaths(personDirectory).mode, 'live');";
+    assert.equal(choose.split(write).length - 1, 1);
+    const caught = choose.indexOf('} catch (error) {', choose.indexOf('carryOutStartOver({'));
+    assert.ok(caught > 0 && choose.indexOf(write) > caught);
+});
+
 test('on a real disk: a desktop that quits in the middle of the seed leaves the request, and the next start makes the sample whole, never shows the half', async () => {
     const d = disk();
     try {
@@ -810,7 +893,7 @@ test('on a real disk: a desktop that quits in the middle of the seed leaves the 
         const half = fake({ markerAbsent: true, failAt: 'approval approve' });
         const onDisk = seedDepsOnDisk({ cli: half.deps.cli, places: d.demo, scratch: join(d.demo.data, 'seed-scratch'), progress: () => undefined });
         const firstRun = { ...onDisk, readStory: half.deps.readStory, sleep: async () => undefined, waitLimitMs: 0 };
-        const quitting = await (await openOnTheSample({ sample: firstRun, load: async () => undefined, preparing: () => undefined, request: () => requestStartOver(d.request, 999_999_999), drop: () => assert.fail('never whole') })).making;
+        const quitting = await (await openOnTheSample({ sample: firstRun, load: async () => undefined, preparing: () => undefined, request: () => requestStartOver(d.request, 999_999_999, true), drop: () => assert.fail('never whole') })).making;
         assert.ok(quitting?.kind === 'failed' && quitting.step === 'approval approve', JSON.stringify(quitting));
         assert.ok(existsSync(d.request), 'the request outlives the run');
         assert.deepEqual(readMarker(onDisk), { version: seedVersion, complete: false }, 'the marker says the sample is not whole');
@@ -1011,6 +1094,6 @@ test('the main process loads the page through openOnTheSample, says the mark to 
     const held = startOver.indexOf('if (sampleMaking) return { refused: demoPreparing };');
     assert.ok(held > 0 && held < startOver.indexOf('await dialog.showMessageBox'));
     // The request a making leaves is the person's start-over request, taken away only once the sample is whole.
-    assert.ok(main.includes('request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver),'));
+    assert.ok(main.includes('request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true),'));
     assert.ok(main.includes('drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),'));
 });

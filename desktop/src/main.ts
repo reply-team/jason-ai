@@ -736,7 +736,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                 preparing: setPreparing,
                 // A making cut short leaves the person's request to start the demo over, so the next start makes the sample
                 // whole rather than show the half; it is taken away once the sample is whole.
-                request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver),
+                request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true),
                 drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),
             });
         } catch (error) {

@@ -52,6 +52,27 @@ describe('the mode read as the page loads', () => {
         expect(modePreparing.value).toBe(false);
     });
 
+    it('follows the mark before it reads the mode, so a ready said between the two is not lost', async () => {
+        let said: ((on: boolean) => void) | null = null;
+        const order: string[] = [];
+        const seam = {
+            onPreparing(handler: (on: boolean) => void) {
+                order.push('follow');
+                said = handler;
+                return () => undefined;
+            },
+            get() {
+                order.push('get');
+                // The desktop answers from before the sample was made, and says it is ready before the answer lands.
+                said?.(false);
+                return Promise.resolve({ mode: 'demo', unopened: null, preparing: true });
+            },
+        };
+        expect(await loadMode({ mode: seam })).toBe('demo');
+        expect(order).toEqual(['follow', 'get']);
+        expect(modePreparing.value).toBe(false);
+    });
+
     it('takes a bare word from a desktop that answers one, and says nothing unopened', async () => {
         expect(await loadMode({ mode: { get: () => Promise.resolve('demo') } })).toBe('demo');
         expect(modeUnopened.value).toBeNull();
