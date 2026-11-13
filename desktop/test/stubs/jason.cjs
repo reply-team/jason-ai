@@ -111,6 +111,9 @@ if (args[0] === 'status') {
         items = JSON.parse(readFileSync(process.env.STUB_JOURNAL_FILE, 'utf8'));
     } catch {}
     // STUB_JOURNAL_SLEEP holds the answer back that many milliseconds, as a slow runtime does.
+    // As the runtime does, a request that names kinds gets lines of those kinds only.
+    const asked = args.flatMap((arg, i) => (arg === '--kind' ? [args[i + 1]] : []));
+    if (asked.length > 0) items = items.filter((item) => asked.includes(item.kind));
     const answer = () => print({ items, next_cursor: process.env.STUB_JOURNAL_MORE === 'yes' ? 'jrn_next' : null });
     if (process.env.STUB_JOURNAL_SLEEP) setTimeout(answer, Number(process.env.STUB_JOURNAL_SLEEP));
     else answer();

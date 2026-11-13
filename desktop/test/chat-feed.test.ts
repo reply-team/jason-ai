@@ -415,14 +415,47 @@ test('a restarted desktop reads back the lines written since the Feed\'s newest,
     await after.idle();
     const reads = r.jason().filter((asked) => asked.startsWith('journal list'));
     // A few seconds before the newest kept moment, as lines are committed out of order.
-    assert.deepEqual(reads, [`journal list ${feedKinds.map((kind) => `--kind ${kind}`).join(' ')} --since 2026-11-11T09:59:56.000Z --limit 100`]);
+    assert.deepEqual(reads.sort(), [
+        `journal list ${feedKinds.map((kind) => `--kind ${kind}`).join(' ')} --since 2026-11-11T09:59:56.000Z --limit 100`,
+        'journal list --kind workitem_succeeded --since 2026-11-11T09:59:56.000Z --limit 100',
+    ].sort(), 'succeeded work is a request of its own, one page, and the other kinds\' request does not name it');
     assert.deepEqual(
         after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)),
         [jrn(1), jrn(3), jrn(4), jrn(5), jrn(6)],
     );
     after.feed([]);
     await after.idle();
-    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 1, 'an ask that carries no catch-up reads nothing back');
+    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 2, 'an ask that carries no catch-up reads nothing back');
+});
+
+test('a catch-up keeps the sends and the listed roles\' work among the succeeded items it reads, in order, and nothing else of them', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(1)]);
+    const done = (n: number, fields: Record<string, unknown>) =>
+        journalLine(n, { kind: 'workitem_succeeded', campaign_id: cmp(1), work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_operation', work_item_role: null, work_item_operation: null, ...fields });
+    // Newest first, as the runtime answers: reads, a manager's work, a registered role's and a send are filtered by the desktop.
+    writeFileSync(
+        r.journal,
+        JSON.stringify([
+            done(8, { work_item_operation: 'social_invitation.send' }),
+            done(7, { work_item_operation: 'conversation.list' }),
+            done(6, { work_item_kind: 'ai_role', work_item_role: 'manager' }),
+            done(5, { work_item_kind: 'ai_role', work_item_role: 'closer-for-ada' }),
+            done(4, { work_item_kind: 'ai_role', work_item_role: 'researcher' }),
+            done(3, { work_item_operation: 'message.send', campaign_id: cmp(3) }),
+            done(2, { work_item_operation: 'contact.list' }),
+            journalLine(1),
+        ]),
+    );
+    const after = r.again();
+    after.feed([], { catchUp: true });
+    await after.idle();
+    assert.deepEqual(
+        after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? `${entry.journal_id}:${entry.operation ?? entry.role ?? entry.journal_kind}` : entry.kind)),
+        [`${jrn(1)}:inbound_reply_observed`, `${jrn(3)}:message.send`, `${jrn(4)}:researcher`, `${jrn(8)}:social_invitation.send`],
+    );
+    const record = recordOf(r, feed.id);
+    for (const said of ['closer-for-ada', 'manager', 'contact.list', 'conversation.list']) assert.ok(!record.includes(said), said);
 });
 
 test('the catch-up runs at each load of the page, as each first ask carries it, and takes no line twice, folded ones included, across a restart', async (t) => {
@@ -435,7 +468,7 @@ test('the catch-up runs at each load of the page, as each first ask carries it, 
     await r.chat.idle();
     r.chat.feed([], { catchUp: true });
     await r.chat.idle();
-    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 2, 'a page loaded again reads back again');
+    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 4, 'a page loaded again reads back again');
     const after = r.again();
     after.feed([], { catchUp: true });
     await after.idle();

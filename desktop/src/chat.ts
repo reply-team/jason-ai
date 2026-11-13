@@ -89,7 +89,7 @@ import {
     type FullAccessAnswer,
 } from './chat-modes.ts';
 import type { Cli } from './cli.ts';
-import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from './feed.ts';
+import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
 import type { DesktopPaths } from './paths.ts';
@@ -1249,12 +1249,24 @@ export class Chat {
      */
     async #catchUp(feed: Conversation, since: string): Promise<void> {
         try {
+            const limitMs = this.#options.feedReadLimitMs ?? feedReadLimitMs;
             const args = ['journal', 'list', ...feedKinds.flatMap((kind) => ['--kind', kind]), '--since', since, '--limit', String(catchUpLimit)];
-            const answer = await this.#readJson(args, this.#options.feedReadLimitMs ?? feedReadLimitMs);
-            if (answer !== null && Array.isArray(answer.items)) {
-                const more = typeof answer.next_cursor === 'string' && answer.next_cursor !== '';
-                // Each line read is made a Feed line by the same check as a line the page hands, or left out.
-                const read = (answer.items as unknown[]).map(lineOf).filter((line): line is LineEntry => line !== null);
+            // A second request, for succeeded work alone and one page of its own, so that a campaign's reads, which succeed
+            // every cadence, cannot crowd the other kinds out of the first. The journal cannot filter by operation or
+            // role, so the desktop does, in `lineOf`: of the newest `catchUpLimit` succeeded items since `since`, those
+            // that are a send or the work of a listed role are kept. Sends older than that page are not caught up, and
+            // no gap is said for them: a gap on every catch-up of a busy campaign would say nothing.
+            const [answer, succeeded] = await Promise.all([
+                this.#readJson(args, limitMs),
+                this.#readJson(['journal', 'list', '--kind', succeededKind, '--since', since, '--limit', String(catchUpLimit)], limitMs),
+            ]);
+            const more = answer !== null && typeof answer.next_cursor === 'string' && answer.next_cursor !== '';
+            // Each line read is made a Feed line by the same check as a line the page hands, or left out.
+            const lines = (page: Record<string, unknown> | null): LineEntry[] =>
+                page !== null && Array.isArray(page.items) ? (page.items as unknown[]).map(lineOf).filter((line): line is LineEntry => line !== null) : [];
+            if (answer !== null || succeeded !== null) {
+                // Newest first within each page; merged by journal id (a ULID sorts by moment) and put in oldest first.
+                const read = [...lines(answer), ...lines(succeeded)].sort((a, b) => (a.journal_id < b.journal_id ? 1 : a.journal_id > b.journal_id ? -1 : 0));
                 this.#takeLines(feed, read.reverse(), more);
             }
         } catch {
