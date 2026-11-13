@@ -348,9 +348,17 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
  * `desktop` but the chat folder (the turns' configurations among them), the known ones whether they exist or not,
  * refused to its file tools and to the file commands it recognises in Bash (`cat`, `head`, a redirection). Without them
  * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
- * the same paths when it is asked.
+ * the same paths when it is asked. In a demo run the person's own directories (`whole`: the person's data directory and
+ * harness root) are refused whole, the folder and everything under it, with no entry left open.
  */
-export function dataRules(platform: Platform, data: string, dataEntries: readonly string[], desktopEntries: readonly string[], grant?: { id: string; present: readonly string[] }): string[] {
+export function dataRules(
+    platform: Platform,
+    data: string,
+    dataEntries: readonly string[],
+    desktopEntries: readonly string[],
+    grant?: { id: string; present: readonly string[] },
+    whole: readonly string[] = [],
+): string[] {
     const paths = platform === 'win32' ? win32 : posix;
     const desktop = paths.join(data, 'desktop');
     // A Full access turn runs in its grant's folder below `chat-full`: the chat folder is then closed to it as every other
@@ -359,8 +367,11 @@ export function dataRules(platform: Platform, data: string, dataEntries: readonl
         ...namesOf(knownDataEntries, dataEntries, 'desktop').map((name) => paths.join(data, name)),
         ...namesOf(knownDesktopEntries, desktopEntries, grant === undefined ? 'chat' : 'chat-full').map((name) => paths.join(desktop, name)),
         ...(grant === undefined ? [] : [paths.join(desktop, 'chat'), ...grant.present.filter((name) => name !== grant.id).map((name) => paths.join(desktop, 'chat-full', name))]),
+        ...whole,
     ];
-    return targets.flatMap((target) => {
+    // On macOS each folder is also named under the data volume's prefix, which shows the same folder (a firmlink).
+    const spellings = platform === 'darwin' ? targets.flatMap((target) => [target, posix.join('/System/Volumes/Data', posix.resolve(target))]) : targets;
+    return spellings.flatMap((target) => {
         const rule = rulePath(platform, target);
         return [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`];
     });

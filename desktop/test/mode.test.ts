@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoUnopened, enterRun, isSettingsVariable, modeUnkept, offersOf, openDirectory, parseMode, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
+import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoUnopened, enterRun, isSettingsVariable, modeUnkept, offersOf, openDirectory, parseMode, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
 import { dataDirectory, desktopPaths } from '../src/paths.ts';
+import { harnessRoot } from '../src/uninstall.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'mode-'));
 
@@ -378,4 +379,39 @@ test('a demo run offers nothing that outlasts it, Remove What Jason Placed inclu
 test('the demo’s menu says, where an update, the PATH command, the start at logon or Remove What Jason Placed would be, to go back to your own installation', () => {
     for (const item of ['updates', 'autostart', 'command', 'removal'] as const) assert.match(demoMenuLine(item), /go back to your own installation/i);
     assert.notEqual(demoMenuLine('updates'), demoMenuLine('autostart'));
+});
+
+test('a demo run hands the chat the person\'s data directory and harness root, read before the run takes the person\'s variables away; a live run hands none', () => {
+    const person = join(folder(), '.jason');
+    const root = join(folder(), 'MyJason');
+    const env: Environment = { JASON_DATA_DIR: person, JASON_Harness__Root: root };
+    const settings = desktopPaths(person).installationSettings;
+    const demo = runsOn(person, 'demo', false);
+    const own = personsOwnOf(demo, () => harnessRoot(env, '/home/someone', settings));
+    enterRun(env, demo);
+    assert.deepEqual(own, { data: person, harnessRoot: root });
+    // Read after the run is entered, the root the person named is gone: why main reads it first.
+    assert.notEqual(harnessRoot(env, '/home/someone', settings), root);
+    let read = false;
+    assert.equal(personsOwnOf(runsOn(person, 'live', false), () => ((read = true), root)), undefined);
+    assert.equal(read, false, 'a live run reads no harness root for the fence');
+});
+
+test('main passes the person\'s directories to the chat, read before the run is entered', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    const read = choose.indexOf('personsOwn = personsOwnOf(runOn, () => personHarness);');
+    const entered = choose.indexOf('personEnvironment = enterRun(process.env, runOn);');
+    assert.ok(read > 0 && entered > read);
+    assert.ok(choose.indexOf('const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);') > 0);
+    const chat = main.slice(main.indexOf('const chat = new Chat({'));
+    assert.ok(chat.slice(0, chat.indexOf('});')).includes('        personsOwn,\n'));
+});
+
+test('main tells the menu and the chat whether this is a demo run, where Full access is not offered', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const setup = main.slice(main.indexOf('new Setup({'), main.indexOf('const chat = new Chat({'));
+    assert.ok(setup.includes("demo: runOn.mode === 'demo',"));
+    const chat = main.slice(main.indexOf('const chat = new Chat({'));
+    assert.ok(chat.slice(0, chat.indexOf('});')).includes("demo: runOn.mode === 'demo',"));
 });

@@ -137,17 +137,15 @@ export class PermissionBroker {
         if (mode === 'plan_only' && tool === 'ExitPlanMode') return refused(planExitRefusal);
         if (mode === 'plan_only' && writers.has(tool)) return refused(planRefusal);
         const judged = mode === 'auto_edit' ? autoEditJudgement(tool, input, turn.scope) : judge(tool, input, turn.scope);
+        // What Full access refuses is refused here too, whichever way the request came, before anything is allowed: a
+        // written file's own refusals among it (`writtenRefusal`). Anything else is judged and carded as in Ask first.
+        const full = mode === 'full_access' ? fullAccessJudgement(tool, input, turn.scope) : null;
+        if (full?.outcome === 'refused') return refused(full.message);
         if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         if (judged.verdict === 'deny') return refused(judged.message);
         // What Full access holds the person answers each time: no "Always" covers it, and its card offers none.
         let remember = judged.remember;
-        if (mode === 'full_access') {
-            // What Full access refuses is refused here too, whichever way the request came; anything else is judged and
-            // carded as in Ask first.
-            const full = fullAccessJudgement(tool, input, turn.scope);
-            if (full.outcome === 'refused') return refused(full.message);
-            if (full.outcome === 'held') remember = null;
-        }
+        if (full?.outcome === 'held') remember = null;
         if (mode === 'plan_only' && !planCards.has(tool)) return refused(planRefusal);
         if (remember !== null && this.#always.get(turn.chat)?.has(remember) === true) {
             return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'person', mode }));

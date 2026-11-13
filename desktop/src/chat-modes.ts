@@ -31,6 +31,13 @@ export const powerShellRunsInFullAccess = false;
 /** What the menu and the desktop say of Full access while the switch is off. */
 export const fullAccessNotYet = 'Full access is not in this version yet.';
 
+/**
+ * What the menu and the desktop say of Full access in a demo run, where it is not offered: the demo promises that the
+ * person's own installation is out of a conversation's reach, and that promise does not rest on the fence's reader being
+ * complete. Nor is the standing choice applied there, the person's own file left as it is.
+ */
+export const demoFullAccess = 'Not in the demo: Full access is for your own installation.';
+
 /** The modes in the menu's order: the default first, then narrow to wide. */
 export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'auto_edit', 'full_access'];
 
