@@ -89,6 +89,17 @@ export function carryOutStartOver(deps: CarryOutDeps): void {
     deps.dropRequest();
 }
 
+/** The aside copies (`<folder>.removing-*`) that lie beside a folder, as paths; none when the parent cannot be read. */
+export function asidesOf(folder: string): string[] {
+    try {
+        return readdirSync(dirname(folder))
+            .filter((name) => name.startsWith(`${basename(folder)}${asideMarker}`))
+            .map((name) => join(dirname(folder), name));
+    } catch {
+        return [];
+    }
+}
+
 /** The disk side of the above, for the person's request file. */
 export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: number) => boolean) {
     return {
@@ -108,15 +119,7 @@ export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: 
             renameSync(folder, aside);
             return aside;
         },
-        asides: (folder: string): string[] => {
-            try {
-                return readdirSync(dirname(folder))
-                    .filter((name) => name.startsWith(`${basename(folder)}${asideMarker}`))
-                    .map((name) => join(dirname(folder), name));
-            } catch {
-                return [];
-            }
-        },
+        asides: asidesOf,
         removeTree: (folder: string): void => rmSync(folder, { recursive: true, force: true }),
         dropRequest: (): void => rmSync(file, { force: true }),
     };

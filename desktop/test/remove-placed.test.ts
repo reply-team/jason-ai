@@ -825,6 +825,39 @@ test('the act takes off the demo beside the person’s installation, worked out 
     assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'removed' });
 });
 
+test('the act takes off a copy a start over left beside the demo, only when it carries the mark', async (t) => {
+    const root = scratch(t);
+    const paths = desktopPaths(`${root}/data`);
+    const person = `${root}/people/Jason`;
+    for (const folder of [paths.data, person]) mkdirSync(folder, { recursive: true });
+    for (const folder of [`${root}/data-demo`, `${person}-demo`, `${root}/data-demo.removing-5`]) claimDemoFolder(folder);
+    mkdirSync(`${person}-demo.removing-6`);
+    writeFileSync(`${person}-demo.removing-6/theirs.txt`, 'x');
+    const removal = placedRemoval({
+        platform: 'linux',
+        home: `${root}/home`,
+        env: { JASON_Harness__Root: person },
+        form: { form: 'deb' },
+        execPath: '/opt/Jason/jason-desktop-app',
+        executable: '/opt/Jason/resources/bundle/jason',
+        version: '0.39.0',
+        paths,
+        command: null,
+        autostart: null,
+        makeCommand: () => ({ status: () => ({ state: 'unsupported' as const, executable: '' }), remove: () => ({ state: 'unsupported' as const, executable: '' }) }),
+        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), set: async () => false }),
+        login: { isOn: () => false, set: async () => undefined },
+        stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
+        stopDemo: async (): Promise<StopOutcome> => ({ kind: 'stopped' }),
+        runsFrom: (): RunsFrom => 'none',
+        log: memoryLog(),
+    });
+    const report = await removal.remove();
+    assert.equal(existsSync(`${root}/data-demo.removing-5`), false);
+    assert.equal(existsSync(`${person}-demo.removing-6/theirs.txt`), true, 'an unmarked copy is left');
+    assert.ok(report.left.some((line) => line.includes('removing-6') && line.includes('carries no mark')));
+});
+
 test('the desktop gives both removals the demo’s stop, from the person’s directory', () => {
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('stopDemo: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }),'));
