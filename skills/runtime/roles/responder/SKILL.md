@@ -84,9 +84,9 @@ jason contact list --query marta@example.com
 A person found counts only when their value on the thread's channel equals that address exactly: `--query` matches any
 part of a name, a company, a title, a channel value or a custom field's value, so a result can be somebody else, and a
 `from` that is a display name rather than an address matches nobody. Exactly one such person: the reply names them with
-`--contact`. None, or more than one: create no reply, and say in your answer who wrote, from which address, and why nothing was drafted as an
-item, so that a person can be asked. A reply that names the wrong person anyway is refused by the reply's own check,
-below, with nothing sent.
+`--contact`. None, or more than one: create no reply, and say in your answer who wrote, from which address, and why
+nothing was drafted as an item, so that a person can be asked. A reply that names the wrong person anyway is refused by
+the reply's own check, below, with nothing sent.
 
 **One verdict per reply, one draft per verdict.** Before you classify, read the thread's work and the verdicts on it:
 this person's items in this campaign that are open or have succeeded, the verdicts already recorded on the campaign's
