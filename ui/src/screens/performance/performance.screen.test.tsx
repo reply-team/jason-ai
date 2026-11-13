@@ -320,6 +320,27 @@ describe('Performance', () => {
         expect(screen.queryByText('Nobody in this count for the period.')).toBeNull();
     });
 
+    it('asks its numbers, its two series and a tile’s list with archived people left out', async () => {
+        const api = week(new FakeApi()).answer('campaign.list_contacts', 'campaign.list_contacts/activity-replied-all');
+        open(api, { ...page, count: 'replied' });
+        expect(await rowOf('Oli Example')).toBeTruthy();
+
+        const window = { since: '2026-10-10T00:00:00.000Z', until: '2026-10-16T09:00:00.000Z' };
+        expect(api.calls.filter((c) => c.operation === 'campaign.activity').map((c) => c.body)).toEqual([
+            { ...window, exclude_archived_contacts: true },
+        ]);
+        expect(api.calls.filter((c) => c.operation === 'campaign.activity_by_period').map((c) => c.body)).toEqual([
+            { count: 'contacted', period: 'day', ...window, zone: 'UTC', exclude_archived_contacts: true },
+            { count: 'replied', period: 'day', ...window, zone: 'UTC', exclude_archived_contacts: true },
+        ]);
+        expect(api.sent('campaign.list_contacts')).toEqual({
+            activity: 'replied',
+            ...window,
+            limit: 50,
+            exclude_archived_contacts: true,
+        });
+    });
+
     it('a row opens the person beside the list, and the panel’s tabs and its close stay on Performance', async () => {
         const api = week(new FakeApi())
             .answer('campaign.list_contacts', 'campaign.list_contacts/activity-replied-all')

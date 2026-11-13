@@ -522,7 +522,7 @@ public class RecordedExchangesTests
         Assert.Equal([seed.Spring, seed.Autumn, seed.Winter, seed.Summer], everything.Items.Select(c => c.Id));
         string[] listed = [.. shown.Items.Select(c => c.Id)];
 
-        var all = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all", new { campaign_ids = listed }, Ct);
+        var all = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all", new { campaign_ids = listed, exclude_archived_contacts = true }, Ct);
         Assert.Equal(
             [
                 new CampaignSummaryRow(seed.Spring, 22, 3, 3, 2, 2, 6, 2, 6, Removed: 1, SequenceLinked: true),
@@ -530,8 +530,8 @@ public class RecordedExchangesTests
                 new CampaignSummaryRow(seed.Summer, 2, 0, 0, 0, 2, 0, 0, 0, Removed: 0, SequenceLinked: false),
             ],
             all.Campaigns);
-        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some", new { campaign_ids = new[] { seed.Spring } }, Ct)).Campaigns);
-        Assert.Equal(4, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "with-archived", new { campaign_ids = everything.Items.Select(c => c.Id) }, Ct)).Campaigns.Count);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some", new { campaign_ids = new[] { seed.Spring }, exclude_archived_contacts = true }, Ct)).Campaigns);
+        Assert.Equal(4, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "with-archived", new { campaign_ids = everything.Items.Select(c => c.Id), exclude_archived_contacts = true }, Ct)).Campaigns.Count);
 
         // Asked for nothing, the summary answers every campaign not archived, Winter left out, and a total in which Ada,
         // a member of three of them, counts once.
@@ -541,33 +541,36 @@ public class RecordedExchangesTests
         Assert.Equal(all.Total, unasked.Total);
         Assert.True(unasked.Total.People < unasked.Campaigns.Sum(c => c.People), "A person in several campaigns would count once per campaign.");
 
-        var week = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "last-7-days", new { campaign_ids = listed, since = WeekStart, until = Now }, Ct);
+        var week = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "last-7-days", new { campaign_ids = listed, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct);
         Assert.Equal(new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1), week.Campaigns[0]);
-        var today = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "today", new { campaign_ids = listed, since = "2026-10-16T00:00:00.000Z", until = Now }, Ct);
+        var today = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "today", new { campaign_ids = listed, since = "2026-10-16T00:00:00.000Z", until = Now, exclude_archived_contacts = true }, Ct);
         Assert.Equal(new CampaignActivityRow(seed.Spring, 0, 0, 0, 0, 0, 0, Removed: 0), today.Campaigns[0]);
         Assert.Equal(
             new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1),
-            Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "one", new { campaign_ids = new[] { seed.Spring }, since = WeekStart, until = Now }, Ct)).Campaigns));
+            Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "one", new { campaign_ids = new[] { seed.Spring }, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Campaigns));
 
         async Task<string[]> PeopleAsync(string @case, object body) =>
             [.. (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, @case, body, Ct)).Items.Select(item => item.Contact.FirstName!)];
 
-        Assert.Equal(["Ada", "Ben", "Pia"], await PeopleAsync("summary-waiting", new { campaign_id = seed.Spring, summary = "waiting", limit = 50 }));
-        Assert.Equal(["Cleo", "Eve", "Pia"], await PeopleAsync("summary-failed", new { campaign_id = seed.Spring, summary = "failed", limit = 50 }));
-        Assert.Equal(["Oli", "Rae"], await PeopleAsync("activity-replied", new { campaign_id = seed.Spring, activity = "replied", since = WeekStart, until = Now, limit = 50 }));
-        Assert.Equal(22, (await PeopleAsync("everyone", new { campaign_id = seed.Spring, limit = 50 })).Length);
-        Assert.Equal(["Ada"], await PeopleAsync("query", new { campaign_id = seed.Spring, query = "ada", limit = 50 }));
-        Assert.Equal(["Oli"], await PeopleAsync("summary-removed", new { campaign_id = seed.Spring, summary = "removed", limit = 50 }));
-        Assert.Equal(14, (await PeopleAsync("activity-people", new { campaign_id = seed.Spring, activity = "people", since = WeekStart, until = Now, limit = 50 })).Length);
-        Assert.Equal(["Oli"], await PeopleAsync("activity-removed", new { campaign_id = seed.Spring, activity = "removed", since = WeekStart, until = Now, limit = 50 }));
-        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.CampaignListContacts, "query-too-long", new { campaign_id = seed.Spring, query = new string('a', 201), limit = 50 }, HttpStatusCode.BadRequest, Ct)).Code);
-        Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "unlinked", new { campaign_ids = new[] { seed.Autumn } }, Ct)).Campaigns).SequenceLinked);
+        Assert.Equal(["Ada", "Ben", "Pia"], await PeopleAsync("summary-waiting", new { campaign_id = seed.Spring, summary = "waiting", limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal(["Cleo", "Eve", "Pia"], await PeopleAsync("summary-failed", new { campaign_id = seed.Spring, summary = "failed", limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal(["Oli", "Rae"], await PeopleAsync("activity-replied", new { campaign_id = seed.Spring, activity = "replied", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal(22, (await PeopleAsync("everyone", new { campaign_id = seed.Spring, limit = 50, exclude_archived_contacts = true })).Length);
+        Assert.Equal(["Ada"], await PeopleAsync("query", new { campaign_id = seed.Spring, query = "ada", limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal(["Oli"], await PeopleAsync("summary-removed", new { campaign_id = seed.Spring, summary = "removed", limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal(14, (await PeopleAsync("activity-people", new { campaign_id = seed.Spring, activity = "people", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true })).Length);
+        Assert.Equal(["Oli"], await PeopleAsync("activity-removed", new { campaign_id = seed.Spring, activity = "removed", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.CampaignListContacts, "query-too-long", new { campaign_id = seed.Spring, query = new string('a', 201), limit = 50, exclude_archived_contacts = true }, HttpStatusCode.BadRequest, Ct)).Code);
+        Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "unlinked", new { campaign_ids = new[] { seed.Autumn }, exclude_archived_contacts = true }, Ct)).Campaigns).SequenceLinked);
+        // The People page narrowed to the same campaign with Archived ticked asks its numbers with archived people counted.
+        Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(
+            Operations.CampaignSummary, "unlinked-with-archived-contacts", new { campaign_ids = new[] { seed.Autumn } }, Ct)).Campaigns).SequenceLinked);
         Assert.Empty((await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "unlinked", new { campaign_id = seed.Autumn }, Ct)).ExternalIds);
-        Assert.Equal(["Ada", "Hal"], await PeopleAsync("unlinked", new { campaign_id = seed.Autumn, limit = 50 }));
+        Assert.Equal(["Ada", "Hal"], await PeopleAsync("unlinked", new { campaign_id = seed.Autumn, limit = 50, exclude_archived_contacts = true }));
 
         var details = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "details", new { campaign_id = seed.Spring }, Ct);
         Assert.Equal(CampaignStatus.Archived, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "archived", new { campaign_id = seed.Winter }, Ct)).Status);
-        Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "archived", new { campaign_ids = new[] { seed.Winter } }, Ct)).Campaigns).SequenceLinked);
+        Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "archived", new { campaign_ids = new[] { seed.Winter }, exclude_archived_contacts = true }, Ct)).Campaigns).SequenceLinked);
         Assert.Equal("campaign", Assert.Single(details.ExternalIds).Kind);
         Assert.Single((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-campaign-planned", new { campaign_id = seed.Spring, status = new[] { "created" }, order = "due", limit = 50 }, Ct)).Items);
         Assert.Equal(2, (await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "by-campaign-running", new { campaign_id = seed.Spring, status = new[] { "scheduled", "processing" }, order = "due", limit = 50 }, Ct)).Items.Count);
@@ -620,15 +623,15 @@ public class RecordedExchangesTests
         // A person waiting on an approval, approved from their row: they leave Waiting, and the campaign's numbers say so.
         Assert.Equal(ApprovalStatus.Approved, (await api.RecordAsync<ApprovalDto>(Operations.ApprovalApprove, "from-campaign-row", new { approval_id = seed.AdaApproval, actor = ada }, Ct)).Status);
         Assert.Equal("approval_not_pending", (await api.RecordErrorAsync(Operations.ApprovalApprove, "from-campaign-row-again", new { approval_id = seed.AdaApproval, actor = ada }, HttpStatusCode.Conflict, Ct)).Code);
-        Assert.Equal(["Ben", "Pia"], await PeopleAsync("summary-waiting-after", new { campaign_id = seed.Spring, summary = "waiting", limit = 50 }));
-        Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some-after", new { campaign_ids = new[] { seed.Spring } }, Ct)).Campaigns).Waiting);
-        Assert.Equal(2, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all-after", new { campaign_ids = listed }, Ct)).Campaigns[0].Waiting);
+        Assert.Equal(["Ben", "Pia"], await PeopleAsync("summary-waiting-after", new { campaign_id = seed.Spring, summary = "waiting", limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "some-after", new { campaign_ids = new[] { seed.Spring }, exclude_archived_contacts = true }, Ct)).Campaigns).Waiting);
+        Assert.Equal(2, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "all-after", new { campaign_ids = listed, exclude_archived_contacts = true }, Ct)).Campaigns[0].Waiting);
 
         // A quieter campaign's panel as a click on its row opens it, on the Timeline: the campaign, its numbers, what is
         // planned and running, what waits for a person, and its journal.
         var summer = seed.Summer;
         Assert.Equal(CampaignStatus.Paused, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "summer", new { campaign_id = summer }, Ct)).Status);
-        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "summer", new { campaign_ids = new[] { summer } }, Ct)).Campaigns);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "summer", new { campaign_ids = new[] { summer }, exclude_archived_contacts = true }, Ct)).Campaigns);
         await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "summer-planned", new { campaign_id = summer, status = new[] { "created" }, order = "due", limit = 50 }, Ct);
         await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "summer-running", new { campaign_id = summer, status = new[] { "scheduled", "processing" }, order = "due", limit = 50 }, Ct);
         await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "summer-pending", new { status = "pending", campaign_id = summer, limit = 50 }, Ct);
@@ -641,32 +644,32 @@ public class RecordedExchangesTests
         string[] two = [seed.Spring, seed.Autumn];
         Assert.Equal(
             new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1),
-            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-7-days", new { since = WeekStart, until = Now }, Ct)).Total);
+            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-7-days", new { since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Total);
         Assert.Equal(
             new CampaignActivityTotal(0, 0, 0, 0, 0, 0, Removed: 0),
-            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-today", new { since = Today, until = Now }, Ct)).Total);
+            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-today", new { since = Today, until = Now, exclude_archived_contacts = true }, Ct)).Total);
         Assert.Equal(
             new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1),
-            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "two", new { campaign_ids = two, since = WeekStart, until = Now }, Ct)).Total);
+            (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "two", new { campaign_ids = two, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Total);
 
         async Task<int[]> SeriesAsync(string @case, object body) =>
             [.. (await api.RecordAsync<CampaignActivityByPeriodResponse>(Operations.CampaignActivityByPeriod, @case, body, Ct)).Buckets.Select(bucket => bucket.Value)];
         // Contacted: Ivy and Tess on the 12th, Uma on the 13th, Vic on the 14th. Replied: Rae on the 12th, Oli on the 14th.
-        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-7-days", new { count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
-        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-7-days", new { count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
-        Assert.Equal(new int[9], await SeriesAsync("contacted-today", new { count = "contacted", period = "hour", since = Today, until = Now, zone = "UTC" }));
-        Assert.Equal(new int[9], await SeriesAsync("replied-today", new { count = "replied", period = "hour", since = Today, until = Now, zone = "UTC" }));
-        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-two", new { campaign_ids = two, count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
-        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-two", new { campaign_ids = two, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
-        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-one", new { campaign_ids = new[] { seed.Spring }, count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
-        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-one", new { campaign_ids = new[] { seed.Spring }, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
+        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-7-days", new { count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-7-days", new { count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        Assert.Equal(new int[9], await SeriesAsync("contacted-today", new { count = "contacted", period = "hour", since = Today, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        Assert.Equal(new int[9], await SeriesAsync("replied-today", new { count = "replied", period = "hour", since = Today, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-two", new { campaign_ids = two, count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-two", new { campaign_ids = two, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-one", new { campaign_ids = new[] { seed.Spring }, count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-one", new { campaign_ids = new[] { seed.Spring }, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
 
         async Task<string[]> CountedAsync(string @case, object body) =>
             [.. (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, @case, body, Ct)).Items.Select(item => item.Contact.FirstName!)];
-        Assert.Equal(["Oli", "Rae"], await CountedAsync("activity-replied-all", new { activity = "replied", since = WeekStart, until = Now, limit = 50 }));
-        Assert.Equal(14, (await CountedAsync("activity-people-all", new { activity = "people", since = WeekStart, until = Now, limit = 50 })).Length);
-        Assert.Equal(["Rae"], await CountedAsync("activity-replied-day", new { activity = "replied", since = "2026-10-12T00:00:00.000Z", until = "2026-10-13T00:00:00.000Z", limit = 50 }));
-        Assert.Empty(await CountedAsync("activity-replied-today", new { activity = "replied", since = Today, until = Now, limit = 50 }));
+        Assert.Equal(["Oli", "Rae"], await CountedAsync("activity-replied-all", new { activity = "replied", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true }));
+        Assert.Equal(14, (await CountedAsync("activity-people-all", new { activity = "people", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true })).Length);
+        Assert.Equal(["Rae"], await CountedAsync("activity-replied-day", new { activity = "replied", since = "2026-10-12T00:00:00.000Z", until = "2026-10-13T00:00:00.000Z", limit = 50, exclude_archived_contacts = true }));
+        Assert.Empty(await CountedAsync("activity-replied-today", new { activity = "replied", since = Today, until = Now, limit = 50, exclude_archived_contacts = true }));
         // Performance counts an archived campaign as any other, so its picker offers them all.
         Assert.Equal(
             [seed.Spring, seed.Autumn, seed.Winter, seed.Summer],
@@ -685,7 +688,7 @@ public class RecordedExchangesTests
         // The quieter campaign's Results: its people now are its summary above, and nothing happened to any of them this week.
         Assert.Equal(
             new CampaignActivityRow(summer, 0, 0, 0, 0, 0, 0, Removed: 0),
-            Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "summer", new { campaign_ids = new[] { summer }, since = WeekStart, until = Now }, Ct)).Campaigns));
+            Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "summer", new { campaign_ids = new[] { summer }, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Campaigns));
     }
 
     /// <summary>
@@ -774,16 +777,16 @@ public class RecordedExchangesTests
         var rest = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "screen-many-next", new { limit = 100, cursor = first.NextCursor }, Ct);
         Assert.Single(rest.Items);
         string[] shown = [.. first.Items.Select(c => c.Id)];
-        Assert.Equal(100, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "many", new { campaign_ids = shown }, Ct)).Campaigns.Count);
-        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "many-next", new { campaign_ids = rest.Items.Select(c => c.Id) }, Ct)).Campaigns);
+        Assert.Equal(100, (await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "many", new { campaign_ids = shown, exclude_archived_contacts = true }, Ct)).Campaigns.Count);
+        Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "many-next", new { campaign_ids = rest.Items.Select(c => c.Id), exclude_archived_contacts = true }, Ct)).Campaigns);
 
         var crowded = shown[0];
-        Assert.Equal(51, (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "many", new { campaign_ids = shown, since = WeekStart, until = Now }, Ct)).Campaigns[0].Added);
+        Assert.Equal(51, (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "many", new { campaign_ids = shown, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Campaigns[0].Added);
         Assert.Equal(crowded, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "many", new { campaign_id = crowded }, Ct)).Id);
-        Assert.Equal(51, Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "many-one", new { campaign_ids = new[] { crowded }, since = WeekStart, until = Now }, Ct)).Campaigns).Added);
-        var page = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50 }, Ct);
+        Assert.Equal(51, Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "many-one", new { campaign_ids = new[] { crowded }, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Campaigns).Added);
+        var page = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true }, Ct);
         Assert.Equal(50, page.Items.Count);
-        var next = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many-next", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50, cursor = page.NextCursor }, Ct);
+        var next = await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "activity-many-next", new { campaign_id = crowded, activity = "added", since = WeekStart, until = Now, limit = 50, cursor = page.NextCursor, exclude_archived_contacts = true }, Ct);
         Assert.Equal("Person 51", Assert.Single(next.Items).Contact.FirstName);
 
         // The same people on the People screen, which lists two hundred at a time and reads on from where a page ended.

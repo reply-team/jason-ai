@@ -169,6 +169,7 @@ public static class ApiFixtures
         "campaign.summary/some-without-archived",
         "campaign.summary/summer",
         "campaign.summary/unlinked",
+        "campaign.summary/unlinked-with-archived-contacts",
         "campaign.summary/with-archived",
         "contact.get/archived",
         "contact.get/imported",

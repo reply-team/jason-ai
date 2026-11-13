@@ -309,7 +309,12 @@ export type CampaignSummaryRow = {
 /** The same counts across every campaign asked, each person counted once however many of them count the person. */
 export type CampaignSummaryTotal = Omit<CampaignSummaryRow, 'campaign_id' | 'sequence_linked'>;
 export type CampaignSummaryResponse = { campaigns: CampaignSummaryRow[]; total: CampaignSummaryTotal };
-export type CampaignActivityRequest = { campaign_ids?: string[]; since: string; until: string };
+export type CampaignActivityRequest = {
+    campaign_ids?: string[];
+    since: string;
+    until: string;
+    exclude_archived_contacts?: boolean;
+};
 export type CampaignActivityRow = {
     campaign_id: string;
     people: number;
@@ -331,6 +336,7 @@ export type CampaignActivityByPeriodRequest = {
     since: string;
     until: string;
     zone?: string;
+    exclude_archived_contacts?: boolean;
 };
 /** One count with the bucket as its period: people once within it, so buckets may add up to more than campaign.activity's total over the window. */
 export type ActivityBucket = { start: string; end: string; value: number };
@@ -366,6 +372,7 @@ export type ListContactsRequest = {
     query?: string;
     limit?: number;
     cursor?: string;
+    exclude_archived_contacts?: boolean;
 };
 export type Role = { id: string; name: string; builtin: boolean };
 export type Channel = { channel: string; value: string; primary: boolean };

@@ -108,7 +108,8 @@ and the ids keep `campaign`, and so does the rest of this page, which describes 
 Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
 **Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this browser's time
 zone (`jason campaign activity`). A person may be in several columns, and each column's name says on hover what it
-counts. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
+counts. Archived people are left out of every number and every list of a campaign, its Results included
+(`--exclude-archived-contacts`), as People leaves them out while Archived is not ticked. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
 `--include-archived`); the view, the period and both filters are part of the page's address. Every number opens its
 campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
 each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
@@ -155,7 +156,8 @@ tab.
 
 The whole operation over time, from the same counts as the Agents page's Activity: what happened to people today, in the last
 7, 30 or 90 days, across every campaign not archived or the ones chosen, each person counted once however many campaigns
-count them (`jason campaign activity` and its `total`). Two charts show contacted and replied people by the hour today,
+count them (`jason campaign activity` and its `total`), archived people left out of every number, chart and list
+(`--exclude-archived-contacts`). Two charts show contacted and replied people by the hour today,
 by the day over 7 or 30 days and by the week over 90, in this browser's time zone (`jason campaign activity-by-period`):
 a person counted on two days stands in both bars and once in the number above them. A count's tile lists its people
 under the tiles, the latest to whom it happened first, grouped by that day, each with the campaigns that count them and

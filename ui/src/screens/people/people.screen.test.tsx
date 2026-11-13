@@ -961,7 +961,7 @@ describe('People: the stage chips', () => {
         const api = new FakeApi()
             .answer('contact.list', 'contact.list/by-campaign-archived')
             .answer('campaign.get', 'campaign.get/unlinked')
-            .answer('campaign.summary', 'campaign.summary/unlinked');
+            .answer('campaign.summary', 'campaign.summary/unlinked-with-archived-contacts');
         open(api, { campaign: unlinked, archived: true });
         await waitFor(() => expect(chipLabels()).toContain('New 1'));
         expect(api.sent('campaign.summary')).toEqual({ campaign_ids: [unlinked] });

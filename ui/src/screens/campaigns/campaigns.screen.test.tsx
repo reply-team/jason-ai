@@ -478,6 +478,25 @@ describe('A campaign’s people', () => {
         },
     );
 
+    it.each(['summary', 'activity'] as const)(
+        'in %s, the list and the numbers beside it leave archived people out, as People does with Archived not ticked',
+        async (view) => {
+            const recorded =
+                view === 'summary'
+                    ? 'campaign.list_contacts/summary-waiting'
+                    : 'campaign.list_contacts/activity-people';
+            const api = peopleApi(recorded);
+            open(api, people(view === 'summary' ? 'waiting' : undefined, view));
+
+            await waitFor(() => expect(sent(api, 'campaign.list_contacts')).toHaveLength(1));
+            await screen.findByRole('cell', { name: 'Spring' });
+            const counted = sent(api, view === 'summary' ? 'campaign.summary' : 'campaign.activity');
+            expect(counted).toHaveLength(2);
+            for (const body of [...sent(api, 'campaign.list_contacts'), ...counted])
+                expect(body['exclude_archived_contacts']).toBe(true);
+        },
+    );
+
     it('a removed person’s badge and the Removed chip say the one word the stage map holds, the badge in outline', async () => {
         const api = peopleApi('campaign.list_contacts/summary-removed');
         open(api, people('removed', 'summary'));
@@ -1031,6 +1050,31 @@ describe('A campaign’s Results', () => {
         expect(sent(api, 'campaign.summary')).toContainEqual(fixtures['campaign.summary/some'].request);
         expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/one'].request]);
         expect(screen.queryByText(/%/)).toBeNull();
+    });
+
+    it('asks both of its reads with archived people left out, as the table beside it does', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('campaign.activity', 'campaign.activity/one');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
+
+        // Every number of the screen counts the people its lists show: none of these reads counts an archived person.
+        expect(sent(api, 'campaign.summary')).toContainEqual({
+            campaign_ids: ['cmp_1'],
+            exclude_archived_contacts: true,
+        });
+        expect(sent(api, 'campaign.activity')).toEqual([
+            {
+                campaign_ids: ['cmp_1'],
+                since: '2026-10-10T00:00:00.000Z',
+                until: '2026-10-16T09:00:00.000Z',
+                exclude_archived_contacts: true,
+            },
+        ]);
+        for (const body of sent(api, 'campaign.summary')) expect(body['exclude_archived_contacts']).toBe(true);
     });
 
     it('a campaign nothing has happened in yet shows its zeros, not blanks', async () => {
