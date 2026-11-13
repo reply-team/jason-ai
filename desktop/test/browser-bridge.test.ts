@@ -357,6 +357,7 @@ test('a tab sends only to a chat in Ask first or Plan only: Auto-edit, Full acce
         assert.deepEqual(refusals(r).at(-1), { Why: why, Member: 'chat.send' }, chatId);
     }
     assert.equal(autoEditElsewhere, 'This chat is in Auto-edit. Send messages to it from Jason Desktop.');
+    assert.equal(otherModeElsewhere, 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.');
     assert.ok(!r.calls.some((call) => call.member === 'chat.send'), 'no refused send was handled');
     await r.call(secret, 'chat.send', ['cht_ask', 'hello', { host: 'claude', model: 'm' }]);
     await r.call(secret, 'chat.send', ['cht_plan', 'hello', { host: 'claude' }]);
@@ -376,12 +377,9 @@ test('chat.send is held to the chat\'s own mode: a tab naming another is refused
     assert.ok(!r.calls.some((call) => call.member === 'chat.send'));
     await r.call(secret, 'chat.send', ['cht_ask', 'hello', { host: 'claude', model: 'm' }]);
     await r.call(secret, 'chat.send', ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }]);
-    // A chat the desktop does not hold is sent in Ask first, which the chat refuses as no conversation of its own.
-    await r.call(secret, 'chat.send', ['cht_gone', 'hello']);
     assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args), [
         ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first' }],
         ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }],
-        ['cht_gone', 'hello', { mode: 'ask_first' }],
     ]);
 });
 
@@ -459,6 +457,18 @@ test('a chat the window made in Full access and never sent to, so not yet kept o
     assert.deepEqual(JSON.parse(answer.body), { result: { refused: fullAccessElsewhere } });
     // The chat said its mode when it was made; it was never asked to send, so it says no end of a turn.
     assert.ok(!(real.events.get(full.id) ?? []).some((event) => event.kind === 'done'), 'the chat was never asked');
+});
+
+test('a send from a tab to a chat the desktop does not hold is refused by the bridge, whatever mode it names, and no turn starts', async (t) => {
+    const real = realChat(t);
+    const r = await rig(t, { members: real.members, modeOf: (chatId) => real.chat.modeNow(chatId) });
+    const secret = await r.pair();
+    for (const options of [undefined, { host: 'claude' }, { host: 'claude', mode: 'ask_first' }, { host: 'claude', mode: 'full_access' }]) {
+        const answer = await r.call(secret, 'chat.send', ['cht_01JZZZZZZZZZZZZZZZZZZZZZZZ', 'hello', options]);
+        assert.deepEqual(JSON.parse(answer.body), { result: { refused: otherModeElsewhere } }, JSON.stringify(options));
+        assert.deepEqual(refusals(r).at(-1), { Why: 'no_chat', Member: 'chat.send' });
+    }
+    assert.ok(!real.b.record().some((each) => each.stdin.includes('hello') || each.args.some((arg) => arg.includes('hello'))), 'no turn was started');
 });
 
 test('the mode a send is held to is read by id, kept or not, keeping nothing; an id the desktop does not hold reads null', async (t) => {
