@@ -498,3 +498,170 @@ describe('Full access answered once for good', () => {
         expect(menu().value).toBe('ask_first');
     });
 });
+
+describe('Plan only’s plan card', () => {
+    const hostile =
+        '**Bold** <script>window.hit=1</script> <a href="https://example.test/x">here</a> [link](https://example.test/y)';
+    const card = () => document.querySelector<HTMLElement>('.chat-plan');
+    const approve = () => screen.queryByRole('button', { name: 'Approve and run' });
+    const go = 'Go ahead with the plan in your last answer.';
+
+    /** Puts the chat in Plan only, sends a turn, and ends it as the desktop ends a Plan only turn with a plan. */
+    async function planned(desktop: StubDesktop, words = hostile, mark = true): Promise<string> {
+        await waitFor(() => menu());
+        choose('plan_only');
+        await waitFor(() => expect(menu().value).toBe('plan_only'));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Plan it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        const id = calls(desktop, 'chat.send')[0]!.args[0] as string;
+        flush(() => {
+            desktop.emit(id, { kind: 'text', text: words });
+            desktop.emit(id, mark ? { kind: 'done', error: null, plan: true } : { kind: 'done', error: null });
+        });
+        return id;
+    }
+
+    it('shows the plan as text, never as markup, with the line for Claude Code and its two buttons', async () => {
+        const desktop = renderConsole();
+        await planned(desktop);
+        await waitFor(() => expect(card()).not.toBeNull());
+        const text = card()!.querySelector('.plan-text')!;
+        expect(text.textContent).toBe(hostile);
+        expect(card()!.querySelector('strong, script, a, em, code')).toBeNull();
+        expect((window as { hit?: number }).hit).toBeUndefined();
+        expect(card()!.textContent).toContain(
+            'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.',
+        );
+        expect(approve()).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Keep planning' })).toBeTruthy();
+        // The plan is the card, not a second bubble beside it.
+        expect(document.querySelectorAll('.m.ai')).toHaveLength(0);
+    });
+
+    it('shows no card for a turn’s end the desktop did not mark', async () => {
+        const desktop = renderConsole();
+        await planned(desktop, 'Just an answer', false);
+        await waitFor(() => screen.getByText('Just an answer'));
+        expect(card()).toBeNull();
+    });
+
+    it('shows no card once the chat left Plan only, nor when it comes back to it', async () => {
+        const again = renderConsole();
+        const id = await planned(again);
+        await waitFor(() => expect(card()).not.toBeNull());
+        flush(() => again.emit(id, { kind: 'mode', mode: 'ask_first' }));
+        expect(card()).toBeNull();
+        flush(() => again.emit(id, { kind: 'mode', mode: 'plan_only' }));
+        expect(card()).toBeNull();
+    });
+
+    it('Approve and run asks the desktop for Ask first through the menu’s call, then sends the go naming Ask first, once however often it is pressed', async () => {
+        const desktop = renderConsole();
+        const id = await planned(desktop);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        const before = calls(desktop, 'chat.setMode').length;
+        // Two presses before the page has drawn again, then one on the card it drew.
+        const button = approve()!;
+        fireEvent.click(button);
+        fireEvent.click(button);
+        const pressed = screen.queryByRole('button', { name: 'Approving…' });
+        if (pressed) fireEvent.click(pressed);
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
+        const modes = calls(desktop, 'chat.setMode').slice(before);
+        expect(modes.map((each) => each.args)).toEqual([[id, 'ask_first', 'claude']]);
+        const sent = calls(desktop, 'chat.send')[1]!;
+        expect(sent.args).toEqual([id, go, { host: 'claude', mode: 'ask_first' }]);
+        // The order: the mode first, the go after its answer.
+        const order = desktop.calls
+            .filter((each) => each.name === 'chat.setMode' || each.name === 'chat.send')
+            .slice(-2);
+        expect(order.map((each) => each.name)).toEqual(['chat.setMode', 'chat.send']);
+        expect(menu().value).toBe('ask_first');
+        expect(card()!.textContent).toContain('Approved: the chat is in Ask first.');
+        expect(approve()).toBeNull();
+        expect(screen.getByText(go)).toBeTruthy();
+        expect(calls(desktop, 'chat.setMode').slice(before)).toHaveLength(1);
+        // Once the go's turn ended, the approved plan is an answer of the past.
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        expect(card()).toBeNull();
+    });
+
+    it('sends nothing when the desktop answers another mode, and says so', async () => {
+        const desktop = renderConsole();
+        await planned(desktop);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        const setMode = desktop.chat.setMode;
+        // Another choice from the menu came first: the desktop answers the chat in Full access.
+        desktop.chat.setMode = async (chat, _mode, host) => setMode(chat, 'full_access', host);
+        fireEvent.click(approve()!);
+        await waitFor(() =>
+            screen.getByText("The chat's mode changed before the plan was approved, so nothing was sent."),
+        );
+        expect(calls(desktop, 'chat.send')).toHaveLength(1);
+        expect(menu().value).toBe('full_access');
+        expect(approve()).toBeNull();
+        desktop.chat.setMode = setMode;
+    });
+
+    it('sends nothing when the desktop refuses the change, and says its words', async () => {
+        const refused = renderConsole();
+        const other = await planned(refused);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        refused.refuse.set('chat.setMode', 'That conversation is not one this desktop keeps.');
+        fireEvent.click(approve()!);
+        await waitFor(() => screen.getByText('That conversation is not one this desktop keeps.'));
+        expect(calls(refused, 'chat.send')).toHaveLength(1);
+        expect(chats.value[other]!.mode).toBe('plan_only');
+        expect(approve()).toBeNull();
+    });
+
+    it('a go the desktop refuses because the mode moved is said, and no turn runs', async () => {
+        const desktop = renderConsole();
+        const id = await planned(desktop);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        // The mode moves after the desktop answered Ask first and before the go reaches it.
+        const setMode = desktop.chat.setMode;
+        desktop.chat.setMode = async (...args) => {
+            const answer = await setMode(...args);
+            await setMode(id, 'full_access', 'claude');
+            return { ...answer, mode: 'ask_first' } as typeof answer;
+        };
+        fireEvent.click(approve()!);
+        await waitFor(() =>
+            screen.getByText("The chat's mode changed before the plan was approved, so nothing was sent."),
+        );
+        expect(calls(desktop, 'chat.send')[1]!.args[2]).toEqual({ host: 'claude', mode: 'ask_first' });
+        expect(chats.value[id]!.running).toBe(false);
+    });
+
+    it('on Codex says the approved plan still only reads, naming Claude Code, and follows a change of host', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = renderConsole(chatDesktop(status));
+        await planned(desktop);
+        await waitFor(() => expect(card()).not.toBeNull());
+        const codexWords =
+            'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
+        expect(card()!.textContent).not.toContain(codexWords);
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        await waitFor(() => expect(card()!.textContent).toContain(codexWords));
+        expect(approve()).not.toBeNull();
+    });
+
+    it('Keep planning puts the card aside, keeps Plan only, asks the desktop nothing and gives the box the focus', async () => {
+        const desktop = renderConsole();
+        await planned(desktop);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        const before = desktop.calls.length;
+        fireEvent.click(screen.getByRole('button', { name: 'Keep planning' }));
+        expect(approve()).toBeNull();
+        expect(card()!.querySelector('.plan-text')!.textContent).toBe(hostile);
+        expect(menu().value).toBe('plan_only');
+        const asked = desktop.calls
+            .slice(before)
+            .filter((each) => each.name === 'chat.setMode' || each.name === 'chat.send');
+        expect(asked).toEqual([]);
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Your message' }));
+    });
+});

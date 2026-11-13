@@ -31,6 +31,15 @@ import {
     stopAsked,
     takenBack,
     typed,
+    afresh,
+    codexPlanLine,
+    livePlan,
+    moded,
+    planApproved,
+    planGo,
+    planLine,
+    planModeMoved,
+    told,
     type Chat,
 } from './chat-model';
 
@@ -649,5 +658,114 @@ describe("a chat's access mode", () => {
         expect(fullAccessLine).toBe(
             'Full access: the agent runs commands without asking, except those Jason cannot read.',
         );
+    });
+});
+
+describe('Plan only’s plan card, as the page keeps it', () => {
+    const planning = (fields: Partial<Chat> = {}): Chat => ({
+        ...newChat('c1', 'claude'),
+        mode: 'plan_only',
+        ...fields,
+    });
+    /** A Plan only turn that ended well with these words last, as the desktop says it. */
+    const planned = (chat: Chat, words: string): Chat =>
+        received(received(said(chat, 'plan it'), { kind: 'text', text: words }), {
+            kind: 'done',
+            error: null,
+            plan: true,
+        });
+    const marks = (chat: Chat) =>
+        chat.entries.flatMap((entry, at) => (entry.kind === 'text' && entry.plan === true ? [at] : []));
+
+    it('marks the turn’s last words a plan only when the desktop says so, and live while nothing came after them', () => {
+        const chat = planned(planning(), 'Read the replies first.');
+        expect(chat.entries.at(-1)).toEqual({ kind: 'text', text: 'Read the replies first.', plan: true });
+        expect(livePlan(chat)).toBe(true);
+        // A turn's end without the mark marks nothing: an older desktop, or a turn that was no plan.
+        const plain = received(received(said(planning(), 'hi'), { kind: 'text', text: 'Hi' }), {
+            kind: 'done',
+            error: null,
+        });
+        expect(marks(plain)).toEqual([]);
+        expect(livePlan(plain)).toBe(false);
+        // Nor for the Feed, whatever the desktop says.
+        const feed = planned(planning({ main: true }), 'A plan');
+        expect(marks(feed)).toEqual([]);
+        expect(livePlan(feed)).toBe(false);
+        // Nor where the turn’s last thing was no words.
+        const stepped = received(received(said(planning(), 'go'), { kind: 'step', text: 'Read a file' }), {
+            kind: 'done',
+            error: null,
+            plan: true,
+        });
+        expect(marks(stepped)).toEqual([]);
+    });
+
+    it('is a plan of the past once a later turn ended, anything followed it, a turn runs, words wait, or the mode is not Plan only', () => {
+        const first = planned(planning(), 'One');
+        const second = planned(first, 'Two');
+        expect(marks(second)).toEqual([second.entries.length - 1]);
+        const failedLater = received(said(first, 'again'), { kind: 'done', error: 'It broke.' });
+        expect(marks(failedLater)).toEqual([]);
+
+        const chat = planned(planning(), 'Plan');
+        expect(livePlan(told(chat, 'A refusal.'))).toBe(false);
+        expect(livePlan(afresh(chat))).toBe(false);
+        expect(livePlan(said(chat, 'Something else'))).toBe(false);
+        expect(livePlan({ ...chat, running: true })).toBe(false);
+        expect(livePlan({ ...chat, waiting: 'later' })).toBe(false);
+        expect(livePlan({ ...chat, plan: 'kept' })).toBe(false);
+        expect(livePlan({ ...chat, plan: 'approving' })).toBe(false);
+        // Leaving Plan only ends the card, as the desktop ends it: back in Plan only it is no card.
+        const left = moded(chat, 'ask_first');
+        expect(marks(left)).toEqual([]);
+        expect(livePlan(moded(left, 'plan_only'))).toBe(false);
+        expect(marks(received(chat, { kind: 'mode', mode: 'full_access' }))).toEqual([]);
+    });
+
+    it('keeps an approved card, inert, through the change to Ask first its approval made, until the go’s turn ends', () => {
+        const chat = planned(planning(), 'Plan');
+        const approving = received({ ...chat, plan: 'approving' }, { kind: 'mode', mode: 'ask_first' });
+        expect(marks(approving)).toEqual([approving.entries.length - 1]);
+        const approved = moded({ ...approving, plan: 'approved' }, 'ask_first');
+        expect(livePlan(approved)).toBe(false);
+        const going = said(approved, planGo);
+        const over = received(received(going, { kind: 'text', text: 'Done.' }), { kind: 'done', error: null });
+        expect(marks(over)).toEqual([]);
+        expect(over.plan).toBeNull();
+    });
+
+    it('reads the mark from a kept conversation, so a reopened chat still in Plan only shows its card', () => {
+        const record: DesktopConversationRecord = {
+            id: 'conv_1',
+            campaignId: null,
+            title: 'Plans',
+            updatedAt: '2026-11-13T10:00:00.000Z',
+            running: false,
+            mode: 'plan_only',
+            dropped: 0,
+            entries: [
+                { kind: 'user', text: 'Plan it' },
+                { kind: 'text', text: 'The plan', plan: true },
+            ],
+            chosen: null,
+        };
+        const chat = fromRecord(record, 'claude');
+        expect(chat.entries.at(-1)).toEqual({ kind: 'text', text: 'The plan', plan: true });
+        expect(chat.plan).toBeNull();
+        expect(livePlan(chat)).toBe(true);
+        expect(livePlan(fromRecord({ ...record, mode: 'ask_first' }, 'claude'))).toBe(false);
+    });
+
+    it('says its sentences as ruled', () => {
+        expect(planGo).toBe('Go ahead with the plan in your last answer.');
+        expect(planLine).toBe(
+            'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.',
+        );
+        expect(codexPlanLine).toBe(
+            'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.',
+        );
+        expect(planApproved).toBe('Approved: the chat is in Ask first.');
+        expect(planModeMoved).toBe("The chat's mode changed before the plan was approved, so nothing was sent.");
     });
 });

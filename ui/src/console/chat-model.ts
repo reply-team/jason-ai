@@ -27,7 +27,8 @@ export interface Step {
 
 export type Entry =
     | { kind: 'user'; text: string }
-    | { kind: 'text'; text: string }
+    /** `plan`, when present: the desktop marked these words a Plan only turn's plan (`livePlan`). */
+    | { kind: 'text'; text: string; plan?: true }
     | { kind: 'step'; step: Step }
     | {
           kind: 'permission';
@@ -97,6 +98,11 @@ export interface Chat {
      * `mode` events, never from what the page asked for. The line that says Full access is on is drawn from this.
      */
     mode: DesktopChatMode;
+    /**
+     * What the person did with the chat's plan card in this page: approving it (the desktop asked, no answer yet),
+     * approved, or kept planning; null when they did neither. Never kept: a reopened page reads the desktop's mark alone.
+     */
+    plan: 'approving' | 'approved' | 'kept' | null;
 }
 
 /** How much of a set-up chat's first message names it, as the desktop names it. */
@@ -136,6 +142,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         removing: false,
         renaming: null,
         mode: 'ask_first',
+        plan: null,
     };
 }
 
@@ -162,6 +169,10 @@ function entryOf(entry: DesktopKeptEntry): Entry {
             return { kind: 'line', line: { ...entry } };
         case 'gap':
             return { kind: 'gap' };
+        case 'text':
+            return entry.plan === true
+                ? { kind: 'text', text: entry.text, plan: true }
+                : { kind: 'text', text: entry.text };
         default:
             return { kind: entry.kind, text: entry.text };
     }
@@ -184,6 +195,58 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         // A desktop of an earlier version keeps no mode: its chats run as Ask first.
         mode: record.mode ?? 'ask_first',
     };
+}
+
+/** What the plan card sends, as the person's message, once the chat is in Ask first. */
+export const planGo = 'Go ahead with the plan in your last answer.';
+
+/** The plan card's line on Claude Code: what Approve and run does. */
+export const planLine =
+    'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.';
+
+/** The plan card's line on Codex, in place of `planLine`: Ask first runs Codex read-only too. */
+export const codexPlanLine =
+    'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
+
+/** The plan card's line once it was approved in this page. */
+export const planApproved = 'Approved: the chat is in Ask first.';
+
+/** Why the plan's go was not sent: the chat was in another mode by the time it was approved, as the desktop says it. */
+export const planModeMoved = "The chat's mode changed before the plan was approved, so nothing was sent.";
+
+/** The words with every plan's mark taken off; the same entries when none had one. */
+function unplanned(entries: Entry[]): Entry[] {
+    if (!entries.some((each) => each.kind === 'text' && each.plan === true)) return entries;
+    return entries.map((each) =>
+        each.kind === 'text' && each.plan === true ? { kind: 'text', text: each.text } : each,
+    );
+}
+
+/**
+ * The chat in the mode the desktop says. Leaving Plan only ends its plan's card, as the desktop ends it, unless the
+ * person's own approval of it is what leaves Plan only: that card stays, inert, saying it was approved.
+ */
+export function moded(chat: Chat, mode: DesktopChatMode): Chat {
+    if (mode === 'plan_only' || chat.plan === 'approving' || chat.plan === 'approved') return { ...chat, mode };
+    return { ...chat, mode, entries: unplanned(chat.entries), plan: null };
+}
+
+/**
+ * Whether the chat's plan card may be approved now: its last entry is a plan the desktop marked, the chat is still in
+ * Plan only, no turn runs, nothing waits to be sent, it is not the Feed, and the person has neither approved it nor kept
+ * planning. Anything after the plan, a message, an error or a note, makes it a plan of the past.
+ */
+export function livePlan(chat: Chat): boolean {
+    const last = chat.entries.at(-1);
+    return (
+        last?.kind === 'text' &&
+        last.plan === true &&
+        chat.mode === 'plan_only' &&
+        !chat.running &&
+        chat.waiting === null &&
+        !chat.main &&
+        chat.plan === null
+    );
 }
 
 /** What the line under the composer says while the desktop holds the chat in Full access. */
@@ -448,7 +511,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'renamed':
             return { ...chat, title: event.title };
         case 'mode':
-            return { ...chat, mode: event.mode };
+            return moded(chat, event.mode);
         // A line never starts a turn: it goes into the thread, and nothing else of the chat changes.
         case 'line': {
             const last = chat.entries.at(-1);
@@ -460,7 +523,15 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'gap':
             return { ...chat, entries: [...chat.entries, { kind: 'gap' }] };
         case 'done': {
-            const over = ended(chat);
+            // A turn ended: every earlier plan is a plan of the past, and this turn's last words are its plan when the
+            // desktop says so. The Feed has none.
+            const words = unplanned(chat.entries);
+            const last = words.at(-1);
+            const entries =
+                event.plan === true && !chat.main && last?.kind === 'text'
+                    ? [...words.slice(0, -1), { kind: 'text' as const, text: last.text, plan: true as const }]
+                    : words;
+            const over = ended({ ...chat, entries, plan: null });
             if (event.error === null)
                 return chat.waiting !== null && !chat.held ? { ...over, waiting: null, outbox: chat.waiting } : over;
             return givenBackAfterFailure(chat, {

@@ -18,8 +18,10 @@ import {
     handed,
     hostChosen,
     kept,
+    livePlan,
     lost,
     modeChoices,
+    moded,
     modelChosen,
     modelTyped,
     modelView,
@@ -27,6 +29,11 @@ import {
     onHost,
     sendHeld,
     pickedFor,
+    planApproved,
+    planGo,
+    planLine,
+    codexPlanLine,
+    planModeMoved,
     replaced,
     said,
     shown,
@@ -257,9 +264,34 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
         .desktop.chat.setMode(id, mode, hostOf(chat)?.id ?? '')
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
-            changeChat(id, (chat) => ({ ...chat, mode: answer.mode }));
+            changeChat(id, (chat) => moded(chat, answer.mode));
         })
         .catch((error: unknown) => changeChat(id, (chat) => told(chat, messageOf(error))));
+}
+
+/**
+ * "Approve and run" on the chat's plan card: the menu's own change to Ask first (`chat.setMode`, the mode `ask_first` and
+ * never another), then the go, sent as the person's message and naming Ask first, so the desktop refuses it when the
+ * chat's mode moved in between. A card that is not live, approving or approved does nothing: a second press, like a
+ * reload or a restart, finds no card to approve. A refusal is said in the chat in the desktop's words, and nothing is sent.
+ */
+export function approvePlan(id: string): void {
+    const chat = chats.value[id];
+    if (!chat || !livePlan(chat)) return;
+    const host = hostOf(chat);
+    if (!host) return;
+    changeChat(id, (each) => ({ ...each, plan: 'approving' }));
+    here()
+        .desktop.chat.setMode(id, 'ask_first', host.id)
+        .then((answer) => {
+            if (isRefusal(answer)) return changeChat(id, (each) => told({ ...each, plan: null }, answer.refused));
+            // Another choice from the menu came first: the chat is in the mode the desktop says, and the go is not sent.
+            if (answer.mode !== 'ask_first')
+                return changeChat(id, (each) => told(moded({ ...each, plan: null }, answer.mode), planModeMoved));
+            changeChat(id, (each) => moded({ ...each, plan: 'approved' }, answer.mode));
+            sendTurn(id, planGo, false, 'ask_first');
+        })
+        .catch((error: unknown) => changeChat(id, (each) => told({ ...each, plan: null }, messageOf(error))));
 }
 
 /** How much each mode lets a turn do without asking, narrow to wide: the desktop's own order for stopping a turn. */
@@ -306,7 +338,7 @@ export function heldHostOf(chat: Chat): DesktopHost | null {
  * Starts a turn on the host chosen now; the desktop takes the campaign from the conversation. `resent` says the words were the waiting message: a
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
-export function sendTurn(id: string, text: string, resent = false): void {
+export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode): void {
     const chat = chats.value[id];
     const words = text.trim();
     if (!chat || chat.running || !words) return;
@@ -326,7 +358,7 @@ export function sendTurn(id: string, text: string, resent = false): void {
     // A chat that named no host yet is on the one its turn runs on from now, so a hold on that host later holds the chat.
     changeChat(id, (each) => said(each.host === null ? { ...each, host: host.id } : each, words, resent));
     here()
-        .desktop.chat.send(id, words, turnOptions(onHost(chat, host.id), host))
+        .desktop.chat.send(id, words, { ...turnOptions(onHost(chat, host.id), host), ...(mode ? { mode } : {}) })
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (each) => failed(each, answer.refused));
             // From its first turn the desktop keeps the conversation, and lists it.
@@ -347,6 +379,21 @@ effect(() => {
 
 define('chat.suggest', ([id, text]) => {
     if (typeof id === 'string' && typeof text === 'string') sendTurn(id, text);
+});
+
+define('chat.approvePlan', ([id]) => {
+    if (typeof id === 'string') approvePlan(id);
+});
+
+/** "Keep planning": the card is put aside in this page, the chat stays in Plan only, and the message box takes focus. */
+define('chat.keepPlanning', ([id], element) => {
+    if (typeof id !== 'string') return;
+    const chat = chats.value[id];
+    if (!chat || !livePlan(chat)) return;
+    // The box is found before the thread is drawn again, which takes the pressed button out of the page.
+    const box = element.closest('.chat-panel')?.querySelector<HTMLTextAreaElement>('textarea');
+    changeChat(id, (each) => ({ ...each, plan: 'kept' }));
+    box?.focus();
 });
 
 define('chat.answer', ([id, request, answer]) => {
@@ -420,6 +467,53 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
         <div class="ask-h">${svg('shield', 14)}<b>${entry.title}</b></div>
         <pre class="perm-detail">${entry.detail}</pre>
         ${buttons}
+    </div>`;
+}
+
+/**
+ * A Plan only turn's plan, as a card: its words drawn as text, never as markup; a line saying what Approve and run does
+ * on the host the go would go to now; and, while the card is live (`livePlan`), its two buttons. A card of the past,
+ * approved or put aside, keeps the words and drops the buttons.
+ */
+function planCard(chat: Chat, entry: Extract<Entry, { kind: 'text' }>, host: DesktopHost | null): Html {
+    const last = entry === chat.entries.at(-1);
+    const live = last && host !== null && livePlan(chat);
+    const approving = last && chat.plan === 'approving';
+    // Only one plan is marked at a time, so the approved one is this one, whatever was said after it.
+    const line =
+        chat.plan === 'approved'
+            ? planApproved
+            : live || approving
+              ? host !== null && codexHosts.has(host.id)
+                  ? codexPlanLine
+                  : planLine
+              : null;
+    return html`<div class="ask chat-plan">
+        <div class="ask-h">${svg('journal', 14)}<b>Plan</b></div>
+        <div class="said plan-text">${entry.text}</div>
+        ${line === null ? null : html`<div class="ask-w">${line}</div>`}
+        ${
+            live || approving
+                ? html`<div class="ask-a">
+                      <button
+                          class="btn sm p"
+                          type="button"
+                          ${approving ? html`disabled` : null}
+                          ${act('chat.approvePlan', chat.id)}
+                      >
+                          ${approving ? 'Approving…' : 'Approve and run'}
+                      </button>
+                      <button
+                          class="btn sm"
+                          type="button"
+                          ${approving ? html`disabled` : null}
+                          ${act('chat.keepPlanning', chat.id)}
+                      >
+                          Keep planning
+                      </button>
+                  </div>`
+                : null
+        }
     </div>`;
 }
 
@@ -507,7 +601,9 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             case 'user':
                 return html`<div class="m user"><div class="bub said">${entry.text}</div></div>`;
             case 'text':
-                return html`<div class="m ai"><div class="bub">${markdownView(entry.text)}</div></div>`;
+                return entry.plan === true && !chat.main
+                    ? planCard(chat, entry, host)
+                    : html`<div class="m ai"><div class="bub">${markdownView(entry.text)}</div></div>`;
             case 'permission':
                 return permission(chat, entry);
             case 'error':
@@ -574,6 +670,9 @@ function threadOf(chatId: string) {
             last.named === named &&
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
+            last.chat.mode === chat.mode &&
+            last.chat.plan === chat.plan &&
+            last.chat.waiting === chat.waiting &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
         if (!same) last = { chat, host, named, now, view: threadView(chat, host) };
