@@ -12,7 +12,7 @@ import { instructionsFile, readFence } from '../src/chat-deny.ts';
 import { header, turnInput } from '../src/chat-header.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { codexFloor, codexFloorSentence, floorSentence, versionLimitMs } from '../src/host-version.ts';
-import { codexWindowsSandbox } from '../src/chat-hosts.ts';
+import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
 import { checkingSandbox, checkVariable, sandboxKeyedSentence, sandboxNoSettingsSentence, sandboxSentence, sandboxUncheckedSentence, type SandboxCheck } from '../src/codex-sandbox.ts';
 import { codexTurnSettings } from '../src/chat-hosts.ts';
 import type { RunResult } from '../src/programs.ts';
@@ -221,6 +221,41 @@ test('a request the model settles makes no card, and the host reads the answer',
     assert.deepEqual(r.decided, [{ outcome: 'allowed', by: 'model', mode: 'ask_first' }, { outcome: 'refused', by: 'model', mode: 'ask_first' }]);
     assert.equal(r.ended[0]?.requests, 2);
     assert.deepEqual(doneOf(said), { kind: 'done', error: null });
+});
+
+test('a demo run\'s turn is fenced off the person\'s own directories whole, by the host\'s rules and by the model; the person\'s own run is not', async (t) => {
+    // The person's directories need not exist: the fence names them either way.
+    const person = join(tmpdir(), `jason-person-${process.pid}-${Date.now()}`);
+    const personsOwn = { data: join(person, '.jason'), harnessRoot: join(person, 'Jason') };
+    /** The host rules that name a folder itself or everything under it. */
+    const whole = (rules: readonly string[], folder: string) => {
+        const named = rulePath(process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux', folder);
+        return rules.filter((rule) => [`Read(${named})`, `Read(${named}/**)`, `Edit(${named})`, `Edit(${named}/**)`].includes(rule));
+    };
+
+    const demo = rig(t, { chat: { personsOwn } });
+    plan(demo, [
+        { ask: { tool: 'Read', input: { file_path: join(personsOwn.data, 'run', 'runtime.json') } } },
+        { ask: { tool: 'Bash', input: { command: `ls "${personsOwn.harnessRoot}"` } } },
+    ]);
+    const said = await demo.turn('c1', words, { host: 'claude' });
+    assert.ok(!kinds(said).includes('permission'), JSON.stringify(said));
+    const answers = texts(said).filter((text) => text.startsWith('decision'));
+    assert.equal(answers.length, 2, JSON.stringify(said));
+    for (const answer of answers) assert.match(answer, /^decision deny: That path is the person's own installation, and this chat runs in the demo/);
+    const [host] = demo.hosts();
+    assert.ok(host);
+    const fence = flagValues(host.args, '--disallowedTools');
+    assert.equal(whole(fence, personsOwn.data).length, 4, fence.join(' '));
+    assert.equal(whole(fence, personsOwn.harnessRoot).length, 4, fence.join(' '));
+
+    const live = rig(t);
+    await live.turn('c1', words, { host: 'claude' });
+    const [own] = live.hosts();
+    assert.ok(own);
+    const liveFence = flagValues(own.args, '--disallowedTools');
+    assert.equal(whole(liveFence, personsOwn.data).length + whole(liveFence, personsOwn.harnessRoot).length, 0);
+    assert.ok(!liveFence.some((rule) => rule.includes('jason-person-')), liveFence.join(' '));
 });
 
 test('a card the person allows lets the tool run, and a card the person refuses tells the host no', async (t) => {

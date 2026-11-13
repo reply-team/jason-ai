@@ -37,7 +37,7 @@ import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDis
 import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
 import { processIsRunning } from './own-runtime.ts';
-import { applyMode, demoDirectory, demoMenu, demoUnopened, enterRun, offersOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
+import { applyMode, demoDirectory, demoMenu, demoUnopened, enterRun, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
 import { claimDemoFolder, hasDemoMarker } from './demo-folders.ts';
@@ -533,6 +533,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
+            // A demo run offers no Full access (`demoFullAccess`).
+            demo: runOn.mode === 'demo',
             // A box is closed, and read as a no, when its window is hidden or closed.
             confirm: (box) =>
                 askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
@@ -560,6 +562,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         env,
         bundle,
         dataNamed,
+        personsOwn,
+        // A demo run offers no Full access by any path, and applies no standing choice (`demoFullAccess`).
+        demo: runOn.mode === 'demo',
         bundleVersion: version,
         cli,
         programs,
@@ -722,11 +727,13 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
-// Which installation this run is on, what the person's environment said, whether the installation is new and whether an
-// earlier page left its storage: decided once by `chooseInstallation`, after the sandbox and the link, before anything
-// else of a start resolves a path, and read only by what runs after it.
+// Which installation this run is on, what the person's environment said, the person's own directories a demo run's chat
+// refuses, whether the installation is new and whether an earlier page left its storage: decided once by
+// `chooseInstallation`, after the sandbox and the link, before anything else of a start resolves a path, and read only by
+// what runs after it.
 let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
+let personsOwn: PersonsOwn | undefined;
 let demoWhere!: DemoPlaces;
 /** Why the start over the run before asked for was not carried out at this start, as a code; null when nothing was refused. */
 let startOverNotCarriedOut: string | null = null;
@@ -796,6 +803,8 @@ function chooseInstallation(installerStart: boolean): void {
         keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
     });
     if (refused && runOn.mode === 'live') runOn = { ...runOn, unopened: demoUnopened };
+    // The person's own directories, which a demo run's chat refuses whole: read while the person's variables still stand.
+    personsOwn = personsOwnOf(runOn, () => personHarness);
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
     personEnvironment = enterRun(process.env, runOn);
     // Whether this installation is new is read next: before Electron makes its profile under the data directory, before

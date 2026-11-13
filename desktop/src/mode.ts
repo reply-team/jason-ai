@@ -71,6 +71,21 @@ export function runsOn(person: string, record: Mode, installerStart: boolean): R
     return { person, data: mode === 'demo' ? demoDirectory(person) : person, mode };
 }
 
+/** The person's own installation, seen from a demo run: its data directory and its harness root. */
+export interface PersonsOwn {
+    data: string;
+    harnessRoot: string;
+}
+
+/**
+ * Pure: the person's own directories a run's chat refuses whole (`ChatScope.personsOwn`): in a demo run the person's data
+ * directory and harness root, none in the person's own installation. It is read before `enterRun`, which takes away the
+ * variable that may name the person's harness root; the root is read only for a demo run.
+ */
+export function personsOwnOf(run: RunsOn, personsHarnessRoot: () => string): PersonsOwn | undefined {
+    return run.mode === 'demo' ? { data: run.person, harnessRoot: personsHarnessRoot() } : undefined;
+}
+
 /** What the first screen says when this start meant the demo and opened the person's own installation instead. */
 export const demoUnopened = 'The demo could not be opened, so Jason opened your own installation.';
 

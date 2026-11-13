@@ -8,7 +8,7 @@ import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { floorSentence, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessSentence } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullAccessSentence } from '../src/chat-modes.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
@@ -962,6 +962,20 @@ test('every host that drives the chat says why Full access cannot be chosen on i
     const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.fullAccess]));
     assert.equal(off.get('claude'), fullAccessNotYet);
     assert.equal(off.get('codex'), fullAccessNotYet);
+});
+
+test('in a demo run the menu shows Full access off on every host that drives the chat, with the demo sentence; Auto-edit is as it was', async (t) => {
+    const { b, say } = claudeSaying(t);
+    say({ stdout: '2.1.400 (Claude Code)' });
+    const hosts = (await new Setup({ ...setupDeps(b), demo: true }).status()).hosts;
+    const full = new Map(hosts.map((host) => [host.id, host.fullAccess]));
+    assert.equal(full.get('claude'), demoFullAccess);
+    assert.equal(full.get('codex'), demoFullAccess);
+    assert.equal(full.get('gemini'), null, 'a host that does not drive the chat offers no mode');
+    for (const provider of hosts.filter((host) => host.kind === 'provider' && host.drivesChat)) assert.equal(provider.fullAccess, demoFullAccess, provider.id);
+    assert.equal(new Map(hosts.map((host) => [host.id, host.autoEdit])).get('claude'), null);
+    const live = new Map((await setupOn(b).status()).hosts.map((host) => [host.id, host.fullAccess]));
+    assert.equal(live.get('claude'), null, "in the person's own installation Full access is offered at this version");
 });
 
 test('every host that drives the chat says whether Auto-edit can be chosen on it: Codex cannot ask before it acts, and Claude Code at any version can', async (t) => {
