@@ -58,7 +58,7 @@ public sealed record PreflightVerdict(
 /// <summary>
 /// Everything that can stop a provider work item, decided before a child process exists. Twenty-seven checks in one
 /// order: what the runtime cannot do at all, then what the planner got wrong — the twenty-seventh, a thread seen at
-/// another account, numbered last and asked last among these — then whether another search of the campaign
+/// another plugin, numbered last and asked after the twenty-third, before the twenty-fourth — then whether another search of the campaign
 /// is in the way, then the approval it owes a person, and last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
 /// before the reasons that need their attention, nobody is asked to approve work that would have been refused
 /// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
@@ -389,19 +389,26 @@ public static class ProviderOpPreflight
         }
 
         // Twenty-seventh, asked here, after the twenty-third and before the three that wait or park: a thread is held only
-        // by the provider account it was seen at, so work on a thread the campaign's lines say was seen goes only to a route
-        // that names one of the plugins and accounts they say. A read or a filing of it was routed there wherever a route
-        // still names one, so this refuses it only where none does; a reply is routed by its channel, so this refuses it
-        // wherever that channel's route holds another account. Asked before the approval and the block, so nobody is asked
-        // to approve, and no block holds, a reply that could only be refused. A thread no line names asks nothing.
+        // by the provider it was seen at, so work on a thread the campaign's lines say was seen goes only to a route that
+        // names one of the plugins they say. The plugin, not the account: an account is known only by the identity of the
+        // whole binding, which carries more than the account, so a route edited in a field that is not the account would
+        // turn every thread the campaign knows into one seen elsewhere; another account of the same plugin is the
+        // provider's to refuse, as a thread it does not hold. A read or a filing of it was routed to such a route wherever
+        // one names a plugin, so this refuses it only where none does, or where the id is held at more than one plugin and
+        // the operation's own route names none of them; a reply is routed by its channel, so this refuses it wherever that
+        // channel's route names another plugin. Asked before the approval and the block, so nobody is asked to approve, and
+        // no block holds, a reply that could only be refused. A thread no line names asks nothing.
         if (CanonicalInput.NamesAThread(contract)
             && facts.Thread is { Count: > 0 } seen
-            && !seen.Any(sighting => sighting.Names(route)))
+            && !seen.Any(sighting => sighting.NamesThePlugin(route)))
         {
+            var thread = CanonicalInput.NamedThread(facts.Item);
             return Refused(
                 resolution,
                 AttemptErrors.ThreadRouteMismatch,
-                $"This campaign saw the thread '{CanonicalInput.NamedThread(facts.Item)}' at another plugin or account than '{operation}' is routed to, and a thread is held only where it was seen, so it is acted on there or not at all. Route the operation, or the channel, to that plugin and account.");
+                seen.Select(sighting => sighting.PluginId).Distinct(StringComparer.Ordinal).Skip(1).Any()
+                    ? $"This campaign saw a thread '{thread}' at more than one plugin, and the route of '{operation}' names none of them, so it does not say which thread is meant; a thread is held only where it was seen. Route the operation to the plugin that holds the thread meant."
+                    : $"This campaign saw the thread '{thread}' at another plugin than '{operation}' is routed to, and a thread is held only where it was seen, so it is acted on there or not at all. Route the operation, or the channel, to that plugin.");
         }
 
         var plan = new ProviderOpPlan(

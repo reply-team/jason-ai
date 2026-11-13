@@ -159,17 +159,17 @@ public partial class ProviderOpPreflightTests
         scenario.Unsettled = true;
         met.Add(Refused(scenario, FailureClass.Ambiguous));
 
-        // Twenty-seventh, asked here: a filing of a thread the campaign's lines say was seen at an account no route names any
-        // more. It stands apart from the other references the work names, numbered after the rest so that no number moved,
-        // and it refuses before a child exists, and before the three that wait or park, like any of them. Where a line says
-        // the routed account, it asks nothing.
+        // Twenty-seventh, asked here: a filing of a thread the campaign's lines say was seen at a plugin the item is not
+        // routed to. It stands apart from the other references the work names, numbered after the rest so that no number
+        // moved, and it refuses before a child exists, and before the three that wait or park, like any of them. Where a
+        // line says the routed plugin, under any account, it asks nothing.
         scenario.Unsettled = false;
         scenario.Operation = Close;
         scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, Close], binding: Scenario.BindingSchema);
         scenario.Arguments = new JsonObject { ["thread"] = new JsonObject { ["external_id"] = "th-1" } };
-        scenario.Thread = [new ThreadSeen(Scenario.PluginId, "sha256:east", AccountKnown: true)];
+        scenario.Thread = [new ThreadSeen("another-provider", "sha256:west", AccountKnown: true)];
         met.Add(Refused(scenario, FailureClass.Permanent));
-        scenario.Thread = [new ThreadSeen(Scenario.PluginId, "sha256:east", AccountKnown: true), new ThreadSeen(Scenario.PluginId, "sha256:west", AccountKnown: true)];
+        scenario.Thread = [new ThreadSeen("another-provider", "sha256:west", AccountKnown: true), new ThreadSeen(Scenario.PluginId, "sha256:east", AccountKnown: true)];
         Assert.True(scenario.Check().Passed);
         scenario.Thread = null;
 
