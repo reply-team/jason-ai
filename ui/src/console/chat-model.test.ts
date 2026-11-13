@@ -776,7 +776,7 @@ describe('Plan only’s plan card, as the page keeps it', () => {
         expect(planElsewhere({ ...chat, plan: 'kept' }, 'codex')).toBe(false);
         expect(planElsewhere(said(chat, 'More'), 'codex')).toBe(false);
         expect(planOtherHost).toBe(
-            'This plan came from another agent host; the one this chat is on now never saw it. Ask for the plan again to approve it.',
+            'This plan came from another AI; the one this chat is on now never saw it. Ask for the plan again to approve it.',
         );
     });
 

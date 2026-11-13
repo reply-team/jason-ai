@@ -220,7 +220,7 @@ export const planApproved = 'Approved: the chat is in Ask first.';
 
 /** The plan card's line, with no buttons, while the chat is on another host than the one that made the plan. */
 export const planOtherHost =
-    'This plan came from another agent host; the one this chat is on now never saw it. Ask for the plan again to approve it.';
+    'This plan came from another AI; the one this chat is on now never saw it. Ask for the plan again to approve it.';
 
 /** Why the plan's go was not sent: the chat was in another mode by the time it was approved, as the desktop says it. */
 export const planModeMoved = "The chat's mode changed before the plan was approved, so nothing was sent.";

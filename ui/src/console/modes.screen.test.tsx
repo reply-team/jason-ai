@@ -510,7 +510,7 @@ describe('Plan only’s plan card', () => {
     const codexWords =
         'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
     const otherHost =
-        'This plan came from another agent host; the one this chat is on now never saw it. Ask for the plan again to approve it.';
+        'This plan came from another AI; the one this chat is on now never saw it. Ask for the plan again to approve it.';
 
     async function planned(desktop: StubDesktop, words = hostile, mark = true, host?: string): Promise<string> {
         await waitFor(() => menu());
