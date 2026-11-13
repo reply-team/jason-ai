@@ -30,6 +30,10 @@ Classes whose tests alone are run, each a full class name, or the start of one w
 .PARAMETER NotClasses
 Classes whose tests are not run, named as Classes names them.
 
+.PARAMETER Count
+A file the number of tests the first attempt ran is written to, over every target, read from that attempt's own reports:
+a test run again after a failure is counted once. Nothing is written when no attempt left a report.
+
 .PARAMETER Critical
 Runs the critical tier alone: the tests that carry the Critical trait.
 
@@ -49,6 +53,7 @@ param(
     [string[]] $NotNamespaces = @(),
     [string[]] $Classes = @(),
     [string[]] $NotClasses = @(),
+    [string] $Count = '',
     [switch] $Critical,
     [Parameter(Mandatory)] [string] $Version,
     [Parameter(Mandatory)] [string] $Results,
@@ -115,6 +120,25 @@ foreach ($run in @($retries | ForEach-Object { Get-ChildItem -LiteralPath $_.Ful
                 $histories[$key].Add("$($result.outcome)")
             }
         }
+    }
+}
+
+# The tests the first attempt ran, over every target: each run's attempt 1 holds every test its target ran once.
+if ($Count) {
+    $first = @(foreach ($run in @($retries | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory })) {
+        $attempt = Join-Path $run.FullName '1'
+        if (Test-Path -LiteralPath $attempt -PathType Container) { Get-ChildItem -LiteralPath $attempt -Filter *.trx -File }
+    })
+    if ($first.Count -gt 0) {
+        $ran = 0
+        foreach ($report in $first) {
+            [xml] $trx = Get-Content -Raw -LiteralPath $report.FullName
+            $ran += @($trx.SelectNodes("//*[local-name()='UnitTestResult']")).Count
+        }
+        $Count = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Count)
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Count) | Out-Null
+        Set-Content -LiteralPath $Count -Value $ran
+        Write-Host "the first attempt ran $ran tests"
     }
 }
 
