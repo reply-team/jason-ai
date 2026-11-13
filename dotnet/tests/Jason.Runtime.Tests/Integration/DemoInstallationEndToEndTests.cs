@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
@@ -190,6 +191,47 @@ public class DemoInstallationEndToEndTests
         Assert.Contains(listing.Items, entry => entry.Id == item);
     }
 
+    /// <summary>
+    /// The demo's folders go to the demo's own harness root. A demo runtime started on settings whose <c>Harness:Root</c>
+    /// names a sibling of the person's root reports that root in its own system report, makes the project and campaign
+    /// folders of the seed's first acts under it, and makes nothing at the person's root.
+    /// </summary>
+    [Fact]
+    public async Task The_demo_runtime_keeps_its_folders_under_the_demo_s_own_harness_root_and_never_in_the_person_s()
+    {
+        await using var host = await StartAsync();
+        var demoRoot = DemoRoot(host.Paths);
+        var personsRoot = PersonsRoot(host.Paths);
+
+        var before = await host.Fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, new { }, Ct);
+        Assert.Equal((demoRoot, HarnessRootState.Absent), (before.Harness!.Root, before.Harness.RootState));
+
+        // The seed's first acts that make folders: the story's project, and a campaign in it.
+        var project = await host.Fixture.PostOkAsync<ProjectDto>(
+            Operations.ProjectCreate,
+            new { name = "Fleet outreach", actor = Operator, reason = "the sample story" },
+            Ct);
+        var campaign = await host.Fixture.PostOkAsync<CampaignDto>(
+            Operations.CampaignCreate,
+            new { name = "Regional fleets", project_id = project.Id, actor = Operator, reason = "the sample story" },
+            Ct);
+
+        var after = await host.Fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, new { }, Ct);
+        Assert.Equal((demoRoot, HarnessRootState.Marked), (after.Harness!.Root, after.Harness.RootState));
+        Assert.True(Directory.Exists(project.FolderPath), "The project's folder is made.");
+        Assert.True(Directory.Exists(campaign.FolderPath), "The campaign's folder is made.");
+        Assert.True(IsWithin(demoRoot, project.FolderPath!), $"{project.FolderPath} is under the demo's root.");
+        Assert.True(IsWithin(project.FolderPath!, campaign.FolderPath!), $"{campaign.FolderPath} is under its project's folder.");
+        Assert.False(Directory.Exists(personsRoot), "Nothing is made at the person's own harness root.");
+    }
+
+    /// <summary>Whether <paramref name="inner"/> is below <paramref name="outer"/>.</summary>
+    private static bool IsWithin(string outer, string inner)
+    {
+        var relative = Path.GetRelativePath(Path.GetFullPath(outer), Path.GetFullPath(inner));
+        return relative != "." && !relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative);
+    }
+
     // ------------------------------------------------------------------------------------------------------------
     // The story and the demo installation
     // ------------------------------------------------------------------------------------------------------------
@@ -227,11 +269,27 @@ public class DemoInstallationEndToEndTests
         return settings.ToJsonString();
     }
 
+    /// <summary>The person's own harness root, as a runtime on this data directory would default it: <c>Jason</c> in the home the test gives it.</summary>
+    private static string PersonsRoot(JasonPaths paths) => Path.Combine(TempDataDir.HomeOf(paths.Root), HarnessRootRule.DefaultFolder);
+
+    /// <summary>The demo's harness root, as the seed names it: the person's own with <c>-demo</c> after it, beside it.</summary>
+    private static string DemoRoot(JasonPaths paths) => PersonsRoot(paths) + "-demo";
+
+    /// <summary>
+    /// The demo runtime, its settings written as the seed writes them, <c>Harness:Root</c> the demo's own root among them,
+    /// with the demo provider's package placed.
+    /// </summary>
     private static Task<FakeHostRuntime> StartAsync() =>
         FakeHostRuntime.StartAsync(
             Ct,
             Settings(),
-            prepare: paths => TestPlugins.Copy(Shipped, paths.PluginPackageDirectory(Demo)),
+            prepare: paths =>
+            {
+                var settings = JsonNode.Parse(File.ReadAllText(paths.UserSettingsFile))!.AsObject();
+                settings["Harness"] = new JsonObject { ["Root"] = DemoRoot(paths) };
+                File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString());
+                TestPlugins.Copy(Shipped, paths.PluginPackageDirectory(Demo));
+            },
             configureServices: services => services.AddSingleton<IPluginHostLocator>(new JasonDllLocator()));
 
     /// <summary>Tells the provider when the story starts, as the seed does: <c>Plugins:Config:demo:story_start</c>.</summary>
