@@ -49,6 +49,10 @@ const desktop = {
         set: (mode: 'live' | 'demo') => ipcRenderer.invoke('jason:mode.set', mode),
         startOver: () => ipcRenderer.invoke('jason:mode.startOver'),
     },
+    openIn: {
+        targets: (campaignId?: string) => ipcRenderer.invoke('jason:openIn.targets', campaignId),
+        open: (target: string, campaignId?: string) => ipcRenderer.invoke('jason:openIn.open', target, campaignId),
+    },
     pairing: {
         paired: (tokenId: string) => ipcRenderer.invoke('jason:pairing.paired', tokenId),
     },

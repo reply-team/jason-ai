@@ -1143,17 +1143,91 @@ body,
     margin: 0 auto;
     padding: 0 20px;
 }
-/* Demo, or a demo that could not be opened: the strip heads the window above the sidebar and the dock, and the shell
-   takes the height that is left. */
-.jc-console.demo {
+/* The window is a column: in Demo, or a demo that could not be opened, the strip heads it, then the top bar with Open in,
+   and the shell takes the height that is left. */
+.jc-console {
     display: flex;
     flex-direction: column;
     height: 100vh;
 }
-.jc-console.demo > .shell {
+.jc-console > .shell {
     flex: 1;
     min-height: 0;
     height: auto;
+}
+.jc-console .top-bar {
+    flex: none;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 4px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+}
+.jc-console .open-in {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.jc-console .open-in-problem {
+    color: var(--red);
+    font-size: 13px;
+}
+.jc-console .open-in-split {
+    display: flex;
+}
+.jc-console .open-in-split button {
+    padding: 3px 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+}
+.jc-console .open-in-split button:hover:not(:disabled) {
+    background: var(--hover);
+}
+.jc-console .open-in-split button:disabled {
+    color: var(--faint);
+    cursor: default;
+}
+.jc-console .open-in-main {
+    border-radius: 6px 0 0 6px;
+}
+.jc-console .open-in-arrow {
+    border-left: 0;
+    border-radius: 0 6px 6px 0;
+}
+.jc-console .open-in-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    margin-top: 4px;
+    padding: 4px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgb(15 23 42 / 14%);
+}
+.jc-console .open-in-folder {
+    padding: 4px 10px;
+    color: var(--mute);
+    font-size: 12px;
+}
+.jc-console .open-in-menu button {
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink);
+    text-align: left;
+}
+.jc-console .open-in-menu button:hover,
+.jc-console .open-in-menu button.on {
+    background: var(--hover);
 }
 .jc-console .mode-strip {
     flex: none;

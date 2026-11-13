@@ -123,6 +123,7 @@ test('the preload exposes window.jasonDesktop with exactly the seam, and nothing
         fullAccess: { standing: 'function', takeBack: 'function', onChanged: 'function' },
         theme: { get: 'function', set: 'function' },
         mode: { get: 'function', set: 'function', startOver: 'function' },
+        openIn: { targets: 'function', open: 'function' },
         pairing: { paired: 'function' },
         links: {
             take: 'function',
@@ -174,6 +175,8 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['mode.get', []],
         ['mode.set', ['demo']],
         ['mode.startOver', []],
+        ['openIn.targets', ['cmp_01']],
+        ['openIn.open', ['vscode', 'cmp_01']],
         ['setup.status', []],
         ['setup.connectReply', []],
         ['setup.connectReplyWithKey', ['k']],

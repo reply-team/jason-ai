@@ -495,6 +495,23 @@ export interface DesktopSetup {
     settingsRefused: string | null;
 }
 
+/**
+ * A place "Open in" can open the folder in, by the name the desktop knows it by: Claude Code or Codex as a new session in a
+ * terminal, a plain terminal, an editor, the file manager, or Copy path. The page sends one of these names and never a path.
+ */
+export type DesktopOpenInPlace =
+    'claude' | 'codex' | 'terminal' | 'vscode' | 'cursor' | 'antigravity' | 'windsurf' | 'zed' | 'files' | 'copy';
+
+/**
+ * What the split button is drawn from: the places this computer has, in the order to show them, the one the button's main
+ * part opens (the place used last, else Claude Code), and the folder's name, never its path.
+ */
+export interface DesktopOpenInAnswer {
+    places: { id: DesktopOpenInPlace; label: string }[];
+    default: DesktopOpenInPlace;
+    folder: string;
+}
+
 export interface JasonDesktop {
     /** The operating system, as Node names it. */
     platform: 'darwin' | 'win32' | 'linux';
@@ -532,6 +549,21 @@ export interface JasonDesktop {
          * there is no demo to start over.
          */
         startOver(): Promise<DesktopRefusal | null>;
+    };
+    openIn: {
+        /**
+         * The places this computer can open a folder in, for the folder of the campaign `campaignId` names (its recorded
+         * folder) or, with none, the harness root; the desktop's refusal, with a sentence, when that folder is not recorded
+         * or not on this computer. In the demo the folders are the demo installation's.
+         */
+        targets(campaignId?: string): Promise<DesktopOpenInAnswer | DesktopRefusal>;
+        /**
+         * Opens that folder in the place `target` names, which the desktop holds against its own list; `campaignId` is the
+         * campaign of the chat that is open, or absent. The page never sends a path. Null once opened (or copied); a refusal
+         * for a place not on this computer, a campaign whose folder is not there, or a program that could not be started. The
+         * place is kept as the next default, Copy path excepted.
+         */
+        open(target: DesktopOpenInPlace, campaignId?: string): Promise<DesktopRefusal | null>;
     };
     pairing: {
         /**

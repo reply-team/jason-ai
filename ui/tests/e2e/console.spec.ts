@@ -29,6 +29,18 @@ function standInDesktop(): void {
         onCommand: quiet,
         theme: { get: () => Promise.resolve(null), set: () => Promise.resolve() },
         links: { take: () => Promise.resolve(null), onOpen: quiet },
+        openIn: {
+            targets: () =>
+                Promise.resolve({
+                    places: [
+                        { id: 'terminal', label: 'Terminal' },
+                        { id: 'copy', label: 'Copy path' },
+                    ],
+                    default: 'terminal',
+                    folder: 'Jason',
+                }),
+            open: () => Promise.resolve(null),
+        },
         chat: {
             send: (id: unknown) => Promise.resolve(kept(id) ? (sent.add(id as string), null) : notKept),
             stop: done,

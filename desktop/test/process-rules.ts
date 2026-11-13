@@ -9,6 +9,7 @@ export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': "the programs a Connect card runs: reply, npm, and the version of an agent host or of node; and an agent host's one naming run of a set-up chat, which src/chat-naming.ts gives its command line",
     'src/chat-process.ts': "an agent host for one turn of the chat, streamed, or an agent host's model listing (`codex app-server`, `startListing`), and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
+    'src/open-in-start.ts': "an editor or the file manager the page's Open in names, started on its own with the folder",
     'src/shell-path.ts': "the login shell, on macOS and Linux only, for the PATH a program started from the Finder or a session's menu lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
     'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',

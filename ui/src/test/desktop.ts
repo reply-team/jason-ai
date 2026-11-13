@@ -7,6 +7,8 @@ import type {
     DesktopConversationRecord,
     DesktopFullAccessStanding,
     DesktopLink,
+    DesktopOpenInAnswer,
+    DesktopOpenInPlace,
     DesktopRefusal,
     DesktopReplyCopied,
     DesktopReplyDone,
@@ -193,6 +195,11 @@ export interface StubDesktop extends JasonDesktop {
     /** The sentence `mode.get` answers when a test says the demo could not be opened; null otherwise. */
     modeUnopened: string | null;
     /**
+     * What `openIn.targets` answers: the places this computer has, the default and the folder's name. `openIn.open` of a
+     * place keeps it as the default (Copy path excepted), as the desktop does, and answers null or the refusal a test set.
+     */
+    openInKept: DesktopOpenInAnswer;
+    /**
      * Calls the test refuses, by name, with the sentence: a chat call answers it as a value (`{ refused }`), as the
      * desktop does; a setup call rejects with it.
      */
@@ -353,6 +360,13 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                     : Promise.reject(new Error('That is not a mode.')),
             startOver: answering('mode.startOver', () => null),
         },
+        openIn: {
+            targets: answering('openIn.targets', () => structuredClone(stub.openInKept)),
+            open: answering('openIn.open', (target) => {
+                if (target !== 'copy') stub.openInKept.default = target as DesktopOpenInPlace;
+                return null;
+            }),
+        },
         pairing: { paired: call('pairing.paired') },
         calls,
         refuse,
@@ -361,6 +375,19 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         themeKept: null,
         modeKept: 'live',
         modeUnopened: null,
+        openInKept: {
+            places: [
+                { id: 'claude', label: 'Claude Code' },
+                { id: 'codex', label: 'Codex' },
+                { id: 'terminal', label: 'Terminal' },
+                { id: 'vscode', label: 'VS Code' },
+                { id: 'zed', label: 'Zed' },
+                { id: 'files', label: 'File manager' },
+                { id: 'copy', label: 'Copy path' },
+            ],
+            default: 'claude',
+            folder: 'Jason',
+        },
         kept,
         names,
         keep,

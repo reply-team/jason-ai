@@ -77,7 +77,9 @@ describe('Demo in the desktop', () => {
         const console = document.querySelector('.jc-console')!;
         expect(console.classList.contains('demo')).toBe(true);
         expect(shown.parentElement).toBe(console);
-        expect(shown.nextElementSibling?.classList.contains('shell')).toBe(true);
+        // The top bar with Open in comes next, then the shell.
+        expect(shown.nextElementSibling?.classList.contains('top-bar')).toBe(true);
+        expect(shown.nextElementSibling?.nextElementSibling?.classList.contains('shell')).toBe(true);
         expect(shown.textContent).toMatch(/sample data/);
         expect(shown.textContent).toMatch(/Nothing in it is real/);
         expect(shown.textContent).toMatch(/nothing is sent to anyone/);
@@ -171,7 +173,8 @@ describe('A demo the desktop could not open', () => {
         expect(said.textContent).toMatch(/^The demo could not be opened, so Jason opened your own installation\./);
         const console = document.querySelector('.jc-console')!;
         expect(said.parentElement).toBe(console);
-        expect(said.nextElementSibling?.classList.contains('shell')).toBe(true);
+        expect(said.nextElementSibling?.classList.contains('top-bar')).toBe(true);
+        expect(said.nextElementSibling?.nextElementSibling?.classList.contains('shell')).toBe(true);
         expect(strip()).toBeNull();
         expect(offer()).not.toBeNull();
     });
