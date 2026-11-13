@@ -220,3 +220,26 @@ test('a write goes through a file no one can foretell, made only where nothing i
     assert.throws(() => writeWindowPairing(blocked, { cleared: true, tokenId: newId }));
     assert.deepEqual(readdirSync(dirname(blocked)), ['window-pairing.json']);
 });
+
+test('every window or view the desktop makes for a page names the in-memory partition, so one added later cannot fall back to the default session', () => {
+    const source = join(import.meta.dirname, '..', 'src');
+    const made: string[] = [];
+    for (const name of readdirSync(source).filter((each) => each.endsWith('.ts'))) {
+        const text = readFileSync(join(source, name), 'utf8');
+        for (const found of text.matchAll(/new\s+(BrowserWindow|BrowserView|WebContentsView)\s*\(/g)) {
+            // The constructor's options, to the parenthesis that closes it.
+            let depth = 0;
+            let end = found.index + found[0].length - 1;
+            for (; end < text.length; end++) {
+                if (text[end] === '(') depth++;
+                else if (text[end] === ')' && --depth === 0) break;
+            }
+            made.push(name);
+            assert.ok(text.slice(found.index, end).includes('partition: windowPartition'), `${name}: ${found[1]} at ${found.index} names the in-memory partition`);
+        }
+        // window-pairing.ts names the prefix only to refuse it.
+        if (name !== 'window-pairing.ts') assert.equal(/fromPartition\s*\(|['"`]persist:/.test(text), false, `${name} makes no other session for a page`);
+        assert.equal(/<webview/i.test(text), false, `${name} embeds no webview`);
+    }
+    assert.deepEqual(made, ['main.ts'], 'the one window the desktop makes is read');
+});

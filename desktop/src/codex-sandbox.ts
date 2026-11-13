@@ -20,7 +20,8 @@
 //
 // What the verdict stands for, credential by credential. Checked: the run token, which `holds` requires unreadable.
 // Absent by construction: the window's own pairing with the runtime, which lives in memory only (`window-pairing.ts`).
-// Sealed: the AI providers' keys, encrypted by the operating system for the person's account (`providers.ts`).
+// Sealed: the AI providers' keys, encrypted by the operating system for the person's account (`providers.ts`), which on
+// Windows Codex's sandbox does not run as: it runs as an account of its own. This says nothing of other systems.
 // Readable and told to the person: a plugin's secret kept in the installation's settings, for which the settings file
 // read here stands, the live Claude turns' endpoint secrets, which open no API, and Jason's data, conversations and
 // transcripts. Outside Jason's folder and not checked: a browser's own pairing and the agent hosts' own sign-ins.

@@ -399,7 +399,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         changed: () => current?.webContents.send(eventChannels['setup.changed']),
         ...loggedModels(log),
     });
-    const refusedTheme = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
+    const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
     const themeDeps = {
         setSource: (choice: 'system' | 'light' | 'dark') => {
             nativeTheme.themeSource = choice;
@@ -407,8 +407,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         },
         write: (next: DesktopSettings) => writeSettings(paths.settings, next),
     };
-    handle(ipcMain, 'theme.get', origin, () => settings.theme, refusedTheme);
-    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refusedTheme);
+    handle(ipcMain, 'theme.get', origin, () => settings.theme, refused);
+    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
@@ -416,7 +416,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         state: () => readWindowPairing(paths.windowPairing),
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
-    handle(ipcMain, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refusedTheme);
+    handle(ipcMain, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
     registerSetup(
         new Setup({
             paths,

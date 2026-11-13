@@ -128,7 +128,9 @@ them on.
   runtime, a key with the run token's rights, never reaches this folder, whatever build of the page the runtime serves.
   An earlier version kept it here: at the first start after the update the desktop revokes every UI token before the
   window loads, then removes what that page stored, so a browser you paired with `jason ui open` must be paired again
-  once. If the revoke fails, nothing is removed and the next start tries again.
+  once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
+  does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
+  its tokens still valid, until a start that starts the runtime.
 - `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
   holds now, never the token. The page reports the id once it has paired, and the desktop revokes the token the window
   held before, so the paired list keeps one row for the window.
@@ -240,7 +242,8 @@ Claude Code.
   whether it did is a fact the check reports and the desktop's log records (`chat_sandbox_checked`, a word for the
   answer and one for the settings file, never a path), not a reason to refuse. What the verdict stands for, credential
   by credential: the run token is checked; the window's own pairing is absent, kept in memory only; the AI providers'
-  keys are sealed by the operating system for your account; a plugin's secret kept in the installation's settings,
+  keys are sealed by the operating system for your account, which Codex's sandbox on Windows does not run as, since it
+  runs as an account of its own; a plugin's secret kept in the installation's settings,
   the live Claude turns' endpoint secrets, which open no API, and Jason's data, conversations and transcripts are
   readable, and the line under the composer says so; a browser's own pairing and the agent hosts' own sign-ins are
   outside Jason's folder and not checked. The chat runs on Codex only on exactly
