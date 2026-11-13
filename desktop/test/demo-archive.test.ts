@@ -1,0 +1,463 @@
+// The prepared demo: an archive the release made, placed by `jason import` at a demo's first start and at the start after
+// Start the Demo Over, when it is fresh; the sample made at the start otherwise, as before. The import here is a stand-in
+// that does what `jason import` does to the places it is given: a harness root holding anything, and a part of the data
+// directory an import places, are moved aside first; then the parts and the root are written; then a runtime is started.
+
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { crc32, deflateRawSync } from 'node:zlib';
+import type { Cli, CliResult } from '../src/cli.ts';
+import {
+    archiveFreshDays,
+    beginPlacing,
+    clearPlaced,
+    demoArchiveOf,
+    exportedAtOf,
+    holdsNothing,
+    PlacingFailed,
+    placingPlan,
+    sampleUnprepared,
+    settlePlacing,
+    writeSampleWhole,
+    type PlacingEnd,
+    type PlacingOutcome,
+} from '../src/demo-archive.ts';
+import { claimDemoFolder, demoMarkerName, hasDemoMarker, markPlacedFolder } from '../src/demo-folders.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftByAPlacing, requestStartOver } from '../src/demo-over.ts';
+import { markerPath, readMarker, type DemoPlaces } from '../src/demo-seed.ts';
+import { fileLines, LogHold } from '../src/log.ts';
+
+const day = 24 * 60 * 60 * 1000;
+const now = new Date('2026-12-01T12:00:00.000Z');
+
+/** A zip as an export writes one: each entry deflated or stored, a central directory, the end record. */
+function zip(entries: { name: string; data: Buffer; stored?: boolean }[]): Buffer {
+    const locals: Buffer[] = [];
+    const central: Buffer[] = [];
+    let offset = 0;
+    for (const entry of entries) {
+        const body = entry.stored ? entry.data : deflateRawSync(entry.data);
+        const name = Buffer.from(entry.name, 'utf8');
+        const local = Buffer.alloc(30);
+        local.writeUInt32LE(0x04034b50, 0);
+        local.writeUInt16LE(20, 4);
+        local.writeUInt16LE(entry.stored ? 0 : 8, 8);
+        local.writeUInt32LE(crc32(entry.data), 14);
+        local.writeUInt32LE(body.length, 18);
+        local.writeUInt32LE(entry.data.length, 22);
+        local.writeUInt16LE(name.length, 26);
+        const header = Buffer.alloc(46);
+        header.writeUInt32LE(0x02014b50, 0);
+        header.writeUInt16LE(20, 4);
+        header.writeUInt16LE(20, 6);
+        header.writeUInt16LE(entry.stored ? 0 : 8, 10);
+        header.writeUInt32LE(crc32(entry.data), 16);
+        header.writeUInt32LE(body.length, 20);
+        header.writeUInt32LE(entry.data.length, 24);
+        header.writeUInt16LE(name.length, 28);
+        header.writeUInt32LE(offset, 42);
+        locals.push(local, name, body);
+        central.push(header, name);
+        offset += local.length + name.length + body.length;
+    }
+    const directory = Buffer.concat(central);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(entries.length, 8);
+    end.writeUInt16LE(entries.length, 10);
+    end.writeUInt32LE(directory.length, 12);
+    end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, directory, end]);
+}
+
+/** The record an export writes, with the moment it names. */
+const record = (exportedAt: string | undefined): Buffer =>
+    Buffer.from(JSON.stringify({ format: 1, jason_version: '0.41.0', ...(exportedAt === undefined ? {} : { exported_at: exportedAt }), operating_system: 'linux', entries: [], directories: [] }));
+
+function scratch(t: { after(fn: () => void): void }): string {
+    const root = mkdtempSync(join(tmpdir(), 'jason-desktop-demo-archive-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    return root;
+}
+
+/** A bundle carrying an archive made at `exportedAt`, and the demo's two places beside a person's, none of them made. */
+function world(t: { after(fn: () => void): void }, exportedAt = new Date(now.getTime() - 3 * day).toISOString()) {
+    const root = scratch(t);
+    const bundle = join(root, 'bundle');
+    const archive = demoArchiveOf(bundle);
+    mkdirSync(join(bundle, 'demo'), { recursive: true });
+    writeFileSync(archive, zip([{ name: 'data/config/settings.json', data: Buffer.from('{}') }, { name: 'export.json', data: record(exportedAt) }]));
+    const places: DemoPlaces = { data: join(root, '.jason-demo'), harnessRoot: join(root, 'Jason-demo') };
+    const request = join(root, '.jason', 'desktop', 'demo-start-over');
+    return { root, bundle, archive, places, request };
+}
+
+test('the archive is the one the package carries, under bundle/demo', () => {
+    assert.equal(demoArchiveOf('b'), join('b', 'demo', 'jason-demo.zip'));
+});
+
+test('the archive’s moment is read from its own record, deflated or stored, and never from the file’s date', (t) => {
+    const w = world(t, '2026-11-13T09:01:02.1234567+00:00');
+    assert.equal(exportedAtOf(w.archive).toISOString(), '2026-11-13T09:01:02.123Z');
+    writeFileSync(w.archive, zip([{ name: 'export.json', data: record('2026-11-20T00:00:00Z'), stored: true }]));
+    assert.equal(exportedAtOf(w.archive).toISOString(), '2026-11-20T00:00:00.000Z');
+    // A record thirty days old in a file written a moment ago is stale; a fresh one in a file dated long ago is placed.
+    writeFileSync(w.archive, zip([{ name: 'export.json', data: record(new Date(now.getTime() - 30 * day).toISOString()) }]));
+    utimesSync(w.archive, now, now);
+    assert.deepEqual(placingPlan({ archive: w.archive, places: w.places, now }), { kind: 'make', step: 'archive_stale' });
+    const fresh = new Date(now.getTime() - day);
+    writeFileSync(w.archive, zip([{ name: 'export.json', data: record(fresh.toISOString()) }]));
+    const longAgo = new Date(now.getTime() - 400 * day);
+    utimesSync(w.archive, longAgo, longAgo);
+    assert.deepEqual(placingPlan({ archive: w.archive, places: w.places, now }), { kind: 'place', archive: w.archive, exportedAt: fresh });
+});
+
+test('a fresh archive is placed up to twenty-one days after it was made, and not a moment later', (t) => {
+    const w = world(t);
+    assert.equal(archiveFreshDays, 21);
+    const at = (age: number) => {
+        writeFileSync(w.archive, zip([{ name: 'export.json', data: record(new Date(now.getTime() - age).toISOString()) }]));
+        return placingPlan({ archive: w.archive, places: w.places, now }).kind;
+    };
+    assert.equal(at(0), 'place');
+    assert.equal(at(21 * day), 'place');
+    assert.equal(at(21 * day + 1), 'make');
+});
+
+test('a missing or broken archive is not placed, and says which by a step', (t) => {
+    const w = world(t);
+    const plan = () => placingPlan({ archive: w.archive, places: w.places, now });
+    const broken: [string, Buffer][] = [
+        ['not a zip', Buffer.from('this is not an archive')],
+        ['cut short', readFileSync(w.archive).subarray(0, 40)],
+        ['no record', zip([{ name: 'data/config/settings.json', data: Buffer.from('{}') }])],
+        ['a record with no moment', zip([{ name: 'export.json', data: record(undefined) }])],
+        ['a record that is not JSON', zip([{ name: 'export.json', data: Buffer.from('{ not json') }])],
+        ['a moment that is no moment', zip([{ name: 'export.json', data: record('yesterday') }])],
+    ];
+    // A record whose bytes do not match its checksum.
+    const damaged = zip([{ name: 'export.json', data: record(now.toISOString()), stored: true }]);
+    // The local header is thirty bytes and the name eleven: the body begins at the forty-first.
+    damaged[45] = damaged[45]! ^ 0xff;
+    broken.push(['a damaged record', damaged]);
+    for (const [what, bytes] of broken) {
+        writeFileSync(w.archive, bytes);
+        assert.deepEqual(plan(), { kind: 'make', step: 'archive_unreadable' }, what);
+    }
+    rmSync(w.archive);
+    assert.deepEqual(plan(), { kind: 'make', step: 'archive_missing' });
+});
+
+test('an archive is placed only into a demo that holds nothing, and never over a harness root that is there', (t) => {
+    const w = world(t);
+    const plan = () => placingPlan({ archive: w.archive, places: w.places, now }).kind;
+    assert.equal(holdsNothing(w.places.data), true, 'no data directory yet');
+    assert.equal(plan(), 'place');
+    claimDemoFolder(w.places.data);
+    mkdirSync(join(w.places.data, 'desktop', 'electron'), { recursive: true });
+    assert.equal(plan(), 'place', 'the desktop’s marker and its own folder are nothing an import places');
+    // A demo that holds a sample, or anything of an installation, is started as any demo: nothing is placed or said.
+    for (const part of ['demo-seed.json', 'state', 'config', 'plugins', 'logs']) {
+        const path = join(w.places.data, part);
+        if (part.endsWith('.json')) writeFileSync(path, '{}');
+        else mkdirSync(path);
+        assert.deepEqual(placingPlan({ archive: w.archive, places: w.places, now }), { kind: 'none' }, part);
+        rmSync(path, { recursive: true });
+    }
+    // A harness root that is there, marked or not, would be moved aside by the import: the sample is made instead.
+    mkdirSync(w.places.harnessRoot);
+    assert.deepEqual(placingPlan({ archive: w.archive, places: w.places, now }), { kind: 'make', step: 'root_present' });
+});
+
+/** What the stand-in import saw and did. */
+interface Seen {
+    args: readonly string[] | null;
+    /** At the moment the import began: whether the log's folder and the harness root were there, and what the data directory held. */
+    logsThere: boolean | null;
+    rootThere: boolean | null;
+    data: string[] | null;
+    asides: string[];
+    started: boolean;
+}
+
+/**
+ * `jason import` as it treats its places (`ImportCommand`): a root that holds anything goes aside to `<root>.replaced-*`,
+ * a part present goes aside into `<data>/replaced-*`; then the parts and the root are written and a runtime started.
+ * `fails` ends it with the verb's error code before anything is written, or after the parts and before the start.
+ */
+function importer(places: DemoPlaces, fails: 'before' | 'after' | null = null) {
+    const seen: Seen = { args: null, logsThere: null, rootThere: null, data: null, asides: [], started: false };
+    const refusal = (code: string): CliResult => ({ exit: 1, stdout: JSON.stringify({ error: { code, message: `nothing at ${places.data} was written`, retryable: false } }), stderr: '' });
+    const cli: Cli = {
+        async run(args) {
+            seen.args = args;
+            seen.logsThere = existsSync(join(places.data, 'logs'));
+            seen.rootThere = existsSync(places.harnessRoot);
+            seen.data = readdirSync(places.data).sort();
+            if (fails === 'before') return refusal('import_refused');
+            if (existsSync(places.harnessRoot) && readdirSync(places.harnessRoot).length > 0) {
+                renameSync(places.harnessRoot, `${places.harnessRoot}.replaced-20261201T120000Z`);
+                seen.asides.push('root');
+            }
+            for (const part of ['state', 'config', 'plugins', 'logs']) {
+                if (!existsSync(join(places.data, part))) continue;
+                mkdirSync(join(places.data, 'replaced-20261201T120000Z'), { recursive: true });
+                renameSync(join(places.data, part), join(places.data, 'replaced-20261201T120000Z', part));
+                seen.asides.push(part);
+            }
+            mkdirSync(join(places.data, 'state'), { recursive: true });
+            writeFileSync(join(places.data, 'state', 'jason.db'), 'db');
+            mkdirSync(join(places.data, 'config'), { recursive: true });
+            writeFileSync(join(places.data, 'config', 'settings.json'), JSON.stringify({ Routes: { Default: { Plugin: 'demo' } } }));
+            mkdirSync(join(places.harnessRoot, 'projects', 'sample'), { recursive: true });
+            writeFileSync(join(places.harnessRoot, 'projects', 'sample', 'AGENTS.md'), '');
+            if (fails === 'after') return refusal('runtime_start_failed');
+            seen.started = true;
+            return { exit: 0, stdout: '{}', stderr: '' };
+        },
+    };
+    return { cli, seen };
+}
+
+/** One placing start over the disk: the plan made, the data directory claimed, the import begun and ended, the log read back. */
+async function placeOn(
+    w: ReturnType<typeof world>,
+    cli: Cli,
+    over: Partial<PlacingEnd> = {},
+): Promise<{ outcome: 'placed' | 'made' | PlacingFailed; lines: Record<string, unknown>[]; order: string[] }> {
+    const plan = placingPlan({ archive: w.archive, places: w.places, now });
+    assert.equal(plan.kind, 'place');
+    claimDemoFolder(w.places.data);
+    const hold = new LogHold();
+    const logs = join(w.places.data, 'logs');
+    const order: string[] = [];
+    let clock = 0;
+    const placing = beginPlacing({
+        cli,
+        archive: w.archive,
+        places: w.places,
+        request: () => requestStartOver(w.request, 4242, false, true),
+        hold: () => hold.hold(),
+        now: () => (clock += 1000),
+    });
+    // Said while the import runs, as the window's start and a second launch say them.
+    const log = hold.logger(() => fileLines(logs));
+    log.info('desktop_started', { Version: '0.41.0', Platform: 'linux', DataDirectory: w.places.data });
+    log.info('deep_link_opened', { Page: 'feed' });
+    let outcome: 'placed' | 'made' | PlacingFailed;
+    try {
+        outcome = await settlePlacing(placing, {
+            log,
+            release: () => (order.push('release'), hold.release()),
+            markRoot: () => (order.push('markRoot'), markPlacedFolder(w.places.harnessRoot)),
+            seal: () => (order.push('seal'), writeSampleWhole(w.places.data)),
+            drop: () => (order.push('drop'), dropStartOver(w.request, log)),
+            runtimeAlive: () => false,
+            stopRuntime: async () => (order.push('stop'), true),
+            clear: () => (order.push('clear'), clearPlaced(w.places)),
+            prepareLive: () => {
+                order.push('prepareLive');
+                // The making's own preparation, on a demo the fall-back emptied: the root is made and marked here, as before.
+                assert.equal(existsSync(w.places.harnessRoot), false, 'the root the import made is gone before the making');
+                assert.equal(existsSync(join(w.places.data, 'state')), false, 'and so is what it placed');
+                claimDemoFolder(w.places.harnessRoot);
+            },
+            ...over,
+        });
+    } catch (error) {
+        if (!(error instanceof PlacingFailed)) throw error;
+        outcome = error;
+    }
+    const lines = existsSync(logs)
+        ? readdirSync(logs).flatMap((name) => readFileSync(join(logs, name), 'utf8').split('\n').filter(Boolean)).map((line) => JSON.parse(line) as Record<string, unknown>)
+        : [];
+    return { outcome, lines, order };
+}
+
+const seal = (data: string) => readMarker({ readText: (file) => (existsSync(file) ? readFileSync(file, 'utf8') : null), markerFile: markerPath(data) });
+
+test('a fresh archive is placed by jason import, before any log line reaches the disk and into a harness root that is not there', async (t) => {
+    const w = world(t);
+    const { cli, seen } = importer(w.places);
+    const { outcome, lines, order } = await placeOn(w, cli);
+    assert.equal(outcome, 'placed');
+    assert.deepEqual(seen.args, ['import', w.archive, '--root', w.places.harnessRoot]);
+    assert.equal(seen.logsThere, false, 'no log line was written while the import ran');
+    assert.equal(seen.rootThere, false, 'the harness root is not made before the import');
+    assert.deepEqual(seen.data, [demoMarkerName], 'the data directory holds the marker alone');
+    assert.deepEqual(seen.asides, [], 'nothing was moved aside');
+    // Placed and sealed: the root is the demo's, the sample is whole, the request is gone.
+    assert.ok(hasDemoMarker(w.places.harnessRoot));
+    assert.deepEqual(seal(w.places.data), { version: 1, complete: true });
+    assert.equal(existsSync(w.request), false);
+    assert.deepEqual(order, ['markRoot', 'seal', 'drop', 'release']);
+    // The lines said during the import are written after it, in order, then the placing's own.
+    assert.deepEqual(lines.map((line) => line.EventName), ['desktop_started', 'deep_link_opened', 'demo_archive_placed']);
+    assert.equal(lines[2]?.ElapsedMs, 1000);
+    assert.ok(String(lines[0]?.['@t']) <= String(lines[2]?.['@t']));
+    assert.equal(readdirSync(w.root).filter((name) => name.includes('.replaced-')).length, 0);
+});
+
+test('the request left for a placing names it, so a start cut short during the import is started over at the next', async (t) => {
+    const w = world(t);
+    let during = '';
+    const cli: Cli = {
+        async run() {
+            during = readFileSync(w.request, 'utf8');
+            return { exit: 0, stdout: '{}', stderr: '' };
+        },
+    };
+    const placing = beginPlacing({ cli, archive: w.archive, places: w.places, request: () => requestStartOver(w.request, 4242, false, true), hold: () => undefined });
+    assert.equal((await placing).kind, 'placed');
+    assert.ok(leftByAPlacing(during));
+    // A request that cannot be left places nothing: no hold, no import.
+    let ran = false;
+    let held = false;
+    const unrequested = await beginPlacing({
+        cli: { run: async () => ((ran = true), { exit: 0, stdout: '', stderr: '' }) },
+        archive: w.archive,
+        places: w.places,
+        request: () => {
+            throw Object.assign(new Error('read-only'), { code: 'EROFS' });
+        },
+        hold: () => void (held = true),
+    });
+    assert.deepEqual(unrequested, { kind: 'failed', step: 'request', code: 'EROFS' });
+    assert.equal(ran || held, false);
+});
+
+test('a refused import makes the sample at this start: the held lines first, then the step, never a path', async (t) => {
+    const w = world(t);
+    const { cli } = importer(w.places, 'before');
+    const { outcome, lines, order } = await placeOn(w, cli);
+    assert.equal(outcome, 'made');
+    assert.deepEqual(order, ['clear', 'release', 'prepareLive']);
+    assert.equal(existsSync(markerPath(w.places.data)), false, 'no sample marker is written without a placing');
+    assert.deepEqual(lines.map((line) => line.EventName), ['desktop_started', 'deep_link_opened', 'demo_archive_unplaced']);
+    assert.equal(lines[2]?.Step, 'import');
+    assert.equal(lines[2]?.Code, 'import_refused');
+    assert.equal(JSON.stringify(lines).includes(w.root), false, 'no line names a path of the demo');
+    // The making's own request stays, as the making leaves one; the root is the making's, marked.
+    assert.ok(hasDemoMarker(w.places.harnessRoot));
+});
+
+test('an import that placed and then failed is taken away whole before the sample is made', async (t) => {
+    const w = world(t);
+    const { cli } = importer(w.places, 'after');
+    const { outcome, lines } = await placeOn(w, cli);
+    assert.equal(outcome, 'made');
+    assert.equal(existsSync(markerPath(w.places.data)), false);
+    assert.equal(lines.at(-1)?.Code, 'runtime_start_failed');
+    assert.deepEqual(readdirSync(w.places.data).sort(), [demoMarkerName, 'logs']);
+});
+
+test('a placed demo whose runtime cannot be stopped, or whose fall-back cannot be prepared, fails the start and says how to start over', async (t) => {
+    for (const over of [
+        { runtimeAlive: () => true, stopRuntime: async () => false },
+        {
+            prepareLive: () => {
+                throw new Error('a folder of the demo’s name exists that this application did not make');
+            },
+        },
+    ] satisfies Partial<PlacingEnd>[]) {
+        const w = world(t);
+        const { cli } = importer(w.places, 'after');
+        const { outcome, lines } = await placeOn(w, cli, over);
+        assert.ok(outcome instanceof PlacingFailed);
+        assert.equal(outcome.message, sampleUnprepared);
+        assert.deepEqual(lines.slice(0, 3).map((line) => line.EventName), ['desktop_started', 'deep_link_opened', 'demo_archive_unplaced']);
+        assert.equal(lines.at(-1)?.EventName, 'demo_seed_failed');
+        assert.equal(existsSync(markerPath(w.places.data)), false);
+        assert.ok(existsSync(w.request), 'the request stays, so the next start begins it again');
+    }
+});
+
+test('a placed archive whose root cannot be marked is not sealed, and the sample is made instead', async (t) => {
+    const w = world(t);
+    const { cli } = importer(w.places);
+    const { outcome, lines, order } = await placeOn(w, cli, { markRoot: () => { throw Object.assign(new Error('no'), { code: 'EACCES' }); } });
+    assert.equal(outcome, 'made');
+    assert.equal(order.includes('seal'), false);
+    assert.equal(lines.at(-1)?.Step, 'root');
+    assert.equal(lines.at(-1)?.Code, 'EACCES');
+});
+
+test('Start the Demo Over removes both folders and the archive is placed again, leaving no folder replaced beside the root', async (t) => {
+    const w = world(t);
+    // A demo placed before and used since: both folders the demo's, a sample in them.
+    {
+        const { cli } = importer(w.places);
+        assert.equal((await placeOn(w, cli)).outcome, 'placed');
+    }
+    writeFileSync(join(w.places.harnessRoot, 'projects', 'sample', 'notes.md'), 'what the person wrote');
+    // Start the Demo Over: its request, whose run has ended; the next start carries it out before anything names the demo.
+    requestStartOver(w.request, 4242);
+    carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => false, exists: existsSync, marked: hasDemoMarker });
+    assert.equal(existsSync(w.places.data) || existsSync(w.places.harnessRoot), false);
+    const { cli, seen } = importer(w.places);
+    assert.equal((await placeOn(w, cli)).outcome, 'placed');
+    assert.equal(seen.rootThere, false);
+    assert.deepEqual(seen.asides, []);
+    assert.deepEqual(readdirSync(w.root).filter((name) => name.includes('.replaced-') || name.includes('.removing-')), []);
+    assert.equal(readdirSync(w.places.data).some((name) => name.startsWith('replaced-')), false);
+    assert.equal(existsSync(join(w.places.harnessRoot, 'projects', 'sample', 'notes.md')), false, 'what was done in the demo is gone');
+    assert.deepEqual(seal(w.places.data), { version: 1, complete: true });
+});
+
+test('a start cut short during the import leaves a root without the marker, which the next start takes away as the demo’s', (t) => {
+    const w = world(t);
+    claimDemoFolder(w.places.data);
+    // The import made the root and the desktop ended before marking it; its request names the placing.
+    mkdirSync(join(w.places.harnessRoot, 'projects'), { recursive: true });
+    requestStartOver(w.request, 4242, false, true);
+    carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => false, exists: existsSync, marked: hasDemoMarker });
+    assert.equal(existsSync(w.places.harnessRoot), false);
+    assert.equal(existsSync(w.places.data), false);
+    // A request that names no placing still leaves an unmarked root alone, and so does one whose data directory is not the demo's.
+    for (const placing of [false, true]) {
+        mkdirSync(join(w.places.harnessRoot, 'projects'), { recursive: true });
+        if (!placing) claimDemoFolder(w.places.data);
+        else mkdirSync(w.places.data, { recursive: true });
+        requestStartOver(w.request, 4242, false, placing);
+        assert.throws(
+            () => carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => false, exists: existsSync, marked: hasDemoMarker }),
+            (error: unknown) => error instanceof CarryOutRefused && error.reason === 'foreign',
+        );
+        assert.ok(existsSync(w.places.harnessRoot));
+        rmSync(w.places.harnessRoot, { recursive: true });
+        rmSync(w.places.data, { recursive: true });
+    }
+});
+
+test('the root an import made is marked only where it is a folder of its own', (t) => {
+    const root = scratch(t);
+    const folder = join(root, 'Jason-demo');
+    mkdirSync(folder);
+    markPlacedFolder(folder);
+    assert.ok(hasDemoMarker(folder));
+    assert.throws(() => markPlacedFolder(folder), 'a marker already there is not written over');
+    writeFileSync(join(root, 'file'), '');
+    assert.throws(() => markPlacedFolder(join(root, 'file')));
+});
+
+test('a placing that fails before it settles is ended as failed, never left waiting', async () => {
+    const failing = Promise.reject(new Error('x')) as Promise<PlacingOutcome>;
+    const order: string[] = [];
+    const hold = new LogHold();
+    const outcome = await settlePlacing(failing, {
+        log: hold.logger(() => () => undefined),
+        release: () => order.push('release'),
+        markRoot: () => order.push('markRoot'),
+        seal: () => order.push('seal'),
+        drop: () => order.push('drop'),
+        runtimeAlive: () => false,
+        stopRuntime: async () => true,
+        clear: () => order.push('clear'),
+        prepareLive: () => order.push('prepareLive'),
+    });
+    assert.equal(outcome, 'made');
+    assert.deepEqual(order, ['clear', 'release', 'prepareLive']);
+});

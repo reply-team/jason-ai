@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { defaultLimits, fileLogger, fileName, holesOf, limitsFrom, lineOf, templates, type Logger } from '../src/log.ts';
+import { defaultLimits, fileLines, fileLogger, fileName, holesOf, limitsFrom, lineOf, LogHold, templates, type Logger } from '../src/log.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
     const directory = mkdtempSync(join(tmpdir(), 'jason-desktop-log-'));
@@ -114,4 +114,41 @@ test('a line that cannot be written is lost, never thrown', (t) => {
     const blocked = join(directory, 'a-file');
     writeFileSync(blocked, '');
     assert.doesNotThrow(() => fileLogger(join(blocked, 'logs')).info('link_opened', {}));
+});
+
+test('a held log writes nothing while it is held, then every line in the order it was said, each with its own moment', (t) => {
+    const directory = join(scratch(t), 'logs');
+    const hold = new LogHold();
+    let now = new Date('2026-11-13T10:00:00.000Z');
+    const clock = () => now;
+    hold.hold();
+    // Two loggers on the one hold, as a start has: the early one and the run's, whose file is opened only when it is let go.
+    const early = hold.logger(() => fileLines(directory), clock);
+    let opened = 0;
+    const run = hold.logger(() => (opened++, fileLines(directory)), clock);
+    early.info('desktop_started', { Version: '0.41.0', Platform: 'win32', DataDirectory: 'D' });
+    now = new Date('2026-11-13T10:00:01.500Z');
+    run.warn('demo_unopened', {});
+    now = new Date('2026-11-13T10:00:02.250Z');
+    early.info('deep_link_opened', { Page: 'feed' });
+    assert.throws(() => readdirSync(directory), 'no folder of the log is made while the hold stands');
+    assert.equal(opened, 0, 'no file is opened while the hold stands');
+
+    now = new Date('2026-11-13T10:00:09.000Z');
+    hold.release();
+    run.info('demo_archive_placed', { ElapsedMs: 4200 });
+    const read = lines(directory);
+    assert.deepEqual(read.map((line) => line.EventName), ['desktop_started', 'demo_unopened', 'deep_link_opened', 'demo_archive_placed']);
+    assert.deepEqual(read.map((line) => line['@t']), ['2026-11-13T10:00:00.000Z', '2026-11-13T10:00:01.500Z', '2026-11-13T10:00:02.250Z', '2026-11-13T10:00:09.000Z']);
+    assert.equal(opened, 1, 'the run’s file is opened once, when it is let go');
+    // A second release writes nothing twice.
+    hold.release();
+    assert.equal(lines(directory).length, 4);
+});
+
+test('a log that is never held writes at once', (t) => {
+    const directory = join(scratch(t), 'logs');
+    const hold = new LogHold();
+    hold.logger(() => fileLines(directory)).info('link_opened', {});
+    assert.equal(lines(directory).length, 1);
 });

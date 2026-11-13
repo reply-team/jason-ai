@@ -114,6 +114,8 @@ export const templates = {
     demo_seed_failed: 'The demo sample failed at {Step} ({Code})',
     demo_seed_step: 'The demo sample: {Step}',
     demo_start_over_request_unremoved: 'The request to start the demo over could not be taken away once the sample was whole ({Code}); the next start makes the sample again',
+    demo_archive_placed: 'The prepared demo was placed by jason import in {ElapsedMs} ms',
+    demo_archive_unplaced: 'The prepared demo was not placed, at the step {Step} ({Code}); the sample is made at this start instead',
     open_in: 'The folder was opened in {Place}',
     open_in_refused: 'The folder could not be opened in {Place}',
     open_in_remember_failed: 'The place Open in used last could not be kept',
@@ -223,11 +225,24 @@ function sizeOf(file: string): number {
     }
 }
 
+/** Where a logger's lines go: one line, at the moment it was said. */
+export type LineSink = (level: Level, name: TemplateName, fields: Readonly<Record<string, unknown>>, at: Date) => void;
+
 /**
  * A logger writing into `directory`. A line that cannot be written is lost rather than stopping the application, as a
  * log must never be the reason the desktop does not work.
  */
 export function fileLogger(directory: string, limits: LogLimits = defaultLimits, clock: () => Date = () => new Date()): Logger {
+    const sink = fileLines(directory, limits);
+    return {
+        info: (name, fields) => sink('Information', name, fields, clock()),
+        warn: (name, fields) => sink('Warning', name, fields, clock()),
+        error: (name, fields) => sink('Error', name, fields, clock()),
+    };
+}
+
+/** The lines of `fileLogger`, each written at the moment it is given. */
+export function fileLines(directory: string, limits: LogLimits = defaultLimits): LineSink {
     let current: { day: string; sequence: number; size: number } | null = null;
 
     const place = (at: Date, length: number): string => {
@@ -258,9 +273,8 @@ export function fileLogger(directory: string, limits: LogLimits = defaultLimits,
         }
     };
 
-    const write = (level: Level, name: TemplateName, fields: Readonly<Record<string, unknown>>) => {
+    return (level, name, fields, at) => {
         try {
-            const at = clock();
             const line = `${lineOf(level, name, fields, at)}\n`;
             const length = Buffer.byteLength(line);
             mkdirSync(directory, { recursive: true });
@@ -271,12 +285,45 @@ export function fileLogger(directory: string, limits: LogLimits = defaultLimits,
             // Lost; see above.
         }
     };
+}
 
-    return {
-        info: (name, fields) => write('Information', name, fields),
-        warn: (name, fields) => write('Warning', name, fields),
-        error: (name, fields) => write('Error', name, fields),
-    };
+/**
+ * A hold on the desktop's log, for the seconds `jason import` places the prepared demo (`demo-archive.ts`): the log's
+ * folder, `<data>/logs/`, is one of the parts an import places, and one that is there when it begins is moved aside. While
+ * the hold stands no line reaches the disk and no file is opened; each line is kept with the moment it was said, and when
+ * the hold is let go every kept line is written in the order it was said, whichever logger said it, and every line after
+ * that is written at once. A hold never taken writes at once.
+ */
+export class LogHold {
+    private held: { sink: () => LineSink; level: Level; name: TemplateName; fields: Readonly<Record<string, unknown>>; at: Date }[] | null = null;
+
+    /** From now on, lines are kept until `release`. */
+    hold(): void {
+        this.held ??= [];
+    }
+
+    /** Writes every kept line, in order, each with its own moment; nothing when nothing is held. */
+    release(): void {
+        const kept = this.held;
+        this.held = null;
+        for (const line of kept ?? []) line.sink()(line.level, line.name, line.fields, line.at);
+    }
+
+    /** A logger on this hold, whose lines go to the sink `open` makes, opened once, at its first line that is written. */
+    logger(open: () => LineSink, clock: () => Date = () => new Date()): Logger {
+        let opened: LineSink | null = null;
+        const sink = (): LineSink => (opened ??= open());
+        const say = (level: Level, name: TemplateName, fields: Readonly<Record<string, unknown>>) => {
+            const at = clock();
+            if (this.held === null) sink()(level, name, fields, at);
+            else this.held.push({ sink, level, name, fields: { ...fields }, at });
+        };
+        return {
+            info: (name, fields) => say('Information', name, fields),
+            warn: (name, fields) => say('Warning', name, fields),
+            error: (name, fields) => say('Error', name, fields),
+        };
+    }
 }
 
 /** The limits the installation's settings name under `Logging`, where they are valid; the runtime's defaults otherwise. */

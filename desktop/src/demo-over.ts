@@ -16,7 +16,8 @@ import type { DemoPlaces } from './demo-seed.ts';
 import type { Logger } from './log.ts';
 
 /** The request file's text: the asking run's process id, so a start that is not that run waits for it to end. */
-export const startOverRequestText = (pid: number, making = false): string => `pid=${pid}\n${making ? `${makingLine}\n` : ''}`;
+export const startOverRequestText = (pid: number, making = false, placing = false): string =>
+    `pid=${pid}\n${making ? `${makingLine}\n` : ''}${placing ? `${placingLine}\n` : ''}`;
 
 /**
  * The line that says a request was left by a making of the sample (`openOnTheSample`), not by Start the Demo Over: the
@@ -26,6 +27,16 @@ export const makingLine = 'making';
 
 /** Whether a request was left by a making of the sample. */
 export const leftByAMaking = (text: string): boolean => text.split('\n').includes(makingLine);
+
+/**
+ * The line that says the request was left by a placing of the prepared demo (`demo-archive.ts`): `jason import` makes the
+ * demo's harness root itself, from a root that was not there, and the marker is written into it once the import has
+ * ended, so a start cut short in between leaves a root of the demo's that carries no marker.
+ */
+export const placingLine = 'placing';
+
+/** Whether a request was left by a placing of the prepared demo. */
+export const leftByAPlacing = (text: string): boolean => text.split('\n').includes(placingLine);
 
 /** What an aside copy's name carries after the folder's own: `<folder>.removing-<time>`. */
 export const asideMarker = '.removing-';
@@ -47,10 +58,10 @@ export class CarryOutRefused extends Error {
     }
 }
 
-/** Leaves the request at `file`, naming the asking process and whether a making left it; throws when it cannot. */
-export function requestStartOver(file: string, pid: number = process.pid, making = false): void {
+/** Leaves the request at `file`, naming the asking process and whether a making or a placing left it; throws when it cannot. */
+export function requestStartOver(file: string, pid: number = process.pid, making = false, placing = false): void {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, startOverRequestText(pid, making));
+    writeFileSync(file, startOverRequestText(pid, making, placing));
 }
 
 /**
@@ -102,7 +113,8 @@ export interface CarryOutDeps {
 /**
  * Does nothing when no request is there, nor when the request is a making's and its run still runs (a second start of
  * that run). Otherwise, in this order: keeps the request and throws while the asking run is
- * still alive or a demo runtime is; refuses a folder there without the marker; takes each marked folder out of the demo's
+ * still alive or a demo runtime is; refuses a folder there without the marker, but the harness root a placing's import
+ * made (`placingLine`); takes each marked folder out of the demo's
  * name by ONE rename, so a failure changes nothing; removes the renamed copies as far as it can (one it cannot is left,
  * marked, and removed at a later carry-out); drops the request. Never touches anything but the two folders and their own
  * aside copies.
@@ -124,7 +136,11 @@ export function carryOutStartOver(deps: CarryOutDeps): void {
     }
     if (deps.runtimeAlive()) throw new CarryOutRefused('runtime_alive', 'A demo runtime is still running.');
     const folders = [deps.places.data, deps.places.harnessRoot];
-    const foreign = folders.find((folder) => deps.exists(folder) && !deps.marked(folder));
+    // A placing's request names the harness root as the import's own, made where nothing stood: it is the demo's while
+    // the data directory beside it carries the marker, the marker the root would have been given once the import ended.
+    const placed = leftByAPlacing(text) && deps.marked(deps.places.data);
+    const ours = (folder: string): boolean => deps.marked(folder) || (placed && folder === deps.places.harnessRoot);
+    const foreign = folders.find((folder) => deps.exists(folder) && !ours(folder));
     if (foreign !== undefined) throw new CarryOutRefused('foreign', `The folder ${foreign} is not one the demo made, so it was left.`);
     const moved: string[] = [];
     for (const folder of folders) {
