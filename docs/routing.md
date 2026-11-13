@@ -358,38 +358,47 @@ and is not counted: a change made while it starts can leave it without its accou
 a send go where the send ran (§7, check 14), by the same rule. A send holds its route while the provider holds it: a send
 of a campaign that is not archived succeeded with the provider's reference, its own result says `cancelable: true` (read
 as the send's operation document defines it, where an absent flag reads as false), and its moment, the `accepted_for` its
-result names or else the `send_after` its arguments named, is after the runtime's clock or is not known at all.
+result names or else the `send_after` its arguments named, is known and after the runtime's clock.
 When the routes in force name the plugin and the account such a send ran under, and the candidate set would name them
 nowhere, the set is refused with `route_orphans_send`: one detail per campaign and account, named by the latest of its
 sends, `campaign:<cmp_…>/sends/<wi_…>`, saying how many sends hold the route, their work items (the latest five, and how
 many more), the latest moment among them in UTC rounded up to the second, and the ways out: cancel them with
-`message.cancel`, or change the route after that moment. Sends with no moment known are named after the dated ones, and
-for them the detail names no moment: their ways out are a cancel, or a `message.status` that reads them as gone, after
-which the route can change. A detail that holds both kinds says both. The answer's message counts the sends. It says nothing a send
+`message.cancel`, or change the route after that moment. The answer's message counts the sends. It says nothing a send
 says to a person: not who it is to, not its sender, subject or text. This holds for an
 operation route, a channel route and a default alike, at the same three doors: `route.set` and `route.unset` answer
 `409 route_orphans_send`, `retryable: false`, and write nothing, and a reload answers `409 plugin_reload_rejected` with
 that detail and keeps the routes in force. A change that leaves another of the send's campaign's routes, or a global
 one, naming the account goes through, and so does any change once its moment has passed: the guard lets go by itself,
-with no cancel made. It lets go as soon as the provider has said it holds the send no longer, in one of three ways:
+with no cancel made. It lets go as soon as the provider has said it holds the send no longer, in one of these ways:
 
 - a `message.cancel` of the send succeeded;
 - a `message.cancel` of the send failed with an answer its document declares as nothing left to cancel,
   `send_not_pending` or `send_not_found`;
-- a `message.status` of the send succeeded and says it is final (`sent`, `cancelled`, `failed` or `unknown`) or that it
-  can no longer be cancelled (`cancelable: false`).
+- a `message.status` of the send failed with the answer its document declares as no such send, `send_not_found`;
+- a `message.status` of the send succeeded and says it is final (`sent`, `cancelled`, `failed` or `unknown`), whichever
+  read said it;
+- the latest `message.status` of the send that succeeded says it can no longer be cancelled (`cancelable: false`). An
+  older read that said so frees nothing once a later one says it can be cancelled again.
 
 A cancel or a status read still to run, and one that failed for any other reason (a provider out of reach, a blocked
-account), leaves the send held. A send that can be cancelled and names no moment, neither `accepted_for` nor
-`send_after`, is held too, and only these three ways free it: the provider holds it for a sending schedule of its own,
-the ordinary case of a message queued outside sending hours, and may send it at any time. An estimate a provider gives of
-when it will send is never read as a moment. A send whose result does not say the provider can cancel it, `cancelable`
-false or absent, is held for nothing a cancel could reach, so no route is kept for it. Everything asked is the runtime's own record: the
+account), leaves the send held. A send whose result does not say the provider can cancel it, `cancelable` false or
+absent, is held for nothing a cancel could reach, so no route is kept for it. An estimate a provider gives of when it will
+send is never read as a moment. Everything asked is the runtime's own record: the
 send's arguments and result, the provenance of its succeeded attempt, and the campaign's cancels and status reads of it.
-The moment is compared with the runtime's clock, in the database, so only the sends still held, dated or not, are read. Every door a
-change comes through refuses one that would strand a held send, so a send no route reaches was left so by a start
-(which has no routes in force to keep), by settings edited while the runtime was stopped, or by a change made while the
-send was still on its way to the provider, before it was held. A start says each such
+The moment is compared with the runtime's clock, in the database, so only the sends still held are read.
+
+The guard has two limits, and within them a send can be left with no route to the account it ran under:
+
+- **A send with no moment known is not guarded.** A send whose result names no `accepted_for` and whose arguments named
+  no `send_after` holds nothing, though its result says it can be cancelled: a provider answers a send it will make as
+  soon as it can the same way as one it keeps queued for a sending schedule of its own, and a hold for the first would
+  outlast the send for as long as nobody read it. If its route has moved, cancel such a send at the provider.
+- **A send on its way is not guarded.** A change made while a send is still on its way to the provider, before it has
+  succeeded, finds nothing held, and the send may be left without its account once it succeeds.
+
+Every door a change comes through refuses one that would strand a held send, so outside those two limits a send no route
+reaches was left so by a start (which has no routes in force to keep), or by settings edited while the runtime was
+stopped. A start says each such
 send once in the log, as a warning naming its work item, its campaign and the plugin it ran at, and nothing it says to a
 person; its cancel and its status read are refused at the claim (§7, check 14). After the start, while the routes in force name nothing,
 the guard reads nothing: there is nothing it could refuse.
@@ -522,8 +531,8 @@ when no route in the set is wrong, and `route.set` and `route.unset` answer it u
 rejected reload.
 
 The fourteenth is its twin for a send: `route_orphans_send`, a set that would take the last route naming the plugin and
-account a send ran under away from it while the provider still holds it, for a moment to come or for a sending
-schedule of its own, and its result says it can be cancelled, until the provider says it holds the send no longer (§6). It is asked when the searches are, and `route.set` and `route.unset` answer it under its own code
+account a send ran under away from it while the provider still holds it for a moment to come and its result says it
+can be cancelled, until the provider says it holds the send no longer (§6). It is asked when the searches are, and `route.set` and `route.unset` answer it under its own code
 when it is all that refused.
 
 **A binding no pattern could finish measuring is none of these.** Where a pattern of the plugin's binding schema did not
