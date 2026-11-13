@@ -17,8 +17,6 @@ import {
     operatorActor,
     openStatuses,
     demoPlaces,
-    demoPluginId,
-    demoSettings,
     ensureSeeded,
     placesProblem,
     preparingPage,
@@ -31,6 +29,7 @@ import {
     type SeedDeps,
     type SeedStep,
 } from '../src/demo-seed.ts';
+import { demoDirectory } from '../src/mode.ts';
 import { parseStory, type Story } from '../src/demo-story.ts';
 
 const repository = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -203,11 +202,12 @@ test('no step is called demo: the nouns are the harness\'s own', () => {
     for (const pair of verbsUsed(buildSeed(fixture()))) assert.doesNotMatch(pair, /demo|seed/i);
 });
 
-test('the demo\'s harness root is a folder of its own beside the person\'s, inside neither data directory', () => {
+test('the demo\'s two folders are the siblings the one rule makes, beside the person\'s and inside neither data directory', () => {
+    assert.equal(places.data, demoDirectory(own.data));
+    assert.equal(places.harnessRoot, demoDirectory(own.harness));
     assert.equal(placesProblem(places, own.data, own.harness), null);
     assert.notEqual(places.harnessRoot, own.harness);
     assert.notEqual(places.data, own.data);
-    assert.deepEqual((demoSettings(places)['Harness'] as { Root: string }).Root, places.harnessRoot);
     // The refusals the rule makes.
     assert.notEqual(placesProblem({ data: places.data, harnessRoot: join(places.data, 'harness') }, own.data, own.harness), null);
     assert.notEqual(placesProblem({ data: places.data, harnessRoot: join(own.data, 'demo') }, own.data, own.harness), null);
@@ -215,27 +215,16 @@ test('the demo\'s harness root is a folder of its own beside the person\'s, insi
     assert.notEqual(placesProblem({ data: join(places.harnessRoot, 'data'), harnessRoot: places.harnessRoot }, own.data, own.harness), null);
 });
 
-test('the demo installation runs no AI role: the responder is off and the manager keeps only the trigger it cannot do without', () => {
-    const settings = demoSettings(places) as { Responder: { OnReply: boolean }; Manager: { Triggers: string[]; ReviewSeconds: number }; Dispatcher: { EventsCadenceSeconds: number } };
-    assert.equal(settings.Responder.OnReply, false);
-    assert.deepEqual(settings.Manager.Triggers, ['decision_answered']);
-    assert.equal(settings.Manager.ReviewSeconds, 604_800);
-    assert.equal(settings.Dispatcher.EventsCadenceSeconds, 60);
-});
-
-test('the routes name the demo provider alone, in the settings and in every step', async () => {
-    const settings = demoSettings(places) as { Routes: Record<string, unknown> };
-    assert.deepEqual(settings.Routes, { Default: { Plugin: demoPluginId } });
+test('the seed does only the run\'s work: no route, no plugin, no runtime start and none of the fixed settings', async () => {
     for (const step of buildSeed(fixture())) {
+        assert.ok(['verb', 'wait', 'wait-field', 'approve', 'cancel-reviews', 'story-start'].includes(step.kind), step.kind);
         if (step.kind !== 'verb') continue;
-        assert.notEqual(step.args[0], 'route', 'the seed routes through the settings, not around them');
+        assert.ok(!['route', 'runtime'].includes(String(step.args[0])), `jason ${String(step.args[0])} is not the run's work`);
         assert.ok(!step.args.includes('--plugin'));
     }
-    // After a whole run the settings file still names the demo provider alone.
+    // The only thing the seed writes to the settings file is the moment the story starts, in the demo provider's configuration.
     const run = await seeded();
-    const written = JSON.parse(run.settings()) as { Routes: unknown; Plugins: { Config: Record<string, unknown> } };
-    assert.deepEqual(written.Routes, { Default: { Plugin: demoPluginId } });
-    assert.deepEqual(Object.keys(written.Plugins.Config), [demoPluginId]);
+    assert.deepEqual(JSON.parse(run.settings()), { Plugins: { Config: { demo: { story_start: '2026-11-13T12:00:00.000Z' } } } });
 });
 
 test('the story is read from the package\'s data module and from nothing else: one literal, nothing evaluated', () => {
@@ -351,11 +340,13 @@ test('"Start the demo over" removes the demo\'s two folders and nothing else, th
     const run = await seeded();
     const removed: string[] = [];
     let relaunched = 0;
+    let prepared = 0;
     const seed = { ...run.deps, removeTree: (path: string) => void removed.push(path), readText: (file: string) => (file === run.deps.markerFile ? null : run.deps.readText(file)) };
-    const outcome = await startDemoOver({ seed, stopRuntime: async () => true, relaunch: () => void (relaunched += 1) });
+    const outcome = await startDemoOver({ seed, stopRuntime: async () => true, prepare: async () => { prepared += 1; return true; }, relaunch: () => void (relaunched += 1) });
     assert.deepEqual(outcome, { kind: 'started-over' });
     assert.deepEqual(removed.slice(0, 2).sort(), [places.data, places.harnessRoot].sort());
     assert.ok(!removed.includes(own.data) && !removed.includes(own.harness));
+    assert.equal(prepared, 1, 'the demo is made ready before it is seeded');
     assert.equal(relaunched, 1);
 });
 
@@ -363,7 +354,7 @@ test('"Start the demo over" leaves everything as it is when the demo\'s runtime 
     const run = await seeded();
     const removed: string[] = [];
     let relaunched = 0;
-    const outcome = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) }, stopRuntime: async () => false, relaunch: () => void (relaunched += 1) });
+    const outcome = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) }, stopRuntime: async () => false, prepare: async () => true, relaunch: () => void (relaunched += 1) });
     assert.equal(outcome.kind, 'refused');
     assert.deepEqual(removed, []);
     assert.equal(relaunched, 0);
@@ -482,7 +473,6 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?:
         },
         makeDirectory: () => undefined,
         removeTree: () => undefined,
-        placePlugin: () => undefined,
         readStory: () => options.text ?? moduleText(story),
         progress: (message) => void progress.push(message),
         sleep: async () => undefined,

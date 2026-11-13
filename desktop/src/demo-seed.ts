@@ -6,9 +6,10 @@
  * The story itself, the seller, the campaigns, the people and their messages, is read from the demo provider package's
  * data module once the package is placed (`demo-story.ts`); this file holds none of it.
  *
- * The order is the story's: the installation's settings (its own harness root, the manager and the responder off, routes
- * naming the demo provider alone), the package placed, the runtime started, the project, the campaigns, the people, the
- * work, and the approvals the story says were already given, in the name of its operator. The provider is told when the
+ * The seed does only the run's work, on an installation that is already made: its directory, its fixed settings (a harness
+ * root of its own, the manager and the responder off, `demo-settings.ts`), the provider package placed and the route to it
+ * written, and its runtime running. The order is the story's: the project, the campaigns, the people, the work, and the
+ * approvals the story says were already given, in the name of its operator. The provider is told when the
  * story starts only after every send already approved has succeeded: an event is attributed once, when it is stored, so
  * a reply may follow a send only once the send is done.
  *
@@ -16,10 +17,12 @@
  * "Start the demo over" removes the demo's two folders and seeds again.
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
-import { parseStory, reviewSeconds, type Story, type StoryPerson, type StorySend } from './demo-story.ts';
+import { demoReviewSeconds } from './demo-settings.ts';
+import { demoDirectory } from './mode.ts';
+import { parseStory, type Story, type StoryPerson, type StorySend } from './demo-story.ts';
 
 /** Raised when the story changes in a way a seeded directory must not be kept through. */
 export const seedVersion = 1;
@@ -84,22 +87,12 @@ export interface CancelReviewsStep {
     campaign: Arg;
 }
 
-/** Writes the demo installation's settings file. */
-export interface SettingsStep {
-    kind: 'settings';
-}
-
-/** Puts the demo provider's package into the demo installation's plugins folder. */
-export interface PlaceStep {
-    kind: 'place-plugin';
-}
-
 /** Tells the provider the moment the story starts, in its configuration: `Plugins:Config:demo:story_start`. */
 export interface StoryStartStep {
     kind: 'story-start';
 }
 
-export type SeedStep = VerbStep | WaitStep | WaitFieldStep | ApproveStep | CancelReviewsStep | SettingsStep | PlaceStep | StoryStartStep;
+export type SeedStep = VerbStep | WaitStep | WaitFieldStep | ApproveStep | CancelReviewsStep | StoryStartStep;
 
 export interface DemoPlaces {
     /** The demo installation's data directory. */
@@ -108,15 +101,12 @@ export interface DemoPlaces {
     harnessRoot: string;
 }
 
-/** The place a person's own folder X has beside it for the demo: the same name with `-demo`, in the same parent. */
-export const demoSibling = (own: string): string => `${own.replace(/[\\/]+$/, '')}-demo`;
-
 /**
- * The demo's two folders, both siblings of the person's own and never inside either data directory. The harness root is
- * the person's, `~/Jason` unless their settings name another, with `-demo` after it.
+ * The demo's two folders, both siblings of the person's own (the one rule, `demoDirectory`) and never inside either data
+ * directory. The harness root is the person's, `~/Jason` unless their settings name another.
  */
 export function demoPlaces(ownData: string, ownHarnessRoot: string): DemoPlaces {
-    return { data: demoSibling(ownData), harnessRoot: demoSibling(ownHarnessRoot) };
+    return { data: demoDirectory(ownData), harnessRoot: demoDirectory(ownHarnessRoot) };
 }
 
 /** Whether `inner` is `outer` or below it. */
@@ -139,23 +129,6 @@ export function placesProblem(places: DemoPlaces, ownData: string, ownHarnessRoo
     return null;
 }
 
-/**
- * The settings the demo installation is started with, as the settings file holds them. The manager and the responder
- * are off: the responder is switched off (`Responder:OnReply`), and the manager, which has no switch of its own, is left
- * only the trigger it cannot do without and its slowest cadence, so no AI role is woken by the story. Routes name the
- * demo provider alone, and its events are read at the shortest cadence so replies arrive in the first minutes.
- */
-export function demoSettings(places: DemoPlaces): Record<string, unknown> {
-    return {
-        Harness: { Root: places.harnessRoot },
-        Responder: { OnReply: false },
-        Manager: { Triggers: ['decision_answered'], ReviewSeconds: reviewSeconds },
-        // A claim is one item per campaign per scan, so a short tick lets a story of a few dozen sends park in seconds, not minutes.
-        Dispatcher: { EventsCadenceSeconds: 60, TickSeconds: 2 },
-        Routes: { Default: { Plugin: demoPluginId } },
-    };
-}
-
 /** The operator as the verbs name a person: `human:<name>`, whether the story writes the prefix or only the name. */
 export const operatorActor = (story: Story): string => (story.operator.actor.includes(':') ? story.operator.actor : `human:${story.operator.actor}`);
 
@@ -175,9 +148,6 @@ export function buildSeed(story: Story): SeedStep[] {
     const sender = story.senders.find((s) => s.channel === 'email') ?? story.senders[0];
     if (!sender?.address) throw new Error('The story needs an email sender with an address.');
     const steps: SeedStep[] = [
-        { kind: 'settings' },
-        { kind: 'place-plugin' },
-        verb(['runtime', 'start']),
         verb(['project', 'create', '--name', story.project.name, ...actor], { capture: { kind: 'field', field: 'id', as: 'project' } }),
     ];
 
@@ -190,7 +160,7 @@ export function buildSeed(story: Story): SeedStep[] {
                 body: { option: '--file', value: { name: campaign.name, context: { description: campaign.description } } },
                 capture: { kind: 'field', field: 'id', as: `campaign:${campaign.key}` },
             }),
-            verb(['campaign', 'update', id, '--review-seconds', String(reviewSeconds), ...actor]),
+            verb(['campaign', 'update', id, '--review-seconds', String(demoReviewSeconds), ...actor]),
             verb(['campaign', 'add-contacts', id, ...actor], {
                 body: {
                     option: '--file',
@@ -287,8 +257,6 @@ export interface SeedDeps {
     /** Makes the folder and the ones above it. */
     makeDirectory(path: string): void;
     removeTree(path: string): void;
-    /** Puts the provider package into `<data>/plugins/demo`; throws when it cannot. */
-    placePlugin(data: string): void;
     /** The text of the placed package's story module. */
     readStory(data: string): string;
     /** What the window says while this goes on. */
@@ -349,9 +317,7 @@ export async function ensureSeeded(deps: SeedDeps, version = seedVersion): Promi
     deps.makeDirectory(deps.scratch);
     try {
         deps.writeText(deps.markerFile, `${JSON.stringify({ version, complete: false })}\n`);
-        // The settings and the package first: the story is read from the package, so it is the one set.
-        writeSettingsFile(deps);
-        deps.placePlugin(deps.places.data);
+        // The story is read from the package the desktop placed, so it is the one set.
         const story = parseStory(deps.readStory(deps.places.data));
         const context: Context = { refs: new Map(), story };
         let count = 0;
@@ -370,11 +336,6 @@ export async function ensureSeeded(deps: SeedDeps, version = seedVersion): Promi
 }
 
 const settingsFile = (deps: SeedDeps): string => join(deps.places.data, 'config', 'settings.json');
-
-function writeSettingsFile(deps: SeedDeps): void {
-    deps.makeDirectory(dirname(settingsFile(deps)));
-    deps.writeText(settingsFile(deps), `${JSON.stringify(demoSettings(deps.places), null, 2)}\n`);
-}
 
 interface Context {
     refs: Map<string, string>;
@@ -418,9 +379,6 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
     const every = deps.waitStepMs ?? 1_000;
     try {
         switch (step.kind) {
-            case 'settings':
-            case 'place-plugin':
-                return null;
             case 'verb': {
                 const args = step.args.map((arg) => resolveArg(arg, refs));
                 if (step.body) {
@@ -498,6 +456,11 @@ export interface StartOverDeps {
     seed: SeedDeps;
     /** Stops the demo installation's runtime; resolves false when it could not be stopped. */
     stopRuntime(): Promise<boolean>;
+    /**
+     * Makes the demo installation ready to be seeded: its directory, its fixed settings, the provider package placed and
+     * its route written, and its runtime started, in that order (the desktop's own start of the demo). False when it cannot.
+     */
+    prepare(): Promise<boolean>;
     /** Loads the window again, in the demo, once the sample is back. */
     relaunch(): void;
 }
@@ -513,6 +476,7 @@ export async function startDemoOver(deps: StartOverDeps): Promise<StartOverOutco
     if (!(await deps.stopRuntime())) return { kind: 'refused', why: 'The sample could not be stopped, so it was left as it is.' };
     deps.seed.removeTree(deps.seed.places.data);
     deps.seed.removeTree(deps.seed.places.harnessRoot);
+    if (!(await deps.prepare())) return { kind: 'refused', why: 'The demo could not be made ready to be filled.' };
     const outcome = await ensureSeeded(deps.seed);
     if (outcome.kind !== 'seeded') return { kind: 'refused', why: outcome.kind === 'failed' ? `The sample could not be prepared (${outcome.step}).` : 'The sample could not be prepared.' };
     deps.relaunch();
@@ -537,8 +501,8 @@ export const markerPath = (data: string): string => join(data, 'demo-seed.json')
 export const placedPackage = (data: string): string => join(data, 'plugins', demoPluginId);
 export const storyModule = (data: string): string => join(placedPackage(data), 'modules', 'story.js');
 
-/** The seed's dependencies on the machine's own files. `packageSource` is the provider package the application carries. */
-export function seedDepsOnDisk(parts: { cli: Cli; places: DemoPlaces; packageSource: string; scratch: string; progress(message: string): void }): SeedDeps {
+/** The seed's dependencies on the machine's own files. */
+export function seedDepsOnDisk(parts: { cli: Cli; places: DemoPlaces; scratch: string; progress(message: string): void }): SeedDeps {
     return {
         cli: parts.cli,
         places: parts.places,
@@ -550,7 +514,6 @@ export function seedDepsOnDisk(parts: { cli: Cli; places: DemoPlaces; packageSou
         },
         makeDirectory: (path) => void mkdirSync(path, { recursive: true }),
         removeTree: (path) => rmSync(path, { recursive: true, force: true }),
-        placePlugin: (data) => cpSync(parts.packageSource, placedPackage(data), { recursive: true }),
         readStory: (data) => readFileSync(storyModule(data), 'utf8'),
         progress: parts.progress,
         sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
