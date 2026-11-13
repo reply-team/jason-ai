@@ -9,8 +9,8 @@ namespace Jason.Runtime.Routing;
 /// <summary>
 /// The sends a route change must not strand: a send of a campaign that is not archived, which succeeded with the
 /// provider's reference, whose arguments name a <c>send_after</c> still to come, which no succeeded cancel names, and whose
-/// own result does not say the provider cannot cancel it (<c>cancelable: false</c>; a result that says nothing either way
-/// holds, since the provider may still cancel it). Its
+/// own result says the provider can cancel it: <c>cancelable: true</c>, read as the operation's document defines the
+/// flag, where "absent reads as false", so a result that says nothing holds nothing, as one that says false does. Its
 /// cancel and its status read go only where it ran (<see cref="RouteResolver.ForSend"/>), so while the provider holds it
 /// for that moment a route naming that plugin and account is what keeps it cancellable. All of it is the runtime's own
 /// record: the send's work item, the latest succeeded attempt's provenance and the campaign's cancels; nothing is asked of
@@ -42,7 +42,7 @@ internal static class HeldSends
           AND s.operation IN (SELECT value FROM json_each({0}))
           AND json_type(s.context_json, '$.input.send_after') = 'text'
           AND json_extract(a.provenance_json, '$.external_ids_returned.send') IS NOT NULL
-          AND json_type(s.result_json, '$.items[0].cancelable') IS NOT 'false'
+          AND json_type(s.result_json, '$.items[0].cancelable') = 'true'
           AND NOT EXISTS (
               SELECT 1 FROM work_items AS k
               WHERE k.campaign_id = s.campaign_id AND k.operation = {1} AND k.status = 'succeeded'

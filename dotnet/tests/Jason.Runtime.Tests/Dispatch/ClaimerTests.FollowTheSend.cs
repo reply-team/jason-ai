@@ -57,6 +57,44 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// The claim reads no <c>cancelable</c> flag: whether a send can still be taken back is the provider's to answer, by the
+    /// cancel operation's own document, which fails a send that already went <c>send_not_pending</c>. So a cancel of a send
+    /// whose result says false, or says nothing, is claimed and goes to the plugin and account the send ran under, as one
+    /// whose result says true does; only the route guard reads the flag, to decide whether a route must be kept for it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task A_cancel_is_claimed_whatever_the_send_s_result_says_of_cancelling_it(bool? cancelable)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var send = Sent(db, campaign, "linkedin", Social, "sha256:" + Social);
+        var outcome = new JsonObject { ["status"] = "accepted", ["reference"] = "linkedin-1001" };
+        if (cancelable is { } can)
+        {
+            outcome["cancelable"] = can;
+        }
+
+        send.Result = new JsonObject { ["items"] = new JsonArray(outcome) };
+        var item = Following(db, campaign, "message.cancel", send);
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded(Mailer, Follows),
+            routes: snapshot => Routes(snapshot, campaign.PublicId, TwoPlugins(), null),
+            others: [TestPlugins.Loaded(Social, Follows)]);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal((item.PublicId, Social), (work.WorkItemPublicId, work.Plan!.Plugin.Manifest.Id));
+        Assert.Equal("linkedin-1001", (string?)work.Plan.Input["send"]!["reference"]);
+    }
+
+    /// <summary>
     /// A send whose plugin and account no route names any more is not followed anywhere: its cancel and its status read
     /// resolve as they did before, by their own route, and the fourteenth check refuses them, permanently, as before.
     /// </summary>

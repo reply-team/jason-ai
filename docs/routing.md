@@ -356,8 +356,8 @@ and is not counted: a change made while it starts can leave it without its accou
 **A change that would strand a send the provider still holds for later is refused.** A cancel and a status read of
 a send go where the send ran (§7, check 14), by the same rule. So when a send of a campaign that is not archived
 succeeded with the provider's reference, its arguments name a `send_after` still to come, no `message.cancel` of it has
-succeeded, its own result does not say `cancelable: false` (a result that says nothing either way holds, since the
-provider may still cancel it), the routes in force name the plugin and the account it ran under, and the candidate set
+succeeded, its own result says `cancelable: true` (read as the send's operation document defines it, where an absent
+flag reads as false), the routes in force name the plugin and the account it ran under, and the candidate set
 would name them nowhere, the set is refused with `route_orphans_send`: one detail per campaign and account, named by
 the latest of its sends, `campaign:<cmp_…>/sends/<wi_…>`, saying how many sends hold the route, their work items, the
 latest moment among them in UTC, and the two ways out: cancel them with `message.cancel`, or change the route after
@@ -367,8 +367,8 @@ operation route, a channel route and a default alike, at the same three doors: `
 that detail and keeps the routes in force. A change that leaves another of the send's campaign's routes, or a global
 one, naming the account goes through, and so does any change once the send is cancelled or its moment has passed: the
 guard lets go by itself, with no cancel made. A send that named no moment is held for nothing the runtime knows of, and
-one whose result says the provider cannot cancel it is held for nothing a cancel could reach, so no route is kept for
-either; a cancel that failed leaves the send held. Everything asked is the runtime's own record — the send's arguments
+one whose result does not say the provider can cancel it, `cancelable` false or absent, is held for nothing a cancel
+could reach, so no route is kept for either; a cancel that failed leaves the send held. Everything asked is the runtime's own record — the send's arguments
 and result, the provenance of its succeeded attempt, the campaign's succeeded cancels — and the moment is compared
 with the runtime's clock. Unlike a search, a send that a start leaves without its account is not said in the log; its cancel and its
 status read are refused at the claim (§7, check 14).
@@ -502,7 +502,7 @@ rejected reload.
 
 The fourteenth is its twin for a send: `route_orphans_send`, a set that would take the last route naming the plugin and
 account a send ran under away from it while the provider still holds it for a `send_after` to come, no cancel of it
-has succeeded and its result does not say it cannot be cancelled (§6). It is asked when the searches are, and `route.set` and `route.unset` answer it under its own code
+has succeeded and its result says it can be cancelled (§6). It is asked when the searches are, and `route.set` and `route.unset` answer it under its own code
 when it is all that refused.
 
 **A binding no pattern could finish measuring is none of these.** Where a pattern of the plugin's binding schema did not

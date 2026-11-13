@@ -18,9 +18,10 @@ namespace Jason.Runtime.Tests.Routing;
 /// ran under. So while a send of a campaign that succeeded under that plugin and account is held at the provider for a
 /// moment still to come, and no cancel of it has succeeded, a route change that would take the last route naming that
 /// plugin and account away from it is refused, naming the send, whichever door it comes through: <c>route.set</c>,
-/// <c>route.unset</c> or a reload. The same change goes through once the send is cancelled, once its moment has passed by
-/// the runtime's own clock, when its result says the provider cannot cancel it, and while another route still names the
-/// plugin and account. Every moment here is read against the runtime's clock, which each test holds at noon and moves
+/// <c>route.unset</c> or a reload. Only a send whose result says the provider can cancel it holds a route: the flag is read
+/// as the operation's document defines it, absent as false. The same change goes through once the send is cancelled, once
+/// its moment has passed by the runtime's own clock, when its result does not say it can be cancelled, and while another
+/// route still names the plugin and account. Every moment here is read against the runtime's clock, which each test holds at noon and moves
 /// itself.
 /// </summary>
 public class RouteKeepsSendsTests
@@ -76,10 +77,10 @@ public class RouteKeepsSendsTests
 
     /// <summary>
     /// The same move goes through once nothing is left to cancel or to read there: a cancel of the send has succeeded, its
-    /// moment has passed, it named no moment at all, or its own result says the provider cannot cancel it; and while another
-    /// route of the campaign still names the plugin and account. A cancel that failed leaves the send held, and so does a
-    /// result that says the provider can cancel it: the move is still refused. A result that says nothing either way holds
-    /// too, as every other row here shows.
+    /// moment has passed, it named no moment at all, or its own result does not say the provider can cancel it, whether it
+    /// says false or says nothing, which the operation's document reads as false; and while another route of the campaign
+    /// still names the plugin and account. A cancel that failed leaves the send held, and so does a result that says the
+    /// provider can cancel it, as every other row here has: the move is still refused.
     /// </summary>
     [Theory]
     [InlineData("cancelled", true)]
@@ -87,6 +88,7 @@ public class RouteKeepsSendsTests
     [InlineData("no moment", true)]
     [InlineData("another route names the account", true)]
     [InlineData("the provider cannot cancel it", true)]
+    [InlineData("the provider says nothing of cancelling it", true)]
     [InlineData("its cancel failed", false)]
     [InlineData("the provider can cancel it", false)]
     public async Task The_same_move_goes_through_once_nothing_is_left_to_cancel_there(string after, bool through)
@@ -108,8 +110,8 @@ public class RouteKeepsSendsTests
             after switch
             {
                 "the provider cannot cancel it" => false,
-                "the provider can cancel it" => true,
-                _ => null,
+                "the provider says nothing of cancelling it" => null,
+                _ => true,
             });
         switch (after)
         {
@@ -285,10 +287,10 @@ public class RouteKeepsSendsTests
     /// <summary>
     /// A send of the campaign on <paramref name="channel"/> to a person, which the provider took with its reference, under
     /// <paramref name="plugin"/> and no binding, as its attempt's provenance keeps it, for the moment
-    /// <paramref name="sendAfter"/> names, or none; its result says whether the provider can cancel it where
-    /// <paramref name="cancelable"/> is not null, and nothing about it otherwise. Answers its work item.
+    /// <paramref name="sendAfter"/> names, or none; its result says the provider can cancel it unless
+    /// <paramref name="cancelable"/> says otherwise, and says nothing about it where that is null. Answers its work item.
     /// </summary>
-    private static async Task<string> SentAsync(RuntimeApiFixture api, string campaign, string plugin, string channel, string? sendAfter, bool? cancelable = null)
+    private static async Task<string> SentAsync(RuntimeApiFixture api, string campaign, string plugin, string channel, string? sendAfter, bool? cancelable = true)
     {
         await using var db = Open(api);
         var owner = await db.Campaigns.SingleAsync(row => row.PublicId == campaign, Ct);
