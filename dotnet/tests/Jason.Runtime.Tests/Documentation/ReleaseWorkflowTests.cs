@@ -4141,13 +4141,17 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// Whether a step really asks an executable what version it is, rather than talking about it, or telling the desktop's
-    /// prepare script the version to publish a bundle at, which asks no executable anything.
+    /// Whether a step really asks an executable what version it is, rather than talking about it, or, in the demo job's one
+    /// publish, telling the desktop's prepare script the version to publish the sample's jason at, which asks no executable
+    /// anything (the sample is made with that jason, its runtime started and stopped, right after).
     /// </summary>
     private static bool Checks(string step) =>
         step.Split('\n')
             .Select(line => line.Trim())
-            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#') && !line.StartsWith("node scripts/prepare.mjs ", StringComparison.Ordinal));
+            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#') && line != DemoPublish);
+
+    /// <summary>The demo job's publish of the release's jason for Linux, the one line the check above passes over.</summary>
+    private const string DemoPublish = "node scripts/prepare.mjs --rid linux-x64 --output bundles/demo --version \"$VERSION\"";
 
     /// <summary>
     /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it

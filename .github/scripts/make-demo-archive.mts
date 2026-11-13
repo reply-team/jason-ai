@@ -83,9 +83,10 @@ async function main(argv: readonly string[]): Promise<void> {
     });
 
     const started = Date.now();
-    await verb(cli, ['runtime', 'start']);
     let stopped = false;
     try {
+        // Inside the try: a start that answers late, or not at all, may still have brought a runtime up, and it is stopped.
+        await verb(cli, ['runtime', 'start']);
         const deps = seedDepsOnDisk({ cli, places, scratch: join(places.data, 'seed-scratch'), progress: (step) => console.log(`seed: ${step}`) });
         const outcome = await readyTheSample(deps, { begin: () => undefined, made: () => undefined });
         if (outcome.kind !== 'ready' || !outcome.seeded) {

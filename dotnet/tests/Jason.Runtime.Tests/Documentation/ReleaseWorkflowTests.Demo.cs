@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text;
 using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
 using static Jason.Runtime.Tests.Documentation.Workflows;
@@ -56,19 +58,51 @@ public partial class ReleaseWorkflowTests
         Assert.Equal("${{ needs.version.outputs.version }}", Scalar(Mapping(publish, "env"), "VERSION"));
         Assert.Equal("node scripts/prepare.mjs --rid linux-x64 --output bundles/demo --version \"$VERSION\"", Scalar(publish, "run")!.Trim());
 
-        var make = Assert.Single(steps, step => Scalar(step, "run")?.Contains(DemoScript, StringComparison.Ordinal) == true);
-        var making = Scalar(make, "run")!;
-        Assert.Contains("sudo mkdir /home/demo", making, StringComparison.Ordinal);
-        Assert.Contains(
-            $"node --experimental-strip-types {DemoScript} --bundle desktop/bundles/demo --home /home/demo --output \"$RUNNER_TEMP/demo/jason-demo.zip\"",
-            making,
-            StringComparison.Ordinal);
+        // Bounded well under a runner's six hours: the publish takes minutes, the seed a minute and a half with each of its
+        // waits capped at two minutes, the export seconds; a runtime that hangs ends the job in half an hour.
+        Assert.Equal("30", Scalar(job, "timeout-minutes"));
 
+        // Made by an account of its own, demo, whose home is /home/demo: a verb run without an actor is written as
+        // human:<the account's name>, so the runner's account name would travel as surely as its folders.
+        var make = Assert.Single(steps, step => Scalar(step, "run")?.Contains(DemoScript, StringComparison.Ordinal) == true);
+        var making = Scalar(make, "run")!.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#')).ToList();
+        Assert.Equal(
+            [
+                "sudo useradd --no-create-home --home-dir /home/demo --shell /bin/bash demo",
+                "sudo mkdir /home/demo",
+                "sudo chown demo:demo /home/demo",
+                "stage=\"$(mktemp -d)\"",
+                "chmod 755 \"$stage\"",
+                "mkdir -p \"$stage/.github/scripts\" \"$stage/desktop\"",
+                $"cp {DemoScript} \"$stage/.github/scripts/\"",
+                "cp -r desktop/src desktop/package.json \"$stage/desktop/\"",
+                "cp -r desktop/bundles/demo \"$stage/bundle\"",
+                "out=\"$(mktemp -d)\"",
+                "chmod 777 \"$out\"",
+                "node=\"$(command -v node)\"",
+                "cd \"$stage\"",
+                $"sudo -u demo -H \"$node\" --experimental-strip-types \"$stage/{DemoScript}\" --bundle \"$stage/bundle\" --home /home/demo --output \"$out/jason-demo.zip\"",
+                "mkdir -p \"$RUNNER_TEMP/demo\"",
+                "cp \"$out/jason-demo.zip\" \"$RUNNER_TEMP/demo/jason-demo.zip\"",
+            ],
+            making);
+
+        // A hit fails the job: each grep that finds something ends the step with 1 (the rows below run the step).
         var held = Assert.Single(steps, step => Scalar(step, "run")?.Contains("unzip -q", StringComparison.Ordinal) == true);
-        var holding = Scalar(held, "run")!;
-        Assert.Contains("for path in \"$HOME\" \"$GITHUB_WORKSPACE\" \"$RUNNER_TEMP\" \"$RUNNER_TOOL_CACHE\"; do", holding, StringComparison.Ordinal);
-        Assert.Contains("grep -r -a -l -F -- \"$path\" \"$unpacked\"", holding, StringComparison.Ordinal);
-        Assert.Contains("grep -q -F '\"home\": \"/home/demo\"' \"$unpacked/export.json\"", holding, StringComparison.Ordinal);
+        var holding = Scalar(held, "run")!.Split('\n').Select(line => line.Trim()).ToList();
+        var loop = holding.IndexOf("for found in \"$HOME\" \"$GITHUB_WORKSPACE\" \"$RUNNER_TEMP\" \"$RUNNER_TOOL_CACHE\" \"$(id -un)\"; do");
+        Assert.True(loop >= 0, "The check does not look for the runner's folders and its account's name.");
+        Assert.Equal(
+            [
+                "[ -n \"$found\" ] || { echo \"::error title=Demo::A folder or the account of this runner has no name to look for.\"; exit 1; }",
+                "if grep -r -a -l -F -- \"$found\" \"$unpacked\"; then",
+                "echo \"::error title=Demo::The archive carries $found, a folder or the account of this runner, in the files above.\"",
+                "exit 1",
+                "fi",
+                "done",
+                "grep -q -F '\"home\": \"/home/demo\"' \"$unpacked/export.json\" || { echo \"::error title=Demo::The archive was not made in /home/demo.\"; exit 1; }",
+            ],
+            holding.Skip(loop + 1).Take(7));
 
         var upload = Assert.Single(steps, step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true);
         Assert.Equal(DemoArtifact, Scalar(Mapping(upload, "with"), "name"));
@@ -78,6 +112,82 @@ public partial class ReleaseWorkflowTests
         Assert.True(
             steps.IndexOf(publish) < steps.IndexOf(make) && steps.IndexOf(make) < steps.IndexOf(held) && steps.IndexOf(held) < steps.IndexOf(upload),
             "The sample is made from the published jason, held to carrying nothing of the runner, and only then uploaded.");
+    }
+
+    /// <summary>
+    /// The check run as GitHub runs it, on an archive of the test's own that stands where the make step leaves one: one
+    /// that carries nothing of the runner passes; one that carries a folder of the runner in the database's bytes, the
+    /// account's name, or that was made in another home fails the step with 1 and says so.
+    /// </summary>
+    [Theory]
+    [InlineData("nothing of the runner", 0)]
+    [InlineData("the workspace in the database's bytes", 1)]
+    [InlineData("the temporary folder in a memory file", 1)]
+    [InlineData("the account's name as an actor", 1)]
+    [InlineData("another home", 1)]
+    public void The_demo_s_check_fails_the_job_on_anything_of_the_runner(string carried, int exit)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "The step is bash on Linux, with GNU stat; CI's Linux leg runs this row.");
+        using var tree = new TempTree();
+        var home = Directory.CreateDirectory(Path.Combine(tree.Root, "account-home")).FullName;
+        var workspace = Directory.CreateDirectory(Path.Combine(tree.Root, "workspace")).FullName;
+        var temporary = Directory.CreateDirectory(Path.Combine(tree.Root, "temporary")).FullName;
+        var tools = Directory.CreateDirectory(Path.Combine(tree.Root, "tools")).FullName;
+        Directory.CreateDirectory(Path.Combine(temporary, "demo"));
+
+        var database = new List<byte>([0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x00, 0x01, 0xff]);
+        var memory = "# The campaign\n";
+        var actor = "human:dana.whitfield";
+        var madeIn = "/home/demo";
+        switch (carried)
+        {
+            case "the workspace in the database's bytes":
+                database.AddRange(Encoding.UTF8.GetBytes($"{{\"entry_command\":[\"{workspace}/desktop/bundles/demo/jason\"]}}"));
+                break;
+            case "the temporary folder in a memory file":
+                memory += $"Made in {temporary}/stage\n";
+                break;
+            case "the account's name as an actor":
+                actor = "human:" + Environment.UserName;
+                break;
+            case "another home":
+                madeIn = home;
+                break;
+        }
+
+        database.AddRange(Encoding.UTF8.GetBytes($"{{\"actor\":\"{actor}\"}}"));
+        using (var archive = ZipFile.Open(Path.Combine(temporary, "demo", "jason-demo.zip"), ZipArchiveMode.Create))
+        {
+            void Add(string name, byte[] bytes)
+            {
+                using var stream = archive.CreateEntry(name).Open();
+                stream.Write(bytes);
+            }
+
+            Add("export.json", Encoding.UTF8.GetBytes($"{{\n  \"format\": 1,\n  \"home\": \"{madeIn}\"\n}}\n"));
+            Add("data/state/jason.db", [.. database]);
+            Add("harness/projects/sample/AGENTS.md", Encoding.UTF8.GetBytes(memory));
+        }
+
+        var step = Assert.Single(JobSteps(Mapping(ReleaseJobs(), DemoJob)), one => Scalar(one, "run")?.Contains("unzip -q", StringComparison.Ordinal) == true);
+        var environment = new Dictionary<string, string>
+        {
+            ["HOME"] = home,
+            ["GITHUB_WORKSPACE"] = workspace,
+            ["RUNNER_TEMP"] = temporary,
+            ["RUNNER_TOOL_CACHE"] = tools,
+        };
+        var (code, stdout, stderr) = Bash(environment, tree.Root, Scalar(step, "run")!);
+
+        Assert.True(code == exit, $"The check ended {code} for an archive carrying {carried}.\n{stdout}\n{stderr}");
+        if (exit == 0)
+        {
+            Assert.Contains("bytes, carrying no folder or account of this runner", stdout, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("::error title=Demo::", stdout, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -98,6 +208,12 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("if (marker === null || !marker.complete || marker.version !== seedVersion)", script, StringComparison.Ordinal);
         Assert.Contains("cpSync(prepared, bundle, { recursive: true });", script, StringComparison.Ordinal);
         Assert.Contains("cwd: options?.cwd ?? home", script, StringComparison.Ordinal);
+
+        // The start is inside the try whose finally stops the runtime: a start that answers late is still stopped.
+        var trying = script.IndexOf("    try {\n", StringComparison.Ordinal);
+        var start = script.IndexOf("await verb(cli, ['runtime', 'start']);", StringComparison.Ordinal);
+        var stopping = script.IndexOf("if (!stopped) await cli.run(['runtime', 'stop']", StringComparison.Ordinal);
+        Assert.True(trying >= 0 && start > trying && stopping > start, "The runtime's start is outside the try that stops it.");
 
         var logs = script.IndexOf("rmSync(join(places.data, 'logs'), { recursive: true, force: true });", StringComparison.Ordinal);
         var export = script.IndexOf("await verb(cli, ['export', output]);", StringComparison.Ordinal);
