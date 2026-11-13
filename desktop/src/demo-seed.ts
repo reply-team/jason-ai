@@ -390,6 +390,26 @@ function resolveArg(arg: Arg, refs: ReadonlyMap<string, string>): string {
 
 type Failed = { step: string; detail: string } | null;
 
+/**
+ * Cancels the open AI-role work items, those of one campaign or of the whole installation, with `workitem list` and
+ * `workitem cancel` in the operator's name; null when all are cancelled, else the step that was refused. The desktop calls
+ * it at every start of the demo, not only at the seed: no AI role runs in the demo's runtime, so a review that falls due
+ * (the first one a week after a campaign starts) would wait for one and end as stopped work on the first screen.
+ */
+export async function cancelOpenReviews(cli: Cli, actor: string, campaign?: string): Promise<Failed> {
+    const listed = await cli.run(['workitem', 'list', ...(campaign === undefined ? [] : ['--campaign', campaign]), '--kind', 'ai_role', ...openStatuses.flatMap((status) => ['--status', status])]);
+    if (listed.exit !== 0) return { step: 'workitem list', detail: describe(listed) };
+    const items = parse(listed)?.['items'];
+    for (const item of Array.isArray(items) ? items : []) {
+        const id = (item as { id?: unknown }).id;
+        if (typeof id !== 'string') continue;
+        const cancelled = await cli.run(['workitem', 'cancel', id, '--reason', 'no AI is connected in the demo', '--actor', actor]);
+        if (cancelled.exit !== 0) return { step: 'workitem cancel', detail: describe(cancelled) };
+    }
+    return null;
+}
+
+
 async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number: number): Promise<Failed> {
     const refs = context.refs;
     const actor = operatorActor(context.story);
@@ -439,16 +459,8 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
             }
             case 'cancel-reviews': {
                 const campaign = resolveArg(step.campaign, refs);
-                const listed = await deps.cli.run(['workitem', 'list', '--campaign', campaign, '--kind', 'ai_role', ...openStatuses.flatMap((status) => ['--status', status])]);
-                if (listed.exit !== 0) return { step: 'workitem list', detail: describe(listed) };
-                const items = parse(listed)?.['items'];
-                for (const item of Array.isArray(items) ? items : []) {
-                    const id = (item as { id?: unknown }).id;
-                    if (typeof id !== 'string') continue;
-                    const cancelled = await deps.cli.run(['workitem', 'cancel', id, '--reason', 'no AI is connected in the demo', '--actor', actor]);
-                    if (cancelled.exit !== 0) return { step: 'workitem cancel', detail: describe(cancelled) };
-                }
-                return null;
+                const outcome = await cancelOpenReviews(deps.cli, actor, campaign);
+                return outcome === null ? null : outcome;
             }
             case 'story-start': {
                 const text = deps.readText(settingsFile(deps));

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
 import {
     buildSeed,
+    cancelOpenReviews,
     operatorActor,
     openStatuses,
     demoPlaces,
@@ -150,6 +151,25 @@ test('the open states a review is cancelled in are the work item statuses that a
     assert.equal(all.length, 9);
     assert.equal(terminal.length, 4);
     assert.deepEqual([...openStatuses].sort(), all.filter((status) => !terminal.includes(status)).sort());
+});
+
+test('a seeded demo started again with one open review gets that review cancelled', async () => {
+    const calls: string[] = [];
+    const cli: Cli = {
+        async run(args) {
+            calls.push(args.join(' '));
+            const items = args[1] === 'list' ? [{ id: 'wi_review_1' }] : [];
+            return { exit: 0, stdout: `${JSON.stringify({ items })}
+`, stderr: '' };
+        },
+    };
+    assert.equal(await cancelOpenReviews(cli, 'human:fixture-operator'), null);
+    assert.ok(calls[0]?.startsWith('workitem list --kind ai_role --status created'));
+    assert.ok(!calls[0]?.includes('--campaign'), 'every campaign, not one');
+    assert.equal(calls[1], 'workitem cancel wi_review_1 --reason no AI is connected in the demo --actor human:fixture-operator');
+    // A refused cancel is said, not swallowed.
+    const refusing: Cli = { async run(args) { return args[1] === 'list' ? { exit: 0, stdout: '{"items":[{"id":"wi_1"}]}', stderr: '' } : { exit: 1, stdout: '{"error":{"code":"x","message":"no","retryable":false}}', stderr: '' }; } };
+    assert.deepEqual(await cancelOpenReviews(refusing, 'human:a'), { step: 'workitem cancel', detail: 'no' });
 });
 
 test('no step is called demo: the nouns are the harness\'s own', () => {
