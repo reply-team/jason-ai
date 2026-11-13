@@ -81,15 +81,16 @@ afterEach(() => {
 });
 
 describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
-    it('sits in the top bar, under the strip in Demo and with none in Live, above the sidebar and the dock', async () => {
+    it('sits in the open-in slot, left of the Demo | Live switch, above the sidebar and the dock', async () => {
         await renderConsole(kept);
         await waitFor(() => split());
-        const bar = split().closest('.top-bar')!;
-        const console = document.querySelector('.jc-console')!;
-        expect(bar.parentElement).toBe(console);
+        const slot = split().closest('[data-slot="open-in"]')!;
+        const bar = slot.parentElement!;
+        expect(bar.classList.contains('mode-strip')).toBe(true);
+        expect(bar.parentElement).toBe(document.querySelector('.jc-console'));
         expect(bar.nextElementSibling?.classList.contains('shell')).toBe(true);
-        expect(screen.queryByRole('region', { name: 'Demo' }) !== null).toBe(kept === 'demo');
-        if (kept === 'demo') expect(bar.previousElementSibling).toBe(screen.getByRole('region', { name: 'Demo' }));
+        expect(slot.nextElementSibling).toBe(within(bar).getByRole('group', { name: 'Data' }));
+        expect(document.querySelector('.top-bar')).toBeNull();
     });
 
     it('opens the default place from the main part, with the harness root as the folder and no path sent', async () => {

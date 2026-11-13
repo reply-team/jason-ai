@@ -18,7 +18,7 @@ import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
-import { ModeStrip, stripShown } from './mode-strip';
+import { ModeStrip } from './mode-strip';
 import { OpenIn } from './open-in';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
@@ -320,17 +320,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     };
 
     return (
-        <div
-            ref={root}
-            className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}${stripShown() ? ' demo' : ''}`}
-        >
-            <ModeStrip />
-            {/* A desktop older than this page has no Open in, and no bar is drawn. */}
-            {desktop.openIn !== undefined && (
-                <div className="top-bar">
-                    <OpenIn desktop={desktop} />
-                </div>
-            )}
+        <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
+            <ModeStrip openIn={desktop.openIn === undefined ? undefined : <OpenIn desktop={desktop} />} />
             <div className="shell">
                 <aside className="side">
                     <Painted className="side-body" view={sideView} />
