@@ -85,6 +85,7 @@ function pages(): Built {
                 here().dock.showChat(held);
             });
         });
+    add('page:dashboard', 'page', t('dash.title'), '', () => here().dock.show('dashboard'));
     add('page:needs', 'page', t('palette.page.needs'), t('palette.words.needs'), () => here().dock.show('needs'));
     const screen = (id: string, kind: Kind, label: string, words: string) => {
         const href = addressOf(id);

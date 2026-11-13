@@ -179,6 +179,7 @@ describe('the palette', () => {
         // Every page the sidebar and More reach, each found by its own name, with its kind on the right.
         for (const [name, word] of [
             ['Feed', 'Page'],
+            ['Dashboard', 'Page'],
             ['Needs you', 'Page'],
             ['People', 'Page'],
             ['Agents', 'Page'],

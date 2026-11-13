@@ -1,6 +1,7 @@
 import { signal } from '@preact/signals-react';
 import { parseRoute, route } from '../router';
 import { registry } from '../platform/slots';
+import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
@@ -88,7 +89,13 @@ define('side.chat', ([id]) => {
 });
 define('side.show', ([panel]) => {
     closeMenus();
-    if (panel === 'needs' || panel === 'campaigns' || panel === 'activity' || panel === 'connect')
+    if (
+        panel === 'dashboard' ||
+        panel === 'needs' ||
+        panel === 'campaigns' ||
+        panel === 'activity' ||
+        panel === 'connect'
+    )
         here().dock.show(panel);
 });
 define('side.page', ([hash]) => {
@@ -186,6 +193,9 @@ export function sideView(): Html {
                           ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
                       </button>`
             }
+            <button class="item" type="button" ${act('side.show', 'dashboard')}>
+                ${svg('home', 15)}<span>${t('dash.title')}</span>
+            </button>
             <button class="item" type="button" ${act('side.show', 'needs')}>
                 ${svg('att', 15)}<span>Needs you</span>
                 ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}

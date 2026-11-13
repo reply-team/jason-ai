@@ -61,14 +61,23 @@ beforeEach(() => {
 });
 
 describe('the sidebar', () => {
-    it('lists Search, Feed, Needs you, People, Agents, Accounts and More in that order, then Recent, with Settings in the foot', async () => {
+    it('lists Search, Feed, Dashboard, Needs you, People, Agents, Accounts and More in that order, then Recent, with Settings in the foot', async () => {
         renderConsole();
         await waitFor(() => within(menu()).getByRole('button', { name: /^Feed/ }));
         const names = within(menu())
             .getAllByRole('button')
             .map((each) => each.textContent?.replace(/\s+/g, ' ').trim().replace(/ \d+$/, ''));
         // Search comes first, with the name of its key beside it.
-        expect(names).toEqual(['SearchCtrl K', 'Feed', 'Needs you', 'People', 'Agents', 'Accounts', 'More']);
+        expect(names).toEqual([
+            'SearchCtrl K',
+            'Feed',
+            'Dashboard',
+            'Needs you',
+            'People',
+            'Agents',
+            'Accounts',
+            'More',
+        ]);
         // The two groups are gone; the conversations sit under their header.
         expect(side().queryByRole('navigation', { name: 'Console' })).toBeNull();
         expect(side().queryByRole('navigation', { name: 'Pages' })).toBeNull();
