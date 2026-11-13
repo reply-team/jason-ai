@@ -147,6 +147,11 @@ lists each key and each card's grant.
   Codex, ends it with Codex's own words), and on a turn on a key the exact key is replaced by `[key]` in every line of text and every
   step the host says, and a host's error text also loses the key's first six and last four characters and any token
   shaped as a provider's key, before the page shows it or the conversation keeps it.
+- **The model list.** A chat's model menu starts with "Default (recommended)", which passes no model, so the host chooses
+  and a new chat starts there. Claude Code's entries follow with a name to read each ("Opus (latest)", "Sonnet (latest)"),
+  while the alias is what the host is given and the version it stands for is the provider's to move. Codex's list is
+  asked of Codex at most once a day; Claude Code documents no way to list its models without a turn, so its list is the
+  desktop's own. A chat that chose a model before keeps it.
 - **Reply.** Signed in with `reply auth login`, or with a key on standard input that only the Reply CLI keeps, then the
   plugin installed and, only where you have set no default route, wired as the default. A card says "configured" when the
   runtime accepted it, never "connected". What the desktop tells Reply about itself is one label in the User-Agent of

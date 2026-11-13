@@ -221,7 +221,7 @@ describe('the console', () => {
             within(model)
                 .getAllByRole('option')
                 .map((each) => each.textContent),
-        ).toEqual(['Default model', 'Opus', 'Sonnet', 'Haiku', 'Another model…']);
+        ).toEqual(['Default (recommended)', 'Opus', 'Sonnet', 'Haiku', 'Another model…']);
         // The host's own model takes no effort the desktop knows of: none is offered.
         expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
         fireEvent.change(model, { target: { value: 'opus' } });
@@ -319,7 +319,7 @@ describe('the console', () => {
             within(model)
                 .getAllByRole('option')
                 .map((each) => each.textContent),
-        ).toEqual(['Default model']);
+        ).toEqual(['Default (recommended)']);
         expect(document.querySelector('.composer .model-unread')?.textContent).toBe(sentence);
         expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
