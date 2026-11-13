@@ -32,10 +32,9 @@ export const en = {
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
-    'mode.strip': 'Demo',
-    'mode.strip.long':
-        'Demo: this is sample data. Nothing in it is real, and nothing is sent to anyone. Live takes you back to your own installation.',
-    'mode.strip.short': 'Demo: sample data, nothing sent',
+    'mode.strip': 'Mode bar',
+    'mode.strip.long': 'Demo data. Nothing here is real or sent.',
+    'mode.strip.short': 'Demo data, nothing sent',
     'mode.switch': 'Mode',
     'mode.switch.demo': 'Demo',
     'mode.switch.live': 'Live',

@@ -91,9 +91,9 @@ afterEach(() => {
 });
 
 describe('The Connect panel in the demo', () => {
-    it('keeps the strip on it, and says once on each of the Reply and Plugins cards that accounts are not connected here', async () => {
+    it('keeps the bar on it, and says once on each of the Reply and Plugins cards that accounts are not connected here', async () => {
         await renderAt('demo', 'Connect');
-        expect(screen.getAllByRole('region', { name: 'Demo' })).toHaveLength(1);
+        expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
         expect(notes()).toHaveLength(2);
         expect(within(replyCard()).getAllByRole('note').map(words)).toContain(sentence);
     });
@@ -185,9 +185,9 @@ describe('The Reply CLI in the demo', () => {
 });
 
 describe('The Accounts page in the demo', () => {
-    it('keeps the strip, lists the accounts, and says once that the Reply card acts are off', async () => {
+    it('keeps the bar, lists the accounts, and says once that the Reply card acts are off', async () => {
         await renderAt('demo', 'Accounts');
-        expect(screen.getAllByRole('region', { name: 'Demo' })).toHaveLength(1);
+        expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
         const card = replyCard();
         expect(words(card)).toContain('Sales inbox');
         expect(within(card).getAllByRole('note').map(words)).toEqual([sentence]);
@@ -198,7 +198,7 @@ describe('The Accounts page in the demo', () => {
 describe('The same screens in Live', () => {
     it('say nothing of the demo and keep every act on the Connect panel', async () => {
         await renderAt('live', 'Connect');
-        expect(screen.queryByRole('region', { name: 'Demo' })).toBeNull();
+        expect(screen.queryByText('Demo data. Nothing here is real or sent.')).toBeNull();
         expect(notes()).toHaveLength(0);
         const card = replyCard();
         for (const name of ['Sign in', 'Connect', 'Add account']) expect(button(card, name).disabled).toBe(false);
@@ -210,7 +210,7 @@ describe('The same screens in Live', () => {
 
     it('keep the Accounts page Reply card on, with no sentence', async () => {
         await renderAt('live', 'Accounts');
-        expect(screen.queryByRole('region', { name: 'Demo' })).toBeNull();
+        expect(screen.queryByText('Demo data. Nothing here is real or sent.')).toBeNull();
         expect(notes()).toHaveLength(0);
         expect(button(replyCard(), 'Add account').disabled).toBe(false);
     });
