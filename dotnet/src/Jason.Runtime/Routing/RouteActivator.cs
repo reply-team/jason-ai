@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Configuration;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
@@ -337,13 +338,32 @@ public sealed class RouteActivator(
             return RouteSet.Empty;
         }
 
+        foreach (var path in settings.MisplacedChannels)
+        {
+            problems.Add(MisplacedChannelProblem(path));
+        }
+
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
+        var channels = new Dictionary<string, Dictionary<string, Route>>(StringComparer.Ordinal);
         foreach (var (operation, entry) in settings.Operations)
         {
-            var route = Accept(plugins, GlobalOperationField(operation), operation, channel: null, entry?.Plugin, entry?.Binding as JsonObject, _timing, problems);
-            if (route is not null)
+            // An operation routed by its channels alone names no plugin of its own, and has no route of its own.
+            if (entry is null || entry.Plugin is not null || entry.Channels.Count == 0)
             {
-                operations[operation] = route;
+                var route = Accept(plugins, GlobalOperationField(operation), operation, channel: null, entry?.Plugin, entry?.Binding as JsonObject, _timing, problems);
+                if (route is not null)
+                {
+                    operations[operation] = route;
+                }
+            }
+
+            foreach (var (channel, channelEntry) in entry?.Channels ?? [])
+            {
+                var route = Accept(plugins, GlobalChannelField(operation, channel), operation, channel, channelEntry?.Plugin, channelEntry?.Binding as JsonObject, _timing, problems);
+                if (route is not null)
+                {
+                    Under(channels, operation)[channel] = route;
+                }
             }
         }
 
@@ -351,13 +371,63 @@ public sealed class RouteActivator(
             ? null
             : Accept(plugins, GlobalDefaultField, null, channel: null, settings.Default.Plugin, settings.Default.Binding as JsonObject, _timing, problems);
 
-        return new RouteSet(fallback, operations);
+        return new RouteSet(fallback, operations, Frozen(channels));
     }
+
+    /// <summary>
+    /// A channel route written where no operation stands above it, under <c>Routes:Default</c> or at the top of the
+    /// section: refused as a channel on no operation, whatever plugin it names, rather than read as nothing while the
+    /// default's plugin takes every send on that channel. The path is shown the way a refused setting's is, so a key that
+    /// is no channel is written as a placeholder.
+    /// </summary>
+    private static ErrorDetail MisplacedChannelProblem(string path)
+    {
+        var field = SettingKey.ShownPath(path, NoInstalledPlugins);
+        var channel = field[(field.LastIndexOf(':') + 1)..];
+        var problem = path.StartsWith(GlobalDefaultField + ":", StringComparison.Ordinal)
+            ? path.EndsWith(":" + nameof(OperationRouteEntry.Channels), StringComparison.Ordinal)
+                ? DefaultChannelsProblem
+                : DefaultChannelProblem(channel)
+            : SectionChannelsProblem;
+        return new ErrorDetail(field, problem.Code, problem.Message);
+    }
+
+    /// <summary>A map of channels under the default, written as text: no channel to name, and still no operation to stand under.</summary>
+    private static readonly RouteProblem DefaultChannelsProblem = new(
+        RouteProblemCodes.ChannelNotRoutable,
+        "a default route names no operation, so it takes no Channels: a channel route is a route of one operation, written under Routes:Operations:<operation>:Channels:<channel>.");
+
+    /// <summary>Channels at the top of the section, beside the default and the operations rather than under an operation.</summary>
+    private static readonly RouteProblem SectionChannelsProblem = new(
+        RouteProblemCodes.ChannelNotRoutable,
+        "Channels at the top of Routes names no operation: a channel route is a route of one operation, written under Routes:Operations:<operation>:Channels:<channel>.");
+
+    /// <summary>No plugin is known to be installed where a misplaced channel's path is shown: a channel is shown, and nothing else that is not a settings name.</summary>
+    private static readonly IReadOnlySet<string> NoInstalledPlugins = new HashSet<string>();
+
+    /// <summary>The channel routes of one operation while a set is being built, made the first time one is added.</summary>
+    private static Dictionary<string, Route> Under(Dictionary<string, Dictionary<string, Route>> channels, string operation)
+    {
+        if (!channels.TryGetValue(operation, out var routes))
+        {
+            channels[operation] = routes = new Dictionary<string, Route>(StringComparer.Ordinal);
+        }
+
+        return routes;
+    }
+
+    /// <summary>The channel routes as a set holds them: none at all where none was built, the set made before channel routes existed.</summary>
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, Route>>? Frozen(Dictionary<string, Dictionary<string, Route>> channels) =>
+        channels.Count == 0
+            ? null
+            : channels.ToDictionary(entry => entry.Key, entry => (IReadOnlyDictionary<string, Route>)entry.Value, StringComparer.Ordinal);
 
     /// <summary>
     /// The global half of the snapshot that is already active, checked again against the new plugin set. It was
     /// valid against the set it was frozen with, and <c>route.set</c> runs against that same set — but checking
-    /// is cheap and the alternative is a rule that holds only because of where it is called from.
+    /// is cheap and the alternative is a rule that holds only because of where it is called from. The channel routes
+    /// are part of the global half: a campaign's route write that copied the rest and left them out would take every
+    /// global channel route away without anybody asking.
     /// </summary>
     private static RouteSet Rechecked(RouteSet active, PluginSnapshot plugins, PatternTiming timing, List<ErrorDetail> problems)
     {
@@ -371,11 +441,21 @@ public sealed class RouteActivator(
             }
         }
 
+        var channels = new Dictionary<string, Dictionary<string, Route>>(StringComparer.Ordinal);
+        foreach (var (operation, channel, route) in active.ChannelRoutes)
+        {
+            var rechecked = Accept(plugins, GlobalChannelField(operation, channel), operation, channel, route.PluginId, route.Binding, timing, problems);
+            if (rechecked is not null)
+            {
+                Under(channels, operation)[channel] = rechecked;
+            }
+        }
+
         var fallback = active.Default is null
             ? null
             : Accept(plugins, GlobalDefaultField, null, channel: null, active.Default.PluginId, active.Default.Binding, timing, problems);
 
-        return new RouteSet(fallback, operations);
+        return new RouteSet(fallback, operations, Frozen(channels));
     }
 
     private async Task<IReadOnlyDictionary<string, RouteSet>> CampaignsAsync(
@@ -538,7 +618,22 @@ public sealed class RouteActivator(
                 $"'{plugin.Manifest.Id}' does not implement '{operation}'; work is never quietly handed to a plugin that did not claim it.");
         }
 
-        return Incompatible(plugin, contract);
+        if (Incompatible(plugin, contract) is { } incompatible)
+        {
+            return incompatible;
+        }
+
+        // Every operation that takes channel routes is about what is sent on the channel — message.send and
+        // conversation.reply send it, sender.list names the accounts that will — and what is sent on a channel route goes
+        // out beside the provider's own campaigns, so a reply to it reaches the campaign only through the events of the
+        // account it went from. A plugin that reads none would leave that reply unseen while the campaign went on writing
+        // to a person who answered. Asked last of the operation's questions: a plugin that does not perform the operation
+        // at all is told that first.
+        return channel is not null && !plugin.Manifest.ReadsEvents
+            ? new RouteProblem(
+                RouteProblemCodes.ChannelPluginReadsNoEvents,
+                $"'{plugin.Manifest.Id}' reads no events, and a channel route needs a plugin that does: a reply to a send on the channel '{channel}' reaches the campaign only through the events of the account the send went from. Route the channel to a plugin whose manifest declares contracts.events, or route the operation without a channel.")
+            : null;
     }
 
     /// <summary>

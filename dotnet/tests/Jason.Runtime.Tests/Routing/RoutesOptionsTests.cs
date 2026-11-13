@@ -67,6 +67,122 @@ public class RoutesOptionsTests
     }
 
     /// <summary>
+    /// A channel route stands under its operation, a key of its own: the colon a compound key would need is the separator
+    /// of a settings path. Where an operation names channel routes its own route may be left out, and then it has none.
+    /// </summary>
+    [Fact]
+    public void A_channel_route_is_read_under_its_operation_and_its_channel()
+    {
+        var options = Read("""
+            {"Routes":{"Operations":{
+              "message.send":{"Channels":{"email":{"Plugin":"fake-provider","Binding":{"workspace":"west"}},"linkedin":{"Plugin":"other-provider"}}},
+              "conversation.reply":{"Plugin":"fake-provider","Channels":{"linkedin":{"Plugin":"other-provider"}}}}}}
+            """);
+
+        var send = Assert.Contains("message.send", options.Operations);
+        Assert.Null(send.Plugin);
+        Assert.Null(send.Binding);
+        Assert.Equal(["email", "linkedin"], send.Channels.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("fake-provider", send.Channels["email"].Plugin);
+        Assert.Equal("west", (string?)Assert.IsType<JsonObject>(send.Channels["email"].Binding)["workspace"]);
+        Assert.Equal("other-provider", send.Channels["linkedin"].Plugin);
+        Assert.Null(send.Channels["linkedin"].Binding);
+
+        var reply = Assert.Contains("conversation.reply", options.Operations);
+        Assert.Equal("fake-provider", reply.Plugin);
+        Assert.Equal("other-provider", Assert.Single(reply.Channels).Value.Plugin);
+        Assert.True(new RoutesOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    /// <summary>
+    /// Every settings file written before channel routes existed stays valid unchanged and is read as it was: no operation
+    /// gains a channel route, and the section that reaches a running runtime is the one it always was.
+    /// </summary>
+    [Fact]
+    public void A_file_written_before_channel_routes_is_read_and_valid_unchanged()
+    {
+        const string settings = """
+            {"Routes":{"Default":{"Plugin":"fake-provider","Binding":{"workspace":"west"}},
+            "Operations":{"campaign.get":{"Plugin":"other-provider"},"message.send":{"Plugin":"fake-provider","Binding":{"workspace":"east"}}}}}
+            """;
+        using var provider = Provider(settings);
+
+        var options = provider.GetRequiredService<IOptionsMonitor<RoutesOptions>>().CurrentValue;
+
+        Assert.Equal("fake-provider", options.Default!.Plugin);
+        Assert.Equal(["campaign.get", "message.send"], options.Operations.Keys.Order(StringComparer.Ordinal));
+        Assert.All(options.Operations.Values, entry => Assert.Empty(entry.Channels));
+        Assert.Equal("east", (string?)Assert.IsType<JsonObject>(options.Operations["message.send"].Binding)["workspace"]);
+        Assert.True(new RoutesOptionsValidator().Validate(null, Read(settings)).Succeeded);
+    }
+
+    /// <summary>
+    /// A channel route is held to the shape an operation's is, named by its whole path; a key that is no channel is written
+    /// as a placeholder, as an operation that is none is. Whether the operation takes channel routes, and that channel, is
+    /// the reload's to answer, with the codes a campaign's channel route is answered with.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":{"email":{"Plugin":"Fake Provider"}}}}}}""", "Routes:Operations:message.send:Channels:email:Plugin must be a plugin id; the value written is 13 characters long and is not one.")]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":{"email":{"Binding":{"workspace":"west"}}}}}}}""", "Routes:Operations:message.send:Channels:email:Plugin must be a plugin id; nothing is written there.")]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":{"linkedin":{"Plugin":"fake-provider","Binding":"west"}}}}}}""", "Routes:Operations:message.send:Channels:linkedin:Binding must be an object; got string.")]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":{"fax":{"Plugin":"fake-provider"}}}}}}""", "Routes:Operations:message.send:Channels:<key> must name a channel; the key written is 3 characters long and is not one.")]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":{"Email":{"Plugin":"fake-provider"}}}}}}""", "Routes:Operations:message.send:Channels:<key> must name a channel; the key written is 5 characters long and is not one.")]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Channels":"email"}}}}""", "Routes:Operations:message.send:Channels must be a map of channels, each an object with Plugin and an optional Binding.")]
+    [InlineData("""{"Routes":{"Operations":{"message.send":{"Binding":{"workspace":"west"},"Channels":{"email":{"Plugin":"fake-provider"}}}}}}""", "Routes:Operations:message.send:Binding must be left out where Plugin is left out: an operation routed by its channels alone names no account of its own.")]
+    public void A_channel_route_that_could_never_be_right_is_named_with_its_line(string settings, string expected)
+    {
+        var result = new RoutesOptionsValidator().Validate(null, Read(settings));
+
+        Assert.True(result.Failed);
+        Assert.Contains(expected, result.Failures!);
+        Assert.DoesNotContain(result.Failures!, failure => failure.Contains("fax", StringComparison.Ordinal) || failure.Contains("west", StringComparison.Ordinal));
+    }
+
+    /// <summary>An operation that names neither its own plugin nor a channel route is still an operation routed nowhere.</summary>
+    [Fact]
+    public void An_operation_with_no_plugin_and_an_empty_map_of_channels_is_refused_as_before()
+    {
+        var result = new RoutesOptionsValidator().Validate(null, Read("""{"Routes":{"Operations":{"message.send":{"Channels":{}}}}}"""));
+
+        Assert.True(result.Failed);
+        Assert.Contains("Routes:Operations:message.send:Plugin must be a plugin id; nothing is written there.", result.Failures!);
+    }
+
+    /// <summary>
+    /// A settings key folds case, as every key of the configuration system does, so <c>channels</c> written in another
+    /// case is the same key and its routes are read. A channel is a value of the contract's, not a key of the file's: it
+    /// keeps its case, and the validator holds it to the contract's word.
+    /// </summary>
+    [Fact]
+    public void Channels_written_in_another_case_under_an_operation_is_read_as_Channels()
+    {
+        var options = Read("""{"Routes":{"Operations":{"message.send":{"channels":{"email":{"Plugin":"fake-provider"}}}}}}""");
+
+        var send = Assert.Contains("message.send", options.Operations);
+        Assert.Null(send.Plugin);
+        Assert.Equal("fake-provider", Assert.Contains("email", send.Channels).Plugin);
+        Assert.True(new RoutesOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    /// <summary>
+    /// The singular <c>Channel</c> is not a key of an operation's entry. It is ignored, as an unknown key is under every
+    /// part of <c>Routes</c> but a <c>Channels</c> where no operation stands: the operation keeps its own route, gains
+    /// no channel route, and the file is valid. This row records that, so a change to it is a decision.
+    /// </summary>
+    [Fact]
+    public void The_singular_Channel_under_an_operation_is_an_unknown_key_and_is_ignored()
+    {
+        var options = Read("""{"Routes":{"Operations":{"message.send":{"Plugin":"fake-provider","Channel":{"email":{"Plugin":"other-provider"}}}}}}""");
+
+        var send = Assert.Contains("message.send", options.Operations);
+        Assert.Equal("fake-provider", send.Plugin);
+        Assert.Null(send.Binding);
+        Assert.Empty(send.Channels);
+        Assert.Empty(options.MisplacedChannels);
+        Assert.True(new RoutesOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    /// <summary>
     /// The configuration system hands every scalar over as text, so what a binding value is — a number or a
     /// string — is decided here by pattern. A quoted value ending in a newline was read as a number: the binding
     /// is hashed into the identity an attempt records and measured against the plugin's declared schema, and

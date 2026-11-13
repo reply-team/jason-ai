@@ -49,8 +49,8 @@ public static class SettingsVocabulary
         "ResponseBytes", "RequestBytes",
         "OutcomeBytes", "StderrBytes", "KillGraceMs", "VersionCheckTimeoutMs", "LogLineBytes",
 
-        // Routes, and the entry each one is.
-        "Default", "Operations", "Plugin", "Binding",
+        // Routes, and the entry each one is; an operation's channel routes stand under Channels.
+        "Default", "Operations", "Channels", "Plugin", "Binding",
 
         // Update.
         "CheckEnabled", "FeedUrl", "InitialDelayMinutes", "IntervalHours",

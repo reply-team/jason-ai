@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Jason.Contracts.Channels;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Journal;
 using Jason.Contracts.Operations;
@@ -42,8 +43,9 @@ public static class SettingKey
 
     /// <summary>
     /// The key as it was typed when it is a settings name (<see cref="SettingsVocabulary.Names"/>), a published
-    /// operation's id, a journal kind the runtime writes (<see cref="JournalKindCatalog"/>), the id of a plugin installed
-    /// here, or a public id; otherwise <see cref="Hidden"/>. A key made
+    /// operation's id, a channel the channel rules keep (<see cref="ChannelRules.IsKnown"/>, the key of a channel route), a
+    /// journal kind the runtime writes (<see cref="JournalKindCatalog"/>), the id of a plugin installed here, or a public
+    /// id; otherwise <see cref="Hidden"/>. A key made
     /// of digits is none of these on its own: it is an index only where a list stands before it, which only
     /// <see cref="ShownPath"/> can see.
     /// </summary>
@@ -57,6 +59,7 @@ public static class SettingKey
 
         return SettingsVocabulary.Names.Contains(key)
             || OperationCatalog.Knows(key)
+            || ChannelRules.IsKnown(key)
             || JournalKindCatalog.Knows(key)
             || installedPluginIds.Contains(key)
             || IsPublicId(key)

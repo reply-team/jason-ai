@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Channels;
 using Jason.Contracts.Configuration;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Operations;
@@ -302,8 +303,8 @@ public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> i
 /// <summary>
 /// The global routes, checked for shape alone. Whether the plugin exists, lists the operation, or accepts the
 /// binding is a reload question — settings are read before any package is loaded — so what is refused here is
-/// only what could never be right: a plugin nothing could be called, an operation this build does not publish,
-/// and a binding that is not an object.
+/// only what could never be right: a plugin nothing could be called, an operation this build does not publish, a
+/// channel that is no channel, and a binding that is not an object.
 /// </summary>
 /// <param name="installedPluginIds">
 /// The plugins installed in this data directory, listed when there is a sentence to compose. A route is keyed by
@@ -339,14 +340,55 @@ public sealed class RoutesOptionsValidator(Func<IReadOnlySet<string>> installedP
 
             if (entry is null)
             {
-                failures.Add($"{SettingKey.ShownPath(setting, installed.Value)} must be an object with Plugin and an optional Binding.");
+                failures.Add($"{SettingKey.ShownPath(setting, installed.Value)} must be an object with Plugin and an optional Binding, or with Channels.");
                 continue;
             }
 
-            ValidateEntry(failures, setting, entry, installed);
+            ValidateOperation(failures, setting, entry, installed);
         }
 
         return OptionRules.Result(failures);
+    }
+
+    /// <summary>
+    /// An operation's entry: its own route, unless it names channel routes and leaves its own out, and then each channel
+    /// route. A channel is held here to being a channel at all — a name the channel rules keep, spelled as they keep it —
+    /// so a key that is not one is written as a placeholder, as an operation that is not one is; whether the operation
+    /// takes channel routes, and that channel, is the reload's question, asked with the codes a campaign's route is
+    /// answered with.
+    /// </summary>
+    private static void ValidateOperation(List<string> failures, string setting, OperationRouteEntry entry, Lazy<IReadOnlySet<string>> installed)
+    {
+        if (entry.ChannelsUnreadable)
+        {
+            failures.Add($"{SettingKey.ShownPath(setting, installed.Value)}:Channels must be a map of channels, each an object with Plugin and an optional Binding.");
+        }
+
+        if (entry.Plugin is not null || entry.Channels.Count == 0)
+        {
+            ValidateEntry(failures, setting, entry, installed);
+        }
+        else if (entry.Binding is not null)
+        {
+            failures.Add($"{SettingKey.ShownPath(setting, installed.Value)}:Binding must be left out where Plugin is left out: an operation routed by its channels alone names no account of its own.");
+        }
+
+        foreach (var (channel, route) in entry.Channels)
+        {
+            var path = $"{setting}:Channels:{channel}";
+            if (!ChannelRules.IsKnown(channel))
+            {
+                failures.Add($"{SettingKey.ShownPath(path, installed.Value)} must name a channel; {OptionRules.Written("key", channel, "is not one")}");
+            }
+
+            if (route is null)
+            {
+                failures.Add($"{SettingKey.ShownPath(path, installed.Value)} must be an object with Plugin and an optional Binding.");
+                continue;
+            }
+
+            ValidateEntry(failures, path, route, installed);
+        }
     }
 
     private static void ValidateEntry(List<string> failures, string setting, RouteEntry entry, Lazy<IReadOnlySet<string>> installed)

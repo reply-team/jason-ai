@@ -77,13 +77,28 @@ public static class TestRoutes
             ["Default"] = Describe(current.Default),
             ["Operations"] = new JsonObject(current.Operations.Select(entry =>
                 KeyValuePair.Create(entry.Key, Describe(entry.Value)))),
+            ["MisplacedChannels"] = new JsonArray([.. current.MisplacedChannels.Select(path => JsonValue.Create(path))]),
         };
 
         return described.ToJsonString(JasonJson.Options);
     }
 
-    private static JsonNode? Describe(RouteEntry? entry) =>
-        entry is null ? null : new JsonObject { ["Plugin"] = entry.Plugin, ["Binding"] = entry.Binding?.DeepClone() };
+    private static JsonNode? Describe(RouteEntry? entry)
+    {
+        if (entry is null)
+        {
+            return null;
+        }
+
+        var described = new JsonObject { ["Plugin"] = entry.Plugin, ["Binding"] = entry.Binding?.DeepClone() };
+        if (entry is OperationRouteEntry { Channels.Count: > 0 } operation)
+        {
+            described["Channels"] = new JsonObject(operation.Channels.Select(channel =>
+                KeyValuePair.Create(channel.Key, Describe(channel.Value))));
+        }
+
+        return described;
+    }
 
     /// <summary>The <c>Routes</c> section of a runtime that sends everything to one plugin.</summary>
     public static string GlobalDefault(string pluginId, JsonObject? binding = null)
