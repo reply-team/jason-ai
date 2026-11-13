@@ -30,7 +30,6 @@ function realDeps(t: { after(fn: () => void): void }, person: string, calls?: st
     writeFileSync(join(carried, 'main.js'), 'export default {};\n');
     const note = (name: string) => calls?.push(name);
     return {
-        open: (data: string) => (note('open'), openDirectory(data)),
         place: (data: string) => (note('place'), placeDemoPlugin(carried, data, person)),
         route: (data: string) => (note('route'), writeDemoRoute(data)),
         fixedSettings: (data: string) => {
@@ -42,12 +41,12 @@ function realDeps(t: { after(fn: () => void): void }, person: string, calls?: st
     };
 }
 
-test('the demo is prepared in one order: the directory, the provider with its route, the fixed settings', (t) => {
+test('the demo is prepared in one order: the provider with its route, then the fixed settings', (t) => {
     const person = join(scratch(t), '.jason');
     const data = demoDirectory(person);
     const calls: string[] = [];
     prepareDemo(data, realDeps(t, person, calls));
-    assert.deepEqual(calls, ['open', 'place', 'route', 'settings']);
+    assert.deepEqual(calls, ['place', 'route', 'settings']);
     assert.ok(existsSync(join(data, 'plugins', 'demo', 'plugin.yaml')));
     const settings = JSON.parse(readFileSync(settingsFileOf(data), 'utf8'));
     assert.deepEqual(settings.Routes, { Default: { Plugin: 'demo' } });
@@ -59,7 +58,8 @@ test('the plugin is placed and the route written before a start is made, and the
     mkdirSync(person);
     const started: string[] = [];
     const run = startOn(person, 'demo' as Mode, false, {
-        open: (directory) => {
+        open: openDirectory,
+        prepare: (directory) => {
             prepareDemo(directory, realDeps(t, person));
             // At the moment the run is decided, everything a start reads is in place.
             started.push(`${existsSync(join(directory, 'plugins', 'demo', 'plugin.yaml'))}:${existsSync(settingsFileOf(directory))}`);
@@ -96,7 +96,8 @@ test('a route is never written where the provider is absent', (t) => {
 test('a step that fails stops the rest, writes no route, and makes the run the person’s own with the record set back', (t) => {
     const person = join(scratch(t), '.jason');
     mkdirSync(person);
-    for (const failing of ['open', 'place', 'route', 'settings'] as const) {
+    const order = ['open', 'place', 'route', 'settings'];
+    for (const failing of order) {
         const calls: string[] = [];
         const kept: Mode[] = [];
         const real = realDeps(t, person, calls);
@@ -105,15 +106,17 @@ test('a step that fails stops the rest, writes no route, and makes the run the p
             throw new Error(`planted ${name}`);
         };
         const wired = { ...real };
-        if (failing === 'open') wired.open = broken('open');
         if (failing === 'place') wired.place = broken('place');
         if (failing === 'route') wired.route = broken('route');
         if (failing === 'settings') wired.fixedSettings = broken('settings');
         rmSync(demoDirectory(person), { recursive: true, force: true });
-        const run = startOn(person, 'demo', false, { open: (directory) => prepareDemo(directory, wired), keep: (mode) => kept.push(mode) });
+        const run = startOn(person, 'demo', false, {
+            open: failing === 'open' ? broken('open') : (directory) => (calls.push('open'), openDirectory(directory)),
+            prepare: (directory) => prepareDemo(directory, wired),
+            keep: (mode) => kept.push(mode),
+        });
         assert.deepEqual([run.mode, run.data, run.unopened === null], ['live', person, false], failing);
         assert.deepEqual(kept, ['live'], failing);
-        const order = ['open', 'place', 'route', 'settings'];
         assert.deepEqual(calls.slice(-1), [failing], `${failing}: nothing runs after it`);
         assert.ok(calls.every((name, at) => name === order[at]), failing);
         if (failing === 'place' || failing === 'open') assert.equal(existsSync(settingsFileOf(demoDirectory(person))), false, `${failing}: no route written`);
@@ -142,7 +145,9 @@ test('a demo runtime left running is stopped with the person’s: a refusal of e
 test('the update, the installer’s stop and the uninstall stop the demo’s runtime too, and the start-up is the one function', () => {
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),'));
-    assert.ok(main.includes('open: (directory) => prepareDemo(directory, { open: openDirectory, place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute }),'));
+    const flat = main.split(/\s+/).join(' ');
+    assert.ok(flat.includes('prepare: (demo) => prepareDemo(demo, { place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
+    assert.ok(main.includes('fixedSettings: (data) => writeDemoSettings(data, harnessRoot('));
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     assert.ok(start.includes('stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime('));
     assert.ok(start.includes('runtime: { stop: () => stopWithDemo(() => stopOwnRuntime(own), () => stopDemo()) },'));

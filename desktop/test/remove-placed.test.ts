@@ -646,7 +646,7 @@ test('the act is offered on macOS and Linux only, in the Jason menu and the tray
     assert.equal(desk.split('!this.removing()').length - 1, 5, 'login, start at logon, the update, the command’s acts and the act itself');
     assert.ok(desk.includes('await this.removal.run();') && desk.includes('await this.readAutostart().catch(() => undefined);'));
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
-    assert.ok(main.includes('const removal = !inDemo && removalOffered(process.platform)\n        ? placedRemoval({'));
+    assert.ok(main.includes('const removal = offers.removal && removalOffered(process.platform)\n        ? placedRemoval({'));
 });
 
 test('the act runs once at a time: a second choice while it runs asks nothing, and the menu is told when it begins and ends', async () => {

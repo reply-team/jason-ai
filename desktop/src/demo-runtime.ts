@@ -32,6 +32,18 @@ export function stopDemoRuntime(where: DemoRuntimeWhere, cliFor?: (executable: s
     return stopOwnRuntime(demoRuntimeDeps(where, cliFor));
 }
 
+/** How long a demo run's quit waits for the demo's runtime to stop before it goes on all the same. */
+export const demoStopCapMs = 15_000;
+
+export interface DemoQuitDeps {
+    stop(): Promise<unknown>;
+    quit(): void;
+    /** Called once when the stop has not answered within the cap and the quit goes on without it. */
+    timedOut(): void;
+    /** The cap; `demoStopCapMs` unless a test says otherwise. */
+    capMs?: number;
+}
+
 /**
  * What a start of the person's installation that stops the person's runtime (an update, the installer's and the
  * uninstaller's starts) asks as well: a demo runtime left running by a kill or a crash holds the carried executable too.
@@ -49,13 +61,14 @@ export async function stopWithDemo(person: () => Promise<StopOutcome>, demo: () 
 
 /**
  * A demo run's quit: the first is held (`beforeQuit` answers true, and Electron's `before-quit` is prevented) while the
- * demo's runtime is stopped; once the stop has answered, whatever it answered, the quit is asked again and goes on.
+ * demo's runtime is stopped; once the stop has answered, whatever it answered, or the cap has passed without an answer,
+ * the quit is asked again and goes on.
  */
 export class DemoQuit {
     private state: 'running' | 'stopping' | 'stopped' = 'running';
-    private readonly deps: { stop(): Promise<unknown>; quit(): void };
+    private readonly deps: DemoQuitDeps;
 
-    constructor(deps: { stop(): Promise<unknown>; quit(): void }) {
+    constructor(deps: DemoQuitDeps) {
         this.deps = deps;
     }
 
@@ -64,13 +77,39 @@ export class DemoQuit {
         if (this.state === 'stopped') return false;
         if (this.state === 'stopping') return true;
         this.state = 'stopping';
-        void this.deps
-            .stop()
-            .catch(() => undefined)
-            .then(() => {
-                this.state = 'stopped';
-                this.deps.quit();
-            });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const capped = new Promise<'timed_out'>((resolve) => {
+            timer = setTimeout(() => resolve('timed_out'), this.deps.capMs ?? demoStopCapMs);
+        });
+        const answered = this.deps.stop().then(
+            () => 'answered' as const,
+            () => 'answered' as const,
+        );
+        void Promise.race([answered, capped]).then((how) => {
+            clearTimeout(timer);
+            if (how === 'timed_out') this.deps.timedOut();
+            this.state = 'stopped';
+            this.deps.quit();
+        });
         return true;
     }
+}
+
+/** The part of Electron's app a demo run's quit is held on: its `before-quit` and its quit. */
+export interface QuittingApp {
+    on(event: 'before-quit', listener: (event: { preventDefault(): void }) => void): unknown;
+    quit(): void;
+}
+
+/**
+ * Holds a demo run's quit for the demo's runtime's stop (`DemoQuit`); a Live run's quit is held for nothing and stops
+ * nothing. Answers the hold, or null in Live.
+ */
+export function holdDemoQuit(app: QuittingApp, mode: 'live' | 'demo', deps: Omit<DemoQuitDeps, 'quit'>): DemoQuit | null {
+    if (mode !== 'demo') return null;
+    const hold = new DemoQuit({ ...deps, quit: () => app.quit() });
+    app.on('before-quit', (event) => {
+        if (hold.beforeQuit()) event.preventDefault();
+    });
+    return hold;
 }

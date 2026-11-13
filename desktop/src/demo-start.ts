@@ -1,39 +1,38 @@
 /**
- * The demo's start-up order, in one function. A route that names a plugin that is not placed fails the runtime's start,
- * so the demo installation is made ready in this order and the runtime is started only after all of it:
+ * The demo's start-up order, in one function: `startOn`'s `prepare` step (`mode.ts`). A route that names a plugin that
+ * is not placed fails the runtime's start, so once the demo's directory is made (`openDirectory`) the demo installation
+ * is made ready in this order, and the runtime is started only after all of it:
  *
- * 1. the demo's directory is made and proved usable (`openDirectory`);
- * 2. the demo provider is placed in `<data>/plugins/demo/` (`placeDemoPlugin`) and, together with it and only once it is
+ * 1. the demo provider is placed in `<data>/plugins/demo/` (`placeDemoPlugin`) and, together with it and only once it is
  *    there, `Routes:Default` is written as the demo provider (`writeDemoRoute`);
- * 3. the demo's fixed settings are written (`fixedSettings`, the mode's own).
+ * 2. the demo's fixed settings are written (`writeDemoSettings`, passed as `fixedSettings`).
  *
- * A step that throws stops the rest and the function throws: `startOn` (`mode.ts`) then makes the run the person's own,
- * sets the record back to Live and says so, so no runtime is ever started on a half-prepared demo.
+ * A step that throws stops the rest and the function throws: `startOn` then makes the run the person's own, sets the
+ * record back to Live and says so, so no runtime is ever started on a half-prepared demo.
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { mergeSettings } from './demo-settings.ts';
+import { desktopPaths } from './paths.ts';
 
 export interface DemoStartDeps {
-    /** Makes the demo's directory and proves it usable (`openDirectory`); throws when not. */
-    open(data: string): void;
     /** Places the demo provider in `<data>/plugins/demo/` (`placeDemoPlugin`); throws when it cannot. */
     place(data: string): void;
     /** Writes `Routes:Default` as the demo provider into the demo's settings file (`writeDemoRoute`). */
     route(data: string): void;
-    /** Writes the demo's fixed settings; absent where the mode has none to write. */
-    fixedSettings?(data: string): void;
+    /** Writes the demo's fixed settings (`writeDemoSettings`). */
+    fixedSettings(data: string): void;
 }
 
 /** The installation's settings file under a data directory: `<data>/config/settings.json`. */
-export const settingsFileOf = (data: string): string => join(data, 'config', 'settings.json');
+export const settingsFileOf = (data: string): string => desktopPaths(data).installationSettings;
 
 /** Prepares the demo installation in the order above; throws at the first step that fails, having done none after it. */
 export function prepareDemo(data: string, deps: DemoStartDeps): void {
-    deps.open(data);
     deps.place(data);
     deps.route(data);
-    deps.fixedSettings?.(data);
+    deps.fixedSettings(data);
 }
 
 /**
@@ -50,12 +49,11 @@ export function writeDemoRoute(data: string): void {
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('The demo’s settings file is not an object.');
         settings = parsed as Record<string, unknown>;
     }
-    const routes = typeof settings['Routes'] === 'object' && settings['Routes'] !== null && !Array.isArray(settings['Routes']) ? (settings['Routes'] as Record<string, unknown>) : {};
-    settings['Routes'] = { ...routes, Default: { Plugin: 'demo' } };
+    const next = mergeSettings(settings, { Routes: { Default: { Plugin: 'demo' } } });
     mkdirSync(dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.tmp`;
     try {
-        writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`);
+        writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`);
         renameSync(temporary, file);
     } catch (error) {
         rmSync(temporary, { force: true });

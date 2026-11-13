@@ -33,10 +33,11 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, openDirectory, readMode, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type StartRun } from './mode.ts';
-import { DemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
+import { applyMode, demoMenu, enterRun, offersOf, openDirectory, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type StartRun } from './mode.ts';
+import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
 import { prepareDemo, writeDemoRoute } from './demo-start.ts';
+import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
@@ -48,7 +49,7 @@ import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
-import { processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
+import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 
@@ -295,18 +296,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const cli = loggedCli(jason, log);
     // A demo run's quit, the switch back to Live included, first stops the demo's runtime, by the demo's run file and the
     // existing stop; the person's runtime is never stopped. A live run's quit leaves its runtime running, as ever.
-    const demoQuit =
-        runOn.mode === 'demo'
-            ? new DemoQuit({
-                  stop: async () => {
-                      const outcome = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
-                      log.info('demo_runtime_stopped', { Outcome: outcome.kind });
-                  },
-                  quit: () => app.quit(),
-              })
-            : null;
-    app.on('before-quit', (event) => {
-        if (demoQuit?.beforeQuit()) event.preventDefault();
+    // The stop is waited for at most `demoStopCapMs`; the quit then goes on all the same.
+    holdDemoQuit(app, runOn.mode, {
+        stop: async () => {
+            const outcome = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
+            log.info('demo_runtime_stopped', { Outcome: outcome.kind });
+        },
+        timedOut: () => log.warn('demo_runtime_stop_timed_out', {}),
     });
     if (runOn.unopened !== null) log.warn('demo_unopened', {});
     // The count and the re-pair loop begin at the first pairing that succeeds: the start's, or a Reload's after a start
@@ -318,15 +314,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
     // On Linux the session starts the launcher: the AppImage file itself, whose mount lasts only while it runs.
     const login = new LoginItem({ platform: process.platform, home, executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead, log, env: process.env });
-    // A demo run writes nothing of the demo into what outlasts it: no update, no start at logon, no PATH command; the
-    // menu says to go back to the person's own installation for them.
-    const inDemo = runOn.mode === 'demo';
-    const autostart = inDemo || version === null || !carried.outlives ? null : new RuntimeAutostart({ cli, log });
+    // A demo run writes nothing of the demo into what outlasts it: no update, no start at logon, no PATH command, no
+    // Remove What Jason Placed; the menu says to go back to the person's own installation for them, and offers the way
+    // back (`offersOf`, `demoMenu`).
+    const offers = offersOf(runOn.mode);
+    const autostart = !offers.autostart || version === null || !carried.outlives ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
     const rollback = paths.rollback;
     // What an update keeps aside to go back to: the AppImage file on Linux, nothing for the deb.
     const aside = keptAsideOf(process.platform, form, process.execPath);
-    const updates = app.isPackaged && !inDemo
+    const updates = app.isPackaged && offers.updates
         ? new Updater({
               updater: autoUpdater,
               version: app.getVersion(),
@@ -361,7 +358,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         isProgram: (file) => isProgramFile(file, process.platform),
         log,
     };
-    const command = !inDemo && carried.outlives ? new PathCommand(commandDeps) : null;
+    const command = offers.command && carried.outlives ? new PathCommand(commandDeps) : null;
     // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this
     // start's; the copies of other versions are removed only after that, by what then still names them.
     const otherCopy = carried.repoints ? (named: string) => isOtherCopy(named, paths.bundle, executable) : null;
@@ -375,7 +372,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
     // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. Never in
     // a demo run: an act that removes an installation never runs with the demo's directory in this process's environment.
-    const removal = !inDemo && removalOffered(process.platform)
+    const removal = offers.removal && removalOffered(process.platform)
         ? placedRemoval({
               platform: process.platform,
               home,
@@ -396,7 +393,35 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               log,
           })
         : null;
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: inDemo });
+    // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
+    // directory, also from a demo run, and the desktop then starts again on the installation it names; a write that fails
+    // starts nothing.
+    const modeDeps = {
+        write: (mode: Mode) => {
+            try {
+                writeMode(desktopPaths(runOn.person).mode, mode);
+            } catch (error) {
+                log.warn('mode_write_failed', { Mode: mode });
+                throw error;
+            }
+            log.info('mode_set', { Mode: mode });
+        },
+        // The new start inherits this process's environment: the person's is put back first (`relaunchAsPerson`).
+        relaunch: () =>
+            relaunchAsPerson({
+                env: process.env,
+                person: personEnvironment,
+                relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
+                quit: () => app.quit(),
+            }),
+    };
+    // Back to Your Own Installation, in a demo run's tray and menu: the way back that needs no page, for a demo whose
+    // start failed.
+    const back = () => {
+        const refusal = applyMode('live', modeDeps);
+        if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
+    };
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back });
     desk.open();
     showWindow = () => desk.show();
     const repointed = (async () => {
@@ -435,24 +460,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(ipcMain, 'theme.get', origin, () => settings.theme, refused);
     handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
-    // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
-    // directory, also from a demo run, and the desktop then starts again on the installation it names; a write that fails
-    // starts nothing. Quitting leaves the runtime running, as any quit does.
-    const modeDeps = {
-        write: (mode: Mode) => {
-            try {
-                writeMode(desktopPaths(runOn.person).mode, mode);
-            } catch (error) {
-                log.warn('mode_write_failed', { Mode: mode });
-                throw error;
-            }
-            log.info('mode_set', { Mode: mode });
-        },
-        relaunch: () => {
-            app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath)));
-            app.quit();
-        },
-    };
     handle(ipcMain, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);
     handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
@@ -658,13 +665,22 @@ const installerStart =
 const personDirectory = dataDirectory(process.env, homedir());
 // A demo directory that cannot be made or used makes this run the person's own: the record goes back to Live, and the
 // first screen says the demo could not be opened.
+// Before the demo's runtime is ever started, its settings are written into its own settings file (`prepare`, the seam
+// for whatever else the demo installation must hold before it runs); the harness root is a sibling of the person's.
 const runOn: StartRun = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
-    // The demo's start-up order in one place (`demo-start.ts`): the directory, then the provider and its route, then the
-    // fixed settings; a step that fails makes this run the person's own, so no runtime starts on a half-made demo.
-    open: (directory) => prepareDemo(directory, { open: openDirectory, place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute }),
+    open: openDirectory,
+    // The demo's start-up order in one place (`demo-start.ts`): the provider and its route, then the fixed settings. It runs
+    // after the directory is made and before any runtime start, and a step that fails makes this run the person's own.
+    prepare: (demo) =>
+        prepareDemo(demo, {
+            place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
+            route: writeDemoRoute,
+            fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+        }),
     keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
 });
-if (runOn.mode === 'demo') process.env.JASON_DATA_DIR = runOn.data;
+// What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
+const personEnvironment = enterRun(process.env, runOn);
 // Whether this installation is new is read next: before Electron makes its profile under the data directory, before the
 // single-instance lock, before anything is written there, on either start below.
 const installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
