@@ -1349,6 +1349,19 @@ body,
 .jc-console .open-in-menu button.on {
     background: var(--hover);
 }
+.jc-console .open-in-continue {
+    display: flex;
+    flex-direction: column;
+    max-width: 320px;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+}
+.jc-console .open-in-menu button:disabled {
+    color: var(--faint);
+    background: transparent;
+    cursor: default;
+}
 .jc-console .mode-strip {
     flex: none;
     display: flex;
