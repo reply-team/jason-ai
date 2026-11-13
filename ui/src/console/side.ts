@@ -7,10 +7,11 @@ import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
 import { attention } from './needs';
+import { openPalette, paletteHint, paletteShortcut } from './palette';
 import { closeFilterMenu, recentView } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
-// The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), the Feed,
+// The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), Search, the Feed,
 // Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
 // conversations under "Recent", and Settings in the foot.
 
@@ -59,6 +60,10 @@ define('side.menu', ([which]) => {
     open.value = open.value === which ? null : which;
 });
 define('side.close', () => closeMenus());
+define('side.search', () => {
+    closeMenus();
+    openPalette();
+});
 // Start is made or brought forward as the window does it; no chat is made until the person sends one.
 define('side.start', () => {
     closeMenus();
@@ -173,6 +178,9 @@ export function sideView(): Html {
             }
         </div>
         <nav class="list" aria-label="Menu">
+            <button class="item" type="button" aria-keyshortcuts="${paletteShortcut()}" ${act('side.search')}>
+                ${svg('search', 15)}<span>${t('palette.search')}</span><span class="kbd">${paletteHint()}</span>
+            </button>
             ${
                 feed === null
                     ? null

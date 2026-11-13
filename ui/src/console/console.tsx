@@ -33,6 +33,7 @@ import { linkPlace } from './links';
 import * as needs from './needs';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
+import { Palette } from './palette';
 import { closeMenus, sideView } from './side';
 import { StartPanel, startMaking, startWaiting } from './start';
 import {
@@ -355,6 +356,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     />
                 </main>
             </div>
+            <Palette system={desktop.platform} />
         </div>
     );
 }
