@@ -295,7 +295,7 @@ public sealed class JournalKindHistoryTests
     private static string? NoReleaseTagFailure(bool underCi) => underCi
         ? "No release tag is reachable from this checkout under CI, so nothing would compare the documents with the last "
           + "published release's: the actions/checkout of each job in .github/workflows/ci.yml that runs the suite, "
-          + "build-test-publish and release-stamp, must keep fetch-depth: 0, which brings the tags."
+          + "tests (each part of a platform's tests) and release-stamp, must keep fetch-depth: 0, which brings the tags."
         : null;
 
     /// <summary>

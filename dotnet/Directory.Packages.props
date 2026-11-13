@@ -11,5 +11,8 @@
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <!-- Tests only, outside the executable's closure: the test platform's own repeat of a failed test, which CI turns on.
+         Its version is the test platform's that xunit.v3 brings. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.Retry" Version="2.4.0" />
   </ItemGroup>
 </Project>
