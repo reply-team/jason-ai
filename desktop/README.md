@@ -163,7 +163,9 @@ forwarder is admitted to); each card's note says where those are set.
 
 A campaign has one conversation, found or made the first time it is opened, and the chat may hold any number of set-up
 chats, which are about no campaign yet. Each is a record, `<data>/desktop/conversations/conv_<id>.json`: the campaign
-it is about, its title, the session each agent host named for it, and what the page drew, kept as text and never as
+it is about, its title, the session each agent host named for it (and, beside it in `plain_sessions`, whether the last
+turn to name or answer with that session was a plain one, on the person's own Claude Code or Codex outside Full access:
+only such a session is offered to Open in's "Continue this chat"), and what the page drew, kept as text and never as
 markup (the person's words, the agent's, the steps, each card with its answer, the errors). A record is written beside
 its name and renamed over it, readable by this account alone, never through a link, when a host first names its session
 and at the end of each turn. It is kept within 2 MB: each text of an entry is cut to 128 KB, keeping its end after a
