@@ -77,8 +77,9 @@ public static class SystemModule
                         routes.Snapshot.Id,
                         routes.Snapshot.ActivatedAt,
                         routes.Snapshot.Global.Default?.PluginId,
-                        routes.Snapshot.Global.Operations.Count,
-                        routes.Snapshot.Campaigns.Values.Sum(set => set.Operations.Count + (set.Default is null ? 0 : 1))),
+                        RouteCounts.GlobalOverrides(routes.Snapshot),
+                        RouteCounts.CampaignRoutes(routes.Snapshot),
+                        RouteCounts.ChannelRoutes(routes.Snapshot)),
                     // Null until a check has succeeded: "has not looked" and "looked and found nothing newer"
                     // are different answers, and a status line has to be able to give either.
                     update.Current,

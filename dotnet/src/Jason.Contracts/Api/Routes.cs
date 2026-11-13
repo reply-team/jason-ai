@@ -3,8 +3,12 @@ using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Api;
 
-/// <summary>Which plugin would perform one operation for one campaign, asked of the snapshot that is active now.</summary>
-public sealed record RouteResolveRequest(string? CampaignId, string? Operation);
+/// <summary>
+/// Which plugin would perform one operation for one campaign, asked of the snapshot that is active now. <c>Channel</c> is
+/// the channel a call of the operation names for its route — the one the claim reads from the work item — so the answer
+/// is the one for a call by that channel; null asks the operation as a call that names none.
+/// </summary>
+public sealed record RouteResolveRequest(string? CampaignId, string? Operation, string? Channel = null);
 
 /// <summary>
 /// The answer a claim would reach, and — when the routed plugin could not actually run the work — why not.
@@ -28,7 +32,8 @@ public sealed record RouteResolutionDto(
     string PluginSnapshotId,
     int OperationVersion,
     bool Usable,
-    IReadOnlyList<ErrorDetail> Problems);
+    IReadOnlyList<ErrorDetail> Problems,
+    string? Channel = null);
 
 /// <summary>Every route, or one campaign's. The global set is always answered: it is what a campaign falls back to.</summary>
 public sealed record RouteListRequest(string? CampaignId);

@@ -50,15 +50,16 @@ public sealed class RouteService(
         ArgumentNullException.ThrowIfNull(request);
 
         var contract = RequireContract(request.Operation);
+        var channel = ChannelAsked(request.Channel, contract.Id);
         var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
 
         var routes = registry.Snapshot;
         var snapshot = plugins.Snapshot;
-        if (RouteResolver.Resolve(routes, campaign.PublicId, contract.Id, channel: null) is not { } resolution)
+        if (RouteResolver.Resolve(routes, campaign.PublicId, contract.Id, channel) is not { } resolution)
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,
-                $"No route sends '{contract.Id}' anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
+                $"No route sends '{contract.Id}'{(channel is null ? string.Empty : $" on '{channel}'")} anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
         }
 
         var route = resolution.Route;
@@ -73,7 +74,7 @@ public sealed class RouteService(
             throw DomainErrors.ValidationTimedOut(
             [
                 new ErrorDetail(
-                    Field(campaign.PublicId, contract.Id, channel: null, resolution.Scope),
+                    Field(campaign.PublicId, contract.Id, channel, resolution.Scope),
                     SchemaValidator.PatternTimedOut,
                     $"the binding could not be measured against what '{route.PluginId}' declares, so whether this route can run is not known yet."),
             ]);
@@ -93,7 +94,8 @@ public sealed class RouteService(
             snapshot.Id,
             contract.Version,
             refused is null,
-            Problems(campaign.PublicId, contract.Id, resolution.Scope, refused));
+            Problems(campaign.PublicId, contract.Id, channel, resolution.Scope, refused),
+            channel);
     }
 
     /// <summary>
@@ -380,6 +382,30 @@ public sealed class RouteService(
         return channel.Trim();
     }
 
+    /// <summary>
+    /// The channel a read names for the operation it asks about, or none where it names none. A read holds the channel to
+    /// what a write would: blank is refused rather than read as none, and a channel the operation's document would never
+    /// let a route name is refused, since answering for it would describe a call no claim can make.
+    /// </summary>
+    internal static string? ChannelAsked(string? channel, string operation)
+    {
+        if (channel is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(channel))
+        {
+            throw new ValidationException(
+                [new ErrorDetail("channel", "blank", "channel is blank. Leave it out to ask about a call that names none, or name the channel the call names.")]);
+        }
+
+        var named = channel.Trim();
+        return RouteActivator.ChannelProblem(operation, named) is { } problem
+            ? throw new ValidationException([new ErrorDetail("channel", problem.Code, problem.Message)])
+            : named;
+    }
+
     private static string? Reason(string? reason, ValidationErrors errors)
     {
         if (reason is not null && reason.Trim().Length > MaxReasonLength)
@@ -394,11 +420,11 @@ public sealed class RouteService(
     /// Where the problem is, spelled the way the operator wrote the route — the same name a rejected reload uses
     /// for it, so two answers about one route read as one vocabulary.
     /// </summary>
-    private static IReadOnlyList<ErrorDetail> Problems(string campaignId, string operation, RouteScope scope, PreflightVerdict? refused)
+    private static IReadOnlyList<ErrorDetail> Problems(string campaignId, string operation, string? channel, RouteScope scope, PreflightVerdict? refused)
     {
         return refused is null
             ? []
-            : [new ErrorDetail(Field(campaignId, operation, channel: null, scope), refused.Code!, refused.Message!), .. refused.Details ?? []];
+            : [new ErrorDetail(Field(campaignId, operation, channel, scope), refused.Code!, refused.Message!), .. refused.Details ?? []];
     }
 
     /// <summary>

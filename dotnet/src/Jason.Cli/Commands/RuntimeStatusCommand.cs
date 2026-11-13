@@ -293,9 +293,12 @@ public static class RuntimeStatusCommand
             return $"nothing is routed anywhere | snapshot {routes.SnapshotId}";
         }
 
+        // The counts above include the channel routes; a runtime that has any says so beside them, since a channel route
+        // is one operation's route for one channel and reads as no other.
+        var byChannel = routes.ChannelRouteCount is > 0 and var channels ? $" | {Plural(channels, "route")} by channel" : string.Empty;
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"snapshot {routes.SnapshotId} | default {routes.GlobalDefaultPlugin ?? "none"} | {Plural(routes.GlobalOverrideCount, "override")} | {Plural(routes.CampaignRouteCount, "campaign route")}");
+            $"snapshot {routes.SnapshotId} | default {routes.GlobalDefaultPlugin ?? "none"} | {Plural(routes.GlobalOverrideCount, "override")} | {Plural(routes.CampaignRouteCount, "campaign route")}{byChannel}");
     }
 
     private static string Plural(int count, string noun) =>

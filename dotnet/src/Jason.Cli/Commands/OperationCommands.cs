@@ -28,9 +28,15 @@ public static class OperationCommands
             Description = "The campaign, as cmp_...; its route for the operation names the plugin described.",
             Required = true,
         };
+        var channel = new Option<string?>("--channel")
+        {
+            Description = "The channel the call names for its route, such as linkedin for message.send: for an operation a route can name a channel of, "
+                + "the plugin described is the one that channel goes to. Leave it out to describe a call that names none.",
+        };
         var human = VerbOptions.Human();
         command.Arguments.Add(operation);
         command.Options.Add(campaign);
+        command.Options.Add(channel);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
@@ -38,7 +44,8 @@ public static class OperationCommands
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(campaign))
-                .Set("operation", parseResult.GetValue(operation));
+                .Set("operation", parseResult.GetValue(operation))
+                .Set("channel", parseResult.GetValue(channel));
             return OperationRunner.RunAsync(env, Operations.OperationDescribe, body, new RunOptions(parseResult.GetValue(human), OperationRenderers.Description), cancellationToken);
         });
 

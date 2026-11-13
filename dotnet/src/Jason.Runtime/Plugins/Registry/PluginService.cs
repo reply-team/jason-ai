@@ -177,8 +177,8 @@ public sealed class PluginService(
                 {
                     ["snapshot_id"] = routes.Id,
                     ["global_default"] = routes.Global.Default?.PluginId,
-                    ["override_count"] = routes.Global.Operations.Count,
-                    ["campaign_route_count"] = routes.Campaigns.Values.Sum(set => set.Operations.Count + (set.Default is null ? 0 : 1)),
+                    ["override_count"] = RouteCounts.GlobalOverrides(routes),
+                    ["campaign_route_count"] = RouteCounts.CampaignRoutes(routes),
                 },
                 ["subscriptions"] = new JsonObject
                 {
