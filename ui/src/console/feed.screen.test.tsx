@@ -153,6 +153,38 @@ describe('the Feed', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
     });
 
+    it('draws a row of a send that went out and a row of role work that finished, in their words, neither leading to Needs you', async () => {
+        const { desktop } = renderConsole();
+        await waitFor(() => feedButton());
+        const id = (await desktop.chat.list()).find((each) => each.main === true)!.id;
+        desktop.keep({
+            id,
+            main: true,
+            title: 'Feed',
+            entries: [
+                kept({
+                    journal_kind: 'workitem_succeeded',
+                    journal_id: 'jrn_01JD0000000000000000000011',
+                    operation: 'message.send',
+                    count: 2,
+                }),
+                kept({
+                    journal_kind: 'workitem_succeeded',
+                    journal_id: 'jrn_01JD0000000000000000000012',
+                    role: 'researcher',
+                }),
+            ],
+        });
+        fireEvent.click(feedButton());
+        const sent = await waitFor(() => found('[data-id="jrn_01JD0000000000000000000011"]'));
+        expect(within(sent).getByText('A message went out')).toBeTruthy();
+        expect(within(sent).getByText('x2')).toBeTruthy();
+        expect(within(sent).queryByRole('button', { name: 'Needs you' })).toBeNull();
+        const done = found('[data-id="jrn_01JD0000000000000000000012"]');
+        expect(within(done).getByText('Research finished')).toBeTruthy();
+        expect(within(done).queryByRole('button', { name: 'Needs you' })).toBeNull();
+    });
+
     it('opens Needs you from an approval or a question row', async () => {
         const desktop = stubDesktop();
         renderConsole(desktop);
@@ -172,7 +204,11 @@ describe('the Feed', () => {
         const id = (await desktop.chat.list()).find((each) => each.main === true)!.id;
         fireEvent.click(feedButton());
         await waitFor(() => screen.getByRole('heading', { name: 'The Feed' }));
-        expect(screen.getByText(/work that stopped, a provider block holding work\./)).toBeTruthy();
+        expect(
+            screen.getByText(
+                /an invitation that went out, work that finished or stopped, a provider block holding work\./,
+            ),
+        ).toBeTruthy();
         flush(() => {
             for (let n = 1; n <= 3; n++)
                 desktop.emit(id, {

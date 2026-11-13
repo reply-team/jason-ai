@@ -70,7 +70,7 @@ export function PeopleScreen() {
                     <Search
                         value={filters.q ?? ''}
                         label="Search people"
-                        placeholder="Search name, company, email, phone, LinkedIn…"
+                        placeholder="Search name, company, email, phone, LinkedIn, custom fields…"
                         onSearch={(q) => narrow(withValue(filters, 'q', q))}
                     />
                     <CampaignPicker

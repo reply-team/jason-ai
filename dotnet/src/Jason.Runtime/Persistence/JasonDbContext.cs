@@ -117,6 +117,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 new AppendOnlyInterceptor(),
                 new JournalLineInterceptor(lines),
                 new TextFoldInterceptor(),
+                new CustomValuesInterceptor(),
                 new LinkedInKeyInterceptor())
             .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.QueryIterationFailed));
     }
@@ -155,6 +156,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<EventBackfillStatus>().HaveConversion<SnakeCaseEnumConverter<EventBackfillStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<SubscriptionRunStatus>().HaveConversion<SnakeCaseEnumConverter<SubscriptionRunStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
+        // A function a query calls on a JSON object column (CustomValues) takes the column as the column stores it.
+        configurationBuilder.DefaultTypeMapping<JsonObject>().HasConversion<JsonObjectConverter>();
         configurationBuilder.Properties<JsonArray>().HaveConversion<JsonArrayConverter, JsonArrayComparer>();
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
         configurationBuilder.Properties<AttemptErrorDto>().HaveConversion<JsonTextConverter<AttemptErrorDto>, JsonTextComparer<AttemptErrorDto>>();
@@ -169,6 +172,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         ArgumentNullException.ThrowIfNull(modelBuilder);
 
         modelBuilder.HasDbFunction(typeof(TextFold).GetMethod(nameof(TextFold.Fold))!).HasName(TextFold.FunctionName);
+        modelBuilder.HasDbFunction(typeof(CustomValues).GetMethod(nameof(CustomValues.Of))!).HasName(CustomValues.FunctionName);
 
         modelBuilder.Entity<Project>(project =>
         {

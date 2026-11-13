@@ -145,6 +145,9 @@ export function feedBlock(lines: readonly LineEntry[], more: number): string | n
             kind: line.journal_kind,
             campaign_id: line.campaign_id,
             ...(line.work_item_id === undefined ? {} : { work_item_id: line.work_item_id }),
+            // Only values of the closed lists (`feedOperations`, `feedRoles`), held at `lineOf` and `keptLineOf`.
+            ...(line.operation === undefined ? {} : { operation: line.operation }),
+            ...(line.role === undefined ? {} : { role: line.role }),
             journal_id: line.journal_id,
             at: line.at,
             count: line.count,

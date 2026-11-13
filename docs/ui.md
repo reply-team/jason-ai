@@ -173,13 +173,13 @@ Three tabs over the same filters: **Now** is what is running and what waits for 
 will run, soonest first and grouped by day, and **Done** is what finished, newest first, with a chip that narrows it to
 failures. Each tab's number is `jason workitem count` for that tab's statuses and filters. The filters are a campaign
 and a person, each a search that opens on the first few and asks the runtime as you type (`jason campaign list
---query`, `jason contact list --query`: any part of a name, company, title, email, phone or profile link), a kind, a
-role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a day at a time. They are part of the page's address,
-so a bookmark or a link from another screen keeps them. Opening an item shows what the runtime recorded about it: its
-facts, its attempts, its input and its history; a failure is shown as the error the runtime recorded, with its class
-and the attempts it used. Open work can take a new priority, start and due time, or be cancelled with a reason,
-through `jason workitem update` and `jason workitem cancel`; work waiting for your approval can be approved or rejected
-right there, as on Attention.
+--query`, `jason contact list --query`: any part of a name, company, title, email, phone, profile link or custom
+field's value), a kind, a role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a
+day at a time. They are part of the page's address, so a bookmark or a link from another screen keeps them. Opening an
+item shows what the runtime recorded about it: its facts, its attempts, its input and its history; a failure is shown as
+the error the runtime recorded, with its class and the attempts it used. Open work can take a new priority, start and
+due time, or be cancelled with a reason, through `jason workitem update` and `jason workitem cancel`; work waiting for
+your approval can be approved or rejected right there, as on Attention.
 
 ## People
 
