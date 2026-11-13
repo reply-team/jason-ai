@@ -17,7 +17,8 @@ export interface CliResult {
 }
 
 export interface Cli {
-    run(args: readonly string[], options?: { timeoutMs?: number; cwd?: string }): Promise<CliResult>;
+    /** `spawned` is told the started process's id, once it has one. */
+    run(args: readonly string[], options?: { timeoutMs?: number; cwd?: string; spawned?: (pid: number) => void }): Promise<CliResult>;
 }
 
 const defaultLimit = 120_000;
@@ -40,6 +41,7 @@ export function cliAt(file: string, env: Record<string, string>, prefix: readonl
                         resolve({ exit, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') || (exit === -1 && error ? error.message : '') });
                     },
                 );
+                if (child.pid !== undefined) options?.spawned?.(child.pid);
                 child.stdin?.on('error', () => undefined);
                 child.stdin?.end();
             });

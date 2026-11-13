@@ -113,3 +113,39 @@ export function holdDemoQuit(app: QuittingApp, mode: 'live' | 'demo', deps: Omit
     });
     return hold;
 }
+
+export interface LeftRuntimeDeps {
+    /** Stops the demo's runtime (`stopDemoRuntime`): the demo's run file, the demo's directory, never the person's. */
+    stop(): Promise<StopOutcome>;
+    /** Notes in the request that this was done (`noteLeftStopped`), so it is done once; throws when it cannot. */
+    note(): void;
+    /** Starts the desktop again on the demo, which then carries the request out. */
+    startAgain(): void;
+    /** What a refused carry-out does: the record set to Live, the person told, their own installation started. */
+    refuse(): void;
+}
+
+/**
+ * The start that found a demo runtime a crashed making or placing left (`leftRuntimeStops`): it opens no window, stops
+ * that runtime and starts again, so the next start carries the request out; a stop that fails, or finds a runtime that
+ * is not this application's, refuses as a carry-out refuses. It is done once for a request: the stop is noted in it
+ * before the start again, and a request that cannot be noted is refused rather than started again without the note.
+ * Answers which it did.
+ */
+export async function stopLeftDemoRuntime(deps: LeftRuntimeDeps): Promise<'started-again' | 'refused'> {
+    const outcome = await deps.stop().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
+    if (outcome.kind === 'stopped' || outcome.kind === 'none') {
+        let noted = true;
+        try {
+            deps.note();
+        } catch {
+            noted = false;
+        }
+        if (noted) {
+            deps.startAgain();
+            return 'started-again';
+        }
+    }
+    deps.refuse();
+    return 'refused';
+}
