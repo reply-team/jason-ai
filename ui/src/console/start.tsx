@@ -3,7 +3,7 @@ import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
-import { mode, modeRefusal, switchMode, type Mode } from '../platform/mode';
+import { mode, type Mode } from '../platform/mode';
 import { ChatNotes, hostOf, isRefusal, sendTurn, startChat } from './chat';
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
@@ -191,18 +191,6 @@ export function StartPanel() {
                             <h1>Who do you want to reach?</h1>
                             <span className="alpha">Alpha</span>
                         </div>
-                        {mode.value === 'live' && (
-                            <p className="start-demo">
-                                <button className="btn sm" type="button" onClick={() => void switchMode('demo')}>
-                                    {t('mode.offer')}
-                                </button>
-                                {modeRefusal.value !== null && (
-                                    <span className="start-demo-refusal" role="alert">
-                                        {modeRefusal.value}
-                                    </span>
-                                )}
-                            </p>
-                        )}
                     </div>
                 </div>
                 {card && <Painted className="start-ai" view={connect.aiCardView} />}
