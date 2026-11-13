@@ -3,8 +3,9 @@
 Jason Desktop is a window onto the installation the `jason` command line already uses. It is one more client of that
 installation, as the [browser UI](ui.md) is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
 `~/.jason`), starts the runtime only through `jason runtime start`, and changes the installation only through CLI verbs
-and the settings file a person would edit. There is no second data directory, no second harness root and nothing in the
-runtime that exists for the desktop.
+and the settings file a person would edit. It runs on one installation at a time, yours or, on your word, the sample
+installation of [the demo](#the-demo) beside it, which is a second data directory and a second harness root. Nothing in
+the runtime exists for the desktop.
 
 The full experience is still a session with your agent, by text or by voice, with the skills loaded; the desktop is for
 the moments you want to see a screen, and what a screen shows is never all there is. It adds three things the browser
@@ -150,6 +151,61 @@ A Connect card writes, into `<data>/config/settings.json`, the keys of the plugi
 would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notifications:Plugins:<id>:Binding`), and then runs
 `jason plugin reload`. A file it cannot parse is refused and left as it is. [desktop/README.md](../desktop/README.md)
 lists each key and each card's grant.
+
+## The demo
+
+The demo is a second, real installation of Jason on invented people, so you can see the product work before you connect
+anything of your own. It has its own data directory and its own harness root, and nothing of your installation is read,
+written or mixed into it. It runs the same runtime, the same database and the same page; a campaign in it is a campaign,
+an approval you give moves the work, and the numbers and the Feed are the runtime's own. What stands where a provider
+would is [the demo provider](../plugins/demo/README.md), a plugin that requests no program, no host and no variable, so
+it can reach nothing outside its process: a message approved in the demo is answered as sent and goes to nobody.
+
+**How you meet it.** On the first screen of your own installation, one line offers **See Jason with sample data**.
+Choosing it writes the mode and starts the desktop again on the demo; while the sample is made the window says it is
+being prepared, which takes a moment the first time. In the demo a strip heads every screen: the data is sample, nothing
+in it is real and nothing is sent to anyone, with a **Demo** and a **Live** button, and **Live**, or **Back to Your Own
+Installation** in the tray and the Jason menu, takes you back to your own installation. **Start the demo over** removes
+the demo's two folders and makes the sample again, so what you did in it is gone and the story moves from its start.
+
+**What the sample holds.** An invented seller and one project with four campaigns in different states (two running,
+one paused, one a draft), fifty-four invented people at `.example` addresses, twenty-eight messages already approved and
+sent, and ten waiting for your approval. A few of the people who were written to answer over the first minutes, because
+the demo provider reports their written replies through events as any provider that reads events does. The sample starts today, with no past, and it is email only; it raises no question, and a person whose
+message is waiting for your approval never answers it.
+
+**What is off in the demo, and why.** The demo has no real account and never gets one, so the acts that connect or change
+one are off, and the card says "Not in the demo: accounts are connected in your own installation.": signing in to Reply,
+its API key, the Reply CLI's install and update, adding, reconnecting, pausing, resuming, unblocking, limiting and
+deleting an account, and connecting or disconnecting a notification channel. Updates, the runtime's start at logon, the
+`jason` command on the PATH and Remove What Jason Placed are off too, each with a line saying it is not in the demo and
+that going back to your own installation is how to reach it, because each outlasts the run or removes an installation.
+Your AI's own keys and hosts, which are the chat's and not an account of the demo, work as they do in your installation.
+
+**The chat.** The chat works in the demo as anywhere: the AI you connected runs `jason` against the demo installation,
+where it can do no harm to anybody. Nothing is connected for you, and the chat says so as it does in your own
+installation when no AI is. No AI role runs in the demo's runtime: the responder is off and the campaign manager keeps
+only the trigger it cannot do without at its slowest cadence, so nothing waits for an AI nobody connected and nothing
+fails for lack of one.
+
+**Its two folders.** The demo's data directory and its harness root are each your own with `-demo` after the name, beside
+yours: `~/.jason` gives `~/.jason-demo` and `~/Jason` gives `~/Jason-demo`, whatever `JASON_DATA_DIR` and `Harness:Root`
+name for you. The demo's harness root is set in the demo's own settings file, never inside either data directory. Which
+installation the desktop runs on is one word, `live` or `demo`, in `<data>/desktop/mode` of your own installation (see
+Its own files, above), and a start is Live unless it says `demo`.
+
+**Quitting and switching.** Quitting a demo run, or switching to Live, stops the demo's runtime first; your own runtime is
+never stopped by either. **Remove What Jason Placed** and the Windows uninstall take the demo's two folders off too,
+the demo's runtime stopped first (see Taking it off, below); so does Start the demo over, which then makes the sample
+again. Removing the two folders is all that removing the demo means.
+
+**From a terminal.** The demo installation is a real installation, so the `jason` command line reaches it by naming its
+data directory: set `JASON_DATA_DIR` to the demo's data directory, and every verb you type then reads and changes the demo
+and not your own installation, with no verb of its own for it. The demo's runtime must be running, which the desktop
+does while a demo run is open. In a POSIX shell, `JASON_DATA_DIR="$HOME/.jason-demo" jason campaign list`; in PowerShell,
+`$env:JASON_DATA_DIR = "$HOME\.jason-demo"; jason campaign list`, after which that window's `jason` stays on the demo until
+you remove the variable with `Remove-Item Env:JASON_DATA_DIR`. If your own data directory is not `~/.jason`, the demo's
+is the same path with `-demo` after it.
 
 ## Connect
 

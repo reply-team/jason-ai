@@ -335,6 +335,14 @@ asks for, the key under `Plugins:Grants:<id>` that grants it, that file and `jas
 `.staging-<id>-…` or `.old-<id>-…` directory beside the
 packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
 the install replaced. Every other package is installed by copying its directory in.
+A sixth package, [`plugins/demo/`](../plugins/demo/README.md), is published with no release: the desktop carries it and places it in
+its demo installation ([the desktop guide](desktop.md#the-demo)), so `jason plugin install demo` has nothing to install.
+It is also the plainest example of a provider package. Its manifest requests no capability, so by §9 it can call no host
+and run no program, and a send made to it is answered `sent` and goes to nobody; it performs `message.send`,
+`social_invitation.send`, `conversation.reply`, `sender.list`, `conversation.list` and `conversation.get`, and declares
+`contracts.events`, so its `events.read` reports the replies its sample story wrote, by a cursor of its own. Its people,
+threads and replies are data inside the package, and the moment the story starts is a value under `Plugins:Config:demo`.
+Read its [README](../plugins/demo/README.md) beside its `plugin.yaml` when you write a provider of your own.
 Step 3 of [the wiring check](golden-path.md) runs the verb.
 The runtime carries each package its own release publishes and says in `system.info`'s `released_plugins` whether the
 one installed of that id is it, by content digest, so `jason status` names an earlier release's package left behind
