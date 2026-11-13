@@ -29,6 +29,11 @@ export interface DemoStartDeps {
     route(data: string): void;
     /** Writes the demo's fixed settings (`writeDemoSettings`). */
     fixedSettings(data: string): void;
+    /**
+     * Whether a demo runtime is alive on `data` (`demoRuntimeAlive`). This runs before the single-instance lock, so a second
+     * launch reaches it while a demo instance runs; with a runtime alive nothing is placed or written.
+     */
+    runtimeAlive?(data: string): boolean;
 }
 
 /** The installation's settings file under a data directory: `<data>/config/settings.json`. */
@@ -45,6 +50,8 @@ export function openDemoDirectory(directory: string): void {
 
 /** Prepares the demo installation in the order above; throws at the first step that fails, having done none after it. */
 export function prepareDemo(data: string, deps: DemoStartDeps): void {
+    // A live demo runtime holds the plugin and the settings it loaded: nothing is removed, copied or written under it.
+    if (deps.runtimeAlive?.(data) === true) return;
     deps.harnessRoot();
     deps.place(data);
     deps.route(data);

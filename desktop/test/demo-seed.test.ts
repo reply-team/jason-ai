@@ -6,7 +6,7 @@
 // run on is a small fixture of the package module's shape, never a copy of the story.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -14,7 +14,9 @@ import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { knownDesktopEntries } from '../src/chat-hosts.ts';
 import { claimDemoFolder, hasDemoMarker } from '../src/demo-folders.ts';
-import { carryOutStartOver, requestOnDisk, requestStartOver } from '../src/demo-over.ts';
+import { askedBy, carryOutOnDisk, carryOutStartOver, requestStartOver } from '../src/demo-over.ts';
+import { demoRuntimeAlive } from '../src/demo-alive.ts';
+import { prepareDemo } from '../src/demo-start.ts';
 import { fileLogger } from '../src/log.ts';
 import { desktopPaths } from '../src/paths.ts';
 import {
@@ -416,11 +418,28 @@ function disk() {
     return { root, person, demo, request: join(person, 'desktop', 'demo-start-over') };
 }
 
+/** The carry-out over the real disk, with the asking process, the runtime and the removal named by the row. */
+function carry(d: ReturnType<typeof disk>, over: Partial<Parameters<typeof carryOutStartOver>[0]> = {}): void {
+    carryOutStartOver({
+        ...carryOutOnDisk(d.request, d.demo, () => false),
+        runtimeAlive: () => false,
+        exists: existsSync,
+        marked: hasDemoMarker,
+        ...over,
+    });
+}
+
+const claimBoth = (d: ReturnType<typeof disk>): void => {
+    claimDemoFolder(d.demo.data);
+    claimDemoFolder(d.demo.harnessRoot);
+};
+
+const aside = (d: ReturnType<typeof disk>): string[] => readdirSync(d.root).filter((name) => name.includes('.removing-'));
+
 test('on a real disk: start over, a log line written inside the demo, then the next start claims fresh folders', async () => {
     const d = disk();
     try {
-        claimDemoFolder(d.demo.data);
-        claimDemoFolder(d.demo.harnessRoot);
+        claimBoth(d);
         writeFileSync(join(d.demo.data, 'demo-seed.json'), '{"version":1,"complete":true}');
         const log = fileLogger(join(d.demo.data, 'logs'));
         const outcome = await startDemoOver({
@@ -428,19 +447,17 @@ test('on a real disk: start over, a log line written inside the demo, then the n
             exists: existsSync,
             marked: hasDemoMarker,
             stopRuntime: async () => true,
-            request: () => requestStartOver(d.request),
+            request: () => requestStartOver(d.request, 999_999_999),
             relaunch: () => undefined,
         });
         assert.equal(outcome.kind, 'started-over');
         // The run that is leaving still logs inside the demo: harmless, because its folders were not removed.
         log.info('demo_start_over', {});
         assert.ok(hasDemoMarker(d.demo.data));
-        // The next start, before anything names the demo's directory.
-        const disks = requestOnDisk(d.request);
-        carryOutStartOver({ ...disks, places: d.demo, exists: existsSync, marked: hasDemoMarker, removeTree: (f) => rmSync(f, { recursive: true, force: true }) });
+        carry(d);
         assert.ok(!existsSync(d.demo.data) && !existsSync(d.demo.harnessRoot) && !existsSync(d.request));
-        claimDemoFolder(d.demo.data);
-        claimDemoFolder(d.demo.harnessRoot);
+        assert.deepEqual(aside(d), [], 'the renamed copies are removed');
+        claimBoth(d);
         assert.ok(hasDemoMarker(d.demo.data) && hasDemoMarker(d.demo.harnessRoot));
         assert.ok(!existsSync(join(d.demo.data, 'demo-seed.json')), 'a fresh demo has no seed marker');
     } finally {
@@ -448,27 +465,99 @@ test('on a real disk: start over, a log line written inside the demo, then the n
     }
 });
 
-test('a start with no request removes nothing; a failing removal keeps the request and throws; an unmarked folder is left', () => {
+test('a start with no request changes nothing; an unmarked folder is left and the request kept', () => {
     const d = disk();
     try {
-        claimDemoFolder(d.demo.data);
-        claimDemoFolder(d.demo.harnessRoot);
-        const removed: string[] = [];
-        const base = { places: d.demo, exists: existsSync, marked: hasDemoMarker, removeTree: (f: string) => void removed.push(f) };
-        carryOutStartOver({ ...requestOnDisk(d.request), ...base });
-        assert.deepEqual(removed, []);
-        requestStartOver(d.request);
-        assert.throws(() => carryOutStartOver({ ...requestOnDisk(d.request), ...base, removeTree: () => { throw new Error('EBUSY'); } }), /could not be removed/);
-        assert.ok(existsSync(d.request), 'the request is kept for the next demo start');
-        // A folder of the demo's name that the demo did not make.
+        claimBoth(d);
+        carry(d);
+        assert.ok(hasDemoMarker(d.demo.data) && hasDemoMarker(d.demo.harnessRoot));
+        requestStartOver(d.request, 999_999_999);
         rmSync(join(d.demo.harnessRoot, '.jason-demo-folder'));
         writeFileSync(join(d.demo.harnessRoot, 'mine.txt'), 'x');
-        assert.throws(() => carryOutStartOver({ ...requestOnDisk(d.request), ...base }), /not one the demo made/);
-        assert.deepEqual(removed, [], 'nothing was removed, the marked folder included');
+        assert.throws(() => carry(d), /not one the demo made/);
         assert.ok(existsSync(join(d.demo.harnessRoot, 'mine.txt')) && existsSync(d.request));
+        assert.ok(hasDemoMarker(d.demo.data), 'the marked folder is not touched either');
+        assert.deepEqual(aside(d), []);
     } finally {
         rmSync(d.root, { recursive: true, force: true });
     }
+});
+
+test('a folder that cannot be taken away changes nothing: the marker stays, the request is kept, and the next carry-out works', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        writeFileSync(join(d.demo.data, 'a-file'), 'x');
+        requestStartOver(d.request, 999_999_999);
+        const real = carryOutOnDisk(d.request, d.demo, () => false);
+        // The first folder moves, the second cannot (a file inside held open on Windows): the rename is one step each, so
+        // whichever fails has lost nothing, and the one that moved is carried on with at the next start.
+        let moves = 0;
+        assert.throws(() => carry(d, { setAside: (folder) => { moves += 1; if (moves === 2) throw new Error('EPERM'); return real.setAside(folder); } }), /could not be taken away/);
+        assert.ok(hasDemoMarker(d.demo.harnessRoot), 'the folder that could not move keeps its marker');
+        assert.ok(existsSync(d.request));
+        carry(d);
+        assert.ok(!existsSync(d.demo.harnessRoot) && !existsSync(d.request));
+        assert.deepEqual(aside(d), []);
+        claimBoth(d);
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('a copy that cannot be removed is left marked beside, and the next carry-out removes it; an unmarked one named like it is not touched', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        requestStartOver(d.request, 999_999_999);
+        carry(d, { removeTree: () => { throw new Error('EBUSY'); } });
+        assert.ok(!existsSync(d.request), 'the folders are out of the demo\'s name, so the request is done');
+        assert.equal(aside(d).length, 2);
+        const stranger = join(d.root, 'jason-demo.removing-1');
+        mkdirSync(stranger);
+        writeFileSync(join(stranger, 'theirs.txt'), 'x');
+        requestStartOver(d.request, 999_999_999);
+        carry(d);
+        assert.deepEqual(aside(d), ['jason-demo.removing-1'], 'only the stranger is left');
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('the request waits for the run that asked and for a live demo runtime, and keeps itself', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        requestStartOver(d.request, 4242);
+        assert.throws(() => carry(d, { running: (pid) => pid === 4242 }), /still ending/);
+        assert.throws(() => carry(d, { runtimeAlive: () => true }), /runtime is still running/);
+        assert.ok(existsSync(d.request) && hasDemoMarker(d.demo.data) && hasDemoMarker(d.demo.harnessRoot));
+        assert.equal(askedBy(readFileSync(d.request, 'utf8')), 4242);
+        // The asking run gone and no runtime: it goes through.
+        carry(d, { running: () => false });
+        assert.ok(!existsSync(d.demo.data) && !existsSync(d.request));
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('a demo runtime is alive when its run file names a running process or cannot be read, and not otherwise', () => {
+    const file = '/x/run/runtime.json';
+    const on = (text: string | null, running: boolean) => ({ exists: () => text !== null, read: () => text ?? '', running: () => running });
+    assert.equal(demoRuntimeAlive(file, on(null, true)), false, 'no run file');
+    assert.equal(demoRuntimeAlive(file, on('{"pid":77}', true)), true);
+    assert.equal(demoRuntimeAlive(file, on('{"pid":77}', false)), false);
+    assert.equal(demoRuntimeAlive(file, on('{', false)), true, 'unreadable is not known to be dead');
+    assert.equal(demoRuntimeAlive(file, on('{"pid":"x"}', false)), true);
+});
+
+test('preparing the demo under a live runtime removes, copies and writes nothing', () => {
+    const calls: string[] = [];
+    const deps = { harnessRoot: () => void calls.push('harness'), place: () => void calls.push('place'), route: () => void calls.push('route'), fixedSettings: () => void calls.push('settings') };
+    prepareDemo('/d', { ...deps, runtimeAlive: () => true });
+    assert.deepEqual(calls, []);
+    prepareDemo('/d', { ...deps, runtimeAlive: () => false });
+    assert.deepEqual(calls, ['harness', 'place', 'route', 'settings']);
 });
 
 test('the request is a known entry of the person\'s desktop folder, so the chat host is refused it', () => {
@@ -656,3 +745,11 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?:
     const outcome = await ensureSeeded(deps);
     return { outcome, deps, calls, events, writes, imported, workItems, approved, cancelled, progress, settings: () => files.get(join(places.data, 'config', 'settings.json')) ?? '' };
 }
+
+test('the main process refuses Start the Demo Over until this run\'s own start has answered, and holds the demo\'s preparation under a live runtime', () => {
+    const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
+    const refuse = main.indexOf('if (startInFlight) return');
+    assert.ok(refuse > 0 && refuse < main.indexOf('await startDemoOver('), 'refused before anything stops');
+    assert.ok(main.includes('let startInFlight = true;') && main.includes('} finally {\n        startInFlight = false;'));
+    assert.ok(main.includes('runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),'));
+});

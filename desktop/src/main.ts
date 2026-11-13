@@ -34,7 +34,9 @@ import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutStartOver, requestOnDisk, requestStartOver } from './demo-over.ts';
+import { carryOutOnDisk, carryOutStartOver, requestStartOver } from './demo-over.ts';
+import { demoRuntimeAlive } from './demo-alive.ts';
+import { processIsRunning } from './own-runtime.ts';
 import { applyMode, demoDirectory, demoMenu, demoUnopened, enterRun, offersOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
@@ -428,8 +430,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // request is left in the person's own desktop folder and the desktop starts again. This run lives inside the demo's
     // folders, so it removes none: the next start removes them before anything names the demo's directory
     // (`carryOutStartOver` in `chooseInstallation`). Refused in Live; the person's own installation is never touched.
+    // True from the window opening until this run's own start of the runtime has answered: a stop in that window finds no run
+    // file and says none, though a runtime is booting, so Start the Demo Over waits for the start.
+    let startInFlight = true;
     const startOver = async (): Promise<{ refused: string } | null> => {
         if (runOn.mode !== 'demo') return { refused: 'Start the Demo Over is only in the demo.' };
+        if (startInFlight) return { refused: 'The demo is still starting. Try again in a moment.' };
         const parent = current;
         const options = { type: 'question' as const, title: 'Jason', message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
         const { response } = parent === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(parent, options);
@@ -594,11 +600,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     await showStarting(window, 'Starting Jason…', false);
     if (uncopied !== null) {
+        startInFlight = false;
         desk.notStarted();
         await showStarting(window, uncopied, true);
         return;
     }
     if (version === null) {
+        startInFlight = false;
         desk.notStarted();
         await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
         return;
@@ -674,6 +682,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                 ? said
                 : keptNotice(said, kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
         if (current !== null) await showStarting(current, notice, true);
+    } finally {
+        startInFlight = false;
     }
     if (otherCopy !== null && version !== null) {
         const named = async (): Promise<readonly string[] | null> => {
@@ -753,11 +763,10 @@ function chooseInstallation(installerStart: boolean): void {
             const problem = placesProblem(demoWhere, personDirectory, personHarness);
             if (problem !== null) throw new Error(problem);
             carryOutStartOver({
-                ...requestOnDisk(desktopPaths(personDirectory).demoStartOver),
-                places: demoWhere,
+                ...carryOutOnDisk(desktopPaths(personDirectory).demoStartOver, demoWhere, processIsRunning),
+                runtimeAlive: () => demoRuntimeAlive(desktopPaths(demoWhere.data).runFile),
                 exists: (folder) => existsSync(folder),
                 marked: hasDemoMarker,
-                removeTree: (folder) => rmSync(folder, { recursive: true, force: true }),
             });
         } catch {
             refused = true;
@@ -778,6 +787,7 @@ function chooseInstallation(installerStart: boolean): void {
                 place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
                 route: writeDemoRoute,
                 fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+                runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),
             }),
         keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
     });
