@@ -151,6 +151,15 @@ export function takeBack(): void {
     startWaiting.value = null;
 }
 
+/**
+ * The box's words: the second sentence, that a website link is enough, only where the host that will drive the chat can
+ * open a page. Claude Code asks the person once and then opens it; Codex opens none, and with no host nothing can.
+ */
+function placeholder(): string {
+    const host = hostOf(startChatNow());
+    return host?.id === 'claude' ? `${t('start.placeholder')} ${t('start.placeholder.site')}` : t('start.placeholder');
+}
+
 export function StartPanel() {
     const modeMenu = useRef<HTMLButtonElement>(null);
     const waiting = startWaiting.value;
@@ -226,7 +235,7 @@ export function StartPanel() {
                     <textarea
                         ref={box}
                         rows={2}
-                        placeholder={t('start.placeholder')}
+                        placeholder={placeholder()}
                         aria-label="Who do you want to reach?"
                         value={startDraft.value}
                         disabled={held}

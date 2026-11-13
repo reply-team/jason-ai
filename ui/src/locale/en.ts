@@ -27,6 +27,7 @@ export const en = {
     'settings.theme.light': 'Light',
     'settings.theme.dark': 'Dark',
     'start.placeholder': 'Tell Jason what you sell and who you want to reach.',
+    'start.placeholder.site': 'A website link is enough to start.',
     'start.send': 'Send',
     'start.note.lead': 'This interface is optional.',
     'start.note.body':

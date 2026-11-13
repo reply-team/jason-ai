@@ -187,12 +187,38 @@ describe('the start screen', () => {
         expect(mark?.textContent).toBe('Alpha');
     });
 
-    it('asks for what the person sells and who to reach, and promises no page is read', async () => {
+    it('asks for what the person sells and who to reach, in two rows', async () => {
         renderConsole(stubDesktop());
         await waitFor(() => startForm());
-        expect(box().placeholder).toBe('Tell Jason what you sell and who you want to reach.');
-        expect(box().placeholder).not.toMatch(/website/i);
+        expect(box().placeholder).toMatch(/^Tell Jason what you sell and who you want to reach\./);
         expect(box().getAttribute('rows')).toBe('2');
+    });
+
+    it('adds that a website link is enough where Claude Code drives the chat', async () => {
+        renderConsole(stubDesktop());
+        await ready();
+        expect(box().placeholder).toBe(
+            'Tell Jason what you sell and who you want to reach. A website link is enough to start.',
+        );
+    });
+
+    it('says the first sentence alone where Codex drives the chat, once chosen in the model menu', async () => {
+        const both: DesktopSetup = {
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'codex' ? { ...each, found: true, version: '1.0.0' } : each,
+            ),
+        };
+        renderConsole(stubDesktop(both));
+        await ready();
+        fireEvent.click(item(openMenu(/Model:/), 'Codex'));
+        expect(box().placeholder).toBe('Tell Jason what you sell and who you want to reach.');
+    });
+
+    it('says the first sentence alone with no AI host', async () => {
+        renderConsole(stubDesktop(noHost));
+        await ready();
+        expect(box().placeholder).toBe('Tell Jason what you sell and who you want to reach.');
     });
 
     it("has no attach button, as the chat's box has none", async () => {
