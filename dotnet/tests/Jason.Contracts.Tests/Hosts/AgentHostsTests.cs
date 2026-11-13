@@ -210,6 +210,81 @@ public class AgentHostsTests
         Assert.All(Enum.GetValues<AgentHostKind>(), kind => Assert.Equal(Prompt, AgentHosts.InteractiveArguments(kind, Prompt)[^1]));
     }
 
+    /// <summary>
+    /// How each host continues one of its own conversations by its id, as its own <c>--help</c> says: Claude Code after
+    /// <c>--resume</c>, Codex after its <c>resume</c> subcommand; the other four have no words here and cannot be asked to.
+    /// </summary>
+    [Theory]
+    [InlineData(AgentHostKind.ClaudeCode, "--resume")]
+    [InlineData(AgentHostKind.Codex, "resume")]
+    [InlineData(AgentHostKind.CopilotCli, null)]
+    [InlineData(AgentHostKind.CursorCli, null)]
+    [InlineData(AgentHostKind.GeminiCli, null)]
+    [InlineData(AgentHostKind.AntigravityCli, null)]
+    public void Each_host_continues_its_own_conversation_by_its_own_words_or_not_at_all(AgentHostKind kind, string? word)
+    {
+        const string Id = "0f8e2c1a-5b7d-4e3f-9a6b-1c2d3e4f5a6b";
+
+        Assert.Equal(word, AgentHosts.Of(kind).ResumeWord);
+        Assert.Equal(word is null ? null : [word, Id], AgentHosts.ResumeArguments(kind, Id));
+    }
+
+    /// <summary>The hosts that take a conversation's id, in the order of the enum, as a refusal names them.</summary>
+    [Fact]
+    public void The_hosts_that_resume_are_named_in_the_order_of_the_enum()
+    {
+        Assert.Equal("claude_code, codex", AgentHosts.ResumeVocabulary);
+    }
+
+    public static TheoryData<string> ConversationIds() =>
+    [
+        "a",
+        "0",
+        "Z9",
+        "0f8e2c1a-5b7d-4e3f-9a6b-1c2d3e4f5a6b",
+        "thread_01.part:2-b",
+        "a" + new string('9', 199),
+    ];
+
+    public static TheoryData<string> NotConversationIds() =>
+    [
+        string.Empty,
+        "-a",
+        ".a",
+        "_a",
+        ":a",
+        "a" + new string('9', 200),
+        "a b",
+        "a/b",
+        "a\\b",
+        "a;b",
+        "a'b",
+        "a\"b",
+        "a$b",
+        "a\n",
+        "a\nb",
+        "été",
+        "aé",
+    ];
+
+    /// <summary>A conversation's id is one shape: a letter or digit, then at most 199 of letters, digits and <c>._:-</c>.</summary>
+    [Theory]
+    [MemberData(nameof(ConversationIds))]
+    public void A_conversation_id_of_the_one_shape_is_taken(string id)
+    {
+        Assert.True(AgentHosts.IsConversationId(id));
+        Assert.Equal(["--resume", id], AgentHosts.ResumeArguments(AgentHostKind.ClaudeCode, id));
+    }
+
+    /// <summary>Anything else is not an id, a trailing line break included, and is never handed to a host.</summary>
+    [Theory]
+    [MemberData(nameof(NotConversationIds))]
+    public void Anything_else_is_not_a_conversation_id_and_is_never_handed_to_a_host(string id)
+    {
+        Assert.False(AgentHosts.IsConversationId(id));
+        Assert.Throws<ArgumentException>(() => AgentHosts.ResumeArguments(AgentHostKind.Codex, id));
+    }
+
     [Fact]
     public void Resolving_a_relative_path_under_a_folder_uses_the_platforms_separator()
     {

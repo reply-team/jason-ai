@@ -497,10 +497,21 @@ export interface DesktopSetup {
 
 /**
  * A place "Open in" can open the folder in, by the name the desktop knows it by: Claude Code or Codex as a new session in a
- * terminal, a plain terminal, an editor, the file manager, or Copy path. The page sends one of these names and never a path.
+ * terminal, a plain terminal, an editor, the file manager, or Copy path; or a browser, which opens the chat in a tab of the
+ * system's browser rather than the folder. The page sends one of these names and never a path.
  */
 export type DesktopOpenInPlace =
-    'claude' | 'codex' | 'terminal' | 'vscode' | 'cursor' | 'antigravity' | 'windsurf' | 'zed' | 'files' | 'copy';
+    | 'claude'
+    | 'codex'
+    | 'terminal'
+    | 'vscode'
+    | 'cursor'
+    | 'antigravity'
+    | 'windsurf'
+    | 'zed'
+    | 'files'
+    | 'browser'
+    | 'copy';
 
 /**
  * What the split button is drawn from: the places this computer has, in the order to show them, the one the button's main

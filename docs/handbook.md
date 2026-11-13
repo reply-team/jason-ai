@@ -587,13 +587,16 @@ nothing and prints the whole command. The session proposes, and the decision sta
 link does the same on Windows (`docs/ui.md`).
 
 With no item, the same verb opens a new terminal at a folder and gives it no first input: a campaign's folder, a
-project's (by its id or slug), or the harness root when neither is named; running the host `--host` names, else the one
-the preference names, or with `--shell` the system's plain shell:
+project's (by its id or slug), the folder you run it in with `--here`, or the harness root when none is named; running
+the host `--host` names, else the one the preference names, or with `--shell` the system's plain shell. With
+`--resume <conversation-id>` the host continues its own conversation of that id instead of starting a new one (Claude
+Code and Codex), as in `jason session open --here --host claude_code --resume <conversation-id>`:
 
 ```sh
 jason session open --campaign <campaign-id>
 jason session open --project acme-corp --host codex
 jason session open --shell
+jason session open --here
 ```
 
 A launched role that cannot decide something for itself asks a person instead, and the answer wakes the

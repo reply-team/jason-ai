@@ -104,6 +104,9 @@ public static class CliErrors
     /// <summary><c>session open</c> at a folder: the host's program is not on the search path, or only as a file Jason does not start.</summary>
     public const string HostNotFound = "host_not_found";
 
+    /// <summary><c>session open</c> at a folder: <c>--resume</c> asked a host that has no words Jason knows for continuing a conversation.</summary>
+    public const string HostCannotResume = "host_cannot_resume";
+
     /// <summary><c>session open</c> at a folder: the system's plain shell is not in its place.</summary>
     public const string ShellNotFound = "shell_not_found";
 

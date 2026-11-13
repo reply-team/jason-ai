@@ -107,7 +107,7 @@ interface Bench {
     logged: string[];
 }
 
-function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boolean }; campaigns?: Record<string, unknown>; root?: string; folders?: string[]; failStart?: string; cliExit?: number; cliOut?: string; remembered?: PlaceId | null } = {}): Bench {
+function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boolean }; campaigns?: Record<string, unknown>; root?: string; folders?: string[]; failStart?: string; cliExit?: number; cliOut?: string; remembered?: PlaceId | null; browser?: () => Promise<string | null> } = {}): Bench {
     const cliCalls: string[][] = [];
     const cwds: (string | undefined)[] = [];
     const started: Line[] = [];
@@ -149,6 +149,7 @@ function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boo
             return terminalFlags(kind, campaignId);
         },
         log: (event, fields) => void logged.push(`${event}:${fields.Place}`),
+        ...(options.browser === undefined ? {} : { browser: options.browser }),
     };
     return { openIn: new OpenIn(deps), cwds, cliCalls, started, copied, kept, flagsGiven, remembered, logged };
 }
@@ -466,4 +467,42 @@ test('the chat’s AI cannot reach the acts: its tools carry no IPC, the chat’
         const text = here(`src/${name}`);
         assert.ok(!/openIn|open-in|jason:openIn/.test(text), `${name} reaches Open in`);
     }
+});
+
+// The chat in a browser tab: a place of its own, offered where the desktop can open one.
+
+test('a browser is offered only where the desktop can open one, after the file manager and before Copy path, with the page’s own word', () => {
+    assert.deepEqual(ids(placesFound(windows, { claude: true, codex: false }, true)), ['claude', 'terminal', 'vscode', 'zed', 'files', 'browser', 'copy']);
+    assert.ok(!ids(placesFound(windows, { claude: true, codex: false })).includes('browser'));
+    assert.equal(placesFound(windows, { claude: false, codex: false }, true).find((place) => place.id === 'browser')?.label, '');
+});
+
+test('a browser is never the default, nor kept as the place used last, nor read back from the settings', async () => {
+    const places = placesFound(probes('linux', []), { claude: false, codex: false }, true);
+    assert.equal(defaultPlace(places, 'browser'), 'terminal');
+    const opened: number[] = [];
+    const b = bench({ browser: async () => (opened.push(1), null) });
+    assert.equal(await b.openIn.open('browser'), null);
+    assert.deepEqual(b.kept, []);
+    assert.deepEqual(b.logged, ['open_in:browser']);
+    assert.equal(((await b.openIn.targets()) as { default: string }).default, 'claude');
+    assert.deepEqual(parseSettings('{"open_in": "browser"}'), { feed: null, skillsDeployedFor: null, theme: null });
+});
+
+test('a browser opens the chat: no folder is read, no campaign asked for, and nothing is started or copied', async () => {
+    const opened: number[] = [];
+    const b = bench({ root: 'C:\\Nowhere', browser: async () => (opened.push(1), null) });
+    assert.equal(await b.openIn.open('browser', 'cmp_01'), null);
+    assert.equal(opened.length, 1);
+    assert.deepEqual(b.cliCalls, []);
+    assert.deepEqual(b.started, []);
+    assert.deepEqual(b.copied, []);
+});
+
+test('a browser the desktop cannot open is refused with its sentence, and one not offered is not a place', async () => {
+    const refused = bench({ browser: async () => "Jason's runtime is not running." });
+    assert.deepEqual(await refused.openIn.open('browser'), { refused: "Jason's runtime is not running." });
+    assert.deepEqual(refused.logged, ['open_in_refused:browser']);
+    const none = bench();
+    assert.deepEqual(await none.openIn.open('browser'), { refused: 'That is not a place this computer can open the folder in.' });
 });

@@ -30,7 +30,9 @@ function nameOf(place: { id: DesktopOpenInPlace; label: string }): string {
         ? t('openIn.place.terminal')
         : place.id === 'files'
           ? t('openIn.place.files')
-          : t('openIn.copy');
+          : place.id === 'browser'
+            ? t('openIn.place.browser')
+            : t('openIn.copy');
 }
 
 export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
@@ -99,6 +101,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         const chosen = answer?.places.find((each) => each.id === place);
         const folder = answer?.folder ?? '';
         if (place === 'copy') setToast(t('openIn.copied', { folder }));
+        else if (place === 'browser') setToast(t('openIn.browserOpened'));
         else {
             // Jason in a terminal works with this window's data. An editor already running keeps the environment it started
             // with, so in the demo an editor is said to be the other way about, and the file manager says nothing of data.
@@ -192,7 +195,11 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     {rest.map((place) =>
                         item(
                             place,
-                            place.id === 'copy' ? answer.folder : undefined,
+                            place.id === 'copy'
+                                ? answer.folder
+                                : place.id === 'browser'
+                                  ? t('openIn.browser')
+                                  : undefined,
                             place.id === 'terminal'
                                 ? t('openIn.terminal')
                                 : place.id === 'copy'
