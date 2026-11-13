@@ -525,9 +525,11 @@ export interface JasonDesktop {
          */
         set(mode: 'live' | 'demo'): Promise<DesktopRefusal | null>;
         /**
-         * In the demo only: stops the demo installation's runtime, removes its two folders, makes the sample again and loads
-         * the window again on it: null once begun; the desktop's refusal, with the demo left as it was, when the runtime
-         * could not be stopped or the sample could not be made. Refused in Live, where there is no demo to start over.
+         * In the demo only: asks the person once, then stops the demo installation's runtime and starts the desktop again;
+         * the next start removes the demo's two folders and makes the sample again. Answers null once it has begun, and also
+         * when the person said no; the desktop's refusal, with the demo left as it was, when the runtime could not be stopped,
+         * a folder of the demo's name is not one the demo made, or the request could not be written. Refused in Live, where
+         * there is no demo to start over.
          */
         startOver(): Promise<DesktopRefusal | null>;
     };

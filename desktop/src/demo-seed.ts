@@ -17,7 +17,7 @@
  * "Start the demo over" removes the demo's two folders and seeds again.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { demoReviewSeconds } from './demo-settings.ts';
@@ -276,7 +276,10 @@ export type SeedOutcome =
     | { kind: 'seeded' }
     /** A directory a seed was cut short in, or one an older story seeded: only "Start the demo over" makes it right. */
     | { kind: 'needs-start-over' }
-    | { kind: 'failed'; step: string; detail: string };
+    | { kind: 'failed'; step: string; detail: string; code?: string };
+
+/** A marker file that is there and cannot be read: never taken for an absent one, so a seeded demo is not seeded again. */
+const unreadableMarker: SeedMarker = { version: -1, complete: false };
 
 export function readMarker(deps: Pick<SeedDeps, 'readText' | 'markerFile'>): SeedMarker | null {
     const text = deps.readText(deps.markerFile);
@@ -285,9 +288,9 @@ export function readMarker(deps: Pick<SeedDeps, 'readText' | 'markerFile'>): See
         const value: unknown = JSON.parse(text);
         const version = typeof value === 'object' && value !== null ? (value as { version?: unknown }).version : undefined;
         const complete = typeof value === 'object' && value !== null ? (value as { complete?: unknown }).complete : undefined;
-        return typeof version === 'number' ? { version, complete: complete === true } : null;
+        return typeof version === 'number' ? { version, complete: complete === true } : unreadableMarker;
     } catch {
-        return null;
+        return unreadableMarker;
     }
 }
 
@@ -298,6 +301,13 @@ function parse(result: CliResult): Record<string, unknown> | null {
     } catch {
         return null;
     }
+}
+
+/** The error's snake_case code (never its message, which can hold what a person wrote), or the exit code. */
+function codeOf(result: CliResult): string {
+    const error = parse(result)?.['error'];
+    const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : null;
+    return typeof code === 'string' && /^[a-z0-9_]{1,64}$/.test(code) ? code : `exit_${result.exit}`;
 }
 
 function describe(result: CliResult): string {
@@ -324,7 +334,7 @@ export async function ensureSeeded(deps: SeedDeps, version = seedVersion): Promi
         for (const step of buildSeed(story)) {
             count += 1;
             const failed = await runStep(deps, step, context, count);
-            if (failed) return { kind: 'failed', step: failed.step, detail: failed.detail };
+            if (failed) return { kind: 'failed', step: failed.step, detail: failed.detail, ...(failed.code === undefined ? {} : { code: failed.code }) };
         }
         deps.writeText(deps.markerFile, `${JSON.stringify({ version, complete: true })}\n`);
         return { kind: 'seeded' };
@@ -349,7 +359,7 @@ function resolveArg(arg: Arg, refs: ReadonlyMap<string, string>): string {
     return value;
 }
 
-type Failed = { step: string; detail: string } | null;
+type Failed = { step: string; detail: string; code?: string } | null;
 
 /**
  * Cancels the open AI-role work items, those of one campaign or of the whole installation, with `workitem list` and
@@ -359,13 +369,13 @@ type Failed = { step: string; detail: string } | null;
  */
 export async function cancelOpenReviews(cli: Cli, actor: string, campaign?: string): Promise<Failed> {
     const listed = await cli.run(['workitem', 'list', ...(campaign === undefined ? [] : ['--campaign', campaign]), '--kind', 'ai_role', ...openStatuses.flatMap((status) => ['--status', status])]);
-    if (listed.exit !== 0) return { step: 'workitem list', detail: describe(listed) };
+    if (listed.exit !== 0) return { step: 'workitem list', detail: describe(listed), code: codeOf(listed) };
     const items = parse(listed)?.['items'];
     for (const item of Array.isArray(items) ? items : []) {
         const id = (item as { id?: unknown }).id;
         if (typeof id !== 'string') continue;
         const cancelled = await cli.run(['workitem', 'cancel', id, '--reason', 'no AI is connected in the demo', '--actor', actor]);
-        if (cancelled.exit !== 0) return { step: 'workitem cancel', detail: describe(cancelled) };
+        if (cancelled.exit !== 0) return { step: 'workitem cancel', detail: describe(cancelled), code: codeOf(cancelled) };
     }
     return null;
 }
@@ -387,7 +397,7 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
                     args.push(step.body.option, file);
                 }
                 const result = await deps.cli.run(args);
-                if (result.exit !== 0) return { step: label(step.args), detail: describe(result) };
+                if (result.exit !== 0) return { step: label(step.args), detail: describe(result), code: codeOf(result) };
                 capture(step.capture, parse(result), refs);
                 return null;
             }
@@ -396,7 +406,7 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
                 const args = step.args.map((arg) => resolveArg(arg, refs));
                 for (let waited = 0; ; waited += every) {
                     const result = await deps.cli.run(args);
-                    if (result.exit !== 0) return { step: label(step.args), detail: describe(result) };
+                    if (result.exit !== 0) return { step: label(step.args), detail: describe(result), code: codeOf(result) };
                     const answer = parse(result);
                     const list = step.kind === 'wait' ? answer?.[step.list] : undefined;
                     const reached = step.kind === 'wait' ? Array.isArray(list) && list.length >= step.atLeast : answer?.[step.field] === step.equals;
@@ -408,12 +418,12 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
             case 'approve': {
                 const item = resolveArg(step.workItem, refs);
                 const listed = await deps.cli.run(['approval', 'list', '--work-item', item]);
-                if (listed.exit !== 0) return { step: 'approval list', detail: describe(listed) };
+                if (listed.exit !== 0) return { step: 'approval list', detail: describe(listed), code: codeOf(listed) };
                 const items = parse(listed)?.['items'];
                 const id = (Array.isArray(items) ? (items[0] as { id?: unknown } | undefined) : undefined)?.id;
                 if (typeof id !== 'string') return { step: 'approval list', detail: `nothing waits on ${item}` };
                 const approved = await deps.cli.run(['approval', 'approve', id, '--reason', step.reason, '--actor', actor]);
-                return approved.exit === 0 ? null : { step: 'approval approve', detail: describe(approved) };
+                return approved.exit === 0 ? null : { step: 'approval approve', detail: describe(approved), code: codeOf(approved) };
             }
             case 'cancel-reviews': {
                 const campaign = resolveArg(step.campaign, refs);
@@ -453,38 +463,44 @@ function capture(how: Capture | undefined, answer: Record<string, unknown> | nul
 // ---------------------------------------------------------------------------------------------------------------------
 
 export interface StartOverDeps {
-    /** The places to remove, and the file removal; the seed's own dependencies, nothing of it is run here. */
-    seed: Pick<SeedDeps, 'places' | 'removeTree'>;
+    /** The demo's two folders. */
+    places: DemoPlaces;
     /** Whether a folder is there at all. */
     exists(folder: string): boolean;
-    /** Whether a folder carries the demo's marker (`hasDemoMarker`): only such a folder is ever removed. */
+    /** Whether a folder carries the demo's marker (`hasDemoMarker`): only such a folder is ever removed, at the next start. */
     marked(folder: string): boolean;
     /** Stops the demo installation's runtime; resolves false when it could not be stopped. */
     stopRuntime(): Promise<boolean>;
-    /** Starts the desktop again on the demo: its start finds no marker, makes the demo ready, starts its runtime and seeds. */
+    /** Leaves the request that the next demo start remove the two folders; throws when it cannot. */
+    request(): void;
+    /** Starts the desktop again on the demo. */
     relaunch(): void;
 }
 
 export type StartOverOutcome = { kind: 'started-over' } | { kind: 'refused'; why: string };
 
 /**
- * "Start the demo over": the demo's runtime is stopped, its two folders are removed and the desktop starts again on the
- * demo. The seed needs a running runtime, which only a start brings up, so the sample is made by that start (the folder
- * has no marker, so it is seeded, behind the preparing page). Nothing of the person's own installation is touched: only
- * the two folders `places` names are removed, only when it carries the demo's marker, and only once the runtime that ran on them has stopped.
+ * "Start the demo over": the demo's runtime is stopped, a request is left in the person's own folder and the desktop starts
+ * again. The folders are NOT removed here: this run lives inside them (its log, its profile, its chats), so the next start
+ * removes them first, before anything of it names the demo's directory (`carryOutStartOver`), then makes and seeds a fresh
+ * demo. Nothing of the person's own installation is touched. A folder of the demo's name without the marker is left and
+ * named before anything stops.
  */
 export async function startDemoOver(deps: StartOverDeps): Promise<StartOverOutcome> {
-    const folders = [deps.seed.places.data, deps.seed.places.harnessRoot];
-    // A folder of the demo's name that carries no marker is not the desktop's to remove: it is left, and named, before anything stops.
+    const folders = [deps.places.data, deps.places.harnessRoot];
     const foreign = folders.find((folder) => deps.exists(folder) && !deps.marked(folder));
     if (foreign !== undefined) return { kind: 'refused', why: `The folder ${foreign} is not one the demo made, so nothing was removed. Move it away or remove it yourself, then start the demo over.` };
     if (!(await deps.stopRuntime())) return { kind: 'refused', why: 'The sample could not be stopped, so it was left as it is.' };
-    for (const folder of folders) if (deps.exists(folder)) deps.seed.removeTree(folder);
+    try {
+        deps.request();
+    } catch {
+        return { kind: 'refused', why: 'The request to start the demo over could not be written, so the demo was left as it is.' };
+    }
     deps.relaunch();
     return { kind: 'started-over' };
 }
 
-export type ReadyOutcome = { kind: 'ready'; seeded: boolean } | { kind: 'failed'; why: string };
+export type ReadyOutcome = { kind: 'ready'; seeded: boolean } | { kind: 'failed'; why: string; step?: string; code?: string };
 
 /**
  * What every start of the demo does once its runtime is up: a demo with no marker is seeded (behind `showPreparing`),
@@ -497,7 +513,7 @@ export async function readyTheSample(deps: SeedDeps, showPreparing: () => Promis
     if (marker === null) {
         await showPreparing();
         const outcome = await ensureSeeded(deps, version);
-        if (outcome.kind === 'failed') return { kind: 'failed', why: `The sample could not be prepared (${outcome.step}). Choose Start the Demo Over in the menu to try again.` };
+        if (outcome.kind === 'failed') return { kind: 'failed', why: `The sample could not be prepared (${outcome.step}). Choose Start the Demo Over in the menu to try again.`, step: outcome.step, code: outcome.code ?? 'none' };
         if (outcome.kind !== 'seeded') return { kind: 'failed', why: 'The sample could not be prepared. Choose Start the Demo Over in the menu to try again.' };
         seeded = true;
     } else if (!marker.complete || marker.version !== version) {
@@ -510,7 +526,7 @@ export async function readyTheSample(deps: SeedDeps, showPreparing: () => Promis
         return { kind: 'failed', why: 'The sample could not be read. Choose Start the Demo Over in the menu to make it again.' };
     }
     const failed = await cancelOpenReviews(deps.cli, actor);
-    if (failed) return { kind: 'failed', why: `The sample could not be made ready (${failed.step}).` };
+    if (failed) return { kind: 'failed', why: `The sample could not be made ready (${failed.step}).`, step: failed.step, code: failed.code ?? 'none' };
     return { kind: 'ready', seeded };
 }
 
@@ -540,8 +556,17 @@ export function seedDepsOnDisk(parts: { cli: Cli; places: DemoPlaces; scratch: s
         markerFile: markerPath(parts.places.data),
         readText: (file) => (existsSync(file) ? readFileSync(file, 'utf8') : null),
         writeText: (file, text) => {
+            // Through a file beside it renamed over it: a cut write leaves the earlier text whole, and a runtime that watches
+            // the settings file never reads a half.
             mkdirSync(dirname(file), { recursive: true });
-            writeFileSync(file, text, { encoding: 'utf8' });
+            const temporary = `${file}.${process.pid}.tmp`;
+            try {
+                writeFileSync(temporary, text, { encoding: 'utf8' });
+                renameSync(temporary, file);
+            } catch (error) {
+                rmSync(temporary, { force: true });
+                throw error;
+            }
         },
         makeDirectory: (path) => void mkdirSync(path, { recursive: true }),
         removeTree: (path) => rmSync(path, { recursive: true, force: true }),

@@ -6,11 +6,17 @@
 // run on is a small fixture of the package module's shape, never a copy of the story.
 
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
+import { knownDesktopEntries } from '../src/chat-hosts.ts';
+import { claimDemoFolder, hasDemoMarker } from '../src/demo-folders.ts';
+import { carryOutStartOver, requestOnDisk, requestStartOver } from '../src/demo-over.ts';
+import { fileLogger } from '../src/log.ts';
+import { desktopPaths } from '../src/paths.ts';
 import {
     buildSeed,
     cancelOpenReviews,
@@ -23,6 +29,7 @@ import {
     preparingSentence,
     readMarker,
     readyTheSample,
+    seedDepsOnDisk,
     seedVersion,
     startDemoOver,
     storyModule,
@@ -102,7 +109,23 @@ function optionsOf(step: SeedStep): string[] {
     return step.kind === 'verb' && step.body ? [...named, step.body.option] : named;
 }
 
-test('every verb and option of the seed is one the command line has, read from its own source', () => {
+/**
+ * The source of one verb: from its `new Command("name"` to the next method declaration. A verb built by a shared
+ * builder (`approve` and `reject`, the campaign transitions) has no block of its own and gives null.
+ */
+function verbBlock(noun: string, name: string): string | null {
+    const source = sourceOf(noun);
+    const start = source.search(new RegExp(`new Command\\(\\s*"${name}"`));
+    if (start < 0) return null;
+    const rest = source.slice(start + 1);
+    const next = rest.search(/\n\s*(private|public|internal) static /);
+    return next < 0 ? rest : rest.slice(0, next);
+}
+
+/** The shared option builders in `VerbOptions.cs` and the option each one makes. */
+const sharedBuilders: Record<string, string> = { '--file': 'VerbOptions.File(', '--reason': 'VerbOptions.Reason(', '--project': 'ProjectOption(' };
+
+test('every verb and option of the seed is one the command line has, read from that verb\'s own source', () => {
     const steps = buildSeed(fixture());
     const pairs = verbsUsed(steps);
     assert.ok(pairs.length >= 10, pairs.join(', '));
@@ -110,21 +133,29 @@ test('every verb and option of the seed is one the command line has, read from i
         const [noun = '', name = ''] = pair.split(' ');
         const source = sourceOf(noun);
         assert.match(source, new RegExp(`new Command\\(\\s*"${noun}"`), `no verb group ${noun}`);
-        // A verb is a `new Command("name"` or, for approve and reject that share one builder, the name handed to it.
+        // A verb is a `new Command("name"` or, for a shared builder, the name handed to it.
         assert.ok(source.includes(`"${name}"`), `jason ${noun} has no ${name}`);
     }
+    let held = 0;
     for (const step of steps) {
         if (step.kind !== 'verb' && step.kind !== 'wait' && step.kind !== 'wait-field') continue;
         const noun = String(step.args[0]);
-        const source = sourceOf(noun);
+        const name = String(step.args[1]);
+        const block = verbBlock(noun, name) ?? sourceOf(noun);
         for (const option of optionsOf(step)) {
             if (option === '--actor') continue;
-            assert.ok(source.includes(`"${option}"`) || shared.includes(`"${option}"`), `jason ${noun} ${String(step.args[1])} has no ${option}`);
+            const builder = sharedBuilders[option];
+            const own = block.includes(`"${option}"`) || (builder !== undefined && block.includes(builder));
+            assert.ok(own, `jason ${noun} ${name} has no ${option} of its own`);
+            held += 1;
         }
     }
-    // The options the cancel of a review and the approval use as well.
-    for (const option of ['--campaign', '--kind', '--status']) assert.ok(sourceOf('workitem').includes(`"${option}"`));
-    assert.ok(sourceOf('approval').includes('"--work-item"'));
+    assert.ok(held >= 8, `${held} options held`);
+    // The review's listing takes its filters from the class the listing and the count share (`ListingFilter`).
+    const filters = /class ListingFilter[\s\S]*?(?=\n    (private|public|internal) )/.exec(sourceOf('workitem'))?.[0] ?? '';
+    for (const option of ['--campaign', '--kind', '--status']) assert.ok(filters.includes(`"${option}"`), `the work item listing has no ${option}`);
+    assert.ok((verbBlock('approval', 'list') ?? sourceOf('approval')).includes('"--work-item"'));
+    assert.ok(shared.includes('Reason(') && shared.includes('File('));
 });
 
 test('the operator is named as a person whether the story writes the prefix or only the name', async () => {
@@ -169,7 +200,7 @@ test('a seeded demo started again with one open review gets that review cancelle
     assert.equal(calls[1], 'workitem cancel wi_review_1 --reason no AI is connected in the demo --actor human:fixture-operator');
     // A refused cancel is said, not swallowed.
     const refusing: Cli = { async run(args) { return args[1] === 'list' ? { exit: 0, stdout: '{"items":[{"id":"wi_1"}]}', stderr: '' } : { exit: 1, stdout: '{"error":{"code":"x","message":"no","retryable":false}}', stderr: '' }; } };
-    assert.deepEqual(await cancelOpenReviews(refusing, 'human:a'), { step: 'workitem cancel', detail: 'no' });
+    assert.deepEqual(await cancelOpenReviews(refusing, 'human:a'), { step: 'workitem cancel', detail: 'no', code: 'x' });
 });
 
 test('the real story the package carries: the one set runs through the seed, every person once, every given send approved and no waiting one', async () => {
@@ -337,50 +368,142 @@ test('the seed and the provider package work from one set: the desktop holds no 
     assert.doesNotMatch(sources, /Dana Whitfield|Tillerwave|Last-Mile/);
 });
 
-test('"Start the demo over" removes the demo\'s two folders and nothing else, then relaunches, and the start after it seeds', async () => {
-    const run = await seeded();
-    const removed: string[] = [];
-    let relaunched = 0;
-    const seed = { ...run.deps, removeTree: (path: string) => void removed.push(path), readText: (file: string) => (file === run.deps.markerFile ? null : run.deps.readText(file)) };
-    const outcome = await startDemoOver({ seed, exists: () => true, marked: () => true, stopRuntime: async () => true, relaunch: () => void (relaunched += 1) });
-    assert.deepEqual(outcome, { kind: 'started-over' });
-    assert.deepEqual(removed.slice(0, 2).sort(), [places.data, places.harnessRoot].sort());
-    assert.ok(!removed.includes(own.data) && !removed.includes(own.harness));
-    assert.equal(relaunched, 1);
+const startOverDeps = (over: Partial<Parameters<typeof startDemoOver>[0]> = {}) => {
+    const seen = { stopped: 0, requested: 0, relaunched: 0 };
+    const deps: Parameters<typeof startDemoOver>[0] = {
+        places,
+        exists: () => true,
+        marked: () => true,
+        stopRuntime: async () => { seen.stopped += 1; return true; },
+        request: () => void (seen.requested += 1),
+        relaunch: () => void (seen.relaunched += 1),
+        ...over,
+    };
+    return { deps, seen };
+};
+
+test('"Start the demo over" stops the runtime, leaves a request and relaunches, and removes nothing itself', async () => {
+    const { deps, seen } = startOverDeps();
+    assert.deepEqual(await startDemoOver(deps), { kind: 'started-over' });
+    assert.deepEqual(seen, { stopped: 1, requested: 1, relaunched: 1 });
 });
 
-test('"Start the demo over" removes a folder only when it carries the marker: one without it is left and named, and nothing is stopped', async () => {
-    const run = await seeded();
-    const removed: string[] = [];
-    let stopped = 0;
-    let relaunched = 0;
-    const outcome = await startDemoOver({
-        seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) },
-        exists: () => true,
-        marked: (folder) => folder !== places.harnessRoot,
-        stopRuntime: async () => { stopped += 1; return true; },
-        relaunch: () => void (relaunched += 1),
-    });
+test('"Start the demo over" leaves a folder without the marker and names it, before anything stops', async () => {
+    const { deps, seen } = startOverDeps({ marked: (folder) => folder !== places.harnessRoot });
+    const outcome = await startDemoOver(deps);
     assert.equal(outcome.kind, 'refused');
     assert.ok(outcome.kind === 'refused' && outcome.why.includes(places.harnessRoot));
-    assert.deepEqual(removed, [], 'the marked folder is not removed either: the act is refused whole');
-    assert.equal(stopped, 0);
-    assert.equal(relaunched, 0);
-    // A folder that is not there is nothing to remove, and is not refused.
-    const absent: string[] = [];
-    const again = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void absent.push(path) }, exists: (folder) => folder === places.data, marked: () => true, stopRuntime: async () => true, relaunch: () => undefined });
-    assert.equal(again.kind, 'started-over');
-    assert.deepEqual(absent, [places.data]);
+    assert.deepEqual(seen, { stopped: 0, requested: 0, relaunched: 0 });
+    // A folder that is not there is not refused.
+    const absent = startOverDeps({ exists: (folder) => folder === places.data });
+    assert.equal((await startDemoOver(absent.deps)).kind, 'started-over');
 });
 
-test('"Start the demo over" leaves everything as it is when the demo\'s runtime cannot be stopped', async () => {
+test('"Start the demo over" leaves everything as it is when the runtime cannot be stopped or the request cannot be written', async () => {
+    const stuck = startOverDeps({ stopRuntime: async () => false });
+    assert.equal((await startDemoOver(stuck.deps)).kind, 'refused');
+    assert.deepEqual(stuck.seen, { stopped: 0, requested: 0, relaunched: 0 });
+    const unwritable = startOverDeps({ request: () => { throw new Error('no'); } });
+    assert.equal((await startDemoOver(unwritable.deps)).kind, 'refused');
+    assert.equal(unwritable.seen.relaunched, 0);
+});
+
+/** A real temp disk: the person's folder and the demo's two, with the real marker, the real logger and the real removal. */
+function disk() {
+    const root = mkdtempSync(join(tmpdir(), 'jason-over-'));
+    const person = join(root, 'jason');
+    const demo = { data: join(root, 'jason-demo'), harnessRoot: join(root, 'harness-demo') };
+    return { root, person, demo, request: join(person, 'desktop', 'demo-start-over') };
+}
+
+test('on a real disk: start over, a log line written inside the demo, then the next start claims fresh folders', async () => {
+    const d = disk();
+    try {
+        claimDemoFolder(d.demo.data);
+        claimDemoFolder(d.demo.harnessRoot);
+        writeFileSync(join(d.demo.data, 'demo-seed.json'), '{"version":1,"complete":true}');
+        const log = fileLogger(join(d.demo.data, 'logs'));
+        const outcome = await startDemoOver({
+            places: d.demo,
+            exists: existsSync,
+            marked: hasDemoMarker,
+            stopRuntime: async () => true,
+            request: () => requestStartOver(d.request),
+            relaunch: () => undefined,
+        });
+        assert.equal(outcome.kind, 'started-over');
+        // The run that is leaving still logs inside the demo: harmless, because its folders were not removed.
+        log.info('demo_start_over', {});
+        assert.ok(hasDemoMarker(d.demo.data));
+        // The next start, before anything names the demo's directory.
+        const disks = requestOnDisk(d.request);
+        carryOutStartOver({ ...disks, places: d.demo, exists: existsSync, marked: hasDemoMarker, removeTree: (f) => rmSync(f, { recursive: true, force: true }) });
+        assert.ok(!existsSync(d.demo.data) && !existsSync(d.demo.harnessRoot) && !existsSync(d.request));
+        claimDemoFolder(d.demo.data);
+        claimDemoFolder(d.demo.harnessRoot);
+        assert.ok(hasDemoMarker(d.demo.data) && hasDemoMarker(d.demo.harnessRoot));
+        assert.ok(!existsSync(join(d.demo.data, 'demo-seed.json')), 'a fresh demo has no seed marker');
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('a start with no request removes nothing; a failing removal keeps the request and throws; an unmarked folder is left', () => {
+    const d = disk();
+    try {
+        claimDemoFolder(d.demo.data);
+        claimDemoFolder(d.demo.harnessRoot);
+        const removed: string[] = [];
+        const base = { places: d.demo, exists: existsSync, marked: hasDemoMarker, removeTree: (f: string) => void removed.push(f) };
+        carryOutStartOver({ ...requestOnDisk(d.request), ...base });
+        assert.deepEqual(removed, []);
+        requestStartOver(d.request);
+        assert.throws(() => carryOutStartOver({ ...requestOnDisk(d.request), ...base, removeTree: () => { throw new Error('EBUSY'); } }), /could not be removed/);
+        assert.ok(existsSync(d.request), 'the request is kept for the next demo start');
+        // A folder of the demo's name that the demo did not make.
+        rmSync(join(d.demo.harnessRoot, '.jason-demo-folder'));
+        writeFileSync(join(d.demo.harnessRoot, 'mine.txt'), 'x');
+        assert.throws(() => carryOutStartOver({ ...requestOnDisk(d.request), ...base }), /not one the demo made/);
+        assert.deepEqual(removed, [], 'nothing was removed, the marked folder included');
+        assert.ok(existsSync(join(d.demo.harnessRoot, 'mine.txt')) && existsSync(d.request));
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('the request is a known entry of the person\'s desktop folder, so the chat host is refused it', () => {
+    assert.equal(desktopPaths(own.data).demoStartOver, join(own.data, 'desktop', 'demo-start-over'));
+    assert.ok(knownDesktopEntries.includes('demo-start-over'));
+});
+
+test('a marker that is there and cannot be read means the demo needs starting over: it is never seeded again', async () => {
     const run = await seeded();
-    const removed: string[] = [];
-    let relaunched = 0;
-    const outcome = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) }, exists: () => true, marked: () => true, stopRuntime: async () => false, relaunch: () => void (relaunched += 1) });
-    assert.equal(outcome.kind, 'refused');
-    assert.deepEqual(removed, []);
-    assert.equal(relaunched, 0);
+    for (const text of ['', '{', '{"version":"1"}']) {
+        const damaged = { ...run.deps, readText: (file: string) => (file === run.deps.markerFile ? text : run.deps.readText(file)) };
+        assert.equal(readMarker(damaged)?.complete, false);
+        const before = run.calls.length;
+        const outcome = await readyTheSample(damaged, async () => undefined);
+        assert.equal(outcome.kind, 'failed');
+        assert.equal(run.calls.length, before, 'no verb ran over a seeded installation');
+        assert.equal((await ensureSeeded(damaged)).kind, 'needs-start-over');
+    }
+});
+
+test('the seed writes through a file beside it renamed over it, and a failed step is logged by step and code, never by text', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'jason-seedwrite-'));
+    try {
+        const deps = seedDepsOnDisk({ cli: { async run() { return { exit: 0, stdout: '{}', stderr: '' }; } }, places, scratch: join(folder, 's'), progress: () => undefined });
+        const file = join(folder, 'config', 'settings.json');
+        deps.writeText(file, 'one');
+        deps.writeText(file, 'two');
+        assert.equal(readFileSync(file, 'utf8'), 'two');
+        assert.deepEqual(readdirSync(join(folder, 'config')), ['settings.json']);
+    } finally {
+        rmSync(folder, { recursive: true, force: true });
+    }
+    const run = await seeded({ failAt: 'campaign create' });
+    const ready = await readyTheSample({ ...run.deps, readText: (file) => (file === run.deps.markerFile ? null : run.deps.readText(file)) }, async () => undefined);
+    assert.ok(ready.kind === 'failed' && ready.step === 'campaign create' && ready.code === 'refused', JSON.stringify(ready));
 });
 
 test('a start of a demo with no marker shows the preparing page, seeds, and cancels the open reviews; the next start only cancels', async () => {
