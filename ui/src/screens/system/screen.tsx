@@ -6,6 +6,7 @@ import type { UiToken } from '../../api/types';
 import { clock, relative, when } from '../../time/format';
 import { followStanding, fullAccessStanding, takeBackStanding } from '../../platform/full-access';
 import * as store from './store';
+import { routeCounts } from './route-counts';
 import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -196,10 +197,7 @@ export function SystemScreen() {
                                 <dt>Default provider</dt>
                                 <dd>{store.routes.value?.global.default?.plugin_id ?? 'none'}</dd>
                                 <dt>Overrides</dt>
-                                <dd>
-                                    {info.routes.global_override_count} global · {info.routes.campaign_route_count} per
-                                    campaign
-                                </dd>
+                                <dd>{routeCounts(info.routes)}</dd>
                                 <dt>Activated</dt>
                                 <dd>
                                     {relative(new Date(info.routes.activated_at), now)} · snapshot{' '}

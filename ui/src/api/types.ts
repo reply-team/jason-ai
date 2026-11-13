@@ -94,6 +94,8 @@ export type SystemInfo = {
         global_default_plugin: string | null;
         global_override_count: number;
         campaign_route_count: number;
+        /** How many of the two counts above name a channel; absent from a runtime older than channel routes. */
+        channel_route_count?: number;
     };
     update?: { available: boolean; version: string; checked_at: string; release_notes_url: string | null } | null;
     listening?: { port: number; configured_port: number } | null;
@@ -142,13 +144,19 @@ export type Plugin = {
     status: string;
     digest: string;
 };
+/** A route by channel: operation, then channel, then the plugin. It is never the operation's own route. */
+export type ChannelRoutes = Record<string, Record<string, { plugin_id: string }>>;
 export type Routes = {
     routing_snapshot_id: string;
     plugin_snapshot_id: string;
-    global: { default: { plugin_id: string } | null; operations: Record<string, { plugin_id: string }> };
-    campaigns: { campaign_id: string }[];
+    global: {
+        default: { plugin_id: string } | null;
+        operations: Record<string, { plugin_id: string }>;
+        channels: ChannelRoutes;
+    };
+    campaigns: { campaign_id: string; channels: ChannelRoutes }[];
 };
-export type RouteResolveRequest = { campaign_id: string; operation: string };
+export type RouteResolveRequest = { campaign_id: string; operation: string; channel?: string };
 /** Where one operation of one campaign would go: the plugin the active routes name, and whether it could run it. */
 export type RouteResolution = {
     operation: string;
@@ -156,6 +164,8 @@ export type RouteResolution = {
     plugin_id: string | null;
     scope: string | null;
     usable: boolean;
+    /** The channel the answer was resolved for; null when none was named. */
+    channel: string | null;
 };
 export type UiToken = { id: string; issued_to: string; issued_at: string; last_used_at: string | null };
 export type UiTokens = { items: UiToken[] };
