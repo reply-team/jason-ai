@@ -1,11 +1,7 @@
 {
   "kind": "routes_updated",
   "version": 1,
-  "case": "a campaign's route for one channel of an operation, moved to another plugin",
-  "body": {
-    "key": "message.send",
-    "old": { "plugin": "example-provider", "binding": { "account": "sender@example.com" }, "channel": "linkedin" },
-    "new": { "plugin": "other-provider", "binding": null, "channel": "linkedin" }
-  },
+  "case": "a channel's route moved to another plugin, its operation's own route not named",
+  "body": { "key": "message.send/linkedin", "old": { "plugin": "example-provider", "binding": null }, "new": { "plugin": "example-other", "binding": { "account": "sender@example.com" } } },
   "expect": "valid"
 }

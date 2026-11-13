@@ -69,7 +69,25 @@ next free one above it and `jason runtime status --human` says so; `Runtime:Port
 
 What waits for you: approvals and questions, **Pending** or **Decided** (`jason approval list`, `jason decision list`).
 Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
-which account and on which channel, and through which provider. A row above the list narrows it to **All**, **Approvals**
+which account and on which channel, and through which provider. An approval to send a message shows it under "The message as
+written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
+body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
+labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
+is made of. One sentence under it says what is not shown: the sender's signature kept at the provider, and the
+provider's tracking, which are added when it sends. A reply in a thread shows who it goes to, the channel and the text.
+A message written as text (not a template) and a reply can be edited there, a message's subject and body or a reply's
+body and nothing else: **Edit message**, then **Save**, which is `jason workitem update` of the message's input with
+you as the actor and a reason the page words. Saving approves nothing: the old card is gone, the page says "Jason asks
+again with the new text when it next takes this work" and shows the new approval when it arrives, and Approve belongs
+to that one; if it does not arrive while the page waits, the sentence stays true and the next refresh shows it. If the
+text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
+box. A card is checked against its work item before it offers **Approve**, and again at the press: the approval's
+subject, the arguments the runtime parked, is compared, as whole documents and whatever the order of their keys,
+with the arguments the work item holds now, and the person with the item's own. Where they differ, whether the text
+was changed by the AI in a chat or in some other way, Approve is not offered and one sentence says the text changed
+and Jason will ask again. The AI in a chat may go on editing a parked message when you ask it to, and nothing is sent
+without a new approval. The runtime's own sentence is shown for a refused edit, and what you typed stays in the box.
+A row above the list narrows it to **All**, **Approvals**
 or **Questions**, each option with how many of its kind are listed, the chosen one ticked so that it is told apart by
 more than its colour, and "Shown: N" saying how many the list shows. The filter belongs to the screen alone: it is never
 stored, never part of the page's address and never sent to the runtime, and it goes back to All when nothing at all is
@@ -238,6 +256,18 @@ downloaded, and says that everything here also works from a session with your ag
 deployed. The browser has no chat and starts no agent: the runtime starts no process for a screen, and a browser tab cannot ask you
 before the agent acts.
 
+## Accounts
+
+One screen for what you have connected. **Provider** is the Reply connection of the desktop's Connect panel, drawn by
+the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
+the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
+box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
+acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
+notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
+with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
+The page says in one sentence where they are changed: under `Notifications:*` in the installation's settings file, or by
+asking your AI, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
+
 ## Inside Jason Desktop
 
 [Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
@@ -245,7 +275,7 @@ object the desktop puts on the page, `window.jasonDesktop`. In it the chat is ho
 **Needs you** (this page's Attention), **Campaigns** and **Activity**, which follow the journal as it is written, and
 **Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
 channels are set up. An empty Needs you card says you are caught up and offers **Open your campaigns**. The browser's
-other screens, People, Performance, Work items, System and Settings, open in a page panel of the same dock, and every
+other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same dock, and every
 screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
 (`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on

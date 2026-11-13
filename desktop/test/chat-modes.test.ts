@@ -10,7 +10,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal } from '../src/chat-modes.ts';
+import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -126,11 +126,24 @@ test('the confirmation says in plain words what Full access does, whose risk it 
             'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run. ' +
             "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving. " +
             'The risk is yours. ' +
-            'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
+            'This time, Full access lasts until you change it or close Jason. ' +
+            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the agent writes and runs could choose it for you too. ' +
+            'The agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
     );
-    assert.deepEqual(dialog.buttons, ['Give full access', 'Cancel']);
-    assert.equal(dialog.defaultId, 1);
-    assert.equal(dialog.cancelId, 1);
+    assert.deepEqual(dialog.buttons, ['Give full access this time', 'Always on this computer', 'Cancel']);
+    assert.equal(dialog.defaultId, 2);
+    assert.equal(dialog.cancelId, 2);
+});
+
+test('a tool that ran unchecked takes Always back as well, and says so only where Always stood', () => {
+    assert.equal(
+        unguardedSentence,
+        'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
+    );
+    assert.equal(
+        unguardedStandingSentence,
+        'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
+    );
 });
 
 test('a tool use and a tool\'s result are read from Claude Code\'s lines by their id, so a tool the hook never saw is known', () => {
@@ -339,10 +352,10 @@ test('in Ask first the broker answers as it always did, and a hook call refuses 
     await card;
 });
 
-test('the main process asks the person itself, with the confirmation\'s own box, and takes only its first button as a yes', () => {
+test('the main process asks the person itself, with the confirmation\'s own box, and reads its answer by its buttons alone', () => {
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    assert.match(main, /const \{ response \} = await dialog\.showMessageBox\(parent, fullAccessDialog\(\)\);\s+return response === 0;/);
-    assert.equal(fullAccessDialog().buttons[0], 'Give full access');
+    assert.match(main, /const \{ response, checkboxChecked \} = await dialog\.showMessageBox\(parent, fullAccessDialog\(\)\);\s+return fullAccessAnswer\(response, checkboxChecked\);/);
+    assert.equal(fullAccessDialog().buttons[0], 'Give full access this time');
 });
 
 // Attempts at getting past Full access's refusals, each through the hook as Claude Code calls it, and the same refusals in Ask first.

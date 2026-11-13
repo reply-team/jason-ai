@@ -157,29 +157,58 @@ public sealed class RouteService(
             channel,
             actor,
             reason,
-            existing =>
+            async () =>
             {
-                var previous = Recorded(existing);
-                if (existing is null)
+                var now = clock.GetUtcNow().UtcDateTime;
+                if (channel is null)
                 {
-                    db.CampaignRoutes.Add(new CampaignRoute
+                    var existing = await OperationRowAsync(campaign, operation, cancellationToken).ConfigureAwait(false);
+                    var previous = Recorded(existing?.PluginId, existing?.Binding);
+                    if (existing is null)
                     {
-                        CampaignId = campaign.Id,
-                        Operation = operation,
-                        Channel = channel,
-                        PluginId = plugin,
-                        Binding = binding,
-                        UpdatedAt = clock.GetUtcNow().UtcDateTime,
-                    });
+                        db.CampaignRoutes.Add(new CampaignRoute
+                        {
+                            CampaignId = campaign.Id,
+                            Operation = operation,
+                            PluginId = plugin,
+                            Binding = binding,
+                            UpdatedAt = now,
+                        });
+                    }
+                    else
+                    {
+                        existing.PluginId = plugin;
+                        existing.Binding = binding;
+                        existing.UpdatedAt = now;
+                    }
+
+                    return (previous, Recorded(plugin, binding));
                 }
                 else
                 {
-                    existing.PluginId = plugin;
-                    existing.Binding = binding;
-                    existing.UpdatedAt = clock.GetUtcNow().UtcDateTime;
-                }
+                    var existing = await ChannelRowAsync(campaign, operation!, channel, cancellationToken).ConfigureAwait(false);
+                    var previous = Recorded(existing?.PluginId, existing?.Binding);
+                    if (existing is null)
+                    {
+                        db.CampaignChannelRoutes.Add(new CampaignChannelRoute
+                        {
+                            CampaignId = campaign.Id,
+                            Operation = operation!,
+                            Channel = channel,
+                            PluginId = plugin,
+                            Binding = binding,
+                            UpdatedAt = now,
+                        });
+                    }
+                    else
+                    {
+                        existing.PluginId = plugin;
+                        existing.Binding = binding;
+                        existing.UpdatedAt = now;
+                    }
 
-                return (previous, Recorded(plugin, binding, channel));
+                    return (previous, Recorded(plugin, binding));
+                }
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -214,18 +243,54 @@ public sealed class RouteService(
             channel,
             actor,
             reason,
-            existing =>
+            async () =>
             {
-                if (existing is null)
+                if (channel is null)
                 {
-                    return null;
-                }
+                    var existing = await OperationRowAsync(campaign, operation, cancellationToken).ConfigureAwait(false);
+                    if (existing is null)
+                    {
+                        return null;
+                    }
 
-                db.CampaignRoutes.Remove(existing);
-                return (Recorded(existing), null);
+                    db.CampaignRoutes.Remove(existing);
+                    return (Recorded(existing.PluginId, existing.Binding), null);
+                }
+                else
+                {
+                    var existing = await ChannelRowAsync(campaign, operation!, channel, cancellationToken).ConfigureAwait(false);
+                    if (existing is null)
+                    {
+                        return null;
+                    }
+
+                    db.CampaignChannelRoutes.Remove(existing);
+                    return (Recorded(existing.PluginId, existing.Binding), null);
+                }
             },
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>The campaign's default route, or one operation's own route: a row of <c>campaign_routes</c>.</summary>
+    private Task<CampaignRoute?> OperationRowAsync(Campaign campaign, string? operation, CancellationToken cancellationToken) =>
+        db.CampaignRoutes.FirstOrDefaultAsync(row => row.CampaignId == campaign.Id && row.Operation == operation, cancellationToken);
+
+    /// <summary>One channel's route under an operation: a row of <c>campaign_channel_routes</c>.</summary>
+    private Task<CampaignChannelRoute?> ChannelRowAsync(Campaign campaign, string operation, string channel, CancellationToken cancellationToken) =>
+        db.CampaignChannelRoutes.FirstOrDefaultAsync(
+            row => row.CampaignId == campaign.Id && row.Operation == operation && row.Channel == channel,
+            cancellationToken);
+
+    /// <summary>
+    /// The key a <c>routes_updated</c> line is filed under: <c>default</c>, the operation's id for its own route, and
+    /// <c>&lt;operation&gt;/&lt;channel&gt;</c> for a channel's route, so that two routes are never one key to a reader
+    /// that keeps the latest line per key. An operation's id never holds a slash (<see cref="OperationCatalog"/>), so the
+    /// first slash is where the channel starts.
+    /// </summary>
+    internal static string JournalKey(string? operation, string? channel) =>
+        operation is null ? RouteActivator.CampaignDefaultName
+        : channel is null ? operation
+        : $"{operation}/{channel}";
 
     /// <summary>
     /// The shape both writers share: under the reload gate, change the row, write down what changed, and build a
@@ -242,7 +307,7 @@ public sealed class RouteService(
         string? channel,
         ActorRef actor,
         string? reason,
-        Func<CampaignRoute?, (JsonNode? Old, JsonNode? New)?> change,
+        Func<Task<(JsonNode? Old, JsonNode? New)?>> change,
         CancellationToken cancellationToken)
     {
         await gate.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -251,11 +316,7 @@ public sealed class RouteService(
             var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             await using (transaction.ConfigureAwait(false))
             {
-                var existing = await db.CampaignRoutes
-                    .FirstOrDefaultAsync(row => row.CampaignId == campaign.Id && row.Operation == operation && row.Channel == channel, cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (change(existing) is not { } changed)
+                if (await change().ConfigureAwait(false) is not { } changed)
                 {
                     return ToDto(registry.Snapshot, only: null);
                 }
@@ -265,7 +326,7 @@ public sealed class RouteService(
                     actor,
                     JournalKinds.RoutesUpdated,
                     campaign,
-                    key: operation ?? RouteActivator.CampaignDefaultName,
+                    key: JournalKey(operation, channel),
                     old: changed.Old,
                     updated: changed.New,
                     reason: reason);
@@ -312,24 +373,9 @@ public sealed class RouteService(
     }
 
     /// <summary>What the journal records a route as, and nothing where there was no route.</summary>
-    private static JsonNode? Recorded(CampaignRoute? route) =>
-        route is null ? null : Recorded(route.PluginId, route.Binding, route.Channel);
-
-    /// <summary>
-    /// A route as <c>routes_updated</c> records it: its plugin and binding, and its channel where it names one. The key
-    /// stays the operation, so a reader that keys on it reads a channel route as a route of that operation; the channel
-    /// is said beside the route rather than folded into the key.
-    /// </summary>
-    private static JsonObject Recorded(string plugin, JsonObject? binding, string? channel)
-    {
-        var recorded = new JsonObject { ["plugin"] = plugin, ["binding"] = binding?.DeepClone() };
-        if (channel is not null)
-        {
-            recorded["channel"] = channel;
-        }
-
-        return recorded;
-    }
+    /// <remarks>A channel route is recorded exactly as an operation's own route is; which route it is, the key says.</remarks>
+    private static JsonObject? Recorded(string? plugin, JsonObject? binding) =>
+        plugin is null ? null : new JsonObject { ["plugin"] = plugin, ["binding"] = binding?.DeepClone() };
 
     internal static OperationContract RequireContract(string? operation)
     {

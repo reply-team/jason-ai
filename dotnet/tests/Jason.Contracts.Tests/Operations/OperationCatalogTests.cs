@@ -22,6 +22,24 @@ public class OperationCatalogTests
     }
 
     /// <summary>
+    /// An operation's id is dotted lowercase words and never holds a slash, and neither does a channel a route may name
+    /// under it: a <c>routes_updated</c> line about a channel's route is keyed <c>&lt;operation&gt;/&lt;channel&gt;</c>, and
+    /// a reader takes the first slash as where the channel starts.
+    /// </summary>
+    [Fact]
+    public void An_operations_id_and_its_route_channels_never_hold_a_slash()
+    {
+        foreach (var contract in OperationCatalog.All)
+        {
+            Assert.Matches("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$", contract.Id);
+            foreach (var channel in contract.RouteChannels ?? [])
+            {
+                Assert.Matches("^[a-z][a-z0-9_]*$", channel);
+            }
+        }
+    }
+
+    /// <summary>
     /// What a provider block holds is read from the documents and nowhere else: every operation whose
     /// <c>dispatch.under_provider_block</c> is <c>waits</c> — the acts, the pause and the opt-out — and nothing beside
     /// them; the take-back of a send, every other control and every read run through a block. The block's trial is

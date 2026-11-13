@@ -470,25 +470,41 @@ public sealed class RouteActivator(
         // An archived campaign's routes are history, and history must never stand between an operator and an
         // uninstall: the campaign will never dispatch again, so what its route named no longer has to exist. Until a search
         // of it ends, though, its stop still runs and goes where the search ran, so its routes stay in the set while one is
-        // followed — each one that no longer holds left out, and refusing nothing.
-        var rows = await db.CampaignRoutes
+        // followed — each one that no longer holds left out, and refusing nothing. Channel routes are a table of their own
+        // and are read by the same rule into the same set.
+        var operationRows = await db.CampaignRoutes
             .AsNoTracking()
             .Where(route => route.Campaign!.ArchivedAt == null
                 || db.AudienceSearches.Any(search => search.CampaignId == route.CampaignId && search.EndedAs == null && search.Reference != null))
-            .OrderBy(route => route.CampaignId)
-            .ThenBy(route => route.Operation)
-            .ThenBy(route => route.Channel)
-            .Select(route => new
-            {
-                Campaign = route.Campaign!.PublicId,
-                Archived = route.Campaign.ArchivedAt != null,
+            .Select(route => new StoredRoute(
+                route.CampaignId,
+                route.Campaign!.PublicId,
+                route.Campaign.ArchivedAt != null,
+                route.Operation,
+                null,
+                route.PluginId,
+                route.Binding))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var channelRows = await db.CampaignChannelRoutes
+            .AsNoTracking()
+            .Where(route => route.Campaign!.ArchivedAt == null
+                || db.AudienceSearches.Any(search => search.CampaignId == route.CampaignId && search.EndedAs == null && search.Reference != null))
+            .Select(route => new StoredRoute(
+                route.CampaignId,
+                route.Campaign!.PublicId,
+                route.Campaign.ArchivedAt != null,
                 route.Operation,
                 route.Channel,
                 route.PluginId,
-                route.Binding,
-            })
+                route.Binding))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        var rows = operationRows
+            .Concat(channelRows)
+            .OrderBy(route => route.CampaignId)
+            .ThenBy(route => route.Operation, StringComparer.Ordinal)
+            .ThenBy(route => route.Channel, StringComparer.Ordinal);
 
         var campaigns = new Dictionary<string, CampaignRoutes>(StringComparer.Ordinal);
         foreach (var row in rows)
@@ -533,6 +549,9 @@ public sealed class RouteActivator(
 
         return campaigns.ToDictionary(entry => entry.Key, entry => entry.Value.Frozen(), StringComparer.Ordinal);
     }
+
+    /// <summary>One stored campaign route as the reload reads it, from either table: a channel only from the channel table.</summary>
+    private sealed record StoredRoute(int CampaignId, string Campaign, bool Archived, string? Operation, string? Channel, string PluginId, JsonObject? Binding);
 
     /// <summary>
     /// One campaign's routes while the rows are still being read: a default, the overrides of it, and the channel routes

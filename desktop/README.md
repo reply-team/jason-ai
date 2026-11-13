@@ -279,12 +279,20 @@ applies to the turns a person starts by sending, from the next one on.
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
   it stays with the chat after a restart, an update and Start afresh.
 - **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
-  confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
-  answering Cancel. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
+  confirmation, a message box the main process shows, with Cancel focused and Escape answering Cancel, each time Full
+  access is chosen while no standing choice stands. Its buttons are "Give full access this time" and "Always on this
+  computer"; Always writes the standing choice to `<data>/desktop/full-access.json`, one entry per host program
+  (`claude`), with the consent number (`fullAccessConsent`), the moment it was given and whether new chats start in Full
+  access (the box's checkbox, ignored with This time, as its label says). An entry whose consent number is not the
+  current one, lower or higher, is no choice. The file is among the known entries of `<data>/desktop/`, so the data rule
+  refuses a chat's read or change of it in every mode. The standing choice skips the box for every Claude Code chat; with
+  new chats, `chat.create` given a host that can take Full access opens the grant at once, and a host that cannot leaves
+  the chat in Ask first with no notice. No channel of the page gives it: `fullAccess.standing` reads it and
+  `fullAccess.takeBack` removes it, leaving the chats in Full access as they are. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
   2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
   page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the agent runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the agent can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the agent's commands that approve, reject, answer or clear for you while a program the agent writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the agent works. Full access is
   held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
-  never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart.
+  never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart; the standing choice only skips the box.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
@@ -368,7 +376,7 @@ applies to the turns a person starts by sending, from the next one on.
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
   start on a folder that could not be put right.
 - **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
-  the chat to Ask first: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
+  the chat to Ask first, and takes back the standing choice: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
   input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
   confirmation says so.
 - Leaving Full access while a turn runs in it stops that turn, and the page gives the waiting message back as Stop does:

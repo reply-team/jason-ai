@@ -11,10 +11,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Tests.Routing;
 
 /// <summary>
-/// A campaign's route may name a channel under its operation: a row of its own, set and taken away on its own beside the
-/// operation's own route, checked by the same checks in the same order plus the two about the channel, recorded in the
-/// chronicle under its operation with its channel said beside the route, and frozen by every activation into the
-/// campaign's set, where the resolver answers it for the calls on that channel.
+/// A campaign's route may name a channel under its operation: a row of the channel table, set and taken away on its own
+/// beside the operation's own route, checked by the same checks in the same order plus the two about the channel,
+/// recorded in the chronicle under the key <c>&lt;operation&gt;/&lt;channel&gt;</c> with the route recorded as any route
+/// is, and frozen by every activation into the campaign's set, where the resolver answers it for the calls on that channel.
 /// </summary>
 public class ChannelRouteStorageTests
 {
@@ -49,17 +49,21 @@ public class ChannelRouteStorageTests
 
         var lines = await LinesAsync(api, campaign);
         var channelLine = lines.Single(line => line.Reason is not null);
-        Assert.Equal(Send, channelLine.Key);
+        Assert.Equal("message.send/linkedin", channelLine.Key);
         Assert.Null(channelLine.Old);
-        Assert.Equal(Social, (string?)channelLine.New!["plugin"]);
-        Assert.Equal("linkedin", (string?)channelLine.New["channel"]);
+        Assert.Equal("""{"plugin":"social","binding":null}""", channelLine.New!.ToJsonString());
         var operationLine = lines.Single(line => line.Reason is null);
         Assert.Equal(Send, operationLine.Key);
-        Assert.False(operationLine.New!.AsObject().ContainsKey("channel"));
+        Assert.Equal("""{"plugin":"mailer","binding":null}""", operationLine.New!.ToJsonString());
+
+        // The operation's table holds the operation's route alone, as an older executable reads it; the channel's is beside it.
+        await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
+        Assert.Equal(["message.send|mailer"], await db.CampaignRoutes.Select(route => route.Operation + "|" + route.PluginId).ToListAsync(Ct));
+        Assert.Equal(["message.send|linkedin|social"], await db.CampaignChannelRoutes.Select(route => route.Operation + "|" + route.Channel + "|" + route.PluginId).ToListAsync(Ct));
     }
 
     [Fact]
-    public async Task Setting_a_channel_route_again_moves_that_route_and_the_line_names_its_channel_before_and_after()
+    public async Task Setting_a_channel_route_again_moves_that_route_under_the_key_of_its_channel()
     {
         await using var api = await StartAsync();
         var campaign = await CampaignAsync(api);
@@ -69,9 +73,9 @@ public class ChannelRouteStorageTests
 
         Assert.Equal((Mailer, RouteScope.CampaignChannel), Won(api.Resolve<RouteRegistry>().Snapshot, campaign, "linkedin"));
         var moved = (await LinesAsync(api, campaign)).Single(line => line.Reason is not null);
-        Assert.Equal(Send, moved.Key);
-        Assert.Equal((Social, "linkedin"), ((string?)moved.Old!["plugin"], (string?)moved.Old["channel"]));
-        Assert.Equal((Mailer, "linkedin"), ((string?)moved.New!["plugin"], (string?)moved.New["channel"]));
+        Assert.Equal("message.send/linkedin", moved.Key);
+        Assert.Equal("""{"plugin":"social","binding":null}""", moved.Old!.ToJsonString());
+        Assert.Equal("""{"plugin":"mailer","binding":null}""", moved.New!.ToJsonString());
         Assert.Equal(1, await CountAsync(api, campaign));
     }
 
@@ -95,9 +99,9 @@ public class ChannelRouteStorageTests
         Assert.Equal((Social, RouteScope.CampaignOperation), Won(afterChannel, campaign, "linkedin"));
         Assert.Equal((Social, RouteScope.CampaignChannel), Won(afterChannel, campaign, "email"));
         var removal = (await LinesAsync(api, campaign)).Single(line => line.Reason is not null);
-        Assert.Equal(Send, removal.Key);
+        Assert.Equal("message.send/linkedin", removal.Key);
         Assert.Null(removal.New);
-        Assert.Equal((Social, "linkedin"), ((string?)removal.Old!["plugin"], (string?)removal.Old["channel"]));
+        Assert.Equal("""{"plugin":"social","binding":null}""", removal.Old!.ToJsonString());
 
         await UnsetAsync(api, campaign, Send, channel: null);
 
@@ -197,7 +201,7 @@ public class ChannelRouteStorageTests
         await SetAsync(api, campaign, Send, " linkedin ", Social);
 
         Assert.Equal((Social, RouteScope.CampaignChannel), Won(api.Resolve<RouteRegistry>().Snapshot, campaign, "linkedin"));
-        Assert.Equal("linkedin", (string?)(await LinesAsync(api, campaign)).Single().New!["channel"]);
+        Assert.Equal("message.send/linkedin", (await LinesAsync(api, campaign)).Single().Key);
 
         await UnsetAsync(api, campaign, Send, " linkedin ");
 
@@ -384,11 +388,12 @@ public class ChannelRouteStorageTests
             new { CampaignId = campaign, Kind = JournalKinds.RoutesUpdated },
             Ct)).Items;
 
-    /// <summary>How many route rows the campaign holds: what was written, read from the table rather than from any answer.</summary>
+    /// <summary>How many route rows the campaign holds in both tables: what was written, read from the tables rather than from any answer.</summary>
     private static async Task<int> CountAsync(RuntimeApiFixture api, string campaign)
     {
         await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
-        return await db.CampaignRoutes.CountAsync(route => route.Campaign!.PublicId == campaign, Ct);
+        return await db.CampaignRoutes.CountAsync(route => route.Campaign!.PublicId == campaign, Ct)
+            + await db.CampaignChannelRoutes.CountAsync(route => route.Campaign!.PublicId == campaign, Ct);
     }
 
     /// <summary>A campaign route written straight into the row the activator reads, past every check <c>route.set</c> makes.</summary>
@@ -396,7 +401,7 @@ public class ChannelRouteStorageTests
     {
         await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));
         var id = await db.Campaigns.Where(c => c.PublicId == campaign).Select(c => c.Id).SingleAsync(Ct);
-        db.CampaignRoutes.Add(new CampaignRoute
+        db.CampaignChannelRoutes.Add(new CampaignChannelRoute
         {
             CampaignId = id,
             Operation = operation,
