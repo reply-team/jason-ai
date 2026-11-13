@@ -176,6 +176,11 @@ describe('the sidebar', () => {
         fireEvent.click(entries('More')[3]!);
         await waitFor(() => expect(inFront()).toContain('Connect'));
         expect(more().getAttribute('aria-current')).toBe('true');
+
+        // Leaving Connect for another panel makes More inactive again.
+        fireEvent.click(side().getByRole('button', { name: 'Agents' }));
+        await waitFor(() => expect(inFront()).toContain('Agents'));
+        expect(more().getAttribute('aria-current')).toBeNull();
     });
 
     it('still reaches every screen it reached before: a panel in front, a page at the address its registered screen gives', async () => {
