@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
 import {
     buildSeed,
+    operatorActor,
     demoPlaces,
     demoPluginId,
     demoSettings,
@@ -122,6 +123,18 @@ test('every verb and option of the seed is one the command line has, read from i
     // The options the cancel of a review and the approval use as well.
     for (const option of ['--campaign', '--kind', '--status']) assert.ok(sourceOf('workitem').includes(`"${option}"`));
     assert.ok(sourceOf('approval').includes('"--work-item"'));
+});
+
+test('the operator is named as a person whether the story writes the prefix or only the name', async () => {
+    const bare = fixture();
+    bare.operator.actor = 'fixture.operator';
+    assert.equal(operatorActor(bare), 'human:fixture.operator');
+    assert.equal(operatorActor(fixture()), 'human:fixture-operator');
+    for (const step of buildSeed(bare)) {
+        if (step.kind !== 'verb') continue;
+        const at = step.args.indexOf('--actor');
+        if (at >= 0) assert.equal(step.args[at + 1], 'human:fixture.operator');
+    }
 });
 
 test('no step is called demo: the nouns are the harness\'s own', () => {

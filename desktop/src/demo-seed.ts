@@ -156,13 +156,16 @@ export function demoSettings(places: DemoPlaces): Record<string, unknown> {
     };
 }
 
+/** The operator as the verbs name a person: `human:<name>`, whether the story writes the prefix or only the name. */
+export const operatorActor = (story: Story): string => (story.operator.actor.includes(':') ? story.operator.actor : `human:${story.operator.actor}`);
+
 const verb = (args: readonly Arg[], extra: Partial<VerbStep> = {}): VerbStep => ({ kind: 'verb', args, ...extra });
 const ref = (name: string): Arg => ({ ref: name });
 const sendRef = (send: StorySend): Arg => ref(`wi:${send.key}`);
 
 /** The seed: every step in order, built from the story the package holds. */
 export function buildSeed(story: Story): SeedStep[] {
-    const actor = ['--actor', story.operator.actor] as const;
+    const actor = ['--actor', operatorActor(story)] as const;
     const sender = story.senders.find((s) => s.channel === 'email') ?? story.senders[0];
     if (!sender) throw new Error('The story needs a sender.');
     const steps: SeedStep[] = [
@@ -383,7 +386,7 @@ type Failed = { step: string; detail: string } | null;
 
 async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number: number): Promise<Failed> {
     const refs = context.refs;
-    const actor = context.story.operator.actor;
+    const actor = operatorActor(context.story);
     const label = (args: readonly Arg[]) => `${args[0]} ${args[1]}`;
     const limit = deps.waitLimitMs ?? 120_000;
     const every = deps.waitStepMs ?? 1_000;
