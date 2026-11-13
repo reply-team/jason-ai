@@ -177,18 +177,22 @@ opens a folder in the place you used last, and its arrow lists every place avail
   that is not found is not listed.
 - **Claude Code** and **Codex**, each as a new session in a terminal window, for the hosts the desktop already finds.
 - **A plain terminal**, in a new window.
-- **The file manager** (File Explorer on Windows, Finder on macOS), and **Copy path**, which puts the folder's path on the
+- **The file manager**: File Explorer on Windows, Finder on macOS, and on Linux whatever `xdg-open` shows a folder with; the
+  entry is absent where `xdg-open` is not found. And **Copy path**, which puts the folder's path on the
   clipboard.
 
-**The default** is Claude Code, until you use another place; the place you used last, if it is still available, then becomes
-the default. Copy path is never the default, and a terminal is always there if nothing else is. The desktop keeps the choice
+**The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
+otherwise the first place of the list. Copy path is never the default, and a terminal is always there. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
 your folders.
 
 **Which folder opens.** The campaign's own folder, the one the installation records for it, only while that campaign's chat is in
 front; otherwise the harness root, and the desktop starts the command line with the harness root as its working folder. In the demo these are the demo's folders, and a terminal opened there works with the demo's data,
 so `jason` in it reads and changes the demo. The page names only the place and, where a campaign's chat is open, the
-campaign; it never sends a path, and the desktop resolves the folder from the installation's own record.
+campaign; it never sends a path, and the desktop resolves the folder from the installation's own record. A campaign whose
+folder is not recorded, or is not on this computer, is refused with a sentence ("This agent's folder is not recorded, or it
+is not on this computer."), and nothing is opened elsewhere, the harness root included. Likewise a harness root that is not
+there yet is refused, with a sentence that it is made with the first agent.
 
 **What starts.** The desktop starts the editors and the file manager itself, with your own environment. The three terminal
 entries run `jason session open` on the folder, with the environment of the installation the desktop runs on, so in the demo
@@ -201,12 +205,13 @@ path says "Copied the path of {folder}.". In the demo the menu also says "Opens 
 works with the demo's data."
 
 Two folders are refused for the file manager with a sentence that points to Copy path: on Windows one whose path holds a
-comma, which File Explorer reads as a separator, and on macOS one named like an application, which could be started rather
+comma, which File Explorer reads as a separator, and on macOS one whose name ends in `.app`, which could be started rather
 than shown.
 
 **What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
 and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
-own act, through the window's one object, and the chat's AI has no tool that reaches it. It does not continue the chat you
+own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
+refused, as the commands that start a session on your computer. It does not continue the chat you
 had, and it does not open the data directory.
 
 ## The demo
