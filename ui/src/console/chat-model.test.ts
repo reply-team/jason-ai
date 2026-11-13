@@ -99,6 +99,18 @@ describe('a chat as the page keeps it', () => {
         expect(lost(allowed, 'req_1').entries[1]).toMatchObject({ answer: 'gone' });
     });
 
+    it('keeps a notice the desktop says in the thread, with the folder it names for the Open folder button', () => {
+        const chat = said(newChat('conv_1', 'claude'), 'Go');
+        expect(received(chat, { kind: 'notice', text: 'Left out of this chat: x.' }).entries.at(-1)).toEqual({
+            kind: 'notice',
+            text: 'Left out of this chat: x.',
+            folder: null,
+        });
+        expect(
+            received(chat, { kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' }).entries.at(-1),
+        ).toEqual({ kind: 'notice', text: 'Kept seven days: /d', folder: 'ID-1788' });
+    });
+
     it('becomes a campaign’s conversation on a hand-over, and keeps a fresh session and a pick in its thread', () => {
         const chat = said(newChat('conv_1', 'claude'), 'Set up an autumn campaign');
         const attached = received(chat, { kind: 'attached', campaignId: 'cmp_1', title: 'Autumn outreach' });
@@ -571,10 +583,21 @@ describe("a chat's access mode", () => {
             disabled: 'Full access runs on Claude Code only.',
         });
         expect(modeChoices(null)[2]?.disabled).toBe('Full access runs on Claude Code only.');
+        expect(modeChoices(claude, true)[2]?.disabled).toBe(
+            'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
+        );
+        expect(
+            modeChoices(claude, true)
+                .slice(0, 2)
+                .map((each) => each.disabled),
+        ).toEqual([null, null]);
+        expect(modeChoices(codex, true)[2]?.disabled).toBe('Full access runs on Claude Code only.');
         expect(modeChoices(claude).map((each) => each.mode)).not.toContain('auto_edit');
     });
 
     it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {
-        expect(fullAccessLine).toBe('Full access: the agent acts on this computer without asking you.');
+        expect(fullAccessLine).toBe(
+            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+        );
     });
 });

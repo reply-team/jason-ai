@@ -47,6 +47,11 @@ export type Entry =
     | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
     /** The person started the conversation afresh: said in the page, not kept by the desktop. */
     | { kind: 'afresh' }
+    /**
+     * A sentence the desktop said once, in its own words, not kept by the desktop. `folder` is the name of an ended Full
+     * access folder the sentence points at, which its Open folder button opens; null for any other.
+     */
+    | { kind: 'notice'; text: string; folder: string | null }
     /** A line of the Feed, as the desktop kept it. */
     | { kind: 'line'; line: DesktopLineEntry }
     /** Where the Feed's catch-up read back fewer lines than were written while the window was closed. */
@@ -182,7 +187,15 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
 }
 
 /** What the line under the composer says while the desktop holds the chat in Full access. */
-export const fullAccessLine = 'Full access: the agent acts on this computer without asking you.';
+export const fullAccessLine = 'Full access: the agent runs commands without asking, except those Jason cannot read.';
+
+/**
+ * What the line under the composer says while the chat's host is Codex on the person's sign-in: every Codex turn leaves
+ * the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
+ * named there.
+ */
+export const codexConfigLine =
+    'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.';
 
 /** Why Full access cannot be chosen on a host a desktop of an earlier version listed, which offers no modes. */
 export const olderDesktop = 'This version of Jason Desktop does not offer Full access.';
@@ -194,14 +207,21 @@ const modeWords: Readonly<Record<DesktopChatMode, string>> = {
     full_access: 'Full access',
 };
 
+/** Why the desktop refuses Full access for the Feed, in its words. */
+const feedFullAccess =
+    'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
+
 /**
  * The menu's choices on the host the next turn runs on: each mode, and why it cannot be chosen there, or null. Full
- * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex.
+ * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex;
+ * and for the Feed, in the order the desktop refuses it.
  */
 export function modeChoices(
     host: DesktopHost | null,
+    feed = false,
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
-    const full = host === null ? 'Full access runs on Claude Code only.' : host.fullAccess;
+    const full =
+        host === null ? 'Full access runs on Claude Code only.' : (host.fullAccess ?? (feed ? feedFullAccess : null));
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
         label: modeWords[mode],
@@ -375,6 +395,11 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             return { ...chat, entries: [...chat.entries, { kind: 'fresh', reason: event.reason }] };
         case 'pick':
             return { ...chat, entries: [...chat.entries, { kind: 'pick', campaignIds: [...event.campaignIds] }] };
+        case 'notice':
+            return {
+                ...chat,
+                entries: [...chat.entries, { kind: 'notice', text: event.text, folder: event.folder ?? null }],
+            };
         case 'renamed':
             return { ...chat, title: event.title };
         case 'mode':

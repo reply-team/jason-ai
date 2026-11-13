@@ -10,6 +10,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Notifications;
 using Jason.Runtime.Tests.Plugins;
@@ -223,10 +224,15 @@ public sealed class AudienceFamilyTests
     /// campaign's open work, a read of the search among it but never a stop, and the next scan makes one stop for each
     /// search in flight, which is claimed in the archived campaign as a stop is in a paused one. The provider's search is
     /// cancelled and its row ends <c>cancelled</c>, said once; no second stop is made, and nothing else of the campaign
-    /// runs again.
+    /// runs again. A search the person deleted at the provider meanwhile is gone there: its stop fails
+    /// <c>search_not_found</c> and ends the row <c>cancelled</c> all the same, said once, by that stop. Either way the
+    /// search then holds its account no longer: moving the only route off it, refused while the search was followed, goes
+    /// through.
     /// </summary>
-    [Fact]
-    public async Task Archiving_a_campaign_stops_each_of_its_searches_in_flight()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Archiving_a_campaign_stops_each_of_its_searches_in_flight(bool deletedAtTheProvider)
     {
         using var account = new StandInAccount();
         await using var api = await StartAsync(account);
@@ -236,17 +242,32 @@ public sealed class AudienceFamilyTests
 
         await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = campaign, actor = new { type = "human", id = "ada" } }, Ct);
         Assert.Equal(WorkItemStatus.Cancelled, (await ReadAsync(api, read)).Status);
+        if (deletedAtTheProvider)
+        {
+            account.Delete("srch-1");
+        }
+
+        await TestRoutes.WriteGlobalAsync(api, TestRoutes.GlobalDefault(Finishing), Ct);
+        var refused = await api.PostErrorAsync(Operations.PluginReload, new { }, HttpStatusCode.Conflict, Ct);
+        Assert.Equal(RouteProblemCodes.OrphansSearch, Assert.Single(refused.Details!).Code);
 
         await ScanAsync(api);
         await ScanAsync(api);
 
         var stop = Assert.Single((await api.PostOkAsync<Page<WorkItemDto>>(Operations.WorkItemList, new { campaign_id = campaign }, Ct)).Items, item => item.Operation == "audience.search_cancel");
-        Assert.Equal((WorkItemStatus.Succeeded, "dispatcher"), (stop.Status, stop.CreatedBy.Id));
+        Assert.Equal(
+            (deletedAtTheProvider ? WorkItemStatus.Failed : WorkItemStatus.Succeeded, deletedAtTheProvider ? "search_not_found" : null, "dispatcher"),
+            (stop.Status, stop.LastError?.Code, stop.CreatedBy.Id));
         Assert.Equal(["srch-1"], account.Started);
-        Assert.Equal(1, await EndedAsync(api, search.Id));
-        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
-        var row = await scope.ServiceProvider.GetRequiredService<JasonDbContext>().AudienceSearches.AsNoTracking().SingleAsync(Ct);
-        Assert.Equal("cancelled", row.EndedAs);
+        Assert.Equal([stop.Id], await EndedByAsync(api, search.Id));
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var row = await scope.ServiceProvider.GetRequiredService<JasonDbContext>().AudienceSearches.AsNoTracking().SingleAsync(Ct);
+            Assert.Equal("cancelled", row.EndedAs);
+        }
+
+        await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+        Assert.Equal(Finishing, api.Resolve<RouteRegistry>().Snapshot.Global.Default!.PluginId);
     }
 
     private static (HttpStatusCode Status, string? Code) Refusal((HttpStatusCode Status, string Body) answer) =>
@@ -394,6 +415,16 @@ public sealed class AudienceFamilyTests
             .CountAsync(line => line.Kind == JournalKinds.AudienceSearchEnded && line.Key == search, Ct);
     }
 
+    /// <summary>The work item each line that says the search ended names as the one that ended it.</summary>
+    private static async Task<List<string?>> EndedByAsync(RuntimeApiFixture api, string search)
+    {
+        using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
+        var lines = await scope.ServiceProvider.GetRequiredService<JasonDbContext>().Journal.AsNoTracking()
+            .Where(line => line.Kind == JournalKinds.AudienceSearchEnded && line.Key == search)
+            .ToListAsync(Ct);
+        return [.. lines.Select(line => (string?)line.New!["ended_by"])];
+    }
+
     private static Task<WorkItemDto> ReadAsync(RuntimeApiFixture api, string item) =>
         api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
 
@@ -428,6 +459,7 @@ public sealed class AudienceFamilyTests
             }
             case "audience.search_status": {
               const search = call("GET", "searches/" + input.search.reference);
+              if (search.gone) { throw host.fail({ class: "permanent", code: "search_not_found", message: "no such search" }); }
               const from = input.search.cursor === null ? 0 : Number(input.search.cursor.slice("after-".length));
               const shown = Math.min(search.found - from, input.args.limit);
               const people = [];
@@ -436,6 +468,7 @@ public sealed class AudienceFamilyTests
             }
             case "audience.search_cancel": {
               const answer = call("POST", "searches/" + input.search.reference + "/cancel", {});
+              if (answer.gone) { throw host.fail({ class: "permanent", code: "search_not_found", message: "no such search" }); }
               return { result: { items: [{ status: answer.status, ended_as: answer.ended_as }] } };
             }
           }
@@ -468,7 +501,7 @@ public sealed class AudienceFamilyTests
     /// <summary>
     /// The stand-in account the keeping provider runs its searches at. A search is started at <c>POST /searches</c> and
     /// found three people; it runs until the test finishes it or a stop cancels it, and a stop of a search that has ended
-    /// says how it ended.
+    /// says how it ended. A search the test deletes is gone: a read or a stop of it is answered that there is none.
     /// </summary>
     private sealed class StandInAccount : IDisposable
     {
@@ -497,6 +530,8 @@ public sealed class AudienceFamilyTests
 
         public void Finish(string reference) => _states[reference] = "finished";
 
+        public void Delete(string reference) => _states.TryRemove(reference, out _);
+
         public void Dispose()
         {
             _stopping.Cancel();
@@ -522,6 +557,11 @@ public sealed class AudienceFamilyTests
                 _states[reference] = "in_progress";
                 _started.Enqueue(reference);
                 return new JsonObject { ["reference"] = reference }.ToJsonString();
+            }
+
+            if (parts is ["searches", var named, ..] && !_states.ContainsKey(named))
+            {
+                return """{"gone":true}""";
             }
 
             if (method == "GET" && parts is ["searches", var read])

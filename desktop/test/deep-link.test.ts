@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { configuration } from '../electron-builder.config.mjs';
 import { templates } from '../src/log.ts';
-import { linkIn, linkScheme, LinkPost, linksTaken, linkRegistration, parseLink, type LinkTarget } from '../src/deep-link.ts';
+import { linkIn, linkLimit, linkScheme, LinkPost, linksTaken, linkRegistration, parseLink, type LinkTarget } from '../src/deep-link.ts';
 
 const id = (prefix: string, n = 1) => `${prefix}_${String(n).padStart(26, '0')}`;
 
@@ -23,6 +23,11 @@ test('every address of the table opens its page, and nothing else is an address'
         [`jason-desktop://question/${id('dec')}`, { page: 'question', id: id('dec') }],
         [`jason-desktop://workitem/${id('wi')}`, { page: 'workitem', id: id('wi') }],
         [`jason-desktop://person/${id('cnt')}`, { page: 'person', id: id('cnt') }],
+        // What a toast's click hands on where the desktop is installed: the runtime's attention links, rebuilt from their
+        // parsed parts by the command line, each opening Needs you.
+        ['jason-desktop://attention', { page: 'needs' }],
+        [`jason-desktop://attention/approvals/${id('apr')}`, { page: 'approval', id: id('apr') }],
+        [`jason-desktop://attention/questions/${id('dec')}`, { page: 'question', id: id('dec') }],
     ];
     for (const [address, target] of table) {
         assert.deepEqual(parseLink(address), target, address);
@@ -67,6 +72,20 @@ test('an address out of the table is refused by a closed code, and never opens a
         [`jason-desktop://campaign/%63mp_${'0'.repeat(26)}`, 'bad_id'],
         ['jason-desktop://campaign/cmp_01\u0000', 'bad_id'],
         ['jason-desktop://needs" --inspect', 'unknown_page'],
+        ['jason-desktop://Attention', 'unknown_page'],
+        ['jason-desktop://attention/campaigns', 'unknown_page'],
+        [`jason-desktop://attention/Approvals/${id('apr')}`, 'unknown_page'],
+        [`jason-desktop://attention/elsewhere/${id('apr')}`, 'unknown_page'],
+        ['jason-desktop://attention/approvals', 'bad_id'],
+        ['jason-desktop://attention/approvals/', 'bad_id'],
+        [`jason-desktop://attention/approvals/${id('dec')}`, 'bad_id'],
+        [`jason-desktop://attention/questions/${id('apr')}`, 'bad_id'],
+        [`jason-desktop://attention/approvals/${id('apr')}/x`, 'bad_id'],
+        [`jason-desktop://attention/approvals/${id('apr')}/prompt`, 'too_long'],
+        [`jason-desktop://attention/questions/${id('dec')}/session`, 'too_long'],
+        [`jason-desktop://attention/approvals/apr_${'0'.repeat(25)}I`, 'bad_id'],
+        [`jason-desktop://attention/approvals/${id('apr')}?x=1`, 'bad_id'],
+        [`jason-desktop://attention//approvals/${id('apr')}`, 'unknown_page'],
     ];
     for (const [address, code] of refused) assert.deepEqual(parseLink(address), { refused: code }, String(address));
 });
@@ -234,11 +253,15 @@ test('an id is held at its edges: 26 Crockford characters with every letter they
         [`jason-desktop://campaign/cmp_${'0'.repeat(25)}\u0000`, 'bad_id'],
     ];
     for (const [address, code] of refused) assert.deepEqual(parseLink(address), { refused: code }, JSON.stringify(address));
-    // The bound: an address of 64 characters is read, one of 65 is not.
-    const at64 = `jason-desktop://${'a'.repeat(64 - 'jason-desktop://'.length)}`;
-    assert.equal(at64.length, 64);
-    assert.deepEqual(parseLink(at64), { refused: 'unknown_page' });
-    assert.deepEqual(parseLink(`${at64}a`), { refused: 'too_long' });
+    // The bound: an address of 72 characters is read, one of 73 is not; the longest in the table is within it.
+    assert.equal(linkLimit, 72);
+    const at72 = `jason-desktop://${'a'.repeat(72 - 'jason-desktop://'.length)}`;
+    assert.equal(at72.length, 72);
+    assert.deepEqual(parseLink(at72), { refused: 'unknown_page' });
+    assert.deepEqual(parseLink(`${at72}a`), { refused: 'too_long' });
+    const longest = `jason-desktop://attention/questions/${id('dec')}/`;
+    assert.ok(longest.length <= linkLimit);
+    assert.deepEqual(parseLink(longest), { page: 'question', id: id('dec') });
 });
 
 /**

@@ -1180,9 +1180,10 @@ public sealed class ReplyAccount : IDisposable
 
     /// <summary>
     /// Whether the stand-in has ended. A pipe refuses the write as soon as the process has closed its end, which can be
-    /// a moment before the process is reported as exited, so the answer is waited for, a bounded while.
+    /// a moment before the process is reported as exited, so the answer is waited for, a bounded while: the exit ends the wait
+    /// at once, and the bound, sized to the slowest runner, only fails a stand-in that never ends.
     /// </summary>
-    private static bool Gone(Process process) => process.WaitForExit(TimeSpan.FromSeconds(10));
+    private static bool Gone(Process process) => process.WaitForExit(TimeSpan.FromSeconds(60));
 
     /// <summary>
     /// Lets go of a stdin whose write was refused. Disposing it flushes what the refused write left buffered, which the

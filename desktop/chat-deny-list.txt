@@ -3,6 +3,10 @@
 # The listed commands are refused by the host's tool fence, and a command that names a listed operation is refused by
 # the desktop. A person runs them, in the page or in a terminal. An operation is told from a command by its dot.
 #
+# The command lines below are written from ConfinedVerbs.Table by DesktopDenyListTests, the table the CLI refuses under
+# JASON_CONFINED; a line taken out or added here by hand is red there until JASON_UPDATE_FIXTURES=1 writes the file
+# again. The operation lines are checked against the Runtime API and the verbs, and are edited by hand.
+#
 # The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a
 # preference, a block cleared, work resumed, a report and a subscription rewound. The CLI gives them no default actor,
 # and gives none to four verbs further down either.

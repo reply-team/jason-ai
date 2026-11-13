@@ -116,7 +116,10 @@ A read that succeeds lands its page in the campaign, whoever made it, in the sam
 each person becomes a member of the campaign — found among the people Jason holds by the identifier pinned to them, by an
 address, by a LinkedIn profile, or made from what the provider said of them — and the provider's identifier is pinned
 to them under `contact`. The search's row takes the `cursor`, the `state`, `found` and `has_more`, and a read that answers
-`finished` or `exhausted` with nothing more readable ends the search. Jason makes these reads itself, on a cadence, for
+`finished` or `exhausted` with nothing more readable ends the search. A read that fails `search_not_found` ends it
+`cancelled`, said once, by that read: the provider holds no search under the reference for the account the binding
+signs in as — deleted there, or that account changed — so nothing would read it again, and the people it already
+landed stay the campaign's. Jason makes these reads itself, on a cadence, for
 each search it follows, and stops when the search ends or its reads land nobody for a bound
 ([`docs/campaign-manager.md`](../../campaign-manager.md) §10).
 

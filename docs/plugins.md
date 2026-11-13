@@ -192,7 +192,17 @@ old to read the key rejects the reload, as every package problem does, rather th
 0.31.0 rejects the reload, as every package problem does, by the same unknown-key rule. §9 says what the word does and
 what it costs. `capabilities.files` is additive in the same way from 0.32.0, and any kind of plugin may ask. No key of a
 manifest holds a secret: a secret belongs under `Plugins:Config` (§6, `host.config`) or in the environment (§6,
-`host.env`), never in `plugin.yaml`, which is the package and travels with it.
+`host.env`), never in `plugin.yaml`, which is the package and travels with it. A `Plugins:Config` value given as a
+variable of the runtime's environment, `JASON_Plugins__Config__<id>__<field>`, is kept from every child the runtime
+starts: a plugin host is given no `JASON_*` variable (§6), and an AI role's agent is launched without any of the
+runtime's configuration ([work-execution.md](work-execution.md)), so it reaches this plugin through `host.config` alone.
+A variable granted for `host.env` is kept from every AI role's agent in the same way, unless it is one of the machine
+configuration names every plugin host is given (§6), a proxy say, which an agent keeps whether or not it is granted.
+So are the four certificate names `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS` and `REQUESTS_CA_BUNDLE`: each
+is the path to a trust store and never a secret, and an agent without it cannot reach its vendor inside a corporate
+network.
+This keeps a plugin's secret out of a dump of an agent's environment; it is not a wall, since a role's agent runs as the
+person and can read what the person can.
 
 `settles_by_key` says which of the sends whose document settles a lost answer by the work item's key — today
 `message.send` and `social_invitation.send` — the plugin makes under that key on every attempt, so that a repeat is
@@ -1112,6 +1122,16 @@ repeat is not the one that attempt was composed with — its arguments, the pers
 channel it consumes, the person's and the campaign's pins, and the campaign but for its status, leaving out only the
 pins that attempt and every later attempt of the item learned from their answers — since the key settles only the
 request it went with: a provider holding it answers a repeat with the earlier send.
+
+A metered operation whose recovery read does not rest on the key — `audience.search`, `campaign.enroll` and
+`campaign.activate` — is held at the claim to the plugin by its id, the binding and the input the unsettled attempt was
+composed with, but not to the package's digest: an update between a lost answer and its repeat replaces an unedited
+package, and a repeat refused for it would leave the work final for good. So **the recovery read must find what an
+earlier attempt did whichever version of the same package made it**: whatever it matches by — a name or a mark your
+package gives what it makes at the provider — is part of your package's contract with its own earlier versions, and
+never changes between them. The same holds for the references your package answers: a later version keeps reading
+every reference an earlier one gave, since a search's read or stop that fails `search_not_found` ends that search
+`cancelled` while it may still run at the provider.
 
 ### What to return
 

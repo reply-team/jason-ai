@@ -438,8 +438,14 @@ public sealed class Claimer(
             : null;
 
     /// <summary>Whether an earlier attempt may have acted: it started, and it ended ambiguous.</summary>
-    private static bool MayHaveActed(Attempt earlier) =>
-        earlier.StartedAt is not null && earlier.Error?.Class == FailureClass.Ambiguous;
+    private static bool MayHaveActed(Attempt earlier) => MayHaveActed(earlier.StartedAt, earlier.Error);
+
+    /// <summary>
+    /// Whether an attempt that started at <paramref name="startedAt"/>, if it did, and ended with <paramref name="error"/>
+    /// may have acted: the one reading of an unsettled attempt, which check 23's hold and check 24's search in the way share.
+    /// </summary>
+    internal static bool MayHaveActed(DateTime? startedAt, AttemptErrorDto? error) =>
+        startedAt is not null && error?.Class == FailureClass.Ambiguous;
 
     /// <summary>
     /// Work the runtime cannot perform fails where it is noticed, with the attempt and its snapshot kept so the
@@ -771,7 +777,7 @@ public sealed class Claimer(
         }
 
         var inTheWay = string.Equals(contract.Id, SearchLanding.Search, StringComparison.Ordinal)
-            ? await AudienceSearches.InTheWayAsync(db, campaign.Id, item.Id, ct).ConfigureAwait(false)
+            ? await AudienceSearches.InTheWayAsync(db, campaign.Id, item.Id, unsettled is not null, ct).ConfigureAwait(false)
             : null;
 
         var audience = CanonicalInput.CarriesADefinition(contract) && CanonicalInput.NamedAudience(item) is { } number

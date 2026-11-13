@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The shipped executable's modes exactly as it runs them, but for one thing: once a runtime it runs has published
+       its descriptor, a thread of its own throws and nothing catches it. No real input can make the runtime do that,
+       and it is what shows the line the runtime writes as an unhandled exception ends it. It is test scaffolding, never
+       published, and its name does not end in .Tests so the test-runner properties do not apply to it; the
+       application's tests reference it only so its assembly and its runtimeconfig are copied next to theirs, to be
+       started in place of the shipped executable. It references the executable and nothing else: it is that program,
+       unchanged. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Jason.DyingRuntime</AssemblyName>
+    <RootNamespace>Jason.DyingRuntime</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Jason.App/Jason.App.csproj" />
+  </ItemGroup>
+</Project>

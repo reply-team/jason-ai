@@ -1,20 +1,30 @@
 // Pure: a chat's access mode, chosen per conversation from the menu beside the composer. Ask first is the default of every
-// new chat and no setting changes it. Plan only reads and proposes and changes nothing. Full access runs Claude Code with no
-// prompts; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt, and it
-// is chosen only through a confirmation shown each time, held in memory for that conversation alone, and never remembered
-// past the window. Codex has no Full access. Nothing here starts a process or reads a file.
+// new chat and no setting changes it. Plan only reads and proposes and changes nothing. Full access runs Claude Code in its
+// default mode with a hook that lets a command run with no card where Jason reads it plainly, refuses what Ask first
+// refuses, and puts anything else to the person as Ask first's card; the deny list, the chat's confinement and the keys
+// still hold wherever the desktop can see the attempt, and it is chosen only through a confirmation shown each time, held
+// in memory for that conversation alone, and never remembered past the window. Codex has no Full access, nor has the
+// Feed. Nothing here starts a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
 
 export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
 
 /**
- * Whether this version offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
+ * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
  * refuses it before any confirmation. Everything else of Full access stays, behind this one switch.
  */
-export const fullAccessOffered = false;
+export const fullAccessOffered = true;
 
-/** What the menu and the desktop say of Full access while this version does not offer it. */
+/**
+ * Whether Full access runs the PowerShell tool's literal commands unasked. Off: in Full access every command of the
+ * PowerShell tool is held or refused, never run unasked, and only the Bash tool's literal commands run. The PowerShell
+ * grammar stays behind this switch: two PowerShell generations pass arguments differently, and its built-in functions
+ * and providers reach code from literal words, so that surface needs its own reading before it runs anything unasked.
+ */
+export const powerShellRunsInFullAccess = false;
+
+/** What the menu and the desktop say of Full access while the switch is off. */
 export const fullAccessNotYet = 'Full access is not in this version yet.';
 
 export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'full_access'];
@@ -24,11 +34,13 @@ export function isChatMode(value: unknown): value is ChatMode {
 }
 
 /**
- * The oldest Claude Code a turn in Full access runs on: the turn's hook blocks the tool when it fails only from this
- * version on. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): "To block the action instead, set
- * `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295 or later."
+ * The oldest Claude Code a turn in Full access runs on: the version on which a hook's `ask` under `-p`, in the default
+ * mode, was seen to override an allow rule, reach the permission prompt tool and wait for its answer, which no page
+ * states. Below it, Full access would rest on a precedence nobody has seen. It is above the version from which the hook
+ * blocks the tool when it fails. Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): "To block the action
+ * instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295 or later."
  */
-export const fullAccessFloor = '2.1.295';
+export const fullAccessFloor = '2.1.322';
 
 /**
  * Why Full access cannot be chosen on a Claude Code of this version, read as the chat's floor is read (`floorSentence`);
@@ -42,6 +54,12 @@ export function fullAccessSentence(version: string | null): string | null {
 
 /** Why Full access cannot be chosen on Codex: its own sandbox and hooks hold none of the chat's refusals. */
 export const codexFullAccess = 'Full access runs on Claude Code only.';
+
+/**
+ * Why Full access cannot be chosen for the Feed: its turns are handed journal lines by default, words that others and
+ * providers wrote, the widest road for a steer.
+ */
+export const feedFullAccess = 'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
 
 /** What a chat in Plan only answers every request it does not take. */
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';
@@ -76,10 +94,11 @@ export function fullAccessDialog(): FullAccessDialog {
         title: 'Full access',
         message: 'Give this chat full access?',
         detail: [
-            'From now on, in this chat, the agent acts on this computer without asking you first: it runs commands, changes and deletes files and opens web pages, and a page it reads can steer what it does.',
+            'From now on, in this chat, the agent runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does.',
+            'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run.',
+            "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving.",
             'The risk is yours.',
-            'Jason still refuses the commands that approve, reject or answer for you, and keeps its keys from the agent, wherever it can see the attempt; it cannot see inside a program the agent writes and runs.',
-            'Full access lasts until you change it or close Jason.',
+            'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
         ].join(' '),
         buttons: [fullAccessButton, 'Cancel'],
         defaultId: 1,

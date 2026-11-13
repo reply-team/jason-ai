@@ -10,8 +10,9 @@ namespace Jason.App.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Six rules. No test names the real registry, the real clipboard or the real terminal starter: each would act on the
-/// machine running the suite, whatever the data directory says, the last by opening a window with an agent host in it.
+/// Six rules. No test names the real registry, the real clipboard, the real terminal starter or the real reader of the
+/// desktop's registration: each would act on, or answer from, the machine running the suite, whatever the data directory
+/// says, the third by opening a window with an agent host in it.
 /// No file reaches the link handler and the real CLI environment together, which carries the real opener, the real
 /// clipboard and the real terminal starter; nor names the <c>session</c> verb or its opener beside that environment. No
 /// file runs the router beside a <c>jason:</c> link, since the router hands a link the real environment: choosing the
@@ -49,6 +50,7 @@ public sealed partial class NoTestClicksALinkTests
     [Theory]
     [InlineData("real registry", "var registry = new Registry" + "UserRegistry();")]
     [InlineData("real clipboard", "IClipboard clipboard = new Windows" + "Clipboard();")]
+    [InlineData("real desktop registration", "IDesktopRegistration desktop = new WindowsDesktop" + "Registration();")]
     [InlineData("real terminal", "ITerminalStarter terminals = new PlatformTerminal" + "Starter();")]
     [InlineData("handler with the real environment", "await Link" + "Handler.RunAsync([link], CliEnvironment.Default(), ct);")]
     [InlineData("session verb with the real environment", "await CliApp.RunAsync([\"session\", \"open\", \"--approval\", id], CliEnvironment.Default(), ct);")]
@@ -84,6 +86,7 @@ public sealed partial class NoTestClicksALinkTests
         var text = Joined(source);
         var registry = string.Concat("Registry", "UserRegistry");
         var clipboard = string.Concat("Windows", "Clipboard");
+        var desktop = string.Concat("WindowsDesktop", "Registration");
         var terminal = string.Concat("PlatformTerminal", "Starter");
         if (text.Contains(registry, StringComparison.Ordinal))
         {
@@ -93,6 +96,11 @@ public sealed partial class NoTestClicksALinkTests
         if (text.Contains(clipboard, StringComparison.Ordinal))
         {
             return $"{file} names {clipboard}, which writes the person's clipboard";
+        }
+
+        if (text.Contains(desktop, StringComparison.Ordinal))
+        {
+            return $"{file} names {desktop}, which reads this account's registry for the desktop's link";
         }
 
         if (text.Contains(terminal, StringComparison.Ordinal))

@@ -19,212 +19,41 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.36.0
+# Jason 0.37.0
 
-## What is new since 0.35.0
+## What is new since 0.36.0
 
-A campaign can be filled from a description of who it is for. The description is written in the provider's own terms;
-the provider says, for free, how many people it matches and shows a few of them; a search for some of them waits for a
-person, then runs at the provider; and Jason follows the search by itself and makes the people it finds the campaign's
-members as they arrive. A threshold says when the campaign is running low on people nobody has started on, and an
-allowance a person gives lets the searches that top up an audience go without asking, up to a number of people. The
-Reply package performs all of it through Reply's Live Data.
+The desktop's chat is fenced more tightly: it loads none of your own MCP servers or connectors, it runs Codex on Windows only where Codex's sandbox keeps Jason's data unreadable, and the CLI declines, inside a chat turn, the commands that give your word or change the installation.
 
-- **An audience is described in the provider's terms.** Six operations make a new family: `audience.preview`,
-  `audience.search`, `audience.search_status`, `audience.search_cancel`, `audience.filter_values` and
-  `audience.availability`, thirty operations in all. An audience's definition is the provider's own shape (which
-  industries, which titles, which company sizes, as the provider names them), and a plugin that searches declares it as
-  a schema. `jason operation describe audience.search --campaign <campaign-id>` prints what the plugin a campaign's
-  searches are routed to takes, each filter with its description. See
-  [the audience family](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/contracts/README.md#the-audience-family).
-- **A preview before anything is spent.** `jason audience preview --campaign <campaign-id> --definition '<json>'`
-  answers how many people and companies a definition matches and a sample of at most 25 of them, with no way to reach
-  them; `--audience <n>` previews an audience the campaign already searched under. `jason audience filter-values
-  --campaign <campaign-id> --filter <name> --query <text>` spells a filter's values as the provider does, and
-  `jason audience availability --campaign <campaign-id>` says whether the account may search now. The three are the
-  provider's reads, asked when a person or an agent asks, of the plugin and account the campaign's searches are routed
-  to: nothing is recorded, journaled or pinned, a preview's definition is held to the plugin's schema first, a preview
-  costs nothing by its contract, and a work item that names one of them is refused (`on_request_only`).
-- **A search is work that waits for a person.** `audience.search` is a work item whose contract asks a person once:
-  `jason workitem create <campaign-id> --kind provider_op --operation audience.search --input
-  '{"definition":{…},"count":25}'` parks it for approval. It asks for 1 to 1000 people, one per company unless
-  `people_per_company` says more, and names either a definition or, for a top-up, the number of an audience the campaign
-  holds: `{"audience":1,"count":25}`. The claim holds the definition to the routed plugin's schema
-  (`definition_invalid`), refuses a number the campaign holds no audience under (`audience_unknown`), and checks the
-  search a status read or a stop names (`search_unknown`, `search_reference_absent`, `search_route_mismatch`); a read or
-  a stop goes where the search ran, whatever its own operation is routed to now. A campaign runs one search at a time:
-  a second waits, before anybody is asked to approve it, until the first has ended (`search_unfinished`, with a
-  `workitem_waiting` line naming the search it waits behind). A search, an enrollment or an activation whose answer was
-  lost is repeated only under the package and the account the attempt that may have spent ran under
-  (`provider_answer_lost`). The claim now makes twenty-six checks, in one published order
-  ([routing](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/routing.md)).
-- **Audiences, numbered.** The first search the claim lets through under a definition, to run or to wait for a person,
-  makes the campaign an audience: an `aud_` id, a number 1, 2, 3 within the campaign, and the definition as the claim
-  held it. The same definition with its members in another order is the same audience, and a definition searched before
-  finds its old number. The claim records the audience on the search under the context key `context.audience`, which no
-  one else may write on a search. See
-  [the audiences](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/campaign-manager.md#10-the-audiences).
-- **The people a search finds become the campaign's members, page by page.** A search the provider takes ends its work
-  item `accepted`. From then on a new step of the dispatcher's scan, the poll, reads it with `audience.search_status`
-  every `Dispatcher:SearchCadenceSeconds` (300 by default), at once while the provider says more people are readable,
-  and less often after reads that failed. Each page lands in the change set that ends its read: a person is found by the
-  provider's identifier pinned at the plugin, then by each address, then by each LinkedIn profile; a person found nowhere
-  becomes a contact, with what a contact has no field for under `custom`; and each becomes a member, except a person the
-  campaign already holds, who stays the one member they are, and one removed from it, who stays removed. Membership is
-  local: nothing is enrolled at the provider. In `jason campaign list-contacts`, a member a search brought in carries a
-  `source`: the audience, as `{id, number}`, the search and when they landed. A search whose reads land nobody for
-  `Dispatcher:SearchStallSeconds` (3600 by default) ends `stalled` and is read no more; one the provider holds, paused
-  there, out of credits or at the plan's contact limit, is read every `Dispatcher:SearchHeldCadenceSeconds` (3600) and
-  stalls only after `Dispatcher:SearchHeldStallSeconds` (a week). A stall bound below its cadence is refused at the
-  start. The scan now runs twelve steps. See
-  [following a search](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/campaign-manager.md#following-a-search-and-the-people-it-lands).
-- **A search can be stopped.** `audience.search_cancel` stops a search at the provider, and the people it already
-  landed stay the campaign's. Like a pause or an opt-out it runs in a paused campaign, and like taking back a send it
-  runs through a provider block; a stop that fails is notified as a protective action that failed. Archiving a campaign
-  stops each of its searches still running: the poll makes one stop for each, the one work an archived campaign still
-  runs, and the search ends `cancelled`, or as the provider had already ended it.
-- **A search keeps its account.** A read or a stop of a search goes where the search ran, so a route change that would
-  take the last of its campaign's routes and the global ones naming its plugin and account away from a search still
-  followed is refused, naming the search: `jason route set` and `jason route unset` answer `route_orphans_search`, exit
-  code 1, and change nothing, and a `jason plugin reload` carrying such a change keeps the routes in force and names the
-  search under `plugin_reload_rejected`. Stop the search with `audience.search_cancel`, or let it end, then change the
-  route; a change that leaves another of those routes naming the account goes through. An archived campaign's routes stay
-  in force while a search of it is still followed, so the stop its archive made goes where the search ran; `jason route
-  list` shows them until then. A start is not refused: a search still followed that the routes it starts with name
-  nowhere is said in the log, with its campaign, then and at each later route change or reload while it lasts. See
-  [routing](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/routing.md#6-activation-and-what-refuses-it).
-- **The chronicle says how a search went.** Five new kinds, written by the dispatcher, facts only:
-  `audience_people_landed`, for each page that carried anybody; `audience_search_held`, once each time the provider
-  holds a search; `audience_search_ended`, once per search, as `finished`, `exhausted`, `stalled` or `cancelled`; and
-  `audience_reserve_low` and `audience_reserve_recovered`, below. `audience_search_held`, `audience_search_ended` and
-  `audience_reserve_low` are new default triggers of the campaign manager.
-- **The reserve.** `jason campaign update <campaign-id> --audience-threshold 50` says how many people nobody has started
-  on the campaign wants to keep, from 1 to 100000, and `--clear audience_threshold` takes it away. A step of the scan
-  counts them whenever something that can change the number was written, and says once per crossing that the reserve
-  fell under the threshold or recovered, so the manager is woken when the campaign runs low; it creates no work itself.
-  The count is `jason campaign summary`'s `new`, which now leaves out the work the runtime made about a person by itself,
-  the read of a thread that moved and the responder it woke: a member whose only work is that is now counted as `new`.
-  A person on the do-not-contact register lands and counts like any other.
-  See [the reserve](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/campaign-manager.md#9-the-reserve).
-- **The allowance: a yes in advance for top-ups.** A search spends the provider's credits, so a new audience's first
-  search, its probe, always waits for a person. After it, a named person can let the searches under that audience go
-  without asking until the people they ask for reach a ceiling, in the act of approving,
-  `jason approval approve <approval-id> --allow 250 --allow-per-search 25 --actor human:<name>`, or on its own,
-  `jason approval set-standing <campaign-id> --operation audience.search --audience 1 --max-people 250 --max-per-search 25
-  --actor human:<name>`; `--allow-expires-at` and `--expires-at` set an end, and `jason approval unset-standing
-  <campaign-id> --operation audience.search` takes it back. A standing approval names a category of reply or the
-  allowance, never both. A campaign holds one allowance, and approving a search under another audience retires it in the
-  same act. A search it does not cover parks, and its preview says why: `no_standing_approval`, `another_audience`,
-  `expired`, `over_per_search` or `ceiling_reached`; `jason approval get --human` lays out a waiting search's definition
-  and that reason, and approving a search with `--human` says where the allowance stands after it. A search it lets go
-  runs under an approval decided by the person who set it, with an `approval_standing_applied` line, and
-  `jason approval list-standing` shows the searches it let go and the people they asked for. See
-  [standing approvals](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/work-execution.md#standing-approvals).
-- **Where a campaign's audience stands.** `jason campaign audience <campaign-id>` answers the reserve's count and
-  threshold, the allowance and how much of it is used, and the campaign's audiences, the newest first, each with its
-  definition, how many people its searches landed, and its latest searches (ten unless `--search-limit` says up to a
-  hundred); `--human` lays each definition out by the plugin's schema. `--audience <n>` on `jason campaign summary`,
-  `activity`, `activity-by-period` and `list-contacts` reads only the people a search landed under that audience, so one
-  audience is judged on its own. `campaign.get` answers `audience_threshold`, null where none is set. See
-  [reading the audiences](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/campaign-manager.md#reading-the-audiences).
-- **The roles learn the work.** The planner forms an audience: it reads the definition the route's plugin takes, spells
-  values with the typeahead, previews and reads the sample, and creates the probe, sized by the preview's count and never
-  the maximum, with its proposal for a threshold and an allowance, neither of which it sets. The manager runs the pulse:
-  it reads how a search ended or why the provider holds it, has the analyst judge a probe's people once the probe's
-  window is over, and tops up an audience that works by its number, under the allowance. The analyst judges one
-  audience's own people and answers `working`, `replace` or `stop`. Every role's launch contract now says that a refusal
-  is about the call's shape, not the work, and that a run never ends without its item. `approvals-and-questions`,
-  `managed-campaign-work`, `approval-boundaries` and `inbox-triage` teach the allowance beside the standing approvals for
-  replies; in the business pack, `audience-building` gains outward search with no provider named, and `sdr-operations`
-  maps the family onto its catalogue. Each of these ships as a draft (below).
-- **For plugins.** Six contract documents under `docs/contracts/operations/`, with their fixtures under
-  `docs/contracts/fixtures/`. A provider that performs `audience.search` or `audience.preview` declares
-  `audience_definition` in its manifest: a `schema` in the contracts' dialect, every property described in plain text
-  with no control character, and an optional `keys`, which gives a property a `side` and a `typeahead`. One that
-  performs `audience.search` performs `audience.search_status` and `audience.search_cancel` too, or the load refuses it
-  with the new problem code `audience_family_incomplete`. The runtime composes `definition` at the input's root for a
-  search and a preview, and `search` (the search's work item, your reference and, for a status read, your cursor) for a
-  status read and a stop; `audience.search_status` is the first operation paged by a cursor, which is yours and never
-  parsed. An operation's document says under `dispatch.in_archived_campaign` whether it runs in an archived campaign;
-  only `audience.search_cancel` does. On Linux and macOS the plugin host, and every program it starts, now gets `TZ` from the runtime's environment. The `read`
-  family a plugin may be granted now covers `operation.describe` and `campaign.audience`. See
-  [plugins](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/plugins.md).
-- **The Reply package 0.15.0 performs the family over Reply's Live Data**, every one of the thirty operations, and needs
-  reply-cli 0.20.0 or newer. A search makes a private contact list of its own, starts Reply's search into it and answers
-  with a reference; a status read pages through that list, the last people of a search that ended come with more to
-  read, and the read after them, which finds nobody, deletes the list; a stop deletes the search and its list. A
-  preview's sample carries each person's name, title, location and company and no way to reach them. Reply charges for
-  each person a search finds; a preview is neither saved nor charged. `audience.availability` answers that the account
-  may search and nothing more, since Reply has no read of an account's credits, and a search for people without an
-  email (`include_without_email`) is refused. Read
-  [what it cannot do](https://github.com/reply-team/jason-ai/blob/v0.36.0/plugins/reply/README.md#what-it-cannot-do) before relying on a search; the known issues below
-  carry what matters most.
-- **The desktop.** Its chat runs the five audience reads without a card, in Plan only as well: `jason audience preview`,
-  `filter-values` and `availability`, `jason campaign audience` and `jason operation describe`, 71 verbs in all. Its
-  setup asks for reply-cli 0.20.0 or newer, which the Reply package needs.
-- **The journal forwarder 1.3.0** declares the five new kinds, so a person can grant them.
-- **Not yet.** The browser UI approves or rejects a search, and shows neither the planner's proposal nor why a search
-  parked; allowing more people is the CLI's, and so are the audiences, the threshold and the allowance, which no screen
-  shows yet. A probe still waiting for a person has no row in `jason campaign audience`: `jason approval list` shows it.
+- **The chat loads none of your own MCP servers or connectors,** on Claude Code and on Codex. Every MCP tool call the chat does make goes through its permission model. What you give up: the chat no longer reads your Codex `config.toml`, so a provider or a profile set there is not used; connect a key on the Connect card instead.
+- **On Windows, a Codex chat runs only where Codex's elevated sandbox keeps Jason's data unreadable.** The desktop checks this itself, with no model, at the first Codex message of a run. Where the check fails, the chat says so and names `codex sandbox setup --elevated`, or Claude Code. On the one real machine checked so far, the elevated sandbox did not pass this check (see Known issues).
+- **The CLI refuses a person's word and changes to the installation inside a chat turn.** Every desktop chat turn carries `JASON_CONFINED`, and under it the CLI refuses, before any request, the commands that give your word or change this installation, with one sentence and exit 1. This is a higher bar, not a boundary: a program that holds the run token can still act as you.
+- **The desktop's Reply card acts on accounts through reply-cli's own `account` verbs**: connect, reconnect and the waiting list; an email account's daily limit; pause and resume of a LinkedIn account; unblock of a mailbox; and delete of either. Each change asks you first in a confirmation that names the account and the act; a connection link opens in your browser or is copied for you, and is never logged or kept. An agent's chat is refused these acts in every mode.
+- **A plugin's secret stays out of an AI role's agent.** A secret given through the runtime's environment, by either of the two ways the plugin guide offers, no longer reaches the agent a role starts.
+- **Full access** is a third mode in the desktop's chat, beside Ask first and Plan only, chosen from the menu beside the message box after a confirmation shown each time, with Cancel focused; Cancel keeps Ask first. In it the agent runs the commands Jason reads plainly without asking you. Anything else Jason holds as a card that waits thirty minutes and is then not run; what Ask first refuses is refused here too. Each grant works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes. It needs Claude Code 2.1.322 or later and is Claude Code only: Codex keeps its read-only sandbox. It is not offered for the Feed, whose turns carry lines that others wrote.
 
-## Fixed since 0.35.0
+## Fixed since 0.36.0
 
-- **The CLI waits for an operation as long as the operation may take.** A request now waits for the operation's own
-  `timeout_ms` and thirty seconds more, and at least thirty seconds, where 0.35.0 gave every request thirty seconds;
-  a connection still gives up after ten. A runtime that took a request and did not answer in that time is
-  `request_timed_out`, exit code 1, not retryable, where 0.35.0 said `runtime_unreachable`, exit code 3, retryable,
-  though the runtime was there and may have acted.
+- **Appending to a file several plugins write at once** no longer fails one of them while the others keep writing: the wait for the file counts as stuck only while nobody makes progress, and a holder that writes nothing still fails the append after ten seconds.
+- **A search the provider no longer has ends.** A read or a stop of a search that fails `search_not_found` (the provider holds no search under the reference for the account the binding signs in as: deleted there, or that account changed) ends it `cancelled`, with its `audience_search_ended` line. In 0.36.0 such a search of an archived campaign was followed for good, and every route change that dropped the last route to its account was refused (`route_orphans_search`), removing the plugin included; in a campaign that runs it ended `stalled` only once the stall bound had passed.
+- **A second search waits behind one whose start answer was lost.** A search item whose start may have acted, open again with no record of its search, now holds the campaign's next search as a running search does (`search_unfinished`, its `workitem_waiting` line naming it under `behind_search`); in 0.36.0 the next search was claimed and spent while the first might be running. Of two such searches the older goes first, and a search item that has ended holds nobody. Where a search whose start answer was lost ends for good, its hold on the campaign's next search is released while the provider may still be running it, so check the provider before the next search spends.
+- **An update between a lost answer and its repeat no longer refuses the repeat for good.** A repeat of `audience.search`, `campaign.enroll` or `campaign.activate` after a lost answer is held to the plugin, the account and the input, no longer to the package's version, since each one's recovery read finds the earlier act at the account; `jason update apply` replaces an unedited package, and 0.36.0 then refused the repeat `provider_answer_lost` for good. The two sends the work item's key settles still go only under the package version that kept the key.
 
-## Upgrading from 0.35.0
+## Upgrading from 0.36.0
 
-Nothing stops: no setting is renamed, and no start refuses a setting 0.35.0 took.
+Nothing stops: no setting is renamed, and no start refuses a setting 0.36.0 took. This release adds no database migration.
 
-- **reply-cli first, if you use Reply.** The Reply package 0.15.0 needs reply-cli 0.20.0 or newer, and
-  `jason update apply` replaces an installed Reply package you did not edit. Update reply-cli before Jason: with an
-  older reply-cli the plugin is `unavailable` (`executable_incompatible`), and every work item routed to it fails at
-  the claim with `plugin_unavailable`, sends and reads as well as the new searches, until reply-cli is updated and the
-  plugins are reloaded (`jason plugin reload`).
-- **The executable:** `jason update apply`, or run the install line again. Installed with Homebrew, it is the three
-  lines `jason update apply` prints instead: `jason runtime stop`, `brew upgrade jason`, `jason runtime start`. After
-  it, `jason skills update` and `jason ui install` follow, and `jason plugin install <id> --replace` for each package
-  you installed and did not edit.
-- **The desktop is a separate install.** `jason update` does not install it: let the desktop offer the update, or
-  download the installer, the disk image, the deb or the AppImage for your machine from this release.
-- **The packages:** reply 0.15.0 (0.14.8 in 0.35.0) and journal-forwarder 1.3.0 (1.2.0); ntfy 1.0.3, slack 1.0.0 and
-  telegram 1.0.0 as in 0.35.0. A release is twenty-seven files, as in 0.35.0.
-- **The data directory:** one migration, applied at the first start after the backup every migration takes: two columns
-  on `campaigns`, the reserve's threshold and the reserve step's place in the chronicle; three new tables, `audiences`,
-  `audience_searches` and `audience_landings`; and three indexes on the journal, for the reserve's lines and a search's
-  ending. Nothing already there is rewritten.
-- **For subscribers.** Three kinds carry the allowance as a second shape beside the one 0.35.0 wrote:
-  `standing_approval_set` and `standing_approval_unset`, whose `key` is then `audience.search` and whose `new` or `old`
-  names the audience and the ceiling in people, and `approval_standing_applied`, whose `new` names the audience and
-  the people the search asked for. `workitem_waiting` may carry `behind_search`, the search an item waits behind, and
-  `campaign_updated` may name `audience_threshold` among the settings that changed. The three kinds' new fields and
-  `behind_search` are marked, in each kind's document, with the release that first wrote them.
-- **A narrowed `Manager:Triggers`** keeps your choice and does not gain `audience_reserve_low`, `audience_search_ended`
-  or `audience_search_held`; add them if the audience should wake the manager.
-- **`jason approval set-standing` and `unset-standing`** take `--category` for a category of reply, as in 0.35.0, or
-  `--operation audience.search` for the allowance, which takes no category. Naming neither, or both, is a usage error,
-  exit code 2, as it was.
-- **A script that read exit code 3 after a slow answer** now gets exit code 1 and `request_timed_out`, which is not
-  retryable: the runtime may have acted, so read what it did before asking again.
-- **Skills:** the update redeploys them wherever a deployment was recorded. Seventeen skills changed their text, and
-  each is `draft`: no agent host has read it against 0.36.0. Eleven of them were `verified` in 0.35.0:
-  `approvals-and-questions`, `managed-campaign-work`, `planner-in-session` and the `planner`, `manager`, `analyst`,
-  `researcher`, `copywriter`, `personalizer`, `critic` and `deliverability-specialist` roles. The other six were drafts
-  already: `troubleshooting-jason`, which now names a stop of a search among the work a paused campaign lets through,
-  the `responder` role, and `approval-boundaries`, `audience-building`, `inbox-triage` and `sdr-operations` of the
-  business pack. `reporting-outside-effects` is the one skill that stays `verified`.
-- **Going back:** an apply of 0.35.0 leaves a newer package where it is, and 0.35.0 refuses both packages this release
-  changed: Reply 0.15.0, whose `audience_definition` it does not read, and the forwarder 1.3.0, whose kinds it does not
-  write. A package problem rejects the whole load, so the runtime starts with no plugin loaded at all until each
-  is put back with `jason plugin install <id> --replace`, run just after the apply. The older executable opens the
-  database as this one migrated it, which it may refuse to do. See
-  [Applying an older release](https://github.com/reply-team/jason-ai/blob/v0.36.0/docs/release-and-update.md#applying-an-older-release).
-- **From 0.34.x or earlier,** the notes of each release in between apply as well. From 0.18.x or earlier, Jason's own
-  installation updates through 0.19.0: `jason update apply --version 0.19.0`, then `jason update apply`; from a build
-  older than 0.18.0, the first of the two can stop at `started`, as the known issue about that update below says.
+- **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` and `jason ui install` follow, and `jason plugin install <id> --replace` for each package you installed and did not edit.
+- **The packages:** reply 0.15.1 (0.15.0 in 0.36.0), README and changelog only; journal-forwarder 1.3.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0 as in 0.36.0.
+- **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the disk image for your machine from this release, or let an installed desktop offer the update.
+- **On Windows, chat on Claude Code.** The chat runs Codex only where Codex's elevated sandbox keeps Jason's data unreadable, and on the one real machine checked so far it did not, even once set up (see Known issues).
+- **The chat no longer uses the providers in Codex's `config.toml`.** Connect a key on the Connect card.
+- **The desktop's Reply card needs reply-cli 0.21.0 or newer;** below it, the card offers to update reply-cli where npm is installed.
+- **Claude Code older than 2.1.257 runs no chat turn;** update Claude Code first.
+- **Codex older than 0.122.0 runs no chat turn;** the chat says to update Codex.
+- **Going back:** what `jason update apply --version` to an older release does to a newer plugin package, and how to load one again, is in [Applying an older
+  release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release).
+- **From 0.35.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
 
@@ -255,15 +84,31 @@ A search the provider had already ended when its campaign was archived ends as i
 stays at Reply with any people not yet read. A search whose start was under way when its campaign was archived has no
 record yet, so nothing stops it: whether Reply took the start is read at Reply.
 
-Full access, the chat's third mode, is not in this version: the menu shows it disabled. Its code is in the release, switched off, because in two readings its refusals did not hold against commands spelled another way.
+In Ask first, and in Plan only, the desktop's chat runs `jason audience preview`, `jason audience filter-values` and
+`jason audience availability` without a card, as in 0.36.0. Each one asks the provider, and nothing in Jason limits how
+often a chat, or any client holding the run token, makes them, or how many run at once: each starts a plugin process of
+its own, so a typeahead asking a filter's values at every key starts one per key.
 
 Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only.
+
+On Windows the chat may decline Codex even after an administrator has set up Codex's elevated sandbox: that sandbox can still read part of Jason's data, a settings file in Jason's data folder among it, and on the one real machine checked it could. The chat then declines every Codex message until the desktop quits, and its sentence still names `codex sandbox setup --elevated`, which does not help there. Use Claude Code for the chat on Windows meanwhile; the next release changes the check.
+
+The Windows check of Codex's sandbox has not been seen on a real machine without the elevated setup. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
+
+On a Mac and on Linux, a read-only Codex turn can read the runtime's run file, so if the loopback interface is reachable from it, a command in a Codex chat could reach Jason's runtime. That has not been probed.
+
+A long-running runtime can be ended by a rare fault in the SQLite provider's connection pool ([dotnet/efcore#38854](https://github.com/dotnet/efcore/issues/38854)); nothing recorded is lost, starting it again continues the work, and the runtime's log now says what ended it.
+
+`jason campaign audience` lists an audience's latest hundred searches at most, with no page past them, so an allowance that tops an audience up for long enough leaves its older searches out of every read of the API but their work items and their lines in the journal. And two endings of the real reply-cli have only been met by a stand-in: `outcome.unknown` at exit code 1 from `live-data start`, which the Reply package reads as a lost answer, keeping the search's list for its repeat to find the search by; and `live_data.service_failed` after Reply did save the search, which the package reads as nothing started, so it deletes the list and the attempt is repeated. Should Reply ever answer so, a person would see a search at Reply that Jason does not follow, spending credits into a list that no longer exists, while Reply refuses the repeat, `search_in_progress`, and its work item fails; stop that search at Reply.
+
+Under a Reply route whose binding names no profile, the binding is whichever profile reply-cli is set to, so switching reply-cli to another profile makes every read and stop of a search Jason follows fail `search_not_found`, and each such search ends `cancelled` while it goes on at Reply under the first account, its people never landing. A binding that searches should name its profile.
 
 Not yet seen on a real machine:
 
 - The Linux packages by hand on Ubuntu 24.04: the tray on GNOME and KDE, the keyring, start at login across a sign-out, a deb update's password prompt, the AppImage replacing itself, Remove What Jason Placed, and a `jason-desktop://` link clicked.
 - The chat with real hosts and keys: a wrong key on each provider, which account pays when a plan is signed in, each effort level, and Plan only on a real Claude Code.
-- Reply with a real account: the shared mailbox page, LinkedIn ids for Reconnect, and the confirmation box in a packaged build.
+- On Windows, a click on one of Jason's notifications bringing the desktop to the front on Needs you, with the desktop open and with it closed.
+- The Reply card's account acts on a real Reply account: connecting an account and reconnecting one, pausing a LinkedIn account and resuming it, and the link pages they open in the browser; with them the shared mailbox page, LinkedIn ids for Reconnect, and the confirmation box in a packaged build.
 - On macOS, Remove What Jason Placed and the LaunchAgent; on every system, how the icon looks in the menu, the dock and the taskbar.
 
 The AppImage refuses to start on a system that refuses its sandbox, with a sentence naming the deb; that refusal has not been seen either.

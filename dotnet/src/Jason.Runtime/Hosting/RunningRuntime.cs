@@ -19,10 +19,20 @@ public sealed class RunningRuntime : IAsyncDisposable
     private readonly InstanceLock _lock;
     private readonly ConfigurationRoot _configuration;
     private readonly Logger _logger;
+    private readonly UnhandledExceptionLine? _unhandled;
     private bool _stopped;
 
-    internal RunningRuntime(WebApplication app, RuntimeDescriptor descriptor, JasonPaths paths, DescriptorPublisher publisher, InstanceLock instanceLock, ConfigurationRoot configuration, Logger logger)
+    internal RunningRuntime(
+        WebApplication app,
+        RuntimeDescriptor descriptor,
+        JasonPaths paths,
+        DescriptorPublisher publisher,
+        InstanceLock instanceLock,
+        ConfigurationRoot configuration,
+        Logger logger,
+        UnhandledExceptionLine? unhandled)
     {
+        _unhandled = unhandled;
         _app = app;
         Descriptor = descriptor;
         _paths = paths;
@@ -88,6 +98,7 @@ public sealed class RunningRuntime : IAsyncDisposable
                 // happened to run; and the log is the one place the stop is recorded.
                 _configuration.Dispose();
                 _logger.Information("Runtime {InstanceId} stopped", Descriptor.InstanceId);
+                _unhandled?.Dispose();
                 await _logger.DisposeAsync().ConfigureAwait(false);
             }
         }

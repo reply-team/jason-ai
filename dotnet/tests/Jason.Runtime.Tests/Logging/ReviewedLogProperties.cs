@@ -80,8 +80,17 @@ internal static class ReviewedLogProperties
         // exception's message (RuntimeHost, RunningRuntime).
         "Why",
 
-        // The type name of a failure to read the settings file, never its message (RuntimeHost).
+        // The type name of a failure to read the settings file, never its message (RuntimeHost); and the full type name of
+        // an exception nothing caught as it ends the process, never its message (UnhandledExceptionLine).
         "ExceptionType",
+
+        // The frames that exception was thrown through, each a type's full name and a method's name: names the build and
+        // the framework compiled, never a frame's file or line, never anything the exception says (UnhandledExceptionLine).
+        "Frames",
+
+        // The full type names of the exceptions that exception wraps, outermost first and at most eight: types only, never
+        // what any of them says (UnhandledExceptionLine).
+        "InnerExceptionTypes",
 
         // Versions and digests.
         "Version", "Digest",

@@ -32,9 +32,23 @@ const readWindow = 4096;
  * that ended with a code other than zero, or was stopped at its time limit, said no version.
  */
 export function printedVersion(result: RunResult): string | null {
+    return versionNamed(result, namesClaudeCode);
+}
+
+const namesCodex = /codex/i;
+
+/**
+ * Codex's version in what `codex --version` printed (`codex-cli 0.122.0`), read as Claude Code's is: the first three
+ * dotted numbers on a line that names Codex, else anywhere; none from a program that did not end with zero.
+ */
+export function printedCodexVersion(result: RunResult): string | null {
+    return versionNamed(result, namesCodex);
+}
+
+function versionNamed(result: RunResult, names: RegExp): string | null {
     if (result.exit !== 0) return null;
     const text = `${result.stdout.slice(0, readWindow)}\n${result.stderr.slice(0, readWindow)}`;
-    const named = text.split(/\r?\n/).find((line) => namesClaudeCode.test(line) && versionShape.test(line));
+    const named = text.split(/\r?\n/).find((line) => names.test(line) && versionShape.test(line));
     return versionShape.exec(named ?? text)?.[0] ?? null;
 }
 
@@ -104,4 +118,36 @@ export function floorSentence(version: string | null): string | null {
     }
     if (compareVersions(version, claudeFloor) >= 0) return null;
     return `Claude Code ${version} is older than ${claudeFloor}, the oldest version the chat runs on. Update Claude Code, for example by running \`claude update\` in a terminal, then check again.`;
+}
+
+/**
+ * The first Claude Code whose command line takes `--no-chrome`, which every turn carries from it on (`claudeArguments`);
+ * below it the turn's settings alone keep the browser out. Anthropic's changelog,
+ * https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md (read 2026-11-12), never says which version
+ * added the flag; the first entry that names it is 2.1.285's: "Fixed `claude remote-control --help` saying
+ * `--[no-]chrome` defaults to the machine's `/chrome` setting". https://code.claude.com/docs/en/cli-reference lists it,
+ * "Disable Chrome browser integration for this session", with no version. So the flag waits for the first version the
+ * changelog shows knowing it.
+ */
+export const noChromeFrom = '2.1.285';
+
+/**
+ * The oldest Codex the chat runs a turn on: the first whose `exec` takes `--ignore-user-config`, which every Codex turn
+ * carries (`codexArguments`), so the person's `config.toml`, and the MCP servers it names, never reach the chat. OpenAI,
+ * https://github.com/openai/codex/releases/tag/rust-v0.122.0 (read 2026-11-12): "#18646 feat: add `--ignore-user-config`
+ * and `--ignore-rules`", and no earlier release names it; `codex-rs/exec/src/cli.rs` at that tag declares it global to
+ * `exec`, `resume` included: "Do not load `$CODEX_HOME/config.toml`; auth still uses `CODEX_HOME`."
+ */
+export const codexFloor = '0.122.0';
+
+/**
+ * The sentence a Codex turn below `codexFloor` is refused with, naming the version found, the floor and the cure; null at
+ * the floor or above it. A version that could not be read (null) is held as below the floor.
+ */
+export function codexFloorSentence(version: string | null): string | null {
+    if (version === null) {
+        return `The version of Codex could not be read, so the chat does not run on it. Run \`codex --version\` in a terminal to see it; the chat needs ${codexFloor} or newer. Update Codex, then send again.`;
+    }
+    if (compareVersions(version, codexFloor) >= 0) return null;
+    return `Codex ${version} is older than ${codexFloor}, the oldest version the chat runs on. Update Codex, then send again.`;
 }

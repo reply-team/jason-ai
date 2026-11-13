@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,11 +28,20 @@ internal static class AudienceSearches
     /// <summary>
     /// The work item of a search of the campaign that has not ended, other than <paramref name="itemId"/>: a row still
     /// followed — running, or held at the provider — the oldest first, off the index that holds only those; or else a
-    /// search of the campaign running now. Null where there is none.
+    /// search of the campaign running now; or else an open search of the campaign with no row whose start may have acted,
+    /// an attempt of it having started and ended ambiguous, so that it may be running at the provider although its answer
+    /// never came — an older one only, where <paramref name="unsettled"/> says the search claimed may have acted itself, so
+    /// that of two such searches the older goes on to its repeat and the newer waits, and neither waits on the other for
+    /// good. Null where there is none: a search that has ended, failed for good or otherwise, is in nobody's way.
     /// </summary>
-    public static async Task<string?> InTheWayAsync(JasonDbContext db, int campaignId, int itemId, CancellationToken ct) =>
+    public static async Task<string?> InTheWayAsync(JasonDbContext db, int campaignId, int itemId, bool unsettled, CancellationToken ct) =>
         await Unended(db, campaignId, itemId).FirstOrDefaultAsync(ct).ConfigureAwait(false)
-        ?? await Starting(db, campaignId, itemId).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        ?? await Starting(db, campaignId, itemId).FirstOrDefaultAsync(ct).ConfigureAwait(false)
+        ?? (await Ran(db, campaignId, itemId).ToListAsync(ct).ConfigureAwait(false))
+            .Where(ran => Claimer.MayHaveActed(ran.StartedAt, ran.Error) && (!unsettled || ran.ItemId < itemId))
+            .OrderBy(ran => ran.ItemId)
+            .Select(ran => ran.WorkItem)
+            .FirstOrDefault();
 
     /// <summary>The work items of a campaign's searches whose rows have not ended, other than <paramref name="itemId"/>'s, the oldest first.</summary>
     internal static IQueryable<string> Unended(JasonDbContext db, int campaignId, int itemId) =>
@@ -46,6 +56,15 @@ internal static class AudienceSearches
             .Where(item => item.CampaignId == campaignId && item.Id != itemId && item.Operation == SearchLanding.Search
                 && (item.Status == WorkItemStatus.Scheduled || item.Status == WorkItemStatus.Processing))
             .Select(item => item.PublicId);
+
+    /// <summary>
+    /// The attempts of a campaign's open search items, other than <paramref name="itemId"/>, with how each went: the item's
+    /// id and work item, when the attempt started, if it did, and its error.
+    /// </summary>
+    internal static IQueryable<RanSearch> Ran(JasonDbContext db, int campaignId, int itemId) =>
+        db.WorkItems
+            .Where(item => item.CampaignId == campaignId && Open.Contains(item.Status) && item.Id != itemId && item.Operation == SearchLanding.Search)
+            .SelectMany(item => item.Attempts, (item, attempt) => new RanSearch(item.Id, item.PublicId, attempt.StartedAt, attempt.Error));
 
     /// <summary>
     /// Every search still followed that the provider gave a reference to, of any campaign, an archived one's included, with
@@ -89,3 +108,6 @@ internal static class AudienceSearches
 /// attempt's provenance.
 /// </summary>
 internal sealed record FollowedSearch(string Campaign, CampaignStatus Status, string WorkItem, string PluginId, AttemptProvenanceDto? Ran);
+
+/// <summary>An attempt of an open search item: the item, when the attempt started, if it did, and its error, if any.</summary>
+internal sealed record RanSearch(int ItemId, string WorkItem, DateTime? StartedAt, AttemptErrorDto? Error);

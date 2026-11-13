@@ -77,7 +77,9 @@ describe('a chat’s access mode', () => {
         desktop.confirmFullAccess = true;
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
-        expect(line()!.textContent).toContain('Full access: the agent acts on this computer without asking you.');
+        expect(line()!.textContent).toContain(
+            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+        );
         expect(menu().value).toBe('full_access');
     });
 
@@ -116,6 +118,22 @@ describe('a chat’s access mode', () => {
         const full = [...menu().options].find((each) => each.value === 'full_access')!;
         expect(full.disabled).toBe(true);
         expect(full.text).toBe('Full access: Full access runs on Claude Code only.');
+    });
+
+    it('says under the composer, on Codex alone, that the chat does not read the person’s Codex config.toml', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        const note = () => screen.queryByRole('note', { name: 'What Codex reads' });
+        expect(note()).toBeNull();
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        await waitFor(() => expect(note()).not.toBeNull());
+        expect(note()!.textContent).toBe(
+            'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.',
+        );
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+        await waitFor(() => expect(note()).toBeNull());
     });
 
     it('says a mode the desktop refused in its own words, and keeps the mode it holds', async () => {

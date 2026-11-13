@@ -490,3 +490,10 @@ jason logs --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 Read them when the readings above have not settled it. They never contain request bodies, prompts, work-item
 contexts or the capability token, so do not send somebody to the logs expecting to find what was actually
 sent to a provider — it was never written there.
+
+**A runtime that stopped with nobody asking it to** may have been ended by a fault of its own. When an exception
+nothing caught ends it, the last line it writes says so, at level `fatal`: `The runtime is ending on an unhandled
+...`, with the exception's type, the types of the exceptions it wraps, and the methods it was thrown through,
+innermost first. It never carries a message, so it cannot say which value was being handled. `jason logs --level fatal` finds it. That line,
+whole, with `jason --version`, is what a report needs; starting the runtime again is safe. A runtime that stopped with
+no such line, and no `Runtime ... stopped` line either, was ended from outside: killed, or its machine went down.

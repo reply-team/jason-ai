@@ -17,6 +17,12 @@ public class AttemptHandlerTests
 {
     private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
 
+    /// <summary>
+    /// How long a row waits for an event it has been promised: a child saying it runs, a handler finishing. The event ends the
+    /// wait the moment it comes; the bound only fails a hang, and is sized to the slowest runner's pause, not to a normal run.
+    /// </summary>
+    private static readonly TimeSpan EventBound = TimeSpan.FromSeconds(60);
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
@@ -329,11 +335,11 @@ public class AttemptHandlerTests
             var seeded = await harness.SeedClaimableAsync(Ct);
             var work = Assert.Single(await harness.ClaimAsync(Ct));
             var handler = RunAsync(harness, work);
-            await running.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+            await running.Task.WaitAsync(EventBound, Ct);
 
             await CancelThroughTheApiAsync(harness, work.AttemptPublicId);
             Assert.True(harness.Registry.TryKill(work.AttemptPublicId));
-            await handler.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+            await handler.WaitAsync(EventBound, Ct);
 
             var item = await harness.ReadItemAsync(seeded.PublicId, Ct);
             Assert.Equal(WorkItemStatus.Cancelled, item.Status);
@@ -374,7 +380,7 @@ public class AttemptHandlerTests
         var seeded = await harness.SeedClaimableAsync(Ct);
         var work = Assert.Single(await harness.ClaimAsync(Ct));
         var handler = RunAsync(harness, work);
-        await running.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        await running.Task.WaitAsync(EventBound, Ct);
 
         harness.InterfereOnceBeforeSaving(
             context => context.ChangeTracker.Entries<WorkItem>().Any(entry => entry.Entity.Status == WorkItemStatus.Cancelled),
@@ -382,7 +388,7 @@ public class AttemptHandlerTests
             {
                 if (stopped.Task.IsCompleted)
                 {
-                    handler.Wait(TimeSpan.FromSeconds(5), Ct);
+                    handler.Wait(EventBound, Ct);
                 }
             });
 
@@ -394,8 +400,8 @@ public class AttemptHandlerTests
         }
 
         // And the child is still stopped, now that the cancellation stands.
-        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct);
-        await handler.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        await stopped.Task.WaitAsync(EventBound, Ct);
+        await handler.WaitAsync(EventBound, Ct);
         var item = await harness.ReadItemAsync(seeded.PublicId, Ct);
         Assert.Equal(WorkItemStatus.Cancelled, item.Status);
         Assert.Equal(AttemptStatus.Cancelled, Assert.Single(item.Attempts).Status);

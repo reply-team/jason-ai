@@ -16,13 +16,21 @@ public class CampaignPeopleAudienceTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    [Fact]
-    public async Task Each_summary_count_of_an_audience_is_the_campaign_s_count_among_the_people_it_landed()
+    /// <summary>
+    /// Quinn, audience 1's one new person, is archived: the counts keep him unless they are asked to leave archived people
+    /// out, and then he leaves the audience's people and its new alike.
+    /// </summary>
+    [Theory]
+    [InlineData(false, 5, 1)]
+    [InlineData(true, 4, 0)]
+    public async Task Each_summary_count_of_an_audience_is_the_campaign_s_count_among_the_people_it_landed(bool withoutArchived, int people, int fresh)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
         var (world, first, _) = await AudiencesAsync(db);
         int[] spring = [world.Spring.Id];
+        world.People["Quinn"].ArchivedAt = CampaignWorld.Now;
+        await db.SaveChangesAsync(Ct);
 
         foreach (var filter in Enum.GetValues<CampaignSummaryFilter>())
         {
@@ -31,11 +39,11 @@ public class CampaignPeopleAudienceTests
         }
 
         Assert.Equal(
-            new SummaryCounts(world.Spring.Id, People: 5, Waiting: 2, Failed: 1, Working: 0, New: 1, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
-            Assert.Single(await CampaignPeople.SummaryCountsAsync(db, spring, first.Id, withoutArchived: false, Ct)).Value);
+            new SummaryCounts(world.Spring.Id, People: people, Waiting: 2, Failed: 1, Working: 0, New: fresh, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
+            Assert.Single(await CampaignPeople.SummaryCountsAsync(db, spring, first.Id, withoutArchived, Ct)).Value);
         Assert.Equal(
-            new SummaryCounts(0, People: 5, Waiting: 2, Failed: 1, Working: 0, New: 1, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
-            await CampaignPeople.SummaryTotalAsync(db, spring, first.Id, withoutArchived: false, Ct));
+            new SummaryCounts(0, People: people, Waiting: 2, Failed: 1, Working: 0, New: fresh, Idle: 1, Sequence: 0, Out: 1, Removed: 1),
+            await CampaignPeople.SummaryTotalAsync(db, spring, first.Id, withoutArchived, Ct));
     }
 
     [Fact]

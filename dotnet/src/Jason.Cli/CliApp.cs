@@ -123,6 +123,13 @@ public static class CliApp
             return ExitCodes.Usage;
         }
 
+        // The bar under JASON_CONFINED, once for every verb: local, before any request. Help is not a run of the verb.
+        if (parseResult.Action is not System.CommandLine.Help.HelpAction && ConfinedVerbs.Refuses(env, Verb(parseResult)))
+        {
+            env.Error.WriteLine(ConfinedVerbs.Sentence);
+            return ExitCodes.ApiError;
+        }
+
         // The default handler would swallow everything an action throws and report it as one unhandled
         // failure; a bad argument the action discovers while composing its request body has to reach the
         // usage exit code instead.
@@ -249,6 +256,7 @@ public static class CliApp
         root.Subcommands.Add(ExportCommand.Build(env));
         root.Subcommands.Add(ImportCommand.Build(env));
 
+        ConfinedVerbs.Describe(root);
         return root;
     }
 }

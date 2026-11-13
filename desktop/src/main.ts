@@ -5,7 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -36,10 +36,11 @@ import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { readSettings, writeSettings, type DesktopSettings } from './settings.ts';
+import { readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
-import { askMailboxConfirmation } from './reply-links.ts';
+import { SkillsGate } from './skills-gate.ts';
+import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { loginPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
@@ -109,33 +110,40 @@ function showStarting(window: BrowserWindow, message: string, failed: boolean): 
 /**
  * Locks the window to the runtime's origin: a navigation elsewhere is refused, and a link or `window.open` that leaves
  * it goes to the system browser only when it is https. Of what the page asks for, only writing to the clipboard is
- * granted, and only at the runtime's origin; no other permission, no webview.
+ * granted, and only at the runtime's origin; no other permission, no webview. Answers the one way to the system
+ * browser, which the Reply card's links take too: it opens an https URL and refuses any other, logging neither.
  */
-function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): void {
-    const leave = (url: string) => {
-        if (isHttps(url)) {
-            void shell.openExternal(url);
-            log.info('link_opened', {});
-        } else {
+function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): (url: string) => Promise<void> {
+    const leave = (url: string): Promise<void> => {
+        if (!isHttps(url)) {
             log.warn('link_refused', {});
+            return Promise.reject(new Error('Only an https link goes to the browser.'));
         }
+        return shell.openExternal(url).then(
+            () => log.info('link_opened', {}),
+            (error: unknown) => {
+                log.warn('link_open_failed', {});
+                throw error;
+            },
+        );
     };
     const guard = (event: { preventDefault(): void }, url: string) => {
         const here = origin();
         if (here !== null && originOf(url) === here) return;
         event.preventDefault();
         log.warn('navigation_refused', { Origin: here ?? 'none' });
-        leave(url);
+        leave(url).catch(() => undefined);
     };
     contents.on('will-navigate', guard);
     contents.on('will-redirect', guard);
     contents.on('will-attach-webview', (event) => event.preventDefault());
     contents.setWindowOpenHandler(({ url }) => {
-        leave(url);
+        leave(url).catch(() => undefined);
         return { action: 'deny' };
     });
     contents.session.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, origin())));
     contents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin()));
+    return leave;
 }
 
 function registerSetup(setup: Setup, origin: () => string | null, log: Logger, window: () => BrowserWindow | null): void {
@@ -148,11 +156,14 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
         ['setup.installProgram', (id) => setup.installProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
         ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
-        // The links answer to this window alone, on the person's click: never logged, never kept.
-        ['setup.replyLinkedInConnect', (name) => setup.replyLinkedInConnect(name)],
-        ['setup.replyLinkedInPendingLink', (id) => setup.replyLinkedInPendingLink(id)],
-        ['setup.replyLinkedInReconnect', (id) => setup.replyLinkedInReconnect(id)],
-        ['setup.replyMailboxLink', (page) => setup.replyMailboxLink(page)],
+        // The Reply card's acts, each a verb of the Reply CLI on the person's click; a link goes to the browser, never here.
+        ['setup.replyConnect', (channel, options) => setup.replyConnect(channel, options)],
+        ['setup.replyReconnect', (channel, id, options) => setup.replyReconnect(channel, id, options)],
+        ['setup.replyLimits', (id, daily) => setup.replyLimits(id, daily)],
+        ['setup.replyPause', (id) => setup.replyPause(id)],
+        ['setup.replyResume', (id) => setup.replyResume(id)],
+        ['setup.replyUnblock', (id) => setup.replyUnblock(id)],
+        ['setup.replyDelete', (channel, id, options) => setup.replyDelete(channel, id, options)],
     ];
     for (const [member, handler] of members) handle(ipcMain, member, origin, handler, refused);
     setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));
@@ -260,7 +271,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     // The origin is read from the run file on every check, because the runtime may come back on another port.
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
-    lockNavigation(window.webContents, origin, log);
+    const toBrowser = lockNavigation(window.webContents, origin, log);
     // A link waits for the page that takes it: a page that goes, by a load or a reload, takes no more until the next asks.
     handle(ipcMain, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     window.webContents.on('did-start-navigation', (details) => {
@@ -270,12 +281,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const registration = linkRegistration(process.platform, app.isPackaged, process.execPath);
     if (registration !== null && !app.setAsDefaultProtocolClient(registration.scheme, registration.path, registration.args)) log.warn('deep_link_registration_failed', {});
 
-    let settings: DesktopSettings = readSettings(paths.settings);
-    // A new installation meets Light, and is told so in its settings, so its second start is not an existing one's.
-    if (newInstallation && settings.theme === null) {
-        settings = { ...settings, theme: 'light' };
-        writeSettings(paths.settings, settings);
-    }
+    // Written when missing (a new installation meets Light there): the Windows check of Codex's sandbox reads it.
+    let settings: DesktopSettings = settingsAtStart(paths.settings, newInstallation);
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);
@@ -411,12 +418,28 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
-            confirmMailboxLink: () => askMailboxConfirmation(current, (window, options) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons] })),
+            // A box is closed, and read as a no, when its window is hidden or closed.
+            confirm: (box) =>
+                askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
+                    window.once('hide', abort);
+                    window.once('close', abort);
+                    return () => {
+                        window.removeListener('hide', abort);
+                        window.removeListener('close', abort);
+                    };
+                }),
+            // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
+            // kept nowhere.
+            openLink: toBrowser,
+            // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
+            copyLink: (link) => clipboard.writeText(link),
         }),
         origin,
         log,
         () => current,
     );
+    // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
+    const skillsGate = new SkillsGate();
     const chat = new Chat({
         paths,
         env,
@@ -428,6 +451,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         models: () => models.lists(),
         keyFor: (id) => keys.keyFor(id),
         fence: chatFence,
+        skillsGate,
+        // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
+        // folder where it stands. Nothing is run or opened with a program.
+        openFolder: (path) => shell.showItemInFolder(path),
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
         // The desktop asks the person itself, every time Full access is chosen: the page cannot answer for them. Only the
         // first button says yes; Cancel is the default and Escape answers it. With no window there is no one to ask.
@@ -471,6 +498,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             programs,
             bundle,
             bundleVersion: version,
+            gate: skillsGate,
             settings,
             saveSettings(next) {
                 settings = next;

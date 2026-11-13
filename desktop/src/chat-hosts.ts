@@ -9,6 +9,7 @@ import { allowRules, denyRules } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
 import { confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
+import { compareVersions, noChromeFrom } from './host-version.ts';
 import { withReplyClient } from './reply-client.ts';
 import { isSessionMarker } from './session-markers.ts';
 
@@ -65,6 +66,22 @@ export interface ClaudeTurn {
     effort?: Effort | undefined;
     /** The session the previous turn of this chat reported; absent on a chat's first turn. */
     resume?: string | undefined;
+    /** The host's version as read before the turn, at or above the floor (`claudeFloor`): it decides `--no-chrome`. */
+    version: string;
+}
+
+/**
+ * What the settings of every turn, in each mode, carry so that nothing of the person's own tools reaches it: the claude.ai
+ * connectors off, and the browser's built-in server denied by name. Both are defences beside `--strict-mcp-config` and
+ * `--no-chrome` (`claudeArguments`), and the only ones on a Claude Code older than `noChromeFrom`, which skips a key it
+ * does not know. Anthropic, https://code.claude.com/docs/en/settings-reference (read 2026-11-12):
+ * `disableClaudeAiConnectors` "Turn off claude.ai connectors so Claude Code doesn't fetch them" and `deniedMcpServers`
+ * "Block specific MCP servers by URL, command, or name", both set in "Any file"; https://code.claude.com/docs/en/settings:
+ * `disableClaudeAiConnectors` is honored as "`true` from any scope", and `--settings` "can set any key your user settings
+ * file can set". The browser's server is `claude-in-chrome`, the name its tools are called by.
+ */
+function serverDefences() {
+    return { disableClaudeAiConnectors: true, deniedMcpServers: [{ serverName: 'claude-in-chrome' }], disableSkillShellExecution: true };
 }
 
 /**
@@ -82,9 +99,12 @@ export interface ClaudeTurn {
  * documentation domains that fetch without a prompt." and "An explicit `WebFetch(domain:...)` rule in `deny`, `ask`, or
  * `allow` takes precedence over the preapproved set, so you can block a preapproved domain or require a prompt for it.";
  * https://code.claude.com/docs/en/permissions#webfetch: "`WebFetch(domain:*)` matches every domain", and "Wildcards in
- * `WebFetch` rules require Claude Code v2.1.172 or later to match fetches.", below the floor.
+ * `WebFetch` rules require Claude Code v2.1.172 or later to match fetches.", below the floor. The settings of every mode
+ * carry `serverDefences` as well, among them `"disableSkillShellExecution": true`, so the shell commands a skill carries are not
+ * run. Anthropic, https://code.claude.com/docs/en/skills (read 2026-11-12): with it set, "each command is replaced with
+ * `[shell command execution disabled by policy]`".
  */
-export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}';
+export const claudeTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true, ask: ['WebFetch(domain:*)'] }, ...serverDefences() });
 
 /**
  * The settings of a turn in Plan only: those of every turn, and no classifier in planning, so a command outside Claude
@@ -93,15 +113,19 @@ export const claudeTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDire
  * https://code.claude.com/docs/en/permission-modes: with auto mode not available, or `useAutoModeDuringPlan` off,
  * "commands outside the built-in read-only set prompt for approval".
  */
-export const planTurnSettings = '{"permissions":{"blockReadsOutsideWorkingDirectories":true},"useAutoModeDuringPlan":false}';
+export const planTurnSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true }, useAutoModeDuringPlan: false, ...serverDefences() });
 
 /**
  * The settings of a turn in Full access, written to the turn's own file: those of every turn, and a `PreToolUse` hook on
- * every tool that posts the tool use to the turn's endpoint, which answers with the permission model's refusals alone.
- * Claude Code's deny rules hold under bypass but match a command as written only, so the hook reads what they cannot.
- * Anthropic, https://code.claude.com/docs/en/hooks (read 2026-11-11): `"deny"` "prevents the tool call"; a matcher of
- * `"*"` "fires on every occurrence of the event"; "To block the action instead, set `"onFailure": "block"` on a
- * `command` or `http` hook. Requires Claude Code v2.1.295 or later." (`fullAccessFloor`).
+ * every tool that posts the tool use to the turn's endpoint, which answers allow, ask or deny by Full access's judgement.
+ * Claude Code's deny rules match a command as written only, so the hook reads what they cannot. Anthropic,
+ * https://code.claude.com/docs/en/hooks (read 2026-11-11): `"allow"` "skips the permission prompt, except for actions no
+ * mode auto-approves", `"deny"` "prevents the tool call", `"ask"` "prompts the user to confirm", and "Deny and ask rules
+ * are still evaluated regardless of what the hook returns"; a matcher of `"*"` "fires on every occurrence of the event";
+ * "To block the action instead, set `"onFailure": "block"` on a `command` or `http` hook. Requires Claude Code v2.1.295
+ * or later." Under `-p` in the default mode a hook's `ask` overrides an allow rule, so an allowed command the hook holds
+ * still reaches the permission prompt tool, and the turn waits for its answer: seen on Claude Code 2.1.322, which no page
+ * states in one sentence, and which is therefore Full access's floor (`fullAccessFloor`).
  */
 export function fullAccessSettings(hookUrl: string, secret: string) {
     return {
@@ -111,6 +135,7 @@ export function fullAccessSettings(hookUrl: string, secret: string) {
         // user settings files", and "Lists merge instead of overriding", so the hook's address is always on the list.
         disableAllHooks: false,
         allowedHttpHookUrls: [hookUrl],
+        ...serverDefences(),
         hooks: {
             PreToolUse: [
                 {
@@ -162,11 +187,13 @@ export const planRemovedTools: readonly string[] = ['ExitPlanMode'];
 /**
  * The command line of one Claude Code turn, in the chat's mode. Ask first: no permission mode, the host's default. Plan
  * only: `--permission-mode plan`, the plan list's verbs in place of the allow list's, and no way out of planning. Full
- * access: `--permission-mode bypassPermissions` and the turn's settings file; Anthropic,
- * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode, including
- * `bypassPermissions`." and "Allow rules have no effect in `bypassPermissions`.", so every deny rule is passed as in Ask
- * first. Never `--bare`, which drops the subscription sign-in and the skills; always
- * `--strict-mcp-config`, so a person's own MCP servers never enter the chat; reads outside the working folders blocked
+ * access: no permission mode either, the host's default, with the turn's settings file, whose hook answers each tool use
+ * (`fullAccessSettings`); what the hook asks about, and what the host asks about whatever the hook said, reaches the
+ * prompt tool as in Ask first. Every deny rule is passed in every mode; Anthropic,
+ * https://code.claude.com/docs/en/permission-modes (read 2026-11-11): "Deny rules block in every mode". Never
+ * `--bare`, which drops the subscription sign-in and the skills; always
+ * `--strict-mcp-config`, so a person's own MCP servers never enter the chat, and from `noChromeFrom` on `--no-chrome`, so
+ * the browser's tools do not either (the settings' `serverDefences` hold below it); reads outside the working folders blocked
  * (`claudeTurnSettings`); each allowed and disallowed rule an argument of its own, the form the CLI reference gives,
  * so a comma in a data path never splits a rule; no prompt argument, so the prompt is read from standard input.
  */
@@ -178,9 +205,10 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     args.push('--disallowedTools', ...claudeRemovedTools, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'full_access' ? (turn.settingsFile as string) : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings);
-    if (mode !== 'ask_first') args.push('--permission-mode', mode === 'plan_only' ? 'plan' : 'bypassPermissions');
+    if (mode === 'plan_only') args.push('--permission-mode', 'plan');
     for (const folder of turn.addDirs) args.push('--add-dir', folder);
     args.push('--permission-prompt-tool', promptToolName, '--mcp-config', turn.mcpConfig, '--strict-mcp-config');
+    if (compareVersions(turn.version, noChromeFrom) >= 0) args.push('--no-chrome');
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('--effort', effortWord(turn.effort));
     if (turn.resume) args.push('--resume', resumable(turn.resume));
@@ -203,6 +231,27 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
  */
 export const codexSearchSettings: readonly string[] = ['web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false'];
 
+/** The setting every Windows Codex turn runs under (`codexArguments`): the elevated sandbox, set for the run. */
+export const codexWindowsSandbox = 'windows.sandbox="elevated"';
+
+/**
+ * The settings every Codex turn on a platform sets for the run by `-c`, before the model and the effort: on Windows the
+ * sandbox's kind, then the search settings, then the person's ChatGPT connectors off (`codexConnectorsOff`). The
+ * Windows sandbox check runs under the same set (`codex-sandbox.ts`).
+ */
+export function codexTurnSettings(platform: Platform): string[] {
+    return [...(platform === 'win32' ? [codexWindowsSandbox] : []), ...codexSearchSettings, codexConnectorsOff];
+}
+
+/**
+ * The person's ChatGPT apps (connectors) off for the run: they are no part of config.toml, so `--ignore-user-config`
+ * leaves them on, and a Codex turn asks no one before one acts. The Codex counterpart of Claude Code's
+ * `disableClaudeAiConnectors`, and what the naming run sets too (`codexToolsOff`). OpenAI,
+ * https://developers.openai.com/codex/config-reference: `features.apps` "Enable app (connector) integrations (stable;
+ * on by default)."
+ */
+export const codexConnectorsOff = 'features.apps=false';
+
 /**
  * The command line of one Codex turn: `codex exec` in its read-only sandbox, emitting JSON events, the prompt read from
  * standard input (`-`), resumed as `codex exec resume <thread>` from the chat's second turn on.
@@ -211,6 +260,17 @@ export const codexSearchSettings: readonly string[] = ['web_search=cached', 'fea
  * card and no fence of the desktop's applies to it: it reads the chat folder, the folders added to it and its skills in
  * `.agents/skills`, and answers. Its sandbox has no network by default and so may keep it from the runtime's loopback
  * address, so a Codex turn reads and advises and acts through nothing.
+ *
+ * Every turn, in every mode, leaves the person's `config.toml` unread (`--ignore-user-config`), so none of the MCP
+ * servers it names, and none of its providers or profiles, reach the chat: Codex asks no one before a tool of a server
+ * runs. Its sign-in is still read from `CODEX_HOME`. The flag is Codex's from `codexFloor` on, and the chat runs no turn
+ * on an older one (`codexFloorSentence`).
+ *
+ * On Windows every turn names its sandbox's kind for the run, `elevated` (`codexWindowsSandbox`), never the default and
+ * never `unelevated`: the person's own choice is in the file the turn leaves unread, and a command in the unelevated
+ * sandbox can read the installation's data directory. OpenAI, https://learn.chatgpt.com/docs/windows/windows-sandbox:
+ * "`elevated`: ... Requires administrator-approved setup." and "`unelevated`: ... doesn't support denied read paths."
+ * On macOS and Linux no kind is named.
  *
  * An effort is the configuration key `model_reasoning_effort`, set for the run by `-c`. OpenAI,
  * https://developers.openai.com/codex/cli/reference, `exec`: "-c, --config key=value Inline configuration override for
@@ -232,8 +292,8 @@ export const codexSearchSettings: readonly string[] = ['web_search=cached', 'fea
  * changes, MCP tool calls, web searches, and plan updates", hold no fetch of a page. The naming run keeps its search off
  * (`codexToolsOff`). The settings are `codexSearchSettings`.
  */
-export function codexArguments(turn: { model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
-    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', ...codexSearchSettings.flatMap((setting) => ['-c', setting])];
+export function codexArguments(turn: { platform: Platform; model?: string | undefined; effort?: Effort | undefined; resume?: string | undefined }): string[] {
+    const args = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', ...codexTurnSettings(turn.platform).flatMap((setting) => ['-c', setting])];
     if (turn.model) args.push('--model', turn.model);
     if (turn.effort !== undefined) args.push('-c', `model_reasoning_effort=${effortWord(turn.effort)}`);
     if (turn.resume) args.push('resume', resumable(turn.resume));
@@ -271,7 +331,7 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, which these rules keep a Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox, which the desktop does
  * not narrow, holds it (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
@@ -285,12 +345,15 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
  * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
  * the same paths when it is asked.
  */
-export function dataRules(platform: Platform, data: string, dataEntries: readonly string[], desktopEntries: readonly string[]): string[] {
+export function dataRules(platform: Platform, data: string, dataEntries: readonly string[], desktopEntries: readonly string[], grant?: { id: string; present: readonly string[] }): string[] {
     const paths = platform === 'win32' ? win32 : posix;
     const desktop = paths.join(data, 'desktop');
+    // A Full access turn runs in its grant's folder below `chat-full`: the chat folder is then closed to it as every other
+    // entry is, and so is every other grant's folder; `chat-full` itself is the one entry left open, for its own folder.
     const targets = [
         ...namesOf(knownDataEntries, dataEntries, 'desktop').map((name) => paths.join(data, name)),
-        ...namesOf(knownDesktopEntries, desktopEntries, 'chat').map((name) => paths.join(desktop, name)),
+        ...namesOf(knownDesktopEntries, desktopEntries, grant === undefined ? 'chat' : 'chat-full').map((name) => paths.join(desktop, name)),
+        ...(grant === undefined ? [] : [paths.join(desktop, 'chat'), ...grant.present.filter((name) => name !== grant.id).map((name) => paths.join(desktop, 'chat-full', name))]),
     ];
     return targets.flatMap((target) => {
         const rule = rulePath(platform, target);
@@ -300,8 +363,8 @@ export function dataRules(platform: Platform, data: string, dataEntries: readonl
 
 /**
  * The host's own refusal of an edit of the chat's own names directly in the chat folder: its instructions, and its agent
- * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold under bypass and in
- * every mode, beside the permission model's refusal of the same places by every route.
+ * settings and skills folders and what lies under them, which the desktop writes and keeps. They hold in every mode,
+ * beside the permission model's refusal of the same places by every route.
  */
 export function chatRules(platform: Platform, chat: string): string[] {
     const paths = platform === 'win32' ? win32 : posix;
@@ -431,6 +494,13 @@ export function hostEnvironment(
         bundleVersion: string | null;
         /** Whether the turn names an effort, which an inherited `CLAUDE_CODE_EFFORT_LEVEL` would override. */
         effortNamed?: boolean;
+        /**
+         * A Full access turn: the folder its judgement reads a `~` against (`ChatScope.shellHome`), set as `HOME` in place
+         * of any spelling of it the base carries, so the host's shell and the judgement take the same home. That folder is
+         * the desktop's own environment's HOME, or the profile's home folder (`homedir()`) when the environment names none.
+         * Where the environment's HOME is another folder than the profile's, the judgement holds every `~`.
+         */
+        home?: string;
     },
 ): Record<string, string> {
     const env: Record<string, string> = {};
@@ -446,8 +516,10 @@ export function hostEnvironment(
             continue;
         }
         if (upper === 'JASON_DATA_DIR' || upper === confinedVariable) continue;
+        if (options.home !== undefined && (options.platform === 'win32' ? upper : name) === 'HOME') continue;
         env[name] = value;
     }
+    if (options.home !== undefined) env.HOME = options.home;
     const separator = options.platform === 'win32' ? ';' : ':';
     env.PATH = path === '' ? options.bundle : `${options.bundle}${separator}${path}`;
     if (options.data !== null) env.JASON_DATA_DIR = options.data;

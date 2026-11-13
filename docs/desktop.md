@@ -155,17 +155,34 @@ lists each key and each card's grant.
   without LinkedIn still shows its email. A channel that account's plan or role does not have says so ("This Reply
   account has no LinkedIn."), and one that could not be read says that and offers **Check again**; the other channel's
   accounts stay in every case. The list is read again when the window takes the focus back, at most once in 30 seconds.
-  **Add account** offers Gmail, Outlook, another mailbox and LinkedIn (a channel the account does not have is not
-  offered; the LinkedIn acts need Reply CLI 0.20.0 or later, and below it the card turns them off and says so), and a row that is not in a good state offers **Reconnect**. Each opens a dialog with Reply's own link for the
-  act, its host in plain text, **Copy link**, **Open in the browser** and **Check now**. Reply's page needs no Reply
-  sign-in, so you can send the link to whoever owns the mailbox or the LinkedIn account, who signs in to Google,
-  Microsoft or LinkedIn there with their own credentials; a mailbox by SMTP or IMAP is added on Reply's page, so its
-  password never passes through Jason. For a mailbox, the desktop first asks you in a box of its own, each time, before it asks Reply for the link; with no window to ask in, it does not ask. The dialog then warns that anyone who has the link can add and manage
-  the Reply account's mailboxes and that it does not expire. A LinkedIn link is valid for a limited time, and the
-  card lists pending connections with Waiting or Expired and their expiry. The desktop asks Reply for the link, checks it
-  before showing it, shows it only on your click, and keeps it nowhere after the dialog closes. Finishing happens on
-  Reply's side, so the card learns of it by **Check now**, **Check again** or a focus. Limits, signatures, pauses and
-  removal stay in Reply.
+  Each act is a verb of the Reply CLI, and the card offers them only from the Reply CLI that has them; below it, it says
+  to update the Reply CLI and offers nothing but **Update**, where npm is there to update it with. **Add account** offers
+  Gmail, Outlook and LinkedIn (a channel the account does not have is not offered). A mailbox row offers **Limits** (its
+  daily limit), **Unblock** (sending again after its provider stopped it) and **Delete**; a LinkedIn row **Pause** when
+  it is enabled, **Resume** when it is disabled, neither at its daily limit, and **Delete**; and a row that is not in a
+  good state **Reconnect**. A connect or a reconnect makes a link to Reply's own page, which needs no Reply sign-in:
+  the desktop opens it here, in this computer's browser, or, where you tick **Copy a new link to hand on**, puts it on
+  the clipboard for you to send to whoever owns the mailbox or the LinkedIn account. They sign in to Google, Microsoft
+  or LinkedIn there with their own credentials, so a password never passes through Jason. Only a link that expires and
+  connects one account is copied. The desktop keeps the link nowhere, and the card says only that it was opened or
+  copied and until when it connects an account. A limit's change, a pause, a resume, an unblock and a delete ask you
+  first in a box of the desktop's own that names the account; with no window to ask in, or once the window is hidden or
+  closed, it does not act. Where Reply does not yet make a link for one mailbox, the card offers the account's shared
+  mailbox page instead, only on your click and after a box that warns that the address does not expire and lets whoever
+  holds it manage all of the user's mailboxes; it is always opened here, never copied. Where sequences use a LinkedIn
+  account, its delete is refused, and **Delete anyway** asks again in a box of its own. A signed-out LinkedIn account
+  offers **Reconnect**, and no pause or resume until it is reconnected. An answer that leaves the account's state unknown
+  reads the list again and shows what is; nothing is repeated by itself. The card lists the links made and not used yet
+  under their channel, with Waiting or Expired and their expiry; such a link is not shown again, so adding the account
+  again makes a new one. Finishing a connection happens on Reply's side, so the card learns of it by **Check now**,
+  **Check again** or a focus. Other mailboxes (SMTP/IMAP), signatures and a LinkedIn account's limits are set in Reply,
+  which the card links to.
+  The same card appears inside the chat of a draft campaign while Reply is not connected. It is an offer, so it is hidden
+  only where the runtime says the campaign's enrolment is routed to a plugin other than Reply (the window asks
+  `route.resolve` for `campaign.enroll`, which applies the campaign's own route, its default, the global override and the
+  global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
+  where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
+  running shows none. **Not now** hides it for that chat until the window is closed.
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
@@ -186,6 +203,32 @@ Claude Code.
   refused before the host starts, a key provider's turn on it included. The reason is one setting: every Claude Code turn
   carries `permissions.blockReadsOutsideWorkingDirectories`, so that a command which reads a file outside the folders
   the chat works in asks you first, and a Claude Code older than 2.1.257 skips a key it does not know without a word.
+  From 2.1.285 on a turn also passes `--no-chrome`, the first version whose changelog names the flag; below it the
+  turn's settings alone keep the browser out.
+- **Codex's floor is 0.122.0**, read before each turn on it: a Codex turn leaves your `config.toml` unread
+  (`--ignore-user-config`, which Codex has from that version on). Below it, or with a version that cannot be read, the
+  turn is refused before Codex starts, with a sentence that says to update Codex. **The chat does not read your Codex
+  config.toml, so a provider or profile set there is not used; connect a key on the Connect card.** Nor are the MCP
+  servers it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which
+  every Codex turn turns off; its sign-in is still used.
+- **On Windows, Codex needs its elevated sandbox.** Every Windows Codex turn names it (`windows.sandbox="elevated"`),
+  since a command in Codex's other Windows sandbox can read Jason's data directory. Naming it does not prove it is set
+  up, so at the first send to Codex in each run of the desktop the chat checks first ("Checking Codex's sandbox…"): a
+  command tries to open two files of the data directory and says only whether it could, never what is in them. One is
+  the runtime's run file, which has an access list of its own; the other is the desktop's settings file, which keeps
+  the access list the rest of the data directory, the database and the logs among them, inherits. It also opens
+  Windows' own hosts file, which every account may read, to show that it can open a file at all. The same command
+  runs first outside any sandbox, where it must open all three, then in Codex's sandbox, where it must open the hosts
+  file and neither of the two, then outside again, where it must open all three once more. The chat runs on Codex only on exactly that; otherwise the turn is
+  refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
+  `codex sandbox setup --elevated` (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.**
+  A turn on the OpenAI key is refused instead with **Codex on a key cannot be checked on Windows yet: sign in to Codex,
+  or chat on Claude Code.** The answer is kept for that Codex until the desktop quits. With no runtime running there is
+  nothing to open, and the turn is refused until there is; the desktop writes its settings file at each start when it
+  is missing, and if it is missing all the same, the turn says to restart Jason. A data
+  directory whose path holds one of `, ; = % ^ & | < > !` or a quote is not checked, and Codex does not run there. The
+  check reads your Codex config.toml, which the turn does not, since Codex's sandbox command cannot leave it unread. It
+  is not run at the Connect card, since naming the elevated sandbox may ask for an administrator.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
@@ -235,10 +278,24 @@ passes only the allowed verbs that read, Claude Code starts in its plan mode wit
 other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
 refusal of the next section stays. A Codex turn runs in its read-only sandbox in either mode.
 
-Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh** leaves it.
-Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could still ask to
-change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu also lists
-Full access, which this version does not offer: it is shown disabled and the desktop refuses it.
+Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh**
+leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
+still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
+also lists Full access. Full access is chosen only after a confirmation shown
+each time, with Cancel focused. In Full access the agent runs commands and changes files on this computer without
+asking, except a command Jason cannot read plainly or one that changes what an agent loads: that is a card titled "Full
+access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. A held card offers no
+"Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
+every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
+refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
+not a tool of the chat. Jason does not read a program the agent writes to a file and runs, nor your own shell
+configuration (aliases, shell options), so such a program can still act as you. None of your own MCP servers or
+connectors reaches a turn. The agent works in a folder of its own; when Full access ends, the chat says where it is,
+with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
+so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
+Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said once.
+Full access is never a default and is gone when you close Jason. It is not offered for the Feed, whose turns are handed
+lines that others and providers wrote without you asking for them.
 
 ### What runs without asking, what is refused, what is a card
 
@@ -260,12 +317,19 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   Also refused: any `reply` command but the two above, any read or write under the data directory outside the chat folder (the
   settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
   where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the
-  agent to the chat's own instruction files and to the `.claude`, `.agents` and `.codex` folders of the chat folder.
+  agent to the chat's own instruction files, to the `.claude`, `.agents` and `.codex` folders of the chat folder and to
+  its `.mcp.json`.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the chat
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
-  (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a web page, once per site
-  per chat, the documentation pages below aside. A path that begins with `~`
-  or is spelled in a way the system would read differently is a card too.
+  (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
+  Code reads its MCP servers from (`.mcp.json`, `.claude.json`) wherever it is, and a `claude mcp` or `codex mcp` command,
+  each time, never "Allow for this chat"; a web page, once per site per chat, the documentation pages below aside. A
+  path that begins with `~` or is spelled in a way the system would read differently is a card too.
+- **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
+  What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
+  input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
+  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, the data directory). Full access
+  does not run it. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
   pages of `developers.openai.com`, and all of `docs.reply.io`. A page counts only when its address is `https`, at most 300
@@ -294,6 +358,14 @@ Under the chat, these things differ from a terminal:
   the content comes on standard input: `--file - < contacts.json` or a here-document, and for long content a file in the
   chat folder given as `--file - < file`. The reason is that `jason` opens such a file itself, which the host's file rules
   never see.
+- **The person's own words and the installation's changes are refused.** The same `JASON_CONFINED=1` makes `jason` refuse, locally
+  before any request, exit 1 and one sentence, every command of the deny list's command half: approving, rejecting,
+  answering and the rest of a person's own word, and the commands that change the installation. Inside the desktop's
+  chat a decision is given in the page, or in a terminal, where the variable is not set. No attempt id in the
+  environment lifts the refusal: a role's own work never carries the variable, because the runtime drops it from what it
+  launches. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and an
+  attempt id in the environment is a claim, not a proof. The deny list's command lines are written from the CLI's one
+  table of these commands.
 - **The provider check names a program, never a path.** `jason status --provider-cli <program>` runs a bare name found on
   the search path, and a name with a directory in it is neither looked up nor started; run a path from a terminal.
 - **A credential in an environment variable does not reach the commands the agent runs.** Every Claude Code turn sets
@@ -314,11 +386,19 @@ Under the chat, these things differ from a terminal:
 
 A `jason-desktop://` link opens a page of the application and does nothing else: it never approves, sends, drafts or
 starts a conversation. The addresses are a closed table: `jason-desktop://feed`, `needs`, `campaigns`,
-`campaign/<campaign id>`, `approval/<approval id>`, `question/<decision id>` and `workitem/<work item id>`, and
-`person/<contact id>`. An approval or a question opens Needs you on that item, and deciding stays your click. An address
-with a query, a fragment, a percent escape, a dot segment, a port or a second id opens nothing. The scheme is the
-desktop's own on every system; `jason://`, which the runtime's Windows notifications use, is the runtime's and the
+`campaign/<campaign id>`, `approval/<approval id>`, `question/<decision id>` and `workitem/<work item id>`,
+`person/<contact id>`, and `attention`, `attention/approvals/<approval id>` and `attention/questions/<decision id>`.
+An approval or a question opens Needs you on that item, and deciding stays your click; `attention` opens Needs you. An
+address with a query, a fragment, a percent escape, a dot segment, a port or a second id opens nothing. The scheme is
+the desktop's own on every system; `jason://`, which the runtime's Windows notifications use, is the runtime's and the
 desktop never registers it.
+
+On Windows a click on one of Jason's notifications opens the desktop where it is installed for your account. The
+command line handling the `jason://attention` link reads the desktop's registration under your account, never writes
+it, and when the program it names is there hands the matching `jason-desktop://attention` address to Windows, which
+starts the desktop; the address is made from the link's parsed parts, never from its text. With no desktop registered,
+its program gone, or the hand-on failing, the browser UI opens as before, and the failure is said by its code
+([notifications.md](notifications.md)). On macOS and Linux a notification's click opens nothing.
 
 On Windows and macOS the application registers the scheme, on Windows at each start for your account alone. On Linux the
 deb's menu entry registers it and the AppImage opens no link. Built so, and not yet seen on a real machine: a link from a
@@ -424,6 +504,8 @@ updater's cache named above.
 
 ## What is not here
 
-Managing Reply accounts beyond connecting and reconnecting one, Codex acting in the chat (it reads and advises), your own connectors and MCP
-servers in the chat, a marketplace and plugins in frames, and a Linux build for arm64 are not here. Everything in this
+Managing Reply accounts beyond connecting and reconnecting one, Codex acting in the chat (it reads and advises), your own tools in the
+chat, a marketplace and plugins in frames, and a Linux build for arm64 are not here. Nothing of your own tools reaches a
+turn: a Claude Code turn loads none of your MCP servers, claude.ai connectors or browser, and a Codex turn does not read
+your `config.toml`, so the MCP servers it names are not loaded either. Everything in this
 page that a real machine shows and only a real machine shows is marked as built so.

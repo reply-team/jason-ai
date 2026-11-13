@@ -12,7 +12,7 @@ import { readFence } from '../src/chat-deny.ts';
 import { readConversations } from '../src/chat-conversations.ts';
 import { quoted } from '../src/chat-header.ts';
 import { namingInstruction, type NamingOutcome } from '../src/chat-naming.ts';
-import { bench, type Bench, type Recorded } from './harness.ts';
+import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 
@@ -38,6 +38,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partia
     const removals: (() => void)[] = [];
     // The program runner reads Claude Code's version with the bench's environment as it is made.
     const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude', 'codex'], env });
+    placeSandboxFiles(b);
     const campaigns = join(b.root, 'campaigns.json');
     writeFileSync(campaigns, '[]');
     b.env.STUB_CAMPAIGNS_FILE = campaigns;
@@ -57,6 +58,7 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, options: Partia
             programs: b.programs,
             keyFor: (id) => keys[id],
             fence: () => fence,
+            sandboxOutside: outsideStandIn,
             emit(chatId, event) {
                 events.set(chatId, [...(events.get(chatId) ?? []), event]);
                 for (const waiter of [...waiters]) {
@@ -422,8 +424,20 @@ test('naming runs go one at a time across the desktop, and one past its bound ke
     await r.chat.idle();
     assert.equal(titleOf(r, slow.id), 'Slow chat');
     assert.equal(r.outcomes.at(-1), 'timed_out');
-    // The run ended at its bound is ended by the system a moment later; its folder goes with the test's.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // The run ended at its bound is ended by the system a moment later, and on Windows its program image holds the bench's
+    // folder until it has gone: wait for the processes the stand-in logged to be gone, not for a stretch of time. The
+    // bound is only a ceiling for a machine that never lets go; the row fails at it, saying so.
+    const alive = (id: number) => {
+        try {
+            process.kill(id, 0);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+    const ran = readFileSync(log, 'utf8').trim().split(/\r?\n/).filter((line) => line.startsWith('start')).map((line) => Number(line.split(' ')[1]));
+    await until(() => !ran.some(alive), 20_000);
+    assert.deepEqual(ran.filter(alive), [], 'the run ended at its bound is gone before the folder is removed');
 });
 
 test('deny by default: a Codex item that is not the agent\'s message or its reasoning, and a Claude Code block that is not text or thinking, refuses the name, known type or not', async (t) => {

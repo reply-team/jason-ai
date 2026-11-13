@@ -26,6 +26,7 @@ export const templates = {
     navigation_refused: 'A navigation off {Origin} was refused',
     link_opened: 'An https link was handed to the system browser',
     link_refused: 'A link that is not https was refused',
+    link_open_failed: 'The system browser was asked to open a link and did not',
     ipc_refused: 'A call on {Channel} from outside {Origin} was refused',
     cli_exited: 'jason {Verb} exited {Exit} after {ElapsedMs} ms',
     program_exited: '{Program} {Verb} exited {Exit} after {ElapsedMs} ms',
@@ -37,7 +38,7 @@ export const templates = {
     reply_connected: 'Reply sign-in by {Method} exited {Exit}',
     reply_wired: 'Jason’s Reply plugin was placed and granted reply; global default written {RouteWritten}; jason plugin reload exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
-    reply_api_answered: 'reply api {Act} answered status {Status}, exit {Exit}',
+    reply_account_act: 'reply account {Act} on {Channel} exited {Exit} with code {Code}; a usage error {Usage}',
     // The desk: the tray, its notifications.
     tray_state: 'The tray shows the state {State}',
     attention_notified: 'A notification said that {Approvals} approvals and {Questions} questions wait on the person',
@@ -78,6 +79,7 @@ export const templates = {
     chat_turn_started: 'A chat turn started on {Host}; resumed {Resumed}; mode {Mode}',
     chat_turn_ended: 'A chat turn on {Host} ended with exit {Exit} after {DurationMs} ms: {Steps} steps, {Requests} permission requests',
     chat_request_decided: 'A permission request of the chat was {Outcome} by the {By}; mode {Mode}',
+    chat_request_held: 'A permission request of the chat was {Outcome} by the {By} for the cause {Cause}; mode {Mode}',
     chat_instructions_missing: 'The chat instruction text {File} is not in the application; turns run without it',
     chat_instructions_unwritten: 'The chat instruction file {File} could not be written ({Code}); turns are refused until it is',
     chat_conversations_read: 'The chat read {Conversations} conversations; {Unreadable} files of its folder were not records and were left as they were',
@@ -91,6 +93,7 @@ export const templates = {
     chat_mode_changed: 'A chat went from mode {From} to mode {To}',
     chat_turn_stopped: 'A chat turn was stopped by the desktop: {Cause}',
     agent_folder_unowned: 'The chat folder\'s agent settings could not be put right at the start ({Code})',
+    chat_full_folder_failed: 'A Full access folder failed at {Step} ({Code})',
 } as const;
 
 export type TemplateName = keyof typeof templates;

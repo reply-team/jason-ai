@@ -397,7 +397,8 @@ export function versionAtLeast(found: string, wanted: string): boolean {
 
 // ---- Reply ---------------------------------------------------------------------------------------------------------
 
-export const replyMinimumVersion = '0.20.0';
+/** The oldest Reply CLI the Reply card's acts use: the first with the account verbs. */
+export const replyMinimumVersion = '0.21.0';
 
 /** The channels `reply account list --channel` takes, read one at a time, in the order the card shows them. */
 export const replyChannels = ['email', 'linkedin'] as const;
@@ -416,7 +417,7 @@ export interface ReplyAccount {
     status: string;
 }
 
-// The two answers of the Reply CLI read here, in the shapes reply-cli 0.18.0 through 0.20.0 print (unchanged between them):
+// The two answers of the Reply CLI read here, in the shapes reply-cli 0.18.0 and 0.19.0 print (unchanged between them):
 //
 // `reply auth status --json` (src/commands/auth.ts, the object built in src/auth/status.ts) prints
 //   {"authenticated": bool, "profile": string, "source"?, "method"?, "user"?: {"id"?, "username"?, "team_id"?},

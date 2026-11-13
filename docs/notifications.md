@@ -162,10 +162,19 @@ such a unit exists only while the person is signed in.
   records it silenced — not delivered and not failed. It is the person's own choice, and never reported as a fault.
 - **macOS** shows it with `osascript`, which macOS attributes to the program that showed it. That command is composed
   and checked by tests here; it has not been watched on a Mac.
-- **A click** on the banner, or on its entry in the notification center, opens your UI on Windows: on the one approval
-  or question when exactly one waits, on the list of what waits otherwise, paired as `jason ui open` pairs (§7). On
-  macOS and Linux a click opens nothing of Jason's; `jason ui open` reaches the same page. The real click on a real
-  toast is not yet measured on a machine; the link's handling is composed and checked by tests here.
+- **A click** on the banner, or on its entry in the notification center, opens Jason on Windows: on the one approval
+  or question when exactly one waits, on the list of what waits otherwise. Where Jason Desktop is installed for your
+  account it opens there, on Needs you: the link's handler reads the desktop's own registration
+  (`HKEY_CURRENT_USER\Software\Classes\jason-desktop`) and never writes it, starts nothing by the path it names, and
+  hands Windows the desktop's `jason-desktop://attention` address, made from the link's parsed parts, through the opener
+  it uses for a browser ([desktop.md](desktop.md), Links). Otherwise — no desktop registered, its program gone, or the
+  hand-on failing, said on stderr by its code (`opener_not_started`, `opener_failed`, `opener_timed_out`) — your
+  browser UI opens, paired as `jason ui open` pairs (§7). On macOS and Linux a click opens nothing of Jason's;
+  `jason ui open` reaches the same page. On Windows the opener is `rundll32`, which answers 0 once the address is
+  handed to the shell and does not carry the handler's own result: a desktop that is registered and there but does not
+  start leaves the click with no page and no fallback, and `jason ui open` reaches the browser UI; `opener_failed`
+  there means the opener itself failed. The real click on a real toast is not yet measured on a machine; the link's
+  handling is composed and checked by tests here.
 - **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows no page of Jason's: it puts on the
   clipboard the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt`
   prints, for you to paste into your agent host. The list's toast has no button, and neither has a toast whose link is
@@ -174,8 +183,9 @@ such a unit exists only while the person is signed in.
   click cannot: your own UI opens on the list, or on an item whose id the page could have typed, or Jason's own prompt
   for such an item replaces what was on your clipboard, for an id the runtime answers, or a new terminal opens running
   your own agent host on Jason's brief for such an item that still waits, under your own permissions for that host
-  (`jason session open`, in [ui.md](ui.md)). Nothing is decided by it, and the link's text is never logged, never
-  repeated in an error and never handed on to another program. A toast has no button for a session: the link is the
+  (`jason session open`, in [ui.md](ui.md)), or Jason Desktop opens on the same list or item. Nothing is decided by
+  it, and the link's text is never logged, never repeated in an error and never handed on to another program: what the
+  desktop receives is an address made again from the parsed link. A toast has no button for a session: the link is the
   UI's.
 
 A notification plugin reaches wherever its service does — a phone following an ntfy topic, a Slack channel, a Telegram

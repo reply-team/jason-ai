@@ -655,7 +655,7 @@ where the host reads them from its work directory rather than its command line, 
   launches normally; nothing was configured, so nothing is missing, and its brief travels in the
   envelope either way.
 
-Its environment is the runtime's own plus the runtime's four and the constants a host's row of the host table declares, never a secret and never a value taken from a person. The four:
+Its environment is the runtime's own, less the runtime's configuration, plus the runtime's four and the constants a host's row of the host table declares, never a secret and never a value taken from a person. The runtime's configuration is every variable that starts with `JASON_` and holds the double underscore between a section and a key, compared without regard to case: any setting can be given that way, a plugin's secret under `Plugins:Config` (`JASON_Plugins__Config__<id>__<field>`) among them, and an agent host that prints its environment would put it in the transcript the person keeps. A name the active plugin snapshot grants to any plugin under `Plugins:Grants:<id>:Env` is taken out too, since it carries that plugin's credential, unless it is one of the machine configuration names every plugin host is given ([plugins.md](plugins.md)), a proxy say. Each is taken out before the four are written; the runtime's own single-word `JASON_` names are not configuration, and every other variable the runtime's environment holds stays. This keeps those values out of a dump of the agent's environment and is not a wall: the agent runs as the person and can read what the person can. The four:
 
 - `JASON_DATA_DIR`, pointing at the data directory;
 - `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so
@@ -962,7 +962,8 @@ The first twenty-three are refusals and all of them are final: twenty are `perma
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
-the routed package, by its id and digest, or its binding is not the one the unsettled attempt ran under, or the input
+the routed package — by its id and digest for a send, by its id alone for a metered act — or its binding is not the one
+the unsettled attempt ran under, or the input
 composed now is not the one it was composed with, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
 nothing ever falls back to another plugin. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
@@ -998,7 +999,10 @@ that attempt was composed with — its arguments, and the whole composed input b
 (below): a route, a binding or a package changed in between ends it `provider_answer_lost` at the claim, since the key
 settles a send only at the provider and the account that took it, and so does an item edited since, or a person or a
 campaign whose part of the input changed since, since the key settles only the request it went with and a provider
-holding it answers a repeat with the earlier send.
+holding it answers a repeat with the earlier send. A metered act settled by a recovery read — `audience.search`,
+`campaign.enroll`, `campaign.activate` — is held the same way but for the package's digest: its recovery read finds
+the earlier act at the account whichever version of the package made it, so an update of the package in between lets
+the repeat through.
 While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
 (`docs/routing.md`). An answer that arrived and does not satisfy the

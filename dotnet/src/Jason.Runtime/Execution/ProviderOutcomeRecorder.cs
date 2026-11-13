@@ -223,6 +223,9 @@ public sealed class ProviderOutcomeRecorder(
                     failureClass: recorded,
                     retriable: OutcomeContract.Retriable(recorded, contract, settlesByKey),
                     block: recorded == FailureClass.Blocked ? failed.Error.Block : null);
+
+                // A read or a stop that found its search gone ends the search, in the change set that ends the item.
+                await searches.FailedAsync(db, item, input, failed.Error.Code, cancellationToken).ConfigureAwait(false);
                 break;
 
             case InvocationOutcome.ProtocolFailure protocol:

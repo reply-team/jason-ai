@@ -15,7 +15,7 @@ const fence = readFence(join(here, '..'));
 const entries = fence.commands;
 const fixture = (name: string) => readFileSync(join(here, 'fixtures', name), 'utf8').split(/\r?\n/).filter((line) => line !== '');
 
-const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: entries, allowed: fence.allowed, dataRules: [] };
+const turn = { mcpConfig: '/data/desktop/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: entries, allowed: fence.allowed, dataRules: [], version: '2.1.300' };
 
 /** The value that follows a flag, once. */
 function valueOf(args: readonly string[], flag: string): string | undefined {
@@ -47,7 +47,7 @@ test('a Claude Code turn runs in print mode with the stream-json events, and nev
 test('every Claude Code turn blocks reads outside its working folders, so a read-only command on such a path asks', () => {
     for (const args of [claudeArguments(turn), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] })]) {
         assert.equal(args.filter((arg) => arg === '--settings').length, 1);
-        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]}}');
+        assert.equal(valueOf(args, '--settings'), '{"permissions":{"blockReadsOutsideWorkingDirectories":true,"ask":["WebFetch(domain:*)"]},"disableClaudeAiConnectors":true,"deniedMcpServers":[{"serverName":"claude-in-chrome"}],"disableSkillShellExecution":true}');
     }
 });
 
@@ -60,7 +60,7 @@ test('the person\'s words are never on a host\'s command line: every argument is
         if (listFlags.has(arg)) i += valuesOf(claude.slice(i), arg).length;
         else if (flagsWithValue.has(arg)) i++;
     }
-    assert.deepEqual(codexArguments({}), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-']);
+    assert.deepEqual(codexArguments({ platform: 'linux' }), ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '-']);
 });
 
 test('the allowed tools are the skills, web search, subagents, the task list, two reply reads, and each allowed jason verb', () => {
@@ -141,14 +141,14 @@ test('the campaign\'s and the project\'s folders are added one --add-dir each; a
 });
 
 test('a Codex turn runs exec with JSON events in the read-only sandbox, resumed by its thread, the prompt from stdin', () => {
-    assert.deepEqual(codexArguments({ model: 'gpt-5', resume: 'thr-1' }), [
-        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '--model', 'gpt-5', 'resume', 'thr-1', '-',
+    assert.deepEqual(codexArguments({ platform: 'linux', model: 'gpt-5', resume: 'thr-1' }), [
+        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '--model', 'gpt-5', 'resume', 'thr-1', '-',
     ]);
 });
 
 test('a Codex turn searches the web from OpenAI\'s cached index on every turn, resumed or not, and never live', () => {
     for (const shape of [{}, { model: 'gpt-6.1-sol', effort: 'high' as const }, { resume: 'thr-1' }, { model: 'gpt-5', resume: 'thr-1' }]) {
-        const args = codexArguments(shape);
+        const args = codexArguments({ ...shape, platform: 'linux' });
         const settings = args.flatMap((arg, i) => (args[i - 1] === '-c' ? [arg] : []));
         assert.deepEqual(settings.filter((setting) => setting.startsWith('web_search')), ['web_search=cached'], JSON.stringify(shape));
         assert.deepEqual(settings.filter((setting) => setting.includes('web_search')), [...codexSearchSettings], JSON.stringify(shape));
@@ -163,7 +163,7 @@ test('a Codex turn searches the web from OpenAI\'s cached index on every turn, r
 test('on a Codex that predates the top-level key, the legacy toggles are passed off, so no legacy setting of the person\'s makes a turn search live', () => {
     assert.deepEqual(codexSearchSettings, ['web_search=cached', 'features.web_search_request=false', 'features.web_search_cached=false']);
     for (const shape of [{}, { resume: 'thr-1' }, { model: 'gpt-6.1-sol', effort: 'low' as const, resume: 'thr-1' }]) {
-        const args = codexArguments(shape);
+        const args = codexArguments({ ...shape, platform: 'linux' });
         for (const setting of codexSearchSettings) assert.equal(args.filter((arg, i) => args[i - 1] === '-c' && arg === setting).length, 1, setting);
         // The two toggles whose meaning beside the top-level key the reference does not state are left alone.
         assert.ok(!args.some((arg) => arg.startsWith('features.web_search=') || arg.startsWith('tools.web_search')), JSON.stringify(shape));
@@ -187,16 +187,16 @@ test('an effort reaches each host as its own flag on every turn that names one, 
         assert.equal(args.filter((arg) => arg === '--effort').length, 1);
     }
     assert.ok(!claudeArguments({ ...turn, model: 'opus' }).includes('--effort'));
-    assert.deepEqual(codexArguments({ model: 'gpt-6.1-sol', effort: 'high', resume: 'thr-1' }), [
-        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', 'resume', 'thr-1', '-',
+    assert.deepEqual(codexArguments({ platform: 'linux', model: 'gpt-6.1-sol', effort: 'high', resume: 'thr-1' }), [
+        'exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--ignore-user-config', '-c', 'web_search=cached', '-c', 'features.web_search_request=false', '-c', 'features.web_search_cached=false', '-c', 'features.apps=false', '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', 'resume', 'thr-1', '-',
     ]);
-    assert.ok(!codexArguments({ model: 'gpt-6.1-sol' }).some((arg) => arg.startsWith('model_reasoning_effort')));
+    assert.ok(!codexArguments({ platform: 'linux', model: 'gpt-6.1-sol' }).some((arg) => arg.startsWith('model_reasoning_effort')));
 });
 
 test('a word outside the five levels never reaches a host, ultracode and ultra among them', () => {
     for (const effort of ['ultracode', 'ultra', 'HIGH', '--yolo', '']) {
         assert.throws(() => claudeArguments({ ...turn, model: 'opus', effort: effort as never }), { message: 'That effort is not one the desktop passes to a host.' }, effort);
-        assert.throws(() => codexArguments({ model: 'gpt-6.1-sol', effort: effort as never }), { message: 'That effort is not one the desktop passes to a host.' }, effort);
+        assert.throws(() => codexArguments({ platform: 'linux', model: 'gpt-6.1-sol', effort: effort as never }), { message: 'That effort is not one the desktop passes to a host.' }, effort);
     }
 });
 
@@ -225,7 +225,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(targetsOf(rules), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -237,7 +237,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 
@@ -544,7 +544,7 @@ test('a session that does not begin with a letter or a digit never reaches a com
     const options = ['--dangerously-skip-permissions', '--dangerously-bypass-approvals-and-sandbox', '-', '-x', '.hidden', ':x', ''];
     for (const resume of options.filter((each) => each !== '')) {
         assert.throws(() => claudeArguments({ ...turn, resume }), { message: 'That session is not one the desktop passes to a host.' }, resume);
-        assert.throws(() => codexArguments({ resume }), { message: 'That session is not one the desktop passes to a host.' }, resume);
+        assert.throws(() => codexArguments({ platform: 'linux', resume }), { message: 'That session is not one the desktop passes to a host.' }, resume);
     }
     for (const id of options) {
         // The line still says where the key came from (`keySourceOf`), and nothing of the session.
@@ -552,7 +552,7 @@ test('a session that does not begin with a letter or a digit never reaches a com
         assert.deepEqual(codexLine(JSON.stringify({ type: 'thread.started', thread_id: id }), new Set()), [], id);
     }
     assert.equal(valueOf(claudeArguments({ ...turn, resume: '0c1d-ses' }), '--resume'), '0c1d-ses');
-    assert.deepEqual(codexArguments({ resume: 'a' }).slice(-3), ['resume', 'a', '-']);
+    assert.deepEqual(codexArguments({ platform: 'linux', resume: 'a' }).slice(-3), ['resume', 'a', '-']);
 });
 
 test('an unreadable line, a tool\'s output and a malformed session say nothing', () => {

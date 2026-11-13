@@ -3,7 +3,7 @@
  * are `<data>/config/settings.json`, which the runtime reads and a Connect card edits as a person would.
  */
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export interface DesktopSettings {
@@ -63,6 +63,18 @@ export function readSettings(file: string): DesktopSettings {
     } catch {
         return { ...defaultSettings };
     }
+}
+
+/**
+ * The settings a start begins with, the file written when it is missing so the desktop's own file is always there: a
+ * new installation that never chose a theme meets Light and is told so, so its second start is not an existing one's.
+ * A file that is there and needs no change is left as it is.
+ */
+export function settingsAtStart(file: string, newInstallation: boolean): DesktopSettings {
+    const settings = readSettings(file);
+    const next = newInstallation && settings.theme === null ? { ...settings, theme: 'light' as const } : settings;
+    if (next !== settings || !existsSync(file)) writeSettings(file, next);
+    return next;
 }
 
 /** Writes the settings whole, through a file beside them renamed over them. */

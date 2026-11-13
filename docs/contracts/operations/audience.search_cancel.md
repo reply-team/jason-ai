@@ -63,7 +63,9 @@ reached the cancel. Nothing is pinned.
 ## What Jason does with the answer
 
 `cancelled`, and `already_ended` with `ended_as` `cancelled` or null, end the search Jason follows as `cancelled`, said once;
-the people it already landed stay the campaign's. `already_ended` with `finished` or `exhausted` leaves the search to its
+the people it already landed stay the campaign's. So does a cancel that fails `search_not_found`: the provider holds no
+search under the reference for the account the binding signs in as — deleted there, or that account changed — so
+nothing would stop or read it again, in an archived campaign as in one that runs. `already_ended` with `finished` or `exhausted` leaves the search to its
 reads: it ended by itself, and what it found is still to be read
 ([`docs/campaign-manager.md`](../../campaign-manager.md) §10).
 
