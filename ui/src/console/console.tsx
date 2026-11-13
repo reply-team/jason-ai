@@ -19,6 +19,7 @@ import { navigate, parseRoute, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
+import { OpenIn } from './open-in';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -31,9 +32,10 @@ import { linkPlace } from './links';
 import * as needs from './needs';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
-import { sideView } from './side';
+import { closeMenus, sideView } from './side';
 import { StartPanel, startMaking, startWaiting } from './start';
 import {
+    activePanel,
     bind,
     changeChat,
     chats,
@@ -177,6 +179,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const unbind = bind({ api, desktop, dock });
         const onFocus = () => connect.reloadOnFocus();
         window.addEventListener('focus', onFocus);
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') closeMenus();
+        };
+        window.addEventListener('keydown', onKey);
         const unlisten = root.current ? listen(root.current) : () => undefined;
         void shell.load(api);
         void needs.reload();
@@ -274,6 +280,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             if (pending !== null) clearTimeout(pending);
             unlisten();
             window.removeEventListener('focus', onFocus);
+            window.removeEventListener('keydown', onKey);
             // A dialog the Reply card was showing is not kept past the console that showed it.
             connect.resetDialogs();
             unbind();
@@ -284,6 +291,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         dockApi.current = event.api;
         // The sidebar marks the conversation whose chat came to the front last.
         event.api.onDidActivePanelChange(({ panel }) => {
+            activePanel.value = panel?.id ?? null;
             if (panel?.id.startsWith('chat:')) currentChat.value = panel.id.slice('chat:'.length);
             if (currentChat.value !== null && currentChat.value === feedId.value) feedUnseen.value = false;
         });
@@ -320,7 +328,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
 
     return (
         <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
-            <ModeStrip />
+            <ModeStrip openIn={desktop.openIn === undefined ? undefined : <OpenIn desktop={desktop} />} />
             <div className="shell">
                 <aside className="side">
                     <Painted className="side-body" view={sideView} />

@@ -40,6 +40,8 @@ export const invokeChannels = {
     'chat.feed': 'jason:chat.feed',
     'fullAccess.standing': 'jason:fullAccess.standing',
     'fullAccess.takeBack': 'jason:fullAccess.takeBack',
+    'openIn.targets': 'jason:openIn.targets',
+    'openIn.open': 'jason:openIn.open',
     'links.take': 'jason:links.take',
     'pairing.paired': 'jason:pairing.paired',
 } as const;

@@ -9,6 +9,7 @@ export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': "the programs a Connect card runs: reply, npm, and the version of an agent host or of node; and an agent host's one naming run of a set-up chat, which src/chat-naming.ts gives its command line",
     'src/chat-process.ts': "an agent host for one turn of the chat, streamed, or an agent host's model listing (`codex app-server`, `startListing`), and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
+    'src/open-in-start.ts': "an editor or the file manager the page's Open in names, started on its own with the folder",
     'src/shell-path.ts': "the login shell, on macOS and Linux only, for the PATH a program started from the Finder or a session's menu lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
     'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
@@ -33,6 +34,18 @@ export const listingCallers: Readonly<Record<string, string>> = {
 };
 
 const listingStart = /\bstartListing\b/;
+
+/**
+ * The one module that may call `startDetached` (src/open-in-start.ts), which starts any file with any arguments: main.ts,
+ * where the Open in wiring hands it only a line the Open in module made from a place the desktop detected.
+ */
+export const startDetachedCallers: Readonly<Record<string, string>> = {
+    'src/main.ts': 'the editor or file manager line the Open in module made from a detected place',
+};
+
+const detachedStart = /\bstartDetached\b/;
+/** The starter's module named in any form (import, re-export, require, dynamic import), so no alias or computed access passes. */
+const detachedModule = /['"`][^'"`]*\/open-in-start(?:\.ts|\.js)?['"`]/;
 
 /**
  * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
@@ -144,6 +157,12 @@ export function processViolations(path: string, text: string): string[] {
     }
     if (listingStart.test(text) && path !== 'src/chat-process.ts' && !(path in listingCallers)) {
         found.push(`${path} starts an agent host's model listing; only ${Object.keys(listingCallers).join(', ')} may`);
+    }
+    if (detachedStart.test(text) && path !== 'src/open-in-start.ts' && !(path in startDetachedCallers)) {
+        found.push(`${path} starts a detached program; only ${Object.keys(startDetachedCallers).join(', ')} may`);
+    }
+    if (detachedModule.test(text) && path !== 'src/open-in-start.ts' && !(path in startDetachedCallers)) {
+        found.push(`${path} imports the detached starter's module; only ${Object.keys(startDetachedCallers).join(', ')} may`);
     }
     const runs = [...text.matchAll(runFileCall)].length - [...text.matchAll(runFileDefinition)].length;
     if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);

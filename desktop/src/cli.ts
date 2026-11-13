@@ -17,7 +17,7 @@ export interface CliResult {
 }
 
 export interface Cli {
-    run(args: readonly string[], options?: { timeoutMs?: number }): Promise<CliResult>;
+    run(args: readonly string[], options?: { timeoutMs?: number; cwd?: string }): Promise<CliResult>;
 }
 
 const defaultLimit = 120_000;
@@ -33,7 +33,7 @@ export function cliAt(file: string, env: Record<string, string>, prefix: readonl
                 const child = execFile(
                     file,
                     [...prefix, ...args],
-                    { env: withoutSessionMarkers(env), timeout: options?.timeoutMs ?? defaultLimit, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8' },
+                    { env: withoutSessionMarkers(env), cwd: options?.cwd, timeout: options?.timeoutMs ?? defaultLimit, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8' },
                     (error, stdout, stderr) => {
                         const code = (error as { code?: unknown } | null)?.code;
                         const exit = typeof code === 'number' ? code : error ? -1 : 0;

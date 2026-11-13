@@ -275,7 +275,9 @@ describe('Accounts inside the desktop', () => {
             )!;
         fireEvent.click(within(row(page)).getByRole('button', { name: 'Pause' }));
         await waitFor(() => expect(words(within(cardIn(page)).getByRole('dialog'))).toMatch(/Done\./));
-        fireEvent.click(side().getByRole('button', { name: 'Connect' }));
+        // Connect is under More.
+        fireEvent.click(side().getByRole('button', { name: 'More' }));
+        fireEvent.click(side().getByRole('menuitem', { name: /^Connect/ }));
         const connect = await waitFor(() => {
             const panel = screen.getByRole('heading', { name: 'Connect', level: 1 }).closest<HTMLElement>('.painted')!;
             expect(panel.querySelector('.acct')).not.toBeNull();
@@ -295,7 +297,8 @@ describe('Accounts inside the desktop', () => {
         const card = () => within(page).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
         fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
         await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' }));
-        fireEvent.click(side().getByRole('button', { name: 'System' }));
+        fireEvent.click(side().getByRole('button', { name: 'More' }));
+        fireEvent.click(side().getByRole('menuitem', { name: /^System/ }));
         await waitFor(() => expect(screen.queryByRole('heading', { name: 'Accounts', level: 1 })).toBeNull());
         fireEvent.click(side().getByRole('button', { name: 'Accounts' }));
         const again = await openAccounts();

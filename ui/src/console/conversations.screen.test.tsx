@@ -476,7 +476,8 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => within(side()).getByText('That conversation is not one this desktop keeps.'));
         expect(screen.queryByRole('heading', { name: 'What should Jason do in Spring?' })).toBeNull();
         desktop.refuse.set('chat.create', "That is not an agent's id.");
-        fireEvent.click(within(side()).getByRole('button', { name: 'New chat' }));
+        fireEvent.click(within(side()).getByRole('button', { name: 'More to create' }));
+        fireEvent.click(within(side()).getByRole('menuitem', { name: /^New chat/ }));
         await waitFor(() => within(side()).getByText("That is not an agent's id."));
         expect(Object.keys(chats.value)).toEqual([id]);
     });
