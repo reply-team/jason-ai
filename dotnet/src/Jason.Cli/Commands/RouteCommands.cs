@@ -72,7 +72,7 @@ public static class RouteCommands
 
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("list", "List every route, or the global set plus one campaign's.");
+        var command = new Command("list", "List every route, or the global set plus one campaign's. A route by channel is listed beside the operation's own and reads \"<operation> on <channel>\".");
         var campaign = Campaign("Only this campaign's routes; the global set is answered either way.", required: false);
         var human = VerbOptions.Human();
         command.Options.Add(campaign);
@@ -182,7 +182,7 @@ public static class RouteCommands
     /// a request is sent only to one that says it does. Where that cannot be read, or the answer has no routes section or
     /// no such count, the request is not sent on a guess: it is refused as <c>runtime_too_old</c>, exit 1, and the person
     /// is told to restart or update the runtime. A runtime that cannot be reached at all is reported as every verb reports
-    /// it. A request that names no channel asks nothing first. Null is clear to send.
+    /// it. A request that names no channel asks nothing first. Null is clear to send. A runtime restarted between the read and the request is not covered; nothing short of a member the server checks would cover it.
     /// </summary>
     internal static async Task<int?> RefusedForAnOlderRuntimeAsync(CliEnvironment env, string? channel, CancellationToken cancellationToken)
     {
@@ -206,7 +206,7 @@ public static class RouteCommands
         var running = info is null ? "The runtime that is running could not be asked what it knows" : $"The runtime that is running ({info.RuntimeVersion}) does not know channel routes";
         env.Out.WriteLine(CliErrors.Serialize(
             CliErrors.RuntimeTooOld,
-            $"{running}, so it would ignore --channel and answer or change the operation's own route instead. Nothing was sent. Restart it so that it runs this jason, or update it with 'jason update apply'.",
+            $"{running}, so it would ignore --channel and answer or change the operation's own route instead. Nothing was sent. Restart the runtime if it was updated without a restart, or update Jason.",
             retryable: false));
         return ExitCodes.ApiError;
     }

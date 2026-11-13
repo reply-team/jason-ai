@@ -538,7 +538,7 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains(
-            "Routes:     snapshot rts_01J4 | default fake-provider | 2 overrides | 3 campaign routes | 4 routes by channel",
+            "Routes:     snapshot rts_01J4 | default fake-provider | 2 overrides | 3 campaign routes | 4 of them by channel",
             output.ToString(),
             StringComparison.Ordinal);
     }

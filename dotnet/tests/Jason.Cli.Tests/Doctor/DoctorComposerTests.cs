@@ -1184,7 +1184,7 @@ public sealed class DoctorComposerTests
         Assert.Equal(4, bundle.Contents.Single(entry => entry.Name == "routes").Items);
 
         var checks = Section(bundle, "status")["checks"]!.AsArray();
-        Assert.Equal("Routed: default none, 3 routes by channel.", Text(checks.Single(check => Text(check!["name"]) == "route")!["fact"]));
+        Assert.Equal("Routed: default none, 3 of them by channel.", Text(checks.Single(check => Text(check!["name"]) == "route")!["fact"]));
         Assert.Equal("ok", Text(checks.Single(check => Text(check!["name"]) == "binding")!["state"]));
         AssertAbsent(bundle, "SENTINEL_GLOBAL_CHANNEL_ACCOUNT", "SENTINEL_CAMPAIGN_CHANNEL_ACCOUNT", RouteIdentity, "SENTINEL_CHANNEL", "sentinelsocial");
     }

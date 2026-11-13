@@ -1215,7 +1215,7 @@ internal static class StatusChecks
                 CheckState.Ok,
                 byChannel == 0
                     ? $"Routed: default {routes.Global.Default?.PluginId ?? "none"}."
-                    : $"Routed: default {routes.Global.Default?.PluginId ?? "none"}, {byChannel} {(byChannel == 1 ? "route" : "routes")} by channel.",
+                    : $"Routed: default {routes.Global.Default?.PluginId ?? "none"}, {byChannel} of them by channel.",
                 null)
             : new StatusCheck(
                 "route",

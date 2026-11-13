@@ -80,6 +80,12 @@ public class RouteResolveExchangesTests
 
         var resolved = await api.RecordAsync<RouteResolutionDto>(Operations.RouteResolve, "on-a-channel", new { campaign_id = campaign, operation = "message.send", channel = "linkedin" }, Ct);
         var listed = await api.RecordAsync<RoutesDto>(Operations.RouteList, "channel-routes", new { campaign_id = campaign }, Ct);
+        var described = await api.RecordAsync<OperationDescriptionDto>(Operations.OperationDescribe, "on-a-channel", new { campaign_id = campaign, operation = "message.send", channel = "linkedin" }, Ct);
+        var refusedResolve = await api.RecordErrorAsync(Operations.RouteResolve, "unknown-channel", new { campaign_id = campaign, operation = "message.send", channel = "sms" }, HttpStatusCode.BadRequest, Ct);
+        var refusedDescribe = await api.RecordErrorAsync(Operations.OperationDescribe, "unknown-channel", new { campaign_id = campaign, operation = "message.send", channel = "sms" }, HttpStatusCode.BadRequest, Ct);
+
+        Assert.Equal(("other-tool", "linkedin"), (described.PluginId, described.Channel));
+        Assert.All(new[] { refusedResolve, refusedDescribe }, error => Assert.Equal("validation_failed", error.Code));
 
         Assert.Equal(("other-tool", RouteScope.CampaignChannel, "linkedin"), (resolved.PluginId, resolved.Scope, resolved.Channel));
         var routes = Assert.Single(listed.Campaigns);

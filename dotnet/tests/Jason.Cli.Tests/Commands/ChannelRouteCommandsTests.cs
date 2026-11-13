@@ -97,7 +97,7 @@ public class ChannelRouteCommandsTests
         Assert.Equal("runtime_too_old", error.Code);
         Assert.False(error.Retryable);
         Assert.Contains("restart", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("jason update", error.Message, StringComparison.Ordinal);
+        Assert.Contains("update Jason", error.Message, StringComparison.Ordinal);
         Assert.Contains("0.1.0-dev", error.Message, StringComparison.Ordinal);
     }
 
@@ -169,7 +169,7 @@ public class ChannelRouteCommandsTests
         var error = JsonSerializer.Deserialize<ErrorResponse>(run.Text, JasonJson.Options)!.Error;
         Assert.Equal("runtime_too_old", error.Code);
         Assert.Contains("restart", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("jason update", error.Message, StringComparison.Ordinal);
+        Assert.Contains("update Jason", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A read that names no channel asks the runtime nothing first.</summary>
@@ -188,6 +188,26 @@ public class ChannelRouteCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Single(run.Asked);
         Assert.NotEqual(Operations.SystemInfo, run.Asked[0]);
+    }
+
+    /// <summary>A runtime that cannot be reached is exit 3 with a channel named, as it is without one.</summary>
+    [Theory]
+    [InlineData("set")]
+    [InlineData("unset")]
+    [InlineData("resolve")]
+    [InlineData("describe")]
+    public async Task A_runtime_that_cannot_be_reached_is_exit_3_with_a_channel_named_as_without(string verb)
+    {
+        using var withChannel = new Run(unreachable: true);
+        using var without = new Run(unreachable: true);
+        var args = ChannelVerb(verb);
+
+        var exit = await withChannel.RunAsync(args);
+        var exitWithout = await without.RunAsync(args.Where((_, i) => args[i] != "--channel" && (i == 0 || args[i - 1] != "--channel")).ToArray());
+
+        Assert.Equal(ExitCodes.RuntimeUnavailable, exit);
+        Assert.Equal(exitWithout, exit);
+        Assert.DoesNotContain("runtime_too_old", withChannel.Text, StringComparison.Ordinal);
     }
 
     private static string[] ChannelVerb(string verb) => verb switch
@@ -330,7 +350,7 @@ public class ChannelRouteCommandsTests
         private readonly CliEnvironment _environment;
         private readonly List<(string Operation, string Body)> _calls = [];
 
-        public Run(string? info = null, string answer = "{}", HttpStatusCode infoStatus = HttpStatusCode.OK)
+        public Run(string? info = null, string answer = "{}", HttpStatusCode infoStatus = HttpStatusCode.OK, bool unreachable = false)
         {
             _paths.WriteDescriptor(Live);
             info ??= Info(channelRoutes: 0);
@@ -342,6 +362,11 @@ public class ChannelRouteCommandsTests
                 {
                     var operation = request.RequestUri!.AbsolutePath["/v1/".Length..];
                     _calls.Add((operation, request.Content!.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult()));
+                    if (unreachable)
+                    {
+                        throw new HttpRequestException("connection refused");
+                    }
+
                     var isInfo = operation == Operations.SystemInfo;
                     return new HttpResponseMessage(isInfo ? infoStatus : HttpStatusCode.OK)
                     {
