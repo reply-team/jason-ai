@@ -45,7 +45,7 @@ type Ruled = { args: unknown[] } | { refused: string; why: 'full_access' | 'mode
 interface Row {
     /** How many arguments the handler takes; what a tab sends past them is not handed on. */
     arity: number;
-    rule?: (args: unknown[], call: (member: InvokeMember) => Promise<unknown>) => Promise<Ruled>;
+    rule?: (args: unknown[], modeOf: (chatId: unknown) => string | null) => Promise<Ruled>;
 }
 
 const modes = ['plan_only', 'ask_first', 'auto_edit', 'full_access'];
@@ -69,14 +69,13 @@ const rows = new Map<InvokeMember, Row>([
         'chat.send',
         {
             arity: 3,
-            // The chat's mode is read as the window's list says it now; the send is refused for Full access, and otherwise
-            // carries that mode, which the chat checks again as it takes the send: a mode changed between the two refuses it.
-            rule: async (args, call) => {
+            // The chat's mode is read as the chat holds it now, kept or not (`Chat.modeNow`); the send is refused for Full
+            // access, and otherwise carries that mode, which the chat checks again as it takes the send: a mode changed
+            // between the two refuses it. A chat the desktop does not hold is sent in Ask first, which the chat refuses.
+            rule: async (args, modeOf) => {
                 const [chatId, text, options] = args;
-                const listed = await call('chat.list');
-                const found = Array.isArray(listed) ? (listed as unknown[]).find((each) => typeof each === 'object' && each !== null && (each as { id?: unknown }).id === chatId) : undefined;
-                const read = (found as { mode?: unknown } | undefined)?.mode;
-                const mode = typeof read === 'string' && modes.includes(read) ? read : 'ask_first';
+                const read = modeOf(chatId);
+                const mode = read !== null && modes.includes(read) ? read : 'ask_first';
                 if (mode === 'full_access') return { refused: fullAccessElsewhere, why: 'full_access' };
                 const given = typeof options === 'object' && options !== null && !Array.isArray(options) ? (options as Record<string, unknown>) : {};
                 if (given.mode !== undefined && given.mode !== mode) return { refused: modeElsewhere, why: 'mode' };
@@ -110,6 +109,8 @@ export interface BridgeOptions {
     origin(): string | null;
     /** Each member's handler, as `ipc.ts` registered it for the window. */
     members: ReadonlyMap<InvokeMember, Handler>;
+    /** A chat's mode as the chat holds it now, by its id, kept or not; null for one it does not hold. Reads alone. */
+    modeOf(chatId: unknown): string | null;
     log: Logger;
     now?(): number;
     /** How often a stream says it is alive; fifteen seconds unless a test shortens it. */
@@ -384,12 +385,8 @@ export class BrowserBridge {
         }
         const handler = this.#options.members.get(member as InvokeMember);
         if (handler === undefined) return void answer(response, 500, { error: 'The desktop has no handler for that yet.' });
-        const call = async (other: InvokeMember) => {
-            const each = this.#options.members.get(other);
-            return each === undefined ? undefined : each();
-        };
         const given = args.slice(0, row.arity);
-        const ruled: Ruled = row.rule === undefined ? { args: given } : await row.rule(given, call);
+        const ruled: Ruled = row.rule === undefined ? { args: given } : await row.rule(given, (chatId) => this.#options.modeOf(chatId));
         if ('refused' in ruled) {
             this.#refuse(ruled.why, member);
             return void answer(response, 200, { result: { refused: ruled.refused } });

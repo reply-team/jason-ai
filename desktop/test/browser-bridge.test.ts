@@ -73,9 +73,12 @@ async function rig(t: { after(fn: () => void | Promise<void>): void }, extra: Pa
     const now = { value: 1_000_000 };
     const origin = { value: runtime as string | null };
     const { listed, ...options } = extra;
+    const listing = listed ?? (() => []);
     const bridge = await BrowserBridge.open({
         origin: () => origin.value,
-        members: recording(calls, listed ?? (() => [])),
+        members: recording(calls, listing),
+        // The chat's own read of a mode, stood in by the conversations given.
+        modeOf: (chatId) => (listing().find((each) => (each as { id?: unknown }).id === chatId) as { mode?: string } | undefined)?.mode ?? null,
         log,
         now: () => now.value,
         ...options,
@@ -328,7 +331,7 @@ test('chat.send to a chat in Full access is refused, and the send handler never 
     const answer = await r.call(secret, 'chat.send', ['cht_full', 'delete everything', { host: 'claude' }]);
     assert.equal(answer.status, 200);
     assert.deepEqual(JSON.parse(answer.body), { result: { refused: fullAccessElsewhere } });
-    assert.deepEqual(r.calls.map((call) => call.member), ['chat.list']);
+    assert.deepEqual(r.calls, [], 'nothing was handled');
     assert.deepEqual(refusals(r).at(-1), { Why: 'full_access', Member: 'chat.send' });
 });
 
@@ -390,7 +393,7 @@ test('chat.create under a standing Full access for new chats makes an Ask first 
     writeStanding(real.b.paths.fullAccess, 'claude', { consent: fullAccessConsent, givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
     // The window's own create is in Full access under this standing choice: the control.
     assert.equal((await real.chat.create(undefined, 'claude')).mode, 'full_access');
-    const r = await rig(t, { members: real.members });
+    const r = await rig(t, { members: real.members, modeOf: (chatId) => real.chat.modeNow(chatId) });
     const secret = await r.pair();
     const made = JSON.parse((await r.call(secret, 'chat.create', [null, 'claude'])).body) as { result: { id: string; mode: string } };
     assert.equal(made.result.mode, 'ask_first');
@@ -403,9 +406,7 @@ test('the chat\'s own check is the second line: a send read as Ask first while t
     const full = await real.chat.create(undefined, 'claude');
     assert.equal(full.mode, 'full_access');
     // The bridge's read is stood in by one that is behind the chat: as if the window chose Full access between the two.
-    const members = new Map(real.members);
-    members.set('chat.list', () => [{ id: full.id, mode: 'ask_first' }]);
-    const r = await rig(t, { members });
+    const r = await rig(t, { members: real.members, modeOf: () => 'ask_first' });
     const secret = await r.pair();
     const answer = await r.call(secret, 'chat.send', [full.id, 'hello', { host: 'claude' }]);
     assert.equal(answer.status, 200);
@@ -413,6 +414,29 @@ test('the chat\'s own check is the second line: a send read as Ask first while t
     const done = said.find((event) => event.kind === 'done');
     assert.ok(done !== undefined && done.kind === 'done' && typeof done.error === 'string', JSON.stringify(said));
     assert.ok(!real.b.record().some((each) => each.stdin.includes('hello') || each.args.some((arg) => arg.includes('hello'))), 'no turn was started');
+});
+
+test('a chat the window made in Full access and never sent to, so not yet kept or listed, takes no message from a tab', async (t) => {
+    const real = realChat(t);
+    writeStanding(real.b.paths.fullAccess, 'claude', { consent: fullAccessConsent, givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
+    const full = await real.chat.create(undefined, 'claude');
+    assert.equal(full.mode, 'full_access');
+    assert.ok(!real.chat.list().some((each) => each.id === full.id), 'the list holds kept chats alone');
+    const r = await rig(t, { members: real.members, modeOf: (chatId) => real.chat.modeNow(chatId) });
+    const secret = await r.pair();
+    const answer = await r.call(secret, 'chat.send', [full.id, 'hello', { host: 'claude' }]);
+    assert.deepEqual(JSON.parse(answer.body), { result: { refused: fullAccessElsewhere } });
+    // The chat said its mode when it was made; it was never asked to send, so it says no end of a turn.
+    assert.ok(!(real.events.get(full.id) ?? []).some((event) => event.kind === 'done'), 'the chat was never asked');
+});
+
+test('the mode a send is held to is read by id, kept or not, keeping nothing; an id the desktop does not hold reads null', async (t) => {
+    const real = realChat(t);
+    assert.equal(real.chat.modeNow('cht_nobody'), null);
+    assert.equal(real.chat.modeNow(42), null);
+    const made = await real.chat.create(undefined, 'claude');
+    assert.equal(real.chat.modeNow(made.id), 'ask_first');
+    assert.ok(!real.chat.list().some((each) => each.id === made.id), 'reading the mode keeps nothing');
 });
 
 // --- events ----------------------------------------------------------------------------------------------------------
@@ -537,7 +561,7 @@ test('closing the bridge ends every stream and session, and its port answers no 
 test('the holder opens one bridge on the first ask, the same one after, and none once it is closed with the window', async (t) => {
     const opened: BrowserBridge[] = [];
     const holder = new BridgeHolder(async () => {
-        const bridge = await BrowserBridge.open({ origin: () => runtime, members: new Map(), log: memoryLog() });
+        const bridge = await BrowserBridge.open({ origin: () => runtime, members: new Map(), modeOf: () => null, log: memoryLog() });
         opened.push(bridge);
         return bridge;
     });
@@ -650,7 +674,7 @@ test('no file the bridge writes, its log among them, holds the code or the secre
     t.after(() => rmSync(folder, { recursive: true, force: true }));
     const log = fileLogger(join(folder, 'logs'));
     const calls: Rig['calls'] = [];
-    const bridge = await BrowserBridge.open({ origin: () => runtime, members: recording(calls, () => [{ id: 'cht_full', mode: 'full_access' }]), log });
+    const bridge = await BrowserBridge.open({ origin: () => runtime, members: recording(calls, () => []), modeOf: () => 'full_access', log });
     t.after(() => bridge.close());
     const code = bridge.mint();
     const secret = (JSON.parse((await ask(bridge.port, { path: '/pair', headers: fromPage, body: json({ code }) })).body) as { secret: string }).secret;

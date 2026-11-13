@@ -302,7 +302,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
     // The bridge a browser tab reaches the chat through: opened only when the person first opens the chat in a browser,
     // closed with the window and at quit.
-    const bridges = new BridgeHolder(() => BrowserBridge.open({ origin, members: seam.members, log }));
+    // The chat is made further down; the bridge opens only on the person's act, long after it is.
+    const bridges = new BridgeHolder(() => BrowserBridge.open({ origin, members: seam.members, modeOf: (chatId) => chat.modeNow(chatId), log }));
     // The one way an event reaches the page: the window, and every tab paired with the bridge for the channels a tab reads.
     const toPage = (channel: keyof typeof eventChannels, ...args: unknown[]) => {
         current?.webContents.send(eventChannels[channel], ...args);

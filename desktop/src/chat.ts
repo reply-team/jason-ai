@@ -850,6 +850,15 @@ export class Chat {
         return this.#options.demo !== true && (this.#options.fullAccessOffered ?? fullAccessOffered);
     }
 
+    /**
+     * A conversation's mode as the desktop holds it now, kept or not, by its id; null for an id it does not hold. A read
+     * alone: unlike `open`, it says nothing a conversation waits to be told, and it marks nothing.
+     */
+    modeNow(id: unknown): ChatMode | null {
+        const conversation = typeof id === 'string' ? this.#conversations.get(id) : undefined;
+        return conversation === undefined ? null : this.#modeOf(conversation);
+    }
+
     #modeOf(conversation: Conversation): ChatMode {
         if (this.#fullAccess.has(conversation.id)) return 'full_access';
         return this.#autoEdit.has(conversation.id) ? 'auto_edit' : (conversation.mode ?? 'ask_first');
