@@ -566,7 +566,8 @@ also when the link is refused.
 Every process is started with a file and arguments, never through a shell, and only by the named modules:
 `src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`, and a set-up chat's
 naming run, whose command line `src/chat-naming.ts` gives), `src/chat-process.ts` (a chat turn's host, and Codex's
-model listing, `codex app-server`, which only `src/model-lists.ts` starts), `src/shell-path.ts` (on macOS and Linux
+model listing, `codex app-server`, which only `src/model-lists.ts` starts), `src/open-in-start.ts` (an editor or the file
+manager that Open in names, started on its own with the folder), `src/shell-path.ts` (on macOS and Linux
 only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
