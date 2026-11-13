@@ -27,6 +27,7 @@ import { askFeed, catchUpFeed, ChatPanel, handLine, openConversation, reloadConv
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
+import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
 import { followStanding } from '../platform/full-access';
@@ -55,6 +56,7 @@ import {
 
 const titles: Readonly<Record<PanelName, string>> = {
     start: 'Start',
+    dashboard: 'Dashboard',
     needs: 'Needs you',
     campaigns: 'Agents',
     activity: 'Activity',
@@ -95,9 +97,18 @@ function PagePanel() {
     );
 }
 
+function DashboardPanel() {
+    useEffect(() => {
+        dashboard.watching(true);
+        return () => dashboard.watching(false);
+    }, []);
+    return <Painted className="painted" view={dashboard.dashboardView} />;
+}
+
 const components = {
     chat: ChatTab,
     start: StartPanel,
+    dashboard: DashboardPanel,
     needs: () => <Painted className="painted" view={needs.needsView} />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
@@ -254,6 +265,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     pending = null;
                     void needs.reload();
                     void campaigns.reload();
+                    dashboard.reloadIfOpen();
                 }, reloadDelay);
             }),
         ];

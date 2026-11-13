@@ -50,7 +50,7 @@ export const messageOf = (error: unknown): string =>
     error instanceof ApiError || error instanceof Error ? error.message : String(error);
 
 /** The panels of the dock, by the name the dock knows each by. */
-export type PanelName = 'start' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
+export type PanelName = 'start' | 'dashboard' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
 
 export interface Dock {
     show(panel: PanelName): void;

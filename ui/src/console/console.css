@@ -1220,3 +1220,72 @@ body,
 .jc-console .start .start-demo-refusal {
     color: var(--amber);
 }
+
+/* The Dashboard: the six tiles, the two cards side by side and the Recent activity card below. */
+.jc-console .dash-head {
+    align-items: flex-start;
+}
+.jc-console .dash-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.jc-console .dash-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    min-width: 0;
+}
+.jc-console .dash-tile b {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.jc-console .dash-tile .dash-none {
+    color: var(--faint);
+}
+.jc-console .dash-tile .label,
+.jc-console .dash-tile .rel {
+    color: var(--faint);
+    font-size: 12.5px;
+}
+.jc-console .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.jc-console .dash-card .hd {
+    justify-content: space-between;
+}
+.jc-console .dash-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 0;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--line2);
+    color: var(--ink);
+    text-align: left;
+}
+.jc-console .dash-link {
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--teal);
+    text-align: left;
+}
+.jc-console .dash-line {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line2);
+}
+.jc-console .dash-agents progress {
+    width: 90px;
+}

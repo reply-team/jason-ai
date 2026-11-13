@@ -1,3 +1,4 @@
+import { t } from '../platform/i18n';
 import { parseRoute } from '../router';
 import { registry, textOf } from '../platform/slots';
 import { pendingMark } from '../shell/attention-mark';
@@ -48,7 +49,13 @@ define('side.chat', ([id]) => {
     });
 });
 define('side.show', ([panel]) => {
-    if (panel === 'needs' || panel === 'campaigns' || panel === 'activity' || panel === 'connect')
+    if (
+        panel === 'dashboard' ||
+        panel === 'needs' ||
+        panel === 'campaigns' ||
+        panel === 'activity' ||
+        panel === 'connect'
+    )
         here().dock.show(panel);
 });
 define('side.page', ([hash]) => {
@@ -85,6 +92,11 @@ export function sideView(): Html {
                       </button>
                   </nav>`
         }
+        <nav class="list" aria-label="Dashboard">
+            <button class="item" type="button" ${act('side.show', 'dashboard')}>
+                ${svg('home', 15)}<span>${t('dash.title')}</span>
+            </button>
+        </nav>
         <button class="newbtn" type="button" ${act('side.new')}>${svg('plus', 15)}New chat</button>
         <nav class="list" aria-label="Conversations">
             ${conversations.value
