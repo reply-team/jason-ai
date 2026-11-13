@@ -484,19 +484,30 @@ public partial class ReleaseWorkflowTests
         var runs = steps.Select(step => Scalar(step, "run")).OfType<string>().ToList();
         Assert.Single(runs, run => run.StartsWith("dotnet build dotnet/Jason.slnx --configuration Release", StringComparison.Ordinal)
             && run.Contains("-p:Version=${{ needs.version.outputs.release }}", StringComparison.Ordinal));
-        var test = Assert.Single(runs, run => run.StartsWith("dotnet test", StringComparison.Ordinal));
-        Assert.StartsWith("dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build", test, StringComparison.Ordinal);
-        Assert.Contains("-p:Version=${{ needs.version.outputs.release }}", test, StringComparison.Ordinal);
+        // The tests run through the script every test step of ci.yml runs them through, told the release's version, and
+        // the whole suite, not a part of it: the three tests that failed were not where anybody would have looked. So the
+        // step names no project, no namespace and not the critical tier.
+        var testing = Assert.Single(steps, step => Scalar(step, "run")?.Contains("Invoke-Tests.ps1", StringComparison.Ordinal) == true);
+        var test = Scalar(testing, "run")!;
+        Assert.StartsWith("./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION ", test, StringComparison.Ordinal);
+        Assert.Equal("${{ needs.version.outputs.release }}", Scalar(Mapping(testing, "env"), "VERSION"));
+        foreach (var narrowing in new[] { "-Projects", "-Namespaces", "-NotNamespaces", "-Critical", "filter" })
+        {
+            Assert.DoesNotContain(narrowing, test, StringComparison.OrdinalIgnoreCase);
+        }
 
-        // The whole suite, not a part of it: the three tests that failed were not where anybody would have looked.
-        Assert.DoesNotContain("filter", test, StringComparison.Ordinal);
+        // Run as a runner runs it, with a stand-in for dotnet, the step makes one call: the whole solution, stamped with the
+        // version it was told, with the test platform's repeat of a failed test and no filter.
+        Assert.Equal(
+            "test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=9.8.7 --results-directory <results>/1 -- --retry-failed-tests 2 --report-xunit-trx",
+            Assert.Single(TestCalls(testing, "9.8.7")));
 
         // And it proves it was stamped, from what was built: a job that quietly lost the stamp would pass as -dev.
         var check = Assert.Single(steps, step => Scalar(step, "run")?.Contains("FileVersionInfo", StringComparison.Ordinal) == true);
         Assert.Equal("${{ needs.version.outputs.release }}", Scalar(Mapping(check, "env"), "RELEASE"));
         Assert.Contains("throw", Scalar(check, "run"), StringComparison.Ordinal);
         Assert.True(
-            steps.IndexOf(check) < steps.FindIndex(step => Scalar(step, "run") == test),
+            steps.IndexOf(check) < steps.IndexOf(testing),
             "The stamp is checked after the tests have already run under it.");
 
         // Every other job keeps the -dev version, and nothing stamps VersionPrefix itself: that would leave the suffix behind.
@@ -516,6 +527,45 @@ public partial class ReleaseWorkflowTests
         }
 
         Assert.DoesNotContain("-p:VersionPrefix", ci, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The <c>dotnet</c> calls a test step of ci.yml makes, run as a runner runs it from the repository's root and told
+    /// <paramref name="version"/>, with a stand-in for <c>dotnet</c>: a PowerShell function, which a command name finds
+    /// before any program. It records each call, with the results directory written as <c>&lt;results&gt;</c>, and
+    /// succeeds having written no report.
+    /// </summary>
+    private static List<string> TestCalls(YamlMappingNode step, string version)
+    {
+        using var tree = new TempTree();
+        var results = Path.Combine(tree.Root, "test-results");
+        var calls = Path.Combine(tree.Root, "calls");
+        File.WriteAllText(calls, string.Empty);
+        var script = Path.Combine(tree.Root, "step.ps1");
+        File.WriteAllText(script, Scalar(step, "run"));
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, $$"""
+            $ErrorActionPreference = 'Stop'
+            function dotnet {
+                Add-Content -LiteralPath '{{calls}}' -Value (($args -join ' ').Replace('{{results}}', '<results>').Replace('\', '/'))
+                $global:LASTEXITCODE = 0
+            }
+            Set-Location -LiteralPath '{{RepositoryRoot()}}'
+            & '{{script}}'
+            exit $LASTEXITCODE
+            """);
+
+        var ran = Pwsh(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["VERSION"] = version,
+                ["RUNNER_TEMP"] = tree.Root,
+                ["GITHUB_STEP_SUMMARY"] = Path.Combine(tree.Root, "summary"),
+            },
+            "-File",
+            harness);
+        Assert.True(ran.Exit == 0, ran.Stdout + ran.Stderr);
+        return [.. File.ReadAllLines(calls).Where(line => line.Length > 0)];
     }
 
     /// <summary>
