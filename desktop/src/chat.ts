@@ -88,7 +88,7 @@ import {
 import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
-import { oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
+import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
 import type { DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
@@ -563,6 +563,9 @@ export class Chat {
         // A take-back the last run owed is done before any chat is made; one the file still will not take keeps the
         // choice taken back for this run too.
         if (takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
+        // A standing choice is in force only while its take-back could be recorded: where its folder takes no new file,
+        // it is held as taken back for this run.
+        if (!this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
         // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
         // never stops for either.
@@ -971,19 +974,23 @@ export class Chat {
         }, 0);
     }
 
-    /** Gives the standing choice: the mark of a take-back owed goes first, so the next start never removes this one. */
+    /**
+     * Gives the standing choice: the new choice is written first, and only then does the mark of a take-back owed go. A
+     * mark removed before a write that fails would let the old choice back at the next start; a mark that will not go
+     * after the write keeps the new one out of force, and the next start removes it. Either failure gives this time only.
+     */
     #giveStanding(newChats: boolean): boolean {
         const file = this.#options.paths.fullAccess;
-        if (takeBackOwed(file)) {
-            try {
-                settleTakeBack(file);
-            } catch (error) {
-                this.#options.standingUnwritten?.((error as NodeJS.ErrnoException).code ?? 'unknown');
-                return false;
-            }
+        const standing: Standing = { consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats };
+        try {
+            writeStanding(file, 'claude', standing);
+            if (takeBackOwed(file)) settleTakeBack(file);
+        } catch (error) {
+            this.#options.standingUnwritten?.((error as NodeJS.ErrnoException).code ?? 'unknown');
+            return false;
         }
-        if (!this.#writeStanding({ consent: fullAccessConsent, givenAt: new Date(this.#now()).toISOString(), newChats }, 'given')) return false;
         this.#takenBack = false;
+        this.#options.standingChanged?.({ givenAt: standing.givenAt, newChats }, 'given');
         return true;
     }
 

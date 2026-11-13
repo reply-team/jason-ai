@@ -88,11 +88,11 @@ export const standingUnkeptSentence = 'Always could not be kept: its file could 
  * held as taken back while this run lasts, and the next start removes it.
  */
 export const standingUnremovedSentence =
-    'Always could not be removed from its file and is not in force until Jason is closed. Close anything that has full-access.json open: Jason removes it when it next starts, and if the System screen then still shows Always, choose Ask each time again there.';
+    'Always could not be removed from its file; Jason holds it as taken back and removes it when it next starts. Close anything that has full-access.json open. If the System screen still shows Always after that start, choose Ask each time again there.';
 
-/** Said in a new chat the standing choice would have started in Full access when the folder for Full access was not made. */
+/** Said in a new chat the standing choice would have started in Full access when Full access could not be set up for it. */
 export const newChatAskFirstSentence =
-    'This chat starts in Ask first: the folder for Full access could not be made. Choose Full access from the menu to try again.';
+    'This chat starts in Ask first: Full access could not be set up for it. Choose Full access from the menu to try again.';
 
 /**
  * The number the standing choice of Full access is given under (`full-access-standing.ts`): a choice kept under any
