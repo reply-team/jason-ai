@@ -3,7 +3,7 @@
 // never a file another program wrote. The nsis uninstaller itself is never run here.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
@@ -14,6 +14,7 @@ import { gitBashWrapper, windowsShim } from '../src/command-line.ts';
 import { RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
+import { claimDemoFolder, demoMarkerName } from '../src/demo-folders.ts';
 import { harnessRoot, inside, runtimeRefusal, stopRuntimeCode, stopRuntimeFlag, stopRuntimeStart, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
 import { memoryLog } from './harness.ts';
 
@@ -125,7 +126,7 @@ test('the start that stops the carried runtime exits 0 when none of its own runs
     assert.ok(branch.includes('void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));'));
     const from = start.indexOf('export async function runStopRuntime(');
     const run = start.slice(from, start.indexOf('\n}\n', from));
-    assert.ok(run.includes('return stopRuntimeCode(() => stopOwnRuntime(carried().own));'));
+    assert.ok(run.includes('return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime('));
     assert.doesNotMatch(run, /dialog|BrowserWindow|requestSingleInstanceLock/);
 });
 
@@ -484,4 +485,166 @@ test('the uninstall start reads and takes off the registration as the start wrot
     assert.ok(start.includes('const written = linkRegistration(process.platform, app.isPackaged, process.execPath);'));
     assert.ok(start.includes('registered: () => app.isDefaultProtocolClient(written.scheme, written.path, written.args),'));
     assert.ok(start.includes('remove: () => app.removeAsDefaultProtocolClient(written.scheme, written.path, written.args),'));
+});
+
+// The demo's two folders: the data directory and the harness root of the second installation beside the person's. The
+// removal run from the person's installation takes them off too, and nothing besides what it took off before.
+
+interface DemoBench {
+    b: Bench;
+    person: { data: string; root: string };
+    demo: { data: string; root: string };
+    stops: string[];
+}
+
+function demoBench(t: { after(fn: () => void): void }, options: { stop?: StopOutcome; make?: boolean } = {}): DemoBench {
+    const b = bench(t);
+    const home = scratch(t);
+    const person = { data: join(home, '.jason'), root: join(home, 'Jason') };
+    const demo = { data: join(home, '.jason-demo'), root: join(home, 'Jason-demo') };
+    for (const folder of [person.data, person.root]) {
+        mkdirSync(folder, { recursive: true });
+        writeFileSync(join(folder, 'kept.txt'), 'the person’s own');
+    }
+    if (options.make !== false) {
+        for (const folder of [demo.data, demo.root]) {
+            claimDemoFolder(folder);
+            mkdirSync(join(folder, 'inner'), { recursive: true });
+            writeFileSync(join(folder, 'inner', 'file.txt'), 'sample');
+        }
+    }
+    const stops: string[] = [];
+    b.deps.platform = process.platform;
+    b.deps.dataDirectory = person.data;
+    b.deps.harnessRoot = person.root;
+    b.deps.demo = {
+        data: demo.data,
+        harnessRoot: demo.root,
+        stop: async () => {
+            stops.push('demo stop');
+            return options.stop ?? { kind: 'none' };
+        },
+    };
+    return { b, person, demo, stops };
+}
+
+test('the removal takes off the demo’s data directory and its harness root, and leaves the person’s own', async (t) => {
+    const d = demoBench(t, { stop: { kind: 'stopped' } });
+    const report = await uninstall(d.b.deps);
+    assert.equal(existsSync(d.demo.data), false);
+    assert.equal(existsSync(d.demo.root), false);
+    assert.equal(readFileSync(join(d.person.data, 'kept.txt'), 'utf8'), 'the person’s own');
+    assert.equal(readFileSync(join(d.person.root, 'kept.txt'), 'utf8'), 'the person’s own');
+    assert.deepEqual(d.stops, ['demo stop'], 'the demo’s runtime is stopped first, once');
+    assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'removed' });
+    assert.ok(report.removed.includes(`The demo’s data directory, ${d.demo.data}, with the sample campaigns in it`));
+    assert.ok(report.removed.includes(`The demo’s harness root, ${d.demo.root}, with the sample folders in it`));
+    // What stays is said as before: the person's data directory and harness root are still named as left.
+    assert.ok(report.left.some((line) => line.startsWith(`The data directory, ${d.person.data}`)));
+    assert.ok(report.left.some((line) => line.startsWith(`The harness root, ${d.person.root}`)));
+    assert.deepEqual(report.failed, []);
+});
+
+test('with no demo set up there is nothing to take off, and nothing is stopped or made', async (t) => {
+    const d = demoBench(t, { make: false });
+    const report = await uninstall(d.b.deps);
+    assert.deepEqual(d.stops, []);
+    assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'absent' });
+    assert.ok(report.untouched.includes('No demo was set up: the demo’s data directory and harness root were not there'));
+    assert.equal(existsSync(d.demo.data), false);
+    assert.equal(existsSync(d.demo.root), false);
+});
+
+test('a demo runtime that does not stop keeps both folders, and the rest of the removal is still made', async (t) => {
+    for (const stop of [{ kind: 'failed', exit: 1 }, { kind: 'unanswered', pid: 7, runFile: join('x', 'runtime.json') }, { kind: 'another' }] as StopOutcome[]) {
+        const d = demoBench(t, { stop });
+        const report = await uninstall(d.b.deps);
+        assert.equal(existsSync(join(d.demo.data, 'inner', 'file.txt')), true, stop.kind);
+        assert.equal(existsSync(join(d.demo.root, 'inner', 'file.txt')), true, stop.kind);
+        assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'runtime_running' }, stop.kind);
+        assert.equal(report.failed.filter((line) => line.includes('demo')).length, 2, stop.kind);
+        assert.equal(report.refused, null, 'the person’s removal goes on');
+    }
+});
+
+test('a demo runtime whose stop throws is a runtime that did not stop', async (t) => {
+    const d = demoBench(t);
+    d.b.deps.demo!.stop = async () => Promise.reject(new Error('planted'));
+    const report = await uninstall(d.b.deps);
+    assert.equal(existsSync(join(d.demo.data, 'inner', 'file.txt')), true);
+    assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'runtime_running' });
+});
+
+test('a link where a demo folder should be is left, and what it points at is untouched', async (t) => {
+    const d = demoBench(t, { make: false });
+    const target = join(scratch(t), 'elsewhere');
+    mkdirSync(target);
+    writeFileSync(join(target, 'precious.txt'), 'x');
+    symlinkSync(target, d.demo.data, 'junction');
+    const report = await uninstall(d.b.deps);
+    assert.equal(readFileSync(join(target, 'precious.txt'), 'utf8'), 'x');
+    assert.ok(report.left.some((line) => line.includes(d.demo.data) && line.includes('a link or a file')));
+    assert.deepEqual(d.stops, [], 'a link is no demo of ours: nothing is stopped for it');
+    assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'not_folder' });
+});
+
+test('a demo folder that is, holds or lies inside the person’s own is never removed', async (t) => {
+    const d = demoBench(t, { make: false });
+    const cases: [string, string][] = [
+        [d.person.data, join(d.person.root, 'x')],
+        [join(d.person.data, 'inner-demo'), join(d.person.root, '..', 'elsewhere-demo')],
+        [join(d.person.data, '..'), join(d.person.root, '..', 'other-demo')],
+    ];
+    for (const [data, root] of cases) {
+        mkdirSync(data, { recursive: true });
+        mkdirSync(root, { recursive: true });
+        d.b.deps.demo = { data, harnessRoot: root, stop: async () => ({ kind: 'none' }) };
+        const report = await uninstall(d.b.deps);
+        assert.equal(readFileSync(join(d.person.data, 'kept.txt'), 'utf8'), 'the person’s own', data);
+        assert.equal(readFileSync(join(d.person.root, 'kept.txt'), 'utf8'), 'the person’s own', data);
+        assert.equal(report.steps.at(-1)?.step, 'demo');
+        assert.notEqual(report.steps.at(-1)?.outcome, 'removed', data);
+    }
+});
+
+test('a removal that stops at the person’s own runtime has not looked at the demo', async (t) => {
+    const d = demoBench(t, { stop: { kind: 'stopped' } });
+    d.b.deps.runtime = { stop: async () => ({ kind: 'failed', exit: 1 }) };
+    const report = await uninstall(d.b.deps);
+    assert.notEqual(report.refused, null);
+    assert.deepEqual(d.stops, []);
+    assert.equal(existsSync(join(d.demo.data, 'inner', 'file.txt')), true);
+});
+
+test('a removal that knows no demo takes only the steps it took before', async (t) => {
+    const b = bench(t);
+    const report = await uninstall(b.deps);
+    assert.ok(!report.steps.some((one) => one.step === 'demo'));
+});
+
+test('the step’s log names the step and its outcome and never a path', async (t) => {
+    const d = demoBench(t, { stop: { kind: 'stopped' } });
+    const log = memoryLog();
+    d.b.deps.log = log;
+    await uninstall(d.b.deps);
+    const line = log.lines.find((one) => one.name === 'removal_step' && one.fields['Step'] === 'demo');
+    assert.deepEqual(line?.fields, { Step: 'demo', Outcome: 'removed' });
+});
+
+test('a demo folder without the desktop’s marker is never removed, and is named as not made by this application', async (t) => {
+    const d = demoBench(t, { stop: { kind: 'stopped' } });
+    rmSync(join(d.demo.root, demoMarkerName));
+    const report = await uninstall(d.b.deps);
+    assert.equal(existsSync(join(d.demo.root, 'inner', 'file.txt')), true, 'the unmarked folder is untouched');
+    assert.equal(existsSync(d.demo.data), false, 'the marked one is removed');
+    assert.ok(report.left.some((line) => line.includes(d.demo.root) && line.includes('not a folder this application made')));
+    assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'unmarked' });
+    // Neither folder marked: nothing is stopped for them and nothing is removed.
+    const e = demoBench(t, { stop: { kind: 'stopped' } });
+    rmSync(join(e.demo.root, demoMarkerName));
+    rmSync(join(e.demo.data, demoMarkerName));
+    const none = await uninstall(e.b.deps);
+    assert.deepEqual(e.stops, []);
+    assert.equal(existsSync(join(e.demo.data, 'inner', 'file.txt')), true);
+    assert.equal(none.left.filter((line) => line.includes('not a folder this application made')).length, 2);
 });

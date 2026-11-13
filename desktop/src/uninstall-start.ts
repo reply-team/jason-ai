@@ -21,6 +21,8 @@ import { LoginItem, RuntimeAutostart } from './login-item.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { fileLogger, limitsFrom } from './log.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
+import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
+import { demoDirectory } from './mode.ts';
 import { dataDirectory, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
@@ -59,7 +61,9 @@ function linkStep(): { link?: { registered(): boolean; remove(): boolean } } {
 
 /** Returns the start's exit code (`stopRuntimeCode`). */
 export async function runStopRuntime(): Promise<number> {
-    return stopRuntimeCode(() => stopOwnRuntime(carried().own));
+    const { paths, executable, own } = carried();
+    // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's.
+    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
 }
 
 /** Returns the start's exit code (`uninstallExit`). */
@@ -67,9 +71,10 @@ export async function runUninstall(quiet: boolean): Promise<number> {
     const { home, paths, log, executable, cli, own } = carried();
     const folder = commandFolder(process.platform, process.env, home);
     const autostart = new RuntimeAutostart({ cli, log });
+    const stopDemo = () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) });
     const report = await uninstall({
         platform: process.platform,
-        runtime: { stop: () => stopOwnRuntime(own) },
+        runtime: { stop: () => stopWithDemo(() => stopOwnRuntime(own), () => stopDemo()) },
         folder,
         command: new PathCommand({
             platform: process.platform,
@@ -90,6 +95,12 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         dataDirectory: paths.data,
         harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
         updaterCache: updaterCache(process.env, home, process.platform),
+        // The demo's two folders, beside the person's: the uninstaller's start acts on the person's installation alone.
+        demo: {
+            data: demoDirectory(paths.data),
+            harnessRoot: demoDirectory(harnessRoot(process.env, home, paths.installationSettings)),
+            stop: stopDemo,
+        },
         log,
         ...linkStep(),
     });

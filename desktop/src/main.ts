@@ -33,8 +33,11 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, demoMenu, enterRun, offersOf, openDirectory, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
-import { holdDemoQuit, stopDemoRuntime } from './demo-runtime.ts';
+import { applyMode, demoDirectory, demoMenu, enterRun, offersOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
+import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
+import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
+import { claimDemoFolder } from './demo-folders.ts';
+import { openDemoDirectory, prepareDemo, writeDemoRoute } from './demo-start.ts';
 import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
@@ -328,7 +331,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               application: aside,
               rollback,
               log,
-              stopRuntime: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)),
+              // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
+              stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),
               refused: (why) => dialog.showErrorBox('Jason', why),
               async beforeInstall() {
                   quitting = true;
@@ -385,6 +389,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               makeAutostart: () => new RuntimeAutostart({ cli, log }),
               login,
               stopAs: (carried) => stopOwnRuntime(ownRuntimeDeps(process.platform, carried, paths.runFile, cli)),
+              stopDemo: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }),
               runsFrom: (folder) => processesRunFrom(folder),
               log,
           })
@@ -682,8 +687,16 @@ if (unsandboxed !== null) {
 function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
     runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
-        open: openDirectory,
-        prepare: (demo) => writeDemoSettings(demo, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+        open: openDemoDirectory,
+        // The demo's start-up order in one place (`demo-start.ts`): the provider and its route, then the fixed settings. It runs
+        // after the directory is made and before any runtime start, and a step that fails makes this run the person's own.
+        prepare: (demo) =>
+            prepareDemo(demo, {
+                harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))),
+                place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
+                route: writeDemoRoute,
+                fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+            }),
         keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
     });
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
