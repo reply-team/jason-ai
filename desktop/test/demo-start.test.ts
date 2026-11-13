@@ -9,6 +9,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { stopWithDemo } from '../src/demo-runtime.ts';
+import { runtimeRefusal as updateRefusal } from '../src/updates.ts';
+import { runtimeRefusal as uninstallRefusal } from '../src/uninstall.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from '../src/demo-plugin.ts';
 import { prepareDemo, settingsFileOf, writeDemoRoute } from '../src/demo-start.ts';
 import { demoDirectory, openDirectory, startOn, type Mode } from '../src/mode.ts';
@@ -134,12 +136,35 @@ test('a demo runtime left running is stopped with the person’s: a refusal of e
     assert.deepEqual(await stopWithDemo(none, none), { kind: 'none' });
     assert.deepEqual(await stopWithDemo(another, stopped), { kind: 'another' });
     assert.deepEqual(await stopWithDemo(failed, stopped), { kind: 'failed', exit: 1 });
-    assert.deepEqual(await stopWithDemo(stopped, failed), { kind: 'failed', exit: 1 });
+    assert.deepEqual(await stopWithDemo(stopped, failed), { kind: 'failed', exit: 1, demo: true });
     assert.deepEqual((await stopWithDemo(none, unanswered)).kind, 'unanswered');
-    assert.deepEqual(await stopWithDemo(stopped, async () => Promise.reject(new Error('planted'))), { kind: 'failed', exit: -1 });
+    assert.deepEqual(await stopWithDemo(stopped, async () => Promise.reject(new Error('planted'))), { kind: 'failed', exit: -1, demo: true });
     let asked = 0;
     await stopWithDemo(failed, async () => (asked += 1, { kind: 'none' }));
     assert.equal(asked, 0, 'the demo’s is not asked once the person’s refused');
+});
+
+test('a demo runtime that will not stop is said to be the demo’s in what the person reads, for the update and for the removal', async () => {
+    const failed = async (): Promise<StopOutcome> => ({ kind: 'failed', exit: 1 });
+    const none = async (): Promise<StopOutcome> => ({ kind: 'none' });
+    const demoRefused = await stopWithDemo(none, failed);
+    assert.deepEqual(demoRefused, { kind: 'failed', exit: 1, demo: true });
+    const personRefused = await stopWithDemo(failed, none);
+    assert.deepEqual(personRefused, { kind: 'failed', exit: 1 }, 'the person’s own refusal is not called the demo’s');
+    const unanswered = await stopWithDemo(none, async () => ({ kind: 'unanswered', pid: 5, runFile: 'run.json' }));
+    assert.equal(unanswered.kind === 'unanswered' && unanswered.demo, true);
+    for (const outcome of [demoRefused, unanswered]) {
+        assert.ok(outcome.kind === 'failed' || outcome.kind === 'unanswered');
+        const update = updateRefusal(outcome);
+        const removal = uninstallRefusal(outcome);
+        for (const text of [update, removal]) {
+            assert.match(text, /the demo’s runtime, the sample installation’s own and not yours, is running and did not stop/);
+            assert.match(text, /Open Jason in the demo and quit it/);
+            assert.doesNotMatch(text, /this application carries/);
+        }
+    }
+    assert.match(updateRefusal(personRefused as { kind: 'failed'; exit: number }), /the runtime this application carries did not stop/);
+    assert.match(uninstallRefusal(personRefused as { kind: 'failed'; exit: number }), /the runtime this application carries is running/);
 });
 
 test('the update, the installer’s stop and the uninstall stop the demo’s runtime too, and the start-up is the one function', () => {

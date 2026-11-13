@@ -44,7 +44,7 @@ import { join, posix, win32 } from 'node:path';
 import { bundleEntries } from './bundle-copy.ts';
 import { inert } from './inert.ts';
 import type { Logger } from './log.ts';
-import { unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
+import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
 import type { CommandStatus } from './path-command.ts';
 import { containedIn, lexicallyInside, resolveReal, type Resolve } from './resolved-path.ts';
 
@@ -261,7 +261,8 @@ export function handJason(jason: string | null): string {
  * What the person is told when the runtime this application carries did not stop, or did not answer, so nothing was
  * removed; `again` is the act to repeat once it has, and `jason` the carried jason the hand acts name.
  */
-export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | Unanswered, again = 'uninstall Jason again', jason: string | null = null): string {
+export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: true } | Unanswered, again = 'uninstall Jason again', jason: string | null = null): string {
+    if (outcome.demo) return `Nothing was removed, because ${demoRuntimeWords}. ${demoRuntimeNext} Then ${again}.`;
     const hand = handJason(jason);
     if (outcome.kind === 'unanswered') {
         const { why, next } = unansweredWords({ ...outcome, runFile: inert(outcome.runFile) }, hand);

@@ -7,6 +7,7 @@ import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, w
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { bundleFiles, checkBundle } from '../electron-builder.config.mjs';
 import { carriedDemoPlugin, placeDemoPlugin } from '../src/demo-plugin.ts';
@@ -60,6 +61,39 @@ test('the build carries the demo provider: the carried copy is the tree’s pack
     const tree = files(join(repository, 'plugins', 'demo'));
     assert.ok(tree.has('plugin.yaml') && tree.has('main.js'), 'the tree holds the package');
     assert.deepEqual(files(carriedDemoPlugin(folder)), tree);
+});
+
+/**
+ * The package digest as docs/plugins.md describes it (the runtime's PackageDigest is the same stream): sha256 over every file
+ * whose relative path has no segment starting with a dot, sorted ordinally by its forward-slashed path, each contributing
+ * its path, a zero byte, its decimal byte length, a zero byte, then its bytes.
+ */
+function packageDigest(folder: string): string {
+    const paths: string[] = [];
+    const walk = (at: string) => {
+        for (const entry of readdirSync(at, { withFileTypes: true })) {
+            const path = join(at, entry.name);
+            if (entry.isDirectory()) walk(path);
+            else paths.push(relative(folder, path).split(sep).join('/'));
+        }
+    };
+    walk(folder);
+    const hash = createHash('sha256');
+    for (const path of paths.filter((one) => !one.split('/').some((segment) => segment.startsWith('.'))).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+        const bytes = readFileSync(join(folder, ...path.split('/')));
+        hash.update(Buffer.concat([Buffer.from(path, 'utf8'), Buffer.from([0]), Buffer.from(String(bytes.length), 'ascii'), Buffer.from([0]), bytes]));
+    }
+    return `sha256:${hash.digest('hex')}`;
+}
+
+test('the carried copy’s package digest, computed as the plugin host does, is the last line plugins/demo.digests lists', (t) => {
+    const lines = readFileSync(join(repository, 'plugins', 'demo.digests'), 'utf8')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line !== '' && !line.startsWith('#'));
+    const last = lines.at(-1) ?? '';
+    assert.match(last, /^[0-9]+\.[0-9]+\.[0-9]+ sha256:[0-9a-f]{64}$/);
+    assert.equal(packageDigest(carriedDemoPlugin(prepared(t))), last.split(' ')[1]);
 });
 
 test('a pack refuses a bundle that does not carry the demo provider', (t) => {

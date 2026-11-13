@@ -51,11 +51,11 @@ export interface DemoQuitDeps {
  * answer, and otherwise it is the person's, or the demo's where the person's had no runtime of this application's.
  */
 export async function stopWithDemo(person: () => Promise<StopOutcome>, demo: () => Promise<StopOutcome>): Promise<StopOutcome> {
-    const refused = (outcome: StopOutcome) => outcome.kind === 'failed' || outcome.kind === 'unanswered';
+    const refused = (outcome: StopOutcome): outcome is Extract<StopOutcome, { kind: 'failed' | 'unanswered' }> => outcome.kind === 'failed' || outcome.kind === 'unanswered';
     const own = await person();
     if (refused(own)) return own;
     const other = await demo().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
-    if (refused(other)) return other;
+    if (refused(other)) return { ...other, demo: true };
     return own.kind === 'none' ? other : own;
 }
 
