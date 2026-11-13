@@ -30,6 +30,9 @@ export const currentChat = signal<string | null>(null);
 export const feedId = signal<string | null>(null);
 /** Whether the Feed took a line since the person last brought it to the front: the sidebar marks it. Kept here only. */
 export const feedUnseen = signal(false);
+
+/** The id of the dock's panel in front: a panel's name, or `chat:<id>`; none before the dock is ready. */
+export const activePanel = signal<string | null>(null);
 /** Why the conversations could not be listed or one opened, in the desktop's words; null when nothing failed. */
 export const conversationsFailure = signal<string | null>(null);
 
