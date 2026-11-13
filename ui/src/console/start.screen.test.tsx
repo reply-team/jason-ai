@@ -14,8 +14,8 @@ import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { fullAccessStanding } from '../platform/full-access';
 import {
-    noteClosed,
     noteKey,
+    notesClosed,
     noteWasClosed,
     startDraft,
     startMaking,
@@ -77,6 +77,13 @@ const ask = (text: string) => {
     fireEvent.click(within(startForm()).getByRole('button', { name: 'Send' }));
 };
 
+/** Opens one of the two menu buttons under the box and returns its menu. */
+const openMenu = (name: RegExp) => {
+    fireEvent.click(within(startForm()).getByRole('button', { name }));
+    return screen.getByRole('menu');
+};
+const item = (menu: HTMLElement, name: string | RegExp) => within(menu).getByRole('menuitemradio', { name });
+
 beforeEach(() => {
     chats.value = {};
     conversations.value = [];
@@ -91,8 +98,9 @@ beforeEach(() => {
     replyDismissed.value = [];
     startMode.value = null;
     startPick.value = newChat('', null);
-    noteClosed.value = false;
-    localStorage.removeItem(noteKey);
+    notesClosed.value = [];
+    localStorage.removeItem(noteKey('live'));
+    localStorage.removeItem(noteKey('demo'));
     fullAccessStanding.value = null;
 });
 
@@ -126,26 +134,31 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
     });
 
-    it("says on the first screen that this interface is optional, and why, and that it is the person's own", async () => {
+    it("says under the box, in the founder's words, that this interface is optional", async () => {
         renderConsole(stubDesktop());
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?', level: 1 }));
         const note = screen.getByRole('note');
         expect(note.querySelector('strong')!.textContent).toBe('This interface is optional.');
-        expect(note.textContent).toMatch(/terminal/);
-        expect(note.textContent).toMatch(/with your AI/);
-        expect(note.textContent).toMatch(/CLI and API/);
-        expect(note.textContent).toMatch(/change it, extend it or build it again/);
-        expect(note.textContent).not.toMatch(/agent/);
+        expect(note.textContent).toContain(
+            'This interface is optional. It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
+        );
+        expect(startForm().contains(note)).toBe(false);
     });
 
-    it('closes the note with its x, and keeps it closed in this browser', async () => {
+    it('has no subline under the title', async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => startForm());
+        expect(screen.queryByText(/Say who it is/)).toBeNull();
+    });
+
+    it('closes the note with its x, and keeps it closed in this browser, for this mode only', async () => {
         renderConsole(stubDesktop());
         await waitFor(() => screen.getByRole('note'));
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(screen.queryByRole('note')).toBeNull();
-        expect(localStorage.getItem(noteKey)).toBe('1');
         // A window opened again in this browser reads the choice back; nothing of it went to the runtime.
-        expect(noteWasClosed()).toBe(true);
+        expect(noteWasClosed('live')).toBe(true);
+        expect(noteWasClosed('demo')).toBe(false);
     });
 
     it("marks the title Alpha, as the sidebar's brand does", async () => {
@@ -162,6 +175,7 @@ describe('the start screen', () => {
         await waitFor(() => startForm());
         expect(box().placeholder).toBe('Tell Jason what you sell and who you want to reach.');
         expect(box().placeholder).not.toMatch(/website/i);
+        expect(box().getAttribute('rows')).toBe('2');
     });
 
     it("has no attach button, as the chat's box has none", async () => {
@@ -190,30 +204,53 @@ describe('the start screen', () => {
         expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
     });
 
-    it("draws the chat's own controls beside the box: host, model, effort and access mode", async () => {
+    it('draws an access button and a model button under the box, with the arrow last and no plus', async () => {
         renderConsole(stubDesktop());
         await ready();
         const form = startForm();
-        expect(within(form).getByRole('combobox', { name: 'AI host' })).toBeTruthy();
-        expect(within(form).getByRole('combobox', { name: 'Model' })).toBeTruthy();
-        expect(within(form).getByRole('combobox', { name: 'Access mode' })).toBeTruthy();
+        expect(within(form).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
+        expect(within(form).getByRole('button', { name: 'Model: Claude Code default' })).toBeTruthy();
+        const buttons = within(form).getAllByRole('button');
+        expect(buttons[buttons.length - 1]!.getAttribute('aria-label')).toBe('Send');
+        expect(within(form).queryByRole('combobox')).toBeNull();
     });
 
-    it('sends the host, model and mode the controls chose with the chat it makes', async () => {
+    it('lists the four modes under the header for new chats on this computer', async () => {
+        renderConsole(stubDesktop());
+        await ready();
+        const menu = openMenu(/Access mode/);
+        expect(within(menu).getByText('What new chats start with on this computer')).toBeTruthy();
+        const names = within(menu)
+            .getAllByRole('menuitemradio')
+            .map((each) => each.textContent);
+        expect(names.map((each) => each!.split(':')[0])).toEqual([
+            'Full access',
+            'Ask first',
+            'Auto-edit',
+            'Plan only',
+        ]);
+    });
+
+    it('sends the model and mode the buttons chose with the chat it makes', async () => {
         const desktop = renderConsole(stubDesktop());
         await ready();
-        const form = startForm();
-        const model = within(form).getByRole('combobox', { name: 'Model' }) as HTMLSelectElement;
-        const picked = Array.from(model.options).find((each) => each.value !== '' && !each.disabled);
-        expect(picked).toBeDefined();
-        fireEvent.change(model, { target: { value: picked!.value } });
-        fireEvent.change(within(form).getByRole('combobox', { name: 'Access mode' }), {
-            target: { value: 'plan_only' },
-        });
+        fireEvent.click(item(openMenu(/Model:/), 'Sonnet'));
+        fireEvent.click(item(openMenu(/Access mode/), 'Plan only'));
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
-        expect((calls(desktop, 'chat.send')[0]!.args[2] as { model?: string }).model).toBe(picked!.value);
+        expect((calls(desktop, 'chat.send')[0]!.args[2] as { model?: string }).model).toBe('sonnet');
         expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toContain('plan_only');
+    });
+
+    it('names the model button by the model chosen, and the effort goes with it', async () => {
+        const desktop = renderConsole(stubDesktop());
+        await ready();
+        fireEvent.click(item(openMenu(/Model:/), 'Opus'));
+        expect(within(startForm()).getByRole('button', { name: 'Model: Opus' })).toBeTruthy();
+        fireEvent.click(item(openMenu(/Model:/), 'High'));
+        ask('Heads of sales at logistics firms in Poland');
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        expect(calls(desktop, 'chat.send')[0]!.args[2]).toMatchObject({ model: 'opus', effort: 'high' });
     });
 
     it('with "start new chats in Full access" shows the access mode as Full access with the chat\'s line, and the chat starts in it', async () => {
@@ -225,9 +262,7 @@ describe('the start screen', () => {
         expect(line.textContent).toContain(
             'Full access: the AI runs commands without asking, except those Jason cannot read.',
         );
-        expect((within(startForm()).getByRole('combobox', { name: 'Access mode' }) as HTMLSelectElement).value).toBe(
-            'full_access',
-        );
+        expect(within(startForm()).getByRole('button', { name: 'Access mode: Full access' })).toBeTruthy();
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
@@ -241,9 +276,7 @@ describe('the start screen', () => {
         renderConsole(desktop);
         await ready();
         await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
-        fireEvent.change(within(startForm()).getByRole('combobox', { name: 'Access mode' }), {
-            target: { value: 'ask_first' },
-        });
+        fireEvent.click(item(openMenu(/Access mode/), 'Ask first'));
         expect(within(startForm()).queryByRole('status', { name: 'Full access is on' })).toBeNull();
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
@@ -259,9 +292,7 @@ describe('the start screen', () => {
         await ready();
         await waitFor(() => expect(fullAccessStanding.value).not.toBeNull());
         expect(within(startForm()).queryByRole('status', { name: 'Full access is on' })).toBeNull();
-        expect((within(startForm()).getByRole('combobox', { name: 'Access mode' }) as HTMLSelectElement).value).toBe(
-            'ask_first',
-        );
+        expect(within(startForm()).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
     });
 
     it('where the host offers no Full access, as in the demo, the access mode refuses it in the own words of the chat', async () => {
@@ -272,8 +303,7 @@ describe('the start screen', () => {
         };
         renderConsole(stubDesktop(demo));
         await ready();
-        const menu = within(startForm()).getByRole('combobox', { name: 'Access mode' }) as HTMLSelectElement;
-        const full = Array.from(menu.options).find((each) => each.value === 'full_access')!;
+        const full = item(openMenu(/Access mode/), /^Full access/) as HTMLButtonElement;
         expect(full.disabled).toBe(true);
         expect(full.textContent).toContain(refusal);
     });

@@ -835,7 +835,7 @@ export function ChatControls({
 }
 
 /** What a host and a mode say under a composer: what Codex reads and reaches, and that Full access or Auto-edit is on. */
-export function ChatNotes({ chat, modeMenu }: { chat: Chat; modeMenu: RefObject<HTMLSelectElement> }) {
+export function ChatNotes({ chat, modeMenu }: { chat: Chat; modeMenu: RefObject<HTMLElement> }) {
     const host = hostOf(chat);
     return (
         <>

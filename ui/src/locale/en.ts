@@ -30,7 +30,10 @@ export const en = {
     'start.send': 'Send',
     'start.note.lead': 'This interface is optional.',
     'start.note.body':
-        "Everything here can also be done from a terminal with your AI, through Jason's CLI and API. The interface is yours too: change it, extend it or build it again on the same API, with Claude Code or Codex, and Jason serves your build in its place.",
+        'It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
+    'start.access.header': 'What new chats start with on this computer',
+    'start.model.header': 'Model for this new chat',
+    'start.model.default': '{host} default',
     'start.note.close': 'Close',
     'chat.title': 'Chat',
     'chat.desktop':

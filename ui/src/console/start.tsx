@@ -3,12 +3,13 @@ import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
-import { mode, modeRefusal, switchMode } from '../platform/mode';
-import { ChatControls, ChatNotes, hostOf, isRefusal, sendTurn, startChat } from './chat';
+import { mode, modeRefusal, switchMode, type Mode } from '../platform/mode';
+import { ChatNotes, hostOf, isRefusal, sendTurn, startChat } from './chat';
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
+import { AccessButton, ModelButton } from './start-menus';
 import { changeChat, chats, here, messageOf, setup, setupError } from './state';
 
 // The start screen: the window opens on the question who the person wants to reach. What is sent there starts a set-up
@@ -51,25 +52,27 @@ const shownMode = (): DesktopChatMode => startMode.value ?? defaultMode();
 /** The choices on the start screen as a chat, so the chat's own controls draw them. */
 const startChatNow = (): Chat => ({ ...startPick.value, mode: shownMode() });
 
-/** The key under which this browser keeps that the note on the start screen was closed. */
-export const noteKey = 'jason.ui.start-note-closed';
+/** The key under which this browser keeps that the note on the start screen was closed, in one mode. */
+export const noteKey = (which: Mode): string => `jason.ui.start-note-closed.${which}`;
 
-export function noteWasClosed(): boolean {
+/** Whether the note was closed in a mode, as this browser kept it; false where it keeps nothing. */
+export function noteWasClosed(which: Mode): boolean {
     try {
-        return localStorage.getItem(noteKey) === '1';
+        return localStorage.getItem(noteKey(which)) === '1';
     } catch {
         return false;
     }
 }
 
-/** Whether the person closed the note about the interface being optional; kept by this browser, never by the runtime. */
-export const noteClosed = signal(noteWasClosed());
+/** The modes in which the person closed the note: Live and the demo apart. Kept by this browser, never by the runtime. */
+export const notesClosed = signal<Mode[]>((['live', 'demo'] as const).filter(noteWasClosed));
 
-/** Closes the note for good in this browser. */
+/** Closes the note for good in the mode this window is in. */
 export function closeNote(): void {
-    noteClosed.value = true;
+    const which = mode.value;
+    notesClosed.value = [...notesClosed.value.filter((each) => each !== which), which];
     try {
-        localStorage.setItem(noteKey, '1');
+        localStorage.setItem(noteKey(which), '1');
     } catch {
         // A browser that keeps nothing shows the note again next time.
     }
@@ -149,7 +152,7 @@ export function takeBack(): void {
 }
 
 export function StartPanel() {
-    const modeMenu = useRef<HTMLSelectElement>(null);
+    const modeMenu = useRef<HTMLButtonElement>(null);
     const waiting = startWaiting.value;
     const making = startMaking.value;
     const connected = aiConnected();
@@ -184,26 +187,10 @@ export function StartPanel() {
                 <div className="ph">
                     <div>
                         <div className="start-title">
+                            <img className="start-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
                             <h1>Who do you want to reach?</h1>
                             <span className="alpha">Alpha</span>
                         </div>
-                        <p>Say who it is, and Jason sets the agent up with you in a chat.</p>
-                        {!noteClosed.value && (
-                            <p className="start-optional" role="note">
-                                <span>
-                                    <strong>{t('start.note.lead')}</strong> {t('start.note.body')}
-                                </span>
-                                <button
-                                    className="btn sm start-optional-close"
-                                    type="button"
-                                    title={t('start.note.close')}
-                                    aria-label={t('start.note.close')}
-                                    onClick={closeNote}
-                                >
-                                    ×
-                                </button>
-                            </p>
-                        )}
                         {mode.value === 'live' && (
                             <p className="start-demo">
                                 <button className="btn sm" type="button" onClick={() => void switchMode('demo')}>
@@ -250,7 +237,7 @@ export function StartPanel() {
                 <form className="composer" onSubmit={send} aria-label="Start">
                     <textarea
                         ref={box}
-                        rows={3}
+                        rows={2}
                         placeholder={t('start.placeholder')}
                         aria-label="Who do you want to reach?"
                         value={startDraft.value}
@@ -259,14 +246,18 @@ export function StartPanel() {
                         onKeyDown={enter}
                     />
                     <div className="crow">
-                        <ChatControls
+                        <AccessButton
                             chat={startChatNow()}
-                            change={(next) => (startPick.value = next(startPick.value))}
-                            choose={(mode) => (startMode.value = mode)}
+                            choose={(chosen) => (startMode.value = chosen)}
                             takeBack={() => void takeBackStanding(here().desktop).catch(() => undefined)}
-                            modeMenu={modeMenu}
+                            buttonRef={modeMenu}
                         />
                         <span className="grow" />
+                        <ModelButton
+                            chat={startChatNow()}
+                            change={(next) => (startPick.value = next(startPick.value))}
+                            choose={(chosen) => (startMode.value = chosen)}
+                        />
                         <button
                             className="send"
                             type="submit"
@@ -279,6 +270,22 @@ export function StartPanel() {
                     </div>
                     <ChatNotes chat={startChatNow()} modeMenu={modeMenu} />
                 </form>
+                {!notesClosed.value.includes(mode.value) && (
+                    <div className="start-note" role="note">
+                        <span>
+                            <strong>{t('start.note.lead')}</strong> {t('start.note.body')}
+                        </span>
+                        <button
+                            className="btn sm start-note-close"
+                            type="button"
+                            title={t('start.note.close')}
+                            aria-label={t('start.note.close')}
+                            onClick={closeNote}
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
