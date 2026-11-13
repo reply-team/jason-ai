@@ -1,16 +1,18 @@
 import { signal } from '@preact/signals-react';
 import { parseRoute, route } from '../router';
 import { registry } from '../platform/slots';
+import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
 import { attention } from './needs';
-import { activePanel, chats, conversations, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
+import { closeFilterMenu, recentView } from './recent';
+import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), the Feed,
 // Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
-// conversations under "Recent", and Settings in the foot in the foot.
+// conversations under "Recent", and Settings in the foot.
 
 /** Which of the sidebar's two menus is open. */
 const open = signal<'create' | 'more' | null>(null);
@@ -18,6 +20,7 @@ const open = signal<'create' | 'more' | null>(null);
 /** Closes whichever menu is open. */
 export function closeMenus(): void {
     open.value = null;
+    closeFilterMenu();
 }
 
 /** The address of a screen the browser shell registers, or null when this build has none. */
@@ -82,7 +85,13 @@ define('side.chat', ([id]) => {
 });
 define('side.show', ([panel]) => {
     closeMenus();
-    if (panel === 'needs' || panel === 'campaigns' || panel === 'activity' || panel === 'connect')
+    if (
+        panel === 'dashboard' ||
+        panel === 'needs' ||
+        panel === 'campaigns' ||
+        panel === 'activity' ||
+        panel === 'connect'
+    )
         here().dock.show(panel);
 });
 define('side.page', ([hash]) => {
@@ -177,6 +186,9 @@ export function sideView(): Html {
                           ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
                       </button>`
             }
+            <button class="item" type="button" ${act('side.show', 'dashboard')}>
+                ${svg('home', 15)}<span>${t('dash.title')}</span>
+            </button>
             <button class="item" type="button" ${act('side.show', 'needs')}>
                 ${svg('att', 15)}<span>Needs you</span>
                 ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
@@ -217,25 +229,7 @@ export function sideView(): Html {
                 }
             </div>
         </nav>
-        <div class="recent">Recent</div>
-        <nav class="list" aria-label="Conversations">
-            ${conversations.value
-                .filter((conversation) => conversation.main !== true)
-                .map(
-                    // A chat the console holds says its title as it is now; the list says it as the desktop kept it.
-                    (conversation) =>
-                        html`<button
-                            class="item"
-                            type="button"
-                            ${conversation.id === currentChat.value ? html`aria-current="true"` : null}
-                            ${act('side.chat', conversation.id)}
-                        >
-                            ${svg(conversation.campaignId === null ? 'chat' : 'camp', 15)}<span
-                                >${chats.value[conversation.id]?.title ?? conversation.title}</span
-                            >
-                        </button>`,
-                )}
-        </nav>
+        ${recentView()}
         ${
             settings === null
                 ? null

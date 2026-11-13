@@ -80,6 +80,7 @@ import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/
 import approvalListUnauthorized from '../../../docs/api/fixtures/approval.list/unauthorized.json';
 import approvalRejectFromWorkItem from '../../../docs/api/fixtures/approval.reject/from-work-item.json';
 import approvalRejectRejected from '../../../docs/api/fixtures/approval.reject/rejected.json';
+import campaignActivityAll30Days from '../../../docs/api/fixtures/campaign.activity/all-30-days.json';
 import campaignActivityAll7Days from '../../../docs/api/fixtures/campaign.activity/all-7-days.json';
 import campaignActivityAllToday from '../../../docs/api/fixtures/campaign.activity/all-today.json';
 import campaignActivityLast7Days from '../../../docs/api/fixtures/campaign.activity/last-7-days.json';
@@ -406,6 +407,10 @@ export const fixtures = {
     'approval.list/unauthorized': approvalListUnauthorized satisfies Exchange<ApprovalListRequest, ErrorEnvelope>,
     'approval.reject/from-work-item': approvalRejectFromWorkItem satisfies Exchange<ApprovalDecisionRequest, Approval>,
     'approval.reject/rejected': approvalRejectRejected satisfies Exchange<ApprovalDecisionRequest, Approval>,
+    'campaign.activity/all-30-days': campaignActivityAll30Days satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
     'campaign.activity/all-7-days': campaignActivityAll7Days satisfies Exchange<
         CampaignActivityRequest,
         CampaignActivityResponse

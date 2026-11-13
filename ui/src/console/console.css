@@ -1434,6 +1434,74 @@ body,
         display: inline;
     }
 }
+/* The Dashboard: the six tiles, the two cards side by side and the Recent activity card below. */
+.jc-console .dash-head {
+    align-items: flex-start;
+}
+.jc-console .dash-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.jc-console .dash-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    min-width: 0;
+}
+.jc-console .dash-tile b {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.jc-console .dash-tile .dash-none {
+    color: var(--faint);
+}
+.jc-console .dash-tile .label,
+.jc-console .dash-tile .rel {
+    color: var(--faint);
+    font-size: 12.5px;
+}
+.jc-console .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.jc-console .dash-card .hd {
+    justify-content: space-between;
+}
+.jc-console .dash-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 0;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--line2);
+    color: var(--ink);
+    text-align: left;
+}
+.jc-console .dash-link {
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--teal);
+    text-align: left;
+}
+.jc-console .dash-line {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line2);
+}
+.jc-console .dash-agents progress {
+    width: 90px;
+}
 /* The start screen: the mark by the title, the note under the box, and the two menu buttons under the box. */
 .jc-console .start .start-title {
     display: flex;
@@ -1504,4 +1572,109 @@ body,
 .jc-console .start .start-menu-reason {
     font-size: 11px;
     color: var(--muted);
+}
+
+.jc-console .recent {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.jc-console .recent .rl {
+    flex: 1;
+}
+.jc-console .rtools {
+    display: flex;
+    gap: 2px;
+    margin-right: -8px;
+}
+.jc-console .rbtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--faint);
+    cursor: pointer;
+}
+.jc-console .rbtn:hover,
+.jc-console .rbtn[aria-pressed='true'] {
+    background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .rbtn[data-active='true'] {
+    color: var(--accent);
+}
+.jc-console .recent .menu {
+    left: auto;
+    right: 10px;
+    top: calc(100% + 2px);
+    min-width: 170px;
+}
+.jc-console .mhead {
+    padding: 6px 8px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--faint);
+}
+.jc-console .menuitem[role='menuitemradio'] {
+    align-items: center;
+}
+.jc-console .menuitem[role='menuitemradio'] svg {
+    grid-row: auto;
+}
+.jc-console .rsearch {
+    padding: 4px 14px 2px;
+}
+.jc-console .rsearch .inp {
+    width: 100%;
+    box-sizing: border-box;
+}
+.jc-console .recent-row .rt {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.jc-console .recent-row .t {
+    margin-left: 0;
+}
+.jc-console .recent-row .count {
+    margin-left: 0;
+}
+.jc-console .rdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+.jc-console .rdot.waiting {
+    background: #e3a03a;
+}
+.jc-console .rdot.active {
+    background: var(--green);
+}
+.jc-console .rdot.paused {
+    background: var(--faint);
+}
+.jc-console .rdot.draft {
+    border: 1.5px solid var(--blue);
+}
+.jc-console .rdot.none {
+    border: 1.5px solid var(--line);
+}
+.jc-console .rmore {
+    color: var(--mute);
+    justify-content: center;
+}
+.jc-console .rnone {
+    padding: 4px 18px;
+    font-size: 12.5px;
+    color: var(--faint);
+}
+.jc-console .rdot.running {
+    animation: pulse 1.2s ease-in-out infinite;
 }
