@@ -87,7 +87,8 @@ public sealed record ContactThreadResponse(string PluginId, JsonObject Thread, J
 
 /// <summary>
 /// <c>value</c> without <c>channel</c> is a usage error; <c>channel</c> alone lists contacts reachable on that channel.
-/// <c>query</c> finds people by any part of a name, company, title or channel value, and narrows together with them.
+/// <c>query</c> finds people by any part of a name, company, title, channel value or custom field's value, never a
+/// field's name nor the provider's record kept beside the fields, and narrows together with them.
 /// <c>campaign_id</c> keeps the campaign's members who are not excluded. <c>summary</c> keeps the people one count of
 /// <c>campaign.summary</c> counts in at least one campaign not archived, or in the campaign <c>campaign_id</c> names, by
 /// the count's own definition, removed people too under <c>removed</c>; it lists people by where they stand, so it is

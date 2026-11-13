@@ -154,4 +154,39 @@ public class ContactEndpointTests
         var fetched = await fixture.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = created.Id }, TestContext.Current.CancellationToken);
         Assert.Empty(fetched.ExternalIds);
     }
+
+    /// <summary>
+    /// The list over the API finds a person by a custom field's value, at any depth and folded, and never by the
+    /// field's name, the JSON's punctuation or the provider's record kept beside the fields.
+    /// </summary>
+    [Fact]
+    public async Task The_list_over_http_finds_by_a_custom_fields_value_and_never_by_its_key()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var fixture = await RuntimeApiFixture.StartAsync(ct);
+        await fixture.PostOkAsync<ContactDto>(
+            Operations.ContactCreate,
+            new JsonObject
+            {
+                ["first_name"] = "Ines",
+                ["custom"] = new JsonObject
+                {
+                    ["industry"] = "Logística",
+                    ["account"] = new JsonObject { ["seats"] = 4217 },
+                    ["provider_record"] = new JsonObject { ["employer"] = "Globex" },
+                },
+            },
+            ct);
+        await fixture.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Otto" }, ct);
+
+        async Task<string> Found(string query) => string.Join(
+            '|',
+            (await fixture.PostOkAsync<Page<ContactDto>>(Operations.ContactList, new { query }, ct)).Items.Select(c => c.FirstName));
+
+        Assert.Equal("Ines", await Found("LOGISTICA"));
+        Assert.Equal("Ines", await Found("4217"));
+        Assert.Equal(string.Empty, await Found("industry"));
+        Assert.Equal(string.Empty, await Found("\":"));
+        Assert.Equal(string.Empty, await Found("globex"));
+    }
 }
