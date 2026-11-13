@@ -34,6 +34,15 @@ const opened = signal(false);
  */
 const platform = signal<string>('');
 
+/** Where the focus was when the palette opened. */
+let before: Element | null = null;
+
+/** Closes the palette; Escape and a click beside the box give the focus back, choosing an entry does not. */
+function shut(restore: boolean): void {
+    opened.value = false;
+    if (restore && before instanceof HTMLElement) before.focus({ preventScroll: true });
+}
+
 export function openPalette(): void {
     opened.value = true;
 }
@@ -159,6 +168,10 @@ function personLabel(contact: Contact): string {
 function usePeople(text: string, on: boolean): readonly Contact[] {
     const [found, setFound] = useState<{ asked: string; people: readonly Contact[] }>({ asked: '', people: [] });
     const typed = tokens(text).join(' ');
+    // What was found belongs to the opening it was found in.
+    useEffect(() => {
+        if (!on) setFound({ asked: '', people: [] });
+    }, [on]);
     useEffect(() => {
         if (!on || typed === '') return;
         let current = true;
@@ -186,7 +199,6 @@ export function Palette({ system }: { system: string }) {
     const [text, setText] = useState('');
     const [at, setAt] = useState(0);
     const input = useRef<HTMLInputElement>(null);
-    const before = useRef<Element | null>(null);
 
     useEffect(() => {
         platform.value = system;
@@ -201,7 +213,7 @@ export function Palette({ system }: { system: string }) {
             }
             if (event.key === 'Escape' && opened.value) {
                 event.preventDefault();
-                opened.value = false;
+                shut(true);
             }
         };
         window.addEventListener('keydown', onKey);
@@ -212,16 +224,13 @@ export function Palette({ system }: { system: string }) {
         };
     }, []);
 
-    // Each opening starts empty and in the box; closing gives the focus back to where it was.
+    // Each opening starts empty and in the box.
     useEffect(() => {
         if (!open) return;
-        before.current = document.activeElement;
+        before = document.activeElement;
         setText('');
         setAt(0);
         input.current?.focus();
-        return () => {
-            if (before.current instanceof HTMLElement) before.current.focus({ preventScroll: true });
-        };
     }, [open]);
 
     const people = usePeople(text, open);
@@ -243,7 +252,7 @@ export function Palette({ system }: { system: string }) {
 
     const chosen = Math.min(at, Math.max(shown.length - 1, 0));
     const go = (entry: Entry) => {
-        opened.value = false;
+        shut(false);
         const contact = people.find((each) => `person:${each.id}` === entry.key);
         if (contact !== undefined) {
             here().dock.page(parseRoute(`#/people/${encodeURIComponent(contact.id)}`));
@@ -253,7 +262,9 @@ export function Palette({ system }: { system: string }) {
     };
     const onKey = (event: React.KeyboardEvent) => {
         if (event.nativeEvent.isComposing) return;
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        // The box holds one control, so Tab and Shift+Tab stay where they are: the dialog is modal.
+        if (event.key === 'Tab') event.preventDefault();
+        else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
             setAt(moved(chosen, event.key === 'ArrowDown' ? 1 : -1, shown.length));
         } else if (event.key === 'Enter') {
@@ -264,7 +275,7 @@ export function Palette({ system }: { system: string }) {
     };
 
     return (
-        <div className="palette-away" onMouseDown={() => (opened.value = false)}>
+        <div className="palette-away" onMouseDown={() => shut(true)}>
             <div
                 className="palette"
                 role="dialog"

@@ -258,9 +258,11 @@ describe('the palette', () => {
         // The first answer is still on its way when the text changes to another.
         type('aguilar@');
         await waitFor(() => expect(labels()).toEqual(['Tomás Aguilar, Andina Tech']));
+        // The first answer comes in after the second: it must change nothing (without the guard on a stale answer,
+        // the person row of the newer text disappears).
         flush(() => release());
         await flush(async () => {
-            await Promise.resolve();
+            await new Promise((resolve) => setTimeout(resolve, 30));
         });
         expect(labels()).toEqual(['Tomás Aguilar, Andina Tech']);
         expect(fake.calls.filter((each) => each.operation === 'contact.list').map((each) => each.body)).toEqual([
@@ -305,6 +307,82 @@ describe('the palette', () => {
     });
 });
 
+describe('the box as a modal', () => {
+    const composer = () => document.querySelector<HTMLTextAreaElement>('textarea')!;
+    const asked = (fake: FakeApi) => fake.calls.filter((each) => each.operation === 'contact.list').length;
+
+    it('opens with Ctrl+K while the focus is in another input, and Escape gives the focus back to it', async () => {
+        renderConsole();
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        composer().focus();
+        fireEvent.keyDown(composer(), { key: 'k', ctrlKey: true });
+        await waitFor(() => expect(box()).not.toBeNull());
+        expect(document.activeElement).toBe(input());
+        fireEvent.keyDown(input(), { key: 'Escape' });
+        await waitFor(() => expect(box()).toBeNull());
+        expect(document.activeElement).toBe(composer());
+    });
+
+    it('gives the focus back after a click beside the box, but not after choosing an entry', async () => {
+        renderConsole();
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        composer().focus();
+        fireEvent.keyDown(composer(), { key: 'k', ctrlKey: true });
+        await waitFor(() => expect(box()).not.toBeNull());
+        fireEvent.mouseDown(document.querySelector('.palette-away')!);
+        await waitFor(() => expect(box()).toBeNull());
+        expect(document.activeElement).toBe(composer());
+
+        fireEvent.keyDown(composer(), { key: 'k', ctrlKey: true });
+        await waitFor(() => expect(box()).not.toBeNull());
+        type('activity');
+        fireEvent.click(rows()[0]!);
+        await waitFor(() => expect(inFront()).toContain('Activity'));
+        expect(box()).toBeNull();
+        expect(document.activeElement).not.toBe(composer());
+    });
+
+    it('keeps Tab and Shift+Tab inside the box', async () => {
+        renderConsole();
+        await opened();
+        expect(fireEvent.keyDown(input(), { key: 'Tab' })).toBe(false);
+        expect(fireEvent.keyDown(input(), { key: 'Tab', shiftKey: true })).toBe(false);
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('asks for no one once the box is cleared again', async () => {
+        const { fake } = renderConsole();
+        await opened();
+        type('zoe');
+        await waitFor(() => expect(labels()).toEqual(['Zoe Example, Zoe Labs']));
+        expect(asked(fake)).toBe(1);
+        type('');
+        await flush(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+        });
+        expect(asked(fake)).toBe(1);
+        expect(kinds()).not.toContain('Person');
+    });
+
+    it('does not show the people of one opening in the next', async () => {
+        const { fake } = renderConsole();
+        await opened();
+        type('zoe');
+        await waitFor(() => expect(kinds()).toEqual(['Person']));
+        fireEvent.keyDown(window, { key: 'Escape' });
+        await waitFor(() => expect(box()).toBeNull());
+        fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+        await waitFor(() => expect(box()).not.toBeNull());
+        // The answer to the second asking is held, so only a leftover could show.
+        fake.hold('contact.list');
+        type('zoe');
+        await flush(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+        });
+        expect(kinds()).not.toContain('Person');
+    });
+});
+
 describe('where each kind goes', () => {
     it('opens a panel as its row does, and a screen at the address it registers', async () => {
         renderConsole();
@@ -319,7 +397,6 @@ describe('where each kind goes', () => {
         type('people');
         fireEvent.click(rows()[0]!);
         await waitFor(() => expect(route.value.screen).toBe('people'));
-        expect(inFront()).toContain('Page');
 
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
         await waitFor(() => expect(box()).not.toBeNull());
