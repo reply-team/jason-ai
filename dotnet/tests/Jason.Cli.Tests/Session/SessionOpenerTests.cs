@@ -714,6 +714,9 @@ public sealed class SessionOpenerTests : IDisposable
         /// <summary>The preference list's body as it is sent, in place of the one composed from <see cref="Preference"/>.</summary>
         public string? PreferencesBody { get; set; }
 
+        /// <summary>The folder the command runs in, none unless a row names one: a marker above it can name a project.</summary>
+        public string? WorkingDirectory { get; set; }
+
         /// <summary>The environment variables the verb reads, none unless a row names one.</summary>
         public Dictionary<string, string> Variables { get; } = [];
 
@@ -773,7 +776,8 @@ public sealed class SessionOpenerTests : IDisposable
                 SearchPath: Programs.Root,
                 Identity: new IdentityFacts(GivenHome ?? Home, "marta", "DESK-1", null, null),
                 Variables: Variables,
-                Terminals: terminals ? Terminals : null);
+                Terminals: terminals ? Terminals : null,
+                WorkingDirectory: WorkingDirectory);
         }
 
         private string Preferences()

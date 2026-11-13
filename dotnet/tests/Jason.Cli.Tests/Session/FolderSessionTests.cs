@@ -1,8 +1,12 @@
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Cli.Http;
 using Jason.Cli.Session;
 using Jason.Cli.Tests.Human;
+using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Harness;
+using Jason.Runtime.Tests;
 using static Jason.Cli.Tests.Session.SessionOpenerTests;
 
 namespace Jason.Cli.Tests.Session;
@@ -50,12 +54,13 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal([_run.ConsoleHost, "--", claude], launch.Argv);
         Assert.Equal(_root, launch.WorkingDirectory);
         var answer = JsonNode.Parse(_run.Output.ToString())!.AsObject();
-        Assert.Equal(["kind", "folder", "program", "host", "terminal", "started"], answer.Select(field => field.Key).ToArray());
+        Assert.Equal(["kind", "folder", "host", "shell", "program", "terminal", "started"], answer.Select(field => field.Key).ToArray());
         Assert.Equal("folder", (string?)answer["kind"]);
         Assert.Equal("harness_root", (string?)answer["folder"]!["level"]);
         Assert.Equal(_root, (string?)answer["folder"]!["path"]);
-        Assert.Equal("host", (string?)answer["program"]);
         Assert.Equal("claude_code", (string?)answer["host"]);
+        Assert.False((bool)answer["shell"]!);
+        Assert.Equal(claude, (string?)answer["program"]);
         Assert.Equal("conhost", (string?)answer["terminal"]);
         Assert.True((bool)answer["started"]!);
         Assert.Single(_run.Output.ToString().TrimEnd().Split('\n'));
@@ -138,6 +143,68 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(_root, Assert.Single(_run.Terminals.Launches).WorkingDirectory);
     }
 
+    /// <summary>
+    /// Inside a project's folder, with neither flag, the folder form takes that project, as every verb that takes a project
+    /// and is given none does, and says so on stderr; from a campaign's folder it takes the campaign's project, never the
+    /// campaign.
+    /// </summary>
+    [Theory]
+    [InlineData("project")]
+    [InlineData("campaign")]
+    public async Task Inside_a_projects_folder_neither_flag_opens_at_that_project(string level)
+    {
+        _run.Programs.AddProgram("claude");
+        Mark(_projectFolder, new HarnessMarker(HarnessMarker.Project, "prj_1"));
+        Mark(_run.CampaignFolder, new HarnessMarker(HarnessMarker.Campaign, "cmp_1"));
+        _run.WorkingDirectory = Path.Combine(level == "project" ? _projectFolder : _run.CampaignFolder, "notes");
+        Directory.CreateDirectory(_run.WorkingDirectory);
+
+        var exit = await _run.Cli("session", "open");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(level == "project" ? ["project.get", "project.get", "preference.list"] : ["campaign.get", "project.get", "preference.list"], _run.Asked);
+        Assert.Equal(_projectFolder, Assert.Single(_run.Terminals.Launches).WorkingDirectory);
+        Assert.Equal("project", (string?)Answer()["folder"]!["level"]);
+        Assert.Contains("Project acme-corp (prj_1), from the working directory", _run.Error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("give --project or --campaign to name another folder", _run.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>Outside every harness folder there is no project to take: the harness root, and nothing said.</summary>
+    [Fact]
+    public async Task Outside_every_harness_folder_neither_flag_opens_at_the_harness_root()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.WorkingDirectory = Path.Combine(_run.DataDirectory, "elsewhere");
+        Directory.CreateDirectory(_run.WorkingDirectory);
+
+        var exit = await _run.Cli("session", "open");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(["system.info", "preference.list"], _run.Asked);
+        Assert.Equal(_root, Assert.Single(_run.Terminals.Launches).WorkingDirectory);
+        Assert.Empty(_run.Error.ToString());
+    }
+
+    /// <summary>
+    /// A marker in a folder that is not the one the runtime records for its project, a copy say, is said on stderr and
+    /// not used: the session opens at the harness root, never in the copy and never at the project's real folder.
+    /// </summary>
+    [Fact]
+    public async Task A_marker_that_is_not_the_recorded_folders_is_said_and_not_used()
+    {
+        _run.Programs.AddProgram("claude");
+        var copy = Path.Combine(_run.DataDirectory, "copy-of-acme").Replace('\\', '/');
+        Mark(copy, new HarnessMarker(HarnessMarker.Project, "prj_1"));
+        _run.WorkingDirectory = copy;
+
+        var exit = await _run.Cli("session", "open");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(["project.get", "system.info", "preference.list"], _run.Asked);
+        Assert.Equal(_root, Assert.Single(_run.Terminals.Launches).WorkingDirectory);
+        Assert.Contains("so it is not used here", _run.Error.ToString(), StringComparison.Ordinal);
+    }
+
     // ---- The program ----
 
     public static TheoryData<string, string> Hosts() => new()
@@ -184,6 +251,26 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(word, (string?)Answer()["host"]);
     }
 
+    /// <summary>A host npm installed starts through the interpreter and entry script its shim names, and nothing follows them.</summary>
+    [Fact]
+    public async Task A_host_npm_installed_starts_through_its_shim_with_nothing_after_the_program()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows has npm's cmd shim.");
+        var node = _run.Programs.Add("node.exe", executable: true);
+        var entry = _run.Programs.AddNested(@"node_modules\gemini-cli\dist\index.js", "// the entry point");
+        _run.Programs.AddNested(@"node_modules\gemini-cli\package.json", "{\"name\":\"gemini-cli\",\"bin\":{\"gemini\":\"dist/index.js\"}}");
+        _run.Programs.Add("gemini.cmd", Jason.Runtime.Tests.Plugins.TestPrograms.NpmShim("gemini-cli", @"dist\index.js"));
+
+        var exit = await _run.Cli("session", "open", "--host", "gemini_cli");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var argv = Assert.Single(_run.Terminals.Launches).Argv;
+        Assert.Equal(4, argv.Count);
+        Assert.Equal(node, Path.GetFullPath(argv[2]));
+        Assert.Equal(entry, Path.GetFullPath(argv[3]));
+        Assert.Equal(node, Path.GetFullPath((string)Answer()["program"]!));
+    }
+
     /// <summary>On Windows --shell is Windows PowerShell from the system directory, never the search path; no host is read.</summary>
     [Fact]
     public async Task Shell_on_windows_opens_powershell_from_the_system_directory()
@@ -197,7 +284,8 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(["system.info"], _run.Asked);
         Assert.Equal([_run.ConsoleHost, "--", shell], Assert.Single(_run.Terminals.Launches).Argv);
         var answer = Answer();
-        Assert.Equal("shell", (string?)answer["program"]);
+        Assert.True((bool)answer["shell"]!);
+        Assert.Equal(shell, (string?)answer["program"]);
         Assert.Null(answer["host"]);
         Assert.True(answer.ContainsKey("host"));
     }
@@ -264,13 +352,22 @@ public sealed class FolderSessionTests : IDisposable
     [InlineData(null)]
     [InlineData("bash")]
     [InlineData("missing")]
+    [InlineData("whitespace")]
+    [InlineData("not executable")]
     public async Task Shell_on_linux_without_a_usable_shell_variable_is_bin_sh(string? shell)
     {
+        Assert.SkipWhen(shell == "not executable" && OperatingSystem.IsWindows(), "Windows keeps no executable bit; the Linux legs run this row.");
         _run.Terminals.Platform = TerminalPlatform.Linux;
         var emulator = _run.Programs.Add("x-terminal-emulator", executable: true);
         if (shell is not null)
         {
-            _run.Variables["SHELL"] = shell == "missing" ? Path.Combine(_run.DataDirectory, "no-such-shell") : shell;
+            _run.Variables["SHELL"] = shell switch
+            {
+                "missing" => Path.Combine(_run.DataDirectory, "no-such-shell"),
+                "whitespace" => _run.Programs.Add("bash", executable: true) + " -l",
+                "not executable" => _run.Programs.Add("zsh", executable: false),
+                _ => shell,
+            };
         }
 
         var exit = await _run.Cli("session", "open", "--shell");
@@ -350,6 +447,8 @@ public sealed class FolderSessionTests : IDisposable
     [InlineData("absent")]
     [InlineData("unmarked")]
     [InlineData("taken")]
+    [InlineData("not_a_folder")]
+    [InlineData("unreadable")]
     public async Task No_folder_recorded_is_refused(string rootState)
     {
         _run.Programs.AddProgram("claude");
@@ -361,7 +460,34 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(["system.info"], _run.Asked);
         Assert.Empty(_run.Terminals.Launches);
         Assert.Equal("folder_not_recorded", Code());
-        Assert.NotEmpty(_run.Error.ToString());
+        var said = _run.Error.ToString().TrimEnd();
+        Assert.Equal(Message(), said);
+
+        // Only where nothing, or an unmarked folder, stands at the root does a first project or campaign make it a place.
+        Assert.Equal(rootState is "absent" or "unmarked", said.Contains("the first project or campaign made", StringComparison.Ordinal));
+        if (rootState == "taken")
+        {
+            Assert.Equal(
+                "The folder at the harness root " + _root + " holds a marker that names something other than a root, so there is nowhere to start and nothing was started.",
+                said);
+        }
+    }
+
+    /// <summary>A campaign whose recorded folders are all gone names what it read: the campaign and its project have none.</summary>
+    [Fact]
+    public async Task No_folder_recorded_for_a_campaign_says_the_campaign_and_its_project_have_none()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.Campaign = Without(_run.Campaign!, "folder_path");
+        _run.Project = Without(_run.Project!, "folder_path");
+        _run.SystemInfo = SystemInfo("absent", _root);
+
+        var exit = await _run.Cli("session", "open", "--campaign", "cmp_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(
+            "The campaign and its project have no folder recorded, and nothing is at the harness root " + _root + " yet (the first project or campaign made makes it), so there is nowhere to start and nothing was started.",
+            _run.Error.ToString().TrimEnd());
     }
 
     [Fact]
@@ -376,6 +502,74 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
         Assert.Equal("folder_missing", Code());
         Assert.Contains(_run.CampaignFolder + "-moved", _run.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("project")]
+    [InlineData("harness_root")]
+    public async Task A_recorded_project_folder_or_root_that_is_not_there_is_refused(string level)
+    {
+        _run.Programs.AddProgram("claude");
+        var gone = (level == "project" ? _projectFolder : _root) + "-gone";
+        if (level == "project")
+        {
+            _run.Project = _run.Project!.Replace(_projectFolder, gone, StringComparison.Ordinal);
+        }
+        else
+        {
+            _run.SystemInfo = SystemInfo("marked", gone);
+        }
+
+        var exit = await _run.Cli(level == "project" ? ["session", "open", "--project", "prj_1"] : ["session", "open"]);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("folder_missing", Code());
+        Assert.Equal(
+            level == "project"
+                ? "The project's folder recorded at " + gone + " is not there, so nothing was started; if it was moved, `jason project link --path <the project's folder, where it is now>` records it and its campaigns again."
+                : "The harness root at " + gone + " is not there, so nothing was started.",
+            _run.Error.ToString().TrimEnd());
+    }
+
+    /// <summary>An answer the runtime gave that cannot be read is refused in the envelope and said on stderr.</summary>
+    [Fact]
+    public async Task An_answer_that_cannot_be_read_is_runtime_error_said_on_both_streams()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.SystemInfo = "<html>not the runtime</html>";
+
+        var exit = await _run.Cli("session", "open");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal("runtime_error", Code());
+        Assert.Equal(Message(), _run.Error.ToString().TrimEnd());
+    }
+
+    /// <summary>
+    /// A preference list the runtime took and did not answer in time is the read's own envelope, request_timed_out, and
+    /// no second one: stdout holds exactly one object.
+    /// </summary>
+    [Fact]
+    public async Task A_preference_read_that_times_out_prints_one_envelope()
+    {
+        using var paths = new TempPaths();
+        paths.WriteDescriptor(new RuntimeDescriptor("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch));
+        var clock = new FixedClock(new DateTimeOffset(2026, 11, 11, 12, 0, 0, TimeSpan.Zero));
+        var asked = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var output = new StringWriter();
+        var env = new CliEnvironment(output, new StringWriter(), paths.Paths, new RootThenWaiting(SystemInfo("marked", _root), asked), Clock: clock, Terminals: _run.Terminals);
+        var budget = RuntimeClient.Budget(Operations.PreferenceList);
+
+        var run = CliApp.RunAsync(["session", "open"], env, TestContext.Current.CancellationToken);
+        await asked.Task.WaitAsync(TestContext.Current.CancellationToken);
+        clock.Advance(budget);
+        var exit = await run.WaitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var printed = Assert.Single(output.ToString().TrimEnd().Split('\n'));
+        Assert.Equal("request_timed_out", (string?)JsonNode.Parse(printed)!["error"]!["code"]);
+        Assert.Empty(_run.Terminals.Launches);
     }
 
     [Fact]
@@ -488,6 +682,30 @@ public sealed class FolderSessionTests : IDisposable
     private JsonObject Answer() => JsonNode.Parse(_run.Output.ToString())!.AsObject();
 
     private string? Code() => (string?)JsonNode.Parse(_run.Output.ToString())!["error"]!["code"];
+
+    private string? Message() => (string?)JsonNode.Parse(_run.Output.ToString())!["error"]!["message"];
+
+    private static void Mark(string folder, HarnessMarker marker)
+    {
+        Directory.CreateDirectory(Path.Combine(folder, HarnessMarker.Directory));
+        File.WriteAllBytes(HarnessMarker.PathIn(folder), marker.Bytes());
+    }
+
+    /// <summary>A runtime that answers system.info and takes preference.list without ever answering it.</summary>
+    private sealed class RootThenWaiting(string systemInfo, TaskCompletionSource<CancellationToken> asked) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("system.info", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(systemInfo, System.Text.Encoding.UTF8, "application/json") };
+            }
+
+            asked.TrySetResult(cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
+    }
 
     /// <summary>Windows PowerShell where the system keeps it, under the system directory the recorder names.</summary>
     private string SystemPowerShell()

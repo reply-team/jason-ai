@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Jason.Cli.Folders;
 using Jason.Cli.Human;
 using Jason.Contracts.Api;
 using Jason.Contracts.Hosts;
@@ -16,8 +17,10 @@ namespace Jason.Cli.Session;
 /// <para>
 /// The folder: <c>--campaign</c> is the campaign's recorded folder, else its project's, else the harness root, as the
 /// item form resolves a campaign; <c>--project</c>, by its id (a <c>prj_</c> value) or its slug, is the project's, else
-/// the root; neither is the root. The root is a place only when it is a folder with the root's marker. Nothing falls back
-/// to the home folder: a folder named and not recorded is said, never replaced by another.
+/// the root; neither is the project of the folder the command runs in, found by its nearest marker as every verb that
+/// takes a project finds it (<see cref="WorkingFolder.FillProjectAsync"/>, said on stderr, never a campaign), else the
+/// root. The root is a place only when it is a folder with the root's marker. Nothing falls back to the home folder: a
+/// folder named and not recorded is said, never replaced by another.
 /// </para>
 /// <para>
 /// The program: <c>--host</c> names a host, else the preference <c>agent.interactive_host</c> does, else Claude Code, found
@@ -51,15 +54,15 @@ public static class FolderSessionOpener
         {
             if (host is null)
             {
-                var (preferenceExit, word) = await SessionOpener.PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
+                var (preferenceExit, word, said) = await SessionOpener.PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
+                if (said)
+                {
+                    return preferenceExit;
+                }
+
                 if (preferenceExit == ExitCodes.ApiError)
                 {
                     return Refuse(env, CliErrors.PreferenceUnreadable, $"The preference {SessionOpener.PreferenceKey} could not be read, so no host was chosen and nothing was started; --host <host> names one, or --shell opens a plain shell.");
-                }
-
-                if (preferenceExit != ExitCodes.Success)
-                {
-                    return preferenceExit;
                 }
 
                 host = word is null ? SessionOpener.DefaultHost : AgentHosts.Parse(word);
@@ -84,7 +87,7 @@ public static class FolderSessionOpener
 
         if (!Directory.Exists(folder.Path))
         {
-            return Refuse(env, CliErrors.FolderMissing, Missing(folder));
+            return Refuse(env, CliErrors.FolderMissing, SessionOpener.Missing(folder));
         }
 
         var terminals = env.Terminals;
@@ -114,7 +117,7 @@ public static class FolderSessionOpener
 
         env.Out.WriteLine(human
             ? $"{(dryRun ? "Would start" : "Started")} {what} in {launch.Terminal} at {folder.Path}."
-            : Printed(folder, hostWord, launch, dryRun));
+            : Printed(folder, hostWord, launch, dryRun, program![0]));
         return ExitCodes.Success;
     }
 
@@ -145,6 +148,18 @@ public static class FolderSessionOpener
         {
             (projectId, slug) = project.StartsWith("prj_", StringComparison.Ordinal) ? (project, null) : ((string?)null, project);
         }
+        else
+        {
+            // Named by neither flag: the project of the folder the command runs in, as every verb that takes a project and
+            // is given none takes it, said on stderr; a campaign's folder gives the campaign's project, never the campaign.
+            var fromFolder = RequestBody.Empty();
+            if ((await WorkingFolder.FillProjectAsync(env, fromFolder, WorkingFolder.ByProjectOrCampaign, cancellationToken).ConfigureAwait(false)).ExitCode is { } stopped)
+            {
+                return (stopped, null, string.Empty);
+            }
+
+            projectId = fromFolder["project_id"]?.GetValue<string>();
+        }
 
         if (projectId is not null || slug is not null)
         {
@@ -171,12 +186,25 @@ public static class FolderSessionOpener
             return (ExitCodes.Success, new PromptFolder(PromptFolderLevel.HarnessRoot, root), "harness_root");
         }
 
-        var named = campaignId is not null ? "The campaign and its project have" : projectId is not null || slug is not null ? "The project has" : "This installation has";
-        return (
-            Refuse(env, CliErrors.FolderNotRecorded, $"{named} no folder recorded and the harness root{(info.Harness is { Root: { Length: > 0 } at } ? " at " + at : string.Empty)} is not a folder with the harness's marker yet, so there is nowhere to start and nothing was started; the first project or campaign made makes it."),
-            null,
-            string.Empty);
+        var named = campaignId is not null ? "The campaign and its project have no folder recorded, and " : projectId is not null || slug is not null ? "The project has no folder recorded, and " : string.Empty;
+        var why = RootNotAPlace(info.Harness);
+        return (Refuse(env, CliErrors.FolderNotRecorded, $"{named}{(named.Length == 0 ? char.ToUpperInvariant(why[0]) + why[1..] : why)}, so there is nowhere to start and nothing was started."), null, string.Empty);
     }
+
+    /// <summary>
+    /// Why the harness root is not a place to start, by what stands there: only where nothing, or an unmarked folder, is
+    /// there does the first project or campaign made make it one, so only there is that said.
+    /// </summary>
+    private static string RootNotAPlace(HarnessInfo? harness) => harness switch
+    {
+        null => "this runtime does not say where the harness root is",
+        { RootState: HarnessRootState.Absent } => $"nothing is at the harness root {harness.Root} yet (the first project or campaign made makes it)",
+        { RootState: HarnessRootState.Unmarked } => $"the harness root {harness.Root} is a folder with no harness marker yet (the first project or campaign made marks it)",
+        { RootState: HarnessRootState.Taken } => $"the folder at the harness root {harness.Root} holds a marker that names something other than a root",
+        { RootState: HarnessRootState.NotAFolder } => $"a file stands at the harness root {harness.Root}, where its folder belongs",
+        { RootState: HarnessRootState.Unreadable } => $"the harness root {harness.Root} cannot be listed, or its marker read, by this account",
+        _ => $"the harness root {harness.Root} is not a folder with the harness's marker",
+    };
 
     /// <summary>One read: the answer, or null with the exit code, the runtime's own refusal printed as it came.</summary>
     private static async Task<(int Exit, T? Answer)> ReadAsync<T>(CliEnvironment env, string operation, JsonObject body, CancellationToken cancellationToken)
@@ -199,8 +227,7 @@ public static class FolderSessionOpener
             return (ExitCodes.Success, answer);
         }
 
-        env.Out.WriteLine(CliErrors.Serialize(CliErrors.RuntimeError, $"The runtime's answer to {operation} could not be read, so nothing was started.", retryable: false));
-        return (ExitCodes.ApiError, null);
+        return (Refuse(env, CliErrors.RuntimeError, $"The runtime's answer to {operation} could not be read, so nothing was started."), null);
     }
 
     private static int Refuse(CliEnvironment env, string code, string message)
@@ -210,21 +237,19 @@ public static class FolderSessionOpener
         return ExitCodes.ApiError;
     }
 
-    private static string Missing(PromptFolder folder) => folder.Level switch
-    {
-        PromptFolderLevel.HarnessRoot => $"The harness root at {folder.Path} is not there, so nothing was started.",
-        _ => $"The {(folder.Level == PromptFolderLevel.Campaign ? "campaign's" : "project's")} folder recorded at {folder.Path} is not there, so nothing was started; "
-            + "if it was moved, `jason project link --path <the project's folder, where it is now>` records it and its campaigns again.",
-    };
-
-    private static string Printed(PromptFolder folder, string? host, TerminalLaunch launch, bool dryRun)
+    /// <summary>
+    /// The answer: <c>program</c> is the program's path, as in the item form's answer (the shell's under <c>--shell</c>),
+    /// and <c>shell</c> says which of the two was started.
+    /// </summary>
+    private static string Printed(PromptFolder folder, string? host, TerminalLaunch launch, bool dryRun, string program)
     {
         var printed = new JsonObject
         {
             ["kind"] = "folder",
             ["folder"] = new JsonObject { ["level"] = SessionOpener.Level(folder.Level), ["path"] = folder.Path },
-            ["program"] = host is null ? "shell" : "host",
             ["host"] = host,
+            ["shell"] = host is null,
+            ["program"] = program,
             ["terminal"] = launch.Terminal,
             ["started"] = !dryRun,
         };

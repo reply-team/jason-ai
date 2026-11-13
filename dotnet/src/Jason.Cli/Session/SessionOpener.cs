@@ -65,7 +65,7 @@ public static class SessionOpener
         }
 
         var folder = await PromptFolderResolver.ResolveAsync(env, item.CampaignId, cancellationToken).ConfigureAwait(false);
-        var (preferenceExit, word) = await PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
+        var (preferenceExit, word, _) = await PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
         if (preferenceExit != ExitCodes.Success)
         {
             if (preferenceExit == ExitCodes.ApiError)
@@ -171,18 +171,22 @@ public static class SessionOpener
             : null;
     }
 
-    /// <summary>The word the preference holds, or null when it is unset; a read the runtime refused is its exit code.</summary>
-    internal static async Task<(int Exit, string? Word)> PreferredHostAsync(CliEnvironment env, CancellationToken cancellationToken)
+    /// <summary>
+    /// The word the preference holds, or null when it is unset; a read the runtime refused is its exit code. <c>Said</c> is
+    /// true where the exit was already written on stdout by the read itself (no runtime, a request that timed out), so a
+    /// caller writes no second envelope.
+    /// </summary>
+    internal static async Task<(int Exit, string? Word, bool Said)> PreferredHostAsync(CliEnvironment env, CancellationToken cancellationToken)
     {
         var (exit, response) = await OperationRunner.SendAsync(env, Operations.PreferenceList, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
-            return (exit, null);
+            return (exit, null, true);
         }
 
         if (!response.IsSuccess)
         {
-            return (ExitCodes.ApiError, null);
+            return (ExitCodes.ApiError, null, false);
         }
 
         JsonNode? listed;
@@ -192,18 +196,18 @@ public static class SessionOpener
         }
         catch (JsonException)
         {
-            return (ExitCodes.ApiError, null);
+            return (ExitCodes.ApiError, null, false);
         }
 
         if (listed?["items"] is not JsonArray items)
         {
-            return (ExitCodes.ApiError, null);
+            return (ExitCodes.ApiError, null, false);
         }
 
         var entry = items.OfType<JsonObject>().FirstOrDefault(preference => preference["key"]?.GetValueKind() == JsonValueKind.String && preference["key"]!.GetValue<string>() == PreferenceKey);
         return entry?["value"]?["host"] is JsonValue host && host.GetValueKind() == JsonValueKind.String
-            ? (ExitCodes.Success, host.GetValue<string>())
-            : (ExitCodes.Success, null);
+            ? (ExitCodes.Success, host.GetValue<string>(), false)
+            : (ExitCodes.Success, null, false);
     }
 
     /// <summary>
@@ -288,7 +292,7 @@ public static class SessionOpener
     /// Why a recorded folder that is not on disk starts nothing: a terminal started there would open somewhere else. A
     /// campaign's or a project's folder a person moved is recorded again by <c>jason project link</c>.
     /// </summary>
-    private static string Missing(PromptFolder folder) => folder.Level switch
+    internal static string Missing(PromptFolder folder) => folder.Level switch
     {
         PromptFolderLevel.HarnessRoot => $"The harness root at {folder.Path} is not there, so nothing was started.",
         _ => $"The {(folder.Level == PromptFolderLevel.Campaign ? "campaign's" : "project's")} folder recorded at {folder.Path} is not there, so nothing was started; "
