@@ -2,6 +2,7 @@ import { signal } from '@preact/signals-react';
 import { act, argsOf, define } from './actions';
 import { campaigns } from './campaigns';
 import { html, type Html } from './html';
+import { t } from '../platform/i18n';
 import { svg } from './icons';
 import { attention } from './needs';
 import { pageSize, recentFilters, recentRows, shownRows, type RecentFilter, type RecentRow } from './recent-rows';
@@ -34,19 +35,19 @@ export function closeFilterMenu(): void {
 }
 
 const labels: Readonly<Record<RecentFilter, string>> = {
-    all: 'All',
-    needs: 'Needs you',
-    live: 'Live',
-    paused: 'Paused',
-    draft: 'Draft',
+    all: t('recent.filter.all'),
+    needs: t('recent.filter.needs'),
+    live: t('recent.filter.live'),
+    paused: t('recent.filter.paused'),
+    draft: t('recent.filter.draft'),
 };
 
 const dotTitles = {
-    waiting: 'Waiting on you',
-    active: 'Active',
-    paused: 'Paused',
-    draft: 'Draft',
-    none: 'No agent',
+    waiting: t('recent.dot.waiting'),
+    active: t('recent.dot.active'),
+    paused: t('recent.dot.paused'),
+    draft: t('recent.dot.draft'),
+    none: t('recent.dot.none'),
 } as const;
 
 define('recent.search', (_args, element) => {
@@ -81,7 +82,7 @@ define('recent.more', () => {
 
 function rowView(row: RecentRow): Html {
     const said = [
-        row.waiting > 0 ? `${row.waiting} waiting` : null,
+        row.waiting > 0 ? t('recent.waiting', { count: String(row.waiting) }) : null,
         row.age === '' ? null : row.age,
         row.agent === null ? null : dotTitles[row.dot],
     ]
@@ -108,8 +109,8 @@ function rowView(row: RecentRow): Html {
 
 function filterMenu(): Html {
     return html`<button class="menu-away" type="button" tabindex="-1" aria-hidden="true" ${act('recent.menu')}></button>
-        <div class="menu" role="menu" aria-label="Show">
-            <div class="mhead">Show</div>
+        <div class="menu" role="menu" aria-label="${t('recent.show')}">
+            <div class="mhead">${t('recent.show')}</div>
             ${recentFilters.map(
                 (each) =>
                     html`<button
@@ -140,13 +141,13 @@ export function recentView(): Html {
     });
     const { rows: shown, more } = shownRows(rows, filter.value, text.value, limit.value);
     return html`<div class="recent">
-            <span class="rl">Recent</span>
+            <span class="rl">${t('recent.title')}</span>
             <span class="rtools">
                 <button
                     class="rbtn"
                     type="button"
-                    title="Search agents"
-                    aria-label="Search agents"
+                    title="${t('recent.search')}"
+                    aria-label="${t('recent.search')}"
                     aria-pressed="${searching.value ? 'true' : 'false'}"
                     ${act('recent.search')}
                 >
@@ -155,8 +156,8 @@ export function recentView(): Html {
                 <button
                     class="rbtn"
                     type="button"
-                    title="Filter"
-                    aria-label="Filter"
+                    title="${t('recent.filter')}"
+                    aria-label="${t('recent.filter')}"
                     aria-haspopup="menu"
                     aria-expanded="${menuOpen.value ? 'true' : 'false'}"
                     data-active="${filter.value === 'all' ? 'false' : 'true'}"
@@ -173,8 +174,8 @@ export function recentView(): Html {
                       <input
                           class="inp"
                           type="text"
-                          aria-label="Search agents"
-                          placeholder="Search agents"
+                          aria-label="${t('recent.search')}"
+                          placeholder="${t('recent.search')}"
                           autocomplete="off"
                           value="${text.value}"
                           data-input="recent.type"
@@ -189,7 +190,7 @@ export function recentView(): Html {
             ${
                 more
                     ? html`<button class="item rmore" type="button" ${act('recent.more')}>
-                          <span>Load more</span>
+                          <span>${t('recent.more')}</span>
                       </button>`
                     : null
             }
@@ -197,6 +198,6 @@ export function recentView(): Html {
         ${
             shown.length > 0
                 ? null
-                : html`<div class="rnone">${rows.length === 0 ? 'No chats yet.' : 'No agents match.'}</div>`
+                : html`<div class="rnone">${rows.length === 0 ? t('recent.none.chats') : t('recent.none.match')}</div>`
         }`;
 }
