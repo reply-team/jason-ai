@@ -27,6 +27,7 @@
   "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "pinned_only" },
   "channel_arguments": null,
   "channel_templates": null,
+  "route_channel_argument": null,
   "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "runs" },
   "contact_projection": {
     "fields": ["id"],
