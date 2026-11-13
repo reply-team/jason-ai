@@ -99,6 +99,7 @@ public sealed class RouteActivator(
 
         var built = new RouteSnapshot(PublicId.New(RouteSnapshot.IdPrefix), clock.GetUtcNow(), snapshot.Id, global, campaigns);
         await KeepSearchesAsync(built, problems, cancellationToken).ConfigureAwait(false);
+        await KeepSendsAsync(built, problems, cancellationToken).ConfigureAwait(false);
         return problems.Count > 0 ? new RouteCandidate(null, problems) : new RouteCandidate(built, []);
     }
 
@@ -165,6 +166,43 @@ public sealed class RouteActivator(
             RouteResolver.ForSearch(routes, campaign, operation, SearchLanding.Search, plugin, identity) is { } found
             && string.Equals(found.Route.PluginId, plugin, StringComparison.Ordinal)
             && string.Equals(found.Route.BindingIdentity, identity, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The same rule for a send (<see cref="RouteResolver.ForSend"/>): a cancel and a status read of a send go only to the
+    /// plugin and account it ran under. So a send the provider still holds for a moment to come, with no succeeded cancel
+    /// (<see cref="HeldSends"/>), that the routes active now reach and <paramref name="candidate"/> would not is a problem
+    /// of the set: it would go out at its moment with nowhere to cancel it. A send the active routes do not reach either
+    /// is not this change's doing, and refuses nothing.
+    /// </summary>
+    private async Task KeepSendsAsync(RouteSnapshot candidate, List<ErrorDetail> problems, CancellationToken cancellationToken)
+    {
+        var active = registry.Snapshot;
+        var sends = await HeldSends.ReadAsync(db, clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+
+        foreach (var send in sends)
+        {
+            if (Reaches(candidate, send) || !Reaches(active, send))
+            {
+                continue;
+            }
+
+            problems.Add(new ErrorDetail(
+                SendField(send.Campaign, send.WorkItem),
+                RouteProblemCodes.OrphansSend,
+                $"campaign '{send.Campaign}' holds send {send.WorkItem}, which ran at '{send.PluginId}' under an account neither the campaign's other routes nor the global ones would name, and the provider holds it for {send.SendAfter}, so its cancel and its status read would have nowhere to go before it goes out. Cancel it with {HeldSends.Cancel}, or let its moment pass, then change the route."));
+        }
+    }
+
+    /// <summary>
+    /// Whether a cancel and a status read of the send would both find the very plugin and binding it ran under. The send's
+    /// own channel is not asked for: it only orders the walk, and whether any route names the account does not depend on
+    /// which is asked first.
+    /// </summary>
+    private static bool Reaches(RouteSnapshot routes, HeldSend send) =>
+        new[] { HeldSends.Cancel, HeldSends.Status }.All(operation =>
+            RouteResolver.ForSend(routes, send.Campaign, operation, send.Operation, sendChannel: null, send.PluginId, send.BindingIdentity) is { } found
+            && string.Equals(found.Route.PluginId, send.PluginId, StringComparison.Ordinal)
+            && string.Equals(found.Route.BindingIdentity, send.BindingIdentity, StringComparison.Ordinal));
 
     /// <summary>
     /// Makes the candidate the active route snapshot. Called under the reload gate, after the plugin registry it
@@ -316,6 +354,9 @@ public sealed class RouteActivator(
 
     /// <summary>How a search a change would leave without a route is named in a problem: its campaign and its work item.</summary>
     public static string SearchField(string campaignId, string searchWorkItem) => $"campaign:{campaignId}/searches/{searchWorkItem}";
+
+    /// <summary>How a send a change would leave without a route is named in a problem: its campaign and its work item.</summary>
+    public static string SendField(string campaignId, string sendWorkItem) => $"campaign:{campaignId}/sends/{sendWorkItem}";
 
     private RouteSet FromSettings(PluginSnapshot plugins, List<ErrorDetail> problems)
     {

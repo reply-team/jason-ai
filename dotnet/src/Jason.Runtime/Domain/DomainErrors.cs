@@ -186,6 +186,19 @@ public static class DomainErrors
             retryable: false,
             details);
 
+    /// <summary>
+    /// A campaign route write refused because it would leave sends the provider still holds for a moment to come with no
+    /// route to the account each ran under. The details name each send; nothing was written and the routes in force stay
+    /// active.
+    /// </summary>
+    public static DomainException RouteOrphansSend(IReadOnlyList<ErrorDetail> details) =>
+        new(
+            StatusCodes.Status409Conflict,
+            Routing.RouteProblemCodes.OrphansSend,
+            string.Create(CultureInfo.InvariantCulture, $"The route change was refused: {details.Count} send(s) still held for a later moment would have no route to the account each ran under; the routes in force stay active."),
+            retryable: false,
+            details);
+
     public static NotFoundException ApprovalNotFound(string id) => new("approval_not_found", $"No approval with id '{id}'.");
 
     /// <summary>No provider block has this id. Nothing deletes a block, so this is a wrong id.</summary>
