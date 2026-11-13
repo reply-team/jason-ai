@@ -258,7 +258,7 @@ internal static class GoldenPath
     public static async Task<RuntimeDescriptor> StartAsync(Installation it)
     {
         ArgumentNullException.ThrowIfNull(it);
-        AssertSuccess(await PatientStart.RunAsync(
+        AssertStarted(it.Paths, await PatientStart.RunAsync(
             it.Paths,
             within => RunAsync(it, "dotnet", [Assembly, "runtime", "start"], within: within),
             () => JasonAsync(it, "runtime", "status"),
@@ -278,7 +278,7 @@ internal static class GoldenPath
         TestContext.Current.TestOutputHelper?.WriteLine(string.Create(
             CultureInfo.InvariantCulture,
             $"jason runtime start, as documented: answered with exit {result.ExitCode} after {clock.Elapsed.TotalSeconds:F1} s."));
-        AssertSuccess(result);
+        AssertStarted(it.Paths, result);
         return Started(it);
     }
 
@@ -542,10 +542,27 @@ internal static class GoldenPath
     public static void AssertSuccess(CliResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        Assert.True(
-            result.ExitCode == ExitCodes.Success && result.Error.Length == 0,
-            $"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}");
+        Assert.True(Succeeded(result), Said(result));
     }
+
+    /// <summary>
+    /// A start held to success, as <see cref="AssertSuccess"/> holds any step; a start that failed says, after the verb's
+    /// answer, the last lines of that runtime's own log (<see cref="PatientStart.LogTail"/>).
+    /// </summary>
+    internal static void AssertStarted(JasonPaths paths, CliResult result)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(result);
+        if (!Succeeded(result))
+        {
+            Assert.Fail($"{Said(result)}{Environment.NewLine}{PatientStart.LogTail(paths)}");
+        }
+    }
+
+    private static bool Succeeded(CliResult result) => result.ExitCode == ExitCodes.Success && result.Error.Length == 0;
+
+    private static string Said(CliResult result) =>
+        $"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}";
 
     public static JsonObject Json(CliResult result)
     {

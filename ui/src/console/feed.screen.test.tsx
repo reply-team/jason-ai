@@ -41,7 +41,8 @@ function renderConsole(desktop: StubDesktop = stubDesktop()): { desktop: StubDes
 
 const side = () => document.querySelector<HTMLElement>('.side')!;
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
-const feedButton = () => within(within(side()).getByRole('navigation', { name: 'Feed' })).getByRole('button');
+const feedButton = () =>
+    within(within(side()).getByRole('navigation', { name: 'Menu' })).getByRole('button', { name: /^Feed/ });
 /** The element the selector finds, thrown for while there is none, so `waitFor` waits for it. */
 const found = (selector: string): HTMLElement => {
     const element = document.querySelector<HTMLElement>(selector);
@@ -73,14 +74,15 @@ beforeEach(() => {
 });
 
 describe('the Feed', () => {
-    it('is asked of the desktop once as the console opens, and drawn first in the sidebar, above New chat and apart from the list', async () => {
+    it('is asked of the desktop once as the console opens, and drawn first in the sidebar, above the other rows and apart from the list', async () => {
         const { desktop } = renderConsole();
         await waitFor(() => expect(feedButton().textContent?.trim()).toBe('Feed'));
         // The first ask of the page's load also has the desktop read back what was written while no page followed.
         expect(calls(desktop, 'chat.feed').map((each) => each.args)).toEqual([[[], { catchUp: true }]]);
         const order = Array.from(side().querySelectorAll('button')).map((each) => each.textContent?.trim());
-        expect(order[0]).toBe('Feed');
-        expect(order.indexOf('Feed')).toBeLessThan(order.indexOf('New chat'));
+        // The button, its caret and the Search row come before it.
+        expect(order.indexOf('Feed')).toBe(order.indexOf('New GTM agent') + 3);
+        expect(order.indexOf('Feed')).toBeLessThan(order.findIndex((each) => each?.startsWith('Needs you')));
         // The window opens on Start, and no chat is made before the person sends one.
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         expect(calls(desktop, 'chat.create')).toEqual([]);

@@ -35,6 +35,9 @@ public static class WorkingFolder
     /// </summary>
     public const string ByProjectOrAllProjects = "give --project to name another, or --all-projects to list every project's campaigns";
 
+    /// <summary>How <c>session open</c> at a folder names another folder than the project its working directory gave.</summary>
+    public const string ByProjectOrCampaign = "give --project or --campaign to name another folder";
+
     /// <summary>How <c>project get</c> names another project than the one its folder gave: it has no <c>--project</c>.</summary>
     public const string ByIdOrSlug = "give a project id or --slug to name another";
 

@@ -5,6 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { isPlace, notFolderPlaces, type PlaceId } from './open-in.ts';
 
 export interface DesktopSettings {
     /**
@@ -20,6 +21,11 @@ export interface DesktopSettings {
      * never told: the system's, except for a new installation, which meets Light (`theme.ts`).
      */
     theme: ThemeChoice | null;
+    /**
+     * The place "Open in" opened last, which the split button's main part opens next. Kept here, by the main process, in
+     * this run's own data directory: never in the window and never in the person's folders. Absent until one was used.
+     */
+    openIn?: PlaceId;
 }
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -49,11 +55,12 @@ export function parseSettings(text: string | null): DesktopSettings {
     } catch {
         return { ...defaultSettings };
     }
-    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown };
+    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown };
     return {
         feed: typeof value.feed === 'string' && isFeed(value.feed) ? value.feed : null,
         skillsDeployedFor: typeof value.skills_deployed_for === 'string' ? value.skills_deployed_for : null,
         theme: isTheme(value.theme) ? value.theme : null,
+        ...(isPlace(value.open_in) && !notFolderPlaces.includes(value.open_in) ? { openIn: value.open_in } : {}),
     };
 }
 
@@ -84,6 +91,7 @@ export function writeSettings(file: string, settings: DesktopSettings): void {
     if (settings.feed !== null) body.feed = settings.feed;
     if (settings.skillsDeployedFor !== null) body.skills_deployed_for = settings.skillsDeployedFor;
     if (settings.theme !== null) body.theme = settings.theme;
+    if (settings.openIn !== undefined) body.open_in = settings.openIn;
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, file);

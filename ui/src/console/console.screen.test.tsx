@@ -45,7 +45,14 @@ function pending(fake: FakeApi): FakeApi {
 
 /** Shows a panel of the dock the way a person does, from the sidebar. */
 function show(name: string): void {
-    fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name }));
+    const side = within(document.querySelector<HTMLElement>('.side')!);
+    // What has no row of its own is under More: the menu opens, and the entry is chosen by its title.
+    if (['Activity', 'Connect'].includes(name)) {
+        fireEvent.click(side.getByRole('button', { name: 'More' }));
+        fireEvent.click(side.getByRole('menuitem', { name: new RegExp(`^${name}`) }));
+        return;
+    }
+    fireEvent.click(side.getByRole('button', { name }));
 }
 
 const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
@@ -219,7 +226,7 @@ describe('the console', () => {
 
     it('describes the Activity panel by the roles, not by agents', async () => {
         renderConsole(pending(new FakeApi()));
-        await waitFor(() => screen.getByRole('button', { name: 'Activity' }));
+        await waitFor(() => screen.getByRole('button', { name: 'More' }));
         show('Activity');
         const activity = await waitFor(() => panel('Activity'));
         expect(words(activity)).toContain('What Jason and its roles do, as the journal records it.');
@@ -1242,24 +1249,17 @@ describe('the console', () => {
         expect(shown(":root[data-theme='dark'] .jc-console .brand .wordmark.light")).toContain('display: none');
     });
 
-    it("cuts the sidebar's version line with an ellipsis rather than scrolling, and keeps its whole text in the title", async () => {
+    it('holds only Settings in the sidebar foot, and not the runtime version', async () => {
         renderConsole(pending(new FakeApi()));
-        const version = `Jason ${fixtures['system.info/with-ui'].response.runtime_version}`;
         const foot = await waitFor(() => {
-            const found = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
-            expect(words(found).trim()).toBe(version);
-            return found;
+            const found = document.querySelector<HTMLElement>('.jc-console .side .sfoot');
+            expect(found).not.toBeNull();
+            return found!;
         });
-        expect(foot.title).toBe(version);
-        // The sidebar is drawn again as what it lists arrives, so the foot is read where it stands now.
-        const now = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
-        const body = rules()
-            .filter((rule) => rule.selector.includes('sfoot') && now.matches(rule.selector))
-            .map((rule) => rule.body)
-            .join(';');
-        expect(body).toMatch(/white-space:\s*nowrap/);
-        expect(body).toMatch(/overflow:\s*hidden/);
-        expect(body).toMatch(/text-overflow:\s*ellipsis/);
+        expect(words(foot).trim()).toBe('Settings');
+        expect(document.querySelector('.jc-console .side')!.textContent).not.toContain(
+            fixtures['system.info/with-ui'].response.runtime_version,
+        );
     });
 
     it('says after a fresh start that lines written in between are not shown, and keeps the lines it has', async () => {

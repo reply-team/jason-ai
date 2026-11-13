@@ -17,6 +17,11 @@ import { loggedModels, loggedTurns } from './chat-log.ts';
 import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
+import { OpenIn, type PlaceId } from './open-in.ts';
+import { isFolder, systemProbes } from './open-in-probes.ts';
+import { editorEnvironment, openInHarnessRoot } from './open-in-env.ts';
+import { startDetached } from './open-in-start.ts';
+import { continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
@@ -30,14 +35,15 @@ import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { eventChannels, handle, type InvokeMember } from './ipc.ts';
+import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
+import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, requestStartOver } from './demo-over.ts';
+import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
 import { processIsRunning } from './own-runtime.ts';
-import { applyMode, demoDirectory, demoMenu, demoUnopened, enterRun, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
+import { applyMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterRun, keepFirstStart, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
 import { claimDemoFolder, hasDemoMarker } from './demo-folders.ts';
@@ -121,10 +127,12 @@ function showStarting(window: BrowserWindow, message: string, failed: boolean): 
 /**
  * Locks the window to the runtime's origin: a navigation elsewhere is refused, and a link or `window.open` that leaves
  * it goes to the system browser only when it is https. Of what the page asks for, only writing to the clipboard is
- * granted, and only at the runtime's origin; no other permission, no webview. Answers the one way to the system
- * browser, which the Reply card's links take too: it opens an https URL and refuses any other, logging neither.
+ * granted, and only at the runtime's origin; no other permission, no webview. Answers the two ways to the system
+ * browser: `leave`, which the Reply card's links take too, opens an https URL and refuses any other, logging neither;
+ * `ownPage` opens a page of the runtime's own UI at its origin, the chat in a tab, and refuses any other address. The
+ * page names neither address: `ownPage` is handed only the link the main process made from what the CLI printed.
  */
-function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): (url: string) => Promise<void> {
+function lockNavigation(contents: WebContents, origin: () => string | null, log: Logger): { leave: (url: string) => Promise<void>; ownPage: (url: string) => Promise<void> } {
     const leave = (url: string): Promise<void> => {
         if (!isHttps(url)) {
             log.warn('link_refused', {});
@@ -138,6 +146,8 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
             },
         );
     };
+    // Held to the runtime's own page as the run file says it at this moment, whatever the caller held (`openOwnPage`).
+    const ownPage = (url: string): Promise<void> => openOwnPage(url, { origin, log, open: (held) => shell.openExternal(held) });
     const guard = (event: { preventDefault(): void }, url: string) => {
         const here = origin();
         if (here !== null && originOf(url) === here) return;
@@ -154,10 +164,10 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
     });
     contents.session.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, origin())));
     contents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin()));
-    return leave;
+    return { leave, ownPage };
 }
 
-function registerSetup(setup: Setup, origin: () => string | null, log: Logger, window: () => BrowserWindow | null): void {
+function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | null, log: Logger, changed: () => void): void {
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
     const members: [InvokeMember, (...args: unknown[]) => unknown][] = [
         ['setup.status', () => setup.status()],
@@ -176,8 +186,8 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
         ['setup.replyUnblock', (id) => setup.replyUnblock(id)],
         ['setup.replyDelete', (channel, id, options) => setup.replyDelete(channel, id, options)],
     ];
-    for (const [member, handler] of members) handle(ipcMain, member, origin, handler, refused);
-    setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));
+    for (const [member, handler] of members) handle(seam, member, origin, handler, refused);
+    setup.onChanged(changed);
 }
 
 /** Brings the window forward; the desk's own once it is open. */
@@ -217,6 +227,9 @@ function linkOf(data: unknown): unknown {
 
 /** The window's run; `links` is where a link waits for the page, made by the start before Electron was ready. */
 async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
+    // Every member the page may ask for is registered through `seam`, which checks the window's sender and keeps each
+    // handler in one registry: the browser bridge reaches the same handlers through it (`browser-bridge.ts`).
+    const seam = withMembers(ipcMain);
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
@@ -284,9 +297,18 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     // The origin is read from the run file on every check, because the runtime may come back on another port.
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
-    const toBrowser = lockNavigation(window.webContents, origin, log);
+    // The bridge a browser tab reaches the chat through: opened only when the person first opens the chat in a browser,
+    // closed with the window and at quit.
+    // The chat is made further down; the bridge opens only on the person's act, long after it is.
+    const bridges = new BridgeHolder(() => BrowserBridge.open({ origin, members: seam.members, modeOf: (chatId) => chat.modeNow(chatId), log }));
+    // The one way an event reaches the page: the window, and every tab paired with the bridge for the channels a tab reads.
+    const toPage = (channel: keyof typeof eventChannels, ...args: unknown[]) => {
+        current?.webContents.send(eventChannels[channel], ...args);
+        bridges.publish(channel, args);
+    };
+    const { leave: toBrowser, ownPage } = lockNavigation(window.webContents, origin, log);
     // A link waits for the page that takes it: a page that goes, by a load or a reload, takes no more until the next asks.
-    handle(ipcMain, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    handle(seam, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     window.webContents.on('did-start-navigation', (details) => {
         if (details.isMainFrame && !details.isSameDocument) links.away();
     });
@@ -423,8 +445,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     // Back to Your Own Installation, in a demo run's tray and menu: the way back that needs no page, for a demo whose
     // start failed.
+    // True while the demo's sample is made behind the page (`openOnTheSample`): the switch, the way back and Start the Demo
+    // Over wait for it, each saying so, and the page shows the mark.
+    let sampleMaking = false;
     const back = () => {
-        const refusal = applyMode('live', modeDeps);
+        const refusal = applyMode('live', modeDeps, sampleMaking);
         if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
     };
     // Start the Demo Over: one question first (everything done in the demo goes), then the demo's runtime is stopped, a
@@ -437,6 +462,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const startOver = async (): Promise<{ refused: string } | null> => {
         if (runOn.mode !== 'demo') return { refused: 'Start the Demo Over is only in the demo.' };
         if (startInFlight) return { refused: 'The demo is still starting. Try again in a moment.' };
+        if (sampleMaking) return { refused: demoPreparing };
         const parent = current;
         const options = { type: 'question' as const, title: 'Jason', message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
         const { response } = parent === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(parent, options);
@@ -473,6 +499,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back, startOver: startOverFromMenu });
     desk.open();
+    // The mark, said to the page, which shows it and holds its switch, and to the menu, which draws its lines again.
+    const setPreparing = (on: boolean) => {
+        sampleMaking = on;
+        desk.setDemo(demoMenu(runOn.mode, removalOffered(process.platform), on));
+        toPage('mode.preparing', on);
+    };
     showWindow = () => desk.show();
     const repointed = (async () => {
         if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
@@ -497,7 +529,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const models = new ModelLists({
         file: paths.models,
         ask: codexAsker({ paths, env, bundle, dataNamed, bundleVersion: version, keyFor: (id) => keys.keyFor(id) }),
-        changed: () => current?.webContents.send(eventChannels['setup.changed']),
+        changed: () => toPage('setup.changed'),
         ...loggedModels(log),
     });
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
@@ -508,11 +540,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         },
         write: (next: DesktopSettings) => writeSettings(paths.settings, next),
     };
-    handle(ipcMain, 'theme.get', origin, () => settings.theme, refused);
-    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
-    handle(ipcMain, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);
-    handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
-    handle(ipcMain, 'mode.startOver', origin, () => startOver(), refused);
+    handle(seam, 'theme.get', origin, () => settings.theme, refused);
+    handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened, preparing: sampleMaking }), refused);
+    handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);
+    handle(seam, 'mode.startOver', origin, () => startOver(), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
@@ -520,8 +552,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         state: () => readWindowPairing(paths.windowPairing),
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
-    handle(ipcMain, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
+    handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
     registerSetup(
+        seam,
         new Setup({
             paths,
             cli,
@@ -553,7 +586,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }),
         origin,
         log,
-        () => current,
+        () => toPage('setup.changed'),
     );
     // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
     const skillsGate = new SkillsGate();
@@ -575,7 +608,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
         // folder where it stands. Nothing is run or opened with a program.
         openFolder: (path) => shell.showItemInFolder(path),
-        emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
+        emit: (chatId, event) => toPage('chat.event', chatId, event),
         // The desktop asks the person itself whenever Full access is chosen with no standing choice: the page cannot answer
         // for them, nor give the standing choice. This time and Always say yes; Cancel is the default and Escape answers
         // it. With no window there is no one to ask.
@@ -589,19 +622,58 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
         standingChanged: (standing, why) => {
             loggedTurns(log).standingChanged(standing, why);
-            current?.webContents.send(eventChannels['fullAccess.changed'], standing);
+            toPage('fullAccess.changed', standing);
         },
     });
-    registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    registerChat(seam, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
+    // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
+    // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
+    // in this run's chat folder, by this run's CLI: in a demo run, the demo's.
+    const openIn = new OpenIn({
+        probes: systemProbes(env),
+        hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
+        cli,
+        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), desktopPaths(runOn.person).installationSettings)),
+        isDirectory: isFolder,
+        remembered: () => settings.openIn ?? null,
+        remember: (id: PlaceId) => {
+            settings = { ...settings, openIn: id };
+            try {
+                writeSettings(paths.settings, settings);
+            } catch {
+                log.warn('open_in_remember_failed', {});
+            }
+        },
+        // An editor or the file manager keeps the environment it is started with for its whole life: the person's, not a
+        // demo run's. The terminals are started by `jason session open` and keep the run's.
+        start: (line) => startDetached(line, editorEnvironment(env, personEnvironment, process.platform)),
+        copy: (text) => clipboard.writeText(text),
+        terminalFlags,
+        // The chat in a tab of the system's browser: the bridge is opened on the first ask, and the link is the one the CLI
+        // printed for the runtime's own page, with the bridge's code in its fragment (`browser-bridge.ts`).
+        browser: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),
+        log: (event, fields) => log.info(event, fields),
+        continuable: (chatId) => chat.continuable(chatId),
+        chatFolder: () => paths.chat,
+        continueFlags,
+        logContinue: (event, fields) => log.info(event, fields),
+    });
+    handle(seam, 'openIn.targets', origin, (campaignId, chatId) => openIn.targets(campaignId, chatId), refused);
+    handle(seam, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
+    handle(seam, 'openIn.continueChat', origin, (chatId) => openIn.continueChat(chatId), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".
     // Nor does a listing of Codex's models: it is ended the way a turn's host is, and the asks that wait are dropped.
+    // Nor does a browser tab's bridge: its sessions end with it.
     window.on('closed', () => {
         chat.closeAll();
         models.close();
+        void bridges.close();
     });
     app.on('before-quit', () => {
         chat.closeAll();
         models.close();
+        void bridges.close();
     });
 
     await showStarting(window, 'Starting Jason…', false);
@@ -634,37 +706,50 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             },
         });
         runtimeVersion = started.runtimeVersion;
-        // A demo's runtime is up: a demo with no sample gets it made, behind the preparing page, and every start cancels the
-        // open AI-role reviews, because no AI role runs in the demo.
-        if (runOn.mode === 'demo') {
-            const ready = await readyTheSample(
-                seedDepsOnDisk({ cli, places: demoWhere, scratch: join(paths.data, 'seed-scratch'), progress: (step) => log.info('demo_seed_step', { Step: step }) }),
-                () => window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(preparingPage())}`),
-            );
-            if (ready.kind === 'failed') {
-                log.error('demo_seed_failed', { Step: ready.step ?? 'marker', Code: ready.code ?? 'none' });
-                throw new Error(ready.why);
-            }
-        }
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
         // What an earlier version's page kept on disk is unpaired and removed first, once (`window-pairing.ts`).
         const kept = readWindowPairing(paths.windowPairing);
-        const { cleared } = await loadWindow(
-            { cleared: kept.cleared, found: earlierPageWasFound },
-            {
-                cli,
-                clearSession: async () => {
-                    await session.defaultSession.clearStorageData();
-                    await session.defaultSession.clearCache();
-                },
-                remove: (folder) => rmSync(folder, { recursive: true, force: true }),
-                electron: paths.electron,
-                log,
-            },
-            () => window.loadURL(started.link),
-        );
+        // A demo's runtime is up: every start cancels the open AI-role reviews, because no AI role runs in the demo, and a
+        // demo with no sample gets it made behind the page, which loads first on the link the start minted (good for a
+        // minute; the seed takes longer) and shows the data as it lands.
+        let opened;
+        try {
+            opened = await openOnTheSample({
+                sample: runOn.mode === 'demo' ? seedDepsOnDisk({ cli, places: demoWhere, scratch: join(paths.data, 'seed-scratch'), progress: (step) => log.info('demo_seed_step', { Step: step }) }) : null,
+                load: () =>
+                    loadWindow(
+                        { cleared: kept.cleared, found: earlierPageWasFound },
+                        {
+                            cli,
+                            clearSession: async () => {
+                                await session.defaultSession.clearStorageData();
+                                await session.defaultSession.clearCache();
+                            },
+                            remove: (folder) => rmSync(folder, { recursive: true, force: true }),
+                            electron: paths.electron,
+                            log,
+                        },
+                        () => window.loadURL(started.link),
+                    ),
+                preparing: setPreparing,
+                // A making cut short leaves the person's request to start the demo over, so the next start makes the sample
+                // whole rather than show the half; it is taken away once the sample is whole.
+                request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true),
+                drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),
+            });
+        } catch (error) {
+            if (!(error instanceof SampleNotReady)) throw error;
+            log.error('demo_seed_failed', { Step: error.outcome.step ?? 'marker', Code: error.outcome.code ?? 'none' });
+            throw new Error(error.outcome.why);
+        }
+        void opened.making?.then(async (made) => {
+            if (made.kind !== 'failed') return;
+            log.error('demo_seed_failed', { Step: made.step ?? 'marker', Code: made.code ?? 'none' });
+            if (current !== null) await showStarting(current, made.why, true);
+        });
+        const { cleared } = opened.loaded;
         if (cleared !== kept.cleared) {
             try {
                 writeWindowPairing(paths.windowPairing, { ...readWindowPairing(paths.windowPairing), cleared });
@@ -764,6 +849,11 @@ function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
     const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
     demoWhere = demoPlaces(personDirectory, personHarness);
+    // Whether this installation is new is read first, of the person's directory: before this start writes anything there,
+    // before Electron makes its profile, before the single-instance lock. A new installation's first start opens on the
+    // demo (`keepFirstStart`), the record being the one thing written in the person's directory before they choose Live.
+    installationWasNew = isNewInstallation(personDirectory);
+    keepFirstStart(desktopPaths(personDirectory).mode, installationWasNew, installerStart);
     // Before the demo's directory is claimed, and before anything of this run names it, a start over asked by the run
     // before is carried out (`demo-over.ts`), and a demo whose places break the rule is refused. Either makes this run the
     // person's own, as an unusable directory does; a failed removal keeps its request for the next demo start.
@@ -807,9 +897,6 @@ function chooseInstallation(installerStart: boolean): void {
     personsOwn = personsOwnOf(runOn, () => personHarness);
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
     personEnvironment = enterRun(process.env, runOn);
-    // Whether this installation is new is read next: before Electron makes its profile under the data directory, before
-    // the single-instance lock, before anything is written there.
-    installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
     // Whether an earlier version's page left its storage on disk, read before Electron is ready (`window-pairing.ts`).
     earlierPageWasFound = earlierPageFound(desktopPaths(dataDirectory(process.env, homedir())).electron);
 }

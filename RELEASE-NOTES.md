@@ -19,47 +19,51 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.39.0
+# Jason 0.40.0
 
-## What is new since 0.38.0
+## What is new since 0.39.0
 
-This release adds a demo to the desktop: a second, real installation of Jason on invented people, so a person can see the product work before connecting anything of their own, with nothing sent to anyone.
+This release gives the desktop a top bar in your own installation and in the demo, with **Open in**, which opens a folder in an editor, a terminal or the file manager, continues a chat in a terminal and shows the desktop's chat in a browser tab; it rearranges the console around a new first screen, a sidebar with a Dashboard, a search box and a list of recent chats with a filter and a search; and a new installation now starts on the demo.
 
-- **See Jason with sample data.** The first screen of your own installation offers the demo in one line. Choosing it starts the desktop again on the demo, a data directory and a harness root of their own, each yours with `-demo` after the name (`~/.jason-demo` and `~/Jason-demo`). Nothing of your installation is read, written or mixed in. A strip heads every screen of the demo, saying the data is sample and nothing is sent to anyone, with **Demo** and **Live** buttons, and **Back to Your Own Installation** in the tray and the Jason menu. Quitting a demo run, or switching to Live, stops the demo's runtime and never yours. [The desktop guide](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#the-demo) says how.
-- **The demo is the product working.** The desktop fills the demo installation through Jason's own command-line verbs: one project, four campaigns (two running, one paused, one a draft), fifty-four invented people at `.example` addresses, twenty-eight messages already approved and sent and ten waiting for your approval. An approval you give moves the work, the numbers are the runtime's own, the Feed moves because lines were written, and a few of the people written to answer over the first minutes. The runtime, the database, the verbs and the page are the ones you use; nothing in them exists for the demo.
-- **A provider plugin that reaches nobody.** The sample runs through [the demo provider](https://github.com/reply-team/jason-ai/blob/v{{version}}/plugins/demo/README.md), a plugin package like any other. Its manifest requests no program, no host and no variable, so by the plugin fence it can reach nothing outside its process, and a send made to it is answered as sent and goes to nobody. Its people, threads and replies are data inside the package, and it reports the written replies through the events contract. The desktop carries it and places it in the demo installation; no release publishes it, so `jason plugin install demo` has nothing to install. It is the plainest example of a provider package in the [plugin guide](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/plugins.md).
-- **Start the Demo Over.** In the demo's tray and Jason menu, beside the way back. It asks once, stops the demo's runtime and starts the desktop again; the next start removes the demo's two folders and makes the sample again, so the story moves from its start. What you did in the demo is gone, and your own installation is not touched.
-- **What is off in the demo.** The demo has no real account, so the acts that connect or change one (signing in to Reply, adding, reconnecting, pausing, unblocking, limiting and deleting an account, connecting a notification channel, installing the Reply CLI) are off on the page, each card saying "Not in the demo: accounts are connected in your own installation." Updates, the start at logon, the `jason` command on the PATH and Remove What Jason Placed are off in a demo run too, each saying so.
-- **The chat works in the demo** with the AI you connected, running `jason` against the demo installation, where it can do no harm to anybody; the chat's fence refuses your own installation's data directory and harness root whole. No AI role runs in the demo's runtime: the responder is off and the campaign manager keeps only the trigger it cannot do without, at its slowest cadence.
-- **The demo from a terminal.** The demo installation is a real one: set `JASON_DATA_DIR` to its data directory and every `jason` verb reads and changes the demo. There is no verb of its own for it.
-- **Remove What Jason Placed and the Windows uninstall take the demo's two folders too,** the demo's runtime stopped first; one that does not stop keeps both folders. They take off, too, any `<folder>.removing-*` copy a start over left beside either, when it carries the demo's mark. Each demo folder carries the mark `.jason-demo-folder`, and a folder of the same name without it is never used or removed. The demo's harness root is your harness root at the time the demo is set up, with `-demo` after it, so if you change `Harness:Root` later the removal takes off the new root's `-demo` folder and the old one stays behind.
-- **Full access is not offered in the demo,** where the mode menu shows it off with "Not in the demo: Full access is for your own installation."
+- **A new installation opens on the demo.** The first start of a new installation opens the demo, with nothing to click: the page shows at once, and the sample is made behind it under a small "Preparing the demo…" mark, which takes about a minute; what the sample already holds is shown while the rest arrives. Until it is ready, the Demo | Live switch, **Start the Demo Over** and **Back to Your Own Installation** wait, each saying "Available once the demo is ready." **Live** then sets up your own installation as a first start does. An installation that existed before, with a mode record or without, and one updated from an earlier version open where they did. Full access is still not offered in the demo.
+- **A top bar in both modes.** A bar heads every screen, in your own installation and in the demo: a green dot and **Live**, or an amber dot, **Demo data** and "Nothing here is real or sent."; on its right, **Open in** and the **Demo | Live** switch, which is now the way into the demo and back. The start screen's "See Jason with sample data" line is gone; **Start the Demo Over** stays in the tray and the Jason menu.
+- **Open in.** A split button in the top bar, in your own installation and in the demo, opens the folder in an installed editor (VS Code, Cursor, Antigravity, Windsurf, Zed), in Claude Code or Codex as a new session in a terminal, in a plain terminal, in the file manager, or copies its path. The place you used last is the default, else Claude Code. With a campaign's chat in front it is that campaign's folder, otherwise the harness root; in the demo, the demo's folders, and a terminal there works with the demo's data. Nothing is written into your folders for it, and the chat's AI cannot reach it. See [the desktop guide](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#open-in).
+- **Continue this chat in a terminal.** While a chat is in front, Open in's last group can hold **Continue this chat in Claude Code** (or **in Codex**): a new terminal in which that program continues its own conversation, the one the chat's turns ran in, at the chat's folder. Nothing is copied and no transcript is written. It is offered only when the chat's last turn ran on your own Claude Code or Codex sign-in, outside Full access. No entry is shown for a chat on a provider's key, for a chat whose last turn ran in Full access, or for a chat begun before this release, until it has had a turn. While a turn of the chat runs, it cannot be chosen. Beside it the menu says that the conversation continues under that program's own permission settings, that this window's permission cards do not follow it, and that this window does not show what happens there.
+- **The desktop's chat in a browser tab.** **Open in**, then **Browser**, opens the desktop's chat in a tab of your browser, one more view onto the same chats the window shows, while the desktop runs: the list of conversations, a conversation and the box. A tab sends only to a chat in Ask first or Plan only, never answers a permission or plan card, and never changes a chat's mode or chooses Full access; a chat started from a tab starts in Ask first. The desktop's window stays the only place that approves. Only a tab the desktop opened shows the chat, paired once by a code in the link it opens; any other tab's Chat screen says how to open it from the desktop. The runtime gains no route for it.
+- **`jason session open` opens a folder, with no approval or question to start from.** `jason session open [--campaign <cmp_id> | --project <prj_id or slug> | --here] [--host <word> | --shell] [--resume <id>]` opens your agent host, or with `--shell` the system's plain shell, in a new terminal at the campaign's folder, else its project's, else the harness root; with `--here`, at the folder the command runs in, as it is; with none of the three, at the project of the folder you run it in, else the harness root. The host is `--host`, else the named preference `agent.interactive_host`, else Claude Code, and no first input is sent to it. `--resume <id>` has the host continue its own conversation of that id, as `claude --resume <id>` or `codex resume <id>`; another host is refused with `host_cannot_resume`. The form with an approval or a question is unchanged. See [the browser UI's page](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md#at-a-folder-with-no-item).
+- **A new first screen.** Start carries Jason's mark over "Who do you want to reach?", and its box asks "Tell Jason what you sell and who you want to reach.", adding "A website link is enough to start." where the chosen AI host can open a page. Under the box sit an access button, for the mode new chats start with on this computer, a model button holding the model, the effort and the AI host, and a send arrow. The note under it, that this interface is optional, can be closed for each mode.
+- **The sidebar.** **New GTM agent** is the main button and brings Start forward; its caret also offers **New chat**, a set-up chat as before, and **Connect an account**. Below it: Search, Feed, Dashboard, Needs you, with the number of approvals and questions waiting, People, Agents, Accounts, and **More**, which holds Performance, Activity, Work items, Connect and System. Settings sits alone at the foot. Every screen reached before still is.
+- **A Dashboard.** A greeting, **Review N waiting** when something waits, and six tiles: Needs you, people contacted and people who replied over 30 days, with the reply rate, and Interested, Meetings booked and Bounce rate, which have no figures in Jason yet and show a dash and "no data yet", never a zero. Below them, the decisions waiting, the running agents with their people, contacted and replied over 30 days, and the Feed's latest lines. Every number is one the page already reads.
+- **Search, with Ctrl K or ⌘K.** One box over the pages, Settings, New GTM agent and New chat, the agents and chats the console holds and, once you type, people; at most twelve rows, each opening where its sidebar row would.
+- **Recent.** The chats under Recent each show a status dot, the number waiting on you and an age, ten at a time with **Load more**, and can be searched by title and filtered to Needs you, Live, Paused or Draft.
 
-## Fixed since 0.38.0
+## Fixed since 0.39.0
 
-- **The chat's fence reads a path in one spelling, and holds more of what it was meant to hold.** These apply to your own installation's data directory as to the demo's folders, in every access mode unless said otherwise:
-  - **One canonical spelling of every fenced path** before it is matched, in one function every check uses: home at any depth and in a file tool's path, file addresses, Windows device, network, stream and trailing-dot forms, the macOS data volume's prefix, and a relative path after a change of folder.
-  - **Network and device paths** are refused for reads and walks as they already were for writes.
-  - **Links are judged by where they lead:** a link's relative target is read from the folder the link is made in, and refused wherever that place is fenced. In Full access a command that gives a place another name (a symbolic or hard link, a junction, a substituted drive, a mount) is not run unasked, wherever it points, and "Always" never covers one.
-  - **The system's openers, launchers and schedulers are held,** the programs that hand a file, an address or a command to the system's own opener, session, service manager or scheduler, or to a terminal, editor or window already running. In Full access they are not run unasked and "Always" never covers them, and a script the chat writes that starts one, or names a fenced place from its own folder, is refused; an edit is judged by the file as it would read after it.
-  - **A program's own folder option is followed** (tar, git, make and the like), and a fenced place reached that way is refused; more archivers and copies that follow links are held.
-  - **A path the reader cannot see,** such as a variable joined at run time, is not run unasked in Full access and is not covered by "Always".
-  - **In a demo run,** your own data directory and harness root are refused whole in every mode, and Full access is not offered.
+- **A screen opened in the console's Page tab fills the panel.** Performance, Work items, People, System, Accounts and Settings were drawn in a narrow column at the left of the panel; they now take its whole width.
+- **The demo's first opening no longer ends on "This browser isn't paired".** The page now opens before the sample is made, so the link that pairs it no longer expires while the sample is made.
+- **A desktop quit while the demo's sample is made no longer leaves half a sample.** The next demo start makes the sample whole by itself, where before it said the sample was not finished and pointed to Start the Demo Over.
 
-## Upgrading from 0.38.0
+## Upgrading from 0.39.0
 
 Nothing stops, no setting is renamed and no database migration is added.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` and `jason ui install` follow.
-- **The packages:** reply 0.15.1, journal-forwarder 1.3.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0, each the same as in 0.38.0, so there is nothing to replace with `jason plugin install`.
+- **The packages:** reply 0.15.1, journal-forwarder 1.3.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0, each the same as in 0.39.0, so there is nothing to replace with `jason plugin install`.
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the disk image for your machine from this release, or let an installed desktop offer the update.
-- **The demo is opt-in.** A start is Live unless you chose the demo; an installation that never does has no demo folder and no changed behaviour.
-- **Update the desktop and Jason together.** The offer and the strip are drawn by the page of this release; the page and the desktop that know the demo are the same release.
-- **From 0.37.x or earlier,** the notes of each release in between apply as well.
+- **Update the desktop and Jason together.** The top bar, Open in and the chat in a tab are drawn by the page of this release, and the terminals the desktop opens run this release's `jason session open`.
+- **The runtime's page may now connect to loopback HTTP.** Its `Content-Security-Policy` for every answer under `/ui` is `default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`: besides its own origin, the page may open connections to any port on `127.0.0.1`, and to no other host. That is how a tab reaches the desktop's chat.
+- **A bare `jason session open`,** a usage error before, now opens your agent host at a folder, as above. A script that relied on the refusal gets a terminal instead.
+- **An existing installation opens as it did.** Only a new installation's first start opens on the demo; an update from 0.39.0 changes nothing of where the desktop opens.
+- **From 0.38.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
 
-The demo is a first cut with limits: it is email only, with no LinkedIn channel; it raises no question; a person whose message waits for your approval never answers it, because a reply is attributed once, when it is stored; no AI role runs in the demo's runtime; and the sample starts today with no past, so there are no charts of earlier weeks. The replies the story wrote have all arrived in the first twelve minutes, after which a kept demo shows nothing new until **Start the demo over**.
+The demo is a first cut with limits: it is email only, with no LinkedIn channel; it raises no question; a person whose message waits for your approval never answers it, because a reply is attributed once, when it is stored; no AI role runs in the demo's runtime; and the sample starts today with no past, so there are no charts of earlier weeks. The replies the story wrote land over the twelve minutes after the sample is made, each shown within a minute of landing, when the demo's events are next read; after that, a kept demo shows nothing new until **Start the demo over**.
+
+Open in's **Browser** hands the link to your browser as an argument. If the browser was not already running, its main
+process keeps the link, with the pairing code in it, in its arguments for its whole life, where another program of your
+account can read it. The code is spent on its first use or expires within sixty seconds, whichever comes first, and a
+spent or expired code opens nothing.
 
 Through Reply, a person the account already holds is never found by `audience.search`, however well they match, while
 `audience.preview` counts and samples them, so a search can find fewer people than its preview said. A person the
@@ -124,8 +128,8 @@ reads finish at every cadence, fewer than a hundred of these may come back. Olde
 for them, and they stay in the journal (`jason journal list --kind workitem_succeeded`). A catch-up whose read fails,
 or that finds the Feed holding no line yet, brings in no sends.
 
-A people search with text reads the custom fields of every contact it scans, one at a time, the pickers that search as
-you type included; on a large installation a search takes longer than a search by name alone did. No measurement has
+A people search with text reads the custom fields of every contact it scans, one at a time, the pickers and the console's
+search box that search as you type included; on a large installation a search takes longer than a search by name alone did. No measurement has
 been made.
 
 A desktop start whose runtime does not start skips the reset of what an earlier page kept, until a start that starts the runtime.
@@ -144,6 +148,8 @@ Not yet seen on a real machine:
 - On Windows, a click on one of Jason's notifications bringing the desktop to the front on Needs you, with the desktop open and with it closed.
 - The Reply card's account acts, and the Accounts page that draws the same card, on a real Reply account: connecting an account and reconnecting one, pausing a LinkedIn account and resuming it, and the link pages they open in the browser; with them the shared mailbox page, LinkedIn ids for Reconnect, and the confirmation box in a packaged build.
 - On macOS, Remove What Jason Placed and the LaunchAgent; on every system, how the icon looks in the menu, the dock and the taskbar.
+- Open in with real editors, terminals and file managers, and Continue this chat with a real Claude Code or Codex: the tests run against stand-ins, and the words that continue a conversation were read from each program's own help.
+- The desktop's chat in a tab of a real browser: the page's tests run against a stand-in for the desktop's side, and the desktop's against a test client.
 
 The AppImage refuses to start on a system that refuses its sandbox, with a sentence naming the deb; that refusal has not been seen either.
 
@@ -199,8 +205,8 @@ On Windows, `jason session open` starts the console host, which hands the window
 your default terminal; where your default terminal is the console host itself, you get a plain console window; neither
 is yet measured on a machine.
 
-The macOS form of `jason session open`, a script opened in Terminal, has not been watched on a Mac, nor has the data
-directory it now carries.
+The macOS form of `jason session open`, a script opened in Terminal, has not been watched on a Mac, with an item or at
+a folder, nor has the data directory it carries, nor the login shell `--shell` reads from Terminal's own environment.
 
 Antigravity CLI's hook route has not been run on an account. The host also reads your own global `AGENTS.md` and
 `GEMINI.md` under `~/.gemini` for every role.

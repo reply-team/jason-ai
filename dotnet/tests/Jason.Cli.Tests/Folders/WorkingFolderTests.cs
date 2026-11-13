@@ -333,16 +333,18 @@ public sealed class WorkingFolderTests : IDisposable
     }
 
     /// <summary>
-    /// Which verbs fill a project from a folder is decided where each is built, and three places ask: the two campaign
-    /// verbs that take an optional project (create and list), and <c>project get</c> with neither id nor slug. A fourth is a
-    /// verb whose writes are now addressed by where a shell stands, so it has to come here by name, with its own row above.
+    /// Which verbs fill a project from a folder is decided where each is built, and four places ask: the two campaign
+    /// verbs that take an optional project (create and list), <c>project get</c> with neither id nor slug, and
+    /// <c>session open</c> at a folder with neither <c>--campaign</c> nor <c>--project</c>, which only reads and opens a
+    /// window there (its rows are in <c>FolderSessionTests</c>). A fifth is a verb whose writes are now addressed by where a
+    /// shell stands, so it has to come here by name, with its own row.
     /// Read off the sources, since a call that is not made leaves nothing to observe. Only the qualified spelling is counted,
     /// which is how every caller outside <c>WorkingFolder</c> has to write it and what leaves the definition itself out of
     /// the count; a call written unqualified inside WorkingFolder.cs, or one made through <c>using static</c>, would not be
     /// seen.
     /// </summary>
     [Fact]
-    public void Only_three_places_in_the_client_fill_a_project_from_a_folder()
+    public void Only_four_places_in_the_client_fill_a_project_from_a_folder()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
@@ -361,7 +363,7 @@ public sealed class WorkingFolderTests : IDisposable
 
         Assert.True(callers.Count > 0, "No source of the client was read.");
         Assert.True(
-            new[] { "CampaignCommands.cs x2", "ProjectCommands.cs x1" }.SequenceEqual(callers),
+            new[] { "CampaignCommands.cs x2", "FolderSessionOpener.cs x1", "ProjectCommands.cs x1" }.SequenceEqual(callers),
             $"The calls to WorkingFolder.FillProjectAsync are in: {string.Join(", ", callers)}.");
     }
 

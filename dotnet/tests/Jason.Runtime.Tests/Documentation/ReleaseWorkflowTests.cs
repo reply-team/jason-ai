@@ -484,19 +484,30 @@ public partial class ReleaseWorkflowTests
         var runs = steps.Select(step => Scalar(step, "run")).OfType<string>().ToList();
         Assert.Single(runs, run => run.StartsWith("dotnet build dotnet/Jason.slnx --configuration Release", StringComparison.Ordinal)
             && run.Contains("-p:Version=${{ needs.version.outputs.release }}", StringComparison.Ordinal));
-        var test = Assert.Single(runs, run => run.StartsWith("dotnet test", StringComparison.Ordinal));
-        Assert.StartsWith("dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build", test, StringComparison.Ordinal);
-        Assert.Contains("-p:Version=${{ needs.version.outputs.release }}", test, StringComparison.Ordinal);
+        // The tests run through the script every test step of ci.yml runs them through, told the release's version, and
+        // the whole suite, not a part of it: the three tests that failed were not where anybody would have looked. So the
+        // step names no project, no namespace and not the critical tier.
+        var testing = Assert.Single(steps, step => Scalar(step, "run")?.Contains("Invoke-Tests.ps1", StringComparison.Ordinal) == true);
+        var test = Scalar(testing, "run")!;
+        Assert.StartsWith("./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION ", test, StringComparison.Ordinal);
+        Assert.Equal("${{ needs.version.outputs.release }}", Scalar(Mapping(testing, "env"), "VERSION"));
+        foreach (var narrowing in new[] { "-Projects", "-Namespaces", "-NotNamespaces", "-Critical", "filter" })
+        {
+            Assert.DoesNotContain(narrowing, test, StringComparison.OrdinalIgnoreCase);
+        }
 
-        // The whole suite, not a part of it: the three tests that failed were not where anybody would have looked.
-        Assert.DoesNotContain("filter", test, StringComparison.Ordinal);
+        // Run as a runner runs it, with a stand-in for dotnet, the step makes one call: the whole solution, stamped with the
+        // version it was told, with the test platform's repeat of a failed test and no filter.
+        Assert.Equal(
+            "test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=9.8.7 --results-directory <results>/1 -- --retry-failed-tests 2 --report-xunit-trx",
+            Assert.Single(TestCalls(testing, "9.8.7")));
 
         // And it proves it was stamped, from what was built: a job that quietly lost the stamp would pass as -dev.
         var check = Assert.Single(steps, step => Scalar(step, "run")?.Contains("FileVersionInfo", StringComparison.Ordinal) == true);
         Assert.Equal("${{ needs.version.outputs.release }}", Scalar(Mapping(check, "env"), "RELEASE"));
         Assert.Contains("throw", Scalar(check, "run"), StringComparison.Ordinal);
         Assert.True(
-            steps.IndexOf(check) < steps.FindIndex(step => Scalar(step, "run") == test),
+            steps.IndexOf(check) < steps.IndexOf(testing),
             "The stamp is checked after the tests have already run under it.");
 
         // Every other job keeps the -dev version, and nothing stamps VersionPrefix itself: that would leave the suffix behind.
@@ -519,10 +530,52 @@ public partial class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// The <c>dotnet</c> calls a test step of ci.yml makes, run as a runner runs it from the repository's root and told
+    /// <paramref name="version"/>, with a stand-in for <c>dotnet</c>: a PowerShell function, which a command name finds
+    /// before any program. It records each call, with the results directory written as <c>&lt;results&gt;</c>, and
+    /// succeeds having written no report.
+    /// </summary>
+    private static List<string> TestCalls(YamlMappingNode step, string version)
+    {
+        using var tree = new TempTree();
+        var results = Path.Combine(tree.Root, "test-results");
+        var calls = Path.Combine(tree.Root, "calls");
+        File.WriteAllText(calls, string.Empty);
+        var script = Path.Combine(tree.Root, "step.ps1");
+        File.WriteAllText(script, Scalar(step, "run"));
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, $$"""
+            $ErrorActionPreference = 'Stop'
+            function dotnet {
+                Add-Content -LiteralPath '{{calls}}' -Value (($args -join ' ').Replace('{{results}}', '<results>').Replace('\', '/'))
+                $global:LASTEXITCODE = 0
+            }
+            Set-Location -LiteralPath '{{RepositoryRoot()}}'
+            & '{{script}}'
+            exit $LASTEXITCODE
+            """);
+
+        var ran = Pwsh(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["VERSION"] = version,
+                ["RUNNER_TEMP"] = tree.Root,
+                ["GITHUB_STEP_SUMMARY"] = Path.Combine(tree.Root, "summary"),
+            },
+            "-File",
+            harness);
+        Assert.True(ran.Exit == 0, ran.Stdout + ran.Stderr);
+        return [.. File.ReadAllLines(calls).Where(line => line.Length > 0)];
+    }
+
+    /// <summary>
     /// The checks ci.yml reports, its matrix legs expanded, are exactly the twelve this repository's ruleset requires
     /// before a pull request merges. A renamed job is a required check that never reports, and every pull request
     /// would wait for it: a job is renamed here only together with the ruleset. The job that reports a check a rule
-    /// skipped reports it under a name another job's leg has, which CiRunsTests holds, so it adds no name here.
+    /// skipped reports it under a name another job's leg has, which CiRunsTests holds, so it adds no name here. A
+    /// platform's name is reported by the job that waits for that platform's package and every part of its tests, which
+    /// CiRunsTests holds cannot be green while one of them is not; the package and the parts report under names of their
+    /// own, listed below as optional.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "pipeline and ruleset agree")]
@@ -544,9 +597,34 @@ public partial class ReleaseWorkflowTests
             "The desktop on ubuntu",
         ];
 
-        // Reported and not required by the ruleset: none today. Making one required is a ruleset change, made together
-        // with moving its name up.
-        string[] optional = [];
+        // Reported and not required by the ruleset: each platform's package, and each part of its tests, which the
+        // platform's own check above waits for and is green only when they are. Making one required is a ruleset change,
+        // made together with moving its name up.
+        string[] optional =
+        [
+            "linux-x64 package",
+            "win-x64 package",
+            "osx-arm64 package",
+            "linux-x64 tests: the critical tier",
+            "linux-x64 tests: App",
+            "linux-x64 tests: Cli, Contracts and PluginHost",
+            "linux-x64 tests: Runtime 1 of 4",
+            "linux-x64 tests: Runtime 2 of 4",
+            "linux-x64 tests: Runtime 3 of 4",
+            "linux-x64 tests: Runtime 4 of 4",
+            "win-x64 tests: App",
+            "win-x64 tests: Cli, Contracts and PluginHost",
+            "win-x64 tests: Runtime 1 of 4",
+            "win-x64 tests: Runtime 2 of 4",
+            "win-x64 tests: Runtime 3 of 4",
+            "win-x64 tests: Runtime 4 of 4",
+            "osx-arm64 tests: App",
+            "osx-arm64 tests: Cli, Contracts and PluginHost",
+            "osx-arm64 tests: Runtime 1 of 4",
+            "osx-arm64 tests: Runtime 2 of 4",
+            "osx-arm64 tests: Runtime 3 of 4",
+            "osx-arm64 tests: Runtime 4 of 4",
+        ];
 
         var jobs = Mapping(Parse(Read(Ci)), "jobs");
         var reported = new List<string>();
@@ -573,7 +651,9 @@ public partial class ReleaseWorkflowTests
 
     /// <summary>
     /// Every leg a matrix can run: a literal <c>include</c> as written, or — where the version job decides the legs — the
-    /// whole list that job's deciding step is given, which is what a full run runs.
+    /// whole list that job's deciding step is given, which is what a full run runs. The parts of the tests are every
+    /// platform in each part of the whole suite, and the critical tier's part on linux-x64, the one platform a run that
+    /// tests the tier builds.
     /// </summary>
     private static List<Dictionary<string, string>>? MatrixLegs(YamlMappingNode jobs, YamlNode? matrix)
     {
@@ -591,6 +671,20 @@ public partial class ReleaseWorkflowTests
 
         var deciding = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "version"), "steps")).Children.Cast<YamlMappingNode>()
             .Single(step => Scalar(step, "id") == "legs");
+        if (decided.Groups[1].Value == "tests")
+        {
+            var env = Mapping(deciding, "env");
+            using var platforms = JsonDocument.Parse(Scalar(env, "PLATFORMS")!);
+            using var parts = JsonDocument.Parse(Scalar(env, "PARTS")!);
+            return [.. platforms.RootElement.EnumerateArray().SelectMany(platform => parts.RootElement.EnumerateArray()
+                .Where(part => part.GetProperty("tier").GetString() == "false" || platform.GetProperty("rid").GetString() == "linux-x64")
+                .Select(part => new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["rid"] = platform.GetProperty("rid").GetString()!,
+                    ["part"] = part.GetProperty("part").GetString()!,
+                }))];
+        }
+
         using var all = JsonDocument.Parse(Scalar(Mapping(deciding, "env"), decided.Groups[1].Value.ToUpperInvariant())!);
         return [.. all.RootElement.EnumerateArray()
             .Select(leg => leg.EnumerateObject().ToDictionary(property => property.Name, property => property.Value.GetString()!, StringComparer.Ordinal))];

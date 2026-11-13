@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { knownDesktopEntries } from '../src/chat-hosts.ts';
 import { claimDemoFolder, hasDemoMarker } from '../src/demo-folders.ts';
-import { askedBy, carryOutOnDisk, CarryOutRefused, carryOutStartOver, removeMarkedLast, requestStartOver, requestYoungMs } from '../src/demo-over.ts';
+import { askedBy, carryOutOnDisk, CarryOutRefused, carryOutStartOver, leftByAMaking, removeMarkedLast, requestStartOver, requestYoungMs } from '../src/demo-over.ts';
 import { demoRuntimeAlive } from '../src/demo-alive.ts';
 import { prepareDemo } from '../src/demo-start.ts';
 import { fileLogger } from '../src/log.ts';
@@ -26,16 +26,18 @@ import {
     openStatuses,
     demoPlaces,
     ensureSeeded,
+    openOnTheSample,
     placesProblem,
-    preparingPage,
-    preparingSentence,
     readMarker,
     readyTheSample,
+    SampleNotReady,
     seedDepsOnDisk,
+    seedWaitStepMs,
     seedVersion,
     startDemoOver,
     storyModule,
     verbsUsed,
+    type Preparing,
     type SeedDeps,
     type SeedStep,
 } from '../src/demo-seed.ts';
@@ -657,7 +659,7 @@ test('a marker that is there and cannot be read means the demo needs starting ov
         const damaged = { ...run.deps, readText: (file: string) => (file === run.deps.markerFile ? text : run.deps.readText(file)) };
         assert.equal(readMarker(damaged)?.complete, false);
         const before = run.calls.length;
-        const outcome = await readyTheSample(damaged, async () => undefined);
+        const outcome = await readyTheSample(damaged, quiet);
         assert.equal(outcome.kind, 'failed');
         assert.equal(run.calls.length, before, 'no verb ran over a seeded installation');
         assert.equal((await ensureSeeded(damaged)).kind, 'needs-start-over');
@@ -677,25 +679,26 @@ test('the seed writes through a file beside it renamed over it, and a failed ste
         rmSync(folder, { recursive: true, force: true });
     }
     const run = await seeded({ failAt: 'campaign create' });
-    const ready = await readyTheSample({ ...run.deps, readText: (file) => (file === run.deps.markerFile ? null : run.deps.readText(file)) }, async () => undefined);
+    const ready = await readyTheSample({ ...run.deps, readText: (file) => (file === run.deps.markerFile ? null : run.deps.readText(file)) }, quiet);
     assert.ok(ready.kind === 'failed' && ready.step === 'campaign create' && ready.code === 'refused', JSON.stringify(ready));
 });
 
-test('a start of a demo with no marker shows the preparing page, seeds, and cancels the open reviews; the next start only cancels', async () => {
+test('a start of a demo with no marker begins the making, seeds, says it made, and cancels the open reviews; the next start only cancels', async () => {
     const run = await seeded();
     // The marker is read as absent: a fresh demo.
     const fresh = { ...run.deps, readText: (file: string) => (file === run.deps.markerFile ? null : run.deps.readText(file)) };
-    let shown = 0;
+    const said: string[] = [];
+    const watching: Preparing = { begin: () => void said.push(`begin ${run.calls.length}`), made: () => void said.push('made') };
     const before = run.calls.length;
-    const first = await readyTheSample(fresh, async () => void (shown += 1));
+    const first = await readyTheSample(fresh, watching);
     assert.deepEqual(first, { kind: 'ready', seeded: true });
-    assert.equal(shown, 1, 'the preparing page is shown once, before the seed');
+    assert.deepEqual(said, [`begin ${before}`, 'made'], 'begun once, before any verb, and made once');
     assert.ok(run.calls.length > before);
-    // The seeded demo started again: no page, no seed, the reviews cancelled.
+    // The seeded demo started again: no making, no seed, the reviews cancelled.
     const again: string[] = [];
     const spy = { ...run.deps, cli: { async run(args: readonly string[]) { again.push(args.join(' ')); return run.deps.cli.run(args); } } as Cli };
-    assert.deepEqual(await readyTheSample(spy, async () => void (shown += 1)), { kind: 'ready', seeded: false });
-    assert.equal(shown, 1);
+    assert.deepEqual(await readyTheSample(spy, watching), { kind: 'ready', seeded: false });
+    assert.deepEqual(said, [`begin ${before}`, 'made']);
     assert.ok(again.every((line) => line.startsWith('workitem ')), again.join(' | '));
     assert.ok(again.some((line) => line.startsWith('workitem list --kind ai_role')));
 });
@@ -703,24 +706,222 @@ test('a start of a demo with no marker shows the preparing page, seeds, and canc
 test('a demo whose seed was not finished is not built on: the start says so and points to the menu', async () => {
     const run = await seeded();
     const unfinished = { ...run.deps, readText: (file: string) => (file === run.deps.markerFile ? '{"version":1,"complete":false}' : run.deps.readText(file)) };
-    const outcome = await readyTheSample(unfinished, async () => undefined);
+    const outcome = await readyTheSample(unfinished, quiet);
     assert.equal(outcome.kind, 'failed');
     assert.match(outcome.kind === 'failed' ? outcome.why : '', /Start the Demo Over/);
 });
 
-test('while the seed runs the window says the sample is being prepared, in a page with no script and no outside file', async () => {
+test('the seed says each of its phases once, in order, as a step and never a text, and that it made the sample', async () => {
     const run = await seeded();
-    assert.equal(run.progress[0], 'Preparing the sample');
-    const page = preparingPage();
-    assert.ok(page.includes(preparingSentence));
-    assert.doesNotMatch(page, /<script|src=|href=|https?:/i);
-    assert.match(page, /default-src 'none'/);
+    assert.deepEqual(run.progress, ['campaigns', 'approvals', 'sends', 'story', 'made']);
+    const cut = await seeded({ failAt: 'approval approve' });
+    assert.deepEqual(cut.progress, ['campaigns', 'approvals'], 'a seed cut short never says it made');
+});
+
+test('a cheap cut: the approve step takes the approval its wait saw, and asks for the list no second time', async () => {
+    const run = await seeded();
+    const waits = buildSeed(fixture()).filter((step) => step.kind === 'wait').length;
+    assert.equal(run.calls.filter((call) => call.startsWith('approval list')).length, waits, 'one list per wait, none per approve');
+    // Each approve names the approval the wait for its own item listed.
+    for (const line of run.approved) assert.match(line, /^approval approve apr_\d+ /);
+    assert.equal(run.approved.length, 4);
+});
+
+test('a cheap cut: a wait asks again every quarter of a second', async () => {
+    assert.equal(seedWaitStepMs, 250);
+    const late = await seeded({ lateBy: 2 });
+    assert.equal(late.outcome.kind, 'seeded');
+    assert.ok(late.slept.length > 0);
+    assert.ok(late.slept.every((ms) => ms === 250), late.slept.join(','));
+});
+
+test('a seed longer than the ticket\u2019s life still ends on a paired page: the page loads first, the sample is made behind it', async () => {
+    // A stand-in for the runtime's one-time link: minted by the start, before the sample, and good for one minute.
+    const life = 60_000;
+    let clock = 0;
+    const minted = clock;
+    const load = async (): Promise<string> => (clock - minted <= life ? 'paired' : 'unpaired');
+    // Every verb of the seed takes two seconds, so the whole seed outlives the link.
+    const fresh = () => fake({ tick: () => void (clock += 2_000), markerAbsent: true });
+    const marks: boolean[] = [];
+    const run = fresh();
+    const opened = await openOnTheSample({ sample: run.deps, load, preparing: (on) => void marks.push(on), request: () => undefined, drop: () => undefined });
+    assert.equal(opened.loaded, 'paired');
+    assert.deepEqual(marks, [true], 'the mark is up as the page loads');
+    const made = await opened.making;
+    assert.deepEqual(made, { kind: 'ready', seeded: true });
+    assert.ok(clock - minted > life, `the seed outlived the link (${clock} ms)`);
+    assert.deepEqual(marks, [true, false], 'and gone once the sample is ready');
+    // The order before: the sample made first, then the page, on the same link, which then pairs no more.
+    clock = 0;
+    const before = fresh();
+    await readyTheSample(before.deps, quiet);
+    assert.equal(await load(), 'unpaired');
+});
+
+test('the mark shows only while a sample is made: a seeded demo and the person\u2019s own installation load with none', async () => {
+    const seededDemo = await seeded();
+    const marks: boolean[] = [];
+    const steps: string[] = [];
+    const deps = (sample: SeedDeps | null) => ({
+        sample,
+        load: async () => void steps.push('load'),
+        preparing: (on: boolean) => void marks.push(on),
+        request: () => void steps.push('request'),
+        drop: () => void steps.push('drop'),
+    });
+    const again = await openOnTheSample(deps(seededDemo.deps));
+    assert.equal(again.making, null);
+    const live = await openOnTheSample(deps(null));
+    assert.equal(live.making, null);
+    assert.deepEqual(marks, []);
+    assert.deepEqual(steps, ['load', 'load']);
+    // A seeded demo whose reviews cannot be cancelled fails before the page, as it did.
+    const refusing = { ...seededDemo.deps, cli: { async run() { return { exit: 1, stdout: '{"error":{"code":"x","message":"no","retryable":false}}', stderr: '' }; } } as Cli };
+    await assert.rejects(openOnTheSample(deps(refusing)), (error: unknown) => error instanceof SampleNotReady && error.outcome.kind === 'failed');
+});
+
+test('a making leaves the request to start over first and takes it away only once the sample is whole; one that fails keeps it, and the mark goes', async () => {
+    const steps: string[] = [];
+    const marks: boolean[] = [];
+    const deps = (sample: SeedDeps) => ({
+        sample,
+        load: async () => void steps.push('load'),
+        preparing: (on: boolean) => void marks.push(on),
+        request: () => void steps.push('request'),
+        drop: () => void steps.push('drop'),
+    });
+    const whole = fake({ markerAbsent: true });
+    await (await openOnTheSample(deps(whole.deps))).making;
+    assert.deepEqual(steps, ['load', 'request', 'drop']);
+    steps.length = 0;
+    const cut = fake({ markerAbsent: true, failAt: 'approval approve' });
+    const made = await (await openOnTheSample(deps(cut.deps))).making;
+    assert.equal(made?.kind, 'failed');
+    assert.deepEqual(steps, ['load', 'request'], 'the request stays for the next start');
+    assert.deepEqual(marks, [true, false, true, false]);
+});
+
+/**
+ * What a start does with the request before it chooses (`chooseInstallation`): the carry-out, and on its refusal the
+ * record set to Live with the request kept. The record is the person's `desktop/mode`.
+ */
+function startWith(d: ReturnType<typeof disk>, over: Partial<Parameters<typeof carryOutStartOver>[0]>): string | null {
+    const record = join(d.person, 'desktop', 'mode');
+    try {
+        carry(d, over);
+        return null;
+    } catch (error) {
+        writeFileSync(record, 'live');
+        return error instanceof CarryOutRefused ? error.reason : 'failed';
+    }
+}
+
+test('a second start while the seed runs leaves the record demo and the request in place', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        mkdirSync(join(d.person, 'desktop'), { recursive: true });
+        const record = join(d.person, 'desktop', 'mode');
+        writeFileSync(record, 'demo');
+        // The running desktop's making left its request, naming that run.
+        const running = 4242;
+        requestStartOver(d.request, running, true);
+        assert.ok(leftByAMaking(readFileSync(d.request, 'utf8')));
+        let waited = 0;
+        // The run is alive and so is its demo runtime: a double-click, or a start from the tray, while it makes the sample.
+        const second = startWith(d, { running: (pid) => pid === running, runtimeAlive: () => true, wait: () => void (waited += 1) });
+        assert.equal(second, null, 'nothing refused');
+        assert.equal(readFileSync(record, 'utf8'), 'demo');
+        assert.ok(existsSync(d.request) && existsSync(d.demo.data) && existsSync(d.demo.harnessRoot), 'nothing carried out');
+        assert.equal(waited, 0, 'and the second start is not held');
+        // The same in a run whose making failed and that is still open, however old its request.
+        const later = startWith(d, { running: (pid) => pid === running, runtimeAlive: () => true, requestAgeMs: () => requestYoungMs * 10 });
+        assert.equal(later, null);
+        assert.equal(readFileSync(record, 'utf8'), 'demo');
+        // Once that run has gone, a real next start carries the request out and makes the sample whole.
+        assert.equal(startWith(d, { running: () => false, runtimeAlive: () => false }), null);
+        assert.ok(!existsSync(d.request) && !existsSync(d.demo.data));
+        assert.equal(readFileSync(record, 'utf8'), 'demo');
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('the case the guide states is unchanged: an old run or a demo runtime still alive at a real next start goes Live and keeps the request', () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        mkdirSync(join(d.person, 'desktop'), { recursive: true });
+        const record = join(d.person, 'desktop', 'mode');
+        // Start the Demo Over's request, whose run is still ending.
+        writeFileSync(record, 'demo');
+        requestStartOver(d.request, 4242);
+        assert.equal(leftByAMaking(readFileSync(d.request, 'utf8')), false);
+        assert.equal(startWith(d, { running: (pid) => pid === 4242 }), 'asking_alive');
+        assert.equal(readFileSync(record, 'utf8'), 'live');
+        assert.ok(existsSync(d.request));
+        // A demo runtime still alive refuses it too.
+        writeFileSync(record, 'demo');
+        assert.equal(startWith(d, { running: () => false, runtimeAlive: () => true }), 'runtime_alive');
+        assert.equal(readFileSync(record, 'utf8'), 'live');
+        // A making's request whose run has gone, with a demo runtime a crash left running, is refused as before.
+        writeFileSync(record, 'demo');
+        requestStartOver(d.request, 4242, true);
+        assert.equal(startWith(d, { running: () => false, runtimeAlive: () => true }), 'runtime_alive');
+        assert.equal(readFileSync(record, 'utf8'), 'live');
+        assert.ok(existsSync(d.request));
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
+});
+
+test('the main module sets the record to Live only where the carry-out refused', () => {
+    const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    const write = "writeMode(desktopPaths(personDirectory).mode, 'live');";
+    assert.equal(choose.split(write).length - 1, 1);
+    const caught = choose.indexOf('} catch (error) {', choose.indexOf('carryOutStartOver({'));
+    assert.ok(caught > 0 && choose.indexOf(write) > caught);
+});
+
+test('on a real disk: a desktop that quits in the middle of the seed leaves the request, and the next start makes the sample whole, never shows the half', async () => {
+    const d = disk();
+    try {
+        claimBoth(d);
+        // The first start: the making begins, leaves the request naming its run, and the run quits half-way.
+        const half = fake({ markerAbsent: true, failAt: 'approval approve' });
+        const onDisk = seedDepsOnDisk({ cli: half.deps.cli, places: d.demo, scratch: join(d.demo.data, 'seed-scratch'), progress: () => undefined });
+        const firstRun = { ...onDisk, readStory: half.deps.readStory, sleep: async () => undefined, waitLimitMs: 0 };
+        const quitting = await (await openOnTheSample({ sample: firstRun, load: async () => undefined, preparing: () => undefined, request: () => requestStartOver(d.request, 999_999_999, true), drop: () => assert.fail('never whole') })).making;
+        assert.ok(quitting?.kind === 'failed' && quitting.step === 'approval approve', JSON.stringify(quitting));
+        assert.ok(existsSync(d.request), 'the request outlives the run');
+        assert.deepEqual(readMarker(onDisk), { version: seedVersion, complete: false }, 'the marker says the sample is not whole');
+        // Without the request, the marker alone keeps it from being shown as ready: the start says so and points to the menu.
+        const shown = await readyTheSample(onDisk, quiet);
+        assert.ok(shown.kind === 'failed' && /not finished/.test(shown.why));
+        // The next start carries the request out before anything names the demo, and makes a whole sample.
+        carry(d);
+        assert.ok(!existsSync(d.demo.data) && !existsSync(d.request));
+        claimBoth(d);
+        const next = fake({ markerAbsent: true });
+        const nextOnDisk = { ...seedDepsOnDisk({ cli: next.deps.cli, places: d.demo, scratch: join(d.demo.data, 'seed-scratch'), progress: () => undefined }), readStory: next.deps.readStory, sleep: async () => undefined, waitLimitMs: 0 };
+        const dropped: string[] = [];
+        const made = await (await openOnTheSample({ sample: nextOnDisk, load: async () => undefined, preparing: () => undefined, request: () => requestStartOver(d.request), drop: () => void dropped.push('drop') })).making;
+        assert.deepEqual(made, { kind: 'ready', seeded: true });
+        assert.deepEqual(dropped, ['drop']);
+        assert.deepEqual(readMarker(nextOnDisk), { version: seedVersion, complete: true });
+    } finally {
+        rmSync(d.root, { recursive: true, force: true });
+    }
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-interface Run {
-    outcome: Awaited<ReturnType<typeof ensureSeeded>>;
+/** What a start does around a making, when a row does not watch it. */
+const quiet: Preparing = { begin: () => undefined, made: () => undefined };
+
+interface Fake {
     deps: SeedDeps;
     calls: string[];
     /** Every verb and every write that matters, in the order they happened. */
@@ -731,11 +932,35 @@ interface Run {
     approved: string[];
     cancelled: string[];
     progress: string[];
+    /** Every sleep a wait took, in milliseconds. */
+    slept: number[];
     settings(): string;
 }
 
+interface Run extends Fake {
+    outcome: Awaited<ReturnType<typeof ensureSeeded>>;
+}
+
 /** Runs the seed against a fake runtime that answers the way the real verbs do, with an in-memory disk. */
-async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?: string } = {}): Promise<Run> {
+async function seeded(options: FakeOptions = {}): Promise<Run> {
+    const made = fake(options);
+    return { ...made, outcome: await ensureSeeded(made.deps) };
+}
+
+interface FakeOptions {
+    failAt?: string;
+    neverSucceed?: boolean;
+    text?: string;
+    /** How many times an approval list for an item answers nothing before the item is parked. */
+    lateBy?: number;
+    /** Called at every verb, as a clock a row keeps. */
+    tick?: () => void;
+    /** The marker is read as absent at first, as in a demo never seeded. */
+    markerAbsent?: boolean;
+}
+
+/** A fake runtime that answers the way the real verbs do, with an in-memory disk, and the seed's deps over it. */
+function fake(options: FakeOptions = {}): Fake {
     const story = options.text === undefined ? fixture() : parseStory(options.text);
     const files = new Map<string, string>();
     const calls: string[] = [];
@@ -746,6 +971,8 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?:
     const approved: string[] = [];
     const cancelled: string[] = [];
     const progress: string[] = [];
+    const slept: number[] = [];
+    const asked = new Map<string, number>();
     const parked: { id: string; item: string; campaign: string }[] = [];
     const decided = new Set<string>();
     const started = new Set<string>();
@@ -754,7 +981,9 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?:
     const ok = (value: unknown): CliResult => ({ exit: 0, stdout: `${JSON.stringify(value)}\n`, stderr: '' });
     const bodyOf = (args: readonly string[]): unknown => {
         const at = args.indexOf('--file');
-        const text = at >= 0 ? files.get(String(args[at + 1])) : undefined;
+        // A body file is in the fake's own disk, or on the real one when a row seeds through `seedDepsOnDisk`.
+        const file = at >= 0 ? String(args[at + 1]) : '';
+        const text = at >= 0 ? (files.get(file) ?? (existsSync(file) ? readFileSync(file, 'utf8') : undefined)) : undefined;
         return text === undefined ? undefined : JSON.parse(text);
     };
     const value = (args: readonly string[], option: string): string => String(args[args.indexOf(option) + 1]);
@@ -763,6 +992,7 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?:
         async run(args) {
             const line = args.join(' ');
             calls.push(line);
+            options.tick?.();
             const pair = `${args[0]} ${args[1]}`;
             events.push(pair === 'workitem get' ? `cli ${line}=${decided.has(String(args[2])) && !options.neverSucceed ? 'succeeded' : 'awaiting_approval'}` : `cli ${line}`);
             if (options.failAt === pair) return { exit: 1, stdout: JSON.stringify({ error: { code: 'refused', message: 'said by the fake', retryable: false } }), stderr: '' };
@@ -795,8 +1025,13 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?:
                     return ok({});
                 case 'workitem get':
                     return ok({ status: decided.has(String(args[2])) && !options.neverSucceed ? 'succeeded' : 'awaiting_approval' });
-                case 'approval list':
-                    return ok({ items: parked.filter((p) => p.item === value(args, '--work-item') && !decided.has(p.item)) });
+                case 'approval list': {
+                    const item = value(args, '--work-item');
+                    const times = (asked.get(item) ?? 0) + 1;
+                    asked.set(item, times);
+                    if (times <= (options.lateBy ?? 0)) return ok({ items: [] });
+                    return ok({ items: parked.filter((p) => p.item === item && !decided.has(p.item)) });
+                }
                 case 'approval approve': {
                     approved.push(line);
                     const found = parked.find((p) => p.id === args[2]);
@@ -823,13 +1058,13 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?:
         removeTree: () => undefined,
         readStory: () => options.text ?? moduleText(story),
         progress: (message) => void progress.push(message),
-        sleep: async () => undefined,
+        sleep: async (ms) => void slept.push(ms),
         now: () => new Date('2026-11-13T12:00:00.000Z'),
         scratch: join(places.data, 'seed-scratch'),
-        waitLimitMs: 0,
+        ...(options.lateBy === undefined ? { waitLimitMs: 0 } : {}),
     };
-    const outcome = await ensureSeeded(deps);
-    return { outcome, deps, calls, events, writes, imported, workItems, approved, cancelled, progress, settings: () => files.get(join(places.data, 'config', 'settings.json')) ?? '' };
+    if (options.markerAbsent) files.delete(deps.markerFile);
+    return { deps, calls, events, writes, imported, workItems, approved, cancelled, progress, slept, settings: () => files.get(join(places.data, 'config', 'settings.json')) ?? '' };
 }
 
 test('the main process refuses Start the Demo Over until this run\'s own start has answered, and holds the demo\'s preparation under a live runtime', () => {
@@ -838,4 +1073,27 @@ test('the main process refuses Start the Demo Over until this run\'s own start h
     assert.ok(refuse > 0 && refuse < main.indexOf('await startDemoOver('), 'refused before anything stops');
     assert.ok(main.includes('let startInFlight = true;') && main.includes('} finally {\n        startInFlight = false;'));
     assert.ok(main.includes('runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),'));
+});
+
+test('the main process loads the page through openOnTheSample, says the mark to the page and the menu, and refuses a switch or a start over while it shows', () => {
+    const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
+    // The page is loaded by the one function that makes the sample behind it; nothing else seeds.
+    assert.ok(main.includes('await openOnTheSample({'));
+    assert.equal(main.includes('readyTheSample('), false);
+    assert.equal(main.includes('preparingPage'), false);
+    const opened = main.slice(main.indexOf('await openOnTheSample({'));
+    assert.ok(opened.indexOf('loadWindow(') > 0 && opened.indexOf('loadWindow(') < opened.indexOf('});'), 'the page is loaded inside it');
+    // The mark: the page reads it with the mode and hears it change; the menu draws its lines again.
+    assert.ok(main.includes("({ mode: runOn.mode, unopened: runOn.unopened, preparing: sampleMaking })"));
+    assert.ok(main.includes("toPage('mode.preparing', on);"));
+    assert.ok(main.includes('desk.setDemo(demoMenu(runOn.mode, removalOffered(process.platform), on));'));
+    // A switch, the way back and a start over are refused while the sample is made.
+    assert.ok(main.includes("handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);"));
+    assert.ok(main.includes("const refusal = applyMode('live', modeDeps, sampleMaking);"));
+    const startOver = main.slice(main.indexOf('const startOver = async ()'));
+    const held = startOver.indexOf('if (sampleMaking) return { refused: demoPreparing };');
+    assert.ok(held > 0 && held < startOver.indexOf('await dialog.showMessageBox'));
+    // The request a making leaves is the person's start-over request, taken away only once the sample is whole.
+    assert.ok(main.includes('request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true),'));
+    assert.ok(main.includes('drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),'));
 });

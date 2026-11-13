@@ -30,6 +30,9 @@ export const currentChat = signal<string | null>(null);
 export const feedId = signal<string | null>(null);
 /** Whether the Feed took a line since the person last brought it to the front: the sidebar marks it. Kept here only. */
 export const feedUnseen = signal(false);
+
+/** The id of the dock's panel in front: a panel's name, or `chat:<id>`; none before the dock is ready. */
+export const activePanel = signal<string | null>(null);
 /** Why the conversations could not be listed or one opened, in the desktop's words; null when nothing failed. */
 export const conversationsFailure = signal<string | null>(null);
 
@@ -50,7 +53,7 @@ export const messageOf = (error: unknown): string =>
     error instanceof ApiError || error instanceof Error ? error.message : String(error);
 
 /** The panels of the dock, by the name the dock knows each by. */
-export type PanelName = 'start' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
+export type PanelName = 'start' | 'dashboard' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
 
 export interface Dock {
     show(panel: PanelName): void;
@@ -72,6 +75,8 @@ export interface Console {
     api: Api;
     desktop: JasonDesktop;
     dock: Dock;
+    /** Set when the console is bound in a browser tab over the desktop's bridge: what only the desktop's window may do is not offered. */
+    tab?: boolean;
 }
 
 let current: Console | null = null;
@@ -87,4 +92,9 @@ export function bind(console: Console): () => void {
 export function here(): Console {
     if (!current) throw new Error('The console is not mounted.');
     return current;
+}
+
+/** Whether the console was bound in a browser tab. The one fact every control a tab may not use is hidden by. */
+export function inTab(): boolean {
+    return current?.tab === true;
 }

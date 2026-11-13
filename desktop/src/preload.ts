@@ -48,6 +48,12 @@ const desktop = {
         get: () => ipcRenderer.invoke('jason:mode.get'),
         set: (mode: 'live' | 'demo') => ipcRenderer.invoke('jason:mode.set', mode),
         startOver: () => ipcRenderer.invoke('jason:mode.startOver'),
+        onPreparing: (handler: Handler) => subscribe('jason:mode.preparing', handler),
+    },
+    openIn: {
+        targets: (campaignId?: string, chatId?: string) => ipcRenderer.invoke('jason:openIn.targets', campaignId, chatId),
+        open: (target: string, campaignId?: string) => ipcRenderer.invoke('jason:openIn.open', target, campaignId),
+        continueChat: (chatId: string) => ipcRenderer.invoke('jason:openIn.continueChat', chatId),
     },
     pairing: {
         paired: (tokenId: string) => ipcRenderer.invoke('jason:pairing.paired', tokenId),

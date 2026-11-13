@@ -34,7 +34,7 @@ If nothing is installed, `jason ui open` says so with the code `ui_not_installed
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
-`Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'`.
+`Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
 release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
@@ -140,9 +140,9 @@ campaign's work while what is running finishes; the provider's own sequence keep
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
-to reach; what you send there starts a set-up chat, about no campaign yet, and no chat is made before you send. The
-sidebar's first item is the **Feed**, the desktop's main chat; below **New chat** it lists the other conversations it
-keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
+to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
+no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and under **Recent** the sidebar lists
+the other conversations the desktop keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
 conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. What happens in
 the agents arrives in the Feed as one line each (a reply, an approval or a question waiting, an agent created,
 started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
@@ -151,8 +151,9 @@ next message there, as records. One whose turn still runs opens running, with St
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. **Start afresh** begins the AI's next turn without its memory
 of the conversation and keeps what is shown; **Remove** asks first, then takes the conversation off this computer, and
-the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. The browser has no chat, and no Chat
-tab.
+the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. In the browser a campaign has no Chat
+tab; the browser's own Chat screen shows the desktop's chat only in a tab the desktop opened
+([below](#settings-and-chat-in-the-browser)).
 
 ## Performance
 
@@ -258,6 +259,65 @@ The page reads which system it runs on from the browser itself; the runtime is t
 and prints the whole command, the brief included, and on macOS the script. Each host's own form for a first message is in
 [execution-profiles.md](execution-profiles.md), §12.
 
+### At a folder, with no item
+
+The same verb opens a session with no item: a new terminal window at a folder, running your own agent host or a plain
+shell, with no first input. It needs no approval or question and decides nothing.
+
+```sh
+jason session open
+jason session open --campaign <campaign-id>
+jason session open --project <project-id-or-slug> --host codex
+jason session open --shell
+jason session open --here --host claude_code --resume <conversation-id>
+```
+
+- **The folder.** `--campaign` opens at the campaign's recorded folder, else its project's, else the harness root;
+  `--project`, named by its id (`prj_…`) or its slug, at the project's folder, else the harness root. With neither, the
+  project is taken from the folder the command runs in, as every verb that takes a project and is given none takes it
+  ([projects.md](projects.md), §6): the nearest marker above it names a project, or a campaign whose project it is, never
+  the campaign itself, and the line on stderr says so; it then opens at that project's folder, else the harness root.
+  Outside every harness folder, or where the marker is not in the folder the runtime records, it opens at the harness
+  root. Of the runtime it asks only `campaign.get`, `project.get` and `system.info`, and nothing is written there or into
+  any folder. The harness root counts only once it is a folder with the harness's marker; there is no fall back to your
+  home folder. `--here` opens at the folder the command runs in, as it is: no marker is read there, the runtime is asked
+  for no folder, and the folder only has to be there. It does not go with `--campaign` or `--project`.
+- **The program.** `--host` names one of the host words; without it the host is the one the named preference
+  `agent.interactive_host` names (`claude_code` while it is unset), read with `preference.list`; `--shell` opens the
+  system's plain shell instead: Windows PowerShell from the system folder on Windows (never one found on the search
+  path), your login shell on macOS, and on Linux the program `SHELL` names by its absolute path, else `/bin/sh`. Nothing
+  follows the program on its command line but what `--resume` adds. `--host` and `--shell` do not go together, nor
+  `--campaign` and `--project`, nor any of the six with `--approval` or `--question`.
+- **Continuing a conversation.** `--resume <id>` has the host continue its own conversation of that id, the one the host
+  itself named, instead of starting a new one: Claude Code is started as `claude --resume <id>`, Codex as
+  `codex resume <id>`, each in the words its own `--help` gives, and nothing else is added. The id is a letter or digit
+  followed by at most 199 letters, digits, dots, underscores, colons or hyphens; anything else is a usage error. It takes
+  the host `--host` names, else the preference's, and does not go with `--shell`. Another host is refused with
+  `host_cannot_resume` as soon as the host is known, before its program or a terminal is looked for. What the session
+  then may do is that host's own permission settings' to decide; Jason copies nothing of the conversation and writes no
+  file for it.
+- **The terminal** is the one an item's session uses, on each system as above, and the data directory reaches it the
+  same way: on Windows and Linux the terminal inherits the CLI's environment, `JASON_DATA_DIR` included, and on macOS the
+  script exports `JASON_DATA_DIR` alone. So `jason` in that window works with the installation the command was given.
+  On macOS this form, like an item's, is composed and checked by tests here and has not been watched on a Mac; `--shell`
+  there also rests on Terminal giving the script `SHELL`, your login shell, in its environment, with `/bin/sh` where it
+  does not.
+- **What it prints.** One object: `kind` (`folder`), `folder` (`level`, one of `campaign`, `project`, `harness_root` and
+  `here`, and `path`), `host` (the host word, or null for a shell), `shell` (true when the plain shell was started),
+  `program` (the path of the program started, as in an item's answer: the host's, or the shell's, `/bin/sh` on macOS),
+  with `--resume` also `resume` (the id), then `terminal` and `started`; with `--dry-run` also `argv`, the host's words
+  and the id among it, and on macOS `script`, where they are quoted as every word of it is. A refusal of its own is the API's error envelope on
+  stdout, said again on stderr, with exit 1: `folder_not_recorded` (nothing in the chain has a folder, and the harness
+  root is not a folder with its marker; the line says what stands there), `folder_missing` (the recorded folder, or with
+  `--here` the folder the command runs in, is not on this machine), `preference_unreadable`, `host_unknown` (the
+  preference names a word this `jason` does not know), `host_cannot_resume` (`--resume` was given for a host Jason knows
+  no words to continue a conversation of), `host_not_found` (the host's program is not on the search path),
+  `shell_not_found`, `terminal_not_found`,
+  `terminal_start_failed` and `runtime_error` (an answer of the runtime's that cannot be read). A request the runtime
+  took and did not answer in time is the one envelope, `request_timed_out`, and no second. A campaign or project the runtime does not know is the runtime's own refusal,
+  `campaign_not_found` or `project_not_found`, printed as it came; no runtime is exit 3; flags that do not go together,
+  an empty value, a host word this `jason` does not know or an id `--resume` does not take are a usage error, exit 2.
+
 ## Settings and Chat in the browser
 
 **Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
@@ -265,10 +325,15 @@ system's, in the order Light, Dark, System. A new installation meets Light; a br
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
 follows it.
 
-**Chat** says that the chat with the AI is part of Jason Desktop and links to the releases page where it is
-downloaded, and says that everything here also works from a session with your AI in a terminal, with the skills Jason
-deployed. The browser has no chat and starts no AI: the runtime starts no process for a screen, and a browser tab cannot ask you
-before the AI acts.
+**Chat**, in a tab Jason Desktop opened (its **Open in** menu, then **Browser**), shows the desktop's chat: the list of
+conversations, a conversation and the box, while the desktop runs. The tab is a view onto the desktop's chats and sends
+through the desktop: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it is
+answered in Jason Desktop, shows the chat's mode as a label, and draws no Start afresh, Remove, Open folder, attach
+buttons, Reply card or Connect button; the desktop's window stays the only place that approves
+([desktop.md](desktop.md#the-chat-in-a-browser-tab)). In any other tab, **Chat** says that the chat with the AI is part
+of Jason Desktop, that it can be opened in this tab from Jason Desktop through Open in, then the browser, and links to the
+releases page where the desktop is downloaded, and says that everything here also works from a session with your AI in a
+terminal, with the skills Jason deployed. The runtime starts no AI and no process for a screen, in either case.
 
 ## Accounts
 

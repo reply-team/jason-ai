@@ -256,6 +256,62 @@ public partial class PageClaimsTests
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <c>session open</c> has two forms, an item's and a folder's, and every place that states what the verb does says
+    /// the second too: the declared exception where it is written, the help, the page that is its contract, the
+    /// preference that names its host, and the pages and the skill that tell a person or an agent what it does. A page
+    /// that went back to the item form alone would tell its reader the folder form is not there.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md", "with no item it opens the same terminal at a campaign's folder, a project's or the harness root")]
+    [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "With no item it opens the same terminal at a folder, with no first input")]
+    [InlineData("docs/ui.md", "### At a folder, with no item")]
+    [InlineData("docs/handbook.md", "With no item, the same verb opens a new terminal at a folder and gives it no first input")]
+    [InlineData("docs/architecture.md", "or, with no item, at a campaign's folder, a project's, the harness root or, with `--here`, the folder it runs in; never by falling back to the home folder, running a host or the system's plain shell with no first input")]
+    [InlineData("docs/projects.md", "| `session open` at a folder | `--project`, the folder it opens at, or `--campaign` | yes, when neither is given; elsewhere it opens at the harness root |")]
+    [InlineData("docs/execution-profiles.md", "opened at a folder with no item, with no first message")]
+    [InlineData("docs/contracts/preferences/agent.interactive_host.md", "or at a folder, a campaign's, a project's or the harness root, or the folder it runs in with `--here`, with no first input")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "With no item, `jason session open` opens a new terminal at a folder with no first input")]
+    public void Every_page_that_says_what_session_open_does_says_its_folder_form(string page, string said)
+    {
+        var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
+
+        Assert.Contains(said, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The help names both forms and the flags of the folder's, and that it carries no first input.</summary>
+    [Fact]
+    public void The_session_help_says_its_folder_form()
+    {
+        var help = Jason.Cli.Session.SessionCommands.OpenDescription;
+
+        Assert.Contains("At a folder (no item)", help, StringComparison.Ordinal);
+        Assert.Contains("with no first input", help, StringComparison.Ordinal);
+        foreach (var flag in new[] { "--campaign", "--project", "--here", "--host", "--shell", "--resume" })
+        {
+            Assert.Contains(flag, help, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The folder form's two later options, <c>--here</c> and <c>--resume</c>, are said wherever the folder form's options
+    /// are listed: the declared exception, the page that is the verb's contract, the handbook and the skill an agent reads
+    /// before it opens a window on a person's desktop.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md", "`--here` opens it at the folder the command runs in", "`--resume <id>` has the host continue its own conversation of that id")]
+    [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "<c>--here</c> opens it at the folder the command runs in", "<c>--resume</c> has the host continue its own conversation of that id")]
+    [InlineData("docs/ui.md", "jason session open --here --host claude_code --resume <conversation-id>", "`host_cannot_resume`")]
+    [InlineData("docs/handbook.md", "jason session open --here", "--resume <conversation-id>")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "`--here` opens it at the folder the command runs in", "`--resume <id>` continues the host's own conversation")]
+    public void Every_page_that_lists_the_folder_forms_options_says_here_and_resume(string page, string here, string resume)
+    {
+        var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
+
+        Assert.Contains(here, text, StringComparison.Ordinal);
+        Assert.Contains(resume, text, StringComparison.Ordinal);
+    }
+
     /// <summary>The help says what the brief asks of the agent, never what the agent cannot do.</summary>
     [Fact]
     public void The_session_help_says_what_the_brief_asks_and_who_decides_what_runs()

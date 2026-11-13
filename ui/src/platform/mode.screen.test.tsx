@@ -3,13 +3,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { stubDesktop } from '../test/desktop';
 import { FakeApi } from '../test/fake-api';
 import { renderApp } from '../test/render-app';
-import { loadMode, mode, modeRefusal, modeUnopened, switchMode } from './mode';
+import { loadMode, mode, modePreparing, modeRefusal, modeUnopened, switchMode } from './mode';
 
 // The mode is which installation the desktop runs on, and the page learns it from the desktop alone, once, as it loads.
-// A browser shows whatever runtime it is paired with: Live to the page, whatever its address says, and no strip.
+// A browser shows whatever runtime it is paired with: Live to the page, whatever its address says, and no bar.
 
 afterEach(() => {
     mode.value = 'live';
+    modePreparing.value = false;
     modeRefusal.value = null;
     modeUnopened.value = null;
     history.replaceState(null, '', '/ui/');
@@ -33,6 +34,43 @@ describe('the mode read as the page loads', () => {
         desktop.modeUnopened = null;
         await loadMode(desktop);
         expect(modeUnopened.value).toBeNull();
+    });
+
+    it('says whether the demo’s sample is being made, and follows the desktop until it is ready', async () => {
+        const desktop = stubDesktop();
+        desktop.modeKept = 'demo';
+        desktop.modePreparing = true;
+        await loadMode(desktop);
+        expect(modePreparing.value).toBe(true);
+        desktop.preparing(false);
+        expect(modePreparing.value).toBe(false);
+        // A desktop that says nothing of it, and Live, are never preparing.
+        expect(await loadMode({ mode: { get: () => Promise.resolve({ mode: 'demo', unopened: null }) } })).toBe('demo');
+        expect(modePreparing.value).toBe(false);
+        desktop.modeKept = 'live';
+        await loadMode(desktop);
+        expect(modePreparing.value).toBe(false);
+    });
+
+    it('follows the mark before it reads the mode, so a ready said between the two is not lost', async () => {
+        let said: ((on: boolean) => void) | null = null;
+        const order: string[] = [];
+        const seam = {
+            onPreparing(handler: (on: boolean) => void) {
+                order.push('follow');
+                said = handler;
+                return () => undefined;
+            },
+            get() {
+                order.push('get');
+                // The desktop answers from before the sample was made, and says it is ready before the answer lands.
+                said?.(false);
+                return Promise.resolve({ mode: 'demo', unopened: null, preparing: true });
+            },
+        };
+        expect(await loadMode({ mode: seam })).toBe('demo');
+        expect(order).toEqual(['follow', 'get']);
+        expect(modePreparing.value).toBe(false);
     });
 
     it('takes a bare word from a desktop that answers one, and says nothing unopened', async () => {
@@ -63,14 +101,14 @@ describe('the mode read as the page loads', () => {
 });
 
 describe('the browser shell', () => {
-    it('draws no strip, even at an address that names the demo', async () => {
+    it('draws no bar, even at an address that names the demo', async () => {
         history.replaceState(null, '', '/ui/?mode=demo');
         await loadMode();
         renderApp(
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => screen.getByRole('navigation'));
-        expect(screen.queryByRole('region', { name: 'Demo' })).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Mode bar' })).toBeNull();
     });
 });
 

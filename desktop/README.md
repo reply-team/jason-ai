@@ -163,7 +163,9 @@ forwarder is admitted to); each card's note says where those are set.
 
 A campaign has one conversation, found or made the first time it is opened, and the chat may hold any number of set-up
 chats, which are about no campaign yet. Each is a record, `<data>/desktop/conversations/conv_<id>.json`: the campaign
-it is about, its title, the session each agent host named for it, and what the page drew, kept as text and never as
+it is about, its title, the session each agent host named for it (and, beside it in `plain_sessions`, whether the last
+turn to name or answer with that session was a plain one, on the person's own Claude Code or Codex outside Full access:
+only such a session is offered to Open in's "Continue this chat"), and what the page drew, kept as text and never as
 markup (the person's words, the agent's, the steps, each card with its answer, the errors). A record is written beside
 its name and renamed over it, readable by this account alone, never through a link, when a host first names its session
 and at the end of each turn. It is kept within 2 MB: each text of an entry is cut to 128 KB, keeping its end after a
@@ -566,7 +568,8 @@ also when the link is refused.
 Every process is started with a file and arguments, never through a shell, and only by the named modules:
 `src/cli.ts` (the bundled `jason`), `src/programs.ts` (the agent hosts, `reply`, `node` and `npm`, and a set-up chat's
 naming run, whose command line `src/chat-naming.ts` gives), `src/chat-process.ts` (a chat turn's host, and Codex's
-model listing, `codex app-server`, which only `src/model-lists.ts` starts), `src/shell-path.ts` (on macOS and Linux
+model listing, `codex app-server`, which only `src/model-lists.ts` starts), `src/open-in-start.ts` (an editor or the file
+manager that Open in names, started on its own with the folder), `src/shell-path.ts` (on macOS and Linux
 only, the login shell's PATH, read before anything is started) and `scripts/prepare.mjs` (`dotnet publish`).
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler

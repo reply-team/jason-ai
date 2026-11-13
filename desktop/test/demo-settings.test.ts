@@ -52,7 +52,7 @@ test('the demo’s settings file holds every value before the demo’s runtime i
         Harness: { Root: join(home, 'Jason-demo') },
         Responder: { OnReply: false },
         Manager: { Triggers: ['decision_answered'], ReviewSeconds: 604800 },
-        Dispatcher: { EventsCadenceSeconds: 60, TickSeconds: 2 },
+        Dispatcher: { EventsCadenceSeconds: 60, TickSeconds: 1 },
     });
     assert.equal(demoReviewSeconds, 604800);
 });
@@ -95,8 +95,24 @@ test('a settings file already in the demo keeps its other keys; the demo’s val
         Responder: { OnReply: false },
         Plugins: { Config: { demo: { story_start: 'x' } } },
         Manager: { Triggers: ['decision_answered'], ReviewSeconds: 604800 },
-        Dispatcher: { EventsCadenceSeconds: 60, TickSeconds: 2 },
+        Dispatcher: { EventsCadenceSeconds: 60, TickSeconds: 1 },
     });
+});
+
+test('a cheap cut: the demo’s own dispatcher ticks each second, in the demo’s settings alone, the harness default untouched', () => {
+    assert.equal(demoSettingsValues('/r/Jason-demo').Dispatcher!.TickSeconds, 1);
+    // One second is the shortest tick the runtime accepts, and its own default stays what it was.
+    const options = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Runtime', 'Configuration', 'DispatcherOptions.cs'), 'utf8');
+    assert.match(options, /public int TickSeconds \{ get; set; \} = 10;/);
+    const validators = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Runtime', 'Configuration', 'OptionsValidators.cs'), 'utf8');
+    assert.match(validators, /"Dispatcher:TickSeconds", options\.TickSeconds, 1, 3600\)/);
+    // The person's own settings are never given it: only the demo's file is written.
+    const home = folder();
+    const person = join(home, '.jason');
+    mkdirSync(join(person, 'config'), { recursive: true });
+    writeFileSync(desktopPaths(person).installationSettings, '{}');
+    writeDemoSettings(join(home, '.jason-demo'), join(home, 'Jason'));
+    assert.equal(readFileSync(desktopPaths(person).installationSettings, 'utf8'), '{}');
 });
 
 test('the settings written name no route: the route is written beside the plugin’s placing, after these', () => {

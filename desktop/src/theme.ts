@@ -4,18 +4,35 @@
  */
 
 import { readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { desktopPaths } from './paths.ts';
 import { isTheme, type DesktopSettings, type ThemeChoice } from './settings.ts';
 
 /** The two backgrounds the window's first paint uses; `shell/shell.css` states the same two for the starting page. */
 export const lightBackground = '#f7f7f5';
 export const darkBackground = '#1b1b1a';
 
-/** Whether the data directory is absent or empty: no earlier use of this installation left anything in it. */
+/**
+ * Whether no earlier use of this installation left anything in its data directory: it is absent, empty, or holds only the
+ * desktop's own records that a start writes before the installation is made, the mode and a request to start the demo
+ * over. A new installation's first start opens on the demo and writes the first, so the person's own installation is
+ * still new when they first choose Live.
+ */
 export function isNewInstallation(dataDirectory: string, list: (directory: string) => string[] = readdirSync): boolean {
+    let entries: string[];
     try {
-        return list(dataDirectory).length === 0;
+        entries = list(dataDirectory);
     } catch {
         return true;
+    }
+    if (entries.length === 0) return true;
+    const desktop = desktopPaths(dataDirectory);
+    if (entries.length !== 1 || entries[0] !== basename(desktop.desktop)) return false;
+    const records = [basename(desktop.mode), basename(desktop.demoStartOver)];
+    try {
+        return list(join(dataDirectory, basename(desktop.desktop))).every((name) => records.includes(name));
+    } catch {
+        return false;
     }
 }
 

@@ -383,7 +383,8 @@
 .jc-console .brand .wordmark.dark {
     display: none;
 }
-.jc-console .brand .alpha {
+.jc-console .brand .alpha,
+.jc-console .start .alpha {
     flex: none;
     padding: 1px 7px;
     border-radius: 999px;
@@ -409,6 +410,115 @@
 }
 .jc-console .newbtn:hover {
     border-color: var(--accent-line);
+}
+.jc-console .menuwrap {
+    position: relative;
+}
+.jc-console .menuwrap.create {
+    padding: 0 14px;
+}
+.jc-console .newrow {
+    display: flex;
+    gap: 6px;
+    margin: 2px 0 8px;
+}
+.jc-console .newrow .newbtn {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+.jc-console .caret {
+    flex: none;
+    width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--ink);
+    cursor: pointer;
+}
+.jc-console .caret:hover {
+    border-color: var(--accent-line);
+}
+.jc-console .menu-away {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    border: 0;
+    background: transparent;
+    cursor: default;
+}
+.jc-console .menu {
+    position: absolute;
+    z-index: 21;
+    left: 0;
+    right: 0;
+    top: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+.jc-console .menuwrap.create > .menu {
+    left: 14px;
+    right: 14px;
+    top: calc(100% - 6px);
+}
+.jc-console .menuitem {
+    display: grid;
+    grid-template-columns: 17px 1fr;
+    column-gap: 10px;
+    align-items: baseline;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    font: inherit;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+}
+.jc-console .menuitem:hover {
+    background: var(--hover);
+}
+.jc-console .menuitem svg {
+    grid-row: 1 / span 2;
+    color: var(--mute);
+    align-self: center;
+}
+.jc-console .menuitem .mt {
+    font-weight: 600;
+}
+.jc-console .menuitem .ms {
+    grid-column: 2;
+    font-size: 12px;
+    color: var(--faint);
+}
+.jc-console .item[aria-current='true'] {
+    background: var(--hover);
+}
+.jc-console .item .count {
+    margin-left: auto;
+    min-width: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #e3a03a;
+    color: #1b1303;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+}
+.jc-console .recent {
+    padding: 10px 18px 2px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--faint);
 }
 .jc-console .item {
     display: flex;
@@ -1100,7 +1210,10 @@ body,
     height: 100%;
     overflow-y: auto;
 }
+/* The shell's grid is a sidebar column and a content column; with no sidebar the one child would sit in the sidebar's
+   column, so the hosted page has the one column, as wide as the panel. */
 .jc-console .harness .app.chromeless {
+    grid-template-columns: minmax(0, 1fr);
     min-height: 100%;
 }
 /* Needs you: the filter over what waits and the card that says nothing does. */
@@ -1143,17 +1256,111 @@ body,
     margin: 0 auto;
     padding: 0 20px;
 }
-/* Demo, or a demo that could not be opened: the strip heads the window above the sidebar and the dock, and the shell
-   takes the height that is left. */
-.jc-console.demo {
+/* The bar heads the window above the sidebar and the dock in both modes, and the shell takes the height that is left. */
+.jc-console {
     display: flex;
     flex-direction: column;
     height: 100vh;
 }
-.jc-console.demo > .shell {
+.jc-console > .shell {
     flex: 1;
     min-height: 0;
     height: auto;
+}
+.jc-console .open-in {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.jc-console .open-in-problem {
+    color: var(--red);
+    font-size: 13px;
+}
+.jc-console .open-in-split {
+    display: flex;
+}
+.jc-console .open-in-split button {
+    padding: 3px 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+}
+.jc-console .open-in-split button:hover:not(:disabled) {
+    background: var(--hover);
+}
+.jc-console .open-in-split button:disabled {
+    color: var(--faint);
+    cursor: default;
+}
+.jc-console .open-in-main {
+    border-radius: 6px 0 0 6px;
+}
+.jc-console .open-in-arrow {
+    border-left: 0;
+    border-radius: 0 6px 6px 0;
+}
+.jc-console .open-in-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    margin-top: 4px;
+    padding: 4px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgb(15 23 42 / 14%);
+}
+.jc-console .open-in-header {
+    padding: 6px 10px 2px;
+    color: var(--mute);
+    font-size: 12px;
+    font-weight: 600;
+}
+.jc-console .open-in-menu small {
+    display: block;
+    color: var(--mute);
+    font-size: 12px;
+}
+.jc-console .open-in-note {
+    max-width: 260px;
+    padding: 6px 10px 4px;
+    border-top: 1px solid var(--line);
+    color: var(--mute);
+    font-size: 12px;
+}
+.jc-console .open-in-toast {
+    color: var(--mute);
+    font-size: 13px;
+}
+.jc-console .open-in-menu button {
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink);
+    text-align: left;
+}
+.jc-console .open-in-menu button:hover,
+.jc-console .open-in-menu button.on {
+    background: var(--hover);
+}
+.jc-console .open-in-continue {
+    display: flex;
+    flex-direction: column;
+    max-width: 320px;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+}
+.jc-console .open-in-menu button:disabled {
+    color: var(--faint);
+    background: transparent;
+    cursor: default;
 }
 .jc-console .mode-strip {
     flex: none;
@@ -1161,15 +1368,40 @@ body,
     align-items: center;
     gap: 12px;
     padding: 6px 14px;
-    background: var(--amber-2);
-    color: var(--amber);
     border-bottom: 1px solid var(--line);
     font-size: 13px;
 }
-.jc-console .mode-strip-long,
-.jc-console .mode-strip-short {
+/* The demo is told from Live by a warm tone, Live by a calm green mark. */
+.jc-console .mode-strip.mode-demo {
+    background: var(--amber-2);
+    color: var(--amber);
+}
+.jc-console .mode-strip.mode-live {
+    background: var(--green-2);
+    color: var(--green);
+}
+.jc-console .mode-strip.mode-live .mode-dot {
+    background: var(--green);
+}
+.jc-console .mode-strip.mode-demo .mode-dot {
+    background: var(--amber);
+}
+.jc-console .mode-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.jc-console .mode-spacer {
     flex: 1;
-    min-width: 0;
+}
+.jc-console .mode-open-in {
+    display: flex;
+    flex: none;
+    align-items: center;
+}
+.jc-console .mode-open-in:empty {
+    display: none;
 }
 .jc-console .mode-strip-short {
     display: none;
@@ -1177,18 +1409,29 @@ body,
 .jc-console .mode-strip-refusal {
     font-weight: 600;
 }
+/* The demo's sample being made: a quiet mark, gone once it is ready. */
+.jc-console .mode-preparing {
+    flex: none;
+    opacity: 0.75;
+    font-style: italic;
+}
+.jc-console .mode-switch button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.jc-console .mode-unopened {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: var(--amber);
+}
 .jc-console .mode-switch {
     display: flex;
     flex: none;
     gap: 4px;
 }
-.jc-console .mode-switch button {
-    padding: 2px 10px;
-    border: 1px solid currentColor;
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-}
+.jc-console .mode-switch button,
 .jc-console .mode-unopened-close {
     flex: none;
     padding: 2px 10px;
@@ -1201,22 +1444,335 @@ body,
     background: var(--amber);
     color: var(--amber-2);
 }
-/* A narrow window takes the strip's short form. */
+.jc-console .mode-strip.mode-live .mode-switch button.on {
+    background: var(--green);
+    color: var(--green-2);
+}
+/* A narrow window takes the short form. */
 @media (max-width: 1000px) {
-    .jc-console .mode-strip:not(.mode-unopened) .mode-strip-long {
+    .jc-console .mode-strip .mode-strip-long {
         display: none;
     }
     .jc-console .mode-strip-short {
         display: inline;
     }
 }
-/* The start screen's one line offering the demo. */
-.jc-console .start .start-demo {
+/* The Dashboard: the six tiles, the two cards side by side and the Recent activity card below. */
+.jc-console .dash-head {
+    align-items: flex-start;
+}
+.jc-console .dash-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.jc-console .dash-tile {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    min-width: 0;
+}
+.jc-console .dash-tile b {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.jc-console .dash-tile .dash-none {
+    color: var(--faint);
+}
+.jc-console .dash-tile .label,
+.jc-console .dash-tile .rel {
+    color: var(--faint);
+    font-size: 12.5px;
+}
+.jc-console .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.jc-console .dash-card .hd {
+    justify-content: space-between;
+}
+.jc-console .dash-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 0;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--line2);
+    color: var(--ink);
+    text-align: left;
+}
+.jc-console .dash-link {
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--teal);
+    text-align: left;
+}
+.jc-console .dash-line {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line2);
+}
+.jc-console .dash-agents progress {
+    width: 90px;
+}
+/* The start screen: the mark by the title, the note under the box, and the two menu buttons under the box. */
+.jc-console .start .start-title {
+    display: flex;
     align-items: center;
     gap: 10px;
 }
-.jc-console .start .start-demo-refusal {
-    color: var(--amber);
+.jc-console .start .start-mark {
+    width: 28px;
+    height: 28px;
+    flex: none;
+}
+.jc-console .start .start-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--teal-2);
+    color: var(--ink);
+}
+.jc-console .start .start-note-close {
+    flex: none;
+    margin-left: auto;
+}
+.jc-console .start .start-menu {
+    position: relative;
+    display: inline-block;
+}
+.jc-console .start .start-menu-panel {
+    position: absolute;
+    z-index: 10;
+    bottom: calc(100% + 4px);
+    left: 0;
+    min-width: 260px;
+    max-width: 380px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
+}
+.jc-console .start .start-menu-head {
+    padding: 4px 8px;
+    font-size: 11px;
+    color: var(--muted);
+}
+.jc-console .start .start-menu-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.jc-console .start .start-menu-item[aria-checked='true'] {
+    background: var(--teal-2);
+}
+.jc-console .start .start-menu-item:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+.jc-console .start .start-menu-reason {
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.jc-console .recent {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.jc-console .recent .rl {
+    flex: 1;
+}
+.jc-console .rtools {
+    display: flex;
+    gap: 2px;
+    margin-right: -8px;
+}
+.jc-console .rbtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--faint);
+    cursor: pointer;
+}
+.jc-console .rbtn:hover,
+.jc-console .rbtn[aria-pressed='true'] {
+    background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .rbtn[data-active='true'] {
+    color: var(--accent);
+}
+.jc-console .recent .menu {
+    left: auto;
+    right: 10px;
+    top: calc(100% + 2px);
+    min-width: 170px;
+}
+.jc-console .mhead {
+    padding: 6px 8px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--faint);
+}
+.jc-console .menuitem[role='menuitemradio'] {
+    align-items: center;
+}
+.jc-console .menuitem[role='menuitemradio'] svg {
+    grid-row: auto;
+}
+.jc-console .rsearch {
+    padding: 4px 14px 2px;
+}
+.jc-console .rsearch .inp {
+    width: 100%;
+    box-sizing: border-box;
+}
+.jc-console .recent-row .rt {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.jc-console .recent-row .t {
+    margin-left: 0;
+}
+.jc-console .recent-row .count {
+    margin-left: 0;
+}
+.jc-console .rdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+.jc-console .rdot.waiting {
+    background: #e3a03a;
+}
+.jc-console .rdot.active {
+    background: var(--green);
+}
+.jc-console .rdot.paused {
+    background: var(--faint);
+}
+.jc-console .rdot.draft {
+    border: 1.5px solid var(--blue);
+}
+.jc-console .rdot.none {
+    border: 1.5px solid var(--line);
+}
+.jc-console .rmore {
+    color: var(--mute);
+    justify-content: center;
+}
+.jc-console .rnone {
+    padding: 4px 18px;
+    font-size: 12.5px;
+    color: var(--faint);
+}
+.jc-console .rdot.running {
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* The search palette: the sidebar's Search row and its key, and the box over the console. */
+.jc-console .item .kbd {
+    margin-left: auto;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--faint);
+    font-size: 11.5px;
+    line-height: 18px;
+}
+.jc-console .palette-away {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 14vh;
+    background: rgba(15, 23, 42, 0.32);
+}
+.jc-console .palette {
+    width: min(560px, calc(100vw - 32px));
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(15, 23, 42, 0.28);
+    overflow: hidden;
+}
+.jc-console .palette-input {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: none;
+    padding: 14px 16px;
+    font-size: 15px;
+    outline: none;
+}
+.jc-console .palette-input::placeholder {
+    color: var(--faint);
+}
+.jc-console .palette-list {
+    list-style: none;
+    margin: 0;
+    padding: 6px;
+    overflow-y: auto;
+}
+.jc-console .palette-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    cursor: pointer;
+}
+.jc-console .palette-list li.on {
+    background: var(--hover);
+}
+.jc-console .palette-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jc-console .palette-kind {
+    color: var(--faint);
+    font-size: 12px;
+}
+.jc-console .palette-none {
+    padding: 18px 16px;
+    color: var(--mute);
 }

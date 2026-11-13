@@ -1,7 +1,8 @@
 import { computed, effect } from '@preact/signals-react';
-import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopEffort, DesktopHost, DesktopRefusal } from '../platform/desktop';
+import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import {
     afresh,
@@ -57,7 +58,18 @@ import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
-import { changeChat, chats, clock, conversations, conversationsFailure, feedId, here, messageOf, setup } from './state';
+import {
+    changeChat,
+    chats,
+    clock,
+    conversations,
+    conversationsFailure,
+    feedId,
+    here,
+    inTab,
+    messageOf,
+    setup,
+} from './state';
 import {
     fullAccessStanding,
     readStandingAgain,
@@ -126,6 +138,7 @@ export async function askFeed(): Promise<void> {
 
 /** The stream started afresh, after a resume the runtime refused: the desktop reads back what the page missed. */
 export function catchUpFeed(): void {
+    if (inTab()) return;
     here()
         .desktop.chat.feed([], { catchUp: true })
         .catch(() => undefined);
@@ -133,6 +146,7 @@ export function catchUpFeed(): void {
 
 /** Hands the desktop a line of the journal's stream when the Feed takes its kind; the desktop checks it again. */
 export function handLine(line: JournalEntry): void {
+    if (inTab()) return;
     const handed = toFeedLine(line);
     if (handed === null) return;
     here()
@@ -206,6 +220,7 @@ async function newChatHost(): Promise<string | undefined> {
 
 /** The take-back in the mode menu: the desktop forgets the standing choice; the chat stays in the mode it is in. */
 export function takeBackChoice(id: string): void {
+    if (inTab()) return;
     takeBackStanding(here().desktop)
         .then((refused) => {
             if (refused !== null) changeChat(id, (chat) => told(chat, refused));
@@ -227,6 +242,7 @@ export async function openConversation(id: string): Promise<string | null> {
 
 /** "Start afresh": the desktop drops the hosts' sessions and keeps the conversation; a refusal is said in the chat. */
 export function restartChat(id: string): void {
+    if (inTab()) return;
     here()
         .desktop.chat.restart(id)
         .then((answer) => {
@@ -260,6 +276,7 @@ export function renameChat(id: string, title: string): void {
  * chat in the desktop's words.
  */
 export function chooseMode(id: string, mode: DesktopChatMode): void {
+    if (inTab()) return;
     const chat = chats.value[id];
     if (!chat) return;
     // A change to a narrower mode while a turn runs stops that turn, as Stop does: leaving Full access, leaving Auto-edit
@@ -283,6 +300,7 @@ export function chooseMode(id: string, mode: DesktopChatMode): void {
  * reload or a restart, finds no card to approve. A refusal is said in the chat in the desktop's words, and nothing is sent.
  */
 export function approvePlan(id: string): void {
+    if (inTab()) return;
     const chat = chats.value[id];
     const host = chat ? hostOf(chat) : null;
     if (!chat || !host || !livePlan(chat, host.id)) return;
@@ -311,6 +329,7 @@ const nameLength = 60;
 
 /** Removes the conversation, asked twice: its tab closes and the list follows; a refusal is said in the chat. */
 export function removeChat(id: string): void {
+    if (inTab()) return;
     changeChat(id, (chat) => ({ ...chat, removing: false }));
     here()
         .desktop.chat.remove(id)
@@ -345,6 +364,8 @@ export function heldHostOf(chat: Chat): DesktopHost | null {
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
 export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode): void {
+    // A chat a tab may not send to takes no message from it, whichever way the message came.
+    if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) return;
     const chat = chats.value[id];
     const words = text.trim();
     if (!chat || chat.running || !words) return;
@@ -386,6 +407,8 @@ define('chat.suggest', ([id, text]) => {
 });
 
 define('chat.approvePlan', ([id]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id === 'string') approvePlan(id);
 });
 
@@ -401,6 +424,8 @@ define('chat.keepPlanning', ([id], element) => {
 });
 
 define('chat.answer', ([id, request, answer]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string' || typeof request !== 'string') return;
     if (answer !== 'allow' && answer !== 'always' && answer !== 'deny') return;
     changeChat(id, (chat) => answered(chat, request, answer));
@@ -410,15 +435,21 @@ define('chat.answer', ([id, request, answer]) => {
 });
 
 define('feed.campaign', ([id]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string') return;
     const name = campaigns.value.find((each) => each.id === id)?.name ?? id;
     here().dock.chat({ id, name });
 });
 
-define('feed.needs', () => here().dock.show('needs'));
+define('feed.needs', () => {
+    if (!inTab()) here().dock.show('needs');
+});
 
 /** The Open folder button of the notice that says a Full access folder is kept: the desktop opens that folder alone. */
 define('chat.openFolder', ([id, name]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string' || typeof name !== 'string') return;
     here()
         .desktop.chat.openFolder(name)
@@ -429,6 +460,8 @@ define('chat.openFolder', ([id, name]) => {
 });
 
 define('chat.attach', ([id, campaignId]) => {
+    // A tab never says yes, and never reaches what only the desktop's window may.
+    if (inTab()) return;
     if (typeof id !== 'string' || typeof campaignId !== 'string') return;
     here()
         .desktop.chat.attach(id, campaignId)
@@ -444,29 +477,41 @@ define('chat.attach', ([id, campaignId]) => {
 const withCode = (sentence: string): Html[] =>
     sentence.split('`').map((part, at) => (at % 2 ? html`<code>${part}</code>` : html`${part}`));
 
+/** In a browser tab a card is only shown: the desktop's own window answers it. */
+const answeredInDesktop = t('chat.tab.answered');
+
+/** A tab may send only to a chat in Ask first or Plan only, as the bridge does; any other mode, an unknown one too, is locked. */
+export const tabMaySend = (mode: string): boolean => mode === 'ask_first' || mode === 'plan_only';
+
+/** The sentence beside a locked box: it names the mode. */
+export const tabLockedSentence = (mode: string): string =>
+    mode === 'full_access' ? t('chat.tab.full') : mode === 'auto_edit' ? t('chat.tab.auto') : t('chat.tab.other');
+
 function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 'permission' }>): Html {
     const buttons =
-        entry.answer === null
-            ? html`<div class="ask-a">
-                  <button class="btn sm p" type="button" ${act('chat.answer', chat.id, entry.request, 'allow')}>
-                      Allow
-                  </button>
-                  ${
-                      entry.remember !== null
-                          ? html`<button
-                                class="btn sm"
-                                type="button"
-                                ${act('chat.answer', chat.id, entry.request, 'always')}
-                            >
-                                Allow for this chat: ${entry.remember}
-                            </button>`
-                          : null
-                  }
-                  <button class="btn sm" type="button" ${act('chat.answer', chat.id, entry.request, 'deny')}>
-                      Don't allow
-                  </button>
-              </div>`
-            : html`<div class="perm-done">${answerWords[entry.answer]}</div>`;
+        entry.answer === null && inTab()
+            ? html`<div class="perm-done">${answeredInDesktop}</div>`
+            : entry.answer === null
+              ? html`<div class="ask-a">
+                    <button class="btn sm p" type="button" ${act('chat.answer', chat.id, entry.request, 'allow')}>
+                        Allow
+                    </button>
+                    ${
+                        entry.remember !== null
+                            ? html`<button
+                                  class="btn sm"
+                                  type="button"
+                                  ${act('chat.answer', chat.id, entry.request, 'always')}
+                              >
+                                  Allow for this chat: ${entry.remember}
+                              </button>`
+                            : null
+                    }
+                    <button class="btn sm" type="button" ${act('chat.answer', chat.id, entry.request, 'deny')}>
+                        Don't allow
+                    </button>
+                </div>`
+              : html`<div class="perm-done">${answerWords[entry.answer]}</div>`;
     return html`<div class="ask perm">
         <div class="ask-h">${svg('shield', 14)}<b>${entry.title}</b></div>
         <pre class="perm-detail">${entry.detail}</pre>
@@ -500,26 +545,28 @@ function planCard(chat: Chat, entry: Extract<Entry, { kind: 'text' }>, host: Des
         <div class="said plan-text">${entry.text}</div>
         ${line === null ? null : html`<div class="ask-w">${line}</div>`}
         ${
-            live || approving
-                ? html`<div class="ask-a">
-                      <button
-                          class="btn sm p"
-                          type="button"
-                          ${approving ? html`disabled` : null}
-                          ${act('chat.approvePlan', chat.id)}
-                      >
-                          ${approving ? 'Approving…' : 'Approve and run'}
-                      </button>
-                      <button
-                          class="btn sm"
-                          type="button"
-                          ${approving ? html`disabled` : null}
-                          ${act('chat.keepPlanning', chat.id)}
-                      >
-                          Keep planning
-                      </button>
-                  </div>`
-                : null
+            (live || approving) && inTab()
+                ? html`<div class="perm-done">${answeredInDesktop}</div>`
+                : live || approving
+                  ? html`<div class="ask-a">
+                        <button
+                            class="btn sm p"
+                            type="button"
+                            ${approving ? html`disabled` : null}
+                            ${act('chat.approvePlan', chat.id)}
+                        >
+                            ${approving ? 'Approving…' : 'Approve and run'}
+                        </button>
+                        <button
+                            class="btn sm"
+                            type="button"
+                            ${approving ? html`disabled` : null}
+                            ${act('chat.keepPlanning', chat.id)}
+                        >
+                            Keep planning
+                        </button>
+                    </div>`
+                  : null
         }
     </div>`;
 }
@@ -532,7 +579,7 @@ const campaignName = (id: string): string => campaigns.value.find((each) => each
  * while the chat is about no campaign and no turn runs; an earlier one is drawn as text.
  */
 function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean): Html {
-    const open = last && chat.campaignId === null && !chat.running;
+    const open = last && chat.campaignId === null && !chat.running && !inTab();
     return html`<div class="ask chat-pick">
         <div class="ask-h">
             ${svg('camp', 14)}<b>${open ? 'Make this the conversation of' : 'Agents this chat made'}</b>
@@ -631,7 +678,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                         : "The AI's memory of this conversation was gone; it starts from the last messages.",
                 );
             case 'notice':
-                return entry.folder === null
+                return entry.folder === null || inTab()
                     ? noteLine(entry.text)
                     : html`<div class="note chat-note">
                           ${entry.text}
@@ -696,6 +743,189 @@ function threadOf(chatId: string) {
     });
 }
 
+/**
+ * The controls beside a composer: the AI host, the model and its effort, and the access mode. The chat's own composer
+ * and the start screen's draw the same ones; `change` and `choose` say where a choice goes (the chat's record, or the
+ * start screen's draft before any chat exists). Nothing here decides what a mode offers: `modeChoices` does.
+ */
+export function ChatControls({
+    chat,
+    change,
+    choose,
+    takeBack: takeBackChosen,
+    modeMenu,
+}: {
+    chat: Chat;
+    change: (next: (each: Chat) => Chat) => void;
+    choose: (mode: DesktopChatMode) => void;
+    takeBack: () => void;
+    modeMenu?: RefObject<HTMLSelectElement>;
+}) {
+    const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
+    const host = hostOf(chat);
+    const ownHeld = heldHostOf(chat);
+    const standing = host ? onHost(chat, host.id) : chat;
+    const picked = host ? modelView(standing, host) : null;
+    const onThisHost = (next: (each: Chat) => Chat) => change((each) => (host ? next(onHost(each, host.id)) : each));
+    return (
+        <>
+            <select
+                aria-label="AI host"
+                disabled={chat.removing}
+                value={host?.id ?? ownHeld?.id ?? ''}
+                onChange={(event) => {
+                    const chosen = event.target.value;
+                    change((each) => hostChosen(each, chosen));
+                    // A host Full access or Auto-edit cannot be chosen on takes the chat back to Ask first.
+                    const next = drive.find((each) => each.id === chosen);
+                    if (chat.mode === 'full_access' && next !== undefined && next.fullAccess !== null)
+                        choose('ask_first');
+                    if (chat.mode === 'auto_edit' && next !== undefined && next.autoEdit !== null) choose('ask_first');
+                }}
+            >
+                {drive.map((each) => (
+                    <option key={each.id} value={each.id}>
+                        {each.label}
+                    </option>
+                ))}
+                {held.map((each) => (
+                    <option key={each.id} value={each.id} disabled>
+                        {each.label}: {each.belowFloor!.replaceAll('`', '')}
+                    </option>
+                ))}
+                {other.map((each) => (
+                    <option key={each.id} value={each.id} disabled>
+                        {each.label}: runs campaign work, not the chat yet
+                    </option>
+                ))}
+            </select>
+            {host &&
+                picked &&
+                (host.models.length > 0 || host.typedModel || picked.kept !== null || host.modelsUnread !== null) && (
+                    <select
+                        className="model"
+                        aria-label="Model"
+                        disabled={chat.removing || host.modelsUnread !== null}
+                        value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
+                        onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
+                    >
+                        <option value="">Default (recommended)</option>
+                        {host.models.map((each) => (
+                            <option key={each.id} value={each.id}>
+                                {each.label}
+                            </option>
+                        ))}
+                        {picked.kept !== null && (
+                            <option value={picked.kept}>
+                                {picked.kept}: no longer listed, so the turn uses {host.label}'s own model with no
+                                effort
+                            </option>
+                        )}
+                        {host.typedModel && <option value={anotherModel}>Another model…</option>}
+                    </select>
+                )}
+            {host && picked?.typing && (
+                <input
+                    className="model-name"
+                    type="text"
+                    aria-label="Model name"
+                    placeholder="Full model name"
+                    spellCheck={false}
+                    disabled={chat.removing}
+                    value={standing.model ?? ''}
+                    onChange={(event) => onThisHost((each) => modelTyped(each, event.target.value))}
+                />
+            )}
+            {picked?.offer && picked.offer.efforts.length > 0 && (
+                <select
+                    className="effort"
+                    aria-label="Effort"
+                    disabled={chat.removing}
+                    value={
+                        standing.effort !== null && picked.offer.efforts.includes(standing.effort)
+                            ? standing.effort
+                            : ''
+                    }
+                    onChange={(event) =>
+                        onThisHost((each) => effortChosen(each, event.target.value as DesktopEffort | ''))
+                    }
+                >
+                    <option value="">Default effort</option>
+                    {picked.offer.efforts.map((each) => (
+                        <option key={each} value={each}>
+                            {effortWords[each]}
+                        </option>
+                    ))}
+                </select>
+            )}
+            {inTab() ? (
+                <span className="mode mode-label" aria-label="Access mode">
+                    {modeChoices(host, chat.main === true).find((each) => each.mode === chat.mode)?.label ?? chat.mode}
+                </span>
+            ) : (
+                <select
+                    ref={modeMenu}
+                    className="mode"
+                    aria-label="Access mode"
+                    disabled={chat.removing}
+                    value={chat.mode}
+                    onFocus={() => readStandingAgain(here().desktop)}
+                    onChange={(event) =>
+                        event.target.value === takeBack
+                            ? takeBackChosen()
+                            : choose(event.target.value as DesktopChatMode)
+                    }
+                >
+                    {modeChoices(host, chat.main === true).map((each) => (
+                        <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
+                            {each.disabled === null
+                                ? each.label
+                                : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
+                        </option>
+                    ))}
+                    {/* While Always stands, its take-back follows the modes; choosing it leaves the mode as it is. */}
+                    {fullAccessStanding.value !== null && <option value={takeBack}>{takeBackWords}</option>}
+                </select>
+            )}
+        </>
+    );
+}
+
+/** What a host and a mode say under a composer: what Codex reads and reaches, and that Full access or Auto-edit is on. */
+export function ChatNotes({ chat, modeMenu }: { chat: Chat; modeMenu: RefObject<HTMLElement> }) {
+    const host = hostOf(chat);
+    return (
+        <>
+            {host?.id === 'codex' && (
+                <div className="note codex-config" role="note" aria-label="What Codex reads">
+                    {codexConfigLine}
+                </div>
+            )}
+            {host !== null && codexHosts.has(host.id) && (
+                <div className="note codex-reach" role="note" aria-label="What a Codex command can reach">
+                    {codexReachLine((here().desktop as { platform?: string }).platform)}
+                </div>
+            )}
+            {chat.mode === 'full_access' && (
+                <div className="note am full-access" role="status" aria-label="Full access is on">
+                    {fullAccessLine}{' '}
+                    <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
+                        Change
+                    </button>
+                </div>
+            )}
+            {chat.mode === 'auto_edit' && (
+                <div className="note auto-edit" role="status" aria-label="Auto-edit is on">
+                    {autoEditLine}{' '}
+                    <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
+                        Change
+                    </button>
+                </div>
+            )}
+        </>
+    );
+}
+
 export function ChatPanel({ chatId }: { chatId: string }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
@@ -747,22 +977,21 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
     const keptByDesktop = conversations.value.some((each) => each.id === chatId);
     const closeRename = () => changeChat(chatId, (each) => ({ ...each, renaming: null }));
-    const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
+    const { held } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
     // The chat's own host, held: its sentence alone is said, and the menu keeps naming it until another is chosen.
     const ownHeld = heldHostOf(chat);
     const heldSaid = ownHeld ? [ownHeld] : held;
     // The model and effort shown are the ones chosen on the host the next turn runs on (`onHost`).
     const standing = host ? onHost(chat, host.id) : chat;
-    const picked = host ? modelView(standing, host) : null;
-    const onThisHost = (change: (each: Chat) => Chat) =>
-        changeChat(chatId, (each) => (host ? change(onHost(each, host.id)) : each));
     // "Another model" with no name typed yet: nothing is sent until a name is, or another choice made.
     const nameMissing = host !== null && sendHeld(standing, host);
+    // A chat in a mode other than Ask first and Plan only takes no message from a tab; the desktop refuses it too.
+    const tabLocked = inTab() && !tabMaySend(chat.mode);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         const current = chats.value[chatId];
-        if (!current || !host || sendHeld(onHost(current, host.id), host)) return;
+        if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
         if (current.running) {
             changeChat(chatId, kept);
             return;
@@ -830,16 +1059,18 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </button>
                     </form>
                 )}
-                <button
-                    className="btn sm"
-                    type="button"
-                    disabled={chat.running || chat.removing}
-                    title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
-                    onClick={() => restartChat(chatId)}
-                >
-                    Start afresh
-                </button>
-                {chat.main ? null : (
+                {!inTab() && (
+                    <button
+                        className="btn sm"
+                        type="button"
+                        disabled={chat.running || chat.removing}
+                        title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
+                        onClick={() => restartChat(chatId)}
+                    >
+                        Start afresh
+                    </button>
+                )}
+                {chat.main || inTab() ? null : (
                     <button
                         ref={removeButton}
                         className="btn sm"
@@ -880,7 +1111,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 Reply is not connected. It is an offer, so it is hidden only where the runtime says the campaign's enrolment is routed to
                 another plugin, or the campaign already runs; no route and a route that cannot be read leave it, and nothing shows
                 while the route is being read. */}
-            {chat.campaignId !== null &&
+            {!inTab() &&
+                chat.campaignId !== null &&
                 campaigns.value.find((each) => each.id === chat.campaignId)?.status === 'draft' &&
                 setup.value &&
                 !(setup.value.reply.signedIn && setup.value.reply.wired) &&
@@ -914,9 +1146,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     <div className="note am">
                         No AI host that drives the chat was found on this machine. Connect lists the hosts and installs
                         one.{' '}
-                        <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
-                            Connect
-                        </button>
+                        {!inTab() && (
+                            <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
+                                Connect
+                            </button>
+                        )}
                     </div>
                 )}
                 {chat.waiting !== null && (
@@ -945,11 +1179,12 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </div>
                     </div>
                 )}
+                {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
                 {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                 <textarea
                     id="box"
                     rows={2}
-                    disabled={chat.removing}
+                    disabled={chat.removing || tabLocked}
                     placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}
                     aria-label="Your message"
                     value={chat.draft}
@@ -957,122 +1192,13 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     onKeyDown={enter}
                 />
                 <div className="crow">
-                    <select
-                        aria-label="AI host"
-                        disabled={chat.removing}
-                        value={host?.id ?? ownHeld?.id ?? ''}
-                        onChange={(event) => {
-                            const chosen = event.target.value;
-                            changeChat(chatId, (each) => hostChosen(each, chosen));
-                            // A host Full access or Auto-edit cannot be chosen on takes the chat back to Ask first.
-                            const next = drive.find((each) => each.id === chosen);
-                            if (chat.mode === 'full_access' && next !== undefined && next.fullAccess !== null)
-                                chooseMode(chatId, 'ask_first');
-                            if (chat.mode === 'auto_edit' && next !== undefined && next.autoEdit !== null)
-                                chooseMode(chatId, 'ask_first');
-                        }}
-                    >
-                        {drive.map((each) => (
-                            <option key={each.id} value={each.id}>
-                                {each.label}
-                            </option>
-                        ))}
-                        {held.map((each) => (
-                            <option key={each.id} value={each.id} disabled>
-                                {each.label}: {each.belowFloor!.replaceAll('`', '')}
-                            </option>
-                        ))}
-                        {other.map((each) => (
-                            <option key={each.id} value={each.id} disabled>
-                                {each.label}: runs campaign work, not the chat yet
-                            </option>
-                        ))}
-                    </select>
-                    {host &&
-                        picked &&
-                        (host.models.length > 0 ||
-                            host.typedModel ||
-                            picked.kept !== null ||
-                            host.modelsUnread !== null) && (
-                            <select
-                                className="model"
-                                aria-label="Model"
-                                disabled={chat.removing || host.modelsUnread !== null}
-                                value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
-                                onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
-                            >
-                                <option value="">Default (recommended)</option>
-                                {host.models.map((each) => (
-                                    <option key={each.id} value={each.id}>
-                                        {each.label}
-                                    </option>
-                                ))}
-                                {picked.kept !== null && (
-                                    <option value={picked.kept}>
-                                        {picked.kept}: no longer listed, so the turn uses {host.label}'s own model with
-                                        no effort
-                                    </option>
-                                )}
-                                {host.typedModel && <option value={anotherModel}>Another model…</option>}
-                            </select>
-                        )}
-                    {host && picked?.typing && (
-                        <input
-                            className="model-name"
-                            type="text"
-                            aria-label="Model name"
-                            placeholder="Full model name"
-                            spellCheck={false}
-                            disabled={chat.removing}
-                            value={standing.model ?? ''}
-                            onChange={(event) => onThisHost((each) => modelTyped(each, event.target.value))}
-                        />
-                    )}
-                    {picked?.offer && picked.offer.efforts.length > 0 && (
-                        <select
-                            className="effort"
-                            aria-label="Effort"
-                            disabled={chat.removing}
-                            value={
-                                standing.effort !== null && picked.offer.efforts.includes(standing.effort)
-                                    ? standing.effort
-                                    : ''
-                            }
-                            onChange={(event) =>
-                                onThisHost((each) => effortChosen(each, event.target.value as DesktopEffort | ''))
-                            }
-                        >
-                            <option value="">Default effort</option>
-                            {picked.offer.efforts.map((each) => (
-                                <option key={each} value={each}>
-                                    {effortWords[each]}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                    <select
-                        ref={modeMenu}
-                        className="mode"
-                        aria-label="Access mode"
-                        disabled={chat.removing}
-                        value={chat.mode}
-                        onFocus={() => readStandingAgain(here().desktop)}
-                        onChange={(event) =>
-                            event.target.value === takeBack
-                                ? takeBackChoice(chatId)
-                                : chooseMode(chatId, event.target.value as DesktopChatMode)
-                        }
-                    >
-                        {modeChoices(host, chat.main === true).map((each) => (
-                            <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
-                                {each.disabled === null
-                                    ? each.label
-                                    : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
-                            </option>
-                        ))}
-                        {/* While Always stands, its take-back follows the modes; choosing it leaves the mode as it is. */}
-                        {fullAccessStanding.value !== null && <option value={takeBack}>{takeBackWords}</option>}
-                    </select>
+                    <ChatControls
+                        chat={chat}
+                        change={(next) => changeChat(chatId, next)}
+                        choose={(mode) => chooseMode(chatId, mode)}
+                        takeBack={() => takeBackChoice(chatId)}
+                        modeMenu={modeMenu}
+                    />
                     <span className="grow" />
                     {chat.running ? (
                         <>
@@ -1106,39 +1232,14 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                             type="submit"
                             title="Send"
                             aria-label="Send"
-                            disabled={!host || chat.removing || nameMissing}
+                            disabled={!host || chat.removing || nameMissing || tabLocked}
                             {...(nameMissing ? { title: 'Type the model name, or choose another model' } : {})}
                         >
                             ↑
                         </button>
                     )}
                 </div>
-                {host?.id === 'codex' && (
-                    <div className="note codex-config" role="note" aria-label="What Codex reads">
-                        {codexConfigLine}
-                    </div>
-                )}
-                {host !== null && codexHosts.has(host.id) && (
-                    <div className="note codex-reach" role="note" aria-label="What a Codex command can reach">
-                        {codexReachLine((here().desktop as { platform?: string }).platform)}
-                    </div>
-                )}
-                {chat.mode === 'full_access' && (
-                    <div className="note am full-access" role="status" aria-label="Full access is on">
-                        {fullAccessLine}{' '}
-                        <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
-                            Change
-                        </button>
-                    </div>
-                )}
-                {chat.mode === 'auto_edit' && (
-                    <div className="note auto-edit" role="status" aria-label="Auto-edit is on">
-                        {autoEditLine}{' '}
-                        <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
-                            Change
-                        </button>
-                    </div>
-                )}
+                <ChatNotes chat={chat} modeMenu={modeMenu} />
             </form>
         </div>
     );

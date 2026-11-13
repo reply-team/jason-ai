@@ -282,6 +282,50 @@ public sealed class PatientStartTests : IDisposable
         Assert.Empty(_said);
     }
 
+    /// <summary>
+    /// A start that fails says, in the failure's own message, the last lines of that runtime's own log, each by its time and
+    /// template alone: a start that went silent is read from the run's message, not only from the folder it names, which is
+    /// gone by the time anybody reads it. The verb's answer comes first, as it came.
+    /// </summary>
+    [Fact]
+    public void A_failed_start_s_message_carries_the_last_lines_of_the_runtime_s_own_log()
+    {
+        WriteLog([
+            .. Enumerable.Range(1, PatientStart.LastLines + 5).Select(second =>
+                $$"""{"@t":"2026-01-01T10:00:{{second:00}}.0000000Z","@mt":"Step {Number} of the start for {Campaign}","Number":{{second}},"Campaign":"Ada secret campaign"}"""),
+            "not json at all",
+        ]);
+        var answer = new CliResult(ExitCodes.ApiError, StillStarting, string.Empty, "runtime start");
+
+        var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => GoldenPath.AssertStarted(Paths, answer)).Message;
+
+        Assert.Contains("'jason runtime start' exited with 1.", failure, StringComparison.Ordinal);
+        Assert.Contains(StillStarting, failure, StringComparison.Ordinal);
+        Assert.Contains($"The runtime's own log, its last {PatientStart.LastLines} lines (time and message template of each):", failure, StringComparison.Ordinal);
+        Assert.Contains("(5 earlier lines not said)", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-01-01T10:00:05.0000000Z", failure, StringComparison.Ordinal);
+        Assert.Contains("2026-01-01T10:00:06.0000000Z Step {Number} of the start for {Campaign}", failure, StringComparison.Ordinal);
+        Assert.Contains($"2026-01-01T10:00:{PatientStart.LastLines + 5}.0000000Z Step {{Number}} of the start for {{Campaign}}", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret campaign", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("not json", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>A start that failed before the runtime wrote a line says so, in the same place, rather than nothing.</summary>
+    [Fact]
+    public void A_failed_start_with_no_log_says_there_was_none()
+    {
+        var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(
+            () => GoldenPath.AssertStarted(Paths, new CliResult(ExitCodes.ApiError, Unreachable, string.Empty, "runtime start"))).Message;
+
+        Assert.Contains("The runtime's own log, its last", failure, StringComparison.Ordinal);
+        Assert.Contains("(no log directory)", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>A start that answered passes, and says nothing.</summary>
+    [Fact]
+    public void A_start_that_answered_passes_the_assertion() =>
+        GoldenPath.AssertStarted(Paths, new CliResult(ExitCodes.Success, Answered, string.Empty, "runtime start"));
+
     /// <summary>The patience a start is given by default is the suite's own bound for a slow step.</summary>
     [Fact]
     public void The_default_patience_is_the_suites_bound_for_a_slow_step() =>

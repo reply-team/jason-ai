@@ -20,14 +20,23 @@ export const modeRefusal = signal<string | null>(null);
  */
 export const modeUnopened = signal<string | null>(null);
 
+/**
+ * Whether the demo's sample is still being made behind the page: a quiet mark in the bar, and the switch off until it
+ * is ready. Only ever true in the demo, and only when the desktop says so.
+ */
+export const modePreparing = signal(false);
+
 /** What the desktop offers for the mode; a desktop older than this page offers none of it. */
 export interface DesktopModeSeam {
     get?: () => Promise<unknown>;
     set?: (mode: Mode) => Promise<{ refused: string } | null>;
+    onPreparing?: (handler: (preparing: boolean) => void) => () => void;
 }
 
 /** The desktop's seam for this load; null in a browser. */
 let seam: DesktopModeSeam | null = null;
+/** The way to stop following the desktop's word on the sample, for the load before this one. */
+let unfollow: (() => void) | null = null;
 
 /**
  * Reads the mode once, as the page loads, from the desktop's seam: `{ mode, unopened }`, or a bare word from a desktop
@@ -37,7 +46,22 @@ let seam: DesktopModeSeam | null = null;
 export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mode> {
     modeRefusal.value = null;
     modeUnopened.value = null;
+    modePreparing.value = false;
+    unfollow?.();
+    unfollow = null;
     seam = desktop === undefined ? null : (desktop.mode ?? {});
+    // The mark is followed before the mode is read, so a word the desktop sends between the two is not lost; a word
+    // heard before the answer outranks the answer's.
+    let heard: boolean | null = null;
+    try {
+        unfollow =
+            seam?.onPreparing?.((on) => {
+                heard = on === true;
+                if (mode.value === 'demo') modePreparing.value = heard;
+            }) ?? null;
+    } catch {
+        unfollow = null;
+    }
     let kept: unknown;
     try {
         kept = await seam?.get?.();
@@ -45,10 +69,17 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
         kept = null;
     }
     const answer =
-        kept !== null && typeof kept === 'object' ? (kept as { mode?: unknown; unopened?: unknown }) : { mode: kept };
+        kept !== null && typeof kept === 'object'
+            ? (kept as { mode?: unknown; unopened?: unknown; preparing?: unknown })
+            : { mode: kept };
     mode.value = answer.mode === 'demo' ? 'demo' : 'live';
     if (mode.value === 'live' && typeof answer.unopened === 'string' && answer.unopened !== '')
         modeUnopened.value = answer.unopened;
+    if (mode.value === 'demo') modePreparing.value = heard ?? answer.preparing === true;
+    else {
+        unfollow?.();
+        unfollow = null;
+    }
     return mode.value;
 }
 
@@ -57,7 +88,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
  * browser, ask nothing; a refusal is kept in `modeRefusal`.
  */
 export async function switchMode(to: Mode): Promise<void> {
-    if (to === mode.value || seam === null) return;
+    if (to === mode.value || seam === null || modePreparing.value) return;
     modeRefusal.value = null;
     if (seam.set === undefined) {
         modeRefusal.value = t('mode.unsupported');

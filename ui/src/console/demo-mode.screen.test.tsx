@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
-import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
+import { loadMode, mode, modePreparing, modeRefusal, modeUnopened } from '../platform/mode';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
@@ -12,13 +12,18 @@ import { Console } from './console';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting } from './start';
 
-// The desktop's console in Demo: the strip above every panel, its two buttons asking the desktop through the seam; in
-// Live no strip, and the start screen offers the demo in one line.
+// The desktop's console: the top bar above every panel in both modes, its switch asking the desktop through the seam;
+// in Demo one short sentence says the data is sample, in Live a mark.
 
-async function renderConsole(kept: 'live' | 'demo', unopened: string | null = null): Promise<StubDesktop> {
+async function renderConsole(
+    kept: 'live' | 'demo',
+    unopened: string | null = null,
+    preparing = false,
+): Promise<StubDesktop> {
     const desktop = stubDesktop();
     desktop.modeKept = kept;
     desktop.modeUnopened = unopened;
+    desktop.modePreparing = preparing;
     // The page reads the mode once as it loads, before the console is drawn (`mount.tsx`).
     await loadMode(desktop);
     const fake = new FakeApi()
@@ -43,7 +48,7 @@ async function renderConsole(kept: 'live' | 'demo', unopened: string | null = nu
     return desktop;
 }
 
-const strip = () => screen.queryByRole('region', { name: 'Demo' });
+const strip = () => screen.queryByRole('region', { name: 'Mode bar' });
 const offer = () => screen.queryByRole('button', { name: 'See Jason with sample data' });
 const modeSets = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'mode.set');
 
@@ -62,26 +67,26 @@ beforeEach(() => {
 
 afterEach(() => {
     mode.value = 'live';
+    modePreparing.value = false;
     modeRefusal.value = null;
     modeUnopened.value = null;
 });
 
 describe('Demo in the desktop', () => {
-    it('draws the strip once, above the sidebar and every panel of the dock', async () => {
+    it('draws the bar once, above the sidebar and every panel of the dock', async () => {
         await renderConsole('demo');
         const shown = await waitFor(() => {
             expect(strip()).not.toBeNull();
             return strip()!;
         });
-        expect(screen.getAllByRole('region', { name: 'Demo' })).toHaveLength(1);
+        expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
         const console = document.querySelector('.jc-console')!;
-        expect(console.classList.contains('demo')).toBe(true);
         expect(shown.parentElement).toBe(console);
         expect(shown.nextElementSibling?.classList.contains('shell')).toBe(true);
-        expect(shown.textContent).toMatch(/sample data/);
-        expect(shown.textContent).toMatch(/Nothing in it is real/);
-        expect(shown.textContent).toMatch(/nothing is sent to anyone/);
-        expect(shown.textContent).toMatch(/back to your own installation/);
+        expect(shown.querySelector('.mode-mark')?.textContent).toBe('Demo data Nothing here is real or sent.');
+        expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Demo data');
+        expect(shown.textContent).not.toMatch(/fresh/i);
+        expect(shown.classList.contains('mode-demo')).toBe(true);
     });
 
     it('keeps the one strip above the console whichever screen is in front', async () => {
@@ -90,10 +95,10 @@ describe('Demo in the desktop', () => {
         expect(strip()).not.toBeNull();
         desktop.command('navigate.settings');
         await waitFor(() => screen.getByRole('heading', { name: 'Settings' }));
-        expect(screen.getAllByRole('region', { name: 'Demo' })).toHaveLength(1);
+        expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
         desktop.command('navigate.connect');
         await waitFor(() => expect(document.querySelector('.dv-tab.dv-active-tab')?.textContent).toMatch(/Connect/));
-        expect(screen.getAllByRole('region', { name: 'Demo' })).toHaveLength(1);
+        expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
     });
 
     it('has a short form beside the long one, for a narrow window', async () => {
@@ -101,13 +106,21 @@ describe('Demo in the desktop', () => {
         const shown = await waitFor(() => strip()!);
         const long = shown.querySelector('.mode-strip-long')?.textContent ?? '';
         const short = shown.querySelector('.mode-strip-short')?.textContent ?? '';
-        expect(short).toMatch(/sample data/);
-        expect(short.length).toBeLessThan(long.length / 2);
+        expect(short).toBe('Sample data. Nothing is sent.');
+        expect(short.length).toBeLessThan(long.length);
+    });
+
+    it('has one place for the Open in control, left of the switch', async () => {
+        await renderConsole('demo');
+        const shown = await waitFor(() => strip()!);
+        const slot = shown.querySelector('[data-slot="open-in"]');
+        expect(slot).not.toBeNull();
+        expect(slot!.nextElementSibling).toBe(within(shown).getByRole('group', { name: 'Data' }));
     });
 
     it('switches to Live through the seam, and Demo, the one marked, asks nothing', async () => {
         const desktop = await renderConsole('demo');
-        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Mode' }));
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
         const demo = within(group).getByRole('button', { name: 'Demo' });
         expect(demo.getAttribute('aria-pressed')).toBe('true');
         fireEvent.click(demo);
@@ -118,7 +131,7 @@ describe('Demo in the desktop', () => {
     it('says the desktop’s refusal in the strip when the mode could not be kept', async () => {
         const desktop = await renderConsole('demo');
         desktop.refuse.set('mode.set', 'The mode could not be saved, so Jason stays as it is.');
-        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Mode' }));
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
         fireEvent.click(within(group).getByRole('button', { name: 'Live' }));
         const alert = await waitFor(() => within(strip()!).getByRole('alert'));
         expect(alert.textContent).toBe('The mode could not be saved, so Jason stays as it is.');
@@ -131,32 +144,77 @@ describe('Demo in the desktop', () => {
     });
 });
 
-describe('Live in the desktop', () => {
-    it('draws no strip', async () => {
-        await renderConsole('live');
+describe('A demo whose sample is being made', () => {
+    const mark = () => within(strip()!).queryByRole('status', { name: 'Preparing the demo…' });
+    const switches = () => within(within(strip()!).getByRole('group', { name: 'Data' })).getAllByRole('button');
+
+    it('shows the page at once with a quiet mark, the switch off with its reason, and asks nothing when clicked', async () => {
+        const desktop = await renderConsole('demo', null, true);
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
-        expect(strip()).toBeNull();
-        expect(document.querySelector('.jc-console')!.classList.contains('demo')).toBe(false);
+        expect(mark()?.textContent).toBe('Preparing the demo…');
+        for (const button of switches()) {
+            expect(button.hasAttribute('disabled')).toBe(true);
+            expect(button.getAttribute('title')).toBe('Available once the demo is ready.');
+        }
+        fireEvent.click(within(strip()!).getByRole('button', { name: 'Live' }));
+        expect(modeSets(desktop)).toEqual([]);
     });
 
-    it('offers the demo in one line on the start screen, which switches to Demo through the seam', async () => {
+    it('takes the mark away and turns the switch on when the desktop says the sample is ready', async () => {
+        const desktop = await renderConsole('demo', null, true);
+        await waitFor(() => expect(mark()).not.toBeNull());
+        desktop.preparing(false);
+        await waitFor(() => expect(mark()).toBeNull());
+        for (const button of switches()) {
+            expect(button.hasAttribute('disabled')).toBe(false);
+            expect(button.getAttribute('title')).toBeNull();
+        }
+        fireEvent.click(within(strip()!).getByRole('button', { name: 'Live' }));
+        await waitFor(() => expect(modeSets(desktop)).toEqual([{ name: 'mode.set', args: ['live'] }]));
+    });
+
+    it('shows no mark in a demo whose sample is made, nor in Live', async () => {
+        await renderConsole('demo');
+        await waitFor(() => strip()!);
+        expect(mark()).toBeNull();
+        expect(switches().every((button) => !button.hasAttribute('disabled'))).toBe(true);
+    });
+});
+
+describe('Live in the desktop', () => {
+    it('draws the bar with a Live mark and no demo sentence, the Live button marked', async () => {
+        await renderConsole('live');
+        const shown = await waitFor(() => strip()!);
+        expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Live');
+        expect(shown.classList.contains('mode-live')).toBe(true);
+        expect(shown.textContent).not.toMatch(/Nothing here is real/);
+        expect(shown.querySelector('[data-slot="open-in"]')).not.toBeNull();
+        const group = within(shown).getByRole('group', { name: 'Data' });
+        expect(within(group).getByRole('button', { name: 'Live' }).getAttribute('aria-pressed')).toBe('true');
+        expect(within(group).getByRole('button', { name: 'Demo' }).getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('switches to Demo through the seam from the bar', async () => {
         const desktop = await renderConsole('live');
-        const button = await waitFor(() => {
-            expect(offer()).not.toBeNull();
-            return offer()!;
-        });
-        expect(button.closest('.start')).not.toBeNull();
-        fireEvent.click(button);
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
+        fireEvent.click(within(group).getByRole('button', { name: 'Live' }));
+        fireEvent.click(within(group).getByRole('button', { name: 'Demo' }));
         await waitFor(() => expect(modeSets(desktop)).toEqual([{ name: 'mode.set', args: ['demo'] }]));
     });
 
-    it('says the desktop’s refusal beside the offer when the mode could not be kept', async () => {
+    it('offers no demo on the start screen, the bar’s switch being the way in', async () => {
+        await renderConsole('live');
+        await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
+        expect(offer()).toBeNull();
+    });
+
+    it('says the desktop’s refusal in the bar when the mode could not be kept', async () => {
         const desktop = await renderConsole('live');
         desktop.refuse.set('mode.set', 'The mode could not be saved, so Jason stays as it is.');
-        fireEvent.click(await waitFor(() => offer()!));
-        const said = await waitFor(() => screen.getByText('The mode could not be saved, so Jason stays as it is.'));
-        expect(said.getAttribute('role')).toBe('alert');
-        expect(said.closest('.start')).not.toBeNull();
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
+        fireEvent.click(within(group).getByRole('button', { name: 'Demo' }));
+        const alert = await waitFor(() => within(strip()!).getByRole('alert'));
+        expect(alert.textContent).toBe('The mode could not be saved, so Jason stays as it is.');
     });
 });
 
@@ -164,16 +222,15 @@ describe('A demo the desktop could not open', () => {
     const unopened = 'The demo could not be opened, so Jason opened your own installation.';
     const note = () => screen.queryByRole('status', { name: 'Demo not opened' });
 
-    it('says so above the console on the first screen, in the desktop’s words, with no demo strip', async () => {
+    it('says so in the bar on the first screen, in the desktop’s words', async () => {
         await renderConsole('live', unopened);
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
         const said = note()!;
         expect(said.textContent).toMatch(/^The demo could not be opened, so Jason opened your own installation\./);
-        const console = document.querySelector('.jc-console')!;
-        expect(said.parentElement).toBe(console);
-        expect(said.nextElementSibling?.classList.contains('shell')).toBe(true);
-        expect(strip()).toBeNull();
-        expect(offer()).not.toBeNull();
+        expect(strip()!.contains(said)).toBe(true);
+        expect(strip()!.nextElementSibling?.classList.contains('shell')).toBe(true);
+        expect(strip()!.querySelector('.mode-mark strong')?.textContent).toBe('Live');
+        expect(offer()).toBeNull();
     });
 
     it('is closed by the person, and the console is Live as before', async () => {
@@ -181,6 +238,6 @@ describe('A demo the desktop could not open', () => {
         const said = await waitFor(() => note()!);
         fireEvent.click(within(said).getByRole('button', { name: 'Close' }));
         await waitFor(() => expect(note()).toBeNull());
-        expect(document.querySelector('.jc-console')!.classList.contains('demo')).toBe(false);
+        expect(strip()).not.toBeNull();
     });
 });

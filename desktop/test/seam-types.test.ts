@@ -12,6 +12,9 @@ import type {
     DesktopFullAccessStanding,
     DesktopKeptEntry,
     DesktopLink,
+    DesktopOpenInAnswer,
+    DesktopOpenInContinue,
+    DesktopOpenInPlace,
     DesktopRefusal,
     DesktopReplyCopied,
     DesktopReplyDone,
@@ -25,6 +28,7 @@ import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { applyMode, Mode, ModeAnswer } from '../src/mode.ts';
+import type { ContinueOffer, OpenInAnswer, OpenInRefusal, PlaceId } from '../src/open-in.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
@@ -44,6 +48,7 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload['links'], keyof JasonDesktop['links']>>,
     Holds<Equal<keyof DesktopPreload['theme'], keyof JasonDesktop['theme']>>,
     Holds<Equal<keyof DesktopPreload['mode'], keyof JasonDesktop['mode']>>,
+    Holds<Equal<keyof DesktopPreload['openIn'], keyof JasonDesktop['openIn']>>,
     Holds<Equal<keyof DesktopPreload['pairing'], keyof JasonDesktop['pairing']>>,
     Holds<Equal<keyof DesktopPreload['fullAccess'], keyof JasonDesktop['fullAccess']>>,
     Holds<DesktopPreload extends JasonDesktop ? true : false>,
@@ -65,6 +70,7 @@ type DeclaredCalls =
     | Calls<JasonDesktop['links'], 'links'>
     | Calls<JasonDesktop['theme'], 'theme'>
     | Calls<JasonDesktop['mode'], 'mode'>
+    | Calls<JasonDesktop['openIn'], 'openIn'>
     | Calls<JasonDesktop['pairing'], 'pairing'>
     | Calls<JasonDesktop['fullAccess'], 'fullAccess'>;
 type DeclaredSubscriptions =
@@ -72,7 +78,8 @@ type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop['chat'], 'chat.'>
     | Subscriptions<JasonDesktop['setup'], 'setup.'>
     | Subscriptions<JasonDesktop['links'], 'links.'>
-    | Subscriptions<JasonDesktop['fullAccess'], 'fullAccess.'>;
+    | Subscriptions<JasonDesktop['fullAccess'], 'fullAccess.'>
+    | Subscriptions<JasonDesktop['mode'], 'mode.'>;
 
 // ipc.ts registers a channel for every call the page declares, and for nothing else.
 type InvokeChannelsAreTheSeam = Holds<Equal<InvokeMember, DeclaredCalls>>;
@@ -84,6 +91,7 @@ const eventChannelOf = {
     'setup.onChanged': 'setup.changed',
     'links.onOpen': 'links.open',
     'fullAccess.onChanged': 'fullAccess.changed',
+    'mode.onPreparing': 'mode.preparing',
 } as const satisfies Record<DeclaredSubscriptions, keyof typeof eventChannels>;
 type EventChannelsAreTheSeam = [
     Holds<Equal<keyof typeof eventChannelOf, DeclaredSubscriptions>>,
@@ -126,14 +134,29 @@ type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStandi
 type LinkIsTheSeam = Holds<Equal<LinkTarget, DesktopLink>>;
 
 // The mode reaches the page as the desktop keeps it, one of two words, with the sentence of a demo that could not be
-// opened, and setting it answers as the desktop does: null once written and the desktop starting again, or the desktop's refusal when the record could not be written.
+// opened and whether the demo's sample is still being made, and setting it answers as the desktop does: null once written and the desktop starting again, or the desktop's refusal when the record could not be written.
 type ModeIsTheSeam = [
     Holds<Equal<ModeAnswer, Awaited<ReturnType<JasonDesktop['mode']['get']>>>>,
     Holds<Equal<Mode, Parameters<JasonDesktop['mode']['set']>[0]>>,
     Holds<Equal<ReturnType<typeof applyMode>, Awaited<ReturnType<JasonDesktop['mode']['set']>>>>,
 ];
 
+// Open in: the places, the default and the folder's name reach the page as the desktop makes them, a place is named by
+// the one list of words both sides hold, and the page sends a name and a campaign's id, nothing else. A chat to continue in
+// a terminal reaches the page as its host's name and whether a turn runs, and the page sends the chat's id alone.
+type OpenInIsTheSeam = [
+    Holds<Equal<PlaceId, DesktopOpenInPlace>>,
+    Holds<Equal<OpenInAnswer, DesktopOpenInAnswer>>,
+    Holds<Equal<OpenInRefusal, DesktopRefusal>>,
+    Holds<Equal<Parameters<JasonDesktop['openIn']['open']>, [target: DesktopOpenInPlace, campaignId?: string]>>,
+    Holds<Equal<Parameters<JasonDesktop['openIn']['targets']>, [campaignId?: string, chatId?: string]>>,
+    Holds<Equal<Parameters<JasonDesktop['openIn']['continueChat']>, [chatId: string]>>,
+    Holds<Equal<ContinueOffer, DesktopOpenInContinue>>,
+    Holds<Equal<keyof DesktopOpenInContinue, 'host' | 'label' | 'running'>>,
+];
+
 export type SeamHeld = [
+    OpenInIsTheSeam,
     ModeIsTheSeam,
     RefusalIsTheSeam,
     ReplyLinkIsTheSeam,
@@ -149,5 +172,5 @@ export type SeamHeld = [
 ];
 
 test('the desktop implements the seam ui/src/platform/desktop.d.ts declares (checked by npm run check)', () => {
-    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged']);
+    assert.deepEqual(Object.keys(eventChannelOf), ['onCommand', 'chat.onEvent', 'setup.onChanged', 'links.onOpen', 'fullAccess.onChanged', 'mode.onPreparing']);
 });

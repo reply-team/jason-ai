@@ -230,7 +230,7 @@ browser UI, the page `jason ui open` opens; a runtime works without it.
 One question, answered check by check. It is one of eleven names in this CLI with no API operation behind
 it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
 `plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
-agent host in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
+agent host, or a plain shell, in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 
@@ -585,6 +585,19 @@ jason session open --question <decision-id> --dry-run
 The named preference `agent.interactive_host` says which host (`claude_code` while it is unset); `--dry-run` starts
 nothing and prints the whole command. The session proposes, and the decision stays yours. The UI's Open an AI session
 link does the same on Windows (`docs/ui.md`).
+
+With no item, the same verb opens a new terminal at a folder and gives it no first input: a campaign's folder, a
+project's (by its id or slug), the folder you run it in with `--here`, or the harness root when none is named; running
+the host `--host` names, else the one the preference names, or with `--shell` the system's plain shell. With
+`--resume <conversation-id>` the host continues its own conversation of that id instead of starting a new one (Claude
+Code and Codex), as in `jason session open --here --host claude_code --resume <conversation-id>`:
+
+```sh
+jason session open --campaign <campaign-id>
+jason session open --project acme-corp --host codex
+jason session open --shell
+jason session open --here
+```
 
 A launched role that cannot decide something for itself asks a person instead, and the answer wakes the
 review that carries the work on:

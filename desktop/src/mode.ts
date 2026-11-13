@@ -4,10 +4,12 @@
  * record of it is one word in the PERSON'S installation, `<data>/desktop/mode`, also during a demo run, since the way
  * back writes it there. It is read once, at the top of the main module, before anything resolves a path; it is never
  * kept in the window's storage and never sent to a runtime. A record that is missing, cannot be read or holds anything
- * but one of the two words reads as the default. A switch writes the record and starts the desktop again.
+ * but one of the two words reads as the default. A switch writes the record and starts the desktop again. A new
+ * installation's first start, with no record, writes the record as the demo first (`keepFirstStart`), so the person
+ * meets the product on the sample and nothing of their own installation is made until they choose Live.
  */
 
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export type Mode = 'live' | 'demo';
@@ -19,6 +21,33 @@ export const isMode = (value: unknown): value is Mode => value === 'live' || val
 
 /** The desktop's sentence when the mode could not be kept: the desktop then stays as it is. */
 export const modeUnkept = 'The mode could not be saved, so Jason stays as it is.';
+
+/** The desktop's sentence when a switch or a start over is asked while the demo's sample is still being made. */
+export const demoPreparing = 'The demo is still being prepared. Try again once it is ready.';
+
+/**
+ * Pure: whether this start writes the record as the demo: the first start of a new installation (`isNewInstallation`,
+ * read of the person's directory before anything of the start writes there) that has no record yet. An installation
+ * that existed opens where it did, a record is kept as it is, and the installer's and the uninstaller's starts never do.
+ */
+export function opensOnDemo(recorded: boolean, isNew: boolean, installerStart: boolean): boolean {
+    return !recorded && isNew && !installerStart;
+}
+
+/**
+ * Writes the demo's record for a new installation's first start (`opensOnDemo`), the one thing written in the person's
+ * directory before they choose Live; answers whether it wrote it. A record that cannot be written leaves the start as
+ * it was: the default.
+ */
+export function keepFirstStart(file: string, isNew: boolean, installerStart: boolean): boolean {
+    if (!opensOnDemo(existsSync(file), isNew, installerStart)) return false;
+    try {
+        writeMode(file, 'demo');
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 /** Pure: the mode a record's text says, the default for anything but one of the two words. */
 export function parseMode(text: string | null): Mode {
@@ -95,12 +124,13 @@ export interface StartRun extends RunsOn {
 }
 
 /**
- * What the page is told of the run: its mode, and the sentence that says the demo the record named could not be opened,
- * null when the run is on the installation the record named.
+ * What the page is told of the run: its mode, the sentence that says the demo the record named could not be opened,
+ * null when the run is on the installation the record named, and whether the demo's sample is still being made.
  */
 export interface ModeAnswer {
     mode: Mode;
     unopened: string | null;
+    preparing: boolean;
 }
 
 /** Makes the demo's directory when it is not there and proves it is a folder this account can write in; throws when not. */
@@ -250,11 +280,16 @@ export interface DemoMenu {
     startOver: MenuLine;
 }
 
-export function demoMenu(mode: Mode, removalOnPlatform: boolean): DemoMenu | null {
+export function demoMenu(mode: Mode, removalOnPlatform: boolean, preparing = false): DemoMenu | null {
     if (mode !== 'demo') return null;
     const off = (item: 'updates' | 'autostart' | 'command' | 'removal'): MenuLine => ({ label: demoMenuLine(item), enabled: false });
-    return { updates: off('updates'), autostart: off('autostart'), command: off('command'), removal: removalOnPlatform ? off('removal') : null, back: { label: backLabel, enabled: true }, startOver: { label: startOverLabel, enabled: true } };
+    // While the sample is made, the way back and Start the Demo Over wait for it, each saying so.
+    const waiting = (label: string): MenuLine => (preparing ? { label: `${label}: ${untilReady}`, enabled: false } : { label, enabled: true });
+    return { updates: off('updates'), autostart: off('autostart'), command: off('command'), removal: removalOnPlatform ? off('removal') : null, back: waiting(backLabel), startOver: waiting(startOverLabel) };
 }
+
+/** What a menu line says after its label while the demo's sample is made. */
+export const untilReady = 'available once the demo is ready';
 
 /**
  * What a demo run's menu says where the person's installation offers an update, the start at logon, the PATH command or
@@ -284,9 +319,11 @@ export interface ModeDeps {
 /**
  * The page asks for a mode: the record is written first and the desktop started again after, answering null. A write
  * that fails starts nothing and answers the refusal; a word that is neither mode is refused before anything is done.
+ * While the demo's sample is still being made nothing is written or started, and the refusal says why.
  */
-export function applyMode(choice: unknown, deps: ModeDeps): { refused: string } | null {
+export function applyMode(choice: unknown, deps: ModeDeps, preparing = false): { refused: string } | null {
     if (!isMode(choice)) throw new Error('That is not a mode.');
+    if (preparing) return { refused: demoPreparing };
     try {
         deps.write(choice);
     } catch {

@@ -67,27 +67,33 @@ The window calls a campaign with its chat an **agent** (**Agents** in the sideba
 campaign and nothing else: the commands, the API and the ids keep `campaign`, and so do the rest of these pages. The AI that
 runs commands is called the AI.
 
-The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
-asks "Who do you want to reach?" and says under it that this interface is optional, since everything there can also be done
-from a terminal with your AI, through Jason's CLI and API. What you type there starts a set-up chat on the AI you connected, about no campaign
+The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, headed
+"Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
+link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
+without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
-**New chat** still makes a chat directly.
+**New GTM agent** brings it forward; that button's caret offers **New chat**, which still makes a chat directly, and
+**Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
   **Open your agents**.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab.
-- The **Feed**, the sidebar's first item, is the desktop's main chat (below).
+- The sidebar lists, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds
+  pages, agents, chats and people; the **Feed**, the desktop's main chat (below); **Dashboard**, numbers the page computes
+  from what it already reads; **Needs you**, with the number of approvals and questions waiting; **People**; **Agents**;
+  **Accounts**; and **More**, which holds Performance, Activity, Work items, Connect and System. The other conversations
+  follow under **Recent**, and **Settings** stands alone at the foot.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
 - The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
 
-**Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light; one that
-existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
+**Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light, in the demo it opens on and again when
+you first choose Live; one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
 its settings and the starting page and the window's background before the page loads follow it.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
@@ -102,12 +108,13 @@ them on.
 
 - `<data>/desktop/settings.json`: the desktop's settings (a `feed`, the theme, and the version whose skills were last deployed).
 - `<data>/desktop/mode`: which installation the desktop runs on, one word, `live` or `demo`; a file that is missing or
-  says anything else is Live. For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
+  says anything else is Live, but a new installation's first start writes it as `demo` (see [the demo](#the-demo)). For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
   `~/.jason-demo`), and this file stays in `<data>`. Before the demo's runtime first starts, the desktop writes the demo's
   own `<data>-demo/config/settings.json`, after it has placed the demo provider in `<data>-demo/plugins/demo/` (from the copy the application carries) and written `Routes:Default` naming it, so no route stands without its plugin: a harness root beside yours with `-demo` after it (`~/Jason` gives
   `~/Jason-demo`), the responder off and the campaign manager left only to answered decisions, so a terminal with
-  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. The window's Demo and
-  Live buttons write this file and start the desktop again, on your own environment. Quitting a demo run, the switch to
+  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. The top bar's Demo | Live
+  switch writes this file and starts the desktop again, on your own environment, and a new installation's first start
+  writes it as `demo` before anything else. Quitting a demo run, the switch to
   Live included, stops the demo's runtime first, waiting at most fifteen seconds; your own runtime is never stopped by
   either. An update, the installer and the uninstaller, run from your own installation, stop a demo runtime that a crash left running too. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What Jason
   Placed: each says to go back to your own installation, and the tray and the Jason menu offer Back to Your Own
@@ -166,6 +173,89 @@ would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notificati
 `jason plugin reload`. A file it cannot parse is refused and left as it is. [desktop/README.md](../desktop/README.md)
 lists each key and each card's grant.
 
+## Open in
+
+The top bar has an **Open in** split button, in your own installation and in [the demo](#the-demo) alike. Its main part
+opens a folder in the place you used last, and its arrow lists every place available on this computer:
+
+- **Editors** that are installed: VS Code, Cursor, Antigravity, Windsurf and Zed, each found the way your system
+  installs it: on Windows its program under your or the machine's programs folder, or beside the folder of a command on the
+  PATH; on macOS its application in an Applications folder, else a command on the PATH; on Linux a command on the PATH. One
+  that is not found is not listed.
+- **Claude Code** and **Codex**, each as a new session in a terminal window, for the hosts the desktop already finds.
+- **A plain terminal**, in a new window.
+- **The file manager**: File Explorer on Windows, Finder on macOS, and on Linux whatever `xdg-open` shows a folder with; the
+  entry is absent where `xdg-open` is not found. And **Copy path**, which puts the folder's path on the
+  clipboard.
+- **Browser**, which opens no folder: it opens the desktop's chat in a tab of your browser
+  ([below](#the-chat-in-a-browser-tab)).
+
+**The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
+otherwise the first place of the list. Copy path and Browser are never the default, and a terminal is always there. The desktop keeps the choice
+in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
+your folders.
+
+**Which folder opens.** The campaign's own folder, the one the installation records for it, only while that campaign's chat is in
+front; otherwise the harness root, and the desktop starts the command line with the harness root as its working folder. In the demo these are the demo's folders, and a terminal opened there works with the demo's data,
+so `jason` in it reads and changes the demo. The page names only the place and, where a campaign's chat is open, the
+campaign; it never sends a path, and the desktop resolves the folder from the installation's own record. A campaign whose
+folder is not recorded, or is not on this computer, is refused with a sentence ("This agent's folder is not recorded, or it
+is not on this computer."), and nothing is opened elsewhere, the harness root included. Likewise a harness root that is not
+there yet is refused, with a sentence that it is made with the first agent.
+
+**What starts.** The desktop starts the editors and the file manager itself, with your own environment. The three terminal
+entries run `jason session open` on the folder, with the environment of the installation the desktop runs on, so in the demo
+a terminal works with the demo's data; no first input is sent to the host, so the session is yours to begin. Typed by hand,
+the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). In the demo, an editor is started with
+your own environment, not the demo's, and the desktop says so after one opens: an editor's own terminal may work with
+your own installation, not the demo. A successful open says "Opened {folder} in {place}.", with "Jason there works with the
+same data as this window." after a terminal, and in your own installation after an editor or the file manager too; Copy
+path says "Copied the path of {folder}.". In the demo the menu also says "Opens the demo's own folder. A terminal there
+works with the demo's data."
+
+Two folders are refused for the file manager with a sentence that points to Copy path: on Windows one whose path holds a
+comma, which File Explorer reads as a separator, and on macOS one whose name ends in `.app`, which could be started rather
+than shown.
+
+**What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
+and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
+own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
+refused, as the commands that start a session on your computer. It does not open the data directory; the one folder of it
+a terminal is opened in is the chat's own, to continue a chat.
+
+**Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
+Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs
+`jason session open --here --host <host> --resume <id>` in the folder the chat's turns run in, `<data>/desktop/chat`, so
+nothing is copied, no transcript is written and nothing goes into your folders. The page names only the chat; the desktop
+reads the program and the conversation's id from its own record of the chat. The entry is there only when the chat's last
+turn ran on Claude Code or Codex with your own sign-in, outside Full access, and that program named its conversation in a
+turn of that kind. A chat on a provider's key, one whose conversation a Full access turn named or carried on, and one no
+turn of this kind has named since an earlier version of the desktop kept it show no entry. While a turn of the chat runs,
+the entry is shown but cannot be chosen, and says to stop the turn or wait for it to end. Beside it the menu says "It
+continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and
+this window does not show what happens there." It is never the default. A refusal of the command line is said in its own
+words, and in the demo the terminal works with the demo's data, as the other terminals do.
+
+### The chat in a browser tab
+
+**Browser** opens the desktop's chat in a tab of your system's browser, one more view onto the same chats the window
+shows, for as long as the desktop runs: the browser page's **Chat** screen shows the list of conversations, a
+conversation and the box. A tab sends only to a chat in Ask first or Plan only; for a chat in any other mode its box is
+locked, with a sentence naming the mode. A tab never answers a permission card or a plan card, which say they are
+answered in Jason Desktop, never changes a chat's mode and never chooses Full access, and a chat started from a tab starts
+in Ask first. The desktop's window stays the only place that approves. A tab draws no Start afresh, Remove, Open folder,
+attach buttons, Reply card or Connect button, and Open in is not offered inside it.
+
+The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
+on its first use or expires within sixty seconds, whichever comes first, and a spent or expired code opens nothing, so only
+a tab the desktop opened shows the chat; any other tab's Chat screen says how to open it from the desktop
+([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
+not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
+`127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
+which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is
+still answered in this window." The runtime gains no route for it and knows nothing of it; its page may connect to any port on
+`127.0.0.1`, which is how the tab reaches the desktop. Browser is offered in your own installation and in the demo alike.
+
 ## The demo
 
 The demo is a second, real installation of Jason on invented people, so you can see the product work before you connect
@@ -175,11 +265,19 @@ an approval you give moves the work, and the numbers and the Feed are the runtim
 would is [the demo provider](../plugins/demo/README.md), a plugin that requests no program, no host and no variable, so
 it can reach nothing outside its process: a message approved in the demo is answered as sent and goes to nobody.
 
-**How you meet it.** On the first screen of your own installation, one line offers **See Jason with sample data**.
-Choosing it writes the mode and starts the desktop again on the demo; while the sample is made the window says it is
-being prepared, which takes a moment the first time. In the demo a strip heads every screen: the data is sample, nothing
-in it is real and nothing is sent to anyone, with a **Demo** and a **Live** button, and **Live**, or **Back to Your Own
-Installation** in the tray and the Jason menu, takes you back to your own installation. **Start the Demo Over**, beside it
+**How you meet it.** A new installation opens on the demo: the first start of a desktop that finds no data directory of
+yours, or one holding nothing but the desktop's own records, and no record of a mode writes the record as the demo and
+starts on it, and nothing of your own installation is made until you choose **Live**. Choosing **Live** from it starts your
+own installation for the first time, as a first start without the demo would, in the Light theme a new installation meets.
+An installation that already existed, with a record or without, and one updated from an earlier version open where they
+did. A top bar heads every screen in both modes: in your own installation a green dot and **Live**; in the demo an amber
+dot, **Demo data** and "Nothing here is real or sent." (in a narrow window, "Sample data. Nothing is sent."). On its right
+the **Demo | Live** switch marks the mode in force; choosing the other writes the mode and starts the desktop again on that
+installation, and **Back to Your Own Installation** in the tray and the Jason menu does what **Live** does, for a demo
+whose start failed. The first time the demo opens, the page opens at once and the sample fills it as it is made, with
+**Preparing the demo…** in the top bar until it is ready, which takes a little over a minute; until then the switch, **Start
+the Demo Over** and **Back to Your Own Installation** wait for it, each saying so. If the desktop quits before the sample
+is whole, the next start of the demo starts it over by itself and makes it whole. **Start the Demo Over**, beside it
 in the same menus, asks once ("Start the demo over?": everything you did in the demo is removed and it starts again from
 the beginning; your own installation is not touched), stops the demo's runtime, leaves a request in your own installation's
 `desktop/` folder and starts the desktop again. The next start carries the request out before anything names the demo's

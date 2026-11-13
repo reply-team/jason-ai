@@ -89,6 +89,33 @@ public static class CliErrors
     /// </summary>
     public const string RuntimeTooOld = "runtime_too_old";
 
+    /// <summary><c>session open</c> at a folder: neither the campaign, nor its project, nor the harness root has a folder recorded to stand in.</summary>
+    public const string FolderNotRecorded = "folder_not_recorded";
+
+    /// <summary><c>session open</c> at a folder: the folder the runtime records is not on this machine.</summary>
+    public const string FolderMissing = "folder_missing";
+
+    /// <summary><c>session open</c> at a folder: the runtime did not answer the preference that names the host.</summary>
+    public const string PreferenceUnreadable = "preference_unreadable";
+
+    /// <summary><c>session open</c> at a folder: the preference names a host this jason does not know.</summary>
+    public const string HostUnknown = "host_unknown";
+
+    /// <summary><c>session open</c> at a folder: the host's program is not on the search path, or only as a file Jason does not start.</summary>
+    public const string HostNotFound = "host_not_found";
+
+    /// <summary><c>session open</c> at a folder: <c>--resume</c> asked a host that has no words Jason knows for continuing a conversation.</summary>
+    public const string HostCannotResume = "host_cannot_resume";
+
+    /// <summary><c>session open</c> at a folder: the system's plain shell is not in its place.</summary>
+    public const string ShellNotFound = "shell_not_found";
+
+    /// <summary><c>session open</c> at a folder: no terminal was found on this machine.</summary>
+    public const string TerminalNotFound = "terminal_not_found";
+
+    /// <summary><c>session open</c> at a folder: the terminal was found and did not start.</summary>
+    public const string TerminalStartFailed = "terminal_start_failed";
+
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
 }

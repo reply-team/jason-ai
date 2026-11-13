@@ -9,6 +9,7 @@ export const processModules: Readonly<Record<string, string>> = {
     'src/cli.ts': 'the bundled jason executable',
     'src/programs.ts': "the programs a Connect card runs: reply, npm, and the version of an agent host or of node; and an agent host's one naming run of a set-up chat, which src/chat-naming.ts gives its command line",
     'src/chat-process.ts': "an agent host for one turn of the chat, streamed, or an agent host's model listing (`codex app-server`, `startListing`), and on Windows taskkill from the system folder to end that turn's process tree, or a program the programs module ran past its time limit",
+    'src/open-in-start.ts': "an editor or the file manager the page's Open in names, started on its own with the folder",
     'src/shell-path.ts': "the login shell, on macOS and Linux only, for the PATH a program started from the Finder or a session's menu lacks",
     'scripts/prepare.mjs': 'dotnet publish of Jason.App, to bundle the jason executable',
     'scripts/sign-windows.mjs': 'signtool, to sign each file of the Windows package through the Trusted Signing client',
@@ -33,6 +34,18 @@ export const listingCallers: Readonly<Record<string, string>> = {
 };
 
 const listingStart = /\bstartListing\b/;
+
+/**
+ * The one module that may call `startDetached` (src/open-in-start.ts), which starts any file with any arguments: main.ts,
+ * where the Open in wiring hands it only a line the Open in module made from a place the desktop detected.
+ */
+export const startDetachedCallers: Readonly<Record<string, string>> = {
+    'src/main.ts': 'the editor or file manager line the Open in module made from a detected place',
+};
+
+const detachedStart = /\bstartDetached\b/;
+/** The starter's module named in any form (import, re-export, require, dynamic import), so no alias or computed access passes. */
+const detachedModule = /['"`][^'"`]*\/open-in-start(?:\.ts|\.js)?['"`]/;
 
 /**
  * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
@@ -67,6 +80,20 @@ const programsWhole = new RegExp(String.raw`import\s*\*\s*as\s+\w+\s*from\s*${pr
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */
 export const ipcModule = 'src/ipc.ts';
 
+/**
+ * The modules that may listen on a port, each with what it serves. Both listen on the loopback address alone, on a port
+ * the system picks, and check every request's Host before anything else of it is read.
+ */
+export const listeningModules: Readonly<Record<string, string>> = {
+    'src/chat-permission-endpoint.ts': "a chat turn's permission prompt tool and its Full access hook, for that turn's host alone, behind the turn's secret",
+    'src/browser-bridge.ts': "the chat's view for a browser tab the desktop opened, behind the runtime's origin and a code the tab traded once",
+};
+
+/** A server module of Node imported or required by any form: what a listening socket is made with. */
+const serverModule = /(?:from\s*|require\s*\(\s*|import\s*\(\s*)['"](?:node:)?(?:http|https|http2|net|tls|dgram)['"]/;
+/** A server made or a socket listened on, by any name: the calls a module must not make outside the named ones. */
+const listening = /\b(?:createServer|createSecureServer|createSocket)\s*\(|\.\s*listen\s*\(|\bWebSocketServer\b/;
+
 /** The child_process functions a named module may import: both take a file and arguments and start no shell. */
 const allowedImports = new Set(['execFile', 'spawn']);
 
@@ -86,6 +113,60 @@ const processKill = /\bprocess\s*(?:\.\s*kill\b|\[\s*['"`]kill['"`]\s*\])/g;
 const killTaken = /\{[^}]*\bkill\b[^}]*\}\s*=\s*process\b/;
 const openPath = /\bshell\s*\.\s*openPath\b/;
 const openExternal = /\bshell\s*\.\s*openExternal\b/g;
+
+/**
+ * The two openers inside main.ts's `lockNavigation` that hand a URL to the system browser, each by the name of the
+ * function it is written in, each calling it once, with what it opens.
+ */
+export const navigationOpeners: Readonly<Record<string, string>> = {
+    leave: 'an https link, and nothing else',
+    ownPage: "a page of the runtime's own UI at its origin, under /ui/: the chat in a browser tab",
+};
+
+/**
+ * Who may call the opener of the runtime's own page: the browser bridge's opening act alone. In main.ts, `ownPage` is
+ * named outside the navigation lock only where the lock hands it out and where `openTab` is given it as its opener;
+ * `openOwnPage` is named only by its module and, in main.ts, by its import and inside the lock.
+ */
+export const ownPageCaller = "src/main.ts: openTab's open, in the Open in browser place, the bridge's opening act";
+
+const ownPageName = /\bownPage\b/g;
+const ownPageHandedOut = /=\s*lockNavigation\(/;
+const ownPageToTab = /\bopenTab\(\{[^\n]*\bopen:\s*ownPage\b/;
+const openOwnPageName = /\bopenOwnPage\b/g;
+
+/**
+ * The spellings that would reach what the rules above name by another name, each refused. This guard reads text: it
+ * holds these spellings and no computed name beyond them (a property reached through a value built at run time, a
+ * module loaded by a name made at run time other than as below), as the C# guard reads compiled IL and not reflection.
+ * - main.ts calls its navigation lock once, taking its two openers apart by name, so no other part of main.ts holds them
+ *   under another name or reaches one by a computed key.
+ * - `shell` is not reached by an index, aliased, taken apart or imported under another name outside the lock, so
+ *   `openExternal` and `openPath` are never called by a name the rules do not read.
+ * - Under src/, `listen` is not reached by an index, and a dynamic import names its module by a plain string.
+ */
+const lockCall = /\blockNavigation\s*\(/g;
+const lockDefinition = /\bfunction\s+lockNavigation\s*\(/g;
+const lockTakenApart = 'const { leave: toBrowser, ownPage } = lockNavigation(';
+const shellIndexed = /\bshell\s*\[/g;
+const shellAliased = /=\s*shell\b(?!\s*\.)/g;
+const shellRenamed = /import\s*\{[^}]*\bshell\s+as\b/g;
+const listenIndexed = /\[\s*['"`]listen['"`]\s*\]/;
+const dynamicImport = /\bimport\s*\(/g;
+const plainImport = /^import\s*\(\s*(?:'[^'`$\\]*'|"[^"`$\\]*")\s*\)/;
+
+/** The line of `text` that holds `index`. */
+function lineAt(text: string, index: number): string {
+    const end = text.indexOf('\n', index);
+    return text.slice(text.lastIndexOf('\n', index) + 1, end < 0 ? text.length : end);
+}
+
+/** The opener an `openExternal` call at `index` is written in: the nearest `const <name> = (` before it, or null. */
+function openerAt(text: string, from: number, index: number): string | null {
+    let name: string | null = null;
+    for (const match of text.slice(from, index).matchAll(/\bconst\s+(\w+)\s*=\s*\(/g)) name = match[1] ?? null;
+    return name;
+}
 
 /** The body of main.ts's `lockNavigation`, the one place a URL is handed to the system browser. */
 function lockNavigationBody(text: string): { start: number; end: number } | null {
@@ -145,17 +226,74 @@ export function processViolations(path: string, text: string): string[] {
     if (listingStart.test(text) && path !== 'src/chat-process.ts' && !(path in listingCallers)) {
         found.push(`${path} starts an agent host's model listing; only ${Object.keys(listingCallers).join(', ')} may`);
     }
+    if (detachedStart.test(text) && path !== 'src/open-in-start.ts' && !(path in startDetachedCallers)) {
+        found.push(`${path} starts a detached program; only ${Object.keys(startDetachedCallers).join(', ')} may`);
+    }
+    if (detachedModule.test(text) && path !== 'src/open-in-start.ts' && !(path in startDetachedCallers)) {
+        found.push(`${path} imports the detached starter's module; only ${Object.keys(startDetachedCallers).join(', ')} may`);
+    }
     const runs = [...text.matchAll(runFileCall)].length - [...text.matchAll(runFileDefinition)].length;
     if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);
     if (!(path in runFileCalls) && (runFileNamed.test(text) || programsWhole.test(text))) {
         found.push(`${path} imports the program runner; only the runner itself and a set-up chat's naming run may`);
     }
+    if (!(path in listeningModules) && (serverModule.test(text) || listening.test(text))) {
+        found.push(`${path} may listen on a port; only ${Object.keys(listeningModules).join(', ')} may`);
+    }
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);
     const lock = path === 'src/main.ts' ? lockNavigationBody(text) : null;
+    const opened = new Map<string, number>();
     for (const match of text.matchAll(openExternal)) {
         if (lock === null || match.index < lock.start || match.index > lock.end) {
             found.push(`${path} hands a URL to the system browser outside main.ts's navigation lock`);
+            continue;
+        }
+        const opener = openerAt(text, lock.start, match.index);
+        if (opener === null || !(opener in navigationOpeners)) {
+            found.push(`${path} hands a URL to the system browser in the navigation lock outside its named openers, ${Object.keys(navigationOpeners).join(' and ')}`);
+            continue;
+        }
+        opened.set(opener, (opened.get(opener) ?? 0) + 1);
+        if (opened.get(opener) === 2) found.push(`${path} hands a URL to the system browser more than once in ${opener}`);
+    }
+    const outsideLock = (index: number) => lock === null || index < lock.start || index > lock.end;
+    if (path !== 'src/browser-bridge.ts') {
+        for (const match of text.matchAll(openOwnPageName)) {
+            const line = lineAt(text, match.index);
+            if (path !== 'src/main.ts' || (outsideLock(match.index) && !/^import\s/.test(line))) {
+                found.push(`${path} names the opener of the runtime's own page outside main.ts's navigation lock`);
+            }
+        }
+    }
+    if (path === 'src/main.ts') {
+        const seen = { handedOut: 0, toTab: 0 };
+        for (const match of text.matchAll(ownPageName)) {
+            if (!outsideLock(match.index)) continue;
+            const line = lineAt(text, match.index);
+            // A line of a comment names it and calls nothing.
+            if (/^\s*(?:\*|\/\/|\/\*)/.test(line)) continue;
+            if (ownPageHandedOut.test(line)) seen.handedOut++;
+            else if (ownPageToTab.test(line)) seen.toTab++;
+            else found.push(`${path} uses the opener of the runtime's own page other than as ${ownPageCaller}`);
+        }
+        if (seen.handedOut > 1 || seen.toTab > 1) found.push(`${path} hands the opener of the runtime's own page to more than ${ownPageCaller}`);
+    }
+    const lockDefined = [...text.matchAll(lockDefinition)].length;
+    const lockCalls = [...text.matchAll(lockCall)].length - lockDefined;
+    // main.ts defines the lock and calls it once, taken apart as above; every other module names it nowhere.
+    if (lockDefined > 0 ? path !== 'src/main.ts' || lockCalls !== 1 || text.split(lockTakenApart).length !== 2 : lockCalls > 0) {
+        found.push(`${path} calls the navigation lock other than once, in main.ts, as ${lockTakenApart}`);
+    }
+    for (const pattern of [shellIndexed, shellAliased, shellRenamed]) {
+        for (const match of text.matchAll(pattern)) {
+            if (outsideLock(match.index)) found.push(`${path} reaches shell by another name outside main.ts's navigation lock: ${match[0].trim()}`);
+        }
+    }
+    if (path.startsWith('src/')) {
+        if (listenIndexed.test(text)) found.push(`${path} reaches listen by an index`);
+        for (const match of text.matchAll(dynamicImport)) {
+            if (!plainImport.test(text.slice(match.index))) found.push(`${path} imports a module by a name that is not a plain string`);
         }
     }
     return found;
