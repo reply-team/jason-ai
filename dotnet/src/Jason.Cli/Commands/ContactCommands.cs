@@ -81,7 +81,7 @@ public static class ContactCommands
         var command = new Command("list", "List contacts, optionally only those reachable on a channel.");
         var channel = new Option<string?>("--channel") { Description = "Only contacts having this channel, for example email." };
         var value = new Option<string?>("--value") { Description = "Only contacts whose channel value is this one; needs --channel." };
-        var query = new Option<string?>("--query") { Description = "Only people whose name, company, title, any channel value or the value of any custom field contains this text; a custom field is found by its value, never its name; case and accents do not matter, a phone number matches however it is spaced, and a pasted LinkedIn link finds its profile." };
+        var query = new Option<string?>("--query") { Description = "Only people whose name, company, title, any channel value or the value of any custom field contains this text; a custom field is found by its value, never its name, and the provider's record kept beside the fields is not searched; case and accents do not matter, a phone number matches however it is spaced, and a pasted LinkedIn link finds its profile." };
         var campaign = new Option<string?>("--campaign") { Description = "Only people on this campaign, as cmp_...; excluded members are left out, except under --summary removed." };
         var summary = Choice<CampaignSummaryFilter>.Only(new Option<string?>("--summary")
         {

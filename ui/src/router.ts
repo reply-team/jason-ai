@@ -17,7 +17,7 @@ export type PersonTab = 'timeline' | 'threads' | 'details' | 'sequences' | 'next
 /** The tabs a person's address on People can name; Performance's panel names the first three only. */
 const personTabs: readonly PersonTab[] = ['details', 'threads', 'sequences', 'next', 'research'];
 export type PeopleFilters = {
-    /** The search typed into the list: a name, a company, a title or part of a channel value. */
+    /** The search typed into the list: a name, company, title, part of a channel value or a custom field's value. */
     q?: string;
     campaign?: string;
     /** One of the counts of campaign.summary: the people it counts, wherever they stand so. */

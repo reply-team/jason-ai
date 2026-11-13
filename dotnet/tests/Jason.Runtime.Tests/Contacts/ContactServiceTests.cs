@@ -248,10 +248,11 @@ public class ContactServiceTests
     }
 
     /// <summary>
-    /// A listing's text also finds a person by the values of their custom fields: a text or a number at any depth, inside
-    /// an object or a list, folded as the other terms are whatever escaping the stored JSON uses, with wildcards taken as
-    /// written. Never by a key, never by the JSON's own punctuation, never by a flag or a null, and never by a text that
-    /// runs from one value into the next.
+    /// A listing's text also finds a person by the values of their custom fields: a text or a number at any depth,
+    /// inside an object or a list, folded as the other terms are whatever escaping the stored JSON uses, with wildcards
+    /// taken as written, and a value holding the separator or a NUL by the same text with a space there. Never by a
+    /// key, never by the JSON's own punctuation, never by a flag or a null, never by a text that runs from one value
+    /// into the next, and never by the provider's record an audience search keeps beside the fields.
     /// </summary>
     [Theory]
     [InlineData("retail", "Rita")]
@@ -277,6 +278,11 @@ public class ContactServiceTests
     [InlineData("MÜNCH", "Mona|Sven")]
     [InlineData("cafe", "Mona|Sven")]
     [InlineData("göteborg", "Mona")]
+    [InlineData("globex", "")]
+    [InlineData("prv-778", "")]
+    [InlineData("lisbon", "Pia")]
+    [InlineData("north west", "Nina")]
+    [InlineData("beta", "Nina")]
     public async Task A_listing_finds_contacts_by_the_values_of_their_custom_fields_and_never_by_a_key(string query, string expected)
     {
         using var database = new TestDatabase();
@@ -293,6 +299,16 @@ public class ContactServiceTests
             ["code"] = "50%_off",
         }), ct);
         await service.CreateAsync(Custom("Wim", new JsonObject { ["code"] = "50x off" }), ct);
+        await service.CreateAsync(Custom("Pia", new JsonObject
+        {
+            [Contact.ProviderRecordKey] = new JsonObject { ["employer"] = "Globex", ["id"] = "prv-778" },
+            ["location"] = "Lisbon",
+        }), ct);
+        await service.CreateAsync(Custom("Nina", new JsonObject
+        {
+            ["region"] = "North" + CustomValues.Separator + "West",
+            ["note"] = "Alpha" + (char)0 + "Beta",
+        }), ct);
         // Written by the service, the stored JSON escapes every letter outside ASCII; written by hand, it need not.
         await service.CreateAsync(Custom("Mona", new JsonObject { ["city"] = "München", ["venue"] = "Café", ["hq"] = "Göteborg" }), ct);
         var sven = await service.CreateAsync(Custom("Sven", null), ct);
@@ -302,6 +318,109 @@ public class ContactServiceTests
         var page = await service.ListAsync(new ContactListRequest(null, null, null, null, null, query), ct);
 
         Assert.Equal(expected, string.Join('|', page.Items.Select(c => c.FirstName).Order(StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// One person's custom fields the search cannot read never stop it finding anybody else by theirs: not text the
+    /// column's check was kept from refusing, nor an object nested past the reader's depth or a text stored as an
+    /// escaped half of a surrogate pair, both of which the check lets through. Such a person is found by none of those
+    /// values, and still by their name; one the runtime cannot read at all is refused when shown, naming the column, as
+    /// before.
+    /// </summary>
+    [Theory]
+    [InlineData("pilot", "Vera")]
+    [InlineData("odd", "Odd")]
+    [InlineData("kept", "")]
+    [InlineData("deep", "unreadable")]
+    [InlineData("zz", "")]
+    public async Task One_contact_whose_custom_fields_cannot_be_read_never_stops_a_search(string query, string expected)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var service = NewService(db, new FixedClock(Noon));
+        var ct = TestContext.Current.CancellationToken;
+        await service.CreateAsync(Custom("Vera", new JsonObject { ["stage"] = "Pilot" }), ct);
+        var halfPair = ((char)92) + "ud800";
+        var odd = await service.CreateAsync(Custom("Odd", null), ct);
+        var broken = await service.CreateAsync(Custom("Broken", null), ct);
+        var deep = await service.CreateAsync(Custom("Deep", null), ct);
+        await db.Database.OpenConnectionAsync(ct);
+        await db.Database.ExecuteSqlAsync($"PRAGMA ignore_check_constraints = ON", ct);
+        await db.Database.ExecuteSqlAsync($"UPDATE contacts SET custom_json = {"{"} WHERE public_id = {broken.Id}", ct);
+        await db.Database.ExecuteSqlAsync($"PRAGMA ignore_check_constraints = OFF", ct);
+        var nested = string.Concat(Enumerable.Repeat("{\"a\":", 65)) + "\"pilot\"" + new string('}', 65);
+        await db.Database.ExecuteSqlAsync($"UPDATE contacts SET custom_json = {nested} WHERE public_id = {deep.Id}", ct);
+        var halves = "{\"mark\":\"" + halfPair + "\",\"note\":\"Kept\"}";
+        await db.Database.ExecuteSqlAsync($"UPDATE contacts SET custom_json = {halves} WHERE public_id = {odd.Id}", ct);
+
+        var listing = service.ListAsync(new ContactListRequest(null, null, null, null, null, query), ct);
+
+        if (expected == "unreadable")
+        {
+            var refused = await Assert.ThrowsAsync<UnreadableStoredValueException>(() => listing);
+            Assert.Equal("contacts.custom_json", refused.Column);
+            return;
+        }
+
+        var page = await listing;
+        Assert.Equal(expected, string.Join('|', page.Items.Select(c => c.FirstName).Order(StringComparer.Ordinal)));
+    }
+
+    /// <summary>A backslash, spelled out, so no tool on the way here reads a JSON escape as its letter.</summary>
+    private static readonly string Slash = ((char)92).ToString();
+
+    /// <summary>JSON written with single quotes and BS for a backslash, so every row reads as written.</summary>
+    private static string Json(string text) => text.Replace('\'', '"').Replace("BS", Slash, StringComparison.Ordinal);
+
+    /// <summary>An object nested this many levels deep, holding one text at the bottom.</summary>
+    private static string Nested(int levels) =>
+        string.Concat(Enumerable.Repeat(Json("{'a':"), levels - 1)) + Json("{'a':'deep'}") + new string('}', levels - 1);
+
+    /// <summary>
+    /// What a stored value cannot give as an object of values gives no values at all, and the function never throws out
+    /// of the database's call: text the reader refuses, an object nested past the reader's depth or a text that is an
+    /// escaped half of a surrogate pair (both of which the column's own check lets through), and valid JSON that is no
+    /// object, which no contact holds.
+    /// </summary>
+    [Theory]
+    [InlineData("{")]
+    [InlineData("")]
+    [InlineData("{'a':'x'} {")]
+    [InlineData("['x']")]
+    [InlineData("'x'")]
+    [InlineData("5")]
+    [InlineData("true")]
+    [InlineData("null")]
+    [InlineData("65 levels")]
+    [InlineData("{'a':'BSud800','b':'Kept'}")]
+    [InlineData("{'a':'BSudc00x','b':'Kept'}")]
+    public void A_stored_value_that_is_no_readable_object_gives_no_values(string stored)
+    {
+        var text = stored == "65 levels" ? Nested(65) : Json(stored);
+
+        Assert.Null(CustomValues.Apply(text));
+    }
+
+    /// <summary>
+    /// The values of the object, folded, in the order they are written: an object as deep as the reader reads is read
+    /// whole; a number is taken as it is written; the provider's record an audience search keeps under its own key is
+    /// passed over, however that key is spelled, while the same name further down is an ordinary field; and the
+    /// separator and a NUL inside a value become spaces, so neither can join two values nor hide the rest of them.
+    /// </summary>
+    [Theory]
+    [InlineData("64 levels", "deep")]
+    [InlineData("{'n':1e5,'m':-0.50}", "1e5|-0.50")]
+    [InlineData("{'provider_record':{'employer':'Globex','id':7},'stage':'Pilot'}", "pilot")]
+    [InlineData("{'stage':'Pilot','provider_record':['Globex']}", "pilot")]
+    [InlineData("{'provider_BSu0072ecord':{'employer':'Globex'},'stage':'Pilot'}", "pilot")]
+    [InlineData("{'notes':{'provider_record':'Kept'}}", "kept")]
+    [InlineData("{'a':'NorthBSu001fWest','b':'Two'}", "north west|two")]
+    [InlineData("{'a':'AlphaBSu0000Beta','b':'Two'}", "alpha beta|two")]
+    public void The_values_are_read_and_the_providers_record_is_passed_over(string stored, string expected)
+    {
+        var text = stored == "64 levels" ? Nested(64) : Json(stored);
+
+        Assert.Equal(expected.Replace('|', CustomValues.Separator), CustomValues.Apply(text));
     }
 
     private static ContactCreateRequest Custom(string first, JsonObject? custom) => new(first, null, null, null, null, null, custom, null, null);

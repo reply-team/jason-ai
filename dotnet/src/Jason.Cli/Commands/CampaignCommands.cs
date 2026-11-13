@@ -376,7 +376,7 @@ public static class CampaignCommands
         });
         var since = VerbOptions.Moment("--since", "With --activity: the period's start, included, as ISO-8601 UTC, or now.");
         var until = VerbOptions.Moment("--until", "With --activity: the period's end, not included, as ISO-8601 UTC, or now.");
-        var query = new Option<string?>("--query") { Description = "Only people found by this text: a name, company, title, any channel value or the value of any custom field, never its name." };
+        var query = new Option<string?>("--query") { Description = "Only people found by this text: a name, company, title, any channel value or the value of any custom field, never its name nor the provider's record kept beside the fields." };
         var audience = AudienceOption();
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
