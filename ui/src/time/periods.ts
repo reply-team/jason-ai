@@ -59,3 +59,40 @@ function midnight(day: string, zone: string): Date {
     const found = new Date(wall - offset(guess, zone));
     return localDay(found, zone) === day ? found : guess;
 }
+
+/** The person's calendar day at this instant, as `YYYY-MM-DD`. */
+export function dayOf(at: Date, zone: string): string {
+    return localDay(at, zone);
+}
+
+/** A day some whole months before another, as `YYYY-MM-DD`; a day the earlier month lacks becomes that month's last. */
+export function monthsBefore(day: string, months: number): string {
+    const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+    const target = new Date(Date.UTC(year, month - 1 - months, 1));
+    const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    target.setUTCDate(Math.min(date, last));
+    return target.toISOString().slice(0, 10);
+}
+
+/** From the zone's midnight that begins a calendar day, included, to now, not included. */
+export function windowFromDay(first: string, now: Date, zone: string): { since: string; until: string } {
+    return { since: midnight(first, zone).toISOString(), until: now.toISOString() };
+}
+
+/**
+ * From the midnight that begins `first` to the midnight that ends `last`, so both days are whole; a range that reaches
+ * past now ends at now. Null for a range that is backwards or has not begun.
+ */
+export function windowBetweenDays(
+    first: string,
+    last: string,
+    now: Date,
+    zone: string,
+): { since: string; until: string } | null {
+    if (first > last) return null;
+    const since = midnight(first, zone);
+    const nextDay = new Date(Date.parse(`${last}T00:00:00Z`) + dayMs).toISOString().slice(0, 10);
+    const end = midnight(nextDay, zone);
+    const until = end > now ? now : end;
+    return since < until ? { since: since.toISOString(), until: until.toISOString() } : null;
+}
