@@ -50,6 +50,7 @@ project create
 project get
 project list
 project update
+reply count
 reply record
 report get
 report list
