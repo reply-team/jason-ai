@@ -75,6 +75,7 @@ import {
     feedAutoEdit,
     feedFullAccess,
     fullAccessConsent,
+    demoFullAccess,
     fullAccessNotYet,
     fullAccessOffered,
     fullAccessSentence,
@@ -243,6 +244,11 @@ export interface ChatOptions {
     unchecked?(): void;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
+    /**
+     * Whether this is a demo run: Full access is then not offered by any path, the menu, the standing choice, a chat
+     * reopened or a request (`demoFullAccess`), and the standing choice is neither read, written nor taken back.
+     */
+    demo?: boolean;
     /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
     skillsGate?: Pick<SkillsGate, 'held' | 'wait'>;
     /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
@@ -598,10 +604,10 @@ export class Chat {
         sweepTurnFiles(options.paths.turns);
         // A take-back the last run owed is done before any chat is made; one the file still will not take keeps the
         // choice taken back for this run too.
-        if (takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
+        if (options.demo !== true && takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
         // A standing choice is in force only while its take-back could be recorded: where its folder takes no new file,
         // it is held as taken back for this run.
-        if (!this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
+        if (options.demo !== true && !this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
         // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
         // never stops for either.
@@ -841,7 +847,7 @@ export class Chat {
     }
 
     #fullAccessOffered(): boolean {
-        return this.#options.fullAccessOffered ?? fullAccessOffered;
+        return this.#options.demo !== true && (this.#options.fullAccessOffered ?? fullAccessOffered);
     }
 
     #modeOf(conversation: Conversation): ChatMode {
@@ -873,6 +879,7 @@ export class Chat {
         // Always answered and its file not written: Full access is given this time, and the chat says so once it is.
         let unkept = false;
         if (mode === 'full_access') {
+            if (this.#options.demo === true) throw new ChatRefused(demoFullAccess);
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = programOf(host);
             if (program === 'codex') throw new ChatRefused(codexFullAccess);
@@ -1012,6 +1019,8 @@ export class Chat {
      */
     #standingFor(mode: ChatMode, program: string | undefined): Standing | null {
         if (mode !== 'full_access' || program !== 'claude') return null;
+        // A demo run offers no Full access, so no standing choice applies there.
+        if (this.#options.demo === true) return null;
         if (this.#takenBack || takeBackOwed(this.#options.paths.fullAccess)) return null;
         return readStanding(this.#options.paths.fullAccess, 'claude');
     }

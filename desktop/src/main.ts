@@ -483,6 +483,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
+            // A demo run offers no Full access (`demoFullAccess`).
+            demo: runOn.mode === 'demo',
             // A box is closed, and read as a no, when its window is hidden or closed.
             confirm: (box) =>
                 askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
@@ -511,6 +513,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         bundle,
         dataNamed,
         personsOwn,
+        // A demo run offers no Full access by any path, and applies no standing choice (`demoFullAccess`).
+        demo: runOn.mode === 'demo',
         bundleVersion: version,
         cli,
         programs,

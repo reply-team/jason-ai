@@ -406,3 +406,11 @@ test('main passes the person\'s directories to the chat, read before the run is 
     const chat = main.slice(main.indexOf('const chat = new Chat({'));
     assert.ok(chat.slice(0, chat.indexOf('});')).includes('        personsOwn,\n'));
 });
+
+test('main tells the menu and the chat whether this is a demo run, where Full access is not offered', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const setup = main.slice(main.indexOf('new Setup({'), main.indexOf('const chat = new Chat({'));
+    assert.ok(setup.includes("demo: runOn.mode === 'demo',"));
+    const chat = main.slice(main.indexOf('const chat = new Chat({'));
+    assert.ok(chat.slice(0, chat.indexOf('});')).includes("demo: runOn.mode === 'demo',"));
+});
