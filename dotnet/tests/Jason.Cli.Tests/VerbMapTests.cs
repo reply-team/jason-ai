@@ -236,7 +236,7 @@ public class VerbMapTests
     /// <summary>
     /// The <c>session</c> noun is one verb, <c>open</c>, and no operation: it starts the person's own agent host in a
     /// terminal of this machine, which the runtime never starts or knows about. The ninth exception, made here in the
-    /// open; a second verb under it is a decision of its own.
+    /// open; a second verb under it is a decision of its own, and so is a third form of <c>open</c>.
     /// </summary>
     [Fact]
     public void The_session_noun_is_open_alone()
@@ -245,6 +245,13 @@ public class VerbMapTests
         var group = Jason.Cli.Session.SessionCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
 
         Assert.Equal(["open"], group.Subcommands.Select(command => command.Name));
+
+        // Its two forms are these options and no others: an item's (--approval, --question) and a folder's (--campaign,
+        // --project, --host, --shell), with --dry-run and --human for both. A further option is a change of the declared
+        // exception and is made in the open, with its text in CliApp.
+        Assert.Equal(
+            ["--approval", "--question", "--campaign", "--project", "--host", "--shell", "--dry-run", "--human"],
+            group.Subcommands.Single().Options.Select(option => option.Name).Where(name => name.StartsWith("--", StringComparison.Ordinal)));
         Assert.DoesNotContain(
             typeof(Contracts.Api.Operations).GetFields().Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue()!),
             name => name.StartsWith("session.", StringComparison.Ordinal));

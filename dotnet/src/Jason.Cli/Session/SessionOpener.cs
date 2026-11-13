@@ -65,7 +65,7 @@ public static class SessionOpener
         }
 
         var folder = await PromptFolderResolver.ResolveAsync(env, item.CampaignId, cancellationToken).ConfigureAwait(false);
-        var (preferenceExit, word) = await PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
+        var (preferenceExit, word, _) = await PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
         if (preferenceExit != ExitCodes.Success)
         {
             if (preferenceExit == ExitCodes.ApiError)
@@ -149,7 +149,7 @@ public static class SessionOpener
     /// How to name another host, in the form every shell passes whole: the value in a file, since Windows PowerShell 5.1
     /// and cmd.exe break an inline JSON value's quotes.
     /// </summary>
-    private const string ChooseAnother =
+    internal const string ChooseAnother =
         "To choose another host, put {\"host\":\"<host>\"} in a file, host.json say, and run `jason preference set agent.interactive_host --value-file host.json --actor human:<your-name>`; "
         + "or go back to claude_code with `jason preference unset agent.interactive_host --actor human:<your-name>`.";
 
@@ -171,18 +171,22 @@ public static class SessionOpener
             : null;
     }
 
-    /// <summary>The word the preference holds, or null when it is unset; a read the runtime refused is its exit code.</summary>
-    private static async Task<(int Exit, string? Word)> PreferredHostAsync(CliEnvironment env, CancellationToken cancellationToken)
+    /// <summary>
+    /// The word the preference holds, or null when it is unset; a read the runtime refused is its exit code. <c>Said</c> is
+    /// true where the exit was already written on stdout by the read itself (no runtime, a request that timed out), so a
+    /// caller writes no second envelope.
+    /// </summary>
+    internal static async Task<(int Exit, string? Word, bool Said)> PreferredHostAsync(CliEnvironment env, CancellationToken cancellationToken)
     {
         var (exit, response) = await OperationRunner.SendAsync(env, Operations.PreferenceList, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
         if (response is null)
         {
-            return (exit, null);
+            return (exit, null, true);
         }
 
         if (!response.IsSuccess)
         {
-            return (ExitCodes.ApiError, null);
+            return (ExitCodes.ApiError, null, false);
         }
 
         JsonNode? listed;
@@ -192,18 +196,18 @@ public static class SessionOpener
         }
         catch (JsonException)
         {
-            return (ExitCodes.ApiError, null);
+            return (ExitCodes.ApiError, null, false);
         }
 
         if (listed?["items"] is not JsonArray items)
         {
-            return (ExitCodes.ApiError, null);
+            return (ExitCodes.ApiError, null, false);
         }
 
         var entry = items.OfType<JsonObject>().FirstOrDefault(preference => preference["key"]?.GetValueKind() == JsonValueKind.String && preference["key"]!.GetValue<string>() == PreferenceKey);
         return entry?["value"]?["host"] is JsonValue host && host.GetValueKind() == JsonValueKind.String
-            ? (ExitCodes.Success, host.GetValue<string>())
-            : (ExitCodes.Success, null);
+            ? (ExitCodes.Success, host.GetValue<string>(), false)
+            : (ExitCodes.Success, null, false);
     }
 
     /// <summary>
@@ -212,7 +216,7 @@ public static class SessionOpener
     /// the executable its package ships), or Cursor CLI's launcher read for what it starts; never a script through a
     /// shell. Null where none of those answers.
     /// </summary>
-    private static (IReadOnlyList<string>? Program, FoundProgram Found) HostProgram(CliEnvironment env, AgentHostKind host)
+    internal static (IReadOnlyList<string>? Program, FoundProgram Found) HostProgram(CliEnvironment env, AgentHostKind host)
     {
         var pathExt = OperatingSystem.IsWindows() ? Variable(env, "PATHEXT") : null;
         var onPath = new ProgramSearchPath(SearchPath(env), pathExt);
@@ -232,7 +236,7 @@ public static class SessionOpener
     /// Why no program was found for the host, by the lookup's outcome: nothing answered for the name, or only a file Jason
     /// refuses to start, named with the rule it broke as <c>jason status</c> names it.
     /// </summary>
-    private static string NotFound(string hostWord, string command, FoundProgram found) => found switch
+    internal static string NotFound(string hostWord, string command, FoundProgram found) => found switch
     {
         { Outcome: ProgramLookupOutcome.ShellOnly, File: { } file } =>
             $"{hostWord}'s program '{command}' resolves only to {file}, {ProgramLookup.ShellScript}, so nothing was started: {ProgramLookup.ProgramsNotShells}.",
@@ -243,9 +247,9 @@ public static class SessionOpener
         _ => $"{hostWord}'s program '{command}' is not on this machine's search path, so nothing was started.",
     };
 
-    private static string? SearchPath(CliEnvironment env) => env.SearchPath ?? Environment.GetEnvironmentVariable("PATH");
+    internal static string? SearchPath(CliEnvironment env) => env.SearchPath ?? Environment.GetEnvironmentVariable("PATH");
 
-    private static string? Variable(CliEnvironment env, string name) =>
+    internal static string? Variable(CliEnvironment env, string name) =>
         env.Variables is { } variables ? variables.GetValueOrDefault(name) : Environment.GetEnvironmentVariable(name);
 
     /// <summary>
@@ -253,7 +257,7 @@ public static class SessionOpener
     /// none, as it does where the data directory is resolved. The directory is the one the CLI uses, made absolute, since
     /// the terminal starts in another folder than the CLI.
     /// </summary>
-    private static string? DataDirectory(CliEnvironment env) =>
+    internal static string? DataDirectory(CliEnvironment env) =>
         string.IsNullOrWhiteSpace(Variable(env, JasonPaths.DataDirectoryVariable)) ? null : env.Paths.Root;
 
     /// <summary>The person's home folder, where a host starts when no folder is recorded: never the folder the CLI runs in.</summary>
@@ -288,14 +292,14 @@ public static class SessionOpener
     /// Why a recorded folder that is not on disk starts nothing: a terminal started there would open somewhere else. A
     /// campaign's or a project's folder a person moved is recorded again by <c>jason project link</c>.
     /// </summary>
-    private static string Missing(PromptFolder folder) => folder.Level switch
+    internal static string Missing(PromptFolder folder) => folder.Level switch
     {
         PromptFolderLevel.HarnessRoot => $"The harness root at {folder.Path} is not there, so nothing was started.",
         _ => $"The {(folder.Level == PromptFolderLevel.Campaign ? "campaign's" : "project's")} folder recorded at {folder.Path} is not there, so nothing was started; "
             + "if it was moved, `jason project link --path <the project's folder, where it is now>` records it and its campaigns again.",
     };
 
-    private static string Level(PromptFolderLevel level) => level switch
+    internal static string Level(PromptFolderLevel level) => level switch
     {
         PromptFolderLevel.Campaign => "campaign",
         PromptFolderLevel.Project => "project",

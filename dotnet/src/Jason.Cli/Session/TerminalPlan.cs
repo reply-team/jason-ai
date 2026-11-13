@@ -57,6 +57,41 @@ public static class TerminalPlan
     };
 
     /// <summary>
+    /// The system's plain shell for <c>jason session open --shell</c>, as the words a terminal is given, or null where it is
+    /// not there: on Windows, Windows PowerShell in its fixed place under <paramref name="systemDirectory"/>, never from the
+    /// search path, for the reason the console host is not taken from it; on macOS a <c>/bin/sh</c> that replaces itself
+    /// with the account's login shell, read from <c>SHELL</c> in Terminal's own environment, since the script Terminal runs
+    /// carries nothing of the CLI's; on Linux <paramref name="shellVariable"/> where it names a program by its absolute
+    /// path, else <c>/bin/sh</c>. No argument follows but macOS's: the shell starts with no first input.
+    /// </summary>
+    public static IReadOnlyList<string>? Shell(TerminalPlatform os, string? systemDirectory, string? shellVariable)
+    {
+        switch (os)
+        {
+            case TerminalPlatform.Windows:
+                if (string.IsNullOrWhiteSpace(systemDirectory))
+                {
+                    return null;
+                }
+
+                var powerShell = Path.Combine(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+                return File.Exists(powerShell) ? [powerShell] : null;
+            case TerminalPlatform.MacOs:
+                return [PosixShell, "-c", "exec \"${SHELL:-/bin/sh}\" -l"];
+            case TerminalPlatform.Linux:
+                return !string.IsNullOrWhiteSpace(shellVariable) && !shellVariable.Any(char.IsWhiteSpace)
+                    && Path.IsPathFullyQualified(shellVariable) && IsProgram(shellVariable)
+                    ? [shellVariable]
+                    : [PosixShell];
+            default:
+                throw new ArgumentOutOfRangeException(nameof(os), os, null);
+        }
+    }
+
+    /// <summary>The POSIX shell every macOS and Linux system keeps at this path.</summary>
+    private const string PosixShell = "/bin/sh";
+
+    /// <summary>
     /// The launch of <paramref name="host"/> (its program, then its arguments) in <paramref name="terminal"/> at
     /// <paramref name="folder"/>. The host's words are passed as they are, one argument each, with no shell of Jason's
     /// between; only macOS's script is read by a shell, Terminal's, and every word in it is single-quoted.
