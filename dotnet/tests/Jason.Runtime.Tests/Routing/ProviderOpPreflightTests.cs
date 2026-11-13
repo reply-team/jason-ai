@@ -286,6 +286,25 @@ public partial class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
+    /// The refusals an unsettled earlier attempt turns ambiguous are those from the route to the template, by their place,
+    /// and the thread's, by its name: asked after provider_answer_lost, it is not among them by place, and a refusal after a
+    /// lost answer must still say the earlier attempt may have reached the person. No operation that names a thread is held
+    /// to an unsettled attempt today, so the set is held here by its members; the second half says when a claim row is owed.
+    /// </summary>
+    [Fact]
+    public void The_thread_s_refusal_is_named_among_those_an_unsettled_attempt_turns_ambiguous()
+    {
+        var codes = ProviderOpPreflight.Codes.ToList();
+        string[] expected = [.. codes.Skip(1).Take(codes.IndexOf(AttemptErrors.TemplateNotOffered)), AttemptErrors.ThreadRouteMismatch];
+        Assert.Equal(expected.Order(StringComparer.Ordinal), ProviderOpPreflight.SilentOnTheEarlierAttempt.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(AttemptErrors.ProviderAnswerLost, ProviderOpPreflight.SilentOnTheEarlierAttempt);
+
+        // When an operation that names a thread comes to be held to an unsettled attempt, a claim row of its refusal owes
+        // the ambiguous class this set gives, and this line is the one to change.
+        Assert.DoesNotContain(OperationCatalog.All, contract => CanonicalInput.NamesAThread(contract) && OutcomeContract.HeldToTheUnsettledAttempt(contract));
+    }
+
+    /// <summary>
     /// The one answer three of the checks give that is not a refusal is named beside the twenty-seven rather than among
     /// them: the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What the binding's, the input's and the definition's checks answer when their pattern does not finish is that named

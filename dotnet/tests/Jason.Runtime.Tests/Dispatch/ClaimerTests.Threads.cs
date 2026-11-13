@@ -61,6 +61,49 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// A line whose read left no record of its account names its plugin under any account: refusing on an account the
+    /// runtime cannot know would refuse every such thread. So a filing of a thread such a line names at the social plugin
+    /// goes to the route that names that plugin, and one such a line names at a plugin no route names is refused.
+    /// </summary>
+    [Theory]
+    [InlineData(Social, true)]
+    [InlineData("retired", false)]
+    public async Task A_line_with_no_account_recorded_names_its_plugin_alone(string plugin, bool routed)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        await db.SaveChangesAsync(Ct);
+
+        // Written directly: no build of the runtime writes such a line today. Both writers record the account, the inbound
+        // read by its attempt and the events store by its event, and this line names neither.
+        new JournalWriter(new FixedClock(Noon)).Append(
+            db, Actors.Dispatcher, JournalKinds.InboundReplyObserved, campaign,
+            key: InboundSync.ObservationKey(plugin, "th-anon", "2026-09-14T11:00:00.000Z"),
+            updated: Said(plugin, "th-anon", "linkedin"));
+        await db.SaveChangesAsync(Ct);
+        var item = OnThread(db, campaign, "conversation.close", "th-anon");
+        await db.SaveChangesAsync(Ct);
+
+        using var harness = ThreadHarness(campaign);
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        await using var fresh = database.Open();
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(row => row.Id == item.Id, Ct);
+        if (routed)
+        {
+            var work = Assert.Single(claimed);
+            Assert.Equal((Social, "sha256:" + Social, RouteScope.CampaignChannel), (work.Plan!.Plugin.Manifest.Id, work.Plan.BindingIdentity, work.Plan.Scope));
+        }
+        else
+        {
+            Assert.Empty(claimed);
+            Assert.Equal((WorkItemStatus.Failed, AttemptErrors.ThreadRouteMismatch), (stored.Status, stored.LastError!.Code));
+        }
+    }
+
+    /// <summary>
     /// A thread seen at two accounts over time is read at the newer one, though the read's own route names the older.
     /// </summary>
     [Fact]

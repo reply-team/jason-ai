@@ -169,15 +169,15 @@ public static class ProviderOpPreflight
     /// code and is recorded ambiguous, with <see cref="MayHaveActed"/>.
     /// </summary>
     /// <remarks>
-    /// The thread's check is named rather than taken by its place because it is asked after <c>provider_answer_lost</c>,
-    /// which says itself that the earlier attempt may have acted and so is not among these, and a place counted past that
-    /// one would take it in too. Refused alone, work on a thread an earlier attempt may have acted on would read as though
-    /// nothing had happened, and a planner would create it again. No operation that names a thread is held to an unsettled
-    /// attempt today — <c>conversation.reply</c> is never repeated after a lost answer — so the name is here for the first
-    /// that will be.
+    /// The thread's check is named rather than taken by its place: it was numbered last but is asked among these, after
+    /// <c>provider_answer_lost</c>, which says itself that the earlier attempt may have acted and so is not among them, and
+    /// a place counted past that one would take it in too. A refusal after a lost answer must still say that the earlier
+    /// attempt may have reached the person, or a planner would create the work again. No operation that names a thread is
+    /// held to an unsettled attempt today — <c>conversation.reply</c> is never repeated after a lost answer — so a row holds
+    /// the name in this set until one is.
     /// </remarks>
-    private static readonly HashSet<string> SilentOnTheEarlierAttempt =
-        new(Codes.Take(Codes.ToList().IndexOf(AttemptErrors.TemplateNotOffered) + 1).Skip(1).Append(AttemptErrors.ThreadRouteMismatch), StringComparer.Ordinal);
+    internal static readonly IReadOnlySet<string> SilentOnTheEarlierAttempt =
+        new HashSet<string>(Codes.Take(Codes.ToList().IndexOf(AttemptErrors.TemplateNotOffered) + 1).Skip(1).Append(AttemptErrors.ThreadRouteMismatch), StringComparer.Ordinal);
 
     /// <summary>
     /// The whole decision, in the published order, with every schema pattern matched under <paramref name="timing"/>.
