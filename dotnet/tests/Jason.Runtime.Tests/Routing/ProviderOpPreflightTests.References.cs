@@ -26,8 +26,9 @@ public partial class ProviderOpPreflightTests
     /// the one that can: the campaign's, made by the operation that makes it, succeeded with a reference, under the plugin
     /// and binding the work is routed to. A search the provider finished inside its own call kept no reference, so its
     /// status is never read. The package's digest is not among the reasons, since a reference outlives a version. A read or
-    /// a stop of a search goes where the search ran, whatever its own operation resolves to: an override that sends it to
-    /// another plugin leaves the search readable and stoppable at the account that is spending.
+    /// a stop of a send or a search goes where it ran, whatever its own operation resolves to: an override that sends it to
+    /// another plugin leaves the send readable and cancellable, and the search readable and stoppable, at the account that
+    /// holds it.
     /// </summary>
     [Theory]
     [InlineData(Status, "none", AttemptErrors.SendUnknown)]
@@ -37,10 +38,12 @@ public partial class ProviderOpPreflightTests
     [InlineData(Status, "another plugin", AttemptErrors.SendRouteMismatch)]
     [InlineData(Status, "another binding", AttemptErrors.SendRouteMismatch)]
     [InlineData(Status, "the one", null)]
+    [InlineData(Status, "the one, its read routed elsewhere", null)]
     [InlineData(Cancel, "none", AttemptErrors.SendUnknown)]
     [InlineData(Cancel, "failed", AttemptErrors.SendReferenceAbsent)]
     [InlineData(Cancel, "another plugin", AttemptErrors.SendRouteMismatch)]
     [InlineData(Cancel, "the one", null)]
+    [InlineData(Cancel, "the one, its stop routed elsewhere", null)]
     [InlineData(SearchStatus, "none", AttemptErrors.SearchUnknown)]
     [InlineData(SearchStatus, "another operation", AttemptErrors.SearchUnknown)]
     [InlineData(SearchStatus, "no reference", AttemptErrors.SearchReferenceAbsent)]

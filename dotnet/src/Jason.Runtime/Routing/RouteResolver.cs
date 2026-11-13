@@ -85,7 +85,27 @@ public static class RouteResolver
     /// (ordinally), then its default — the campaign's scope before the global one.
     /// </para>
     /// </summary>
-    public static Resolution? ForSearch(RouteSnapshot snapshot, string campaignId, string operation, string searchOperation, string pluginId, string? bindingIdentity)
+    public static Resolution? ForSearch(RouteSnapshot snapshot, string campaignId, string operation, string searchOperation, string pluginId, string? bindingIdentity) =>
+        WhereItRan(snapshot, campaignId, operation, searchOperation, madeChannel: null, pluginId, bindingIdentity);
+
+    /// <summary>
+    /// The route of a read or a cancel of one send, by the rule a search has (<see cref="ForSearch"/>): the route active now
+    /// that names the plugin and the account the send ran under, since its reference is that account's. The operation's own
+    /// route where it does, then the campaign's route for the send's own operation by the channel the send was routed by
+    /// (<paramref name="sendChannel"/>, null where it named none), then every route in the order of precedence, channel
+    /// routes included; and the operation's own route where none names them any more, which the fourteenth check then
+    /// refuses as made elsewhere. So a campaign that sends email through one plugin and LinkedIn messages through another
+    /// cancels and reads each send where it went.
+    /// </summary>
+    public static Resolution? ForSend(RouteSnapshot snapshot, string campaignId, string operation, string sendOperation, string? sendChannel, string pluginId, string? bindingIdentity) =>
+        WhereItRan(snapshot, campaignId, operation, sendOperation, sendChannel, pluginId, bindingIdentity);
+
+    /// <summary>
+    /// The one rule behind <see cref="ForSearch"/> and <see cref="ForSend"/>: the route that names the plugin and the
+    /// account the work named by its reference ran under, by the work's own route first, then the route of the operation
+    /// that made it, then every route in the order of precedence, else the work's own route.
+    /// </summary>
+    private static Resolution? WhereItRan(RouteSnapshot snapshot, string campaignId, string operation, string madeOperation, string? madeChannel, string pluginId, string? bindingIdentity)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(pluginId);
@@ -96,9 +116,9 @@ public static class RouteResolver
             return own;
         }
 
-        if (Resolve(snapshot, campaignId, searchOperation, channel: null) is { } searched && Names(searched))
+        if (Resolve(snapshot, campaignId, madeOperation, madeChannel) is { } made && Names(made))
         {
-            return searched;
+            return made;
         }
 
         var campaign = snapshot.Campaigns.TryGetValue(campaignId, out var held) ? held : RouteSet.Empty;

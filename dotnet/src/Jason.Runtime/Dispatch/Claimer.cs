@@ -737,9 +737,27 @@ public sealed class Claimer(
                 (made, reference, ran) => new NamedSearch(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
                 ct).ConfigureAwait(false)
             : null;
+        // So is the send the work names: a read or a cancel of it goes where it ran, and asks first the route the send went
+        // by, the one its own channel resolved.
+        var send = contract is not null && CanonicalInput.NamesASend(contract)
+            ? await ReferenceAsync(
+                db,
+                item,
+                CanonicalInput.NamedSend(item),
+                SendKind,
+                (made, reference, ran) => new NamedSend(
+                    made.PublicId,
+                    made.Operation,
+                    made.Status,
+                    reference,
+                    ran?.PluginId,
+                    ran?.BindingIdentity,
+                    made.Operation is { } sent ? OperationCatalog.Find(sent)?.RouteChannel(made.Context[WorkItemService.InputKey]) : null),
+                ct).ConfigureAwait(false)
+            : null;
         var resolution = contract is null
             ? null
-            : ProviderOpPreflight.Resolve(contract, new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Search: search), routing);
+            : ProviderOpPreflight.Resolve(contract, new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Send: send, Search: search), routing);
         if (contract is null || resolution is null)
         {
             return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Unsettled: unsettled);
@@ -751,15 +769,6 @@ public sealed class Claimer(
         // The open blocks of the route's plugin and binding, by their index, and only for work a block holds.
         var blocks = OperationCatalog.HeldByProviderBlock.Contains(contract.Id)
             ? await ProviderBlocks.OpenAsync(db, pluginId, ProviderBlocks.Identity(resolution.Route.BindingIdentity), ct).ConfigureAwait(false)
-            : null;
-        var send = CanonicalInput.NamesASend(contract)
-            ? await ReferenceAsync(
-                db,
-                item,
-                CanonicalInput.NamedSend(item),
-                SendKind,
-                (made, reference, ran) => new NamedSend(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
-                ct).ConfigureAwait(false)
             : null;
 
         // Where a status read starts is the search's own row's: the cursor the last read answered, as the row keeps it, and
