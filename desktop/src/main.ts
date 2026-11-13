@@ -33,10 +33,14 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, demoDirectory, demoMenu, enterRun, offersOf, readMode, personsOwnOf, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
+import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, requestStartOver } from './demo-over.ts';
+import { demoRuntimeAlive } from './demo-alive.ts';
+import { processIsRunning } from './own-runtime.ts';
+import { applyMode, demoDirectory, demoMenu, demoUnopened, enterRun, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
-import { claimDemoFolder } from './demo-folders.ts';
+import { claimDemoFolder, hasDemoMarker } from './demo-folders.ts';
 import { openDemoDirectory, prepareDemo, writeDemoRoute } from './demo-start.ts';
 import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
@@ -306,6 +310,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         timedOut: () => log.warn('demo_runtime_stop_timed_out', {}),
     });
     if (runOn.unopened !== null) log.warn('demo_unopened', {});
+    if (startOverNotCarriedOut !== null) log.warn('demo_start_over_not_carried_out', { Cause: startOverNotCarriedOut });
     // The count and the re-pair loop begin at the first pairing that succeeds: the start's, or a Reload's after a start
     // that failed.
     const begin = atFirstPairing(() => {
@@ -422,7 +427,51 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const refusal = applyMode('live', modeDeps);
         if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
     };
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back });
+    // Start the Demo Over: one question first (everything done in the demo goes), then the demo's runtime is stopped, a
+    // request is left in the person's own desktop folder and the desktop starts again. This run lives inside the demo's
+    // folders, so it removes none: the next start removes them before anything names the demo's directory
+    // (`carryOutStartOver` in `chooseInstallation`). Refused in Live; the person's own installation is never touched.
+    // True from the window opening until this run's own start of the runtime has answered: a stop in that window finds no run
+    // file and says none, though a runtime is booting, so Start the Demo Over waits for the start.
+    let startInFlight = true;
+    const startOver = async (): Promise<{ refused: string } | null> => {
+        if (runOn.mode !== 'demo') return { refused: 'Start the Demo Over is only in the demo.' };
+        if (startInFlight) return { refused: 'The demo is still starting. Try again in a moment.' };
+        const parent = current;
+        const options = { type: 'question' as const, title: 'Jason', message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
+        const { response } = parent === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(parent, options);
+        if (response !== 0) return null;
+        const outcome = await startDemoOver({
+            places: demoWhere,
+            exists: (path) => existsSync(path),
+            marked: hasDemoMarker,
+            stopRuntime: async () => {
+                const stopped = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
+                log.info('demo_runtime_stopped', { Outcome: stopped.kind });
+                return stopped.kind === 'stopped' || stopped.kind === 'none';
+            },
+            request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver),
+            relaunch: () => modeDeps.relaunch(),
+        });
+        if (outcome.kind === 'refused') {
+            log.warn('demo_start_over_refused', { Cause: outcome.reason });
+            return { refused: outcome.why };
+        }
+        log.info('demo_start_over', {});
+        return null;
+    };
+    const startOverFromMenu = () => {
+        void startOver().then(
+            (refusal) => {
+                if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
+            },
+            () => {
+                log.warn('demo_start_over_refused', { Cause: 'threw' });
+                dialog.showErrorBox('Jason', 'The demo could not be started over.');
+            },
+        );
+    };
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back, startOver: startOverFromMenu });
     desk.open();
     showWindow = () => desk.show();
     const repointed = (async () => {
@@ -463,6 +512,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
     handle(ipcMain, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);
     handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
+    handle(ipcMain, 'mode.startOver', origin, () => startOver(), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
@@ -556,11 +606,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     await showStarting(window, 'Starting Jason…', false);
     if (uncopied !== null) {
+        startInFlight = false;
         desk.notStarted();
         await showStarting(window, uncopied, true);
         return;
     }
     if (version === null) {
+        startInFlight = false;
         desk.notStarted();
         await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
         return;
@@ -582,6 +634,18 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             },
         });
         runtimeVersion = started.runtimeVersion;
+        // A demo's runtime is up: a demo with no sample gets it made, behind the preparing page, and every start cancels the
+        // open AI-role reviews, because no AI role runs in the demo.
+        if (runOn.mode === 'demo') {
+            const ready = await readyTheSample(
+                seedDepsOnDisk({ cli, places: demoWhere, scratch: join(paths.data, 'seed-scratch'), progress: (step) => log.info('demo_seed_step', { Step: step }) }),
+                () => window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(preparingPage())}`),
+            );
+            if (ready.kind === 'failed') {
+                log.error('demo_seed_failed', { Step: ready.step ?? 'marker', Code: ready.code ?? 'none' });
+                throw new Error(ready.why);
+            }
+        }
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
@@ -624,6 +688,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                 ? said
                 : keptNotice(said, kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
         if (current !== null) await showStarting(current, notice, true);
+    } finally {
+        startInFlight = false;
     }
     if (otherCopy !== null && version !== null) {
         const named = async (): Promise<readonly string[] | null> => {
@@ -668,6 +734,9 @@ const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), proc
 let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
 let personsOwn: PersonsOwn | undefined;
+let demoWhere!: DemoPlaces;
+/** Why the start over the run before asked for was not carried out at this start, as a code; null when nothing was refused. */
+let startOverNotCarriedOut: string | null = null;
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
 if (unsandboxed !== null) {
@@ -693,7 +762,32 @@ if (unsandboxed !== null) {
  */
 function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
-    const personsRoot = () => harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
+    const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
+    demoWhere = demoPlaces(personDirectory, personHarness);
+    // Before the demo's directory is claimed, and before anything of this run names it, a start over asked by the run
+    // before is carried out (`demo-over.ts`), and a demo whose places break the rule is refused. Either makes this run the
+    // person's own, as an unusable directory does; a failed removal keeps its request for the next demo start.
+    let refused = false;
+    if (readMode(desktopPaths(personDirectory).mode) === 'demo' && !installerStart) {
+        try {
+            const problem = placesProblem(demoWhere, personDirectory, personHarness);
+            if (problem !== null) throw new CarryOutRefused('places', problem);
+            carryOutStartOver({
+                ...carryOutOnDisk(desktopPaths(personDirectory).demoStartOver, demoWhere, processIsRunning),
+                runtimeAlive: () => demoRuntimeAlive(desktopPaths(demoWhere.data).runFile),
+                exists: (folder) => existsSync(folder),
+                marked: hasDemoMarker,
+            });
+        } catch (error) {
+            refused = true;
+            startOverNotCarriedOut = error instanceof CarryOutRefused ? error.reason : 'failed';
+            try {
+                writeMode(desktopPaths(personDirectory).mode, 'live');
+            } catch {
+                // The record stays as it was; this start is the person's all the same.
+            }
+        }
+    }
     runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
         open: openDemoDirectory,
         // The demo's start-up order in one place (`demo-start.ts`): the provider and its route, then the fixed settings. It runs
@@ -704,11 +798,13 @@ function chooseInstallation(installerStart: boolean): void {
                 place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
                 route: writeDemoRoute,
                 fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+                runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),
             }),
         keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
     });
+    if (refused && runOn.mode === 'live') runOn = { ...runOn, unopened: demoUnopened };
     // The person's own directories, which a demo run's chat refuses whole: read while the person's variables still stand.
-    personsOwn = personsOwnOf(runOn, personsRoot);
+    personsOwn = personsOwnOf(runOn, () => personHarness);
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
     personEnvironment = enterRun(process.env, runOn);
     // Whether this installation is new is read next: before Electron makes its profile under the data directory, before

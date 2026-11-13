@@ -545,6 +545,37 @@ test('the removal takes off the demo’s data directory and its harness root, an
     assert.deepEqual(report.failed, []);
 });
 
+test('the removal also takes off the copies a start over left beside the demo’s folders, only when each carries the mark, and names one that does not', async (t) => {
+    const d = demoBench(t, { stop: { kind: 'stopped' } });
+    const marked = `${d.demo.data}.removing-1`;
+    const alsoMarked = `${d.demo.root}.removing-2`;
+    const stranger = `${d.demo.data}.removing-3`;
+    for (const folder of [marked, alsoMarked]) {
+        claimDemoFolder(folder);
+        writeFileSync(join(folder, 'file.txt'), 'sample');
+    }
+    mkdirSync(stranger);
+    writeFileSync(join(stranger, 'theirs.txt'), 'x');
+    const report = await uninstall(d.b.deps);
+    assert.equal(existsSync(marked), false);
+    assert.equal(existsSync(alsoMarked), false);
+    assert.equal(existsSync(join(stranger, 'theirs.txt')), true, 'an unmarked copy is not touched');
+    assert.ok(report.left.some((line) => line.startsWith(stranger) && line.includes('carries no mark')));
+    assert.ok(report.removed.some((line) => line.includes(marked)));
+    assert.equal(existsSync(d.demo.data), false);
+    assert.equal(readFileSync(join(d.person.data, 'kept.txt'), 'utf8'), 'the person’s own');
+});
+
+test('leftover copies are taken off even when the demo’s own folders are already gone', async (t) => {
+    const d = demoBench(t, { make: false });
+    const marked = `${d.demo.data}.removing-9`;
+    claimDemoFolder(marked);
+    const report = await uninstall(d.b.deps);
+    assert.equal(existsSync(marked), false);
+    assert.deepEqual(d.stops, [], 'nothing runs from a leftover copy, so nothing is stopped');
+    assert.deepEqual(report.failed, []);
+});
+
 test('with no demo set up there is nothing to take off, and nothing is stopped or made', async (t) => {
     const d = demoBench(t, { make: false });
     const report = await uninstall(d.b.deps);

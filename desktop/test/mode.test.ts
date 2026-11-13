@@ -371,6 +371,7 @@ test('a demo run offers nothing that outlasts it, Remove What Jason Placed inclu
     }
     assert.equal(menu.removal!.label, 'Remove What Jason Placed: not in the demo. Go back to your own installation for this.');
     assert.deepEqual(menu.back, { label: 'Back to Your Own Installation', enabled: true });
+    assert.deepEqual(menu.startOver, { label: 'Start the Demo Over', enabled: true });
     // Where the platform offers no Remove What Jason Placed (Windows keeps its uninstaller), there is no line for it.
     assert.equal(demoMenu('demo', false)!.removal, null);
 });
@@ -399,10 +400,10 @@ test('a demo run hands the chat the person\'s data directory and harness root, r
 test('main passes the person\'s directories to the chat, read before the run is entered', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
-    const read = choose.indexOf('personsOwn = personsOwnOf(runOn, personsRoot);');
+    const read = choose.indexOf('personsOwn = personsOwnOf(runOn, () => personHarness);');
     const entered = choose.indexOf('personEnvironment = enterRun(process.env, runOn);');
     assert.ok(read > 0 && entered > read);
-    assert.ok(choose.indexOf('const personsRoot = () => harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);') > 0);
+    assert.ok(choose.indexOf('const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);') > 0);
     const chat = main.slice(main.indexOf('const chat = new Chat({'));
     assert.ok(chat.slice(0, chat.indexOf('});')).includes('        personsOwn,\n'));
 });

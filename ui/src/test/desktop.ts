@@ -351,6 +351,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                           return null;
                       })(mode)
                     : Promise.reject(new Error('That is not a mode.')),
+            startOver: answering('mode.startOver', () => null),
         },
         pairing: { paired: call('pairing.paired') },
         calls,
