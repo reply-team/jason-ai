@@ -313,6 +313,61 @@ public class CampaignCommandsTests
         cli.AssertPosted(Operations.CampaignSummary, posted);
     }
 
+    /// <summary>
+    /// The list of a campaign's people and the reads behind the activity counts take the same flag as the summary: sent as
+    /// <c>exclude_archived_contacts</c> only when given, and nothing is sent without it.
+    /// </summary>
+    [Theory]
+    [InlineData("list-contacts", new[] { "cmp_A", "--exclude-archived-contacts" }, "{\"campaign_ids\":[\"cmp_A\"],\"exclude_archived_contacts\":true}")]
+    [InlineData("list-contacts", new[] { "cmp_A" }, "{\"campaign_ids\":[\"cmp_A\"]}")]
+    [InlineData(
+        "activity",
+        new[] { "cmp_A", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z", "--exclude-archived-contacts" },
+        "{\"campaign_ids\":[\"cmp_A\"],\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\",\"exclude_archived_contacts\":true}")]
+    [InlineData(
+        "activity",
+        new[] { "cmp_A", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z" },
+        "{\"campaign_ids\":[\"cmp_A\"],\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\"}")]
+    [InlineData(
+        "activity-by-period",
+        new[] { "--count", "replied", "--period", "day", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z", "--zone", "UTC", "--exclude-archived-contacts" },
+        "{\"count\":\"replied\",\"period\":\"day\",\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\",\"zone\":\"UTC\",\"exclude_archived_contacts\":true}")]
+    [InlineData(
+        "activity-by-period",
+        new[] { "--count", "replied", "--period", "day", "--since", "2026-10-09T00:00:00Z", "--until", "2026-10-16T09:00:00Z", "--zone", "UTC" },
+        "{\"count\":\"replied\",\"period\":\"day\",\"since\":\"2026-10-09T00:00:00Z\",\"until\":\"2026-10-16T09:00:00Z\",\"zone\":\"UTC\"}")]
+    public async Task The_people_reads_leave_out_archived_contacts_when_asked(string verb, string[] options, string posted)
+    {
+        using var cli = new CliRun();
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync(["campaign", verb, .. options]));
+
+        cli.AssertPosted(verb switch
+        {
+            "list-contacts" => Operations.CampaignListContacts,
+            "activity" => Operations.CampaignActivity,
+            _ => Operations.CampaignActivityByPeriod,
+        }, posted);
+    }
+
+    /// <summary>Each verb that takes the flag says of it what the summary says.</summary>
+    [Theory]
+    [InlineData("summary")]
+    [InlineData("list-contacts")]
+    [InlineData("activity")]
+    [InlineData("activity-by-period")]
+    public async Task Each_people_read_s_help_says_the_same_of_the_flag(string verb)
+    {
+        using var cli = new CliRun();
+
+        Assert.Equal(ExitCodes.Success, await cli.RunAsync("campaign", verb, "--help"));
+
+        var said = string.Join(" ", cli.Text.Split((char[])['\r', '\n', ' '], StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(
+            said.Contains("--exclude-archived-contacts Leave out archived contacts, whom contact list shows only with --include-archived; by default they are counted.", StringComparison.Ordinal),
+            $"The help of campaign {verb} does not say it:{Environment.NewLine}{cli.Text}");
+    }
+
     [Fact]
     public async Task Activity_sends_its_period_and_the_campaigns_named()
     {
