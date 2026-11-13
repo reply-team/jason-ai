@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flushNow, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { mode } from '../platform/mode';
@@ -123,6 +123,26 @@ describe('the Dashboard', () => {
         expect(
             [...dash().querySelectorAll('.dash-tile b')].map((each) => words(each)).filter((each) => each === '0'),
         ).toEqual([]);
+    });
+
+    it('shows a dash with no data yet on Needs you while what waits is not yet read', async () => {
+        const { fake } = renderConsole();
+        fake.hold('approval.list');
+        await open();
+        await settled();
+        expect(attention.loaded.value).toBe(false);
+        expect(part('Needs you', 'b')).toBe('–');
+        expect(part('Needs you', '.rel')).toBe('no data yet');
+    });
+
+    it('shows the same on Needs you when what waits could not be read', async () => {
+        const { fake } = renderConsole();
+        fake.unreachable('approval.list');
+        await open();
+        await settled();
+        expect(attention.failure.value).not.toBeNull();
+        expect(part('Needs you', 'b')).toBe('–');
+        expect(part('Needs you', '.rel')).toBe('no data yet');
     });
 
     it('shows dashes with no data yet for the thirty days’ tiles while their read does not answer', async () => {
@@ -298,7 +318,56 @@ describe('the cards', () => {
         expect(words(line.querySelector('b')!)).toBe('Agent started');
         expect(words(line.querySelectorAll('div')[1]!)).toMatch(/ · /);
         fireEvent.click(within(line).getByRole('button', { name: 'Spring' }));
-        await waitFor(() => expect(document.querySelector('.chat-panel, .composer, [data-chat]')).not.toBeUndefined());
+        await waitFor(() => expect(document.querySelector('.chat-panel')).toBeTruthy());
+    });
+
+    it('shows exactly four approvals and two questions of a longer queue', async () => {
+        renderConsole();
+        await open();
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        const approval = attention.approvals.value[0]!;
+        const question = attention.questions.value[0]!;
+        attention.approvals.value = Array.from({ length: 6 }, (_, at) => ({ ...approval, id: `apr_q${at}` }));
+        attention.questions.value = Array.from({ length: 4 }, (_, at) => ({ ...question, id: `dec_q${at}` }));
+        const ids = () =>
+            [...dash().querySelectorAll('.dash-decide .dash-row')].map((each) => each.getAttribute('data-id'));
+        await waitFor(() => expect(ids()).toHaveLength(6));
+        expect(ids()).toEqual(['apr_q0', 'apr_q1', 'apr_q2', 'apr_q3', 'dec_q0', 'dec_q1']);
+        expect(words(dash().querySelector('.dash-decide .hd .btn')!)).toBe('All 10 →');
+    });
+
+    it('draws an agent name, a question and an actor that hold markup as text', async () => {
+        const { journal } = renderConsole();
+        await open();
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        const hostile = '<b>x</b> "q"';
+        consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.map((each) => ({
+            ...each,
+            name: hostile,
+        }));
+        attention.questions.value = attention.questions.value.map((each) => ({
+            ...each,
+            question: hostile,
+            campaign_name: hostile,
+        }));
+        attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, campaign_name: hostile }));
+        flushNow(() => {
+            journal.open();
+            journal.send(
+                journalLine({
+                    id: 'jrn_500',
+                    ts: '2026-11-11T10:00:00.000Z',
+                    kind: 'campaign_started',
+                    campaign_id: 'cmp_1',
+                    actor: { type: 'human', id: hostile },
+                }),
+            );
+        });
+        await waitFor(() => expect(dash().querySelector('.dash-line')).toBeTruthy());
+        const page = dash();
+        expect(page.textContent).toContain(hostile);
+        expect(words(page.querySelector('.dash-line .meta')!)).toContain(hostile);
+        expect([...page.querySelectorAll('b')].some((each) => each.textContent === 'x')).toBe(false);
     });
 });
 
