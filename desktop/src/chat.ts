@@ -92,7 +92,8 @@ import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
-import type { DesktopPaths } from './paths.ts';
+import { desktopPaths, type DesktopPaths } from './paths.ts';
+import type { PersonsOwn } from './mode.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
     checkingSandbox,
@@ -209,6 +210,12 @@ export interface ChatOptions {
     bundle: string;
     /** Whether the desktop runs with a data directory `JASON_DATA_DIR` names, which the host is then given too. */
     dataNamed: boolean;
+    /**
+     * In a demo run, the person's own installation: its data directory and its harness root, which a Claude Code turn
+     * neither reads nor writes, whole, in every mode (`ChatScope.personsOwn`, `dataRules`). Absent in the person's own
+     * installation, where the fence is the data directory alone.
+     */
+    personsOwn?: PersonsOwn | undefined;
     /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
     bundleVersion: string | null;
     cli: Cli;
@@ -1766,6 +1773,7 @@ export class Chat {
                 const id = newTurnId();
                 turnId = id;
                 running.turnId = id;
+                const persons = this.#options.personsOwn;
                 const scope: ChatScope = {
                     platform: this.#platform,
                     cwd: folder,
@@ -1776,7 +1784,8 @@ export class Chat {
                     // The host's environment is built from this one (`hostEnvironment`), so its shell's `~` is this HOME;
                     // a Full access turn names it to the host explicitly (`turnHome`), so the two cannot differ.
                     shellHome: turnHome,
-                    protectedFiles: [paths.installationSettings, paths.runFile],
+                    ...(persons === undefined ? {} : { personsOwn: [persons.data, persons.harnessRoot] }),
+                    protectedFiles: [paths.installationSettings, paths.runFile, ...(persons === undefined ? [] : [desktopPaths(persons.data).installationSettings, desktopPaths(persons.data).runFile])],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     real: realPathOf,
@@ -1798,7 +1807,7 @@ export class Chat {
                 // The host's data rules name the grants present at this turn's start; a grant opened later is refused by the
                 // permission model's data rule alone, since a deny wins over an allow and no rule says "all of chat-full but mine".
                 const rules = [
-                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }),
+                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }, persons === undefined ? [] : [persons.data, persons.harnessRoot]),
                     ...chatRules(this.#platform, folder),
                 ];
                 argsFor = (resumed) =>

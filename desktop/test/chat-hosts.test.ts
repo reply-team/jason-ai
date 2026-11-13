@@ -241,6 +241,19 @@ test('the data rules name the known entries even before they exist, so one made 
     ]);
 });
 
+test('in a demo run the data rules refuse the person\'s data directory and harness root whole, and in the person\'s own installation nothing more', () => {
+    const live = dataRules('linux', '/home/a/.jason-demo', ['config'], ['chat']);
+    const demo = dataRules('linux', '/home/a/.jason-demo', ['config'], ['chat'], undefined, ['/home/a/.jason', '/home/a/Jason']);
+    assert.deepEqual(demo.slice(0, live.length), live);
+    assert.deepEqual(demo.slice(live.length), [
+        'Read(//home/a/.jason)', 'Read(//home/a/.jason/**)', 'Edit(//home/a/.jason)', 'Edit(//home/a/.jason/**)',
+        'Read(//home/a/Jason)', 'Read(//home/a/Jason/**)', 'Edit(//home/a/Jason)', 'Edit(//home/a/Jason/**)',
+    ]);
+    assert.deepEqual(dataRules('linux', '/home/a/.jason', [], [], undefined, []), dataRules('linux', '/home/a/.jason', [], []));
+    const windows = dataRules('win32', 'C:\\Users\\a\\.jason-demo', [], [], { id: 'grant-1', present: ['grant-1'] }, ['C:\\Users\\a\\.jason', 'C:\\Users\\a\\Jason']);
+    for (const rule of ['Read(//c/Users/a/.jason/**)', 'Edit(//c/Users/a/.jason)', 'Edit(//c/Users/a/Jason/**)']) assert.ok(windows.includes(rule), rule);
+});
+
 test('a Claude Code turn neither reads nor edits the record of a conversation: the data rules name the conversations folder whether it exists or not', () => {
     const rules = dataRules('linux', '/home/a/.jason', [], []);
     for (const rule of ['Read', 'Edit']) {

@@ -33,7 +33,7 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, demoMenu, enterRun, offersOf, openDirectory, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
+import { applyMode, demoMenu, enterRun, offersOf, openDirectory, readMode, personsOwnOf, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime } from './demo-runtime.ts';
 import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
@@ -505,6 +505,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         env,
         bundle,
         dataNamed,
+        personsOwn,
         bundleVersion: version,
         cli,
         programs,
@@ -651,11 +652,13 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
-// Which installation this run is on, what the person's environment said, whether the installation is new and whether an
-// earlier page left its storage: decided once by `chooseInstallation`, after the sandbox and the link, before anything
-// else of a start resolves a path, and read only by what runs after it.
+// Which installation this run is on, what the person's environment said, the person's own directories a demo run's chat
+// refuses, whether the installation is new and whether an earlier page left its storage: decided once by
+// `chooseInstallation`, after the sandbox and the link, before anything else of a start resolves a path, and read only by
+// what runs after it.
 let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
+let personsOwn: PersonsOwn | undefined;
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
 if (unsandboxed !== null) {
@@ -681,11 +684,14 @@ if (unsandboxed !== null) {
  */
 function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
+    const personsRoot = () => harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
     runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
         open: openDirectory,
-        prepare: (demo) => writeDemoSettings(demo, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+        prepare: (demo) => writeDemoSettings(demo, personsRoot()),
         keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
     });
+    // The person's own directories, which a demo run's chat refuses whole: read while the person's variables still stand.
+    personsOwn = personsOwnOf(runOn, personsRoot);
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
     personEnvironment = enterRun(process.env, runOn);
     // Whether this installation is new is read next: before Electron makes its profile under the data directory, before

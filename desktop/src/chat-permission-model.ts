@@ -27,6 +27,12 @@ export interface ChatScope {
      * when it carries none. Absent, taken to be `home`. Under Full access a `~` is held where the two differ.
      */
     shellHome?: string;
+    /**
+     * In a demo run, the person's own installation's directories: its data directory and its harness root, each refused
+     * whole in every mode, Full access included, with no folder in them that the chat may use. Absent or empty in the
+     * person's own installation, where the data directory is the one fenced folder.
+     */
+    personsOwn?: readonly string[];
     /** The files refused first: the installation's settings file and the runtime's run file. */
     protectedFiles: readonly string[];
     /** The deny list's commands. */
@@ -148,6 +154,7 @@ export const replyNoCardForms: readonly string[] = (() => {
 })();
 
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
+const personsRefusal = 'That path is the person\'s own installation, and this chat runs in the demo: the chat neither reads nor writes it. Nothing was done.';
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
 const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
@@ -217,6 +224,29 @@ function inside(scope: ChatScope, root: string, path: string): boolean {
     const folder = keyOf(scope.platform, root);
     const key = keyOf(scope.platform, path);
     return key === folder || key.startsWith(folder.endsWith(separator) ? folder : `${folder}${separator}`);
+}
+
+/** The person's own directories a demo run fences off whole; none in the person's own installation. */
+function personsOwnOf(scope: ChatScope): readonly string[] {
+    return scope.personsOwn ?? [];
+}
+
+/** True when a located path is in one of the person's own directories (`ChatScope.personsOwn`). */
+function inPersonsOwn(scope: ChatScope, path: string): boolean {
+    return personsOwnOf(scope).some((folder) => inside(scope, located(folder, scope), path));
+}
+
+/**
+ * The fenced folders as located paths: the data directory, and in a demo run the person's own directories. A place that
+ * holds one of them, or is one, may walk into it.
+ */
+function fencedFolders(scope: ChatScope): string[] {
+    return [scope.data, ...personsOwnOf(scope)].map((folder) => located(folder, scope));
+}
+
+/** True when a located place is a fenced folder or a folder holding one, so a walk of it may reach the fenced data. */
+function holdsFenced(scope: ChatScope, place: string): boolean {
+    return fencedFolders(scope).some((folder) => inside(scope, place, folder));
 }
 
 /** The working folder a located path lies in, the chat folder first, and whether it is the chat folder; null when none. */
@@ -338,6 +368,7 @@ function judgeLocated(value: string, scope: ChatScope, writes: boolean): Judgeme
     const paths = pathsOf(scope.platform);
     const path = located(value, scope);
     const key = keyOf(scope.platform, path);
+    if (inPersonsOwn(scope, path)) return { verdict: 'deny', message: personsRefusal };
     if (scope.protectedFiles.some((file) => keyOf(scope.platform, located(file, scope)) === key)) return { verdict: 'deny', message: dataRefusal };
     const chat = located(scope.chat, scope);
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, chat, path)) return { verdict: 'deny', message: dataRefusal };
@@ -359,13 +390,14 @@ const walkTitles: Readonly<Record<string, string>> = {
 };
 
 /**
- * True when a folder holds the data directory, read as a walk would most likely reach it: a leading `~` as the home
- * folder, and on Windows each component without its trailing dots and spaces, as Windows reads the name.
+ * True when a folder holds the data directory or, in a demo run, one of the person's own directories, read as a walk
+ * would most likely reach it: a leading `~` as the home folder, and on Windows each component without its trailing dots
+ * and spaces, as Windows reads the name.
  */
 function holdsData(value: string, scope: ChatScope): boolean {
     let text = /^~([\\/]|$)/.test(value) ? `${scope.home}${value.slice(1)}` : value;
     if (scope.platform === 'win32') text = text.split(/[\\/]/).map((part) => (part === '.' || part === '..' ? part : part.replace(/[. ]+$/, ''))).join('\\');
-    return inside(scope, located(text, scope), located(scope.data, scope));
+    return holdsFenced(scope, located(text, scope));
 }
 
 /**
@@ -673,27 +705,47 @@ function namesLocalJason(command: string, scope: ChatScope): boolean {
  * True when the command's text names the data directory, or anything in it outside the chat folder, in any literal
  * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows,
  * and `~/.jason`, `$HOME/.jason` or `.jason` under the home folder's variable in any shell's spelling (`$USERPROFILE`
- * among them, since Git Bash is the Windows shell) when the data directory is the default one. A name that only begins
- * like it is not it.
+ * among them, since Git Bash is the Windows shell) when the data directory is the default one, or in a demo run when it
+ * is any folder directly in the home folder. A name that only begins like it is not it.
  */
 function namesData(command: string, scope: ChatScope): boolean {
+    return namesFolder(command, scope, scope.data, scope.chat, personsOwnOf(scope).length > 0 ? null : '.jason');
+}
+
+/**
+ * True when the command's text names one of the person's own directories (`ChatScope.personsOwn`), or anything in it, in
+ * the spellings `namesData` reads, the home folder's spellings for one directly in the home folder. A name that only
+ * begins like it is not it: `~/.jason` never names `~/.jason-demo`, nor `~/Jason` `~/Jason-demo`.
+ */
+function namesPersonsOwn(command: string, scope: ChatScope): boolean {
+    return personsOwnOf(scope).some((folder) => namesFolder(command, scope, folder, null, null));
+}
+
+/**
+ * True when the command's text names a folder, or anything in it outside the one folder it excepts, in any literal
+ * spelling a shell takes; the home folder's spellings when the folder is directly in the home folder and, where a name is
+ * given, has that name.
+ */
+function namesFolder(command: string, scope: ChatScope, folder: string, except: string | null, homeName: string | null): boolean {
     const paths = pathsOf(scope.platform);
     const text = pathText(scope.platform, command);
-    const data = pathText(scope.platform, paths.resolve(scope.data)).replace(/\/$/, '');
-    const chat = pathText(scope.platform, paths.resolve(scope.chat));
-    const chatRest = chat.startsWith(`${data}/`) ? chat.slice(data.length) : null;
-    const spellings = [data];
-    const drive = /^([a-z]):\//i.exec(data);
-    if (drive) spellings.push(`/${drive[1]}${data.slice(2)}`);
-    if (data === `${pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '')}/.jason`) {
-        for (const home of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}']) spellings.push(pathText(scope.platform, `${home}/.jason`));
+    const named = pathText(scope.platform, paths.resolve(folder)).replace(/\/$/, '');
+    const excepted = except === null ? null : pathText(scope.platform, paths.resolve(except));
+    const exceptRest = excepted !== null && excepted.startsWith(`${named}/`) ? excepted.slice(named.length) : null;
+    const spellings = [named];
+    const drive = /^([a-z]):\//i.exec(named);
+    if (drive) spellings.push(`/${drive[1]}${named.slice(2)}`);
+    const home = pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '');
+    const name = named.startsWith(`${home}/`) ? named.slice(home.length + 1) : null;
+    if (name !== null && name !== '' && !name.includes('/') && (homeName === null || name === keyOf(scope.platform, homeName))) {
+        for (const variable of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}']) spellings.push(pathText(scope.platform, `${variable}/${name}`));
     }
     for (const spelling of spellings) {
         for (let at = text.indexOf(spelling); at >= 0; at = text.indexOf(spelling, at + 1)) {
             const rest = text.slice(at + spelling.length);
             if (/^[A-Za-z0-9._-]/.test(rest)) continue;
-            const named = posix.normalize(`/${/^[^\s"'`;|&<>()]*/.exec(rest)?.[0] ?? ''}`);
-            if (chatRest !== null && (named === chatRest || named.startsWith(`${chatRest}/`))) continue;
+            const under = posix.normalize(`/${/^[^\s"'`;|&<>()]*/.exec(rest)?.[0] ?? ''}`);
+            if (exceptRest !== null && (under === exceptRest || under.startsWith(`${exceptRest}/`))) continue;
             return true;
         }
     }
@@ -742,6 +794,11 @@ function wordNamesData(places: readonly string[], scope: ChatScope): boolean {
     return places.some((path) => inside(scope, data, path) && !inside(scope, chat, path));
 }
 
+/** True when a place the command's words name is in one of the person's own directories (`ChatScope.personsOwn`). */
+function wordNamesPersonsOwn(places: readonly string[], scope: ChatScope): boolean {
+    return places.some((path) => inPersonsOwn(scope, path));
+}
+
 /** The programs whose `mcp` command adds, removes or lists the MCP servers that host loads: Claude Code and Codex. */
 const serverHosts: ReadonlySet<string> = new Set(['claude', 'claude-code', 'codex']);
 
@@ -766,6 +823,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesConfinedVariable(command)) return { verdict: 'deny', message: confinedRefusal };
     if (changesSearch(command)) return { verdict: 'deny', message: lookupRefusal };
     const places = placesOf(command, scope);
+    if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope)) return { verdict: 'deny', message: personsRefusal };
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
@@ -792,9 +850,9 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // the person's to answer, each time.
     if (tool !== 'Bash') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     if (!isCompound(command) && replyNoCardForms.includes(command.trim().split(/\s+/).join(' '))) return allow;
-    // A command that names a folder holding the data directory may walk it: a card each time, never covered by a grant.
-    const data = located(scope.data, scope);
-    const prefix = places.some((path) => inside(scope, path, data)) ? null : commandPrefix(command);
+    // A command that names a folder holding the data directory, or in a demo run one of the person's own directories, may
+    // walk it: a card each time, never covered by a grant.
+    const prefix = places.some((path) => holdsFenced(scope, path)) ? null : commandPrefix(command);
     if (prefix === null) return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: `${tool}:${prefix}`, covers: `${prefix} \u2026` };
 }
@@ -828,7 +886,7 @@ export function writtenRefusal(tool: string, input: Record<string, unknown>, sco
  * variable or the installation's data in any literal spelling, or clears the environment around a jason.
  */
 function textRefused(text: string, scope: ChatScope): boolean {
-    if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || jasonIn(text, scope) === 'deny') return true;
+    if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || namesPersonsOwn(text, scope) || jasonIn(text, scope) === 'deny') return true;
     return respelledRefusal(text, scope) !== null;
 }
 
@@ -993,6 +1051,7 @@ function respelledRefusal(text: string, scope: ChatScope): string | null {
     for (const plain of readingsOf(text)) {
         if (plain === text) continue;
         if (namesConfinedVariable(plain)) return confinedRefusal;
+        if (namesPersonsOwn(plain, scope)) return personsRefusal;
         if (namesDataVariable(plain, scope) || namesData(plain, scope)) return dataRefusal;
         if (jasonIn(plain, scope) === 'deny') return commandRefusal;
     }
@@ -1077,7 +1136,8 @@ function withoutHereDocuments(command: string): { text: string; fedToShell: bool
 /**
  * Whether a piece of a word could expand into the data directory: one that begins with `~` other than the home folder's
  * own, one with a variable and a glob, and a glob whose fixed beginning is the data directory, a folder holding it or a
- * name it begins with, or a place in it outside the chat folder. A `~` folder is read as the home folder.
+ * name it begins with, or a place in it outside the chat folder. A `~` folder is read as the home folder. In a demo run
+ * each of the person's own directories is read the same way, whole.
  */
 function couldReachData(piece: string, scope: ChatScope): boolean {
     let value = piece;
@@ -1089,7 +1149,7 @@ function couldReachData(piece: string, scope: ChatScope): boolean {
     if (glob < 0) {
         if (!piece.startsWith('~')) return false;
         const path = spelled(value, scope);
-        return inside(scope, spelled(scope.data, scope), path) && !inside(scope, spelled(scope.chat, scope), path);
+        return fencedSpellings(scope).some(({ folder, except }) => inside(scope, folder, path) && !(except !== null && inside(scope, except, path)));
     }
     const fixed = value.slice(0, glob);
     if (/[$%]/.test(fixed)) return true;
@@ -1098,10 +1158,19 @@ function couldReachData(piece: string, scope: ChatScope): boolean {
     const partial = leading === '' || /[\\/]$/.test(leading) ? '' : (leading.split(/[\\/]/).pop() ?? '');
     const folder = spelled(partial === '' ? leading || '.' : leading.slice(0, leading.length - partial.length) || '.', scope);
     const start = keyOf(scope.platform, pathsOf(scope.platform).join(folder, partial));
-    const data = keyOf(scope.platform, spelled(scope.data, scope));
-    const chat = spelled(scope.chat, scope);
-    if (data === start || data.startsWith(start)) return true;
-    return inside(scope, data, folder) && !inside(scope, chat, folder);
+    return fencedSpellings(scope).some(({ folder: fenced, except }) => {
+        const key = keyOf(scope.platform, fenced);
+        if (key === start || key.startsWith(start)) return true;
+        return inside(scope, key, folder) && !(except !== null && inside(scope, except, folder));
+    });
+}
+
+/** The fenced folders as spelled: the data directory with the chat folder excepted, and the person's own directories whole. */
+function fencedSpellings(scope: ChatScope): { folder: string; except: string | null }[] {
+    return [
+        { folder: spelled(scope.data, scope), except: spelled(scope.chat, scope) },
+        ...personsOwnOf(scope).map((folder) => ({ folder: spelled(folder, scope), except: null })),
+    ];
 }
 
 /**
@@ -1200,6 +1269,7 @@ function literalJudgement(tool: string, command: string | null, scope: ChatScope
 function refusalOver(text: string, places: readonly string[], scope: ChatScope): string | null {
     if (namesConfinedVariable(text)) return confinedRefusal;
     if (changesSearch(text)) return lookupRefusal;
+    if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(places, scope)) return personsRefusal;
     if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(places, scope)) return dataRefusal;
     if (jasonIn(text, scope) === 'deny') return commandRefusal;
     const own = chatsOwnPlace(places, scope);
@@ -1244,8 +1314,7 @@ function literalOutcome(tool: string, command: string, scope: ChatScope): FullAc
     const folded = reading.commands.map((each) => [...each.words, ...each.targets].filter((word) => !word.startsWith('-')).join(' ')).join('\n').toUpperCase();
     if (tool === 'PowerShell' && scope.platform === 'win32' && namesSearch(folded)) return heldFor('search');
     if (commands.some(({ command: each, scope: at }) => namesLocalJason([...each.words, ...each.targets].join(' '), at))) return heldFor('local_jason');
-    const data = located(scope.data, scope);
-    if (places.some((path) => inside(scope, path, data))) return heldFor('holds_data');
+    if (places.some((path) => holdsFenced(scope, path))) return heldFor('holds_data');
     // (c) Runs.
     return { outcome: 'runs' };
 }
