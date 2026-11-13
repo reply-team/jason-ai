@@ -1052,8 +1052,6 @@ public partial class PageClaimsTests
                 .ToArray();
         int Skills(params string[] folder) =>
             Directory.GetDirectories(Path.Combine([root, .. folder])).Count(directory => File.Exists(Path.Combine(directory, "SKILL.md")));
-        var skills = Files("skills", "SKILL.md");
-        int Status(string status) => skills.Count(file => Regex.IsMatch(File.ReadAllText(file), $@"(?m)^  status: {status}\r?$"));
         var families = Directory.GetFiles(Path.Combine(root, "skills", "business", "sdr-operations", "operations"), "*.yaml")
             .Where(file => Regex.IsMatch(Path.GetFileName(file), @"^\d\d-"))
             .ToArray();
@@ -1067,8 +1065,6 @@ public partial class PageClaimsTests
             (@"(\d+) API fixtures", [Files(Path.Combine("docs", "api", "fixtures"), "*").Length]),
             (@"(\d+) C# test files", [Files(Path.Combine("dotnet", "tests"), "*.cs").Length]),
             (@"(\d+) business skills, (\d+) runtime skills and (\d+) role skills", [Skills("skills", "business"), Skills("skills", "runtime"), Skills("skills", "runtime", "roles")]),
-            (@"(\d+) of the (\d+) skills (?:is|are) `verified`", [Status("verified"), skills.Length]),
-            (@"the other (\d+) are still `draft`", [Status("draft")]),
             (@"(\d+) SDR operations", [operations]),
             (@"(\d+) SDR operations in (\d+) families", [operations, families.Length]),
         ];

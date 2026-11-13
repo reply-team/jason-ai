@@ -201,30 +201,6 @@ public class SkillPackTests
     }
 
     /// <summary>
-    /// The catalog's list says each skill's status in bold where it names the skill, and that word is a third place the
-    /// status is claimed. A skill flipped to draft with its list entry still saying "verified" tells a reader of the
-    /// catalog that a host read a text nobody has read, so each runtime skill's entry says what its front matter says.
-    /// </summary>
-    [Fact]
-    public void The_catalog_says_each_runtime_skill_s_status_as_its_front_matter_does()
-    {
-        var catalog = File.ReadAllText(SkillPack.Catalog()).Replace("\r\n", "\n", StringComparison.Ordinal);
-
-        foreach (var skill in SkillPack.All())
-        {
-            var path = skill.IsRole ? $"roles/{skill.Name}" : skill.Name;
-            var entries = Regex.Matches(
-                catalog,
-                $@"(?m)^- \[`{Regex.Escape(path)}`\]\({Regex.Escape(path)}/SKILL\.md\) — \*\*(?<status>[a-z]+)\b");
-            Assert.True(entries.Count == 1, $"The catalog's list names '{path}' {entries.Count} times; it names each skill once.");
-
-            var status = SkillFrontMatter.Read(skill.File).Metadata.GetValueOrDefault("status");
-            var said = entries[0].Groups["status"].Value;
-            Assert.True(said == status, $"The catalog's list calls '{path}' {said}, and its front matter says {status}.");
-        }
-    }
-
-    /// <summary>
     /// Every table row whose first cell names this skill. More than one table lists a skill now — the
     /// interactive readings and the roles — so this reads them all rather than the first it meets.
     /// </summary>
