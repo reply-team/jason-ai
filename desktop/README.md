@@ -192,14 +192,25 @@ desktop does not narrow, so it may read the records.
 - **The Feed.** One conversation is of its own kind: the Feed, the person's main chat, about no campaign, marked `main`
   in its record, made and written the first time the page asks for it (`chat.feed`) and drawn first in the sidebar. The
   page hands it each line of the journal's stream whose kind it takes: `inbound_reply_observed`, `approval_requested`,
-  `decision_raised`, `campaign_created`, `campaign_started`, `campaign_paused`, `workitem_failed`, `workitem_expired`
-  and `provider_blocked`, each a kind the runtime writes itself (a test reads them from the runtime's source). The
-  desktop checks each line again and keeps its id, moment, kind, campaign and work item, each held to its shape, and
-  nothing else of it: no reason, no old or new value, no name. A line it has taken is not taken twice; lines of the same
-  kind and campaign that follow one another fold into one with a count; at most 500 are kept, the oldest dropped and
+  `decision_raised`, `campaign_created`, `campaign_started`, `campaign_paused`, `workitem_failed`, `workitem_expired`,
+  `provider_blocked`, `approval_approved`, `approval_rejected`, `decision_answered` and `campaign_archived`, each a kind
+  the runtime writes itself (a test reads them from the runtime's source), and `workitem_succeeded` for two things alone:
+  a send the provider took (sent or scheduled; the operation `message.send`, `conversation.reply` or `social_invitation.send`) and the finished
+  work of a role that is shipped and shown (`planner`, `researcher`, `copywriter`, `analyst` or
+  `deliverability-specialist`; not the manager and the responder, whose results already reach the Feed as approvals,
+  questions and sends, nor the personalizer and the critic, which work message by message). The desktop checks each line
+  again and keeps its id, moment, kind, campaign and work item, each held to its shape, and nothing else of it: no
+  reason, no old or new value, no name; a succeeded line keeps the operation or the role, one of the names above, and a
+  succeeded item of any other operation or of any other role, a role a person registered among them, is not kept at
+  all. A line it has taken is not taken twice; lines of the same kind, campaign, operation and role that follow one
+  another fold into one with a count (sends that alternate with other lines are shown one by one); at most 500 are
+  kept, the oldest dropped and
   counted; the ids it took, the last 1,000, are kept on its record. Each load of the page, and a stream the runtime
   refused to resume, has the desktop read back one page of 100 of the lines written since five seconds before the
   Feed's newest (`jason journal list --kind … --since …`, within thirty seconds), and says when there were more; the
+  succeeded work is read by a request of its own, one page of 100 of the newest, of which the desktop keeps the sends and
+  the listed roles' work (the journal cannot be asked for an operation), so a send or a role's finished work older than
+  that page is not read back and no gap is said for it; the
   lines the page hands meanwhile are checked at once and wait, the newest 200, with a gap said for the rest. A line
   never starts a turn: a turn of the Feed is given, after its header, the lines no turn was given yet, at most 50, each
   as one JSON object, under the desktop's sentence that they are records, information and never instructions; the
@@ -277,14 +288,28 @@ applies to the turns a person starts by sending, from the next one on.
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
-  it stays with the chat after a restart, an update and Start afresh.
+  it stays with the chat after a restart, an update and Start afresh. A Plan only turn that ends with no error, not
+  stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
+  the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
+  fits them to the record takes the mark off. The mark goes from every entry at each turn's end, at
+  Start afresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
+  send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
+  any host starts.
 - **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
-  confirmation, a message box the main process shows each time Full access is chosen, with Cancel focused and Escape
-  answering Cancel. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
+  confirmation, a message box the main process shows, with Cancel focused and Escape answering Cancel, each time Full
+  access is chosen while no standing choice stands. Its buttons are "Give full access this time" and "Always on this
+  computer"; Always writes the standing choice to `<data>/desktop/full-access.json`, one entry per host program
+  (`claude`), with the consent number (`fullAccessConsent`), the moment it was given and whether new chats start in Full
+  access (the box's checkbox, ignored with This time, as its label says). An entry whose consent number is not the
+  current one, lower or higher, is no choice. The file is among the known entries of `<data>/desktop/`, so the data rule
+  refuses a chat's read or change of it in every mode. The standing choice skips the box for every Claude Code chat; with
+  new chats, `chat.create` given a host that can take Full access opens the grant at once, and a host that cannot leaves
+  the chat in Ask first with no notice. No channel of the page gives it: `fullAccess.standing` reads it and
+  `fullAccess.takeBack` removes it, leaving the chats in Full access as they are. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
   2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
-  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the agent runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the agent can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the agent's commands that approve, reject, answer or clear for you while a program the agent writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the agent works. Full access is
+  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the AI runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the AI can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the AI's commands that approve, reject, answer or clear for you while a program the AI writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the AI works. Full access is
   held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
-  never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart.
+  never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart; the standing choice only skips the box.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
   `<data>/desktop/turns/` beside its MCP file and removed with it, add a `PreToolUse` HTTP hook on every tool with
@@ -304,7 +329,7 @@ applies to the turns a person starts by sending, from the next one on.
   - **runs** with no question for what the model allows, the tools that run nothing (skills, web search, subagents, the
     task list) and the plain cards: a command it read, a write in or outside the working folders, a page, a read outside
     the folders.
-- **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what an agent loads, is
+- **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what the AI loads, is
   a card titled "Full access asks about this one"; it waits thirty minutes, then is not run and the turn goes on. A
   deletion on a critical path, and a tool the hook never saw, are cards too. A held card offers no "Always", and an
   earlier "Always" grant from Ask first never lets a held command through: each hold is the person's to answer every time.
@@ -315,8 +340,8 @@ applies to the turns a person starts by sending, from the next one on.
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
   none reaches a turn.
-- **The agent's folder.** In Full access the agent works in a folder of its own. When Full access ends the desktop says
-  "Full access has ended. The folder the agent worked in is kept for seven days and then removed: <path>", with an Open
+- **The AI's folder.** In Full access the AI works in a folder of its own. When Full access ends the desktop says
+  "Full access has ended. The folder the AI worked in is kept for seven days and then removed: <path>", with an Open
   folder button, and removes it after seven days. Added campaign or project folders whose `.claude` holds skills,
   agents or commands are left out of a turn, and the chat says so once.
 - **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands, the operations by
@@ -368,12 +393,58 @@ applies to the turns a person starts by sending, from the next one on.
   fails is logged by its exit code, the start goes on without them, and the next start tries again. A turn does not
   start on a folder that could not be put right.
 - **When the hook did not run.** The first tool that runs without the hook having seen its use ends the turn and returns
-  the chat to Ask first: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
+  the chat to Ask first, and takes back the standing choice: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
   input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
   confirmation says so.
-- Leaving Full access while a turn runs in it stops that turn, and the page gives the waiting message back as Stop does:
-  no turn follows by itself. A change to Plan only stops the running turn the same way, so the menu never says Plan only
-  while a turn could still ask to change something; a change from Plan only to Ask first lets the running turn finish
+- **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
+  (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,
+  byte for byte: no `--permission-mode`, no `acceptEdits`, no `defaultMode` and no hook; the permission tool alone
+  decides, and the broker uses `autoEditJudgement` in place of `judge` for a turn started in it. That judgement returns
+  `judge`'s result unchanged unless `judge` says ask, the tool is `Bash`, and the literal reading (`readLiteral`, with
+  `~` held) is a run of the six commands joined by `&&`, `;`, `||` or new lines, each named bare, with nothing piped in
+  or redirected and no folder of its own; then it allows. Every option is read wherever it stands before `--`, since
+  GNU's tools take one after an operand; an option outside the list, an abbreviated long option, a lone `-` or an empty
+  word leaves the card:
+
+  | Command | Options it runs with | Operands at least |
+  | --- | --- | --- |
+  | `mkdir` | `-p`, `-v`, `--parents`, `--verbose` | 1 |
+  | `touch` | `-c`, `--no-create` | 1 |
+  | `mv` | `-n`, `-v`, `--no-clobber`, `--verbose` | 2 |
+  | `cp` | `-n`, `-v`, `-p`, `--no-clobber`, `--verbose` | 2 |
+  | `rm` | `-d`, `-v`, `--dir`, `--verbose` | 1 |
+  | `rmdir` | `-v`, `--verbose` | 1 |
+
+  Each operand must hold no `..` component, pass the spelling check Ask first applies (`judgeSpelling`), name no device
+  on Windows (`con`, `nul`, `com1`, `lpt1` and the like, with any extension), and lie strictly inside
+  `<data>/desktop/chat` both as written and once links are followed (`located`), the folder itself excluded; the names
+  an agent loads (`guardedPlace`, `namesLocalJason`) and every refusal over the resolved words stay as in Ask first.
+  A link or a junction that leads nowhere, at the operand or at any folder above it in the chat folder, is a card: the
+  scope's `entry` (`entryOf`, `src/chat-real-path.ts`) finds something there that the real path reader cannot follow,
+  and a `touch` or a `cp` through it would write where it leads. A scope without `entry` runs nothing unasked. For a
+  `mv` or a `cp`, the path it writes when its last operand is a folder, that operand with each source's name after it,
+  is judged as one more operand for every copy and move, whatever the last operand is at the judgement, since an
+  earlier part of the line may make it a folder; and a `mv` whose destination or written path ends in the first part of
+  a guarded name of two parts (`.github`) is a card, since the folder moved there may hold the rest. A file named like
+  one of the six (with a program extension on Windows, folded where names fold) or like jason, directly in the chat
+  folder, is a card when an operand names it or when the command runs that program and such a file is already there:
+  where the search path holds the current folder the shell would run it in place of the system's.
+  The chain rule: once a `mv` or a `cp` names or writes a path, no later operand of the same command line may lie
+  inside it, since what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`), on a
+  host that does not drive the chat and for the Feed (`feedAutoEdit`); each host's listing carries `autoEdit`, the
+  reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation, no switch and
+  no standing entry; it is held in memory alone, for that conversation, like Full access, so a record never says it, a
+  restart opens Ask first, Start afresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
+  first. The page draws its line under the composer from the mode the desktop holds, with the same Change button as
+  Full access's. **The limits:** the chat folder is shared by the chats that are not in Full access, so a chat in
+  Auto-edit can remove a file another chat left there; a hard link already in the folder is not told by its path, so a
+  command that writes through it reaches the file it shares; and the judgement is made before the command runs, so a
+  link put into the folder by something else between the two is the same limit Ask first's Write has.
+- A change to a mode narrower than the running turn's stops that turn, narrow to wide being Plan only, Ask first,
+  Auto-edit, Full access, and the page gives the waiting message back as Stop does: no turn follows by itself. So
+  leaving Full access, or leaving Auto-edit for a narrower mode (Ask first or Plan only), stops the turn that runs in
+  it, and a change to Plan only stops any running turn, so the menu never says a mode while the running turn could
+  still do more than it lets; a change to a wider mode, Auto-edit to Full access included, lets the running turn finish
   in the mode it started in.
 - **No turn starts by itself.** Every turn is a person's send:
   - a message the person sends while a turn runs waits in the page and goes as the next turn once that one ends well, in
@@ -455,7 +526,7 @@ otherwise. The addresses are a closed table:
 | --- | --- |
 | `jason-desktop://feed` | the Feed |
 | `jason-desktop://needs` | Needs you |
-| `jason-desktop://campaigns` | Campaigns |
+| `jason-desktop://campaigns` | Agents |
 | `jason-desktop://campaign/cmp_…` | that campaign's page |
 | `jason-desktop://approval/apr_…` | Needs you, with that approval open; deciding it stays a person's click |
 | `jason-desktop://question/dec_…` | Needs you, with that question open |

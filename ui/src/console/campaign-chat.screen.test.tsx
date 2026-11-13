@@ -51,10 +51,8 @@ async function openSpring(): Promise<HTMLElement> {
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
     // The sidebar brings the Campaigns panel forward, since a chat opened from it takes the front.
     const spring = async () => {
-        fireEvent.click(
-            within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Campaigns' }),
-        );
-        return (await waitFor(() => within(painted('Campaigns')).getByText('Spring'))).closest('tr')!;
+        fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Agents' }));
+        return (await waitFor(() => within(painted('Agents')).getByText('Spring'))).closest('tr')!;
     };
     fireEvent.click(within(await spring()).getByRole('button', { name: 'Open' }));
     return waitFor(() => {
@@ -106,10 +104,8 @@ describe('a campaign’s Chat tab in the desktop', () => {
         renderConsole(springApi(), desktop);
         // The list's Chat first: the campaign's one conversation, opened with its kept words.
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-        fireEvent.click(
-            within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Campaigns' }),
-        );
-        const row = (await waitFor(() => within(painted('Campaigns')).getByText('Spring'))).closest('tr')!;
+        fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Agents' }));
+        const row = (await waitFor(() => within(painted('Agents')).getByText('Spring'))).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         expect(await screen.findByText('The kept words about Spring')).toBeTruthy();
         expect(about('cmp_1').map((chat) => chat.id)).toEqual(['conv_01JDKEPT0000000000000000S1']);

@@ -47,7 +47,7 @@ export function PeopleList({ people, filters, drawn, tab, selected, more, me, no
                         </th>
                         <th scope="col">Stage</th>
                         <th scope="col" className="wide">
-                            Campaign
+                            Agent
                         </th>
                         <th scope="col">Last activity</th>
                     </tr>

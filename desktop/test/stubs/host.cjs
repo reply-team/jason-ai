@@ -1,7 +1,7 @@
 // A stand-in for an agent host running one chat turn: Claude Code's stream-json print mode or Codex's exec JSON
 // events, by the name it was started as. What the turn does comes from STUB_HOST_PLAN, a JSON array of steps:
 //   { "ask": { "tool": "Bash", "input": { ... } } }  ask the permission prompt tool, then say what it decided
-//   { "say": "text" }                                 say a line of text
+//   { "say": "text" }                                 say a line of text; with "repeat": n, Claude Code says it n times over
 //   { "use": { "tool": "Read", "input": { ... } } }  use a tool without asking, as one the allowed tools let through, and
 //                                                    say its result; with a Full access settings file (--settings naming a
 //                                                    file with a PreToolUse hook), the hook is asked first, as Claude Code
@@ -147,7 +147,7 @@ async function claude(args, stdin) {
     if (!silent(asked)) print({ type: 'assistant', message: { content: [{ type: 'text', text: `heard ${stdin.length} characters` }] } });
     let n = 0;
     for (const step of plan()) {
-        if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say }] } });
+        if (step.say !== undefined) print({ type: 'assistant', message: { content: [{ type: 'text', text: step.say.repeat(step.repeat ?? 1) }] } });
         else if (step.campaign !== undefined) addCampaign(step.campaign);
         else if (step.sleep !== undefined) await new Promise((resolve) => setTimeout(resolve, step.sleep));
         else if (step.hold !== undefined) while (!existsSync(step.hold)) await new Promise((resolve) => setTimeout(resolve, 20));

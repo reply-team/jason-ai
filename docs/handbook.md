@@ -544,6 +544,15 @@ jason route resolve --campaign <id> --operation list_membership.add --human
 jason route list --human
 ```
 
+A route may also name a channel under an operation, for the operations whose document lets it: one campaign sends
+its email through one plugin and its LinkedIn messages through another. The channel route sits beside the operation's
+own route and never replaces it, and every view names it `message.send on linkedin`:
+
+```sh
+jason route set --campaign <id> --operation message.send --channel linkedin --plugin acme-social --actor human:you@example.com
+jason route resolve --campaign <id> --operation message.send --channel linkedin --human
+```
+
 Once a route is in place, provider work is a work item like any other: the operation it asks for,
 and the arguments that operation's own contract publishes.
 

@@ -2,7 +2,7 @@
   "kind": "routes_updated",
   "version": 1,
   "since": "0.1.0",
-  "summary": "A campaign's route was set or taken away, so an operation, or the campaign's default, goes to the plugin it names or back to the routes above it.",
+  "summary": "A campaign's route was set or taken away, so an operation, one channel of an operation, or the campaign's default, goes to the plugin it names or back to the routes above it.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -17,7 +17,7 @@
       "key": {
         "type": "string",
         "minLength": 1,
-        "description": "The operation the route is for, or `default` for the campaign's default route."
+        "description": "Which route the line is about, in one of three forms: `default` for the campaign's default route; an operation's id, such as `message.send`, for that operation's own route; or `<operation>/<channel>`, such as `message.send/linkedin`, for the route of that operation's calls on one channel. A line keyed `<operation>/<channel>` is about that channel's route only and says nothing of the operation's own route, which is keyed by the operation alone; two routes are never one key. The separator is a slash, and the first one: an operation's id never holds a slash, nor does a channel a route may name."
       },
       "old": {
         "type": ["object", "null"],

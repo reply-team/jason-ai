@@ -59,6 +59,10 @@ the token it held, so the list stays one row per browser. The System screen show
 recently first; one not used for a month is dimmed, since a private window that closed or a browser whose data was
 cleared never comes back for its token, and one button revokes every browser but the one you are using.
 
+A browser you paired keeps its token in its own profile, which a command of a Codex chat may read; revoke a browser you
+no longer use. The desktop's own window keeps its token in memory only and pairs afresh at each start. The first start of
+a desktop that kept it on disk before revokes every UI token once, so a browser you paired must be paired again once.
+
 ## The port
 
 The runtime listens on `127.0.0.1:52766` by default, so the bookmark is stable. When that port is taken it takes the
@@ -69,7 +73,25 @@ next free one above it and `jason runtime status --human` says so; `Runtime:Port
 
 What waits for you: approvals and questions, **Pending** or **Decided** (`jason approval list`, `jason decision list`).
 Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
-which account and on which channel, and through which provider. A row above the list narrows it to **All**, **Approvals**
+which account and on which channel, and through which provider. An approval to send a message shows it under "The message as
+written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
+body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
+labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
+is made of. One sentence under it says what is not shown: the sender's signature kept at the provider, and the
+provider's tracking, which are added when it sends. A reply in a thread shows who it goes to, the channel and the text.
+A message written as text (not a template) and a reply can be edited there, a message's subject and body or a reply's
+body and nothing else: **Edit message**, then **Save**, which is `jason workitem update` of the message's input with
+you as the actor and a reason the page words. Saving approves nothing: the old card is gone, the page says "Jason asks
+again with the new text when it next takes this work" and shows the new approval when it arrives, and Approve belongs
+to that one; if it does not arrive while the page waits, the sentence stays true and the next refresh shows it. If the
+text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
+box. A card is checked against its work item before it offers **Approve**, and again at the press: the approval's
+subject, the arguments the runtime parked, is compared, as whole documents and whatever the order of their keys,
+with the arguments the work item holds now, and the person with the item's own. Where they differ, whether the text
+was changed by the AI in a chat or in some other way, Approve is not offered and one sentence says the text changed
+and Jason will ask again. The AI in a chat may go on editing a parked message when you ask it to, and nothing is sent
+without a new approval. The runtime's own sentence is shown for a refused edit, and what you typed stays in the box.
+A row above the list narrows it to **All**, **Approvals**
 or **Questions**, each option with how many of its kind are listed, the chosen one ticked so that it is told apart by
 more than its colour, and "Shown: N" saying how many the list shows. The filter belongs to the screen alone: it is never
 stored, never part of the page's address and never sent to the runtime, and it goes back to All when nothing at all is
@@ -77,14 +99,21 @@ listed, so whatever arrives next is shown. After a decision, the next item opene
 shows. Approving, rejecting and answering are the person's, here as on the command line, and so are the two buttons that
 brief an agent on one item, [Copy prompt](#copy-prompt) and [Open an AI session](#open-an-ai-session).
 
-## Campaigns
+## Agents
+
+The page calls a campaign with its chat an agent: **Agents** in the sidebar, **Add to agent**, "Find an agent". It is the
+harness's campaign and nothing else. Only the words on the screen change; the commands, the API fields, the addresses
+and the ids keep `campaign`, and so does the rest of this page, which describes them.
 
 Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
 **Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this browser's time
 zone (`jason campaign activity`). A person may be in several columns, and each column's name says on hover what it
-counts. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
-`--include-archived`); the view, the period and both filters are part of the page's address. Every number opens its
-campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
+counts. A campaign's numbers, in the table and once it is open, its People tab and its Results leave archived people
+out (`--exclude-archived-contacts`), as People does while Archived is not ticked; its Inbox and What happened still
+show what happened with them. A search finds a campaign by its name, and the archived ones appear on request
+(`jason campaign list --query`, `--include-archived`); the view, the period and both filters are part of the page's
+address. Every number opens its campaign with exactly the people it counts (`jason campaign list-contacts --summary`,
+or `--activity` with the period),
 each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
 opens the person's panel in place, with the page's address left as the campaign's, and a failure shows the reason the
 runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
@@ -110,26 +139,27 @@ campaign's work while what is running finishes; the provider's own sequence keep
 `jason campaign start`, which resumes a paused one, with your reason). An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
-nowhere; the Campaigns list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
+nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
 to reach; what you send there starts a set-up chat, about no campaign yet, and no chat is made before you send. The
 sidebar's first item is the **Feed**, the desktop's main chat; below **New chat** it lists the other conversations it
 keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
 conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. What happens in
-the campaigns arrives in the Feed as one line each (a reply, an approval or a question waiting, a campaign created,
+the agents arrives in the Feed as one line each (a reply, an approval or a question waiting, an agent created,
 started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
-conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the agent hears the lines that came with your
+conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the AI hears the lines that came with your
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
-another, offers what its last turn made to pick from. **Start afresh** begins the agent's next turn without its memory
+another, offers what its last turn made to pick from. **Start afresh** begins the AI's next turn without its memory
 of the conversation and keeps what is shown; **Remove** asks first, then takes the conversation off this computer, and
-the agent host keeps its own transcript of it. What the desktop refuses is said in its own words. The browser has no chat, and no Chat
+the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. The browser has no chat, and no Chat
 tab.
 
 ## Performance
 
-The whole operation over time, from the same counts as Campaigns' Activity: what happened to people today, in the last
+The whole operation over time, from the same counts as the Agents page's Activity: what happened to people today, in the last
 7, 30 or 90 days, across every campaign not archived or the ones chosen, each person counted once however many campaigns
-count them (`jason campaign activity` and its `total`). Two charts show contacted and replied people by the hour today,
+count them (`jason campaign activity` and its `total`), archived people left out of every number, chart and list
+(`--exclude-archived-contacts`). Two charts show contacted and replied people by the hour today,
 by the day over 7 or 30 days and by the week over 90, in this browser's time zone (`jason campaign activity-by-period`):
 a person counted on two days stands in both bars and once in the number above them. A count's tile lists its people
 under the tiles, the latest to whom it happened first, grouped by that day, each with the campaigns that count them and
@@ -143,13 +173,13 @@ Three tabs over the same filters: **Now** is what is running and what waits for 
 will run, soonest first and grouped by day, and **Done** is what finished, newest first, with a chip that narrows it to
 failures. Each tab's number is `jason workitem count` for that tab's statuses and filters. The filters are a campaign
 and a person, each a search that opens on the first few and asks the runtime as you type (`jason campaign list
---query`, `jason contact list --query`: any part of a name, company, title, email, phone or profile link), a kind, a
-role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a day at a time. They are part of the page's address,
-so a bookmark or a link from another screen keeps them. Opening an item shows what the runtime recorded about it: its
-facts, its attempts, its input and its history; a failure is shown as the error the runtime recorded, with its class
-and the attempts it used. Open work can take a new priority, start and due time, or be cancelled with a reason,
-through `jason workitem update` and `jason workitem cancel`; work waiting for your approval can be approved or rejected
-right there, as on Attention.
+--query`, `jason contact list --query`: any part of a name, company, title, email, phone, profile link or custom
+field's value), a kind, a role, and one day on Planned and Done: the day work is due, or the day it finished, stepped a
+day at a time. They are part of the page's address, so a bookmark or a link from another screen keeps them. Opening an
+item shows what the runtime recorded about it: its facts, its attempts, its input and its history; a failure is shown as
+the error the runtime recorded, with its class and the attempts it used. Open work can take a new priority, start and
+due time, or be cancelled with a reason, through `jason workitem update` and `jason workitem cancel`; work waiting for
+your approval can be approved or rejected right there, as on Attention.
 
 ## People
 
@@ -167,7 +197,7 @@ campaigns shows the one the list is narrowed to, else the one their latest activ
 excluded, with "+N" naming the others; under a chip, the first of those that holds the count; a person on no campaign
 shows dashes. While a new list is on its way the rows stay as they were fetched. Last activity is the newest journal
 line about the person, of any kind. Opening a person
-shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to campaign**
+shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to agent**
 (`jason campaign add-contacts`). The **Timeline** puts their open work above the now line and what happened to them
 below it: the journal's lines about them (`jason journal list --contact`), narrowed by chips to replies, work, decisions
 or changes, with their additions to and exclusions from campaigns in place. **Details** is their record: channels,
@@ -211,7 +241,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
-  folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked
+  folder, readable by your account alone, which removes itself and its folder when it runs. Terminal's shell starts
+  without the CLI's environment, so where `jason` runs with `JASON_DATA_DIR` set the script exports that variable, and
+  nothing else, for the host's own `jason` commands to reach the same installation. This is composed and checked
   by tests here; it has not been watched on a Mac.
 - **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, and gives it the host in the
   form that program documents, decided by its file name: `kitty` and `foot` take the host's words after the program,
@@ -233,19 +265,31 @@ system's, in the order Light, Dark, System. A new installation meets Light; a br
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
 follows it.
 
-**Chat** says that the chat with an agent is part of Jason Desktop and links to the releases page where it is
-downloaded, and says that everything here also works from a session with your agent in a terminal, with the skills Jason
-deployed. The browser has no chat and starts no agent: the runtime starts no process for a screen, and a browser tab cannot ask you
-before the agent acts.
+**Chat** says that the chat with the AI is part of Jason Desktop and links to the releases page where it is
+downloaded, and says that everything here also works from a session with your AI in a terminal, with the skills Jason
+deployed. The browser has no chat and starts no AI: the runtime starts no process for a screen, and a browser tab cannot ask you
+before the AI acts.
+
+## Accounts
+
+One screen for what you have connected. **Provider** is the Reply connection of the desktop's Connect panel, drawn by
+the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
+the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
+box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
+acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
+notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
+with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
+The page says in one sentence where they are changed: under `Notifications:*` in the installation's settings file, or by
+asking your AI, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
 
 ## Inside Jason Desktop
 
 [Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
 object the desktop puts on the page, `window.jasonDesktop`. In it the chat is home, in a dock with panels beside it:
-**Needs you** (this page's Attention), **Campaigns** and **Activity**, which follow the journal as it is written, and
+**Needs you** (this page's Attention), **Agents** and **Activity**, which follow the journal as it is written, and
 **Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
-channels are set up. An empty Needs you card says you are caught up and offers **Open your campaigns**. The browser's
-other screens, People, Performance, Work items, System and Settings, open in a page panel of the same dock, and every
+channels are set up. An empty Needs you card says you are caught up and offers **Open your agents**. The browser's
+other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same dock, and every
 screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
 (`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on

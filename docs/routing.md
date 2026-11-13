@@ -12,22 +12,35 @@ This document is for whoever operates an installation. What a plugin is and how 
 **Routing** answers *which plugin performs this operation for this campaign*. **Binding** answers
 *which account, workspace or mailbox at that provider the plugin works in*. They are separate on
 purpose: one installation routinely sends every campaign to one provider and works several of its
-accounts, and one campaign occasionally needs a different provider for a single operation.
+accounts, and one campaign occasionally needs a different provider for a single operation, or for one channel of
+it: email through one plugin, LinkedIn messages through another.
 
 Nothing is routed anywhere by default. A fresh runtime routes no operation to any plugin, so every
 `provider_op` work item fails at the claim with `no_route` until somebody writes a route — and a
 product that shipped a default route would make its vendor-neutrality a claim its own configuration
 contradicted.
 
-## 2. Two scopes, four levels
+## 2. Two scopes, six levels
 
 Routes live at two scopes — **global**, in `settings.json`, and **campaign**, in the database — and
-each scope has a **default** route and per-**operation** overrides. That is four levels, and the most
-specific one wins:
+each scope has a **default** route, per-**operation** overrides and, for the few operations that take them,
+per-**channel** routes under an operation. That is six levels, and the most specific one wins:
 
 ```text
-campaign operation override  →  campaign default  →  global operation override  →  global default
+campaign operation and channel  →  campaign operation override  →  campaign default
+  →  global operation and channel  →  global operation override  →  global default
 ```
+
+The answer names the level it came from as its scope: `campaign_channel`, `campaign_operation`,
+`campaign_default`, `global_channel`, `global_operation` or `global_default`.
+
+**A channel level answers only a call that names a channel.** Which operations take channel routes is data in the
+operation's own document (`route_channel_argument`, [docs/contracts/](contracts/README.md)): `message.send` and
+`conversation.reply` read the channel from `channel`, and `sender.list` from its optional `sender_channel` filter,
+so a `sender.list` without the filter is routed by the operation alone, as it always was. An operation whose
+`channel` is the address a person is found by takes none, and none is declared for an operation with one channel only, whose own route is already that. A
+call that names a channel no route is set for falls through to the operation's own route and the levels under it;
+nothing is routed by a channel that was not named.
 
 **Masking is exact, and it is the one rule people get wrong.** A campaign default hides *every* global
 operation override for that campaign. Given these four routes:
@@ -52,6 +65,9 @@ Keeping the global exception inside `cmp_A` takes an explicit campaign override:
 ```sh
 jason route set --campaign cmp_A --operation campaign.get --plugin provider-c --actor human:you@example.com
 ```
+
+The same holds for channels: a campaign default or a campaign operation override hides a global channel route, and
+keeping one inside the campaign takes a campaign route that names the channel.
 
 The alternative — merging the levels — would mean a campaign that named its provider could still have
 one operation quietly sent somewhere else, which is exactly the surprise routing exists to prevent.
@@ -80,6 +96,31 @@ Nothing anywhere combines two bindings into a third.
 must name an operation this build publishes a contract for. `Binding` is optional and is whatever the
 plugin's manifest says a route to it must carry.
 
+An operation whose document names the argument a route reads its channel from may also carry **channel routes**, under
+`Channels`, one route per channel, each with its own `Plugin` and optional `Binding`:
+
+```json
+{
+  "Routes": {
+    "Operations": {
+      "message.send": {
+        "Plugin": "acme-provider",
+        "Channels": {
+          "linkedin": { "Plugin": "social-provider", "Binding": { "seat": "sales-1" } }
+        }
+      }
+    }
+  }
+}
+```
+
+The channel is a key of its own, never part of the operation's: a colon is what separates the keys of a settings path.
+Where `Channels` names a route, the operation's own `Plugin` and `Binding` may be left out, and then the operation has
+no route of its own at the global scope. A key under `Channels` that is no channel is refused with the section, as
+`routes_settings_invalid`; `Channels` under `Default` or at the top of `Routes`, an operation that takes no channel
+routes, a channel its argument does not allow, and a plugin that reads no events are refused at the reload (§7). A file
+without `Channels` means what it always meant.
+
 **A global route is frozen into the active route snapshot by `jason plugin reload`, and by the load at
 startup — editing the file changes nothing until then.** It is the same discipline plugin grants
 already follow, and for the same reason: what is running should change when somebody says so, not when
@@ -90,15 +131,29 @@ runtime whose global default is one plugin and which also holds one campaign rou
 Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY | default fake-provider | 0 overrides | 1 campaign route
 ```
 
+The override and campaign counts include channel routes; a runtime that holds any adds `| N of them by channel`.
+
 ## 4. A campaign's own routes
 
 ```sh
 jason route set   --campaign cmp_… --plugin acme-provider --binding '{"workspace":"latam"}' --actor human:you@example.com
 jason route set   --campaign cmp_… --operation campaign.get --plugin other-provider --actor human:you@example.com
+jason route set   --campaign cmp_… --operation message.send --channel linkedin --plugin social-provider --actor human:you@example.com
 jason route unset --campaign cmp_… --operation campaign.get --actor human:you@example.com
+jason route unset --campaign cmp_… --operation message.send --channel linkedin --actor human:you@example.com
 jason route list  --campaign cmp_…
 jason route resolve --campaign cmp_… --operation list_membership.add --human
+jason route resolve --campaign cmp_… --operation message.send --channel linkedin --human
 ```
+
+`--channel` needs `--operation`, and an operation whose document lets a route name a channel. `route list` shows a
+channel route beside the operation's own and reads it `<operation> on <channel>`; `route resolve` answers for the
+channel when it is given one, and for a call that names none when it is not. With `--channel`, the CLI first asks
+the running runtime whether it counts channel routes, and refuses the command before it sends anything where it does
+not, or where its answer does not say that it does: `runtime_too_old`, exit 1; a runtime that cannot be reached at all
+is exit 3, as for every verb. A runtime that does not count them would ignore the channel and answer for, or change,
+the operation's own route instead. Restart the runtime if it was updated without a restart, or
+update Jason, and run the command again.
 
 `route set` and `route unset` take no default actor: the CLI will not put this account's name on a change of route
 by itself, so a command typed outside a run names who makes it with `--actor human:<Name>`, and one an executor runs
@@ -122,7 +177,7 @@ written under "Routes" in settings.json and activated with 'jason plugin reload'
 The reason is worth stating rather than accepting: a reload freezes plugins and routes together, so a
 global route becomes active by the same explicit act as the packages it names.
 
-Four smaller rules, each of which somebody will meet:
+Five smaller rules, each of which somebody will meet:
 
 - **A route is checked before its row is written.** A `route set` that could never activate is refused
   as a 400 naming the route, rather than written and then refusing its own activation.
@@ -135,6 +190,11 @@ Four smaller rules, each of which somebody will meet:
   re-routed in either direction — including the direction that only takes something away.
 - **`route unset` of a route that is not there succeeds and changes nothing** — it is the state the
   caller asked for, and nothing is activated because nothing changed.
+- **An operation's own route and its channel routes are separate routes.** Removing the operation's own route leaves
+  its channel routes, and removing a channel route leaves the operation's own route. A channel route with no route of
+  the operation beside it is a normal state, not a half-removed one: that channel is routed, and the operation's other
+  calls fall to the levels below. An older executable on the same database can change or remove an operation's own
+  route while channel rows stay, because it never reads them as its own; the newer one reads the state as it stands.
 
 **The read verbs still answer for an archived campaign**, because it can still be named — and what they
 answer about is a campaign whose own routes have left the snapshot: `route resolve` falls back to the
@@ -158,17 +218,17 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the twenty-six answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the twenty-seven answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last nineteen are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last twenty are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
 value is suppressed, whether the routed plugin has pinned the person an operation that works by the pin
 alone acts on, whether the send a read or a take-back names is this campaign's, whether it kept the provider's reference, whether it was
 made under the route the item is routed to, the same three questions of the search a status read or a stop names, whether an audience named
 by its number is one the campaign holds, whether the composed input satisfies the schema, whether the definition it carries satisfies the
 schema the routed plugin declares for one, whether the routed plugin takes an argument
-the operation names per channel on the channel the input names, whether it writes a template on that channel where the message is one, whether an earlier attempt that lost its answer may be repeated under the routed plugin, whether another search of the campaign has not ended, whether the operation needs a person's approval, and whether an open provider block holds it — which turns on the sending account the input names. So `route resolve --operation campaign.enroll` answers `usable: true` against a
+the operation names per channel on the channel the input names, whether it writes a template on that channel where the message is one, whether an earlier attempt that lost its answer may be repeated under the routed plugin, whether the campaign saw the thread the operation names at the plugin it is routed to, whether another search of the campaign has not ended, whether the operation needs a person's approval, and whether an open provider block holds it — which turns on the sending account the input names. So `route resolve --operation campaign.enroll` answers `usable: true` against a
 plugin that implements it, and every item of that operation is still parked for a person at the
 claim.
 
@@ -281,7 +341,9 @@ the operator wrote it:
 |---|---|
 | the global default | `Routes:Default` |
 | a global operation override | `Routes:Operations:<operation>` |
+| a global channel route | `Routes:Operations:<operation>:Channels:<channel>` |
 | a campaign route | `campaign:<cmp_…>/routes/<operation>`, or `campaign:<cmp_…>/routes/default` |
+| a campaign channel route | `campaign:<cmp_…>/routes/<operation>/<channel>` |
 
 The load at startup takes the same path: a runtime started with a bad route reports it in the startup report and
 leaves **both** registries empty, rather than running with plugins and no routes. A pattern that could not finish
@@ -327,6 +389,55 @@ the global ones — and so does any change once the search has ended. A search t
 and stopped nowhere (§7, check 16), so no route is kept for it. A search whose start is under way has no record yet
 and is not counted: a change made while it starts can leave it without its account, and it is said as below.
 
+**A change that would strand a send the provider still holds for later is refused.** A cancel and a status read of
+a send go where the send ran (§7, check 14), by the same rule. A send holds its route while the provider holds it: a send
+of a campaign that is not archived succeeded with the provider's reference, its own result says `cancelable: true` (read
+as the send's operation document defines it, where an absent flag reads as false), and its moment, the `accepted_for` its
+result names or else the `send_after` its arguments named, is known and after the runtime's clock.
+When the routes in force name the plugin and the account such a send ran under, and the candidate set would name them
+nowhere, the set is refused with `route_orphans_send`: one detail per campaign and account, named by the latest of its
+sends, `campaign:<cmp_…>/sends/<wi_…>`, saying how many sends hold the route, their work items (the latest five, and how
+many more), the latest moment among them in UTC rounded up to the second, and the ways out: cancel them with
+`message.cancel`, or change the route after that moment. The answer's message counts the sends. It says nothing a send
+says to a person: not who it is to, not its sender, subject or text. This holds for an
+operation route, a channel route and a default alike, at the same three doors: `route.set` and `route.unset` answer
+`409 route_orphans_send`, `retryable: false`, and write nothing, and a reload answers `409 plugin_reload_rejected` with
+that detail and keeps the routes in force. A change that leaves another of the send's campaign's routes, or a global
+one, naming the account goes through, and so does any change once its moment has passed: the guard lets go by itself,
+with no cancel made. It lets go as soon as the provider has said it holds the send no longer, in one of these ways:
+
+- a `message.cancel` of the send succeeded;
+- a `message.cancel` of the send failed with an answer its document declares as nothing left to cancel,
+  `send_not_pending` or `send_not_found`;
+- a `message.status` of the send failed with the answer its document declares as no such send, `send_not_found`;
+- a `message.status` of the send succeeded and says it is final (`sent`, `cancelled`, `failed` or `unknown`), whichever
+  read said it;
+- the latest `message.status` of the send that succeeded says it can no longer be cancelled (`cancelable: false`). An
+  older read that said so frees nothing once a later one says it can be cancelled again.
+
+A cancel or a status read still to run, and one that failed for any other reason (a provider out of reach, a blocked
+account), leaves the send held. A send whose result does not say the provider can cancel it, `cancelable` false or
+absent, is held for nothing a cancel could reach, so no route is kept for it. An estimate a provider gives of when it will
+send is never read as a moment. Everything asked is the runtime's own record: the
+send's arguments and result, the provenance of its succeeded attempt, and the campaign's cancels and status reads of it.
+The moment is compared with the runtime's clock, in the database, so only the sends still held are read.
+
+The guard has two limits, and within them a send can be left with no route to the account it ran under:
+
+- **A send with no moment known is not guarded.** A send whose result names no `accepted_for` and whose arguments named
+  no `send_after` holds nothing, though its result says it can be cancelled: a provider answers a send it will make as
+  soon as it can the same way as one it keeps queued for a sending schedule of its own, and a hold for the first would
+  outlast the send for as long as nobody read it. If its route has moved, cancel such a send at the provider.
+- **A send on its way is not guarded.** A change made while a send is still on its way to the provider, before it has
+  succeeded, finds nothing held, and the send may be left without its account once it succeeds.
+
+Every door a change comes through refuses one that would strand a held send, so outside those two limits a send no route
+reaches was left so by a start (which has no routes in force to keep), or by settings edited while the runtime was
+stopped. A start says each such
+send once in the log, as a warning naming its work item, its campaign and the plugin it ran at, and nothing it says to a
+person; its cancel and its status read are refused at the claim (§7, check 14). After the start, while the routes in force name nothing,
+the guard reads nothing: there is nothing it could refuse.
+
 **The start is not refused, only reported.** A start has no routes in force to keep, and a start whose routes are
 refused leaves no plugin active at all. So routes changed outside the three doors above — the settings edited while the
 runtime was stopped — are activated as they are, and each search still followed that they leave with no route naming
@@ -338,8 +449,9 @@ change that would itself take the account away.
 
 An activated load journals `plugins_reloaded` with the routes it froze beside the packages:
 `routes: {snapshot_id, global_default, override_count, campaign_route_count}`. A route write journals
-`routes_updated` against the campaign, keyed by the operation or by `default`, with the old and new
-values.
+`routes_updated` against the campaign, keyed by the operation, by `default`, or by `<operation>/<channel>` for a
+channel route — `message.send/linkedin` — with the old and new values. A line keyed by an operation and a channel is
+about that channel's route only, never the operation's own.
 
 ## 7. Fail-closed: every reason, and what to change
 
@@ -347,7 +459,7 @@ Nothing falls back. An operation the routed plugin cannot perform ends the work 
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the twenty-six, in the order they are checked
+### At the claim — the twenty-seven, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
@@ -384,6 +496,10 @@ succeed and a read tells the truth. An item it holds **waits** on the
 block, with no attempt, until the block clears or a trial gets past it. It is asked after the approval, so a person
 is asked about work while the provider refuses it, and work a person releases still waits for the block.
 
+A row's number is its name and stays the same from release to release, and the order the checks are asked in is the
+order of this table: so row 27 stands between rows 23 and 24, so that nobody is asked to approve, and no block holds, a
+reply that could only be refused.
+
 | # | Code | Class | What it means, and what to change |
 |---|---|---|---|
 | 1 | `operation_unknown` | permanent | this build publishes no contract for the operation the item names. The item was written by a build that did; nothing but a different build will run it |
@@ -399,7 +515,7 @@ is asked about work while the provider refuses it, and work a person releases st
 | 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act) |
 | 12 | `send_unknown` | permanent | the operation reads or takes back one send — its input schema names `send`, today `message.status` and `message.cancel` — and the work item `args.send` names is not one of this campaign's, or is not an operation that makes a send: `message.send` or `social_invitation.send`. Name the work item that made the send, in this campaign; then create a new item. An operation that names no send never meets this check, nor the two after it |
 | 13 | `send_reference_absent` | permanent | the send named has no reference to act by: it has not succeeded, or the provider gave it none. The runtime composes `send.reference` from the send's own attempt and from nothing a caller writes, so there is nothing to read or take back yet. Wait for the send to succeed, or create a new item for another one |
-| 14 | `send_route_mismatch` | permanent | the send was made through another plugin, or under another binding, than this item is routed to: a reference names a send only at the provider and account that took it. Plugin and binding are compared by the plugin's id and the binding's identity, never the package's digest, so an upgraded package still reads its own sends. Route the operation the way the send was routed, then create a new item |
+| 14 | `send_route_mismatch` | permanent | no route active now names the plugin and the binding the send was made under. A cancel or a status read of a send is routed where the send ran, whatever its own operation resolves to — the rule a search has (row 17): the operation's own route where it names that plugin and binding, then the campaign's route for the send's own operation by the channel the send was routed by, then any of the campaign's routes and the global ones, channel routes included, in the order of precedence — so a campaign that sends email through one plugin and LinkedIn messages through another cancels and reads each send where it went. A route change that would take the last route naming that account away from a send still held for a later moment is refused at activation, `route_orphans_send` (§6). A reference names a send only at the provider and account that took it. Plugin and binding are compared by the plugin's id and the binding's identity, never the package's digest, so an upgraded package still reads its own sends. Route an operation to that plugin and account again, then create a new item |
 | 15 | `search_unknown` | permanent | the operation reads or stops one search — its input schema names `search`, today `audience.search_status` and `audience.search_cancel` — and the work item `args.search` names is not one of this campaign's, or is not an `audience.search`. Name the work item that made the search, in this campaign; then create a new item. An operation that names no search never meets this check, nor the two after it |
 | 16 | `search_reference_absent` | permanent | the search named has no reference to act by: it has not succeeded, or it answered `finished` inside its own call — a provider that searches synchronously answers so, with every person found, and its search is never read or stopped — or the provider gave it none. The runtime composes `search.reference` from the search's own attempt and from nothing a caller writes, so there is nothing to read or to stop |
 | 17 | `search_route_mismatch` | permanent | no route active now names the plugin and the binding the search was made under. A read or a stop of a search is routed where the search ran, whatever its own operation resolves to: the operation's own route where it names that plugin and binding, then the campaign's route for `audience.search`, then any of the campaign's routes and the global ones, in the order of precedence, the binding found by its identity — so an override of the read alone, or a default moved to another account while another route still names the first, leaves it readable and stoppable at the account that is spending. A route is where a binding is kept, so a route change that would take the last route naming that account away from a search still followed is refused at activation, `route_orphans_search` (§6). A search reaches this check only where its account's last route went outside those doors — the settings edited while the runtime was stopped, then a start, which says the search in its log — and then its reads and its stop are refused here, and the search goes on at the provider unread until a route names that account again. A reference names a search only at the provider and account that started it; compared by the plugin's id and the binding's identity, never the package's digest. Route an operation to that plugin and account again, then create a new item |
@@ -409,6 +525,7 @@ is asked about work while the provider refuses it, and work a person releases st
 | 21 | `argument_unsupported` | permanent | the input carries an argument the operation's document names per channel — its `channel_arguments`, today `send_after` on `message.send` and `social_invitation.send` — on a channel the routed plugin's manifest does not list it for under `arguments` (`docs/plugins.md` §3). Leave the argument out and give the item `not_before` at the moment instead, or route the operation to a plugin that takes it on that channel; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act). An item that does not carry the argument never meets this check |
 | 22 | `template_not_offered` | permanent | the message is a template — `compose: template` — on a channel the operation's document names under `channel_templates`, today `email` and `linkedin` on `message.send`, and the routed plugin's manifest does not list that channel for the operation under `templates` (`docs/plugins.md` §3). A manifest without the key writes a template nowhere. Write the message as final text, or route the operation to a plugin that writes a template on that channel; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act). A final message never meets this check |
 | 23 | `provider_answer_lost` | ambiguous | the item carries an unsettled send — an earlier attempt of it started and ended ambiguous, whatever ended after it — so it may have reached the person, and the operation's document settles a lost answer by the work item's key — `recovery_read.by_key`, today `message.send` and `social_invitation.send` — while the routed plugin's manifest does not list the operation under `settles_by_key` (`docs/plugins.md` §3), or the routed package, by its id and digest, or its binding is not the one the latest such attempt's provenance names, or that provenance names none, or the item's arguments are not the ones that attempt's snapshot kept, or the input composed now is not the one that attempt was composed with — compared by that provenance's `input_digest`, the canonical `sha256:` (keys in ordinal order, so member order alone is no difference) of everything in the composed input but the campaign's status, and so neither the binding, compared by its identity, nor the invocation's context: the arguments, the send, the person with the projected fields, the consumed channel's value and the pins, the campaign with its name and pins, and the work item's key. A pin the compared attempt and every later attempt of the item recorded, from the answers they ended with, is left out of the input composed now before it is named, since the input that attempt was composed with could not carry it and every later attempt ran only because its claim found it the same request; a pin an earlier attempt, another item or another plugin recorded is not left out. A digest names the input and carries none of it, no address included, and an attempt claimed before attempts named their input carries none and is compared on its arguments alone. A route, a binding or a package changed in between makes the ending final, since the key settles a send only at the provider and the account that took it, and so does an item edited since, a person whose address, field or pin changed since, or a campaign renamed or pinned since, since the key settles only the request it went with and the provider answers a repeat with the earlier send; a campaign paused and resumed in between asks nothing else of the provider. Nothing says the repeat would be settled by the key, so it is not made: the item is as unsettled as the attempt that may have acted, and it is final. Find out from the provider whether the first attempt acted, and create a new item only if it did not. An item no earlier attempt left ambiguous never meets this check. **The same hold covers every operation whose `cost` is `metered` and whose `repeat_after_ambiguous` is `after_recovery_read`** — today `audience.search`, `campaign.enroll` and `campaign.activate` beside the two sends — but for the manifest's `settles_by_key` and the package's digest: its blind repeat would spend again, and its recovery read finds what the earlier attempt may have started only at the provider and account that took it, for the request it went with, whichever version of the package started it (`docs/plugins.md` §7). So a route moved to another plugin or account, or a count or a definition edited while the item waited, makes the ending final, rather than start a second search that nothing could find, read or stop; a package updated in between, under the same id, does not |
+| 27 | `thread_route_mismatch` | permanent | the operation names a thread — its input schema names `thread`, today `conversation.get`, `conversation.reply`, `conversation.classify`, `conversation.close` and `conversation.reopen` — and the campaign's own `inbound_reply_observed` lines name that thread, but none of them at the plugin the item is routed to. A thread is held only by the provider it was seen at. **The check compares the plugin, never the account.** An account is known only by the identity of the whole binding, which carries more than the account — a behaviour flag beside the profile, say — so a route edited in such a field would make every thread the campaign knows one seen elsewhere, and refuse every reply to an existing conversation until that thread moved again; another account of the same plugin is the provider's to refuse, as a thread it does not hold, which acts on nobody. A read or a filing of a thread is routed where the campaign saw it, whatever its own operation resolves to — the rule a send's cancel has (row 14): a route that names a plugin and account the lines name, newest first, then a route that names the plugin under any binding, each asked of the operation's own route, then the campaign's route for `conversation.list`, then any of the campaign's routes and the global ones, channel routes included, in the order of precedence — so it is refused here only where no route names the plugin any more. **An id seen at more than one plugin** names neither thread by itself: a read or a filing goes where the operation's own route says, never to the newest sighting, and is refused here, saying the id is held at more than one plugin, where that route names none of them. A reply is routed by its channel, as any `conversation.reply` is, and refused here where that channel's route names another plugin than the thread was seen at, before a person is asked to approve it. A line names its plugin; its account is the binding the read that found the thread ran under — the inbound read's attempt, or the events source the stored event was read from, a source with no binding naming a route with none — and a line whose read left no record of an account is a sighting of its plugin all the same. A thread no line of the campaign names, another campaign's included, never meets this check. Route the operation, or its channel, to the plugin that saw the thread, then create a new item |
 | 24 | `search_unfinished` | — | **not a failure**: the operation is `audience.search`, and another search of the campaign has not ended — a search whose row is not ended, running or held at the provider, another `audience.search` item of the campaign running now, or one open again with no row after an attempt of it started and ended ambiguous, whose start may have acted although its answer was lost, so that it may be running at the provider. A campaign runs one search at a time: a second one would spend beside the first, and the provider refuses only a second search of the same definition. The item waits as `waiting`, with no attempt, its last error naming the search in the way, and is claimed again a search cadence later, the held cadence where the provider holds that search; nobody is asked to approve it meanwhile. Of two searches whose starts both lost their answers, the older goes first and the newer waits behind it. A search item that has ended — failed, cancelled or expired — is in nobody's way, even one whose start may have acted: what it may have started is a person's to find at the provider (row 23). Let that search end, or stop it with `audience.search_cancel`; one whose answer was lost settles at its own next attempt, which reads the provider's searches first and starts none of its own if one was started |
 | 25 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved, unless a standing approval covers it: then it runs in the same claim, under a row the person who set the standing approval decided. `docs/work-execution.md` §Approvals |
 | 26 | `provider_blocked` | — | **not a failure**: an open block of the routed plugin and binding holds the work — the account's, which covers every sending account under it, or the block of the sending account the input names at `/args/sender/external_id`. Only the operations whose contract says `dispatch.under_provider_block: waits` are held: every `reach: act` operation, `campaign.pause` and `optout.record`. The item waits as `waiting`, its `wait.blocked_by` naming the block, with no attempt; one item at a time is the block's trial and runs, an act wherever one can run, and what an act answers decides the block; a control's answer decides nothing but `blocked`. Nothing is to change on the item: what clears a block is on the provider's side. `docs/work-execution.md` §Provider blocks |
@@ -418,37 +535,45 @@ Two of these are worth a second sentence. `input_invalid` and `definition_invali
 it keeps what the attempt before it left unknown; everything else is structural. Structural, that is, while nothing
 before it may have reached the person: while the item carries an unsettled attempt of an operation row 23 holds — one the
 work item's key settles, or a metered one its recovery read settles — every refusal from check 2 to check 22 keeps its
-code and is recorded `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the
+code, and so does check 27, and is recorded `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the
 person, or may have acted and be spending. A route moved since the lost answer to a plugin
 without the operation is `plugin_operation_unsupported` so. Whatever a row above says to change, new work for that
 send is created only once the provider has said the earlier attempt did not act. And an argument that
 disagrees with a pin is refused rather than resolved either way: the rule is to work by the pin, so the
 message names the pinned value.
 
-### At activation — eight route problems, plus one for the section and one for the searches
+### At activation — eleven route problems, plus one for the section, one for the searches and one for the sends
 
 | Code | When |
 |---|---|
 | `route_plugin_unknown` | the route names a plugin the candidate set does not contain |
 | `route_plugin_kind_not_invocable` | the plugin is a notification plugin, which performs no canonical operation; it is reached through the `Notifications` settings instead |
-| `route_operation_unknown` | a *campaign* route names an operation this build does not publish. A global override keyed by such a name never reaches this check: the section validator refuses it first, as the eighth code below |
+| `route_operation_unknown` | a *campaign* route names an operation this build does not publish. A global override keyed by such a name never reaches this check: the section validator refuses it first, as `routes_settings_invalid` below |
+| `route_channel_not_routable` | the route names a channel under an operation whose document names no argument a route reads its channel from — or under no operation: a campaign default, or `Channels` under `Routes:Default` or at the top of `Routes`, which is refused at the reload whatever plugin it names. Asked only of a route that names a channel |
+| `route_channel_unknown` | the route names a channel the argument the operation's document names for routes does not allow |
 | `route_operation_unsupported` | the plugin does not list the operation the route sends it |
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
+| `route_channel_plugin_reads_no_events` | the route names a channel, and the plugin it names reads no events: its manifest declares no `contracts.events`. Every operation that takes channel routes is about what is sent on the channel — `message.send` and `conversation.reply` send it, `sender.list` names the accounts that will — and a reply to what is sent on a channel route reaches the campaign only through the events of the account it went from, so it would go unseen. Asked of a channel route only, at `route.set` and at every reload, so a reload whose new package stops reading events while a channel route names it is refused whole, and the previous snapshot stays active. A restart in that state starts with no plugins and no routes (§6), since the package is checked against the route at the start as at any reload |
 | `route_binding_secret_like` | the binding carries a field named like a credential, at any depth |
 | `route_binding_too_large` | the binding's canonical JSON is larger than the 64 KiB the protocol carries |
 | `route_binding_invalid` | the binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin whose schema refuses `{}` |
 
-The ninth is not a problem with a route but with the **section**: `routes_settings_invalid` is the
+The twelfth is not a problem with a route but with the **section**: `routes_settings_invalid` is the
 `Routes` section itself failing the validator that reads it, which happens when the file is edited into
 something no route could be built from. The options system reports that as prose rather than as
 structure, so the runtime carries the validator's own sentence through verbatim and names the setting it
 came from. It arrives as the same rejected reload, because an operator who mistypes a route must get one
 answer — and never a 500, which would say the runtime broke rather than the edit.
 
-The tenth is not a problem with one route either, but with the whole set: `route_orphans_search`, a set that would take
+The thirteenth is not a problem with one route either, but with the whole set: `route_orphans_search`, a set that would take
 the last route naming the plugin and account a search still followed ran under away from it (§6). It is asked only
 when no route in the set is wrong, and `route.set` and `route.unset` answer it under its own code rather than as a
 rejected reload.
+
+The fourteenth is its twin for a send: `route_orphans_send`, a set that would take the last route naming the plugin and
+account a send ran under away from it while the provider still holds it for a moment to come and its result says it
+can be cancelled, until the provider says it holds the send no longer (§6). It is asked when the searches are, and `route.set` and `route.unset` answer it under its own code
+when it is all that refused.
 
 **A binding no pattern could finish measuring is none of these.** Where a pattern of the plugin's binding schema did not
 finish matching, twice, nothing was found wrong with the binding: it is not `route_binding_invalid`. Alone, it leaves
@@ -682,8 +807,8 @@ hold it to. It invokes nothing.
 
 ## 12. Known limitations of this version
 
-- **No operation-family wildcards.** A route names one operation or is the default; there is no
-  `list_membership.*` (DEF-ROUTE-001).
+- **No operation-family wildcards.** A route names one operation, or one channel of an operation that takes channel
+  routes, or is the default; there is no `list_membership.*` (DEF-ROUTE-001).
 - **No named, reusable bindings.** Every route carries its own binding object, so two campaigns working the
   same account repeat it (DEF-ROUTE-001).
 - **No repair path for a pin.** A pin cannot be corrected, moved or deleted through the API, and a

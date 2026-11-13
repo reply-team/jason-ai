@@ -391,7 +391,8 @@ it in full:
 `last_reload.routes` lists the routes that load refused, each named the way it is written — `Routes:Default`,
 `Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
 message, so it is empty when the load activated; a search the load's routes would have left without its account is
-named `campaign:<cmp_…>/searches/<wi_…>`, under `route_orphans_search` ([routing](routing.md) §6). The routes a load froze are not listed there: `routing_snapshot_id`
+named `campaign:<cmp_…>/searches/<wi_…>`, under `route_orphans_search`, and a send still held for a later moment
+`campaign:<cmp_…>/sends/<wi_…>`, under `route_orphans_send` ([routing](routing.md) §6). The routes a load froze are not listed there: `routing_snapshot_id`
 names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
 `last_reload.subscriptions` is the same for the order of each journal kind's subscribers (§16): each refusal is named by
 its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `capabilities.subscriptions` is the kinds
@@ -725,6 +726,13 @@ keys and values, with a mark that says so. Two limits are yours to know. A value
 masking text that short would mangle ordinary words. And a successful result is not masked at all: what you return is
 yours to keep clean, so returning a configured value is a conformance failure of your plugin, not something the host
 catches.
+
+**Keep a secret out of `settings.json`.** A value under `Plugins:Config` there is in a file a command of the desktop's
+Codex chat can read, on every system, as any program you run can ([desktop.md](desktop.md)). Give a secret as a variable
+of the runtime's environment instead, `JASON_Plugins__Config__<id>__<field>`: that keeps it out of `settings.json` and
+out of the environment of a chat turn and of an AI role's agent. It does not keep it out of the place where you set the
+variable: a shell profile, a launchd or a systemd unit is a file a Codex command can read on macOS and Linux, and on
+Linux the runtime process's environment (`/proc/<pid>/environ`) is readable by your account.
 
 ### `host.log`
 

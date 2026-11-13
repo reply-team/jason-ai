@@ -1,14 +1,18 @@
 // Pure: a chat's access mode, chosen per conversation from the menu beside the composer. Ask first is the default of every
-// new chat and no setting changes it. Plan only reads and proposes and changes nothing. Full access runs Claude Code in its
-// default mode with a hook that lets a command run with no card where Jason reads it plainly, refuses what Ask first
-// refuses, and puts anything else to the person as Ask first's card; the deny list, the chat's confinement and the keys
-// still hold wherever the desktop can see the attempt, and it is chosen only through a confirmation shown each time, held
-// in memory for that conversation alone, and never remembered past the window. Codex has no Full access, nor has the
-// Feed. Nothing here starts a process or reads a file.
+// new chat out of the box. Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that the six
+// file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by the host's
+// accept-edits mode; it has no confirmation and no standing choice, is held in memory alone, and is chosen on Claude Code
+// only, never for the Feed. Full access runs Claude Code in its default mode with a hook that lets a command run with no
+// card where Jason reads it plainly, refuses what Ask first refuses, and puts anything else to the person as Ask first's
+// card; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt. It is
+// chosen through a confirmation that offers this time only or always on this computer, the second with new chats
+// starting in Full access as well; a conversation's Full access is held in memory alone and never remembered past the
+// window, and the standing choice is the main process's own file (`full-access-standing.ts`), under a consent number.
+// Codex has no Full access, nor has the Feed. Nothing here starts a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
 
-export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
+export type ChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
 /**
  * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
@@ -27,7 +31,8 @@ export const powerShellRunsInFullAccess = false;
 /** What the menu and the desktop say of Full access while the switch is off. */
 export const fullAccessNotYet = 'Full access is not in this version yet.';
 
-export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'full_access'];
+/** The modes in the menu's order: the default first, then narrow to wide. */
+export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'auto_edit', 'full_access'];
 
 export function isChatMode(value: unknown): value is ChatMode {
     return typeof value === 'string' && (chatModes as readonly string[]).includes(value);
@@ -61,11 +66,24 @@ export const codexFullAccess = 'Full access runs on Claude Code only.';
  */
 export const feedFullAccess = 'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
 
+/** Why Auto-edit cannot be chosen on Codex: it never asks before it acts, so its turns only read. */
+export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
+
+/** Why Auto-edit cannot be chosen for the Feed: the reason Full access is not offered there. */
+export const feedAutoEdit = 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
+
 /** What a chat in Plan only answers every request it does not take. */
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';
 
 /** What a chat in Plan only answers the host's own way out of planning: only the person changes the mode. */
-export const planExitRefusal = 'Plan only is on, and only the person leaves it, from the menu beside the message box. Give your plan as your answer.';
+export const planExitRefusal =
+    'Plan only is on, and only the person leaves it, from the menu beside the message box or by approving your plan. Give your plan as your answer.';
+
+/**
+ * Why a send that names the mode it was approved for is refused: the chat is in another mode now. The plan card's go
+ * names Ask first, and a mode chosen from the menu between the approval and the send would otherwise carry it.
+ */
+export const planModeMoved = "The chat's mode changed before the plan was approved, so nothing was sent.";
 
 /**
  * The turn's end when a tool ran that the turn's hook never saw, a policy having filtered the hook out, say: that first
@@ -74,7 +92,35 @@ export const planExitRefusal = 'Plan only is on, and only the person leaves it, 
 export const unguardedSentence =
     'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';
 
-/** What the confirmation shows, as Electron's message box takes it: Cancel is focused, and Escape answers Cancel. */
+/** The same end where the standing choice stood: a check that a policy filtered out would miss every later turn too. */
+export const unguardedStandingSentence =
+    'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.';
+
+/** Said in the chat when Always was answered and its file could not be written: Full access is given this time only. */
+export const standingUnkeptSentence = 'Always could not be kept: its file could not be written; Full access holds this time only.';
+
+/**
+ * Said in the chat when a tool ran unchecked and the file of the standing choice would not let Always be removed: it is
+ * held as taken back while this run lasts, and the next start removes it.
+ */
+export const standingUnremovedSentence =
+    'Always could not be removed from its file; Jason holds it as taken back and removes it when it next starts. Close anything that has full-access.json open. If the System screen still shows Always after that start, choose Ask each time again there.';
+
+/** Said in a new chat the standing choice would have started in Full access when Full access could not be set up for it. */
+export const newChatAskFirstSentence =
+    'This chat starts in Ask first: Full access could not be set up for it. Choose Full access from the menu to try again.';
+
+/**
+ * The number the standing choice of Full access is given under (`full-access-standing.ts`): a choice kept under any
+ * other number, lower or higher, is no choice, and the confirmation is shown again. It is raised only by a release that
+ * widens what Full access reaches; a change of wording alone, the confirmation's or the page's, does not raise it.
+ */
+export const fullAccessConsent = 1;
+
+/**
+ * What the confirmation shows, as Electron's message box takes it: Cancel is focused, and Escape answers Cancel. The
+ * checkbox counts only with Always (`fullAccessAnswer`); Electron cannot grey it, so its label says so.
+ */
 export interface FullAccessDialog {
     type: 'warning';
     title: string;
@@ -83,10 +129,13 @@ export interface FullAccessDialog {
     buttons: string[];
     defaultId: number;
     cancelId: number;
+    checkboxLabel: string;
+    checkboxChecked: false;
     noLink: true;
 }
 
-export const fullAccessButton = 'Give full access';
+export const fullAccessButton = 'Give full access this time';
+export const fullAccessAlwaysButton = 'Always on this computer';
 
 export function fullAccessDialog(): FullAccessDialog {
     return {
@@ -94,15 +143,34 @@ export function fullAccessDialog(): FullAccessDialog {
         title: 'Full access',
         message: 'Give this chat full access?',
         detail: [
-            'From now on, in this chat, the agent runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does.',
-            'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run.',
-            "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving.",
+            'From now on, in this chat, the AI runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does.',
+            'Jason still asks you about a command it cannot read plainly or one that changes what the AI loads, and a question you leave unanswered for thirty minutes is not run.',
+            "Jason refuses the AI's commands that approve, reject, answer or clear for you; a program the AI writes and runs can still act as you, including approving.",
             'The risk is yours.',
-            'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
+            'This time, Full access lasts until you change it or close Jason.',
+            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the AI writes and runs could choose it for you too.',
+            'The AI works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
         ].join(' '),
-        buttons: [fullAccessButton, 'Cancel'],
-        defaultId: 1,
-        cancelId: 1,
+        buttons: [fullAccessButton, fullAccessAlwaysButton, 'Cancel'],
+        defaultId: 2,
+        cancelId: 2,
+        checkboxLabel: 'With Always, also start new chats in Full access',
+        checkboxChecked: false,
         noLink: true,
     };
+}
+
+/**
+ * The person's answer to the confirmation, by the button pressed and the checkbox: null for Cancel or anything else;
+ * the checkbox is read only with Always.
+ */
+export interface FullAccessAnswer {
+    always: boolean;
+    newChats: boolean;
+}
+
+export function fullAccessAnswer(response: number, checkboxChecked: boolean): FullAccessAnswer | null {
+    if (response === 0) return { always: false, newChats: false };
+    if (response === 1) return { always: true, newChats: checkboxChecked === true };
+    return null;
 }

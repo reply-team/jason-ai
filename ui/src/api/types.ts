@@ -94,6 +94,8 @@ export type SystemInfo = {
         global_default_plugin: string | null;
         global_override_count: number;
         campaign_route_count: number;
+        /** How many of the two counts above name a channel; absent from a runtime older than channel routes. */
+        channel_route_count?: number;
     };
     update?: { available: boolean; version: string; checked_at: string; release_notes_url: string | null } | null;
     listening?: { port: number; configured_port: number } | null;
@@ -110,6 +112,29 @@ export type SystemInfo = {
         root: string;
         root_state: string;
     } | null;
+    notifications?: NotificationsInfo | null;
+};
+
+/** What `system.info` says of the notification channels: whether they are on, and what each did with the last one. */
+export type NotificationsInfo = {
+    enabled: boolean;
+    channels: NotificationChannel[];
+    last_notification_id: string | null;
+    last_at: string | null;
+};
+
+export type NotificationChannel = {
+    channel: string;
+    kind: string;
+    on: boolean;
+    /** `delivered`, `silenced`, `failed` or `not_attempted`; null before anything was sent. */
+    outcome: string | null;
+    reason: string | null;
+    code: string | null;
+    class: string | null;
+    at: string | null;
+    /** The toast's: `available`, or `no_desktop`. */
+    presence?: string | null;
 };
 export type Plugin = {
     id: string;
@@ -119,13 +144,19 @@ export type Plugin = {
     status: string;
     digest: string;
 };
+/** A route by channel: operation, then channel, then the plugin. It is never the operation's own route. */
+export type ChannelRoutes = Record<string, Record<string, { plugin_id: string }>>;
 export type Routes = {
     routing_snapshot_id: string;
     plugin_snapshot_id: string;
-    global: { default: { plugin_id: string } | null; operations: Record<string, { plugin_id: string }> };
-    campaigns: { campaign_id: string }[];
+    global: {
+        default: { plugin_id: string } | null;
+        operations: Record<string, { plugin_id: string }>;
+        channels: ChannelRoutes;
+    };
+    campaigns: { campaign_id: string; channels: ChannelRoutes }[];
 };
-export type RouteResolveRequest = { campaign_id: string; operation: string };
+export type RouteResolveRequest = { campaign_id: string; operation: string; channel?: string };
 /** Where one operation of one campaign would go: the plugin the active routes name, and whether it could run it. */
 export type RouteResolution = {
     operation: string;
@@ -133,6 +164,8 @@ export type RouteResolution = {
     plugin_id: string | null;
     scope: string | null;
     usable: boolean;
+    /** The channel the answer was resolved for; null when none was named. */
+    channel: string | null;
 };
 export type UiToken = { id: string; issued_to: string; issued_at: string; last_used_at: string | null };
 export type UiTokens = { items: UiToken[] };
@@ -210,6 +243,8 @@ export type WorkItemUpdateRequest = {
     priority?: number;
     not_before?: string | null;
     due_at?: string | null;
+    set?: Record<string, unknown>;
+    reason?: string;
     actor?: ActorRef;
 };
 export type WorkItemCancelRequest = { work_item_id: string; reason?: string; actor?: ActorRef };
@@ -274,7 +309,12 @@ export type CampaignSummaryRow = {
 /** The same counts across every campaign asked, each person counted once however many of them count the person. */
 export type CampaignSummaryTotal = Omit<CampaignSummaryRow, 'campaign_id' | 'sequence_linked'>;
 export type CampaignSummaryResponse = { campaigns: CampaignSummaryRow[]; total: CampaignSummaryTotal };
-export type CampaignActivityRequest = { campaign_ids?: string[]; since: string; until: string };
+export type CampaignActivityRequest = {
+    campaign_ids?: string[];
+    since: string;
+    until: string;
+    exclude_archived_contacts?: boolean;
+};
 export type CampaignActivityRow = {
     campaign_id: string;
     people: number;
@@ -296,6 +336,7 @@ export type CampaignActivityByPeriodRequest = {
     since: string;
     until: string;
     zone?: string;
+    exclude_archived_contacts?: boolean;
 };
 /** One count with the bucket as its period: people once within it, so buckets may add up to more than campaign.activity's total over the window. */
 export type ActivityBucket = { start: string; end: string; value: number };
@@ -331,6 +372,7 @@ export type ListContactsRequest = {
     query?: string;
     limit?: number;
     cursor?: string;
+    exclude_archived_contacts?: boolean;
 };
 export type Role = { id: string; name: string; builtin: boolean };
 export type Channel = { channel: string; value: string; primary: boolean };

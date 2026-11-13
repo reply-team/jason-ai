@@ -198,9 +198,9 @@ describe('Work items', () => {
         await waitFor(() => expect(sentLists(api)).toHaveLength(2));
 
         const smb = fixtures['campaign.list/first-page'].response.items.find((c) => c.name === 'SMB test')!;
-        fireEvent.click(screen.getByRole('button', { name: 'All campaigns' }));
+        fireEvent.click(screen.getByRole('button', { name: 'All agents' }));
         await waitFor(() => expect(api.sent('campaign.list')).toEqual({ limit: 10 }));
-        const find = screen.getByPlaceholderText('Find a campaign');
+        const find = screen.getByPlaceholderText('Find an agent');
         fireEvent.input(find, { target: { value: 'smb' } });
         await waitFor(() => expect(api.sent('campaign.list')).toEqual({ query: 'smb', limit: 10 }));
         // Typed, the first match is the one Enter picks.
@@ -284,7 +284,7 @@ describe('Work items', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Ada Lovelace' })).toBeTruthy());
         await waitFor(() => expect(route.value).not.toMatchObject({ filters: { campaign: gone } }));
         expect(route.value).toMatchObject({ filters: { contact: ada.id } });
-        expect(screen.getByText('The campaign in this address no longer exists; its filter was dropped.')).toBeTruthy();
+        expect(screen.getByText('The agent in this address no longer exists; its filter was dropped.')).toBeTruthy();
     });
 
     it('a campaign the address names is shown by its name', async () => {

@@ -22,7 +22,7 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Sixteen of the twenty-six are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// Sixteen of the twenty-seven are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
 /// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
 /// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead, and so is <c>provider_answer_lost</c>,
 /// which needs an earlier attempt that lost its answer and is met through the real claim in <c>ClaimerTests</c>. The five
@@ -32,7 +32,9 @@ namespace Jason.Runtime.Tests.Routing;
 /// <c>provider_blocked</c> are not in this matrix at all, because they are the three answers that do not fail an item: work
 /// behind another search of its campaign waits for it, work whose operation needs a person's approval is parked for one,
 /// and work a provider block holds waits on the block, which
-/// <c>ClaimerTests</c> is where to read about.
+/// <c>ClaimerTests</c> is where to read about. <c>thread_route_mismatch</c> needs the campaign's own lines naming a thread,
+/// and is met through the real claim in <c>ClaimerTests</c> as well, and over a built snapshot in
+/// <see cref="ProviderOpPreflightTests"/>.
 /// Routes are placed into the registry directly: which plugin an operation goes to is a decision this test takes
 /// rather than the subject of it.
 /// </remarks>

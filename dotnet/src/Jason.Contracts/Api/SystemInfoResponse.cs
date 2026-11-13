@@ -204,13 +204,20 @@ public sealed record PluginsInfo(
     bool? LastReloadActivated);
 
 /// <summary>
-/// Where work is being sent, in five values. It sits beside <see cref="PluginsInfo"/> because "what is running"
+/// Where work is being sent, in six values. It sits beside <see cref="PluginsInfo"/> because "what is running"
 /// is only half of the question an operator is asking: the other half is which plugin each operation reaches,
 /// and the two are frozen by the same act. The routes themselves are read through <c>route.list</c>.
+/// <para>
+/// <c>GlobalOverrideCount</c> counts the global routes under an operation, the channel routes among them, and
+/// <c>CampaignRouteCount</c> every campaign's routes, the channel routes among them too. <c>ChannelRouteCount</c> says how
+/// many of those, global and campaign together, name a channel; null is a runtime older than channel routes, which is how a
+/// client learns that it would ignore a channel in a request.
+/// </para>
 /// </summary>
 public sealed record RoutesInfo(
     string SnapshotId,
     DateTimeOffset ActivatedAt,
     string? GlobalDefaultPlugin,
     int GlobalOverrideCount,
-    int CampaignRouteCount);
+    int CampaignRouteCount,
+    int? ChannelRouteCount = null);

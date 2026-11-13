@@ -5,6 +5,7 @@ import type {
     DesktopCommand,
     DesktopConversation,
     DesktopConversationRecord,
+    DesktopFullAccessStanding,
     DesktopLink,
     DesktopRefusal,
     DesktopReplyCopied,
@@ -40,6 +41,7 @@ export const setupFound: DesktopSetup = {
             install: null,
             belowFloor: null,
             fullAccess: null,
+            autoEdit: null,
             models: [
                 { id: 'opus', label: 'Opus', efforts: [...every] },
                 { id: 'sonnet', label: 'Sonnet', efforts: [...every] },
@@ -58,6 +60,8 @@ export const setupFound: DesktopSetup = {
             install: 'codex',
             belowFloor: null,
             fullAccess: 'Full access runs on Claude Code only.',
+            autoEdit:
+                'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.',
             models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
             typedModel: false,
             modelsUnread: null,
@@ -72,6 +76,7 @@ export const setupFound: DesktopSetup = {
             install: null,
             belowFloor: null,
             fullAccess: null,
+            autoEdit: null,
             models: [],
             typedModel: false,
             modelsUnread: null,
@@ -86,6 +91,7 @@ export const setupFound: DesktopSetup = {
             install: null,
             belowFloor: null,
             fullAccess: null,
+            autoEdit: null,
             models: [
                 { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', efforts: ['low', 'high', 'max'] },
                 { id: 'deepseek-flash', label: 'deepseek-flash', efforts: ['low', 'high', 'max'] },
@@ -193,6 +199,13 @@ export interface StubDesktop extends JasonDesktop {
     /** What the person answers the desktop's own confirmation of Full access with; yes unless a test says no. */
     confirmFullAccess: boolean;
     /**
+     * The standing choice of Full access the desktop keeps; none unless a test gives one. While it stands the box is not
+     * asked, and with `newChats` a chat made on a host that can take Full access starts in it.
+     */
+    standing: DesktopFullAccessStanding | null;
+    /** Changes the standing choice as the desktop does, saying so to the page. */
+    stand(standing: DesktopFullAccessStanding | null): void;
+    /**
      * What each of the Reply card's acts answers, by its name (`setup.replyConnect` and so on), in place of the stand-in's
      * own: a link opened, an act done, a limit of 500. A list is answered one by one, its last kept for the rest.
      */
@@ -214,6 +227,7 @@ export type ReplyAnswer =
 export function stubDesktop(status: DesktopSetup = setupFound, options: { newChat?: boolean } = {}): StubDesktop {
     const chatHandlers = new Set<(chatId: string, event: DesktopChatEvent) => void>();
     const changeHandlers = new Set<() => void>();
+    const standingHandlers = new Set<(standing: DesktopFullAccessStanding | null) => void>();
     const commandHandlers = new Set<(command: DesktopCommand) => void>();
     const linkHandlers = new Set<(link: DesktopLink) => void>();
     const calls: { name: string; args: unknown[] }[] = [];
@@ -320,6 +334,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const stub: StubDesktop = {
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
+        pairing: { paired: call('pairing.paired') },
         calls,
         refuse,
         actAnswers,
@@ -329,6 +344,25 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         names,
         keep,
         confirmFullAccess: true,
+        standing: null,
+        stand: (standing) => {
+            stub.standing = standing;
+            standingHandlers.forEach((handler) => handler(standing));
+        },
+        fullAccess: {
+            standing: () => {
+                calls.push({ name: 'fullAccess.standing', args: [] });
+                return Promise.resolve(stub.standing);
+            },
+            takeBack: answering('fullAccess.takeBack', () => {
+                stub.stand(null);
+                return null;
+            }),
+            onChanged(handler) {
+                standingHandlers.add(handler);
+                return () => standingHandlers.delete(handler);
+            },
+        },
         held: null,
         link: (target) => linkHandlers.forEach((handler) => handler(target)),
         links: {
@@ -354,7 +388,12 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 if (!record) return notKept;
                 // The desktop refuses what it does not pass to a host with a `done` that says why, and keeps nothing.
                 const { host, model, effort } = options as DesktopChatOptions;
-                const why = refusalOf(stub.status, options as DesktopChatOptions);
+                // A send approved for one mode is refused, as the desktop refuses it, while the chat is in another.
+                const approvedFor = (options as DesktopChatOptions).mode;
+                const why =
+                    approvedFor !== undefined && approvedFor !== record.mode
+                        ? "The chat's mode changed before the plan was approved, so nothing was sent."
+                        : refusalOf(stub.status, options as DesktopChatOptions);
                 if (why !== null) {
                     chatHandlers.forEach((handler) => handler(record.id, { kind: 'done', error: why }));
                     return null;
@@ -390,13 +429,16 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 const record = own(id);
                 return record ? structuredClone(record) : notKept;
             }),
-            create: answering('chat.create', (campaignId): DesktopConversation => {
+            create: answering('chat.create', (campaignId, host): DesktopConversation => {
                 const campaign = typeof campaignId === 'string' ? campaignId : null;
                 const existing = [...kept.values()].find((each) => campaign !== null && each.campaignId === campaign);
                 if (existing) return summaryOf(existing);
                 const id = `conv_01JD${String(++made).padStart(22, '0')}`;
                 const title = campaign === null ? 'New chat' : (names.get(campaign) ?? campaign);
-                const record = keep({ id, campaignId: campaign, title, updatedAt: now() });
+                // A new chat starts in Full access where the standing choice says so and its host can take it.
+                const takes = stub.status.hosts.find((each) => each.id === host)?.fullAccess === null;
+                const mode = stub.standing?.newChats === true && takes ? 'full_access' : 'ask_first';
+                const record = keep({ id, campaignId: campaign, title, updatedAt: now(), mode });
                 // Made and never sent to: the window's that made it, not yet listed.
                 listed.delete(id);
                 return summaryOf(record);
@@ -419,12 +461,12 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             attach: answering('chat.attach', (id, campaignId) => {
                 const record = own(id);
                 if (!record) return notKept;
-                if (record.running) return answeringStill('choose its campaign');
-                if (record.campaignId !== null) return { refused: 'This conversation is already about a campaign.' };
+                if (record.running) return answeringStill('choose its agent');
+                if (record.campaignId !== null) return { refused: 'This conversation is already about an agent.' };
                 if ([...kept.values()].some((each) => each.campaignId === campaignId))
-                    return { refused: 'That campaign has its conversation already. Open it from the campaign.' };
+                    return { refused: 'That agent has its conversation already. Open it from the agent.' };
                 if (!(picks.get(record.id) ?? []).includes(campaignId as string))
-                    return { refused: 'That campaign is not one this chat made. Open it from the campaign.' };
+                    return { refused: 'That agent is not one this chat made. Open it from the agent.' };
                 record.campaignId = campaignId as string;
                 // A name a person gave stays, as the desktop keeps it.
                 if (!namedByPerson.has(record.id))
@@ -458,15 +500,20 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             setMode: answering('chat.setMode', (id, mode, host) => {
                 const record = own(id);
                 if (!record) return notKept;
-                if (mode !== 'ask_first' && mode !== 'plan_only' && mode !== 'full_access')
+                if (mode !== 'ask_first' && mode !== 'plan_only' && mode !== 'auto_edit' && mode !== 'full_access')
                     return { refused: 'That is not a mode of the chat.' };
                 if (mode === record.mode) return summaryOf(record);
                 // Full access is refused before anything is asked on a host where it cannot apply, as the desktop does.
                 const listed = stub.status.hosts.find((each) => each.id === host);
                 if (mode === 'full_access' && (listed === undefined || listed.fullAccess !== null))
-                    return { refused: listed?.fullAccess ?? 'That is not an agent host this desktop knows.' };
-                // Full access waits for the person's yes to the desktop's own box; a no answers the conversation as it was.
-                if (mode === 'full_access' && !stub.confirmFullAccess) return summaryOf(record);
+                    return { refused: listed?.fullAccess ?? 'That is not an AI host this desktop knows.' };
+                // So is Auto-edit, with no box to answer.
+                if (mode === 'auto_edit' && (listed === undefined || listed.autoEdit !== null))
+                    return { refused: listed?.autoEdit ?? 'That is not an AI host this desktop knows.' };
+                // Full access waits for the person's yes to the desktop's own box, unless the standing choice stands; a no
+                // answers the conversation as it was.
+                if (mode === 'full_access' && stub.standing === null && !stub.confirmFullAccess)
+                    return summaryOf(record);
                 record.mode = mode;
                 // The desktop says the change before it answers.
                 stub.emit(record.id, { kind: 'mode', mode });

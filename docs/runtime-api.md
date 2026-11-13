@@ -187,7 +187,10 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 
 ### `system`
 
-- `system.info`: what `jason runtime status` shows.
+- `system.info`: what `jason runtime status` shows. Its `routes` section counts the global overrides and the campaign
+  routes, the routes that name a channel among them, and says in `channel_route_count` how many name one. A runtime older
+  than channel routes has no such member, which is how `jason route set` and `jason route unset` know that `--channel`
+  would be ignored there and decline to send it.
 - `system.shutdown`: `jason runtime stop` sends it.
 - `system.drain`: stop claiming; `jason update apply` sends it.
 - `system.resume`: claim again. No command sends it.
@@ -209,12 +212,13 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.remove_contacts`
 - `campaign.list_contacts`: the people of the campaigns named, or of every campaign not archived, each person once;
   a member a search brought in carries its `source`: the audience, as `{id, number}` like every answer that names one,
-  the search and when they landed.
+  the search and when they landed; `exclude_archived_contacts` leaves out the people whose own record is archived.
 - `campaign.summary`: for each campaign named, or every campaign not archived, where its people stand now, whole;
   `exclude_archived_contacts` leaves out the people whose own record is archived.
 - `campaign.activity`: for the same campaigns, what happened to their people between `since`, included, and `until`,
-  not included, whole.
-- `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time.
+  not included, whole; `exclude_archived_contacts` leaves out the people whose own record is archived.
+- `campaign.activity_by_period`: one count across the campaigns asked, a bucket at a time; `exclude_archived_contacts`
+  leaves out the people whose own record is archived.
 
   The four take `audience`, the number of one of the campaign's audiences, and then read only the people a search landed
   under it, each count by its own definition, in the one campaign they name; an audience nobody landed under answers
@@ -248,10 +252,12 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   membership carries `standing`: the counts of `campaign.summary` that count the person in that campaign now, read from
   the same definitions ([docs/work-execution.md](work-execution.md), "A campaign's people, counted"); `contact.list` and
   `campaign.list_contacts` carry the same.
-- `contact.list`: `query` finds any part of a name, a company, a title or any channel value. `summary` keeps the people
-  one count of `campaign.summary` counts in at least one campaign not archived, or in the one `campaign_id` names, and
-  composes with `query`, `order`, `include_archived` and the paging; with `channel` or `value` it is refused as
-  `validation_failed`.
+- `contact.list`: `query` finds any part of a name, a company, a title, any channel value or the value of any custom
+  field — a text at any depth, folded as the rest are, or a number as it is written, never a field's name — and
+  `campaign.list_contacts` finds by the same. The provider's record an audience search keeps beside the fields, as
+  `provider_record` in `custom`, is not searched. `summary` keeps the people one count of `campaign.summary` counts in at
+  least one campaign not archived, or in the one `campaign_id` names, and composes with `query`, `order`,
+  `include_archived` and the paging; with `channel` or `value` it is refused as `validation_failed`.
 - `contact.update`: Jason's own record of the person; the provider's contact is a `provider_op` work item.
 - `contact.archive`
 - `contact.threads`: a person's threads, read from the provider when a person asks, outside any work item.
@@ -279,7 +285,8 @@ or an agent asks, outside any work item: nothing is recorded, journaled or pinne
 - `workitem.list`
 - `workitem.count`
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
-  profile, the result format and the context.
+  profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval
+  withdraws the question, and the work goes back to the queue, where the claim asks again about what it now says.
 - `workitem.cancel`: stops the work for good.
 - `workitem.heartbeat`: the attempt's "I am still here".
 - `workitem.set_result`: progress worth keeping before the work is done; the whole result is replaced.
@@ -299,6 +306,8 @@ that is not that attempt does not call them.
   approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
   approving a search under another audience than the allowance names takes the allowance back in the same act.
 - `approval.reject`: the work ends, carrying the decision and the person who made it.
+- An approval whose work had its input edited while it was pending is `superseded`, by whoever edited it, and
+  either verb naming it answers `approval_not_pending`. [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.set_standing`: a person's word in advance for one campaign and one category of verdict: a drafted reply
   that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names. With the
   search operation alone as its `operations`, the campaign's allowance: the searches under one of its audiences go
@@ -397,20 +406,33 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 ### `route`
 
 - `route.resolve`: what would perform this operation for this campaign, and, when the route cannot be run, why not.
-- `route.list`: every route, or the global set plus one campaign's.
-- `route.set`: sends one campaign's work, or one of its operations, to a plugin.
-- `route.unset`: takes one campaign route away.
+  Takes the `channel` a call of the operation names for its route, and answers it back: the plugin that call reaches,
+  which may be a channel route (`scope` `campaign_channel` or `global_channel`). A channel the operation's document does
+  not let a route name, or a blank one, is refused `validation_failed` on `channel`.
+- `route.list`: every route, or the global set plus one campaign's. The global set and each campaign answer `channels`
+  beside `operations`: operation, then channel, then the route.
+- `route.set`: sends one campaign's work, or one of its operations, or one channel of an operation, to a plugin.
+- `route.unset`: takes one campaign route away: the default, an operation's own route, or with `channel` that channel's.
 
   Either is refused `409` with the code `route_orphans_search`, and changes nothing, when it would take the last of the
   search's campaign's routes and the global ones naming the plugin and account a search still followed ran under away
   from it: its reads and its stop would have nowhere to go. Each detail names one such search and says what to do: stop the search, or let it end, then change the route
   ([docs/routing.md](routing.md), §6).
 
+  Either is refused `409` with the code `route_orphans_send`, the same way, when it would take the last of the send's
+  campaign's routes and the global ones naming the plugin and account a send ran under away from it while the provider
+  still holds it for a moment to come and its result says it can be cancelled, until a cancel or a status read of it
+  says the provider holds it no longer: its cancel and its status read would have nowhere to go. The message counts the
+  sends; each detail covers one campaign's sends at one account and says how many there are, their work items, the
+  latest moment among them and what to do: cancel them, or change the route after that moment
+  ([docs/routing.md](routing.md), §6).
+
 ### `operation`
 
 - `operation.describe`: what a canonical operation takes for a campaign — its argument schema and, for one that carries
   an audience's definition, the schema the plugin the campaign's route names declares for it, with that schema's keys.
-  The route is resolved now and held to the route's half of the claim; nothing is invoked.
+  The route is resolved now and held to the route's half of the claim; nothing is invoked. Takes the `channel` a call
+  names for its route, for the operations a route can name a channel of, and describes the plugin that channel goes to.
 
 ### `suppression`
 

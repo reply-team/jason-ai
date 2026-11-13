@@ -396,7 +396,7 @@ test('the Feed is never handed over, renamed or removed: a campaign its turn mak
     const made = (JSON.parse(readFileSync(r.campaigns, 'utf8')) as { id: string }[])[0]!.id;
     assert.deepEqual(r.chat.open(feed.id).campaignId, null);
     assert.equal(r.chat.open(feed.id).title, 'Feed', 'not named by its first words');
-    await assert.rejects(r.chat.attach(feed.id, made), { message: "The Feed is about no campaign. Open the campaign's own conversation from the campaign." });
+    await assert.rejects(r.chat.attach(feed.id, made), { message: "The Feed is about no agent. Open the agent's own conversation from the agent." });
     assert.throws(() => r.chat.rename(feed.id, 'Mine'), { message: 'The Feed is always kept; it cannot be removed or renamed.' });
     assert.throws(() => r.chat.remove(feed.id), { message: 'The Feed is always kept; it cannot be removed or renamed.' });
     r.chat.restart(feed.id);
@@ -415,14 +415,101 @@ test('a restarted desktop reads back the lines written since the Feed\'s newest,
     await after.idle();
     const reads = r.jason().filter((asked) => asked.startsWith('journal list'));
     // A few seconds before the newest kept moment, as lines are committed out of order.
-    assert.deepEqual(reads, [`journal list ${feedKinds.map((kind) => `--kind ${kind}`).join(' ')} --since 2026-11-11T09:59:56.000Z --limit 100`]);
+    assert.deepEqual(reads.sort(), [
+        `journal list ${feedKinds.map((kind) => `--kind ${kind}`).join(' ')} --since 2026-11-11T09:59:56.000Z --limit 100`,
+        'journal list --kind workitem_succeeded --since 2026-11-11T09:59:56.000Z --limit 100',
+    ].sort(), 'succeeded work is a request of its own, one page, and the other kinds\' request does not name it');
     assert.deepEqual(
         after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)),
         [jrn(1), jrn(3), jrn(4), jrn(5), jrn(6)],
     );
     after.feed([]);
     await after.idle();
-    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 1, 'an ask that carries no catch-up reads nothing back');
+    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 2, 'an ask that carries no catch-up reads nothing back');
+});
+
+test('a catch-up keeps the sends and the listed roles\' work among the succeeded items it reads, in order, and nothing else of them', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(1)]);
+    const done = (n: number, fields: Record<string, unknown>) =>
+        journalLine(n, { kind: 'workitem_succeeded', campaign_id: cmp(1), work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_op', work_item_role: null, work_item_operation: null, ...fields });
+    // Newest first, as the runtime answers: reads, a manager's work, a registered role's and a send are filtered by the desktop.
+    writeFileSync(
+        r.journal,
+        JSON.stringify([
+            done(8, { work_item_operation: 'social_invitation.send' }),
+            done(7, { work_item_operation: 'conversation.list' }),
+            done(6, { work_item_kind: 'ai_role', work_item_role: 'manager' }),
+            done(5, { work_item_kind: 'ai_role', work_item_role: 'closer-for-ada' }),
+            done(4, { work_item_kind: 'ai_role', work_item_role: 'researcher' }),
+            done(3, { work_item_operation: 'message.send', campaign_id: cmp(3) }),
+            done(2, { work_item_operation: 'contact.list' }),
+            journalLine(1),
+        ]),
+    );
+    const after = r.again();
+    after.feed([], { catchUp: true });
+    await after.idle();
+    assert.deepEqual(
+        after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? `${entry.journal_id}:${entry.operation ?? entry.role ?? entry.journal_kind}` : entry.kind)),
+        [`${jrn(1)}:inbound_reply_observed`, `${jrn(3)}:message.send`, `${jrn(4)}:researcher`, `${jrn(8)}:social_invitation.send`],
+    );
+    const record = recordOf(r, feed.id);
+    for (const said of ['closer-for-ada', 'manager', 'contact.list', 'conversation.list']) assert.ok(!record.includes(said), said);
+});
+
+test('a catch-up merges the two pages by their ids, the other kinds\' lines among the sends', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(1)]);
+    const done = (n: number, fields: Record<string, unknown>) =>
+        journalLine(n, { kind: 'workitem_succeeded', work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_op', work_item_role: null, work_item_operation: null, ...fields });
+    // One file serves both requests, each filtered by the kinds it names: the approvals between the sends are the first page's.
+    writeFileSync(
+        r.journal,
+        JSON.stringify([
+            done(8, { work_item_operation: 'conversation.reply' }),
+            journalLine(7, { kind: 'approval_requested', campaign_id: cmp(7) }),
+            done(6, { work_item_operation: 'message.send', campaign_id: cmp(6) }),
+            journalLine(5, { kind: 'decision_raised', campaign_id: cmp(5) }),
+            done(4, { work_item_operation: 'message.send', campaign_id: cmp(4) }),
+            journalLine(1),
+        ]),
+    );
+    const after = r.again();
+    after.feed([], { catchUp: true });
+    await after.idle();
+    assert.deepEqual(
+        after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)),
+        [jrn(1), jrn(4), jrn(5), jrn(6), jrn(7), jrn(8)],
+    );
+});
+
+test('a catch-up whose read of the other kinds failed puts nothing in, the succeeded work with it; one whose succeeded read failed puts in the rest', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(1)]);
+    const done = (n: number) =>
+        journalLine(n, { kind: 'workitem_succeeded', work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_op', work_item_role: null, work_item_operation: 'message.send', campaign_id: cmp(n) });
+    writeFileSync(r.journal, JSON.stringify([done(6), journalLine(5, { kind: 'approval_requested', campaign_id: cmp(5) }), journalLine(1)]));
+    const entries = (chat: Chat) => chat.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind));
+    // The read of the Feed's kinds fails, the succeeded one answers: nothing goes in, so the span is read again next time.
+    r.b.env.STUB_JOURNAL_FAILS_EXCEPT = 'workitem_succeeded';
+    const first = r.again();
+    first.feed([], { catchUp: true });
+    await first.idle();
+    assert.deepEqual(entries(first), [jrn(1)], 'no sends alone, no moment moved past the other kinds');
+    // The succeeded read fails, the other answers: its lines go in and no send is caught up.
+    delete r.b.env.STUB_JOURNAL_FAILS_EXCEPT;
+    r.b.env.STUB_JOURNAL_FAILS_KIND = 'workitem_succeeded';
+    const second = r.again();
+    second.feed([], { catchUp: true });
+    await second.idle();
+    assert.deepEqual(entries(second), [jrn(1), jrn(5)]);
+    // Both answering, the next catch-up reads the span again and the send comes in.
+    delete r.b.env.STUB_JOURNAL_FAILS_KIND;
+    const third = r.again();
+    third.feed([], { catchUp: true });
+    await third.idle();
+    assert.deepEqual(entries(third), [jrn(1), jrn(5), jrn(6)]);
 });
 
 test('the catch-up runs at each load of the page, as each first ask carries it, and takes no line twice, folded ones included, across a restart', async (t) => {
@@ -435,7 +522,7 @@ test('the catch-up runs at each load of the page, as each first ask carries it, 
     await r.chat.idle();
     r.chat.feed([], { catchUp: true });
     await r.chat.idle();
-    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 2, 'a page loaded again reads back again');
+    assert.equal(r.jason().filter((asked) => asked.startsWith('journal list')).length, 4, 'a page loaded again reads back again');
     const after = r.again();
     after.feed([], { catchUp: true });
     await after.idle();

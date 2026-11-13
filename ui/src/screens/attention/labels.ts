@@ -43,7 +43,7 @@ export function approvalNote(status: string, decidedBy: string | null | undefine
 export function reasonLabel(reason: string): string {
     switch (reason) {
         case 'approval_required':
-            return 'Approval is required for every operation of this kind in this campaign.';
+            return 'Approval is required for every operation of this kind for this agent.';
         case 'input_changed':
             return 'The input changed since an earlier approval, so it is asked again.';
         default:

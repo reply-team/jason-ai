@@ -199,8 +199,8 @@ export function entryLabel(entry: JournalEntry, me: string): EntryLabel {
         case 'workitem_released':
             return {
                 mark: mark('created'),
-                title: `${work} will be tried again`,
-                short: `${workShort} to try again`,
+                title: `${work} was put back to be taken again`,
+                short: `${workShort} put back`,
                 note: entry.reason,
             };
         case 'workitem_reopened':

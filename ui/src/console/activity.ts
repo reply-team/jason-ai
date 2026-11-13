@@ -18,7 +18,7 @@ export function activityView(): Html {
         <div class="ph">
             <div>
                 <h1>Activity</h1>
-                <p>What Jason and its agents do, as the journal records it.</p>
+                <p>What Jason and its roles do, as the journal records it.</p>
             </div>
         </div>
         <div class="meta stream-${state.status}" role="status">${statusWords[state.status]}</div>

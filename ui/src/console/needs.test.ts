@@ -66,3 +66,16 @@ describe('what Needs you reads from an approval', () => {
         }
     });
 });
+
+describe('what a message approval reads for its card', () => {
+    it('reads a template and the example the runtime made of it, and nothing of a text message', () => {
+        const text = toApprovalDetail(fixtures['approval.get/email-message'].response.preview);
+        expect(text).toMatchObject({ compose: null, example: null });
+        const template = toApprovalDetail({
+            highlights: { '/args/message': { format: 'email', compose: 'template', subject: 'Hi [x]', body: 'B' } },
+            example: { subject: 'Hi Ines', body: 'B', unfilled: ['sender.first_name', 7] },
+        });
+        expect(template.compose).toBe('template');
+        expect(template.example).toEqual({ subject: 'Hi Ines', body: 'B', unfilled: ['sender.first_name'] });
+    });
+});

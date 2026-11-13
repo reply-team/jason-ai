@@ -2,19 +2,21 @@
 // everything else is a card on the asking chat's page, and the answer comes from that page by `answer` and from nowhere
 // else. Each request is answered once. "Always" is kept in memory for one chat and is gone with the window.
 //
-// A turn runs in its chat's mode. Ask first is the above. Plan only refuses every request but a read, which the model
-// settles, and the two cards left to it: reading a file outside the chat's folders and opening a web page. Full access
-// runs in the host's default mode: the turn's hook (`hook`) answers each tool use by one judgement
-// (`fullAccessJudgement`): allow what runs, deny what is refused, and ask about what is held, which Claude Code then puts
-// to the prompt tool. A request that reaches the prompt tool in Full access, held, one the host asks about whatever the
-// hook said, or one the hook never saw, is judged and carded as in Ask first, under its own title, after Full access's own
-// refusals. The tool uses the hook saw are kept by id; each refusal and each hold is said to the log.
+// A turn runs in its chat's mode. Ask first is the above. Auto-edit is Ask first with its own judgement
+// (`autoEditJudgement`), which allows the six file commands in the chat folder with no card; it has no hook. Plan only
+// refuses every request but a read, which the model settles, and the two cards left to it: reading a file outside the
+// chat's folders and opening a web page. Full access runs in the host's default mode: the turn's hook (`hook`) answers
+// each tool use by one judgement (`fullAccessJudgement`): allow what runs, deny what is refused, and ask about what is
+// held, which Claude Code then puts to the prompt tool. A request that reaches the prompt tool in Full access, held, one
+// the host asks about whatever the hook said, or one the hook never saw, is judged and carded as in Ask first, under its
+// own title, after Full access's own refusals. The tool uses the hook saw are kept by id; each refusal and each hold is
+// said to the log.
 
 import { randomUUID } from 'node:crypto';
 import type { HeldReason } from './chat-literal.ts';
 import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
 import type { HookAnswer } from './chat-permission-endpoint.ts';
-import { fullAccessJudgement, heldSentence, judge, type ChatScope } from './chat-permission-model.ts';
+import { autoEditJudgement, fullAccessJudgement, heldSentence, judge, type ChatScope } from './chat-permission-model.ts';
 
 /** What the permission prompt tool answers, in the shape Claude Code reads. */
 export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unknown> } | { behavior: 'deny'; message: string };
@@ -134,7 +136,7 @@ export class PermissionBroker {
         const refused = (message: string) => Promise.resolve(this.#decided({ behavior: 'deny', message }, { outcome: 'refused', by: 'model', mode }));
         if (mode === 'plan_only' && tool === 'ExitPlanMode') return refused(planExitRefusal);
         if (mode === 'plan_only' && writers.has(tool)) return refused(planRefusal);
-        const judged = judge(tool, input, turn.scope);
+        const judged = mode === 'auto_edit' ? autoEditJudgement(tool, input, turn.scope) : judge(tool, input, turn.scope);
         if (judged.verdict === 'allow') return Promise.resolve(this.#decided(allowed(input), { outcome: 'allowed', by: 'model', mode }));
         if (judged.verdict === 'deny') return refused(judged.message);
         // What Full access holds the person answers each time: no "Always" covers it, and its card offers none.

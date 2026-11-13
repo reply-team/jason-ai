@@ -89,6 +89,45 @@ public class ContactThreadServiceTests
         }
     }
 
+    /// <summary>
+    /// Every route is walked, channel routes included: where the campaign reads its threads in another account, a route
+    /// that sends on a channel in the account the person's identifier was learned in is the one the read goes by, for a
+    /// person's threads and for one thread alike. Where no route names that account, the read is refused as before.
+    /// </summary>
+    [Theory]
+    [InlineData("conversation.list", true)]
+    [InlineData("conversation.get", true)]
+    [InlineData("conversation.list", false)]
+    public async Task A_channel_route_that_names_the_pin_s_account_carries_the_read(string operation, bool namesTheAccount)
+    {
+        using var world = await World.CreateAsync();
+        var bySend = new Route(Plugin, Binding(namesTheAccount ? "a" : "c"), BindingIdentity.Of(Binding(namesTheAccount ? "a" : "c")));
+        world.Route(new RouteSet(
+            new Route(Plugin, Binding("b"), BindingIdentity.Of(Binding("b"))),
+            RouteSet.Empty.Operations,
+            new Dictionary<string, IReadOnlyDictionary<string, Route>>(StringComparer.Ordinal)
+            {
+                ["message.send"] = new Dictionary<string, Route>(StringComparer.Ordinal) { ["linkedin"] = bySend },
+            }));
+        world.Reads.Answer(FakeProviderReads.Result(operation == "conversation.list" ? Threads() : Thread(owner: Pin)));
+
+        Task reading = operation == "conversation.list"
+            ? world.Service.ThreadsAsync(new ContactThreadsRequest(world.Ada.PublicId, null, null, null), Ct)
+            : world.Service.ThreadAsync(new ContactThreadRequest(world.Ada.PublicId, null, "t_1", null, null), Ct);
+
+        if (namesTheAccount)
+        {
+            await reading;
+            var request = Assert.Single(world.Reads.Requests);
+            Assert.Equal((operation, """{"workspace":"a"}"""), (request.Operation, request.Binding!.ToJsonString()));
+        }
+        else
+        {
+            Assert.Equal("no_route", (await Assert.ThrowsAsync<NotFoundException>(() => reading)).Code);
+            Assert.Empty(world.Reads.Requests);
+        }
+    }
+
     [Fact]
     [Critical(Family.S1, "a thread read is the person's own")]
     public async Task A_thread_of_somebody_else_is_refused()
@@ -284,6 +323,15 @@ public class ContactThreadServiceTests
                 new RouteSet(To(global), RouteSet.Empty.Operations),
                 new Dictionary<string, RouteSet>(StringComparer.Ordinal) { [Autumn.PublicId] = new RouteSet(To(campaign), RouteSet.Empty.Operations) }));
         }
+
+        /// <summary>Autumn's routes are <paramref name="campaign"/>, and nothing is routed globally.</summary>
+        public void Route(RouteSet campaign) =>
+            _routes.Replace(new RouteSnapshot(
+                PublicId.New(RouteSnapshot.IdPrefix),
+                new DateTimeOffset(Noon),
+                _plugins.Snapshot.Id,
+                RouteSet.Empty,
+                new Dictionary<string, RouteSet>(StringComparer.Ordinal) { [Autumn.PublicId] = campaign }));
 
         public async Task<(int Journal, int WorkItems, int Attempts, int Pins)> CountsAsync() => (
             await Db.Journal.CountAsync(Ct),

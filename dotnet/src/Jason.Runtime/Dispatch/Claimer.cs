@@ -582,9 +582,10 @@ public sealed class Claimer(
         {
             // A question nobody has answered yet, about this item. It is left exactly as it is: asking the same
             // person the same thing twice is not an improvement, and a second pending row is one the database
-            // would refuse anyway. Whether its subject still matches is not asked here, because it cannot have
-            // stopped matching — a pending row sits on an item that is awaiting_approval, and such an item is
-            // never claimed, so nothing could have edited the work since. Reaching here at all means something
+            // would refuse anyway. Whether its subject still matches is not asked here: a pending row sits on an
+            // item that is awaiting_approval, which is never claimed, and an edit of that item's input withdraws
+            // the question in the same save that hands the item back to the queue, so the claim meets such an
+            // item with no live decision and asks about what it now says. Reaching here at all means something
             // let the item back into the queue with the decision still open, and the honest answer to that is to
             // put it back where it was waiting.
             ApprovalGate.Wait(db, journal, item, now);
@@ -737,12 +738,36 @@ public sealed class Claimer(
                 (made, reference, ran) => new NamedSearch(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
                 ct).ConfigureAwait(false)
             : null;
+        // So is the send the work names: a read or a cancel of it goes where it ran, and asks first the route the send went
+        // by, the one its own channel resolved.
+        var send = contract is not null && CanonicalInput.NamesASend(contract)
+            ? await ReferenceAsync(
+                db,
+                item,
+                CanonicalInput.NamedSend(item),
+                SendKind,
+                (made, reference, ran) => new NamedSend(
+                    made.PublicId,
+                    made.Operation,
+                    made.Status,
+                    reference,
+                    ran?.PluginId,
+                    ran?.BindingIdentity,
+                    made.Operation is { } sent ? OperationCatalog.Find(sent)?.RouteChannel(made.Context[WorkItemService.InputKey]) : null),
+                ct).ConfigureAwait(false)
+            : null;
+        // And so is where the thread the work names was seen: a read or a filing of it goes there, and every operation that
+        // names one is held to it. A thread no line of the campaign names is one the runtime knows nothing about.
+        var thread = contract is not null && CanonicalInput.NamesAThread(contract) && CanonicalInput.NamedThread(item) is { } named
+            && await ThreadSightings.InCampaignAsync(db, item.CampaignId, named, ct).ConfigureAwait(false) is { Count: > 0 } seen
+            ? seen
+            : null;
         var resolution = contract is null
             ? null
-            : ProviderOpPreflight.Resolve(contract, new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Search: search), routing);
+            : ProviderOpPreflight.Resolve(contract, new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Send: send, Search: search, Thread: thread), routing);
         if (contract is null || resolution is null)
         {
-            return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Unsettled: unsettled);
+            return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Unsettled: unsettled, Thread: thread);
         }
 
         var pluginId = resolution.Route.PluginId;
@@ -751,15 +776,6 @@ public sealed class Claimer(
         // The open blocks of the route's plugin and binding, by their index, and only for work a block holds.
         var blocks = OperationCatalog.HeldByProviderBlock.Contains(contract.Id)
             ? await ProviderBlocks.OpenAsync(db, pluginId, ProviderBlocks.Identity(resolution.Route.BindingIdentity), ct).ConfigureAwait(false)
-            : null;
-        var send = CanonicalInput.NamesASend(contract)
-            ? await ReferenceAsync(
-                db,
-                item,
-                CanonicalInput.NamedSend(item),
-                SendKind,
-                (made, reference, ran) => new NamedSend(made.PublicId, made.Operation, made.Status, reference, ran?.PluginId, ran?.BindingIdentity),
-                ct).ConfigureAwait(false)
             : null;
 
         // Where a status read starts is the search's own row's: the cursor the last read answered, as the row keeps it, and
@@ -787,7 +803,7 @@ public sealed class Claimer(
 
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search, audience, inTheWay);
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search, audience, inTheWay, thread);
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -810,7 +826,8 @@ public sealed class Claimer(
             Learned(contact.ExternalIds, campaign.ExternalIds, pluginId, item, unsettled),
             search,
             audience,
-            inTheWay);
+            inTheWay,
+            thread);
     }
 
     /// <summary>

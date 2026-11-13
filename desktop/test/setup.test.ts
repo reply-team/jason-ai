@@ -8,7 +8,7 @@ import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { loggedTurns } from '../src/chat-log.ts';
 import { floorSentence, sharingVersionReads, versionLimitMs } from '../src/host-version.ts';
-import { codexFullAccess, fullAccessNotYet, fullAccessSentence } from '../src/chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessSentence } from '../src/chat-modes.ts';
 import { fileLogger, type Logger } from '../src/log.ts';
 import { loggedCli, startInstallation } from '../src/installation.ts';
 import { LoginItem, loginFlag, RuntimeAutostart } from '../src/login-item.ts';
@@ -744,7 +744,7 @@ test('every host is listed, found or not; the missing ones name an install only 
     const b = bench(t, { programs: ['claude', 'gemini', 'npm'] });
     const { hosts } = await setupOn(b).status();
     const byId = new Map(hosts.map((host) => [host.id, host]));
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: null, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: null, autoEdit: null, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null });
     assert.equal(byId.get('codex')?.found, false);
     assert.equal(byId.get('codex')?.install, 'codex');
     assert.equal(byId.get('gemini')?.found, true);
@@ -762,10 +762,10 @@ test('each host carries the models it offers with their efforts, and a listing a
     const every = ['low', 'medium', 'high', 'xhigh', 'max'];
     let byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
     assert.deepEqual(byId.get('claude')?.models, [
-        { id: 'opus', label: 'Opus', efforts: every },
-        { id: 'sonnet', label: 'Sonnet', efforts: every },
-        { id: 'haiku', label: 'Haiku', efforts: every },
-        { id: 'fable', label: 'Fable', efforts: every },
+        { id: 'opus', label: 'Opus (latest)', efforts: every },
+        { id: 'sonnet', label: 'Sonnet (latest)', efforts: every },
+        { id: 'haiku', label: 'Haiku (latest)', efforts: every },
+        { id: 'fable', label: 'Fable (latest)', efforts: every },
     ]);
     assert.equal(byId.get('claude')?.typedModel, true);
     assert.equal(byId.get('claude-api-key')?.typedModel, true);
@@ -810,7 +810,7 @@ test('a Claude Code below the floor is listed and marked with the version found,
     const byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
     const sentence = floorSentence('2.1.200');
     assert.ok(sentence);
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessSentence('2.1.200'), models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessSentence('2.1.200'), autoEdit: null, models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null });
     assert.equal(byId.get('claude-api-key')?.belowFloor, sentence, 'a key provider runs on that same claude');
     assert.equal(byId.get('deepseek')?.belowFloor, sentence);
     assert.equal(byId.get('codex')?.belowFloor, null, 'only Claude Code has a floor');
@@ -962,6 +962,21 @@ test('every host that drives the chat says why Full access cannot be chosen on i
     const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.fullAccess]));
     assert.equal(off.get('claude'), fullAccessNotYet);
     assert.equal(off.get('codex'), fullAccessNotYet);
+});
+
+test('every host that drives the chat says whether Auto-edit can be chosen on it: Codex cannot ask before it acts, and Claude Code at any version can', async (t) => {
+    const { b, say } = claudeSaying(t);
+    say({ stdout: '2.1.200 (Claude Code)\n' });
+    const hosts = (await setupOn(b).status()).hosts;
+    const on = new Map(hosts.map((host) => [host.id, host.autoEdit]));
+    assert.equal(on.get('claude'), null, 'below Full access\'s floor Auto-edit is still offered: it needs no hook');
+    assert.equal(on.get('codex'), codexAutoEdit);
+    assert.equal(on.get('gemini'), null, 'a host that does not drive the chat offers no mode');
+    for (const provider of hosts.filter((host) => host.kind === 'provider')) {
+        assert.equal(provider.autoEdit, provider.id.startsWith('codex') ? codexAutoEdit : null, provider.id);
+    }
+    const off = new Map((await new Setup({ ...setupDeps(b), fullAccessOffered: false }).status()).hosts.map((host) => [host.id, host.autoEdit]));
+    assert.equal(off.get('claude'), null, 'Full access\'s switch is not Auto-edit\'s');
 });
 
 test('a sign-in whose chat folder cannot be put right keeps its own result: the folder\'s code is logged, never its sentence said', async (t) => {

@@ -21,7 +21,7 @@ describe('Settings', () => {
             await waitFor(() => screen.getByRole('heading', { name: 'Settings' }));
             expect(screen.queryByRole('heading', { name: 'Language', level: 2 })).toBeNull();
             expect(screen.queryByRole('button', { name: 'English' })).toBeNull();
-            expect(screen.getByRole('link', { name: 'Campaigns' })).toBeTruthy();
+            expect(screen.getByRole('link', { name: 'Agents' })).toBeTruthy();
             startLocale();
             expect(document.documentElement.lang).toBe('en');
             expect(fake.calls.map((c) => c.operation)).toEqual(['system.info']);

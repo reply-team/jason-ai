@@ -1,9 +1,12 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { route } from '../../router';
+import { stubDesktop } from '../../test/desktop';
+import { fullAccessStanding } from '../../platform/full-access';
+import { routeCounts } from './route-counts';
 
 function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'aged' = 'two') {
     const fake = new FakeApi()
@@ -18,7 +21,27 @@ function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'a
     return { fake, rendered };
 }
 
+describe('route counts', () => {
+    it('says how many go by channel only when some do', () => {
+        const counts = { global_override_count: 1, campaign_route_count: 3 };
+        expect(routeCounts(counts)).toBe('1 global · 3 per agent');
+        expect(routeCounts({ ...counts, channel_route_count: 0 })).toBe('1 global · 3 per agent');
+        expect(routeCounts({ ...counts, channel_route_count: 2 })).toBe(
+            '1 global · 3 per agent · 2 of them by channel',
+        );
+    });
+});
+
 describe('System', () => {
+    it('shows the recorded route counts without a channel clause when none go by channel', async () => {
+        systemFake();
+        const routes = fixtures['system.info/with-ui'].response.routes;
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        expect(routes.channel_route_count).toBe(0);
+        expect(screen.getByText('0 global · 0 per agent')).toBeTruthy();
+        expect(screen.queryByText(/by channel/)).toBeNull();
+    });
+
     it('shows the runtime, the port, the dispatcher and this UI', async () => {
         systemFake();
         const info = fixtures['system.info/with-ui'].response;
@@ -126,5 +149,72 @@ describe('System, the update sentence', () => {
         expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
         expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
         expect(screen.queryByText(/jason update apply/)).toBeNull();
+    });
+});
+
+describe('System, the standing choice of Full access', () => {
+    afterEach(() => {
+        delete window.jasonDesktop;
+        fullAccessStanding.value = null;
+    });
+
+    it('in a browser shows no Full access card', async () => {
+        systemFake();
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        expect(screen.queryByRole('heading', { name: 'Full access' })).toBeNull();
+    });
+
+    it('in the desktop says that Full access asks each time while no choice stands', async () => {
+        window.jasonDesktop = stubDesktop();
+        systemFake();
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Full access' })).toBeTruthy());
+        expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Ask each time again' })).toBeNull();
+    });
+
+    it('in the desktop shows Always and new chats, and takes them back with one button', async () => {
+        const desktop = stubDesktop();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
+        window.jasonDesktop = desktop;
+        systemFake();
+        await waitFor(() =>
+            expect(screen.getByText(/Chats on this computer enter Full access without asking, since /)).toBeTruthy(),
+        );
+        expect(screen.getByText('New chats start in Full access.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Ask each time again' }));
+        await waitFor(() => expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy());
+        expect(desktop.calls.filter((each) => each.name === 'fullAccess.takeBack')).toHaveLength(1);
+        expect(screen.queryByText('New chats start in Full access.')).toBeNull();
+    });
+
+    it('reads the choice again each time it shows, so one the desktop never said is shown', async () => {
+        const desktop = stubDesktop();
+        window.jasonDesktop = desktop;
+        systemFake();
+        await waitFor(() => expect(screen.getByText('Full access asks you each time a chat enters it.')).toBeTruthy());
+        cleanup();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
+        systemFake();
+        await waitFor(() =>
+            expect(screen.getByText(/Chats on this computer enter Full access without asking, since /)).toBeTruthy(),
+        );
+    });
+
+    it('a moment that is no date is shown without it, and the screen still draws', async () => {
+        const desktop = stubDesktop();
+        desktop.standing = { givenAt: '2026-99-99T99:99:99Z', newChats: false };
+        window.jasonDesktop = desktop;
+        systemFake();
+        await waitFor(() =>
+            expect(screen.getByText('Chats on this computer enter Full access without asking.')).toBeTruthy(),
+        );
+        expect(screen.getByRole('button', { name: 'Ask each time again' })).toBeTruthy();
+    });
+
+    it('in a desktop of an earlier version, with no standing choice to read, shows no card', async () => {
+        window.jasonDesktop = {} as NonNullable<typeof window.jasonDesktop>;
+        systemFake();
+        await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
+        expect(screen.queryByRole('heading', { name: 'Full access' })).toBeNull();
     });
 });

@@ -225,7 +225,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     assert.deepEqual(targetsOf(rules), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -237,7 +237,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
 
@@ -587,4 +587,19 @@ test('a Claude turn is denied, by the host itself, any command that assigns PATH
     const at = disallowed.indexOf('Bash(*JASON_CONFINED*)');
     assert.deepEqual(disallowed.slice(at, at + 5), ['Bash(*JASON_CONFINED*)', 'Bash(*PATH=*)', 'Bash(*PATH+=*)', 'Bash(*PATHEXT=*)', 'Bash(*PATHEXT+=*)']);
     assert.ok(!valuesOf(claudeArguments(turn), '--allowedTools').some((rule) => rule.includes('PATH')));
+});
+
+test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: the default mode, the prompt tool, never accept-edits', () => {
+    const asked = claudeArguments({ ...turn, mode: 'ask_first' });
+    const edited = claudeArguments({ ...turn, mode: 'auto_edit' });
+    assert.deepEqual(edited, asked);
+    assert.deepEqual(claudeArguments({ ...turn, mode: 'auto_edit', resume: 'ses-1', addDirs: ['/c'] }), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] }));
+    assert.equal(edited.includes('--permission-mode'), false);
+    assert.ok(edited.includes('--permission-prompt-tool'));
+    // No argument and no setting names the host's own accept-edits mode or a default mode of any kind.
+    for (const arg of edited) {
+        assert.doesNotMatch(arg, /acceptEdits|defaultMode|bypassPermissions/i, arg);
+    }
+    const settings = JSON.parse(valueOf(edited, '--settings') ?? '{}') as Record<string, unknown>;
+    assert.equal(JSON.stringify(settings).includes('hooks'), false);
 });

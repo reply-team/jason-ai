@@ -1,6 +1,8 @@
 import { effect, signal } from '@preact/signals-react';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
-import { sendTurn, startChat } from './chat';
+import { fullAccessStanding } from '../platform/full-access';
+import { hostOf, sendTurn, startChat } from './chat';
+import { fullAccessLine, newChat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
@@ -25,6 +27,19 @@ export const startWaiting = signal<string | null>(null);
  */
 export const startMaking = signal<string | null>(null);
 
+/** The person's Change on the start screen's Full access line: the chat this message makes starts in Ask first. */
+export const startAskFirst = signal(false);
+
+/**
+ * Whether the chat a message sent from here makes would start in Full access: the standing choice says new chats start
+ * in it and the host that chat would run on can take it, and the person did not change that here. The start screen then
+ * shows the chat's Full access line before anything is sent.
+ */
+function startsInFullAccess(): boolean {
+    if (startAskFirst.value || fullAccessStanding.value?.newChats !== true || setup.value === null) return false;
+    return hostOf(newChat('', null))?.fullAccess === null;
+}
+
 /** Whether the setup, once read, holds an AI that can drive the chat; null while it is not read. */
 const aiConnected = (): boolean | null => {
     const hosts = setup.value?.hosts;
@@ -39,7 +54,8 @@ async function begin(text: string): Promise<void> {
     startMaking.value = text;
     let id: string | null;
     try {
-        id = await startChat();
+        // What the start screen showed decides: a chat it did not say starts in Full access never does.
+        id = await startChat(undefined, { askFirst: !startsInFullAccess() });
     } finally {
         startMaking.value = null;
     }
@@ -47,6 +63,7 @@ async function begin(text: string): Promise<void> {
         startDraft.value = text;
         return;
     }
+    startAskFirst.value = false;
     here().dock.showChat(id);
     here().dock.close('start');
     sendTurn(id, text, true);
@@ -111,7 +128,11 @@ export function StartPanel() {
                 <div className="ph">
                     <div>
                         <h1>Who do you want to reach?</h1>
-                        <p>Say who it is, and Jason sets the campaign up with you in a chat.</p>
+                        <p>Say who it is, and Jason sets the agent up with you in a chat.</p>
+                        <p className="start-optional">
+                            This interface is optional: everything here can also be done from a terminal with your AI,
+                            through Jason's CLI and API.
+                        </p>
                     </div>
                 </div>
                 {card && <Painted className="start-ai" view={connect.aiCardView} />}
@@ -159,6 +180,14 @@ export function StartPanel() {
                             Start
                         </button>
                     </div>
+                    {startsInFullAccess() && (
+                        <div className="note am full-access" role="status" aria-label="The chat starts in Full access">
+                            {fullAccessLine}{' '}
+                            <button className="btn sm" type="button" onClick={() => (startAskFirst.value = true)}>
+                                Change
+                            </button>
+                        </div>
+                    )}
                 </form>
             </div>
         </div>

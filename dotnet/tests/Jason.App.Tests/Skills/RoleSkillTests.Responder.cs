@@ -272,7 +272,7 @@ public partial class RoleSkillTests
             StringComparison.Ordinal);
         Assert.Contains("jason contact list --query marta@example.com", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "A person found counts only when their value on the thread's channel equals that address exactly: `--query` matches any part of a name, a company, a title or a channel value, so a result can be somebody else, and a `from` that is a display name rather than an address matches nobody.",
+            "A person found counts only when their value on the thread's channel equals that address exactly: `--query` matches any part of a name, a company, a title, a channel value or a custom field's value (never the provider's record), so a result can be somebody else, and a `from` that is a display name rather than an address matches nobody.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("Exactly one such person: the reply names them with `--contact`.", skill, StringComparison.Ordinal);

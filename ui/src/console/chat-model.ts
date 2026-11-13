@@ -27,7 +27,8 @@ export interface Step {
 
 export type Entry =
     | { kind: 'user'; text: string }
-    | { kind: 'text'; text: string }
+    /** `plan`, when present: the desktop marked these words a Plan only turn's plan (`livePlan`). */
+    | { kind: 'text'; text: string; plan?: true }
     | { kind: 'step'; step: Step }
     | {
           kind: 'permission';
@@ -97,6 +98,16 @@ export interface Chat {
      * `mode` events, never from what the page asked for. The line that says Full access is on is drawn from this.
      */
     mode: DesktopChatMode;
+    /**
+     * What the person did with the chat's plan card in this page: approving it (the desktop asked, no answer yet),
+     * approved, or kept planning; null when they did neither. Never kept: a reopened page reads the desktop's mark alone.
+     */
+    plan: 'approving' | 'approved' | 'kept' | null;
+    /**
+     * The host the chat's last turn was sent to, as the desktop kept it (`chosen`); null before any. A plan is the answer
+     * of that host's session alone: another host's session never saw it (`livePlan`).
+     */
+    turnHost: string | null;
 }
 
 /** How much of a set-up chat's first message names it, as the desktop names it. */
@@ -136,6 +147,8 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         removing: false,
         renaming: null,
         mode: 'ask_first',
+        plan: null,
+        turnHost: null,
     };
 }
 
@@ -162,6 +175,10 @@ function entryOf(entry: DesktopKeptEntry): Entry {
             return { kind: 'line', line: { ...entry } };
         case 'gap':
             return { kind: 'gap' };
+        case 'text':
+            return entry.plan === true
+                ? { kind: 'text', text: entry.text, plan: true }
+                : { kind: 'text', text: entry.text };
         default:
             return { kind: entry.kind, text: entry.text };
     }
@@ -183,11 +200,83 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         running: record.running,
         // A desktop of an earlier version keeps no mode: its chats run as Ask first.
         mode: record.mode ?? 'ask_first',
+        turnHost: chosen?.host ?? null,
     };
 }
 
+/** What the plan card sends, as the person's message, once the chat is in Ask first. */
+export const planGo = 'Go ahead with the plan in your last answer.';
+
+/** The plan card's line on Claude Code: what Approve and run does. */
+export const planLine =
+    'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.';
+
+/** The plan card's line on Codex, in place of `planLine`: Ask first runs Codex read-only too. */
+export const codexPlanLine =
+    'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.';
+
+/** The plan card's line once it was approved in this page. */
+export const planApproved = 'Approved: the chat is in Ask first.';
+
+/** The plan card's line, with no buttons, while the chat is on another host than the one that made the plan. */
+export const planOtherHost =
+    'This plan came from another AI; the one this chat is on now never saw it. Ask for the plan again to approve it.';
+
+/** Why the plan's go was not sent: the chat was in another mode by the time it was approved, as the desktop says it. */
+export const planModeMoved = "The chat's mode changed before the plan was approved, so nothing was sent.";
+
+/** The words with every plan's mark taken off; the same entries when none had one. */
+function unplanned(entries: Entry[]): Entry[] {
+    if (!entries.some((each) => each.kind === 'text' && each.plan === true)) return entries;
+    return entries.map((each) =>
+        each.kind === 'text' && each.plan === true ? { kind: 'text', text: each.text } : each,
+    );
+}
+
+/**
+ * The chat in the mode the desktop says. Leaving Plan only ends its plan's card, as the desktop ends it, unless the
+ * person's own approval of it is what leaves Plan only: that card stays, inert, saying it was approved.
+ */
+export function moded(chat: Chat, mode: DesktopChatMode): Chat {
+    if (mode === 'plan_only' || chat.plan === 'approving' || chat.plan === 'approved') return { ...chat, mode };
+    return { ...chat, mode, entries: unplanned(chat.entries), plan: null };
+}
+
+/**
+ * Whether the chat's plan card may be approved now, with the go sent to `host`: its last entry is a plan the desktop
+ * marked, the chat is still in Plan only, no turn runs, nothing waits to be sent, it is not the Feed, the person has
+ * neither approved it nor kept planning, and `host` is the host that made it. Anything after the plan, a message, an
+ * error or a note, makes it a plan of the past; another host makes it one that host never saw (`planElsewhere`).
+ */
+export function livePlan(chat: Chat, host: string | null): boolean {
+    return planStands(chat) && host !== null && host === chat.turnHost;
+}
+
+/** Whether the chat's plan would be live but `host` is not the host that made it: the card says to ask for it again. */
+export function planElsewhere(chat: Chat, host: string | null): boolean {
+    return planStands(chat) && host !== null && host !== chat.turnHost;
+}
+
+/** `livePlan` on whichever host. */
+function planStands(chat: Chat): boolean {
+    const last = chat.entries.at(-1);
+    return (
+        last?.kind === 'text' &&
+        last.plan === true &&
+        chat.mode === 'plan_only' &&
+        !chat.running &&
+        chat.waiting === null &&
+        !chat.main &&
+        chat.plan === null
+    );
+}
+
 /** What the line under the composer says while the desktop holds the chat in Full access. */
-export const fullAccessLine = 'Full access: the agent runs commands without asking, except those Jason cannot read.';
+export const fullAccessLine = 'Full access: the AI runs commands without asking, except those Jason cannot read.';
+
+/** What the line under the composer says while the desktop holds the chat in Auto-edit. */
+export const autoEditLine =
+    "Auto-edit: the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first.";
 
 /**
  * What the line under the composer says while the chat's host is Codex on the person's sign-in: every Codex turn leaves
@@ -197,13 +286,37 @@ export const fullAccessLine = 'Full access: the agent runs commands without aski
 export const codexConfigLine =
     'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.';
 
+/**
+ * What the line under the composer says while the chat's host is Codex, on the person's sign-in or on the OpenAI key,
+ * system by system as it was seen. On Windows the desktop's check has shown Codex's elevated sandbox keeping the run
+ * file from a command; on macOS and Linux nobody has looked, and a read-only command reads what the person can, so the
+ * line there names the run token among what it can read. Neither says anything of the network or of acting for the
+ * person, which nobody has seen; "read-only" is the mode the desktop runs Codex in.
+ */
+export const codexReachWindows =
+    'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, but not the key Jason’s own commands use, its run token. Codex runs it read-only.';
+export const codexReachElsewhere =
+    'A Codex command can read your files, Jason’s data and settings among them, a plugin’s secret kept in settings.json too, and the key Jason’s own commands use, its run token. Codex runs it read-only.';
+
+/** Pure: the line for the system the desktop says it runs on; one that says none is told the line that claims nothing. */
+export function codexReachLine(platform: string | undefined): string {
+    return platform === 'win32' ? codexReachWindows : codexReachElsewhere;
+}
+
+/** The hosts whose turns run on Codex: the person's sign-in, and the OpenAI key. */
+export const codexHosts: ReadonlySet<string> = new Set(['codex', 'codex-api-key']);
+
 /** Why Full access cannot be chosen on a host a desktop of an earlier version listed, which offers no modes. */
 export const olderDesktop = 'This version of Jason Desktop does not offer Full access.';
+
+/** Why Auto-edit cannot be chosen on a host a desktop of an earlier version listed. */
+export const olderDesktopAutoEdit = 'This version of Jason Desktop does not offer Auto-edit.';
 
 /** The modes as the menu beside the composer names them, in its order. */
 const modeWords: Readonly<Record<DesktopChatMode, string>> = {
     ask_first: 'Ask first',
     plan_only: 'Plan only',
+    auto_edit: 'Auto-edit',
     full_access: 'Full access',
 };
 
@@ -211,10 +324,19 @@ const modeWords: Readonly<Record<DesktopChatMode, string>> = {
 const feedFullAccess =
     'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
 
+/** Why the desktop refuses Auto-edit on Codex, in its words; with no host the menu says it too. */
+const codexAutoEdit =
+    'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
+
+/** Why the desktop refuses Auto-edit for the Feed, in its words. */
+const feedAutoEdit =
+    'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
+
 /**
- * The menu's choices on the host the next turn runs on: each mode, and why it cannot be chosen there, or null. Full
- * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex;
- * and for the Feed, in the order the desktop refuses it.
+ * The menu's choices on the host the next turn runs on, narrow to wide after Ask first: each mode, and why it cannot be
+ * chosen there, or null. Full access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for
+ * it; with no host, as on Codex; and for the Feed, in the order the desktop refuses it. Auto-edit is disabled the same
+ * way, on Codex and for the Feed; it has no version floor.
  */
 export function modeChoices(
     host: DesktopHost | null,
@@ -222,10 +344,11 @@ export function modeChoices(
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
     const full =
         host === null ? 'Full access runs on Claude Code only.' : (host.fullAccess ?? (feed ? feedFullAccess : null));
+    const edit = host === null ? codexAutoEdit : (host.autoEdit ?? (feed ? feedAutoEdit : null));
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
         label: modeWords[mode],
-        disabled: mode === 'full_access' ? full : null,
+        disabled: mode === 'full_access' ? full : mode === 'auto_edit' ? edit : null,
     }));
 }
 
@@ -235,11 +358,14 @@ export function modeChoices(
  */
 export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
     return hosts.map((host) => {
-        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess'>>;
+        const given = host as Partial<
+            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit'>
+        >;
         return Array.isArray(given.models) &&
             typeof given.typedModel === 'boolean' &&
             given.modelsUnread !== undefined &&
-            given.fullAccess !== undefined
+            given.fullAccess !== undefined &&
+            given.autoEdit !== undefined
             ? host
             : {
                   ...host,
@@ -250,6 +376,10 @@ export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
                       typeof given.fullAccess === 'string' || given.fullAccess === null
                           ? given.fullAccess
                           : olderDesktop,
+                  autoEdit:
+                      typeof given.autoEdit === 'string' || given.autoEdit === null
+                          ? given.autoEdit
+                          : olderDesktopAutoEdit,
               };
     });
 }
@@ -403,7 +533,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'renamed':
             return { ...chat, title: event.title };
         case 'mode':
-            return { ...chat, mode: event.mode };
+            return moded(chat, event.mode);
         // A line never starts a turn: it goes into the thread, and nothing else of the chat changes.
         case 'line': {
             const last = chat.entries.at(-1);
@@ -415,7 +545,15 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
         case 'gap':
             return { ...chat, entries: [...chat.entries, { kind: 'gap' }] };
         case 'done': {
-            const over = ended(chat);
+            // A turn ended: every earlier plan is a plan of the past, and this turn's last words are its plan when the
+            // desktop says so. The Feed has none.
+            const words = unplanned(chat.entries);
+            const last = words.at(-1);
+            const entries =
+                event.plan === true && !chat.main && last?.kind === 'text'
+                    ? [...words.slice(0, -1), { kind: 'text' as const, text: last.text, plan: true as const }]
+                    : words;
+            const over = ended({ ...chat, entries, plan: null });
             if (event.error === null)
                 return chat.waiting !== null && !chat.held ? { ...over, waiting: null, outbox: chat.waiting } : over;
             return givenBackAfterFailure(chat, {

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApi } from '../../api/context';
+import type { Approval } from '../../api/types';
 import { FiltersBar } from '../../layout/filters-bar';
 import { PeriodSwitch } from '../../layout/period-switch';
 import { Segmented } from '../../layout/segmented';
@@ -78,7 +79,7 @@ export function CampaignsScreen() {
         store.notice.value = null;
         void store.open(api, selected, table, new Date(), zone, at.tab !== 'people').then((known) => {
             if (known) return;
-            store.notice.value = 'The campaign in this address no longer exists; it was closed.';
+            store.notice.value = 'The agent in this address no longer exists; it was closed.';
             replace({ screen: 'campaigns', tab: 'sequence', ...table });
         });
     }, [api, selected]);
@@ -203,7 +204,7 @@ export function CampaignsScreen() {
         <div className={`main campaigns${selected ? '' : ' single'}`}>
             <div className="list">
                 <Toolbar
-                    title="Campaigns"
+                    title="Agents"
                     refresh={{
                         busy: store.refreshing.value,
                         onRefresh: () => {
@@ -225,8 +226,8 @@ export function CampaignsScreen() {
                 <FiltersBar>
                     <Search
                         value={at.filters.q ?? ''}
-                        label="Find a campaign"
-                        placeholder="Find a campaign"
+                        label="Find an agent"
+                        placeholder="Find an agent"
                         onSearch={(q) => reshape({ filters: withValue(at.filters, 'q', q) })}
                     />
                     {at.view === 'activity' && (
@@ -254,10 +255,10 @@ export function CampaignsScreen() {
                 {store.actionFailure.value && <Notice danger>{store.actionFailure.value}</Notice>}
                 {ready && campaigns.length === 0 ? (
                     filtered ? (
-                        <div className="empty">No campaign matches.</div>
+                        <div className="empty">No agent matches.</div>
                     ) : (
                         <EmptyStart
-                            sentence="No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you."
+                            sentence="No agents yet. An agent is set up in a chat with Jason: say who you want to reach, and the AI sets it up with you."
                             start={chat ? () => chat() : null}
                         />
                     )
@@ -286,7 +287,7 @@ export function CampaignsScreen() {
                     zone={zone}
                     busy={store.busy.value}
                     remaining=""
-                    skipLabel="Back to the campaign"
+                    skipLabel="Back to the agent"
                     onApprove={() => void decide('approval.approve', { approval_id: waiting.approval.id })}
                     onReject={(reason) =>
                         void decide('approval.reject', {
@@ -296,6 +297,11 @@ export function CampaignsScreen() {
                     }
                     onSkip={() => (store.waiting.value = null)}
                     onClose={() => (store.waiting.value = null)}
+                    onReasked={(id) =>
+                        void api
+                            .call<Approval>('approval.get', { approval_id: id })
+                            .then((approval) => (store.waiting.value = { campaignId: waiting.campaignId, approval }))
+                    }
                 />
             )}
             {selected && waiting && 'decision' in waiting && (
@@ -304,7 +310,7 @@ export function CampaignsScreen() {
                     now={new Date()}
                     busy={store.busy.value}
                     remaining=""
-                    skipLabel="Back to the campaign"
+                    skipLabel="Back to the agent"
                     onAnswer={(choice, reason) =>
                         void decide('decision.answer', {
                             decision_id: waiting.decision.id,

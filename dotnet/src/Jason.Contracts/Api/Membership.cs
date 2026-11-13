@@ -53,6 +53,8 @@ public sealed record RemoveContactsResult(string CampaignId, RemoveContactsSumma
 /// of the two at most, and neither takes a <c>state</c>. <c>query</c> finds people as <c>contact.list</c> does.
 /// <c>audience</c>, the number of one of the campaign's audiences, lists only the people a search landed under it, with or
 /// without a count; an audience is one campaign's, so the request then names that campaign alone.
+/// <c>exclude_archived_contacts</c> true leaves out every membership of a contact whose own record is archived, as
+/// <c>campaign.summary</c> and <c>campaign.activity</c> count with it; absent, null or false, they are listed.
 /// </summary>
 public sealed record ListContactsRequest(
     string? CampaignId,
@@ -65,7 +67,8 @@ public sealed record ListContactsRequest(
     DateTimeOffset? Until = null,
     string? Query = null,
     IReadOnlyList<string>? CampaignIds = null,
-    int? Audience = null);
+    int? Audience = null,
+    bool? ExcludeArchivedContacts = null);
 
 /// <summary>
 /// A person listed once, with the whole contact so an agent listing a campaign avoids a get per member. <c>counted</c>

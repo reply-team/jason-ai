@@ -34,7 +34,7 @@ export class AgentFolderUnowned extends Error {
     readonly code: string;
 
     constructor(code: unknown) {
-        super('The chat’s agent settings folder could not be put right, so the turn was not started. Close anything that has it open and send again.');
+        super('The chat’s AI settings folder could not be put right, so the turn was not started. Close anything that has it open and send again.');
         this.name = 'AgentFolderUnowned';
         this.code = typeof code === 'string' && /^E[A-Z]+$/.test(code) ? code : 'unknown';
     }

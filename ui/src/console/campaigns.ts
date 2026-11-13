@@ -30,7 +30,10 @@ export async function reload(): Promise<void> {
         if (mine !== generation) return;
         const ids = page.items.map((each) => each.id);
         const counts = ids.length
-            ? await api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: ids })
+            ? await api.call<CampaignSummaryResponse>('campaign.summary', {
+                  campaign_ids: ids,
+                  ...store.archivedLeftOut,
+              })
             : { campaigns: [] };
         if (mine !== generation) return;
         summary.value = Object.fromEntries(counts.campaigns.map((row) => [row.campaign_id, row]));
@@ -58,26 +61,26 @@ export function campaignsView(): Html {
     return html`<div class="panel-body">
         <div class="ph">
             <div>
-                <h1>Campaigns</h1>
-                <p>Every campaign that is not archived, with the people in it.</p>
+                <h1>Agents</h1>
+                <p>Every agent that is not archived, with the people in it.</p>
             </div>
         </div>
         ${shownFailure ? html`<div class="note am" role="alert">${shownFailure}</div>` : null}
         ${
             !read.value && !shownFailure
-                ? html`<div class="empty">Reading the campaigns…</div>`
+                ? html`<div class="empty">Reading the agents…</div>`
                 : rows.length === 0
                   ? html`<div class="empty empty-start">
                         <p>
-                            No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and
-                            the agent sets it up with you.
+                            No agents yet. An agent is set up in a chat with Jason: say who you want to reach, and the
+                            AI sets it up with you.
                         </p>
                         <button class="btn sm p" type="button" ${act('campaigns.start')}>New chat</button>
                     </div>`
                   : html`<table class="t">
                         <thead>
                             <tr>
-                                <th>Campaign</th>
+                                <th>Agent</th>
                                 <th>State</th>
                                 <th>People</th>
                                 <th>Waiting</th>

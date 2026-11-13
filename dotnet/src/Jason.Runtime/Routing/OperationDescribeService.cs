@@ -24,15 +24,16 @@ public sealed class OperationDescribeService(JasonDbContext db, RouteRegistry ro
         ArgumentNullException.ThrowIfNull(request);
 
         var contract = RouteService.RequireContract(request.Operation);
+        var channel = RouteService.ChannelAsked(request.Channel, contract.Id);
         var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
         var snapshot = plugins.Snapshot;
         // What is described is the plugin the work would reach: a campaign's read on request goes where its searches go.
         var routedAs = AudienceReadService.RoutedAs(contract.Id);
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, routedAs) is not { } resolution)
+        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, routedAs, channel) is not { } resolution)
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,
-                $"No route sends '{routedAs}' anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
+                $"No route sends '{routedAs}'{(channel is null ? string.Empty : $" on '{channel}'")} anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
         }
 
         var route = resolution.Route;
@@ -50,6 +51,7 @@ public sealed class OperationDescribeService(JasonDbContext db, RouteRegistry ro
             route.PluginId,
             manifest.Version,
             contract.ArgumentSchema.DeepClone().AsObject(),
-            CanonicalInput.CarriesADefinition(contract) ? manifest.AudienceDefinition?.ToJson() : null);
+            CanonicalInput.CarriesADefinition(contract) ? manifest.AudienceDefinition?.ToJson() : null,
+            channel);
     }
 }

@@ -1130,8 +1130,8 @@ test('every instruction file the desktop writes into the chat folder is one the 
 
 test('a write under a guarded name anywhere else in a working folder is a card each time, never "always"; a read of it is allowed', () => {
     const marker = 'Change a folder\'s Jason marker';
-    const loads = 'Change the skills or settings an agent loads';
-    const instructions = 'Change instructions an agent reads';
+    const loads = 'Change the skills or settings the AI loads';
+    const instructions = 'Change instructions the AI reads';
     for (const [scope, path, title] of [
         [windows(), `${winChat}\\notes\\CLAUDE.md`, instructions],
         [windows(), `${winChat}\\GEMINI.md`, instructions],
@@ -1162,10 +1162,10 @@ test('a command naming a guarded file in a working folder takes the guard\'s tit
     const plain = run(mac(), 'cp notes.md backup.md');
     assert.ok(plain.verdict === 'ask' && plain.remember === 'Bash:cp notes.md');
     for (const [scope, command, title] of [
-        [mac(), 'cp notes.md GEMINI.md', 'Change instructions an agent reads'],
-        [mac(), `cp notes.md ${macProject}/AGENTS.md`, 'Change instructions an agent reads'],
+        [mac(), 'cp notes.md GEMINI.md', 'Change instructions the AI reads'],
+        [mac(), `cp notes.md ${macProject}/AGENTS.md`, 'Change instructions the AI reads'],
         [windows(), `cp x.json ${winCampaign}\\.jason\\marker.json`, 'Change a folder\'s Jason marker'],
-        [mac(), `mkdir -p ${macProject}/.agents/skills/x`, 'Change the skills or settings an agent loads'],
+        [mac(), `mkdir -p ${macProject}/.agents/skills/x`, 'Change the skills or settings the AI loads'],
     ] as const) {
         const judged = run(scope, command);
         assert.deepEqual(judged, { verdict: 'ask', title, detail: command, remember: null }, `${scope.platform} ${command}`);
@@ -1217,10 +1217,10 @@ test('on macOS, a write in the chat folder spelled in another case is read below
 
 // ---- The guard, as the volume folds a name, everywhere ----------------------------------------------------------------
 
-const settingsTitle = 'Change the agent\'s own settings';
+const settingsTitle = 'Change the AI\'s own settings';
 const markerTitle = 'Change a folder\'s Jason marker';
-const loadsTitle = 'Change the skills or settings an agent loads';
-const instructionsTitle = 'Change instructions an agent reads';
+const loadsTitle = 'Change the skills or settings the AI loads';
+const instructionsTitle = 'Change instructions the AI reads';
 const guardCard = (title: string, detail: string): Judgement => ({ verdict: 'ask', title, detail, remember: null });
 
 test('a name the volume folds to a guarded name is that name: compatibility forms, marks, ignorable characters and case both ways', () => {
@@ -1321,7 +1321,7 @@ test('the folders and files the other hosts read are guarded too', () => {
     assert.deepEqual(write(mac(), `${macProject}/copilot-instructions.md`), { verdict: 'allow' });
 });
 
-const configurationRefusal = 'That folder is the chat\'s own agent settings and skills, which the desktop keeps: the chat never changes it. Nothing was done.';
+const configurationRefusal = 'That folder is the chat\'s own AI settings and skills, which the desktop keeps: the chat never changes it. Nothing was done.';
 
 test('in the chat folder itself a write under .claude, .agents or .codex is refused; in a campaign\'s or a project\'s folder it is a card', () => {
     const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };

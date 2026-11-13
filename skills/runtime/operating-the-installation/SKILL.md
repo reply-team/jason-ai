@@ -270,7 +270,9 @@ jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campai
 
 `route list` shows the global routes plus a campaign's. `route resolve` answers the only question that matters
 before promising work: for *this* campaign and *this* operation, which plugin would perform it, or why nothing
-would. No provider ships configured, so nothing routed is the normal state of a fresh installation rather than a
+would. A route can also be set per channel, for the operations that send on one (`message.send`, for instance):
+`route list` shows those routes beside the operation's own, and `route resolve` answers for a channel when it is
+given `--channel`, such as `--channel linkedin`. No provider ships configured, so nothing routed is the normal state of a fresh installation rather than a
 fault — **writing a route is an operator's explicit act**. If the answer is that nothing is routed, say so
 plainly instead of submitting work that will fail.
 

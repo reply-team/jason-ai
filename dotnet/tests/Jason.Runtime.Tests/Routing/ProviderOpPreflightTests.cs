@@ -30,6 +30,7 @@ public partial class ProviderOpPreflightTests
     private const string Pause = "campaign.pause";
     private const string Activate = "campaign.activate";
     private const string Send = "message.send";
+    private const string Close = "conversation.close";
 
     /// <summary>
     /// The order, proven by repairing one thing at a time: everything is wrong at the start, and each repair
@@ -37,7 +38,7 @@ public partial class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the twenty-six checks' order")]
+    [Critical(Family.W3, "the twenty-seven checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -158,6 +159,20 @@ public partial class ProviderOpPreflightTests
         scenario.Unsettled = true;
         met.Add(Refused(scenario, FailureClass.Ambiguous));
 
+        // Twenty-seventh, asked here: a filing of a thread the campaign's lines say was seen at a plugin the item is not
+        // routed to. It stands apart from the other references the work names, numbered after the rest so that no number
+        // moved, and it refuses before a child exists, and before the three that wait or park, like any of them. Where a
+        // line says the routed plugin, under any account, it asks nothing.
+        scenario.Unsettled = false;
+        scenario.Operation = Close;
+        scenario.Plugin = Scenario.Package(operations: [Add, Enroll, Get, Delete, Close], binding: Scenario.BindingSchema);
+        scenario.Arguments = new JsonObject { ["thread"] = new JsonObject { ["external_id"] = "th-1" } };
+        scenario.Thread = [new ThreadSeen("another-provider", "sha256:west", AccountKnown: true)];
+        met.Add(Refused(scenario, FailureClass.Permanent));
+        scenario.Thread = [new ThreadSeen("another-provider", "sha256:west", AccountKnown: true), new ThreadSeen(Scenario.PluginId, "sha256:east", AccountKnown: true)];
+        Assert.True(scenario.Check().Passed);
+        scenario.Thread = null;
+
         // Twenty-fourth, and the first that is not a refusal: a search while another of its campaign has not ended waits
         // behind it, and it is asked before the approval, so nobody is asked to approve a spend that cannot start now.
         scenario.Unsettled = false;
@@ -188,7 +203,7 @@ public partial class ProviderOpPreflightTests
         met.Add(parked.Code!);
 
         // The unsettled attempt stays, and asks nothing of an operation whose repeat does not rest on the key.
-        // Twenty-sixth, and last: work nobody has to confirm, which a block the provider holds on this account still
+        // Twenty-sixth: work nobody has to confirm, which a block the provider holds on this account still
         // parks. It is asked after the approval because it says nothing about the work, so the block travels on the
         // approval's park as well, and work a person releases still waits for it.
         var block = Scenario.Block(binding: "sha256:west");
@@ -260,7 +275,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the twenty-six is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the twenty-seven is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -271,7 +286,26 @@ public partial class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
-    /// The one answer three of the checks give that is not a refusal is named beside the twenty-six rather than among
+    /// The refusals an unsettled earlier attempt turns ambiguous are those from the route to the template, by their place,
+    /// and the thread's, by its name: asked after provider_answer_lost, it is not among them by place, and a refusal after a
+    /// lost answer must still say the earlier attempt may have reached the person. No operation that names a thread is held
+    /// to an unsettled attempt today, so the set is held here by its members; the second half says when a claim row is owed.
+    /// </summary>
+    [Fact]
+    public void The_thread_s_refusal_is_named_among_those_an_unsettled_attempt_turns_ambiguous()
+    {
+        var codes = ProviderOpPreflight.Codes.ToList();
+        string[] expected = [.. codes.Skip(1).Take(codes.IndexOf(AttemptErrors.TemplateNotOffered)), AttemptErrors.ThreadRouteMismatch];
+        Assert.Equal(expected.Order(StringComparer.Ordinal), ProviderOpPreflight.SilentOnTheEarlierAttempt.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(AttemptErrors.ProviderAnswerLost, ProviderOpPreflight.SilentOnTheEarlierAttempt);
+
+        // When an operation that names a thread comes to be held to an unsettled attempt, a claim row of its refusal owes
+        // the ambiguous class this set gives, and this line is the one to change.
+        Assert.DoesNotContain(OperationCatalog.All, contract => CanonicalInput.NamesAThread(contract) && OutcomeContract.HeldToTheUnsettledAttempt(contract));
+    }
+
+    /// <summary>
+    /// The one answer three of the checks give that is not a refusal is named beside the twenty-seven rather than among
     /// them: the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What the binding's, the input's and the definition's checks answer when their pattern does not finish is that named
     /// outcome, and nothing else.
@@ -1390,6 +1424,9 @@ public partial class ProviderOpPreflightTests
         /// <summary>Another search of the campaign that has not ended, as the claim would have read it for a search; null where none.</summary>
         public string? SearchInTheWay { get; set; }
 
+        /// <summary>Where the campaign's lines say the thread the arguments name was seen, as the claim would have read it; null where none says.</summary>
+        public IReadOnlyList<ThreadSeen>? Thread { get; set; }
+
         /// <summary>
         /// The package, by its id and digest, and the account that attempt ran under, as its provenance kept them; null
         /// where it ran under the route and the package this claim resolves, and <see cref="NoProvenance"/> where the
@@ -1519,7 +1556,7 @@ public partial class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay, Thread: Thread);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);

@@ -8,7 +8,8 @@
     "plugin_snapshot_id": "snp_1",
     "global": {
       "default": null,
-      "operations": {}
+      "operations": {},
+      "channels": {}
     },
     "campaigns": []
   }

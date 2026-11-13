@@ -505,6 +505,18 @@ public sealed class ConfigShapeTests
         Assert.Equal("object", At(shape, "Notifications", "Plugins", campaign)["type"]!.GetValue<string>());
     }
 
+    /// <summary>A channel route's channel is a name the code keeps, so it is shown; a key in its place that is no channel is not.</summary>
+    [Fact]
+    public void A_channel_is_shown_as_the_key_of_a_channel_route()
+    {
+        var shape = Shape("""{"Routes":{"Operations":{"message.send":{"Channels":{"linkedin":{"Plugin":"x"},"SENTINEL":{"Plugin":"x"}}}}}}""");
+
+        var channels = At(shape, "Routes", "Operations", "message.send", "Channels");
+        Assert.Equal(["linkedin", "<key>"], Names(channels));
+        Assert.Equal("string", At(channels, "linkedin", "Plugin")["type"]!.GetValue<string>());
+        Assert.DoesNotContain("SENTINEL", shape.ToJsonString(), StringComparison.Ordinal);
+    }
+
     /// <summary>A number is an index only where a list is: at the whole path of one, and a key somebody chose anywhere else.</summary>
     [Fact]
     public void A_number_is_shown_as_a_key_only_where_it_indexes_a_list()
@@ -907,6 +919,7 @@ public sealed class ConfigShapeTests
                      // Strings and lists of strings, none of which is ever a value.
                      "Update:FeedUrl", "Roles:DefaultExecutionProfile", "Roles:DefaultEntryCommand[]",
                      "Routes:Default:Plugin", $"Routes:Operations:{operation}:Plugin",
+                     $"Routes:Operations:{operation}:Channels:email:Plugin",
                      "Plugins:Grants:fake-provider:Exec[]", "Plugins:Grants:fake-provider:Http[]", "Plugins:Grants:fake-provider:Env[]",
                      "Plugins:Grants:fake-provider:Files[]",
 
@@ -915,6 +928,7 @@ public sealed class ConfigShapeTests
                      "Routes:Default:Binding:Port", "Routes:Default:Binding:Enabled", "Routes:Default:Binding:MaxCalls",
                      "Routes:Default:Binding:MinimumLevel", "Routes:Default:Binding:Triggers[]",
                      $"Routes:Operations:{operation}:Binding:Port", $"Routes:Operations:{operation}:Binding:MaxCalls",
+                     $"Routes:Operations:{operation}:Channels:email:Binding:Port", $"Routes:Operations:{operation}:Channels:linkedin:Binding:Enabled",
                      "Notifications:Plugins:fake-provider:Binding:Port", "Notifications:Plugins:fake-provider:Binding:Enabled",
                      "Notifications:Plugins:fake-provider:Binding:QuietSeconds",
                      "Plugins:Grants:fake-provider:Limits:TimeoutMs",

@@ -89,6 +89,64 @@ public class AudienceFilterEndpointTests
         Assert.Equal(["Oli"], Names(replied));
     }
 
+    /// <summary>
+    /// <c>audience</c> together with <c>exclude_archived_contacts</c> on the three reads beside the summary: once Oli, who
+    /// replied and was removed, and Quinn, who is new, both of audience 1, are archived, the audience's activity, its series
+    /// and its lists leave them out when asked, each count still the number its list lists, and count them when not.
+    /// </summary>
+    [Fact]
+    public async Task An_audience_s_reads_leave_out_its_archived_people_when_asked()
+    {
+        await using var api = await StartAsync();
+        var world = await WorldAsync(api);
+        var spring = world.Spring.PublicId;
+        foreach (var name in new[] { "Oli", "Quinn" })
+        {
+            await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = world.People[name].PublicId }, Ct);
+        }
+
+        var counted = await api.PostOkAsync<CampaignActivityResponse>(
+            Operations.CampaignActivity, new { campaign_ids = new[] { spring }, audience = 1, since = Week.Since, until = Week.Until }, Ct);
+        var left = Assert.Single((await api.PostOkAsync<CampaignActivityResponse>(
+            Operations.CampaignActivity,
+            new { campaign_ids = new[] { spring }, audience = 1, since = Week.Since, until = Week.Until, exclude_archived_contacts = true },
+            Ct)).Campaigns);
+        Assert.Equal([new CampaignActivityRow(spring, 5, 2, 2, 0, 1, 0, Removed: 1)], counted.Campaigns);
+        Assert.Equal((0, 0), (left.Replied, left.Removed));
+
+        var counts = new Dictionary<string, int>
+        {
+            ["people"] = left.People, ["added"] = left.Added, ["worked_on"] = left.WorkedOn, ["contacted"] = left.Contacted,
+            ["replied"] = left.Replied, ["opted_out"] = left.OptedOut, ["removed"] = left.Removed,
+        };
+        foreach (var (activity, number) in counts)
+        {
+            var listed = await api.PostOkAsync<Page<MembershipItemDto>>(
+                Operations.CampaignListContacts,
+                new { campaign_id = spring, audience = 1, activity, since = Week.Since, until = Week.Until, exclude_archived_contacts = true },
+                Ct);
+            Assert.True(number == listed.Items.Count, $"activity {activity}: the count says {number}");
+            Assert.DoesNotContain(listed.Items, item => item.Contact.FirstName is "Oli" or "Quinn");
+        }
+
+        async Task<int[]> RepliedByDayAsync(bool? without) =>
+            [.. (await api.PostOkAsync<CampaignActivityByPeriodResponse>(
+                Operations.CampaignActivityByPeriod,
+                without is null
+                    ? new { campaign_ids = new[] { spring }, audience = 1, count = "replied", period = "day", since = Week.Since, until = Week.Until }
+                    : new { campaign_ids = new[] { spring }, audience = 1, count = "replied", period = "day", since = Week.Since, until = Week.Until, exclude_archived_contacts = without },
+                Ct)).Buckets.Select(bucket => bucket.Value)];
+        Assert.Equal(1, (await RepliedByDayAsync(null)).Sum());
+        Assert.Equal(0, (await RepliedByDayAsync(true)).Sum());
+
+        Assert.Equal(["Ada", "Ben", "Cleo", "Jon", "Quinn"], Names(await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { campaign_id = spring, audience = 1 }, Ct)));
+        Assert.Equal(["Ada", "Ben", "Cleo", "Jon"], Names(await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { campaign_id = spring, audience = 1, exclude_archived_contacts = true }, Ct)));
+        Assert.Equal(["Oli"], Names(await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { campaign_id = spring, audience = 1, activity = "replied", since = Week.Since, until = Week.Until }, Ct)));
+    }
+
     [Fact]
     public async Task An_audience_nobody_landed_under_answers_zeros()
     {

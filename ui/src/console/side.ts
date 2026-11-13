@@ -14,7 +14,7 @@ import { chats, conversations, currentChat, feedId, feedUnseen, here, type Panel
 
 const panels: readonly { panel: PanelName; label: string; icon: IconName }[] = [
     { panel: 'needs', label: 'Needs you', icon: 'att' },
-    { panel: 'campaigns', label: 'Campaigns', icon: 'camp' },
+    { panel: 'campaigns', label: 'Agents', icon: 'camp' },
     { panel: 'activity', label: 'Activity', icon: 'pulse' },
     { panel: 'connect', label: 'Connect', icon: 'plug' },
 ];
@@ -27,6 +27,7 @@ const icons: Readonly<Record<string, IconName>> = {
     performance: 'perf',
     workitems: 'work',
     system: 'ops',
+    accounts: 'plug',
     settings: 'gear',
 };
 
@@ -67,6 +68,7 @@ export function sideView(): Html {
             <img class="mark" src="${assets}favicon.svg" alt="" />
             <img class="wordmark light" src="${assets}brand-wordmark.svg" alt="Jason AI, GTM Harness" />
             <img class="wordmark dark" src="${assets}brand-wordmark-dark.svg" alt="Jason AI, GTM Harness" />
+            <span class="alpha">Alpha</span>
         </div>
         ${
             feed === null

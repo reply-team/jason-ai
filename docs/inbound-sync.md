@@ -23,7 +23,10 @@ short transaction with the watermark's guarded move. For a line about a thread t
 line this read says, and an events line whose `attributed_by` is `campaign_pin` — it queues two work items:
 
 - a read of the thread, a `conversation.get` `provider_op` whose input is the thread's identifier, a page of 20 and
-  offset 0, made when the campaign's route for that operation names the plugin the reply was read at;
+  offset 0, made where the thread was seen: at the plugin the reply was read at, when a route names it, resolved as the
+  claim resolves any read of a thread ([routing](routing.md), `thread_route_mismatch`) — the read's own route, then the
+  campaign's route for `conversation.list`, then any of the campaign's routes and the global ones — so a campaign that
+  routes only the answer to that plugin has the thread read there;
 - the **responder**, an `ai_role` item the dispatcher creates as root work, at `Responder:Priority`, with the result
   format the responder's skill answers in and a context of identifiers and moments only:
 
@@ -39,8 +42,9 @@ provider block or not — and spends no launch waiting. While a provider block h
 scheduled, so the manager's check-in the same line wakes may be claimed before the responder. At the deadline it is released with `read` naming an item that
 has not ended, and finds the thread itself. The wait was written before any run, so no attempt waited and the first run
 is told of no resumption: its envelope's `resumption` is null, and it reads the item `inbound_reply.read` names with
-`jason workitem get`, which says whether the read succeeded and what it read. With no read (no route for it, another
-plugin's route, or an identifier its input refuses), `read` is null and the responder is created ready, to find the
+`jason workitem get`, which says whether the read succeeded and what it read. With no read (no route names the plugin the reply was read at,
+that plugin performs no read, an identifier the campaign saw at more than one plugin whose read's own route names another,
+or an identifier its input refuses), `read` is null and the responder is created ready, to find the
 thread itself. `contact_id` is the person the
 line names; the items' own contact column is set only when that person is a member of the campaign who is not excluded
 and not archived.

@@ -3,12 +3,12 @@
 // campaign fold, how many are kept, and which lines a turn is given.
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import { feedBlock } from '../src/chat-header.ts';
-import { feedKinds, feedLimit, givenUpTo, headerLimit, keptLineOf, lineOf, linesWaiting, markGiven, take, trimmed, type LineEntry } from '../src/feed.ts';
+import { feedKinds, feedLimit, feedOperations, feedRoles, givenUpTo, headerLimit, keptLineOf, lineOf, linesWaiting, markGiven, shippedRoles, succeededKind, take, trimmed, type LineEntry } from '../src/feed.ts';
 
 const ulid = (n: number) => String(n).padStart(26, '0');
 const jrn = (n: number) => `jrn_${ulid(n)}`;
@@ -57,10 +57,24 @@ test('every kind the Feed takes is a kind the runtime writes itself, read from t
     const block = /Reserved \{ get; \} = new HashSet<string>\(StringComparer\.Ordinal\)\s*\{([^}]*)\}/.exec(source)?.[1] ?? '';
     const reserved = new Set(block.split(',').map((name) => name.trim()).filter(Boolean));
     assert.ok(reserved.size > 40, `the reserved set was read: ${reserved.size}`);
-    for (const kind of feedKinds) assert.ok(reserved.has(constants.get(kind) ?? ''), `${kind} is not in JournalKinds.Reserved`);
+    for (const kind of [...feedKinds, succeededKind]) assert.ok(reserved.has(constants.get(kind) ?? ''), `${kind} is not in JournalKinds.Reserved`);
     assert.deepEqual(
         [...feedKinds].sort(),
-        ['approval_requested', 'campaign_created', 'campaign_paused', 'campaign_started', 'decision_raised', 'inbound_reply_observed', 'provider_blocked', 'workitem_expired', 'workitem_failed'],
+        [
+            'approval_approved',
+            'approval_rejected',
+            'approval_requested',
+            'campaign_archived',
+            'campaign_created',
+            'campaign_paused',
+            'campaign_started',
+            'decision_answered',
+            'decision_raised',
+            'inbound_reply_observed',
+            'provider_blocked',
+            'workitem_expired',
+            'workitem_failed',
+        ],
     );
 });
 
@@ -78,6 +92,21 @@ test('a journal line becomes a Feed line of identifiers, its kind and its moment
         campaign_id: cmp(2),
         count: 1,
     });
+});
+
+test('a decided line (an approval approved or rejected, a question answered, a campaign archived) keeps ids and a moment, never the option chosen', () => {
+    for (const kind of ['approval_approved', 'approval_rejected', 'decision_answered', 'campaign_archived'] as const) {
+        const made = lineOf(journal({ kind, work_item_id: wi(4), new: { decision_id: 'dec_1', chosen_option: 'Send the discount offer' } }));
+        assert.deepEqual(made, { kind: 'line', journal_kind: kind, journal_id: jrn(1), at: '2026-11-11T10:00:00.000Z', campaign_id: cmp(1), work_item_id: wi(4), count: 1 });
+        assert.ok(!JSON.stringify(made).includes('discount'), kind);
+        // The decision's actor and reason (a person's words) are on the journal line and in neither the kept line nor the block.
+        const decided = lineOf(journal({ kind, reason: 'Reason only the decider wrote', actor: { type: 'human', id: 'grace' }, new: { decision_id: 'dec_1', chosen_option: 'Send the discount offer' } }));
+        assert.ok(decided !== null);
+        const block = feedBlock([decided], 0) ?? '';
+        for (const text of [JSON.stringify(decided), block]) {
+            for (const said of ['actor', 'reason', 'Reason only', 'grace', 'human', 'chosen_option', 'discount']) assert.ok(!text.includes(said), `${kind}: ${said}`);
+        }
+    }
 });
 
 test('a line outside the table, with no campaign, or with an id or a moment out of shape is no Feed line', () => {
@@ -196,4 +225,125 @@ test('the lines a turn is given are set apart as records, information and never 
     assert.equal(close, '</runtime-lines>');
     assert.equal(more, '3 older lines of them are not listed.');
     assert.doesNotMatch(feedBlock([line(1)], 0)!, /older lines/);
+});
+
+const succeeded = (fields: Record<string, unknown> = {}) => journal({ kind: 'workitem_succeeded', work_item_id: wi(5), work_item_kind: 'provider_op', work_item_operation: 'message.send', ...fields });
+
+test('the shipped roles are the runtime\'s own, read from its source, and the Feed\'s roles are five of them', () => {
+    const source = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Contracts', 'Api', 'ShippedRoles.cs'), 'utf8');
+    const names = /Names \{ get; \} =\s*\[([^\]]*)\]/.exec(source)?.[1] ?? '';
+    const written = [...names.matchAll(/"([a-z-]+)"/g)].map((match) => match[1]);
+    assert.ok(written.length >= 9, `the runtime's roles were read: ${written.length}`);
+    assert.deepEqual([...shippedRoles], written);
+    assert.deepEqual([...feedRoles].sort(), ['analyst', 'copywriter', 'deliverability-specialist', 'planner', 'researcher']);
+    for (const role of feedRoles) assert.ok(written.includes(role), role);
+    // The four left out, and why, are in the code: the manager and the responder surface as approvals, questions and sends;
+    // the personalizer and the critic work message by message.
+    for (const left of ['manager', 'responder', 'personalizer', 'critic']) assert.ok(!(feedRoles as readonly string[]).includes(left), left);
+    assert.deepEqual([...feedOperations].sort(), ['conversation.reply', 'message.send', 'social_invitation.send']);
+    // And each operation is one the catalog documents, as the roles are the runtime's.
+    for (const operation of feedOperations) {
+        assert.ok(existsSync(join(import.meta.dirname, '..', '..', 'docs', 'contracts', 'operations', `${operation}.json`)), `${operation} is no operation of the catalog`);
+    }
+    assert.equal(succeededKind, 'workitem_succeeded');
+    assert.ok(!(feedKinds as readonly string[]).includes(succeededKind), 'never taken whole: a campaign\'s reads succeed every cadence');
+    const constants = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Runtime', 'Journal', 'JournalKinds.cs'), 'utf8');
+    assert.match(constants, /public const string \w+ = "workitem_succeeded";/);
+});
+
+test('a succeeded work item is a Feed line only for a listed send or a listed role, and keeps that name alone', () => {
+    for (const operation of feedOperations) {
+        assert.deepEqual(lineOf(succeeded({ work_item_operation: operation })), { kind: 'line', journal_kind: 'workitem_succeeded', journal_id: jrn(1), at: '2026-11-11T10:00:00.000Z', campaign_id: cmp(1), work_item_id: wi(5), count: 1, operation });
+    }
+    for (const role of feedRoles) {
+        const made = lineOf(succeeded({ work_item_kind: 'ai_role', work_item_operation: null, work_item_role: role }));
+        assert.deepEqual(made, { kind: 'line', journal_kind: 'workitem_succeeded', journal_id: jrn(1), at: '2026-11-11T10:00:00.000Z', campaign_id: cmp(1), work_item_id: wi(5), count: 1, role });
+    }
+    // The page's projection is taken the same way.
+    assert.deepEqual(lineOf({ id: jrn(2), ts: '2026-11-11T10:00:00.000Z', kind: 'workitem_succeeded', campaign_id: cmp(2), work_item_id: null, work_item_role: 'analyst' }), {
+        kind: 'line',
+        journal_kind: 'workitem_succeeded',
+        journal_id: jrn(2),
+        at: '2026-11-11T10:00:00.000Z',
+        campaign_id: cmp(2),
+        count: 1,
+        role: 'analyst',
+    });
+    const text = JSON.stringify(lineOf(succeeded()));
+    for (const said of ['Ignore', 'hello', 'Because', 'Spring', 'Ada', 'thread-1', 'cnt_1', 'provider_op']) assert.ok(!text.includes(said), said);
+});
+
+test('a succeeded work item of another operation or role, a registered role\'s included, is no Feed line, and nor is one with neither', () => {
+    const refused: Record<string, unknown>[] = [
+        { work_item_operation: 'contact.list' },
+        { work_item_operation: 'conversation.list' },
+        { work_item_operation: 'conversation.get' },
+        { work_item_operation: 'MESSAGE.SEND' },
+        { work_item_operation: 'toString' },
+        { work_item_operation: 'contact.list', work_item_role: 'researcher' },
+        { work_item_operation: 'message.send', work_item_role: 'researcher' },
+        { work_item_operation: null, work_item_role: 'manager' },
+        { work_item_operation: null, work_item_role: 'responder' },
+        { work_item_operation: null, work_item_role: 'personalizer' },
+        { work_item_operation: null, work_item_role: 'critic' },
+        { work_item_operation: null, work_item_role: 'closer-for-ada' },
+        { work_item_operation: null, work_item_role: 'constructor' },
+        { work_item_operation: null, work_item_role: 42 },
+        { work_item_operation: null, work_item_role: null },
+        { work_item_operation: undefined },
+        { work_item_operation: 7 },
+    ];
+    for (const fields of refused) assert.equal(lineOf(succeeded(fields)), null, JSON.stringify(fields));
+});
+
+test('another kind keeps no operation and no role, whatever the journal line carries', () => {
+    const made = lineOf(journal({ kind: 'workitem_failed', work_item_id: wi(3), work_item_operation: 'message.send', work_item_role: 'researcher' }));
+    assert.deepEqual(made, { kind: 'line', journal_kind: 'workitem_failed', journal_id: jrn(1), at: '2026-11-11T10:00:00.000Z', campaign_id: cmp(1), work_item_id: wi(3), count: 1 });
+    assert.deepEqual(keptLineOf({ ...line(4, { journal_kind: 'workitem_failed' }), operation: 'message.send', role: 'analyst' }), line(4, { journal_kind: 'workitem_failed' }));
+});
+
+test('a kept succeeded line is read back only with exactly one name, from the lists; a record of the old shape is still read', () => {
+    const sent = line(4, { journal_kind: 'workitem_succeeded', operation: 'conversation.reply' });
+    const done = line(5, { journal_kind: 'workitem_succeeded', role: 'copywriter', given: true });
+    assert.deepEqual(keptLineOf(sent), sent);
+    assert.deepEqual(keptLineOf(done), done);
+    for (const broken of [
+        {},
+        { operation: undefined },
+        { operation: 'contact.list' },
+        { operation: 'conversation.reply', role: 'copywriter' },
+        { operation: null, role: 'manager' },
+        { operation: undefined, role: 'critic' },
+        { operation: undefined, role: 'a role a person registered' },
+        { operation: 3 },
+    ]) {
+        const { operation: _o, role: _r, ...bare } = sent;
+        assert.equal(keptLineOf({ ...bare, ...broken }), null, JSON.stringify(broken));
+    }
+    // Records written before the two members existed hold none, and are lines of the older kinds: read as they were.
+    assert.deepEqual(keptLineOf({ kind: 'line', journal_kind: 'approval_requested', journal_id: jrn(2), at: line(2).at, campaign_id: cmp(1), count: 2, given: true }), line(2, { journal_kind: 'approval_requested', count: 2, given: true }));
+});
+
+test('lines fold only when the operation or the role is the same too', () => {
+    const entries: KeptEntry[] = [];
+    const sent = (n: number, fields: Partial<LineEntry> = {}) => line(n, { journal_kind: 'workitem_succeeded', operation: 'message.send', ...fields });
+    take(entries, sent(1));
+    assert.equal(take(entries, sent(2)).folded, true);
+    assert.equal(take(entries, sent(3, { operation: 'conversation.reply' })).folded, false, 'another operation');
+    assert.equal(take(entries, line(4, { journal_kind: 'workitem_succeeded', role: 'researcher' })).folded, false, 'a role after an operation');
+    assert.equal(take(entries, line(5, { journal_kind: 'workitem_succeeded', role: 'researcher' })).folded, true);
+    assert.equal(take(entries, line(6, { journal_kind: 'workitem_succeeded', role: 'planner' })).folded, false, 'another role');
+    assert.deepEqual(
+        entries.map((each) => (each.kind === 'line' ? `${each.operation ?? each.role}x${each.count}` : each.kind)),
+        ['message.sendx2', 'conversation.replyx1', 'researcherx2', 'plannerx1'],
+    );
+    assert.deepEqual(entries[2], line(5, { journal_kind: 'workitem_succeeded', role: 'researcher', count: 2 }), 'a fold keeps the name');
+});
+
+test('a turn is handed the operation or the role of a succeeded line, and nothing else of the work', () => {
+    const block = feedBlock([line(1, { journal_kind: 'workitem_succeeded', operation: 'message.send', work_item_id: wi(4) }), line(2, { journal_kind: 'workitem_succeeded', role: 'analyst', campaign_id: cmp(2) })], 0);
+    assert.ok(block);
+    const [, , first, second] = block.split('\n');
+    assert.deepEqual(JSON.parse(first!), { kind: 'workitem_succeeded', campaign_id: cmp(1), work_item_id: wi(4), operation: 'message.send', journal_id: jrn(1), at: line(1).at, count: 1 });
+    assert.deepEqual(JSON.parse(second!), { kind: 'workitem_succeeded', campaign_id: cmp(2), role: 'analyst', journal_id: jrn(2), at: line(2).at, count: 1 });
 });

@@ -43,7 +43,9 @@
         "20261029150321_SentFacts",
         "20261102051342_ResponderWatermark",
         "20261105002401_SubscriptionRunner",
-        "20261111143412_Audience"
+        "20261111143412_Audience",
+        "20261113000729_ChannelRoutes",
+        "20261113021003_JournalByThread"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -77,7 +79,9 @@
         "20261029150321_SentFacts",
         "20261102051342_ResponderWatermark",
         "20261105002401_SubscriptionRunner",
-        "20261111143412_Audience"
+        "20261111143412_Audience",
+        "20261113000729_ChannelRoutes",
+        "20261113021003_JournalByThread"
       ],
       "backup_file": null
     },
@@ -101,7 +105,8 @@
       "activated_at": "2026-10-16T09:00:00.000Z",
       "global_default_plugin": null,
       "global_override_count": 0,
-      "campaign_route_count": 0
+      "campaign_route_count": 0,
+      "channel_route_count": 0
     },
     "update": null,
     "skills": {

@@ -1,13 +1,56 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useApi } from '../../api/context';
 import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
 import type { UiToken } from '../../api/types';
-import { clock, relative } from '../../time/format';
+import { clock, relative, when } from '../../time/format';
+import { followStanding, fullAccessStanding, takeBackStanding } from '../../platform/full-access';
 import * as store from './store';
+import { routeCounts } from './route-counts';
 import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/**
+ * The standing choice of Full access, in the desktop alone: what stands and its take-back, which asks the box again at
+ * the next entry and starts new chats in Ask first. The page never gives the choice; only the desktop's own box does. A
+ * browser, and a desktop of an earlier version, show no card.
+ */
+function FullAccessCard() {
+    const desktop = window.jasonDesktop;
+    const offered = desktop !== undefined && (desktop as Partial<typeof desktop>).fullAccess !== undefined;
+    const [refused, setRefused] = useState<string | null>(null);
+    useEffect(() => (desktop !== undefined && offered ? followStanding(desktop) : undefined), [desktop, offered]);
+    if (desktop === undefined || !offered) return null;
+    const standing = fullAccessStanding.value;
+    const takeBack = () =>
+        void takeBackStanding(desktop)
+            .then(setRefused)
+            .catch((error: unknown) => setRefused(error instanceof Error ? error.message : String(error)));
+    return (
+        <section className="card">
+            <h2>Full access</h2>
+            {refused && <Notice danger>{refused}</Notice>}
+            {standing === null ? (
+                <p>Full access asks you each time a chat enters it.</p>
+            ) : (
+                <>
+                    <p>
+                        {Number.isNaN(new Date(standing.givenAt).getTime())
+                            ? 'Chats on this computer enter Full access without asking.'
+                            : `Chats on this computer enter Full access without asking, since ${when(new Date(standing.givenAt), new Date(), zone)}.`}
+                    </p>
+                    {standing.newChats && <p>New chats start in Full access.</p>}
+                    <div className="btn-row">
+                        <button className="btn" type="button" onClick={takeBack}>
+                            Ask each time again
+                        </button>
+                    </div>
+                </>
+            )}
+        </section>
+    );
+}
 
 export function SystemScreen() {
     const api = useApi();
@@ -36,7 +79,7 @@ export function SystemScreen() {
                             </>
                         ) : (
                             <>
-                                Update from a terminal with <code>jason update apply</code>, or ask your agent.
+                                Update from a terminal with <code>jason update apply</code>, or ask your AI.
                             </>
                         )}
                         {info.update.release_notes_url && (
@@ -82,6 +125,8 @@ export function SystemScreen() {
                                 <dd>{info.database.applied_migrations.length} migrations applied</dd>
                             </dl>
                         </section>
+
+                        <FullAccessCard />
 
                         <section className="card">
                             <h2>
@@ -152,10 +197,7 @@ export function SystemScreen() {
                                 <dt>Default provider</dt>
                                 <dd>{store.routes.value?.global.default?.plugin_id ?? 'none'}</dd>
                                 <dt>Overrides</dt>
-                                <dd>
-                                    {info.routes.global_override_count} global · {info.routes.campaign_route_count} per
-                                    campaign
-                                </dd>
+                                <dd>{routeCounts(info.routes)}</dd>
                                 <dt>Activated</dt>
                                 <dd>
                                     {relative(new Date(info.routes.activated_at), now)} · snapshot{' '}

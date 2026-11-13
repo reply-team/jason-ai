@@ -62,8 +62,13 @@ link that leaves it opens in the system browser, and only when it is `https:`.
 
 ## What you see
 
+The window calls a campaign with its chat an **agent** (**Agents** in the sidebar and the View menu). That is the harness's
+campaign and nothing else: the commands, the API and the ids keep `campaign`, and so do the rest of these pages. The AI that
+runs commands is called the AI.
+
 The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
-asks "Who do you want to reach?". What you type there starts a set-up chat on the AI you connected, about no campaign
+asks "Who do you want to reach?" and says under it that this interface is optional, since everything there can also be done
+from a terminal with your AI, through Jason's CLI and API. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
@@ -71,20 +76,20 @@ shows before anything is typed and what you send waits, while the window is open
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
-  **Open your campaigns**.
-- **Campaigns** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
+  **Open your agents**.
+- **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab.
 - The **Feed**, the sidebar's first item, is the desktop's main chat (below).
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System and Settings, open in a page panel of the same
+- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light; one that
 existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
 its settings and the starting page and the window's background before the page loads follow it.
 
-The View menu carries the keys (New Chat, What Needs You, Performance, Campaigns, Work Items, People, System, Reload).
+The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
@@ -105,10 +110,17 @@ them on.
 - `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a turn on a provider's key
   runs its host with. They keep the host's transcripts of those turns, never the key, and are readable by your account
   alone where the system has modes.
-- `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone, naming the
-  desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
+- `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone where the
+  system has modes, naming the desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
+- `<data>/desktop/full-access.json`: the standing choice of Full access (below), kept for each host program that can take
+  it and removed when you take it back. No chat's command or edit can change it, and a chat on Claude Code cannot read
+  it, in any mode; where Codex's sandbox reads Jason's data folder a Codex command can read it, and it holds no secret. A
+  program the AI writes and that you let run, in any mode, can change it, as it can anything you can, and the
+  confirmation says so. Beside it, `full-access-taken-back` marks a take-back the file would not take: Jason holds the
+  choice as taken back while it is there and removes the file when it next starts. Where the folder takes no new file
+  when Jason starts, so that a take-back could not be marked, the choice is held as taken back until it next starts.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
   the chat folder, which the chat can neither read nor write.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).
@@ -116,8 +128,17 @@ them on.
   that lasts only while it runs, so each start copies its `jason` here; that copy is the `jason` it runs, starts the
   runtime from, puts on the PATH and gives the chat. A copy is used only when every file matches the package's, and one
   that differs, or a link where the folder should be, stops the start and is named, to be removed by hand.
-- `<data>/desktop/electron/`: Electron's own profile, the page's storage and its logs, so a second data directory is a
-  second desktop and nothing of it lands outside `<data>`.
+- `<data>/desktop/electron/`: Electron's own profile and its logs, so a second data directory is a second desktop and
+  nothing of it lands outside `<data>`. The window's page keeps its storage in memory only, so its pairing with the
+  runtime, a key with the run token's rights, never reaches this folder, whatever build of the page the runtime serves.
+  An earlier version kept it here: at the first start after the update the desktop revokes every UI token before the
+  window loads, then removes what that page stored, so a browser you paired with `jason ui open` must be paired again
+  once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
+  does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
+  its tokens still valid, until a start that starts the runtime.
+- `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
+  holds now, never the token. The page reports the id once it has paired, and the desktop revokes the token the window
+  held before, so the paired list keeps one row for the window.
 - `<data>/logs/desktop-YYYYMMDD[_NNN].jsonl`: its log, in the runtime log's shape and under its limits, and never any
   text a person gave Jason. `jason logs --source desktop` reads it, and `jason doctor` carries a bounded slice.
 
@@ -147,6 +168,11 @@ lists each key and each card's grant.
   Codex, ends it with Codex's own words), and on a turn on a key the exact key is replaced by `[key]` in every line of text and every
   step the host says, and a host's error text also loses the key's first six and last four characters and any token
   shaped as a provider's key, before the page shows it or the conversation keeps it.
+- **The model list.** A chat's model menu starts with "Default (recommended)", which passes no model, so the host chooses
+  and a new chat starts there. Claude Code's entries follow with a name to read each ("Opus (latest)", "Sonnet (latest)"),
+  while the alias is what the host is given and the version it stands for is the provider's to move. Codex's list is
+  asked of Codex at most once a day; Claude Code documents no way to list its models without a turn, so its list is the
+  desktop's own. A chat that chose a model before keeps it.
 - **Reply.** Signed in with `reply auth login`, or with a key on standard input that only the Reply CLI keeps, then the
   plugin installed and, only where you have set no default route, wired as the default. A card says "configured" when the
   runtime accepted it, never "connected". What the desktop tells Reply about itself is one label in the User-Agent of
@@ -183,6 +209,8 @@ lists each key and each card's grant.
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
+  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts,
+  beside the notification channels as the runtime reports them; see [the browser UI](ui.md#accounts).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
@@ -212,15 +240,26 @@ Claude Code.
   servers it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which
   every Codex turn turns off; its sign-in is still used.
 - **On Windows, Codex needs its elevated sandbox.** Every Windows Codex turn names it (`windows.sandbox="elevated"`),
-  since a command in Codex's other Windows sandbox can read Jason's data directory. Naming it does not prove it is set
-  up, so at the first send to Codex in each run of the desktop the chat checks first ("Checking Codex's sandbox…"): a
-  command tries to open two files of the data directory and says only whether it could, never what is in them. One is
-  the runtime's run file, which has an access list of its own; the other is the desktop's settings file, which keeps
-  the access list the rest of the data directory, the database and the logs among them, inherits. It also opens
-  Windows' own hosts file, which every account may read, to show that it can open a file at all. The same command
-  runs first outside any sandbox, where it must open all three, then in Codex's sandbox, where it must open the hosts
-  file and neither of the two, then outside again, where it must open all three once more. The chat runs on Codex only on exactly that; otherwise the turn is
-  refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
+  since a command in Codex's other Windows sandbox can read the runtime's run file, and with it the token that lets a
+  program act as you through Jason's API. Naming it does not prove it is set up, so at the first send to Codex in each
+  run of the desktop the chat checks first, saying so: **Checking Codex's sandbox… Windows may ask once for an
+  administrator; answering No means chatting on Claude Code instead.** That line is Windows' alone. A command tries to open two
+  files of the data directory and says only whether it could, never what is in them. One is the runtime's run file,
+  which has an access list of its own; the other is the desktop's settings file, which keeps the access list the rest
+  of the data directory, the database and the logs among them, inherits. It also opens Windows' own hosts file, which
+  every account may read, to show that it can open a file at all. The same command runs first outside any sandbox,
+  where it must open all three, then in Codex's sandbox, where it must open the hosts file and not the run file, then
+  outside again, where it must open all three once more. The verdict rests on the run file alone: the elevated sandbox
+  opens the settings file, as a Codex command can read the rest of the data directory on macOS and Linux too, and
+  whether it did is a fact the check reports and the desktop's log records (`chat_sandbox_checked`, a word for the
+  answer and one for the settings file, never a path), not a reason to refuse. What the verdict stands for, credential
+  by credential: the run token is checked; the window's own pairing is absent, kept in memory only; the AI providers'
+  keys are sealed by the operating system for your account, which Codex's sandbox on Windows does not run as, since it
+  runs as an account of its own; a plugin's secret kept in the installation's settings,
+  the live Claude turns' endpoint secrets, which open no API, and Jason's data, conversations and transcripts are
+  readable, and the line under the composer says so; a browser's own pairing and the agent hosts' own sign-ins are
+  outside Jason's folder and not checked. The chat runs on Codex only on exactly
+  that; otherwise the turn is refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
   `codex sandbox setup --elevated` (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.**
   A turn on the OpenAI key is refused instead with **Codex on a key cannot be checked on Windows yet: sign in to Codex,
   or chat on Claude Code.** The answer is kept for that Codex until the desktop quits. With no runtime running there is
@@ -231,8 +270,18 @@ Claude Code.
   is not run at the Connect card, since naming the elevated sandbox may ask for an administrator.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
-  skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
+  skills in `.agents/skills`, and answers. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
   loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder.
+  While Codex is the chat's host, on your sign-in or on the OpenAI key, the line under the composer says what a command
+  can read, system by system as it was seen. On Windows, where the desktop's check has seen the elevated sandbox keep
+  the run file from a command: **A Codex command can read your files, Jason's data and settings among them, a plugin's
+  secret kept in settings.json too, but not the key Jason's own commands use, its run token. Codex runs it
+  read-only.** On macOS and Linux, where nobody has looked, and on a desktop that does not say its system: **A Codex
+  command can read your files, Jason's data and settings among them, a plugin's secret kept in settings.json too, and
+  the key Jason's own commands use, its run token. Codex runs it read-only.** Neither says anything of the network or
+  of acting for you, which nobody has seen. Keep a plugin's secret out of `settings.json`
+  ([plugins.md](plugins.md#hostconfig)). A browser you paired keeps its token in its own profile, which a command of a
+  Codex chat may read; revoke a browser you no longer use ([ui.md](ui.md#paired-browsers)).
 
 ### Conversations
 
@@ -243,7 +292,8 @@ conversation is kept from its first turn, one never sent to leaves nothing, and 
 turn without its memory of the conversation and keeps what is shown. **Remove** deletes the conversation's record from
 this computer after one question; the host keeps its own transcript.
 
-A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone: the campaign, a title,
+A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
+modes: the campaign, a title,
 the session each host named for it, and what the page drew, as text, within 2 MB. Every turn begins with a paragraph the
 desktop writes, naming the conversation's campaign and its folder, and a turn that cannot resume its host's session
 starts a fresh one with a recap of the last words. The conversation is no boundary: the agent is asked to keep to its
@@ -254,11 +304,19 @@ model's to decide.
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
 **New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
-approval or a question waiting, a campaign created, started or paused, work that stopped or expired, a provider block
-holding work. Consecutive lines of the same kind and campaign fold into one with a count, and the Feed keeps the newest
-500. A line carries a kind, ids, a count and a moment and never a person's words, a subject or a name; the campaign's name
-on it opens that campaign's conversation, and an approval or a question opens Needs you on that item. When the window
-loads, the desktop reads what it missed with `jason journal list`.
+approval or a question waiting, an approval approved or rejected, a question answered, a campaign created, started,
+paused or archived, work that stopped or expired, a provider block holding work, a message or an invitation sent or
+scheduled, a reply sent, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability
+specialist. Consecutive lines of the same kind and campaign fold into one with a count; a message sent or scheduled and
+an invitation sent or scheduled are not the same kind of line, so sends that alternate with other lines are shown one by
+one. A send is a line when it succeeded, which includes a send the provider took for a later moment, so the line says
+sent or scheduled and a scheduled send can still be cancelled. A kept line of a kind, an operation or a role the page
+has no words for, such as one a newer desktop kept, is not drawn. The Feed keeps the newest 500. A line carries a kind,
+ids, a count and a moment, and for a send or finished work which one it was, and never a person's words, a subject or a
+name; the campaign's name on it opens that campaign's conversation, and an approval or a question opens Needs you on
+that item. When the window loads, the desktop reads what it missed with `jason journal list`. Of the work that finished,
+a catch-up takes at most the newest hundred items, and keeps the sends and the role work among them; older ones stay in
+the journal and are not shown again.
 
 **A line never starts a turn.** The agent hears the lines it has not yet been given only with your next message there,
 at most 50, as records Jason took from the journal: information, never instructions. The Feed cannot be renamed,
@@ -276,26 +334,68 @@ chat is in. A mode applies to the turns you start by sending, from the next one 
 chat and the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
 passes only the allowed verbs that read, Claude Code starts in its plan mode with the exit from it removed, and every
 other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
-refusal of the next section stays. A Codex turn runs in its read-only sandbox in either mode.
+refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
+
+When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
+**Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in
+your last answer." as your message; it never enters Auto-edit or Full access, and if the chat's mode changed in between,
+from the menu or by a Full access box answered meanwhile, nothing is sent and the chat says so. The card is offered only
+while the plan is the chat's last word and the chat is still in Plan only, so a plan approved, or followed by another
+turn, is not offered again, after a reload or a restart either. It is offered only on the agent host that made the
+plan: on another one, which never saw it, the card says to ask for the plan again. Keep planning leaves the chat in Plan
+only and puts the cursor in the message box. On Codex the card says that the approved plan still only reads and that Claude Code carries
+it out. The Feed has no plan card.
+
+**Auto-edit** is Ask first, except that six file commands run without a card when every path they name is inside the
+chat's own folder: `mkdir`, `touch`, `mv`, `cp`, `rm` and `rmdir`, read word by word by Jason, never by the host's own
+accept-edits mode. Such a command runs only when every part of it is one of the six with only the options Jason lists
+for it, with no pipe, redirection, pattern, variable, `~` or `..`, and every path strictly inside the chat folder once
+links are followed and outside the names an agent loads. The path a copy or a move writes into a folder counts as a
+path it names. A recursive or forced removal (`rm -r`, `rm -f`), a copy of a folder, a link that leads nowhere, a move
+to `.github`, a file in the chat folder named like one of the six (which the shell might run in place of the system's),
+and anything in a campaign's or a project's folder, in the data directory or elsewhere is Ask first's card, and
+whatever Ask first refuses stays refused. Auto-edit runs on Claude Code only and is not offered for the Feed; it has no
+confirmation and no Always, is never a default, and is gone when you close Jason. Leaving it for Ask first or Plan only
+while a turn runs stops that turn; a change to Full access lets the turn finish in the mode it started in.
+
+Three limits come with it. The chat folder is shared by the chats that are not in Full access, so a chat in Auto-edit
+can remove a file another chat left there. A hard link already in the folder is not told by its path, so a command that
+writes through it, a `cp` onto it say, reaches the file it shares wherever that file is. And the judgement is made
+before the command runs, so a link put into the folder by something else between the two is the same limit Ask first's
+Write has.
 
 Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh**
 leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
-also lists Full access. Full access is chosen only after a confirmation shown
-each time, with Cancel focused. In Full access the agent runs commands and changes files on this computer without
-asking, except a command Jason cannot read plainly or one that changes what an agent loads: that is a card titled "Full
+also lists Full access. Full access is chosen only after a confirmation, with Cancel focused and Escape answering
+Cancel, unless you gave the standing choice (below). In Full access the AI runs commands and changes files on this computer without
+asking, except a command Jason cannot read plainly or one that changes what the AI loads: that is a card titled "Full
 access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. A held card offers no
 "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
 every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
-not a tool of the chat. Jason does not read a program the agent writes to a file and runs, nor your own shell
+not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
 configuration (aliases, shell options), so such a program can still act as you. None of your own MCP servers or
-connectors reaches a turn. The agent works in a folder of its own; when Full access ends, the chat says where it is,
+connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
-Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said once.
-Full access is never a default and is gone when you close Jason. It is not offered for the Feed, whose turns are handed
-lines that others and providers wrote without you asking for them.
+Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
+Out of the box Full access is never a default; given this time, it is gone when you close Jason. It is not offered for
+the Feed, whose turns are handed lines that others and providers wrote without you asking for them.
+
+The confirmation is answered in one of two ways. **Give full access this time** holds for that chat until you change
+its mode or close Jason. **Always on this computer** is the standing choice: every Claude Code chat on this computer
+then enters Full access from its menu without the confirmation, after a restart too. With **With Always, also start new
+chats in Full access** ticked, a new chat whose host can take Full access starts in it, its line under the composer
+shown from the first moment; a new chat on a host that cannot, Codex or a Claude Code too old for it, starts in Ask
+first with no notice, and the menu shows the mode it has. With This time that box is ignored, and its label says so. A
+chat reopened after a restart is in Ask first as before: the standing choice skips the confirmation, it never enters
+Full access by itself. You take it back with **Full access: ask each time again** in the mode menu, or **Ask each time
+again** on the System screen's Full access card, which only the desktop shows; a chat that is in Full access stays in
+it, its line still shown, and the next entry asks again. The page only reads the standing choice and takes it back;
+only the confirmation gives it. A tool that ran without Jason having seen it takes the standing choice back as well as
+ending the turn. A release that widens what Full access reaches asks again; a change of wording alone does not. The
+Feed is refused whatever stands, and a held card still offers no "Always".
 
 ### What runs without asking, what is refused, what is a card
 

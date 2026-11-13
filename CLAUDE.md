@@ -105,11 +105,12 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   apart. `docs/contracts/README.md` is the contract. The delivery contract, `notification.send`, is a family of its
   own under `docs/contracts/notifications/`, embedded the same way and never in the operation catalog.
 - Routing: which plugin performs an operation for a campaign is a route, resolved by a pure function
-  over an immutable snapshot — campaign operation override, campaign default, global operation
-  override, global default, with exact masking and no fallback to another plugin. Routes are frozen
+  over an immutable snapshot — campaign operation and channel, campaign operation override, campaign
+  default, global operation and channel, global operation override, global default, with exact
+  masking and no fallback to another plugin. Routes are frozen
   by the same reload that freezes plugins: the `Routes` section of `settings.json` is read only
   there and at startup, `route.set`/`route.unset` copy the global half from the active snapshot, and
-  a bad route rejects the whole reload. The claim is fail-closed: twenty-six checks in one published
+  a bad route rejects the whole reload. The claim is fail-closed: twenty-seven checks in one published
   order, one code per reason, decided before a child exists, with the attempt kept; an audience's definition is the
   provider's own shape, held at the claim to the schema the routed plugin declares, never at create. A binding names
   an account and never a credential. A person's reads on request are routed by the person's pin; a campaign's reads

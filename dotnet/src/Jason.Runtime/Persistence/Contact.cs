@@ -24,6 +24,12 @@ public sealed class Contact
     /// <summary>IANA time-zone id, validated on write.</summary>
     public string? TimeZone { get; set; }
 
+    /// <summary>
+    /// The key of <see cref="Custom"/> under which an audience search's landing keeps the provider's own record of the
+    /// person, beside their fields. A people search never looks into it (<see cref="CustomValues"/>).
+    /// </summary>
+    public const string ProviderRecordKey = "provider_record";
+
     /// <summary>Whatever else the caller knows about the contact; schema-less by design.</summary>
     public JsonObject Custom { get; set; } = new();
 

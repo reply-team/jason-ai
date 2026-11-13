@@ -147,23 +147,44 @@ public sealed class ContactThreadService(JasonDbContext db, PluginRegistry plugi
             : new NotFoundException(AttemptErrors.NoRoute, $"No route sends '{operation}' to '{pin.PluginId}' in the account this person's identifier was learned in.");
     }
 
-    /// <summary>What the operation resolves to in every campaign the routes name, then globally.</summary>
+    /// <summary>
+    /// What the operation resolves to in every campaign the routes name, then globally; then every route there is, channel
+    /// routes included — each campaign's, then the global ones, in the order of precedence — since a route that names the
+    /// account the person's identifier was learned in is one wherever it sits: a person reached on a channel routed to a
+    /// second plugin is read there, by the route that sends there, when that plugin performs the read.
+    /// </summary>
     private static IEnumerable<Route> Candidates(RouteSnapshot snapshot, string operation)
     {
         foreach (var campaign in snapshot.Campaigns.Keys.Order(StringComparer.Ordinal))
         {
-            if (RouteResolver.Resolve(snapshot, campaign, operation) is { } resolution)
+            if (RouteResolver.Resolve(snapshot, campaign, operation, channel: null) is { } resolution)
             {
                 yield return resolution.Route;
             }
         }
 
         // A campaign id no route names resolves to the global routes.
-        if (RouteResolver.Resolve(snapshot, string.Empty, operation) is { } global)
+        if (RouteResolver.Resolve(snapshot, string.Empty, operation, channel: null) is { } global)
         {
             yield return global.Route;
         }
+
+        foreach (var set in snapshot.Campaigns.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => entry.Value).Append(snapshot.Global))
+        {
+            foreach (var route in Every(set))
+            {
+                yield return route;
+            }
+        }
     }
+
+    /// <summary>One scope's routes in the order of precedence: its channel routes, its operation routes ordinally, its default.</summary>
+    private static IEnumerable<Route> Every(RouteSet set) =>
+    [
+        .. set.ChannelRoutes.Select(entry => entry.Route),
+        .. set.Operations.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => entry.Value),
+        .. set.Default is { } fallback ? [fallback] : Array.Empty<Route>(),
+    ];
 
     private Task<JsonObject> ReadAsync(Target target, JsonObject args, CancellationToken ct) =>
         ProviderReadCall.InvokeAsync(

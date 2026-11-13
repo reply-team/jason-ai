@@ -17,6 +17,7 @@ import { registry } from '../platform/slots';
 import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
+import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
@@ -27,6 +28,7 @@ import * as campaigns from './campaigns';
 import * as connect from './connect';
 import { linkPlace } from './links';
 import * as needs from './needs';
+import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { sideView } from './side';
 import { StartPanel, startMaking, startWaiting } from './start';
@@ -53,7 +55,7 @@ import {
 const titles: Readonly<Record<PanelName, string>> = {
     start: 'Start',
     needs: 'Needs you',
-    campaigns: 'Campaigns',
+    campaigns: 'Agents',
     activity: 'Activity',
     connect: 'Connect',
     page: 'Page',
@@ -73,13 +75,18 @@ function chatAbout(campaign?: { id: string; name: string }): void {
     here().dock.chat(campaign);
 }
 
+/** What the Accounts page is handed to draw the provider's accounts: the Reply card, as the Connect panel acts on it. */
+const providerAccounts = { view: connect.accountsReplyView, gone: connect.accountsReplyGone };
+
 function PagePanel() {
     return (
         <div className="harness">
             <div className="app chromeless">
                 <div className="content">
                     <CampaignChat.Provider value={chatAbout}>
-                        <CurrentPage />
+                        <ProviderAccountsContext.Provider value={providerAccounts}>
+                            <CurrentPage />
+                        </ProviderAccountsContext.Provider>
                     </CampaignChat.Provider>
                 </div>
             </div>
@@ -210,6 +217,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             if (place.panel === 'needs' && place.open) void needs.attention.open(api, place.open.kind, place.open.id);
         };
         const stops = [
+            // The standing choice of Full access, for the mode menu's take-back and the System screen.
+            followStanding(desktop),
             desktop.links.onOpen(opened),
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));

@@ -16,10 +16,11 @@ describe('the shell', () => {
             'Chat',
             'Attention',
             'Performance',
-            'Campaigns',
+            'Agents',
             'Work items',
             'People',
             'System',
+            'Accounts',
             'Settings',
         ]);
         await waitFor(() => expect(screen.getByText(/ada · Jason/)).toBeTruthy());
@@ -42,6 +43,7 @@ describe('the shell', () => {
         ]);
         expect(screen.getAllByRole('img', { name: 'Jason AI, GTM Harness' })).toHaveLength(2);
         expect(head.querySelector('.glyph')).toBeNull();
+        expect(head.querySelector('.alpha')?.textContent).toBe('Alpha');
         unmount();
         renderApp(new FakeApi(), { paired: false });
         await waitFor(() => expect(screen.getByText(/jason ui open/)).toBeTruthy());

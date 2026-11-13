@@ -13,6 +13,8 @@ import {
     turnOptions,
     withModels,
     fullAccessLine,
+    autoEditLine,
+    olderDesktopAutoEdit,
     modeChoices,
     olderDesktop,
     failed,
@@ -29,6 +31,17 @@ import {
     stopAsked,
     takenBack,
     typed,
+    afresh,
+    codexPlanLine,
+    livePlan,
+    planElsewhere,
+    planOtherHost,
+    moded,
+    planApproved,
+    planGo,
+    planLine,
+    planModeMoved,
+    told,
     type Chat,
 } from './chat-model';
 
@@ -387,6 +400,7 @@ describe('the model and the effort a chat is sent with', () => {
         install: null,
         belowFloor: null,
         fullAccess: null,
+        autoEdit: null,
         models: [
             { id: 'opus', label: 'Opus', efforts: every },
             { id: 'haiku', label: 'Haiku', efforts: [] },
@@ -406,6 +420,13 @@ describe('the model and the effort a chat is sent with', () => {
     it('names no model and no effort until one is chosen, so the host keeps its own', () => {
         expect(fresh).toMatchObject({ model: null, effort: null, typing: false });
         expect(turnOptions(fresh, claude)).toEqual({ host: 'claude' });
+    });
+
+    it('keeps a chat on the alias it chose before names were shown: the id is what is sent, the menu shows its display name', () => {
+        const named: DesktopHost = { ...claude, models: [{ id: 'opus', label: 'Opus (latest)', efforts: every }] };
+        const before = { ...fresh, model: 'opus', effort: 'high' as const };
+        expect(modelView(before, named).offer?.label).toBe('Opus (latest)');
+        expect(turnOptions(before, named)).toEqual({ host: 'claude', model: 'opus', effort: 'high' });
     });
 
     it('names the model chosen, and the effort only where that model takes it', () => {
@@ -519,6 +540,7 @@ describe('the hosts as a desktop of another version answers them', () => {
         const current: DesktopHost = {
             ...older,
             fullAccess: null,
+            autoEdit: null,
             models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
             typedModel: true,
             modelsUnread: null,
@@ -536,14 +558,34 @@ describe('the hosts as a desktop of another version answers them', () => {
         } as unknown as DesktopHost;
         expect(withModels([older])[0]?.fullAccess).toBe(olderDesktop);
     });
+
+    it('reads a host listed without Auto-edit as one on which Auto-edit cannot be chosen, keeping what else it lists', () => {
+        const listed = {
+            id: 'claude',
+            label: 'Claude Code',
+            fullAccess: null,
+            models: [],
+            typedModel: true,
+            modelsUnread: null,
+        } as unknown as DesktopHost;
+        const [read] = withModels([listed]);
+        expect(read?.autoEdit).toBe('This version of Jason Desktop does not offer Auto-edit.');
+        expect(read?.autoEdit).toBe(olderDesktopAutoEdit);
+        expect(read?.fullAccess).toBeNull();
+        expect(read?.typedModel).toBe(true);
+        expect(modeChoices(read!).find((each) => each.mode === 'auto_edit')?.disabled).toBe(olderDesktopAutoEdit);
+    });
 });
 
 describe("a chat's access mode", () => {
-    const claude = { id: 'claude', label: 'Claude Code', fullAccess: null } as unknown as DesktopHost;
+    const claude = { id: 'claude', label: 'Claude Code', fullAccess: null, autoEdit: null } as unknown as DesktopHost;
+    const codexAutoEdit =
+        'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
     const codex = {
         id: 'codex',
         label: 'Codex',
         fullAccess: 'Full access runs on Claude Code only.',
+        autoEdit: codexAutoEdit,
     } as unknown as DesktopHost;
 
     it('is Ask first in a new chat, and is what the desktop says it is, never what the page asked for', () => {
@@ -571,19 +613,20 @@ describe("a chat's access mode", () => {
         expect(fromRecord(record as unknown as DesktopConversationRecord, 'claude').mode).toBe('ask_first');
     });
 
-    it("offers the three modes, Full access disabled with the desktop's reason on a host that has none", () => {
+    it("offers the four modes, narrow to wide with Full access last, each disabled with the desktop's reason", () => {
         expect(modeChoices(claude)).toEqual([
             { mode: 'ask_first', label: 'Ask first', disabled: null },
             { mode: 'plan_only', label: 'Plan only', disabled: null },
+            { mode: 'auto_edit', label: 'Auto-edit', disabled: null },
             { mode: 'full_access', label: 'Full access', disabled: null },
         ]);
-        expect(modeChoices(codex)[2]).toEqual({
+        expect(modeChoices(codex)[3]).toEqual({
             mode: 'full_access',
             label: 'Full access',
             disabled: 'Full access runs on Claude Code only.',
         });
-        expect(modeChoices(null)[2]?.disabled).toBe('Full access runs on Claude Code only.');
-        expect(modeChoices(claude, true)[2]?.disabled).toBe(
+        expect(modeChoices(null)[3]?.disabled).toBe('Full access runs on Claude Code only.');
+        expect(modeChoices(claude, true)[3]?.disabled).toBe(
             'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
         );
         expect(
@@ -591,13 +634,161 @@ describe("a chat's access mode", () => {
                 .slice(0, 2)
                 .map((each) => each.disabled),
         ).toEqual([null, null]);
-        expect(modeChoices(codex, true)[2]?.disabled).toBe('Full access runs on Claude Code only.');
-        expect(modeChoices(claude).map((each) => each.mode)).not.toContain('auto_edit');
+        expect(modeChoices(codex, true)[3]?.disabled).toBe('Full access runs on Claude Code only.');
+    });
+
+    it("disables Auto-edit on Codex, with no host and for the Feed in the desktop's words, and nowhere else", () => {
+        expect(modeChoices(codex)[2]).toEqual({ mode: 'auto_edit', label: 'Auto-edit', disabled: codexAutoEdit });
+        expect(modeChoices(null)[2]?.disabled).toBe(codexAutoEdit);
+        expect(modeChoices(claude, true)[2]?.disabled).toBe(
+            'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
+        );
+        expect(modeChoices(codex, true)[2]?.disabled).toBe(codexAutoEdit);
+        // A Claude Code below Full access's floor still offers Auto-edit: it needs no hook.
+        const below = { ...claude, fullAccess: 'Full access needs a newer Claude Code.' } as DesktopHost;
+        expect(modeChoices(below)[2]?.disabled).toBeNull();
+        expect(modeChoices(below)[3]?.disabled).toBe('Full access needs a newer Claude Code.');
+    });
+
+    it('says Auto-edit is on in its own line under the composer', () => {
+        expect(autoEditLine).toBe(
+            "Auto-edit: the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first.",
+        );
     });
 
     it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {
         expect(fullAccessLine).toBe(
-            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+            'Full access: the AI runs commands without asking, except those Jason cannot read.',
         );
+    });
+});
+
+describe('Plan only’s plan card, as the page keeps it', () => {
+    const planning = (fields: Partial<Chat> = {}): Chat => ({
+        ...newChat('c1', 'claude'),
+        mode: 'plan_only',
+        turnHost: 'claude',
+        ...fields,
+    });
+    /** A Plan only turn that ended well with these words last, as the desktop says it. */
+    const planned = (chat: Chat, words: string): Chat =>
+        received(received(said(chat, 'plan it'), { kind: 'text', text: words }), {
+            kind: 'done',
+            error: null,
+            plan: true,
+        });
+    const marks = (chat: Chat) =>
+        chat.entries.flatMap((entry, at) => (entry.kind === 'text' && entry.plan === true ? [at] : []));
+
+    it('marks the turn’s last words a plan only when the desktop says so, and live while nothing came after them', () => {
+        const chat = planned(planning(), 'Read the replies first.');
+        expect(chat.entries.at(-1)).toEqual({ kind: 'text', text: 'Read the replies first.', plan: true });
+        expect(livePlan(chat, 'claude')).toBe(true);
+        // A turn's end without the mark marks nothing: an older desktop, or a turn that was no plan.
+        const plain = received(received(said(planning(), 'hi'), { kind: 'text', text: 'Hi' }), {
+            kind: 'done',
+            error: null,
+        });
+        expect(marks(plain)).toEqual([]);
+        expect(livePlan(plain, 'claude')).toBe(false);
+        // Nor for the Feed, whatever the desktop says.
+        const feed = planned(planning({ main: true }), 'A plan');
+        expect(marks(feed)).toEqual([]);
+        expect(livePlan(feed, 'claude')).toBe(false);
+        // Nor where the turn’s last thing was no words.
+        const stepped = received(received(said(planning(), 'go'), { kind: 'step', text: 'Read a file' }), {
+            kind: 'done',
+            error: null,
+            plan: true,
+        });
+        expect(marks(stepped)).toEqual([]);
+    });
+
+    it('is a plan of the past once a later turn ended, anything followed it, a turn runs, words wait, or the mode is not Plan only', () => {
+        const first = planned(planning(), 'One');
+        const second = planned(first, 'Two');
+        expect(marks(second)).toEqual([second.entries.length - 1]);
+        const failedLater = received(said(first, 'again'), { kind: 'done', error: 'It broke.' });
+        expect(marks(failedLater)).toEqual([]);
+
+        const chat = planned(planning(), 'Plan');
+        expect(livePlan(told(chat, 'A refusal.'), 'claude')).toBe(false);
+        expect(livePlan(afresh(chat), 'claude')).toBe(false);
+        expect(livePlan(said(chat, 'Something else'), 'claude')).toBe(false);
+        expect(livePlan({ ...chat, running: true }, 'claude')).toBe(false);
+        expect(livePlan({ ...chat, waiting: 'later' }, 'claude')).toBe(false);
+        expect(livePlan({ ...chat, plan: 'kept' }, 'claude')).toBe(false);
+        expect(livePlan({ ...chat, plan: 'approving' }, 'claude')).toBe(false);
+        // Leaving Plan only ends the card, as the desktop ends it: back in Plan only it is no card.
+        const left = moded(chat, 'ask_first');
+        expect(marks(left)).toEqual([]);
+        expect(livePlan(moded(left, 'plan_only'), 'claude')).toBe(false);
+        expect(marks(received(chat, { kind: 'mode', mode: 'full_access' }))).toEqual([]);
+    });
+
+    it('keeps an approved card, inert, through the change to Ask first its approval made, until the go’s turn ends', () => {
+        const chat = planned(planning(), 'Plan');
+        const approving = received({ ...chat, plan: 'approving' }, { kind: 'mode', mode: 'ask_first' });
+        expect(marks(approving)).toEqual([approving.entries.length - 1]);
+        const approved = moded({ ...approving, plan: 'approved' }, 'ask_first');
+        expect(livePlan(approved, 'claude')).toBe(false);
+        const going = said(approved, planGo);
+        const over = received(received(going, { kind: 'text', text: 'Done.' }), { kind: 'done', error: null });
+        expect(marks(over)).toEqual([]);
+        expect(over.plan).toBeNull();
+    });
+
+    it('reads the mark from a kept conversation, so a reopened chat still in Plan only shows its card', () => {
+        const record: DesktopConversationRecord = {
+            id: 'conv_1',
+            campaignId: null,
+            title: 'Plans',
+            updatedAt: '2026-11-13T10:00:00.000Z',
+            running: false,
+            mode: 'plan_only',
+            dropped: 0,
+            entries: [
+                { kind: 'user', text: 'Plan it' },
+                { kind: 'text', text: 'The plan', plan: true },
+            ],
+            chosen: { host: 'claude', model: null, effort: null },
+        };
+        const chat = fromRecord(record, 'claude');
+        expect(chat.entries.at(-1)).toEqual({ kind: 'text', text: 'The plan', plan: true });
+        expect(chat.plan).toBeNull();
+        expect(livePlan(chat, 'claude')).toBe(true);
+        expect(livePlan(fromRecord({ ...record, mode: 'ask_first' }, 'claude'), 'claude')).toBe(false);
+        // The plan's host is the one the record says the last turn went to.
+        expect(fromRecord(record, 'codex').turnHost).toBe('claude');
+        expect(livePlan(fromRecord({ ...record, chosen: null }, 'claude'), 'claude')).toBe(false);
+    });
+
+    it('is the plan of the host that made it alone: on another host it is no card to approve, until the chat is back on it', () => {
+        const chat = planned(planning(), 'Plan');
+        expect(livePlan(chat, 'claude')).toBe(true);
+        expect(planElsewhere(chat, 'claude')).toBe(false);
+        expect(livePlan(chat, 'codex')).toBe(false);
+        expect(planElsewhere(chat, 'codex')).toBe(true);
+        // No host found is neither: there is nothing to send the go to.
+        expect(livePlan(chat, null)).toBe(false);
+        expect(planElsewhere(chat, null)).toBe(false);
+        // A plan of the past is no plan elsewhere either.
+        expect(planElsewhere({ ...chat, plan: 'kept' }, 'codex')).toBe(false);
+        expect(planElsewhere(said(chat, 'More'), 'codex')).toBe(false);
+        expect(planOtherHost).toBe(
+            'This plan came from another AI; the one this chat is on now never saw it. Ask for the plan again to approve it.',
+        );
+    });
+
+    it('says its sentences as ruled', () => {
+        expect(planGo).toBe('Go ahead with the plan in your last answer.');
+        expect(planLine).toBe(
+            'Approve and run leaves Plan only for Ask first and tells the AI to go ahead; whatever Ask first asks about still comes to you as a card.',
+        );
+        expect(codexPlanLine).toBe(
+            'On Codex the approved plan still only reads: every Codex turn here is read-only. To have it carried out, choose Claude Code for this chat.',
+        );
+        expect(planApproved).toBe('Approved: the chat is in Ask first.');
+        expect(planModeMoved).toBe("The chat's mode changed before the plan was approved, so nothing was sent.");
     });
 });

@@ -7,8 +7,10 @@
 export {};
 
 /**
- * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, a campaign created, started or
- * paused, and work that stopped. Each is a kind the runtime writes itself.
+ * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, an approval approved or
+ * rejected, a question answered, a campaign created, started, paused or archived, work that stopped, and work that
+ * succeeded where it was a send or the work of one of five roles (`DesktopFeedOperation`, `DesktopFeedRole`). Each is a
+ * kind the runtime writes itself.
  */
 export type DesktopFeedKind =
     | 'inbound_reply_observed'
@@ -19,7 +21,18 @@ export type DesktopFeedKind =
     | 'campaign_paused'
     | 'workitem_failed'
     | 'workitem_expired'
-    | 'provider_blocked';
+    | 'provider_blocked'
+    | 'approval_approved'
+    | 'approval_rejected'
+    | 'decision_answered'
+    | 'campaign_archived'
+    | 'workitem_succeeded';
+
+/** The operations whose success the Feed shows, as a send the provider took. */
+export type DesktopFeedOperation = 'message.send' | 'conversation.reply' | 'social_invitation.send';
+
+/** The shipped roles whose finished work the Feed shows. */
+export type DesktopFeedRole = 'planner' | 'researcher' | 'copywriter' | 'analyst' | 'deliverability-specialist';
 
 /**
  * A journal line as the page hands it to the Feed: its id, moment, kind, campaign and work item, as `journal.list` and
@@ -31,6 +44,9 @@ export interface DesktopFeedLine {
     kind: DesktopFeedKind;
     campaign_id: string;
     work_item_id: string | null;
+    /** On a `workitem_succeeded` line alone: the operation or the role, one of them, from the closed lists; else absent. */
+    work_item_operation?: DesktopFeedOperation;
+    work_item_role?: DesktopFeedRole;
 }
 
 /**
@@ -45,6 +61,9 @@ export interface DesktopLineEntry {
     at: string;
     campaign_id: string;
     work_item_id?: string;
+    /** On a `workitem_succeeded` line, exactly one of these two; else neither. */
+    operation?: DesktopFeedOperation;
+    role?: DesktopFeedRole;
     count: number;
     /** Present, and true, once a turn of the Feed was given the line with this count; a fold that raises it removes it. */
     given?: true;
@@ -96,15 +115,34 @@ export interface DesktopChatOptions {
      * send whose effort the model does not take, and one with an effort and no model, before any host starts.
      */
     effort?: DesktopEffort;
+    /**
+     * The mode the turn was approved for: the plan card's go names `ask_first`. The desktop refuses the send, with a
+     * `done` that says why and before any host starts, when the conversation is in another mode; absent, the turn runs
+     * in the mode the conversation is in.
+     */
+    mode?: DesktopChatMode;
 }
 
 /**
  * A chat's access mode, chosen per conversation from the menu beside the composer. `ask_first`, the default of every new
- * chat: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads and proposes,
- * and changes nothing. `full_access`: it acts on this computer without asking; the desktop asks the person to confirm,
- * each time it is chosen, and holds it for that conversation only until the window closes. Codex has no Full access.
+ * chat out of the box: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads
+ * and proposes, and changes nothing. `auto_edit`: Ask first, except that the six file commands (mkdir, touch, mv, cp, rm,
+ * rmdir) run with no card on paths in the chat's own folder; no confirmation, held for that conversation only until the
+ * window closes, Claude Code only, never the Feed. `full_access`: it acts on this computer without asking; the desktop asks the person
+ * to confirm each time it is chosen, unless they answered that box with Always (`DesktopFullAccessStanding`), and holds
+ * it for that conversation only until the window closes. Codex has no Full access.
  */
-export type DesktopChatMode = 'ask_first' | 'plan_only' | 'full_access';
+export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
+
+/**
+ * The standing choice of Full access, which only the person's answer to the desktop's own box gives: while it stands,
+ * the menu enters Full access without the box, and with `newChats` a new chat on a host that can take Full access starts
+ * in it. `givenAt` is when it was given, ISO-8601 UTC.
+ */
+export interface DesktopFullAccessStanding {
+    givenAt: string;
+    newChats: boolean;
+}
 
 /** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
 export interface DesktopModel {
@@ -167,7 +205,8 @@ export interface DesktopRefusal {
  */
 export type DesktopKeptEntry =
     | { kind: 'user'; text: string }
-    | { kind: 'text'; text: string }
+    /** `plan`, when present, marks the last words of a Plan only turn that ended well as its live plan. */
+    | { kind: 'text'; text: string; plan?: true }
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
     | { kind: 'error'; text: string }
@@ -240,13 +279,18 @@ export type DesktopChatEvent =
     | { kind: 'gap' }
     /**
      * A sentence the desktop says once, in its own words: a campaign's or project's folder left out of the chat because its
-     * `.claude` holds skills, agents or commands, or, with `folder`, the name of the folder a Full access grant worked in,
+     * `.claude` holds skills, subagents or commands, or, with `folder`, the name of the folder a Full access grant worked in,
      * kept for seven days after Full access ended, which `chat.openFolder` opens. A notice is not kept with the
      * conversation.
      */
     | { kind: 'notice'; text: string; folder?: string }
-    /** The turn is over: `error` is null when it ended well, else the host's own words for why it did not. */
-    | { kind: 'done'; error: string | null };
+    /**
+     * The turn is over: `error` is null when it ended well, else the host's own words for why it did not. `plan` is
+     * present, and true, when a turn in Plan only ended well with its words last, in a chat still in Plan only and not
+     * the Feed: those words, the last `text` event, are its plan, which the page offers as a card. Every earlier plan is
+     * no card any more once a turn has ended.
+     */
+    | { kind: 'done'; error: string | null; plan?: true };
 
 /** An agent host or a key provider the chat's dropdown lists, found on this machine or not. */
 export interface DesktopHost {
@@ -277,6 +321,11 @@ export interface DesktopHost {
      * on Codex, or the version Claude Code needs for it; null where it can be. The menu shows the item disabled with this.
      */
     fullAccess: string | null;
+    /**
+     * Why Auto-edit cannot be chosen for a chat on it, in the desktop's words, on Codex; null where it can be. The menu
+     * shows the item disabled with this.
+     */
+    autoEdit: string | null;
     /**
      * The models the chat's box offers on it: Claude Code's aliases, the models Codex offered when last asked (kept by
      * the desktop and asked again at most once a day), or a key provider's own; empty for a host that offers none here.
@@ -460,6 +509,13 @@ export interface JasonDesktop {
          */
         set(choice: 'system' | 'light' | 'dark'): Promise<void>;
     };
+    pairing: {
+        /**
+         * Tells the desktop the id of the UI token the page holds now, once it has paired: never the token, which the
+         * desktop refuses. The desktop then revokes the one the window held before, so the window keeps one pairing.
+         */
+        paired(tokenId: string): Promise<void>;
+    };
     chat: {
         /**
          * Starts a turn of the conversation `chatId`, an id `chat.create` or `chat.list` gave; null once started, or a
@@ -483,9 +539,11 @@ export interface JasonDesktop {
         open(chatId: string): Promise<DesktopConversationRecord | DesktopRefusal>;
         /**
          * A conversation to start in: with a campaign, that campaign's own conversation, found or made with its name;
-         * without one, a new set-up chat.
+         * without one, a new set-up chat. `host` is the `DesktopHost.id` the next turn runs on: a conversation newly made
+         * starts in Full access, its `mode` saying so in this answer, when the standing choice says new chats do and that
+         * host can take Full access; otherwise in Ask first, with nothing said.
          */
-        create(campaignId?: string): Promise<DesktopConversation | DesktopRefusal>;
+        create(campaignId?: string, host?: string): Promise<DesktopConversation | DesktopRefusal>;
         /** Removes a conversation and its record: null once done. Refused while its turn runs. */
         remove(chatId: string): Promise<DesktopRefusal | null>;
         /**
@@ -509,8 +567,8 @@ export interface JasonDesktop {
         /**
          * Chooses a conversation's mode, on `host`, the `DesktopHost.id` the next turn runs on. `full_access` is refused
          * before anything is asked where it cannot apply (Codex, a host that does not drive the chat, a Claude Code too old
-         * for it, the Feed), in the desktop's words; otherwise the desktop asks the person to confirm, every time, and their no
-         * answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
+         * for it, the Feed), in the desktop's words; otherwise the desktop asks the person to confirm, every time while no
+         * standing choice stands, and their no answers the conversation unchanged. Leaving Full access stops a turn that runs in it. A `mode` event comes before
          * this answers whenever the mode changed. Refused for a conversation the desktop does not keep.
          */
         setMode(chatId: string, mode: DesktopChatMode, host: string): Promise<DesktopConversation | DesktopRefusal>;
@@ -527,6 +585,18 @@ export interface JasonDesktop {
          * most 200 lines a call; more is refused.
          */
         feed(lines: DesktopFeedLine[], options?: { catchUp: true }): Promise<DesktopConversation | DesktopRefusal>;
+    };
+    fullAccess: {
+        /** The standing choice of Full access, or null when none stands. */
+        standing(): Promise<DesktopFullAccessStanding | null>;
+        /**
+         * Takes the standing choice back: the box is asked again at the next entry, and new chats start in Ask first. A
+         * chat in Full access now stays in it. Null once done, or a refusal when its file could not be changed. No call
+         * gives the choice: only the person's answer to the desktop's own box does.
+         */
+        takeBack(): Promise<DesktopRefusal | null>;
+        /** Calls `handler` with the standing choice each time it changes, wherever; the function it returns stops that. */
+        onChanged(handler: (standing: DesktopFullAccessStanding | null) => void): () => void;
     };
     links: {
         /**

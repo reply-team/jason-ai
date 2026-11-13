@@ -85,7 +85,7 @@ export function PersonCard({ person, tab, to, onTab, now, zone, onAdd, onClose, 
             />
             <ActionsRow>
                 <button className="btn" type="button" onClick={onAdd}>
-                    Add to campaign
+                    Add to agent
                 </button>
             </ActionsRow>
             {to ? (

@@ -1323,7 +1323,7 @@ public partial class ClaimerTests
     /// is let back into the queue. These tests are about what the claim does with that, not about the verb.
     /// </summary>
     /// <summary>
-    /// The twenty-fifth check parks protective work an open block holds: no attempt, a wait on the block, and the campaign
+    /// The twenty-sixth check parks protective work an open block holds: no attempt, a wait on the block, and the campaign
     /// told once — whichever of its items parks next, the line is not written again, and the block's link is never in it.
     /// </summary>
     [Fact]
@@ -2154,7 +2154,9 @@ public partial class ClaimerTests
             LoadedPlugin? plugin = null,
             Route? route = null,
             ISuppressionCheck? register = null,
-            PatternTiming? timing = null)
+            PatternTiming? timing = null,
+            Func<string, RouteSnapshot>? routes = null,
+            IReadOnlyList<LoadedPlugin>? others = null)
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
             var clock = new FixedClock(Noon);
@@ -2164,7 +2166,7 @@ public partial class ClaimerTests
             if (plugin is not null)
             {
                 plugins.Replace(
-                    new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [plugin]),
+                    new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [plugin, .. others ?? []]),
                     new ReloadReport(Noon, SnapshotSource.Startup, Activated: true, [], []));
             }
 
@@ -2177,6 +2179,11 @@ public partial class ClaimerTests
                     plugins.Snapshot.Id,
                     new RouteSet(route, RouteSet.Empty.Operations),
                     RouteSnapshot.Empty(Noon, plugins.Snapshot.Id).Campaigns));
+            }
+
+            if (routes is not null)
+            {
+                routing.Replace(routes(plugins.Snapshot.Id));
             }
 
             Claimer = new Claimer(

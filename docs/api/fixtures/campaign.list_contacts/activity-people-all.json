@@ -5,7 +5,8 @@
     "activity": "people",
     "since": "2026-10-10T00:00:00.000Z",
     "until": "2026-10-16T09:00:00.000Z",
-    "limit": 50
+    "limit": 50,
+    "exclude_archived_contacts": true
   },
   "status": 200,
   "response": {

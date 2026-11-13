@@ -5,10 +5,13 @@ using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Plugins.Reply;
 using Jason.Runtime.Tests.Routing;
@@ -24,8 +27,9 @@ namespace Jason.Runtime.Tests.Integration;
 /// answer against the stand-in account, so what reached the provider is read from the account's own call log.
 /// </summary>
 /// <remarks>
-/// Only the answer is routed, for this campaign: the read of the thread is not, so the responder is woken without one
-/// and is claimed in the scan that wakes it.
+/// Only the answer is routed, for this campaign. The read of the thread follows the thread to the plugin that route
+/// names, so the responder is woken waiting on that read, made at the answer's plugin and account, and is claimed once
+/// the read has succeeded.
 /// </remarks>
 [Collection(ProcessEnvironmentCollection.Name)]
 public class StandingApprovalResponderTests
@@ -34,11 +38,15 @@ public class StandingApprovalResponderTests
 
     private const string Category = "interested";
 
+    /// <summary>The account the campaign's <c>conversation.reply</c> route binds, which also asks for the first name.</summary>
+    private static JsonObject Binding() => new() { ["derive_first_name"] = true };
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
     /// The whole way: the verdict is the responder's attempt's own, the draft names it, and the claim releases the draft
-    /// under an approved row the person who set the standing approval decided. The account was read and answered.
+    /// under an approved row the person who set the standing approval decided. The account was read for the responder,
+    /// then read again and answered by the answer itself.
     /// </summary>
     [Fact]
     public async Task A_responder_s_draft_goes_to_the_account_under_a_standing_approval()
@@ -52,10 +60,11 @@ public class StandingApprovalResponderTests
             new { campaign_id = campaign, category = Category, actor = new { type = "human", id = "operator" } },
             Ct);
 
-        var (responder, draft) = await DraftedAsync(host, campaign, contact);
+        var (read, responder, draft) = await DraftedAsync(host, campaign, contact);
 
+        await AssertReadAtTheAnswersRouteAsync(host, read);
         await host.WaitForStatusAsync(draft.Id, WorkItemStatus.Succeeded, Ct);
-        Assert.Equal(["inbox get " + Thread, "inbox reply " + Thread], Answered(account));
+        Assert.Equal(["inbox get " + Thread, "inbox get " + Thread, "inbox reply " + Thread], Answered(account));
 
         await using var db = Open(host);
         Assert.Equal(1, await db.Attempts.CountAsync(row => row.WorkItem!.PublicId == draft.Id, Ct));
@@ -70,7 +79,7 @@ public class StandingApprovalResponderTests
         Assert.Equal(1, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.ApprovalStandingApplied, Ct));
     }
 
-    /// <summary>The same reply and the same draft, with no word given in advance: the draft waits for a person and the account is not asked about the thread.</summary>
+    /// <summary>The same reply and the same draft, with no word given in advance: the draft waits for a person, and the account is read once for the responder and never answered.</summary>
     [Fact]
     public async Task Without_a_standing_approval_the_responder_s_draft_waits_for_a_person()
     {
@@ -79,10 +88,11 @@ public class StandingApprovalResponderTests
         await using var host = await StartAsync();
         var (campaign, contact) = await CampaignAsync(host);
 
-        var (_, draft) = await DraftedAsync(host, campaign, contact);
+        var (read, _, draft) = await DraftedAsync(host, campaign, contact);
 
+        await AssertReadAtTheAnswersRouteAsync(host, read);
         await host.WaitForStatusAsync(draft.Id, WorkItemStatus.AwaitingApproval, Ct);
-        Assert.Empty(Answered(account));
+        Assert.Equal(["inbox get " + Thread], Answered(account));
         await using (var db = Open(host))
         {
             Assert.False(await db.Attempts.AnyAsync(row => row.WorkItem!.PublicId == draft.Id, Ct));
@@ -102,27 +112,68 @@ public class StandingApprovalResponderTests
         account.Calls.Where(call => call.Command != "inbox changes").Select(call => call.Line);
 
     /// <summary>
-    /// A reply said on the campaign's thread, the responder it wakes run to its end, and the draft it made handed to the
-    /// claim in the scan after. Answers the responder and the draft as they stand after that scan.
+    /// A reply said on the campaign's thread; the read of the thread it queues and the responder created waiting on it,
+    /// both run to their end; and the draft the responder made handed to the claim in the scan after. Answers the read,
+    /// the responder and the draft as they stand after that scan.
     /// </summary>
-    private static async Task<(WorkItemDto Responder, WorkItemDto Draft)> DraftedAsync(FakeHostRuntime host, string campaign, string contact)
+    private static async Task<(WorkItemDto Read, WorkItemDto Responder, WorkItemDto Draft)> DraftedAsync(FakeHostRuntime host, string campaign, string contact)
     {
         await InboundAsync(host, campaign, contact);
 
         await host.ScanAsync(Ct);
         string woken;
+        string read;
         await using (var db = Open(host))
         {
             woken = (await db.WorkItems.AsNoTracking().SingleAsync(item => item.Role == Responder.Role, Ct)).PublicId;
+            read = (await db.WorkItems.AsNoTracking().SingleAsync(item => item.Operation == Responder.ReadOperation, Ct)).PublicId;
         }
 
+        host.Track(read);
         host.Track(woken);
-        var responder = await host.WaitForStatusAsync(woken, WorkItemStatus.Succeeded, Ct);
+        await SettleAsync(host, async () => (await host.GetAsync(woken, Ct)).Status == WorkItemStatus.Succeeded);
+        var responder = await host.GetAsync(woken, Ct);
         var draftId = (string)responder.Result!["created_work_items"]![0]!;
         host.Track(draftId);
 
         await host.ScanAsync(Ct);
-        return (responder, await host.GetAsync(draftId, Ct));
+        return (await host.GetAsync(read, Ct), responder, await host.GetAsync(draftId, Ct));
+    }
+
+    /// <summary>
+    /// The read of the thread succeeded in one attempt, at the plugin and the account of the campaign's
+    /// <c>conversation.reply</c> route: the thread was seen there, and no route of the read's own names another.
+    /// </summary>
+    private static async Task AssertReadAtTheAnswersRouteAsync(FakeHostRuntime host, WorkItemDto read)
+    {
+        var attempt = Assert.Single((await host.GetAsync(read.Id, Ct)).Attempts!);
+        Assert.Equal(
+            (AttemptStatus.Succeeded, ReplyPlugins.PluginId, BindingIdentity.Of(Binding())),
+            (attempt.Status, attempt.Provenance!.PluginId, attempt.Provenance.BindingIdentity));
+    }
+
+    /// <summary>
+    /// Scans until the row's condition holds, each scan followed by a wait for what it started: the handler pool's
+    /// children and the events reader's read. The claim takes one item of a campaign per scan, so the read and then the
+    /// responder it wakes take a few scans.
+    /// </summary>
+    private static async Task SettleAsync(FakeHostRuntime host, Func<Task<bool>> done)
+    {
+        var pool = host.Fixture.Resolve<HandlerPool>();
+        var reader = host.Fixture.Resolve<EventReader>();
+        for (var scan = 0; scan < 12; scan++)
+        {
+            await host.ScanAsync(Ct);
+            Assert.True(
+                await DispatchHarness.EventuallyAsync(() => pool.InFlightAttemptIds.Count == 0 && reader.Idle, Ct, timeoutMilliseconds: 30_000),
+                "A child the scan started never finished.");
+            if (await done())
+            {
+                return;
+            }
+        }
+
+        Assert.Fail("Twelve scans did not bring the row to the state it waits for.");
     }
 
     /// <summary>The line the inbound read writes for a thread that moved, as it writes it, about the campaign's person.</summary>
@@ -154,7 +205,7 @@ public class StandingApprovalResponderTests
     {
         var campaign = await host.CampaignAsync(Ct, "Autumn outreach");
         var contact = await host.ContactAsync(campaign, ReplyOperations.Address, Ct);
-        await TestRoutes.SetCampaignAsync(host.Fixture, campaign, "conversation.reply", ReplyPlugins.PluginId, new JsonObject { ["derive_first_name"] = true }, Ct);
+        await TestRoutes.SetCampaignAsync(host.Fixture, campaign, "conversation.reply", ReplyPlugins.PluginId, Binding(), Ct);
         return (campaign, contact);
     }
 

@@ -129,7 +129,7 @@ describe('The person panel', () => {
     it('Sequences says so when the person is in no campaign', async () => {
         const api = people().answer('contact.get', 'contact.get/imported');
         open(api, grace.id, 'sequences');
-        expect(await within(await shown()).findByText('Not in any campaign.')).toBeTruthy();
+        expect(await within(await shown()).findByText('Not added to any agent.')).toBeTruthy();
     });
 
     it("Next lists the person's open work by kind and state as the runtime answers it, each opening in Work items", async () => {
@@ -429,7 +429,7 @@ describe('The campaign the provider change is queued in', () => {
         });
         expect(box.disabled).toBe(false);
         const where = within(panel()).getByRole<HTMLSelectElement>('combobox', {
-            name: 'The campaign the change is queued in',
+            name: 'The agent the change is queued in',
         });
         expect(Array.from(where.options).map((option) => option.textContent)).toEqual([
             'Nordic pilot',
@@ -461,7 +461,7 @@ describe('The campaign the provider change is queued in', () => {
             target: { value: 'Promoted in October.' },
         });
         fireEvent.click(within(panel()).getByRole('checkbox', { name: /queue the name, company and title/ }));
-        fireEvent.change(within(panel()).getByRole('combobox', { name: 'The campaign the change is queued in' }), {
+        fireEvent.change(within(panel()).getByRole('combobox', { name: 'The agent the change is queued in' }), {
             target: { value: 'cmp_2' },
         });
         fireEvent.click(within(panel()).getByRole('button', { name: 'Save' }));
@@ -643,7 +643,7 @@ describe('Move', () => {
     async function moveTo(name: string) {
         const row = membership('Nordic pilot');
         fireEvent.click(within(row).getByRole('button', { name: 'Move' }));
-        fireEvent.click(within(row).getByRole('button', { name: /Choose a campaign/ }));
+        fireEvent.click(within(row).getByRole('button', { name: /Choose an agent/ }));
         fireEvent.click(await within(row).findByRole('option', { name: new RegExp(name) }));
         fireEvent.input(within(row).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }), {
             target: { value: 'Moved to the follow-ups.' },
@@ -756,7 +756,7 @@ describe('Move', () => {
         await within(await shown()).findByText('Q4 follow-ups', { selector: 'a' });
         const row = membership('Q4 follow-ups');
         fireEvent.click(within(row).getByRole('button', { name: 'Move' }));
-        fireEvent.click(within(row).getByRole('button', { name: /Choose a campaign/ }));
+        fireEvent.click(within(row).getByRole('button', { name: /Choose an agent/ }));
         fireEvent.click(await within(row).findByRole('option', { name: /Nordic pilot/ }));
         fireEvent.click(within(row).getByRole('button', { name: 'Move to Nordic pilot' }));
 
@@ -877,7 +877,7 @@ describe('Research', () => {
         fireEvent.click(within(await shown()).getByRole('tab', { name: 'Research' }));
         await within(panel()).findByText('Fjordline opened an office in Bergen in September.');
         const where = within(panel()).getByRole<HTMLSelectElement>('combobox', {
-            name: 'The campaign the researcher works in',
+            name: 'The agent the researcher works in',
         });
         expect(Array.from(where.options).map((option) => option.textContent)).toEqual([
             'Nordic pilot',

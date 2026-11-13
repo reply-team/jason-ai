@@ -1203,9 +1203,20 @@ internal static class StatusChecks
             return new StatusCheck("route", false, CheckState.Unknown, "The runtime did not answer.", null);
         }
 
-        var configured = routes.Global.Default is not null || routes.Global.Operations.Count > 0 || routes.Campaigns.Count > 0;
+        var configured = routes.Global.Default is not null
+            || routes.Global.Operations.Count > 0
+            || routes.Global.Channels is { Count: > 0 }
+            || routes.Campaigns.Count > 0;
+        var byChannel = ChannelRoutes(routes);
         return configured
-            ? new StatusCheck("route", false, CheckState.Ok, $"Routed: default {routes.Global.Default?.PluginId ?? "none"}.", null)
+            ? new StatusCheck(
+                "route",
+                false,
+                CheckState.Ok,
+                byChannel == 0
+                    ? $"Routed: default {routes.Global.Default?.PluginId ?? "none"}."
+                    : $"Routed: default {routes.Global.Default?.PluginId ?? "none"}, {byChannel} of them by channel.",
+                null)
             : new StatusCheck(
                 "route",
                 false,
@@ -1231,6 +1242,13 @@ internal static class StatusChecks
             : new StatusCheck("binding", false, CheckState.Absent, "No route names an account yet.", null);
     }
 
+    /// <summary>How many routes name a channel, global and campaign together: each is a plugin picked for one channel of an operation.</summary>
+    private static int ChannelRoutes(RoutesDto routes) =>
+        Channelled(routes.Global.Channels).Count() + routes.Campaigns.Sum(campaign => Channelled(campaign.Channels).Count());
+
+    private static IEnumerable<RouteDto> Channelled(IReadOnlyDictionary<string, IReadOnlyDictionary<string, RouteDto>>? channels) =>
+        channels is null ? [] : channels.Values.Where(byChannel => byChannel is not null).SelectMany(byChannel => byChannel.Values);
+
     private static IEnumerable<RouteDto> Every(RoutesDto routes)
     {
         if (routes.Global.Default is { } global)
@@ -1243,6 +1261,11 @@ internal static class StatusChecks
             yield return route;
         }
 
+        foreach (var route in Channelled(routes.Global.Channels))
+        {
+            yield return route;
+        }
+
         foreach (var campaign in routes.Campaigns)
         {
             if (campaign.Default is { } fallback)
@@ -1251,6 +1274,11 @@ internal static class StatusChecks
             }
 
             foreach (var route in campaign.Operations.Values)
+            {
+                yield return route;
+            }
+
+            foreach (var route in Channelled(campaign.Channels))
             {
                 yield return route;
             }

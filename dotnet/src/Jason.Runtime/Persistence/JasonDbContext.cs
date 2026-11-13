@@ -36,6 +36,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<CampaignRoute> CampaignRoutes => Set<CampaignRoute>();
 
+    public DbSet<CampaignChannelRoute> CampaignChannelRoutes => Set<CampaignChannelRoute>();
+
     public DbSet<Approval> Approvals => Set<Approval>();
 
     public DbSet<Decision> Decisions => Set<Decision>();
@@ -115,6 +117,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 new AppendOnlyInterceptor(),
                 new JournalLineInterceptor(lines),
                 new TextFoldInterceptor(),
+                new CustomValuesInterceptor(),
                 new LinkedInKeyInterceptor())
             .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.QueryIterationFailed));
     }
@@ -153,6 +156,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<EventBackfillStatus>().HaveConversion<SnakeCaseEnumConverter<EventBackfillStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<SubscriptionRunStatus>().HaveConversion<SnakeCaseEnumConverter<SubscriptionRunStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
+        // A function a query calls on a JSON object column (CustomValues) takes the column as the column stores it.
+        configurationBuilder.DefaultTypeMapping<JsonObject>().HasConversion<JsonObjectConverter>();
         configurationBuilder.Properties<JsonArray>().HaveConversion<JsonArrayConverter, JsonArrayComparer>();
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
         configurationBuilder.Properties<AttemptErrorDto>().HaveConversion<JsonTextConverter<AttemptErrorDto>, JsonTextComparer<AttemptErrorDto>>();
@@ -167,6 +172,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         ArgumentNullException.ThrowIfNull(modelBuilder);
 
         modelBuilder.HasDbFunction(typeof(TextFold).GetMethod(nameof(TextFold.Fold))!).HasName(TextFold.FunctionName);
+        modelBuilder.HasDbFunction(typeof(CustomValues).GetMethod(nameof(CustomValues.Of))!).HasName(CustomValues.FunctionName);
 
         modelBuilder.Entity<Project>(project =>
         {
@@ -669,6 +675,18 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             // The default route is the row with no operation, and nulls are distinct in the index above: only a
             // filtered index can say "at most one of those per campaign".
             route.HasIndex(r => r.CampaignId).IsUnique().HasFilter("operation IS NULL").HasDatabaseName("ix_campaign_routes_one_default_per_campaign");
+            route.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CampaignChannelRoute>(route =>
+        {
+            route.HasKey(r => r.Id);
+            route.Property(r => r.Operation).HasMaxLength(200);
+            route.Property(r => r.Channel).HasMaxLength(32);
+            route.Property(r => r.PluginId).HasMaxLength(64);
+            route.Property(r => r.Binding).HasColumnName("binding_json");
+            route.ToTable(t => t.HasCheckConstraint("ck_campaign_channel_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)"));
+            route.HasIndex(r => new { r.CampaignId, r.Operation, r.Channel }).IsUnique();
             route.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Cascade);
         });
 

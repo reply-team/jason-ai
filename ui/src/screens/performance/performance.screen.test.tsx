@@ -250,7 +250,7 @@ describe('Performance', () => {
         open(api);
         await screen.findByRole('button', { name: 'Replied, 2' });
 
-        fireEvent.click(screen.getByRole('button', { name: /^All campaigns/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^All agents/ }));
         // An archived campaign counts as any other, so it is offered too, saying it is archived.
         expect((await screen.findByRole('option', { name: /^Winter/ })).textContent).toContain('archived');
         fireEvent.click(await screen.findByRole('option', { name: /^Spring/ }));
@@ -263,7 +263,7 @@ describe('Performance', () => {
         await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
         const chips = Array.from(document.querySelectorAll('.filters .chip')).map((chip) => chip.textContent);
         expect(chips).toEqual(['Spring×', 'Autumn draft×']);
-        expect(screen.getByRole('button', { name: /^Campaigns/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Agents/ })).toBeTruthy();
         expect(await screen.findByRole('button', { name: 'Replied, 2' })).toBeTruthy();
 
         const clear = screen.getByRole('button', { name: 'Clear' });
@@ -272,7 +272,7 @@ describe('Performance', () => {
 
         await waitFor(() => expect(location.hash).toBe('#/performance'));
         // Clear is gone with the chips, so the keyboard goes back to the picker.
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^All campaigns/ }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^All agents/ }));
         expect(document.querySelectorAll('.filters .chip')).toHaveLength(0);
     });
 
@@ -289,7 +289,7 @@ describe('Performance', () => {
             );
         open(api, { ...page, campaigns: ['cmp_5', 'cmp_1'] });
 
-        expect(await screen.findByText('A campaign in this address no longer exists; it was left out.')).toBeTruthy();
+        expect(await screen.findByText('An agent in this address no longer exists; it was left out.')).toBeTruthy();
         await waitFor(() => expect(location.hash).toBe('#/performance?campaign=cmp_1'));
         expect(Array.from(document.querySelectorAll('.filters .chip')).map((chip) => chip.textContent)).toEqual([
             'Spring×',
@@ -318,6 +318,27 @@ describe('Performance', () => {
         expect(screen.queryByRole('button', { name: /^Replied, / })).toBeNull();
         // A list that could not be read is not an empty one.
         expect(screen.queryByText('Nobody in this count for the period.')).toBeNull();
+    });
+
+    it('asks its numbers, its two series and a tile’s list with archived people left out', async () => {
+        const api = week(new FakeApi()).answer('campaign.list_contacts', 'campaign.list_contacts/activity-replied-all');
+        open(api, { ...page, count: 'replied' });
+        expect(await rowOf('Oli Example')).toBeTruthy();
+
+        const window = { since: '2026-10-10T00:00:00.000Z', until: '2026-10-16T09:00:00.000Z' };
+        expect(api.calls.filter((c) => c.operation === 'campaign.activity').map((c) => c.body)).toEqual([
+            { ...window, exclude_archived_contacts: true },
+        ]);
+        expect(api.calls.filter((c) => c.operation === 'campaign.activity_by_period').map((c) => c.body)).toEqual([
+            { count: 'contacted', period: 'day', ...window, zone: 'UTC', exclude_archived_contacts: true },
+            { count: 'replied', period: 'day', ...window, zone: 'UTC', exclude_archived_contacts: true },
+        ]);
+        expect(api.sent('campaign.list_contacts')).toEqual({
+            activity: 'replied',
+            ...window,
+            limit: 50,
+            exclude_archived_contacts: true,
+        });
     });
 
     it('a row opens the person beside the list, and the panel’s tabs and its close stay on Performance', async () => {

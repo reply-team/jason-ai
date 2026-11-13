@@ -383,6 +383,16 @@
 .jc-console .brand .wordmark.dark {
     display: none;
 }
+.jc-console .brand .alpha {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--teal-2);
+    color: var(--accent);
+    font-family: var(--m);
+    font-size: 11px;
+    line-height: 1.5;
+}
 .jc-console .newbtn {
     margin: 2px 14px 8px;
     display: flex;
@@ -732,8 +742,10 @@
 .jc-console .composer select.mode {
     max-width: 22%;
 }
-/* While the desktop holds the chat in Full access, the line under the composer says so; it is never dismissed. */
-.jc-console .composer .full-access {
+/* While the desktop holds the chat in Full access or Auto-edit, the line under the composer says so; it is never
+   dismissed. */
+.jc-console .composer .full-access,
+.jc-console .composer .auto-edit {
     margin-top: 6px;
 }
 .jc-console .composer .model-name {

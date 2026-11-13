@@ -149,7 +149,7 @@ internal sealed partial class NamesMet
         }
     }
 
-    /// <summary>Every route of a <c>route.list</c> answer: the global default and operations, then each campaign's.</summary>
+    /// <summary>Every route of a <c>route.list</c> answer: the global default, operations and channels, then each campaign's.</summary>
     private static IEnumerable<JsonObject> Routes(JsonNode? answer)
     {
         JsonNode?[] sets = [answer?["global"], .. answer?["campaigns"] is JsonArray campaigns ? campaigns : []];
@@ -163,6 +163,16 @@ internal sealed partial class NamesMet
             if (set["operations"] is JsonObject operations)
             {
                 foreach (var route in operations.Select(operation => operation.Value).OfType<JsonObject>())
+                {
+                    yield return route;
+                }
+            }
+
+            // A channel route is a route like the others: its plugin is as much the person's, and a plugin only a channel
+            // names is named by nothing else in the answer.
+            if (set["channels"] is JsonObject channels)
+            {
+                foreach (var route in channels.Select(operation => operation.Value).OfType<JsonObject>().SelectMany(byChannel => byChannel.Select(channel => channel.Value).OfType<JsonObject>()))
                 {
                     yield return route;
                 }

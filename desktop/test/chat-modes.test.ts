@@ -10,7 +10,7 @@ import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
-import { chatModes, codexFullAccess, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planRefusal } from '../src/chat-modes.ts';
+import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
 import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
@@ -28,10 +28,15 @@ const values = (args: string[], flag: string) => {
     return end < 0 ? rest : rest.slice(0, end);
 };
 
-test('the three modes, Ask first first', () => {
-    assert.deepEqual(chatModes, ['ask_first', 'plan_only', 'full_access']);
-    assert.ok(isChatMode('plan_only'));
-    assert.ok(!isChatMode('auto_edit') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
+test('the four modes, Ask first first, then narrow to wide with Full access last', () => {
+    assert.deepEqual(chatModes, ['ask_first', 'plan_only', 'auto_edit', 'full_access']);
+    assert.ok(isChatMode('plan_only') && isChatMode('auto_edit'));
+    assert.ok(!isChatMode('acceptEdits') && !isChatMode('accept_edits') && !isChatMode('bypassPermissions') && !isChatMode(undefined));
+});
+
+test('Auto-edit says in one sentence why Codex and the Feed have none', () => {
+    assert.equal(codexAutoEdit, 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.');
+    assert.equal(feedAutoEdit, 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.');
 });
 
 test('Ask first starts Claude Code as every turn did before the modes: no permission mode, the settings inline', () => {
@@ -122,15 +127,28 @@ test('the confirmation says in plain words what Full access does, whose risk it 
     assert.equal(dialog.message, 'Give this chat full access?');
     assert.equal(
         dialog.detail,
-        'From now on, in this chat, the agent runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does. ' +
-            'Jason still asks you about a command it cannot read plainly or one that changes what an agent loads, and a question you leave unanswered for thirty minutes is not run. ' +
-            "Jason refuses the agent's commands that approve, reject, answer or clear for you; a program the agent writes and runs can still act as you, including approving. " +
+        'From now on, in this chat, the AI runs commands and changes files on this computer without asking you first; it can read and change what you can on this computer, and a page it reads can steer what it does. ' +
+            'Jason still asks you about a command it cannot read plainly or one that changes what the AI loads, and a question you leave unanswered for thirty minutes is not run. ' +
+            "Jason refuses the AI's commands that approve, reject, answer or clear for you; a program the AI writes and runs can still act as you, including approving. " +
             'The risk is yours. ' +
-            'Full access lasts until you change it or close Jason; the agent works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
+            'This time, Full access lasts until you change it or close Jason. ' +
+            'Always lets every Claude Code chat on this computer enter Full access from its menu without this box, until you take it back in that menu or on the System screen, and a program the AI writes and runs could choose it for you too. ' +
+            'The AI works in a folder of its own, which Jason keeps for seven days after Full access ends and then removes.',
     );
-    assert.deepEqual(dialog.buttons, ['Give full access', 'Cancel']);
-    assert.equal(dialog.defaultId, 1);
-    assert.equal(dialog.cancelId, 1);
+    assert.deepEqual(dialog.buttons, ['Give full access this time', 'Always on this computer', 'Cancel']);
+    assert.equal(dialog.defaultId, 2);
+    assert.equal(dialog.cancelId, 2);
+});
+
+test('a tool that ran unchecked takes Always back as well, and says so only where Always stood', () => {
+    assert.equal(
+        unguardedSentence,
+        'Full access was turned off and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
+    );
+    assert.equal(
+        unguardedStandingSentence,
+        'Full access was turned off, and Always taken back, and the turn was stopped: a tool ran without the check Jason makes before each one. Choose Full access again only once that check runs, or go on in Ask first.',
+    );
 });
 
 test('a tool use and a tool\'s result are read from Claude Code\'s lines by their id, so a tool the hook never saw is known', () => {
@@ -339,10 +357,10 @@ test('in Ask first the broker answers as it always did, and a hook call refuses 
     await card;
 });
 
-test('the main process asks the person itself, with the confirmation\'s own box, and takes only its first button as a yes', () => {
+test('the main process asks the person itself, with the confirmation\'s own box, and reads its answer by its buttons alone', () => {
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    assert.match(main, /const \{ response \} = await dialog\.showMessageBox\(parent, fullAccessDialog\(\)\);\s+return response === 0;/);
-    assert.equal(fullAccessDialog().buttons[0], 'Give full access');
+    assert.match(main, /const \{ response, checkboxChecked \} = await dialog\.showMessageBox\(parent, fullAccessDialog\(\)\);\s+return fullAccessAnswer\(response, checkboxChecked\);/);
+    assert.equal(fullAccessDialog().buttons[0], 'Give full access this time');
 });
 
 // Attempts at getting past Full access's refusals, each through the hook as Claude Code calls it, and the same refusals in Ask first.
@@ -595,4 +613,18 @@ test('the settings of every turn, in all three modes, turn off the shell command
     assert.equal(JSON.parse(claudeTurnSettings).disableSkillShellExecution, true);
     assert.equal(JSON.parse(planTurnSettings).disableSkillShellExecution, true);
     assert.equal(fullAccessSettings('http://127.0.0.1:4100/hook', 's').disableSkillShellExecution, true);
+});
+
+test('Plan only says the AI how it is left, the plan card included, and a go approved for another mode says why it was not sent', () => {
+    assert.equal(
+        planExitRefusal,
+        'Plan only is on, and only the person leaves it, from the menu beside the message box or by approving your plan. Give your plan as your answer.',
+    );
+    assert.equal(planModeMoved, "The chat's mode changed before the plan was approved, so nothing was sent.");
+    // The page declares the same sentence for the refusal it says itself, and its stub desktop refuses with it: one text.
+    const page = join(import.meta.dirname, '..', '..', 'ui', 'src');
+    const declared = readFileSync(join(page, 'console', 'chat-model.ts'), 'utf8').match(/export const planModeMoved =\s*("[^"]*");/);
+    assert.equal(declared === null ? null : JSON.parse(declared[1]!), planModeMoved, 'the page declares the sentence the desktop refuses with');
+    assert.ok(readFileSync(join(page, 'test', 'desktop.ts'), 'utf8').includes(JSON.stringify(planModeMoved)), 'and its stub desktop refuses with it');
+    assert.equal(planRefusal, 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.', 'unchanged');
 });

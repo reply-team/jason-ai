@@ -5,7 +5,8 @@
     "campaign_ids": [
       "cmp_1",
       "cmp_2"
-    ]
+    ],
+    "exclude_archived_contacts": true
   },
   "status": 200,
   "response": {

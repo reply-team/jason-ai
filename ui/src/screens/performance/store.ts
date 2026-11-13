@@ -13,6 +13,7 @@ import type {
 import { mergePage } from '../../lists/paging';
 import type { Period, Route } from '../../router';
 import { periodWindow } from '../../time/periods';
+import { archivedLeftOut } from '../campaigns/store';
 import { fail } from '../people/store';
 
 export type At = Extract<Route, { screen: 'performance' }>;
@@ -52,9 +53,12 @@ export function listKey(at: At): string {
     return JSON.stringify([at.period, at.campaigns, at.count ?? null, at.from ?? null, at.to ?? null]);
 }
 
-/** The campaigns the reads name: none named is every campaign not archived, which the runtime takes as no list. */
+/**
+ * The campaigns the reads name: none named is every campaign not archived, which the runtime takes as no list. Every read
+ * leaves archived people out, as the campaign screens do.
+ */
 function scope(at: At): Record<string, unknown> {
-    return at.campaigns.length > 0 ? { campaign_ids: at.campaigns } : {};
+    return at.campaigns.length > 0 ? { campaign_ids: at.campaigns, ...archivedLeftOut } : { ...archivedLeftOut };
 }
 
 let numbersRead = 0;
@@ -184,6 +188,6 @@ export async function resolveCampaigns(api: Api, ids: string[], stillAsked: () =
     if (!stillAsked()) return null;
     const kept = read.filter((campaign): campaign is Chosen => campaign !== null);
     campaigns.value = kept;
-    if (kept.length < ids.length) notice.value = 'A campaign in this address no longer exists; it was left out.';
+    if (kept.length < ids.length) notice.value = 'An agent in this address no longer exists; it was left out.';
     return kept.map((campaign) => campaign.id);
 }

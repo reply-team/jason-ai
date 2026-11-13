@@ -5,16 +5,16 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, safeStorage, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
-import { fullAccessDialog } from './chat-modes.ts';
+import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
@@ -46,6 +46,7 @@ import { loginPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
+import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 
 function readText(file: string): string | null {
     try {
@@ -242,6 +243,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         backgroundColor: nativeTheme.shouldUseDarkColors ? darkBackground : lightBackground,
         webPreferences: {
             preload: join(__dirname, 'preload.js'),
+            // A session Electron keeps in memory: nothing of the page's pairing reaches the disk (`window-pairing.ts`).
+            partition: windowPartition,
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
@@ -396,7 +399,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         changed: () => current?.webContents.send(eventChannels['setup.changed']),
         ...loggedModels(log),
     });
-    const refusedTheme = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
+    const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
     const themeDeps = {
         setSource: (choice: 'system' | 'light' | 'dark') => {
             nativeTheme.themeSource = choice;
@@ -404,8 +407,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         },
         write: (next: DesktopSettings) => writeSettings(paths.settings, next),
     };
-    handle(ipcMain, 'theme.get', origin, () => settings.theme, refusedTheme);
-    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refusedTheme);
+    handle(ipcMain, 'theme.get', origin, () => settings.theme, refused);
+    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
+    const windowPairing = new WindowPairing({
+        cli,
+        log,
+        state: () => readWindowPairing(paths.windowPairing),
+        save: (next) => writeWindowPairing(paths.windowPairing, next),
+    });
+    handle(ipcMain, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
     registerSetup(
         new Setup({
             paths,
@@ -456,15 +467,21 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // folder where it stands. Nothing is run or opened with a program.
         openFolder: (path) => shell.showItemInFolder(path),
         emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
-        // The desktop asks the person itself, every time Full access is chosen: the page cannot answer for them. Only the
-        // first button says yes; Cancel is the default and Escape answers it. With no window there is no one to ask.
+        // The desktop asks the person itself whenever Full access is chosen with no standing choice: the page cannot answer
+        // for them, nor give the standing choice. This time and Always say yes; Cancel is the default and Escape answers
+        // it. With no window there is no one to ask.
         confirmFullAccess: async () => {
             const parent = current;
-            if (parent === null) return false;
-            const { response } = await dialog.showMessageBox(parent, fullAccessDialog());
-            return response === 0;
+            if (parent === null) return null;
+            const { response, checkboxChecked } = await dialog.showMessageBox(parent, fullAccessDialog());
+            return fullAccessAnswer(response, checkboxChecked);
         },
         ...loggedTurns(log),
+        // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
+        standingChanged: (standing, why) => {
+            loggedTurns(log).standingChanged(standing, why);
+            current?.webContents.send(eventChannels['fullAccess.changed'], standing);
+        },
     });
     registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // A turn never outlives the window: closing it stops every host and forgets every "always".
@@ -509,7 +526,29 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
-        await window.loadURL(started.link);
+        // What an earlier version's page kept on disk is unpaired and removed first, once (`window-pairing.ts`).
+        const kept = readWindowPairing(paths.windowPairing);
+        const { cleared } = await loadWindow(
+            { cleared: kept.cleared, found: earlierPageWasFound },
+            {
+                cli,
+                clearSession: async () => {
+                    await session.defaultSession.clearStorageData();
+                    await session.defaultSession.clearCache();
+                },
+                remove: (folder) => rmSync(folder, { recursive: true, force: true }),
+                electron: paths.electron,
+                log,
+            },
+            () => window.loadURL(started.link),
+        );
+        if (cleared !== kept.cleared) {
+            try {
+                writeWindowPairing(paths.windowPairing, { ...readWindowPairing(paths.windowPairing), cleared });
+            } catch (error) {
+                log.warn('page_storage_clear_failed', { Step: 'record', Code: (error as { code?: string }).code ?? 'unknown' });
+            }
+        }
         log.info('window_loaded', { Origin: started.origin });
         settleStart(rollback, app.getVersion(), true, log);
         repairer.pairedWith(readText(paths.runFile));
@@ -566,6 +605,8 @@ const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), proc
 // Whether this installation is new is read next: before Electron makes its profile under the data directory, before the
 // single-instance lock, before anything is written there, on either start below.
 const installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
+// Whether an earlier version's page left its storage on disk, read before Electron is ready (`window-pairing.ts`).
+const earlierPageWasFound = earlierPageFound(desktopPaths(dataDirectory(process.env, homedir())).electron);
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {

@@ -291,13 +291,16 @@ public class InboundSyncHarvestTests
         return await db.WorkItems.AsNoTracking().OrderByDescending(item => item.Id).FirstAsync(Ct);
     }
 
-    /// <summary>The read ran at a plugin and succeeded with this page: an attempt whose provenance names the plugin.</summary>
-    internal static async Task<string> SucceedAsync(DispatchHarness harness, WorkItem read, JsonObject page, string plugin = Reader)
+    /// <summary>
+    /// The read ran at a plugin and succeeded with this page: an attempt whose provenance names the plugin and the account,
+    /// by default the binding <see cref="RouteAll"/> routes everything under.
+    /// </summary>
+    internal static async Task<string> SucceedAsync(DispatchHarness harness, WorkItem read, JsonObject page, string plugin = Reader, string? identity = RoutedIdentity)
     {
         await using var db = harness.Open();
         var item = await db.WorkItems.SingleAsync(row => row.Id == read.Id, Ct);
         var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Succeeded, harness.Clock.GetUtcNow().UtcDateTime);
-        attempt.Provenance = new AttemptProvenanceDto(plugin, "1.0.0", "sha256:0", 1, 1, InboundSync.Operation, 1, null, null, null, null);
+        attempt.Provenance = new AttemptProvenanceDto(plugin, "1.0.0", "sha256:0", 1, 1, InboundSync.Operation, 1, null, null, null, identity);
         item.Status = WorkItemStatus.Succeeded;
         item.Result = page;
         await db.SaveChangesAsync(Ct);
@@ -363,6 +366,9 @@ public class InboundSyncHarvestTests
             new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [plugin]),
             new ReloadReport(Noon, SnapshotSource.Startup, Activated: true, [], []));
 
+    /// <summary>The identity of the binding <see cref="RouteAll"/> routes everything under.</summary>
+    internal const string RoutedIdentity = "sha256:binding";
+
     internal static void RouteAll(DispatchHarness harness, string plugin)
     {
         var plugins = harness.Resolve<PluginRegistry>().Snapshot;
@@ -370,7 +376,7 @@ public class InboundSyncHarvestTests
             PublicId.New(RouteSnapshot.IdPrefix),
             Noon,
             plugins.Id,
-            new RouteSet(new Route(plugin, new JsonObject(), "sha256:binding"), RouteSet.Empty.Operations),
+            new RouteSet(new Route(plugin, new JsonObject(), RoutedIdentity), RouteSet.Empty.Operations),
             RouteSnapshot.Empty(Noon, plugins.Id).Campaigns));
     }
 }

@@ -23,6 +23,10 @@ public class SettingKeyTests
     [InlineData("DISPATCHER")]
     [InlineData("Binding")]
     [InlineData(InstalledPlugin)]
+
+    // A channel the channel rules keep: the key of a channel route under its operation.
+    [InlineData("email")]
+    [InlineData("linkedin")]
     public void A_key_the_code_already_knows_is_shown_as_it_was_typed(string key)
     {
         Assert.Equal(key, SettingKey.Shown(key, Installed));
