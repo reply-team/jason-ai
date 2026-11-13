@@ -159,6 +159,12 @@ export function demoSettings(places: DemoPlaces): Record<string, unknown> {
 /** The operator as the verbs name a person: `human:<name>`, whether the story writes the prefix or only the name. */
 export const operatorActor = (story: Story): string => (story.operator.actor.includes(':') ? story.operator.actor : `human:${story.operator.actor}`);
 
+/**
+ * The statuses a work item can be in and not yet finished: every status of the enum but the four of
+ * `WorkItemTransitions.Terminal` (succeeded, failed, cancelled, expired). These are the ones a cancel can still change.
+ */
+export const openStatuses = ['created', 'awaiting_approval', 'scheduled', 'processing', 'waiting'] as const;
+
 const verb = (args: readonly Arg[], extra: Partial<VerbStep> = {}): VerbStep => ({ kind: 'verb', args, ...extra });
 const ref = (name: string): Arg => ({ ref: name });
 const sendRef = (send: StorySend): Arg => ref(`wi:${send.key}`);
@@ -433,7 +439,7 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
             }
             case 'cancel-reviews': {
                 const campaign = resolveArg(step.campaign, refs);
-                const listed = await deps.cli.run(['workitem', 'list', '--campaign', campaign, '--kind', 'ai_role', '--status', 'created', '--status', 'scheduled', '--status', 'waiting']);
+                const listed = await deps.cli.run(['workitem', 'list', '--campaign', campaign, '--kind', 'ai_role', ...openStatuses.flatMap((status) => ['--status', status])]);
                 if (listed.exit !== 0) return { step: 'workitem list', detail: describe(listed) };
                 const items = parse(listed)?.['items'];
                 for (const item of Array.isArray(items) ? items : []) {

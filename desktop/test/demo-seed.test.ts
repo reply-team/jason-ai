@@ -14,6 +14,7 @@ import type { Cli, CliResult } from '../src/cli.ts';
 import {
     buildSeed,
     operatorActor,
+    openStatuses,
     demoPlaces,
     demoPluginId,
     demoSettings,
@@ -137,6 +138,20 @@ test('the operator is named as a person whether the story writes the prefix or o
     }
 });
 
+test('the open states a review is cancelled in are the work item statuses that are not terminal, read from the runtime source', () => {
+    // dotnet/src/Jason.Contracts/Api/Enums.cs, `enum WorkItemStatus`: every status, in the words the verb takes (snake_case).
+    const enums = readFileSync(join(repository, 'dotnet', 'src', 'Jason.Contracts', 'Api', 'Enums.cs'), 'utf8');
+    const body = /enum WorkItemStatus\s*\{([^}]*)\}/.exec(enums)?.[1] ?? '';
+    const all = [...body.matchAll(/^\s*([A-Z][A-Za-z]*),/gm)].map((m) => (m[1] ?? '').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase());
+    // dotnet/src/Jason.Runtime/WorkItems/WorkItemTransitions.cs, `Terminal`: finished, expired included.
+    const transitions = readFileSync(join(repository, 'dotnet', 'src', 'Jason.Runtime', 'WorkItems', 'WorkItemTransitions.cs'), 'utf8');
+    const terminalBody = /Terminal \{ get; \} =\s*new HashSet<WorkItemStatus> \{([^}]*)\}/.exec(transitions)?.[1] ?? '';
+    const terminal = [...terminalBody.matchAll(/WorkItemStatus\.([A-Za-z]+)/g)].map((m) => (m[1] ?? '').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase());
+    assert.equal(all.length, 9);
+    assert.equal(terminal.length, 4);
+    assert.deepEqual([...openStatuses].sort(), all.filter((status) => !terminal.includes(status)).sort());
+});
+
 test('no step is called demo: the nouns are the harness\'s own', () => {
     for (const pair of verbsUsed(buildSeed(fixture()))) assert.doesNotMatch(pair, /demo|seed/i);
 });
@@ -224,6 +239,7 @@ test('a fake runtime lets the whole seed run: refs are kept in order, every pers
     assert.equal(run.calls.filter((c) => c.startsWith('campaign pause')).length, 1);
     // Reviews a start queued are cancelled right after it, with the existing verb, in the operator's name.
     assert.equal(run.cancelled.length, 3);
+    for (const call of run.calls.filter((c) => c.startsWith('workitem list'))) assert.equal(call.split(' --status ').length - 1, openStatuses.length);
     assert.ok(run.cancelled.every((line) => line.includes('--actor human:fixture-operator')));
     // Only the sends the story gives as approved were approved, each in the operator's name; the waiting ones were left.
     assert.equal(run.approved.length, 4);
