@@ -36,6 +36,16 @@ export const listingCallers: Readonly<Record<string, string>> = {
 const listingStart = /\bstartListing\b/;
 
 /**
+ * The one module that may call `startDetached` (src/open-in-start.ts), which starts any file with any arguments: main.ts,
+ * where the Open in wiring hands it only a line the Open in module made from a place the desktop detected.
+ */
+export const startDetachedCallers: Readonly<Record<string, string>> = {
+    'src/main.ts': 'the editor or file manager line the Open in module made from a detected place',
+};
+
+const detachedStart = /\bstartDetached\b/;
+
+/**
  * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
  * the runner's own run of a program the PATH finds, a set-up chat's one naming run, and on Windows the check of Codex's
  * sandbox before a chat's first Codex turn, which runs cmd outside any sandbox and Codex. Anything else starts a program
@@ -145,6 +155,9 @@ export function processViolations(path: string, text: string): string[] {
     }
     if (listingStart.test(text) && path !== 'src/chat-process.ts' && !(path in listingCallers)) {
         found.push(`${path} starts an agent host's model listing; only ${Object.keys(listingCallers).join(', ')} may`);
+    }
+    if (detachedStart.test(text) && path !== 'src/open-in-start.ts' && !(path in startDetachedCallers)) {
+        found.push(`${path} starts a detached program; only ${Object.keys(startDetachedCallers).join(', ')} may`);
     }
     const runs = [...text.matchAll(runFileCall)].length - [...text.matchAll(runFileDefinition)].length;
     if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);

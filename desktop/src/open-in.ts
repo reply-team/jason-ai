@@ -123,9 +123,9 @@ export function findEditor(id: EditorId, probes: Probes): Found | null {
     return null;
 }
 
-/** What the system calls its file manager. */
+/** What the system calls its file manager; empty where the page's own word for it is used. */
 export function fileManagerName(platform: NodeJS.Platform): string {
-    return platform === 'darwin' ? 'Finder' : platform === 'win32' ? 'File Explorer' : 'File manager';
+    return platform === 'darwin' ? 'Finder' : platform === 'win32' ? 'File Explorer' : '';
 }
 
 /** The file manager's program, or null where there is none to find. */
@@ -139,6 +139,14 @@ export function fileManager(probes: Probes): string | null {
 export interface Line {
     file: string;
     args: string[];
+}
+
+/**
+ * How the file manager shows the folder. On macOS it is `open -a Finder <folder>`, so that a folder named like an
+ * application is shown and never launched.
+ */
+export function fileManagerLine(program: string, folder: string, platform: NodeJS.Platform): Line {
+    return platform === 'darwin' ? { file: program, args: ['-a', 'Finder', folder] } : { file: program, args: [folder] };
 }
 
 /** How an editor found is started with the folder. */
@@ -155,7 +163,9 @@ export function placesFound(probes: Probes, hosts: { claude: boolean; codex: boo
     for (const id of editorIds) if (findEditor(id, probes) !== null) found.push(id);
     if (fileManager(probes) !== null) found.push('files');
     found.push('copy');
-    return found.map((id) => ({ id, label: id === 'files' ? fileManagerName(probes.platform) : labels[id] }));
+    // The generic places (Terminal, Copy path, and the file manager where the system has no name for it) carry no label: the
+    // page has its own words for them. A product's name (VS Code, Finder, File Explorer, Claude Code) is the desktop's.
+    return found.map((id) => ({ id, label: id === 'files' ? fileManagerName(probes.platform) : id === 'terminal' || id === 'copy' ? '' : labels[id] }));
 }
 
 /**
@@ -203,6 +213,16 @@ function cliSentence(stdout: string): string | null {
     }
 }
 
+/** The `error.code` of a CLI answer's JSON, when it has one. */
+function cliCode(stdout: string): string | null {
+    try {
+        const code = (JSON.parse(stdout) as { error?: { code?: unknown } }).error?.code;
+        return typeof code === 'string' ? code : null;
+    } catch {
+        return null;
+    }
+}
+
 export class OpenIn {
     readonly #deps: OpenInDeps;
 
@@ -215,6 +235,8 @@ export class OpenIn {
         if (campaignId !== undefined && campaignId !== null) {
             if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) return { refused: 'That is not an agent this desktop knows.' };
             const answer = await this.#deps.cli.run(['campaign', 'get', campaignId]);
+            if (answer.exit === 3) return { refused: "Jason's runtime is not running." };
+            if (answer.exit !== 0 && cliCode(answer.stdout) === 'not_found') return { refused: 'That agent is not in this installation.' };
             let path: unknown;
             try {
                 path = answer.exit === 0 ? (JSON.parse(answer.stdout) as { folder_path?: unknown }).folder_path : undefined;
@@ -260,7 +282,13 @@ export class OpenIn {
             }
         } else if (target === 'files') {
             const program = fileManager(deps.probes);
-            const failed = program === null ? 'The file manager could not be found.' : await deps.start({ file: program, args: [folder] });
+            // File Explorer reads a comma in its argument as a separator, so a folder whose path holds one is not shown there.
+            const failed =
+                program === null
+                    ? 'The file manager could not be found.'
+                    : deps.probes.platform === 'win32' && folder.includes(',')
+                      ? 'File Explorer cannot show a folder whose path holds a comma. Use Copy path.'
+                      : await deps.start(fileManagerLine(program, folder, deps.probes.platform));
             if (failed !== null) refusal = { refused: failed };
         } else {
             const found = findEditor(target, deps.probes);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DesktopOpenInAnswer, DesktopOpenInPlace, DesktopRefusal, JasonDesktop } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
-import { chats, currentChat } from './state';
+import { activePanel, chats, currentChat } from './state';
 
 // "Open in": the split button of the console's top bar, in Live and in Demo alike. The main part opens the folder in the
 // default place, the arrow lists every place this computer has. The page names a place and, where a campaign's chat is
@@ -13,11 +13,24 @@ const editorIds = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
 const refused = (answer: unknown): answer is DesktopRefusal =>
     typeof answer === 'object' && answer !== null && 'refused' in answer;
 
-/** The campaign of the chat in front, or undefined when none is, or the one in front is not about a campaign. */
+/**
+ * The campaign of the chat in front, or undefined: only while that chat's panel is the one in front is its campaign's
+ * folder the one meant; with Agents, Needs you or Activity in front the folder is the harness root.
+ */
 function campaignOfChat(): string | undefined {
     const id = currentChat.value;
-    if (id === null) return undefined;
+    if (id === null || activePanel.value !== 'chat:' + id) return undefined;
     return chats.value[id]?.campaignId ?? undefined;
+}
+
+/** The words for a place: the desktop's product name where it sends one, else the page's own word for the place. */
+function nameOf(place: { id: DesktopOpenInPlace; label: string }): string {
+    if (place.label !== '') return place.label;
+    return place.id === 'terminal'
+        ? t('openIn.place.terminal')
+        : place.id === 'files'
+          ? t('openIn.place.files')
+          : t('openIn.copy');
 }
 
 export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
@@ -46,6 +59,13 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     useEffect(() => {
         void read();
+    }, [read]);
+
+    // A refusal is not for good: the window coming back to the front reads the places again.
+    useEffect(() => {
+        const again = () => void read();
+        window.addEventListener('focus', again);
+        return () => window.removeEventListener('focus', again);
     }, [read]);
 
     useEffect(() => {
@@ -86,7 +106,10 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
             const editor = place !== 'files';
             const same = terminal || mode.value !== 'demo';
             setToast(
-                t('openIn.opened', { folder, place: chosen?.label ?? '' }) +
+                t('openIn.opened', {
+                    folder,
+                    place: place === 'terminal' ? t('openIn.terminal') : chosen === undefined ? '' : nameOf(chosen),
+                }) +
                     (same
                         ? ' ' + t('openIn.sameData')
                         : editor && mode.value === 'demo'
@@ -115,7 +138,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
             className={place.id === answer?.default ? 'on' : undefined}
             onClick={() => void open(place.id)}
         >
-            <span>{text ?? place.label}</span>
+            <span>{text ?? nameOf(place)}</span>
             {subtitle !== undefined && <small>{subtitle}</small>}
         </button>
     );
@@ -131,9 +154,14 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     type="button"
                     className="open-in-main"
                     disabled={main === undefined}
+                    title={
+                        main === undefined
+                            ? undefined
+                            : t('openIn.mainTitle', { folder: answer?.folder ?? '', place: nameOf(main) })
+                    }
                     onClick={() => main !== undefined && void open(main.id)}
                 >
-                    {t('openIn.main', { place: main?.label ?? '' })}
+                    {t('openIn.main', { place: main === undefined ? '' : nameOf(main) })}
                 </button>
                 <button
                     type="button"
@@ -142,7 +170,6 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     title={t('openIn.title')}
                     aria-haspopup="menu"
                     aria-expanded={menu}
-                    disabled={answer === null}
                     onClick={() => {
                         setMenu(!menu);
                         if (!menu) void read();
@@ -166,7 +193,11 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                         item(
                             place,
                             place.id === 'copy' ? answer.folder : undefined,
-                            place.id === 'terminal' ? t('openIn.terminal') : undefined,
+                            place.id === 'terminal'
+                                ? t('openIn.terminal')
+                                : place.id === 'copy'
+                                  ? t('openIn.copy')
+                                  : undefined,
                         ),
                     )}
                     {mode.value === 'demo' && <div className="open-in-note">{t('openIn.demoNote')}</div>}

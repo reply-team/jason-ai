@@ -4,8 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { invokeChannels, handle, RefusedSender, type IpcRegistrar } from '../src/ipc.ts';
-import { defaultPlace, editorLine, fileManager, findEditor, OpenIn, placesFound, type Line, type OpenInDeps, type PlaceId, type Probes } from '../src/open-in.ts';
+import { defaultPlace, editorLine, fileManager, fileManagerLine, findEditor, OpenIn, placesFound, type Line, type OpenInDeps, type PlaceId, type Probes } from '../src/open-in.ts';
+import { editorEnvironment, openInHarnessRoot } from '../src/open-in-env.ts';
+import { enterRun, type PersonEnvironment } from '../src/mode.ts';
 import { startDetached } from '../src/open-in-start.ts';
+import { verbOf } from '../src/installation.ts';
 import { terminalFlags } from '../src/open-in-terminal.ts';
 import { parseSettings, readSettings, writeSettings } from '../src/settings.ts';
 
@@ -58,10 +61,13 @@ test('the places are the hosts the desktop finds, a terminal, the editors instal
     assert.deepEqual(ids(placesFound(mac, { claude: true, codex: false })), ['claude', 'terminal', 'vscode', 'cursor', 'windsurf', 'files', 'copy']);
     assert.deepEqual(ids(placesFound(probes('linux', []), { claude: false, codex: false })), ['terminal', 'copy']);
     assert.deepEqual(placesFound(linux, { claude: true, codex: false }).find((place) => place.id === 'claude'), { id: 'claude', label: 'Claude Code' });
+    // The generic places carry no label, and the page has its own words for them; a product's name is the desktop's.
+    assert.equal(placesFound(windows, { claude: false, codex: false }).find((place) => place.id === 'terminal')?.label, '');
+    assert.equal(placesFound(windows, { claude: false, codex: false }).find((place) => place.id === 'copy')?.label, '');
     // The file manager goes by the system's own name.
     assert.equal(placesFound(windows, { claude: false, codex: false }).find((place) => place.id === 'files')?.label, 'File Explorer');
     assert.equal(placesFound(mac, { claude: false, codex: false }).find((place) => place.id === 'files')?.label, 'Finder');
-    assert.equal(placesFound(linux, { claude: false, codex: false }).find((place) => place.id === 'files')?.label, 'File manager');
+    assert.equal(placesFound(linux, { claude: false, codex: false }).find((place) => place.id === 'files')?.label, '');
 });
 
 test('the default is the place used last while it is here, else Claude Code, else the first place that opens something; never Copy path', () => {
@@ -174,8 +180,8 @@ test('a campaign that is not known, or whose folder is not recorded or not on th
     const b = bench({ campaigns: { cmp_02: { folder_path: null }, cmp_03: { folder_path: 'C:\\Gone' }, cmp_04: { folder_path: 'relative\\dir' } } });
     for (const id of ['cmp_01', 'cmp_02', 'cmp_03', 'cmp_04']) {
         const answer = await b.openIn.open('vscode', id);
-        assert.match((answer as { refused: string }).refused, /folder is not recorded|not on this computer/, id);
-        assert.match(((await b.openIn.targets(id)) as { refused: string }).refused, /not recorded/, id);
+        assert.match((answer as { refused: string }).refused, id === 'cmp_01' ? /not in this installation/ : /folder is not recorded|not on this computer/, id);
+        assert.match(((await b.openIn.targets(id)) as { refused: string }).refused, id === 'cmp_01' ? /not in this installation/ : /not recorded/, id);
     }
     const callsBefore = b.cliCalls.length;
     for (const id of ['../x', 'cmp_', 'C:\\Windows', 7, {}]) {
@@ -184,6 +190,91 @@ test('a campaign that is not known, or whose folder is not recorded or not on th
     assert.equal(b.cliCalls.length, callsBefore, 'an id of no shape is never asked of the runtime');
     assert.deepEqual(b.started, []);
     assert.deepEqual(b.kept, []);
+});
+
+test('a runtime that is not running is said so when the campaign is read, as when a terminal is opened, and a campaign the runtime does not know keeps its own sentence', async () => {
+    const down = new OpenIn({
+        probes: windows,
+        hosts: () => ({ claude: true, codex: true }),
+        cli: { run: () => Promise.resolve({ exit: 3, stdout: '', stderr: '' }) },
+        harnessRoot: () => 'C:\\Jason',
+        isDirectory: () => true,
+        remembered: () => null,
+        remember: () => undefined,
+        start: () => Promise.resolve(null),
+        copy: () => undefined,
+        terminalFlags,
+    });
+    assert.deepEqual(await down.targets('cmp_01'), { refused: "Jason's runtime is not running." });
+    assert.deepEqual(await down.open('vscode', 'cmp_01'), { refused: "Jason's runtime is not running." });
+    const known = bench({ campaigns: {} });
+    assert.deepEqual(await known.openIn.open('vscode', 'cmp_01'), { refused: 'That agent is not in this installation.' });
+    assert.deepEqual(await known.openIn.targets('cmp_01'), { refused: 'That agent is not in this installation.' });
+});
+
+test('on macOS the file manager is shown with open -a Finder, so a folder named like an application is never launched; elsewhere the folder is the argument', async () => {
+    assert.deepEqual(fileManagerLine('/usr/bin/open', '/Users/ada/Jason/odd.app', 'darwin'), { file: '/usr/bin/open', args: ['-a', 'Finder', '/Users/ada/Jason/odd.app'] });
+    assert.deepEqual(fileManagerLine('/usr/bin/xdg-open', '/home/ada/Jason', 'linux'), { file: '/usr/bin/xdg-open', args: ['/home/ada/Jason'] });
+    const b = bench({ probes: mac, root: '/Users/ada/Jason', folders: ['/Users/ada/Jason'] });
+    assert.equal(await b.openIn.open('files'), null);
+    assert.deepEqual(b.started, [{ file: '/usr/bin/open', args: ['-a', 'Finder', '/Users/ada/Jason'] }]);
+});
+
+test('on Windows a folder whose path holds a comma is not given to File Explorer, with a sentence that points to Copy path; editors and Copy path still take it', async () => {
+    const b = bench({ root: 'C:\\Jason, Inc', folders: ['C:\\Jason, Inc'] });
+    const answer = (await b.openIn.open('files')) as { refused: string };
+    assert.match(answer.refused, /comma.*Copy path/);
+    assert.deepEqual(b.started, []);
+    assert.deepEqual(b.kept, []);
+    assert.equal(await b.openIn.open('vscode'), null);
+    assert.equal(await b.openIn.open('copy'), null);
+    assert.deepEqual(b.copied, ['C:\\Jason, Inc']);
+});
+
+test('a Windows editor found as an .exe on the PATH is started by that file, and a batch file is not', () => {
+    const exe = probes('win32', [], { cursor: 'C:\\Tools\\bin\\cursor.exe', zed: 'C:\\Tools\\bin\\zed.cmd' });
+    assert.deepEqual(findEditor('cursor', exe), { kind: 'program', path: 'C:\\Tools\\bin\\cursor.exe' });
+    assert.equal(findEditor('zed', exe), null);
+    assert.deepEqual(editorLine({ kind: 'program', path: 'C:\\Tools\\bin\\cursor.exe' }, 'C:\\Jason'), { file: 'C:\\Tools\\bin\\cursor.exe', args: ['C:\\Jason'] });
+});
+
+test('a demo run hands an editor the person’s environment, and the run keeps the demo’s for the terminals', () => {
+    const env: Record<string, string | undefined> = { PATH: '/bin', JASON_DATA_DIR: '/home/ada/.jason', JASON_Harness__Root: '/home/ada/Jason', HOME: '/home/ada' };
+    const person: PersonEnvironment = enterRun(env, { mode: 'demo', data: '/home/ada/.jason-demo' } as never);
+    assert.equal(env.JASON_DATA_DIR, '/home/ada/.jason-demo', 'the run is on the demo');
+    assert.equal(env.JASON_Harness__Root, undefined);
+    const forEditor = editorEnvironment(env, person, 'linux');
+    assert.equal(forEditor.JASON_DATA_DIR, '/home/ada/.jason');
+    assert.equal(forEditor.JASON_Harness__Root, '/home/ada/Jason');
+    assert.equal(forEditor.PATH, '/bin');
+    assert.equal(env.JASON_DATA_DIR, '/home/ada/.jason-demo', 'the run’s own environment, which a terminal is started with, stays the demo’s');
+    assert.equal(env.JASON_Harness__Root, undefined);
+    // A person with no data directory of their own gets none, not the demo’s.
+    const bare: Record<string, string | undefined> = { PATH: '/bin' };
+    const nothing = enterRun(bare, { mode: 'demo', data: '/d' } as never);
+    assert.equal(editorEnvironment(bare, nothing, 'linux').JASON_DATA_DIR, undefined);
+});
+
+test('on Linux the program started gets XDG_CURRENT_DESKTOP back from the original Electron kept, and nowhere else is it touched', () => {
+    const person: PersonEnvironment = { dataDirectory: undefined, settings: {} };
+    const env = { XDG_CURRENT_DESKTOP: 'Unity', ORIGINAL_XDG_CURRENT_DESKTOP: 'GNOME' };
+    assert.equal(editorEnvironment(env, person, 'linux').XDG_CURRENT_DESKTOP, 'GNOME');
+    assert.equal(editorEnvironment(env, person, 'darwin').XDG_CURRENT_DESKTOP, 'Unity');
+    assert.equal(editorEnvironment({ XDG_CURRENT_DESKTOP: 'KDE' }, person, 'linux').XDG_CURRENT_DESKTOP, 'KDE');
+    assert.equal(env.XDG_CURRENT_DESKTOP, 'Unity', 'a copy is changed, never the run’s environment');
+});
+
+test('main.ts hands an editor the person’s environment, and the demo’s harness root is named in a demo run', () => {
+    assert.equal(openInHarnessRoot('demo', '/home/ada/Jason-demo', () => '/home/ada/Jason'), '/home/ada/Jason-demo');
+    assert.equal(openInHarnessRoot('live', '/home/ada/Jason-demo', () => '/home/ada/Jason'), '/home/ada/Jason');
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    assert.match(main, /harnessRoot: \(\) => openInHarnessRoot\(runOn\.mode, demoWhere\.harnessRoot, /);
+    assert.match(main, /startDetached\(line, editorEnvironment\(env, personEnvironment, process\.platform\)\)/);
+});
+
+test('the log names jason session open by its verb', () => {
+    assert.equal(verbOf(['session', 'open', '--shell']), 'session open');
+    assert.equal(verbOf(['session', 'open', '--campaign', 'cmp_01', '--host', 'codex']), 'session open');
 });
 
 test('with no harness root yet, the act is refused with a sentence', async () => {

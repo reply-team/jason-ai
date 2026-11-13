@@ -19,6 +19,7 @@ import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
+import { editorEnvironment, openInHarnessRoot } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
 import { terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
@@ -604,7 +605,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
         cli,
-        harnessRoot: () => (runOn.mode === 'demo' ? demoWhere.harnessRoot : harnessRoot(process.env, homedir(), desktopPaths(runOn.person).installationSettings)),
+        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), desktopPaths(runOn.person).installationSettings)),
         isDirectory: isFolder,
         remembered: () => settings.openIn ?? null,
         remember: (id: PlaceId) => {
@@ -615,7 +616,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                 log.warn('open_in_remember_failed', {});
             }
         },
-        start: (line) => startDetached(line, env),
+        // An editor or the file manager keeps the environment it is started with for its whole life: the person's, not a
+        // demo run's. The terminals are started by `jason session open` and keep the run's.
+        start: (line) => startDetached(line, editorEnvironment(env, personEnvironment, process.platform)),
         copy: (text) => clipboard.writeText(text),
         terminalFlags,
         log: (event, fields) => log.info(event, fields),

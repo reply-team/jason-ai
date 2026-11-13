@@ -143,9 +143,9 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         const desktop = chatDesktop();
         desktop.openInKept = {
             places: [
-                { id: 'terminal', label: 'Terminal' },
+                { id: 'terminal', label: '' },
                 { id: 'cursor', label: 'Cursor' },
-                { id: 'copy', label: 'Copy path' },
+                { id: 'copy', label: '' },
             ],
             default: 'terminal',
             folder: 'Jason',
@@ -254,7 +254,31 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         });
         expect(alert.textContent).toBe('Jason’s folder is not there yet; it is made with the first agent.');
         expect((mainPart() as HTMLButtonElement).disabled).toBe(true);
-        expect((arrow() as HTMLButtonElement).disabled).toBe(true);
+        expect((arrow() as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('reads the places again when the arrow is opened, and recovers after a refusal', async () => {
+        const desktop = chatDesktop();
+        desktop.refuse.set('openIn.targets', 'Jason’s folder is not there yet; it is made with the first agent.');
+        await renderConsole(kept, desktop);
+        await waitFor(() => expect(document.querySelector('.open-in-problem')).not.toBeNull());
+        expect((mainPart() as HTMLButtonElement).disabled).toBe(true);
+        desktop.refuse.delete('openIn.targets');
+        const before = targets(desktop).length;
+        fireEvent.click(arrow());
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(before));
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        expect((mainPart() as HTMLButtonElement).disabled).toBe(false);
+        expect(document.querySelector('.open-in-problem')).toBeNull();
+        expect(within(menu()).getAllByRole('menuitem').length).toBeGreaterThan(1);
+    });
+
+    it('reads the places again when the window regains focus', async () => {
+        const desktop = await renderConsole(kept);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        const before = targets(desktop).length;
+        fireEvent.focus(window);
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(before));
     });
 });
 
@@ -275,8 +299,30 @@ describe('Open in with a campaign’s chat in front', () => {
         fireEvent.click(mainPart());
         await waitFor(() => expect(opens(desktop)).toHaveLength(1));
         expect(opens(desktop)[0]!.args).toEqual(['claude', 'cmp_1']);
+        expect(mainPart().title).toBe('Open Jason in Claude Code');
         for (const call of desktop.calls.filter((each) => each.name.startsWith('openIn.'))) {
             expect(JSON.stringify(call.args)).not.toMatch(/[\\/]/);
         }
+    });
+
+    it('opens the harness root again once Agents is in front after a chat', async () => {
+        const desktop = await renderConsole('live');
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        const side = () => within(document.querySelector<HTMLElement>('.side')!);
+        fireEvent.click(side().getByRole('button', { name: 'Agents' }));
+        const row = (await waitFor(() => screen.getByText('Spring'))).closest('tr')!;
+        fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
+        const tabs = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.harness .campaign-tabs');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
+        await waitFor(() => expect(targets(desktop).some((each) => each.args[0] === 'cmp_1')).toBe(true));
+        fireEvent.click(side().getByRole('button', { name: 'Agents' }));
+        await waitFor(() => expect(targets(desktop).at(-1)!.args[0]).toBeUndefined());
+        fireEvent.click(mainPart());
+        await waitFor(() => expect(opens(desktop)).toHaveLength(1));
+        expect(opens(desktop)[0]!.args).toEqual(['claude', undefined]);
     });
 });

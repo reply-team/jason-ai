@@ -35,6 +35,7 @@ import { Painted } from './painted';
 import { sideView } from './side';
 import { StartPanel, startMaking, startWaiting } from './start';
 import {
+    activePanel,
     bind,
     changeChat,
     chats,
@@ -285,6 +286,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         dockApi.current = event.api;
         // The sidebar marks the conversation whose chat came to the front last.
         event.api.onDidActivePanelChange(({ panel }) => {
+            activePanel.value = panel?.id ?? null;
             if (panel?.id.startsWith('chat:')) currentChat.value = panel.id.slice('chat:'.length);
             if (currentChat.value !== null && currentChat.value === feedId.value) feedUnseen.value = false;
         });

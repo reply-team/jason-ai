@@ -507,6 +507,7 @@ export type DesktopOpenInPlace =
  * part opens (the place used last, else Claude Code), and the folder's name, never its path.
  */
 export interface DesktopOpenInAnswer {
+    /** A product's name (VS Code, Finder, Claude Code) is the label; a generic place (Terminal, Copy path) has an empty one and the page's own word. */
     places: { id: DesktopOpenInPlace; label: string }[];
     default: DesktopOpenInPlace;
     folder: string;

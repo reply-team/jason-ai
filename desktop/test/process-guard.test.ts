@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, listingCallers, processModules, processViolations, runFileCalls, signalLines } from './process-rules.ts';
+import { ipcModule, listingCallers, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -146,6 +146,17 @@ test("an agent host's model listing is one call: codex app-server, started only 
     assert.deepEqual(processViolations('src/model-lists.ts', 'startListing(launch, { cwd, env, onLine });'), []);
     for (const path of ['src/chat.ts', 'src/setup.ts', 'src/main.ts']) {
         assert.notDeepEqual(processViolations(path, "import { startListing } from './chat-process.ts';"), [], path);
+    }
+});
+
+test('the detached start of Open in is called only by main.ts, and a planted call anywhere else fires the rule', () => {
+    assert.deepEqual(Object.keys(startDetachedCallers), ['src/main.ts']);
+    const planted = (call: string) => `import { startDetached } from './open-in-start.ts';\n${call}\n`;
+    assert.deepEqual(processViolations('src/main.ts', planted('start: (line) => startDetached(line, env),')), []);
+    for (const path of ['src/chat.ts', 'src/setup.ts', 'src/open-in.ts', 'src/ipc.ts']) {
+        const found = processViolations(path, planted("await startDetached({ file: 'x', args: [] }, env);"));
+        assert.equal(found.length, 1, path);
+        assert.match(found[0] ?? '', /starts a detached program/);
     }
 });
 
