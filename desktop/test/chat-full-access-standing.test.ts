@@ -117,18 +117,27 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
  * The file of the standing choice will not be removed, as when another program holds it open on Windows: removing it
  * throws EBUSY until the function returned is called. Every other path is removed as before.
  */
-function holdOpen(t: { after(fn: () => void): void }, file: string): () => void {
+function holdOpen(t: { after(fn: () => void): void }, file: string, also: { replace?: boolean } = {}): () => void {
     const original = fs.rmSync;
+    const rename = fs.renameSync;
+    const busy = () => Object.assign(new Error(`EBUSY: resource busy or locked, '${file}'`), { code: 'EBUSY' });
     fs.rmSync = ((path: fs.PathLike, options?: fs.RmOptions) => {
-        if (String(path) === file) throw Object.assign(new Error(`EBUSY: resource busy or locked, unlink '${file}'`), { code: 'EBUSY' });
+        if (String(path) === file) throw busy();
         original(path, options);
     }) as typeof fs.rmSync;
+    // With replace, a file renamed over it fails the same way.
+    if (also.replace === true)
+        fs.renameSync = ((from: fs.PathLike, to: fs.PathLike) => {
+            if (String(to) === file) throw busy();
+            rename(from, to);
+        }) as typeof fs.renameSync;
     syncBuiltinESMExports();
     let held = true;
     const release = () => {
         if (!held) return;
         held = false;
         fs.rmSync = original;
+        fs.renameSync = rename;
         syncBuiltinESMExports();
     };
     t.after(release);
@@ -334,6 +343,59 @@ test('Always given again after a take-back was owed clears the mark first, so th
     await held.setMode(id, 'full_access', 'claude');
     assert.ok(!existsSync(takenBackMark(r.b.paths.fullAccess)));
     assert.notEqual(r.again().fullAccessStanding(), null, 'Always given after the mark stands at the next start');
+});
+
+test('Always answered while a take-back is owed and the file will not be replaced: the mark stays, so the next start shows the box', async (t) => {
+    const r = rig(t);
+    stand(r, true);
+    writeFileSync(takenBackMark(r.b.paths.fullAccess), '');
+    holdOpen(t, r.b.paths.fullAccess, { replace: true });
+    const held = r.again();
+    const { id } = await held.create();
+    assert.equal((await held.setMode(id, 'full_access', 'claude')).mode, 'full_access');
+    assert.equal(r.confirms, 1);
+    assert.deepEqual(notices(r.events.get(id) ?? []), [standingUnkeptSentence]);
+    assert.ok(existsSync(takenBackMark(r.b.paths.fullAccess)), 'the mark goes only after the new choice is written');
+    const next = r.again();
+    assert.equal(next.fullAccessStanding(), null, 'the old Always is not back');
+    assert.equal((await next.create(undefined, 'claude')).mode, 'ask_first', 'nor its new chats');
+    const other = await next.create();
+    await next.setMode(other.id, 'full_access', 'claude');
+    assert.equal(r.confirms, 2, 'the box');
+});
+
+test('Always written while the mark of a take-back owed will not go answers as this time only, and the next start removes it', async (t) => {
+    const r = rig(t);
+    const mark = takenBackMark(r.b.paths.fullAccess);
+    writeFileSync(mark, '');
+    holdOpen(t, mark);
+    const { id } = await r.chat.create();
+    await r.chat.setMode(id, 'full_access', 'claude');
+    assert.deepEqual(notices(r.events.get(id) ?? []), [standingUnkeptSentence]);
+    assert.equal(r.chat.fullAccessStanding(), null);
+    assert.deepEqual(r.standings, [], 'nothing given is said to the page');
+});
+
+test('a start whose folder takes no new file holds a standing choice as taken back for the run', async (t) => {
+    const r = rig(t);
+    stand(r, true);
+    const original = fs.writeFileSync;
+    fs.writeFileSync = ((path: fs.PathOrFileDescriptor, data: string | NodeJS.ArrayBufferView, options?: fs.WriteFileOptions) => {
+        if (String(path).endsWith('.probe')) throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        original(path, data, options);
+    }) as typeof fs.writeFileSync;
+    syncBuiltinESMExports();
+    t.after(() => {
+        fs.writeFileSync = original;
+        syncBuiltinESMExports();
+    });
+    const held = r.again();
+    assert.equal(held.fullAccessStanding(), null);
+    assert.equal((await held.create(undefined, 'claude')).mode, 'ask_first');
+    fs.writeFileSync = original;
+    syncBuiltinESMExports();
+    assert.notEqual(r.again().fullAccessStanding(), null, 'a folder that takes files again lets it stand');
+    assert.deepEqual(readdirSync(dirname(r.b.paths.fullAccess)).filter((name) => name.endsWith('.probe')), [], 'no probe is left');
 });
 
 test('the menu\'s take-back the file will not take is refused with what to do, and Always still stands', async (t) => {
