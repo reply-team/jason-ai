@@ -180,14 +180,17 @@ opens a folder in the place you used last, and its arrow lists every place avail
 **The default** is Claude Code, until you use another place; the place you used last then becomes the default. The desktop
 keeps it in its own settings, in the data directory of the installation it runs on, and never in the window or in your folders.
 
-**Which folder opens.** With a campaign's chat open, the campaign's own folder, the one the installation records for it;
-otherwise the harness root. In the demo these are the demo's folders, and a terminal opened there works with the demo's data,
+**Which folder opens.** The campaign's own folder, the one the installation records for it, only while that campaign's chat is in
+front; otherwise the harness root, and the desktop starts the command line with the harness root as its working folder. In the demo these are the demo's folders, and a terminal opened there works with the demo's data,
 so `jason` in it reads and changes the demo. The page names only the place and, where a campaign's chat is open, the
 campaign; it never sends a path, and the desktop resolves the folder from the installation's own record.
 
-**What starts.** The desktop starts the editors and the file manager itself. The three terminal entries run `jason session
-open` on the folder, with no first input sent to the host, so the session is yours to begin; typed by hand, the same verb
-does the same ([ui.md](ui.md) describes it).
+**What starts.** The desktop starts the editors and the file manager itself, with your own environment. The three terminal
+entries run `jason session open` on the folder, with the environment of the installation the desktop runs on, so in the demo
+a terminal works with the demo's data; no first input is sent to the host, so the session is yours to begin. Typed by hand,
+the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). In the demo, an editor is started with
+your own environment, not the demo's, and the desktop says so after one opens: an editor's own terminal may work with
+your own installation, not the demo.
 
 **What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
 and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
