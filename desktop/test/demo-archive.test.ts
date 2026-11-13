@@ -348,7 +348,12 @@ test('a refused import makes the sample at this start: the held lines first, the
     assert.deepEqual(lines.map((line) => line.EventName), ['desktop_started', 'deep_link_opened', 'demo_archive_unplaced']);
     assert.equal(lines[2]?.Step, 'import');
     assert.equal(lines[2]?.Code, 'import_refused');
-    assert.equal(JSON.stringify(lines).includes(w.root), false, 'no line names a path of the demo');
+    // The start's own line names the data directory it runs on, as every start's does (`desktop_started`). No other line
+    // names a path of the demo, the refusal's message included, which does; values are read as written, not as JSON.
+    assert.equal(lines[0]?.DataDirectory, w.places.data);
+    for (const line of lines.slice(1)) {
+        for (const value of Object.values(line)) assert.equal(String(value).includes(w.root), false, `${String(line.EventName)} names a path of the demo`);
+    }
     // The making's own request stays, as the making leaves one; the root is the making's, marked.
     assert.ok(hasDemoMarker(w.places.harnessRoot));
 });
@@ -759,4 +764,18 @@ test('a left demo runtime is stopped once for a request: one that comes back aft
     // Noting it twice writes the line once.
     noteLeftStopped(w.request);
     assert.equal(readFileSync(w.request, 'utf8').split(/\r?\n/).filter((line) => line === 'stopped').length, 1);
+});
+
+test('two carry-outs within the same millisecond each take their folder aside under a name of its own', (t) => {
+    const w = world(t);
+    const at = () => 1_800_000_000_000;
+    const disk = carryOutOnDisk(w.request, w.places, () => false, at);
+    claimDemoFolder(w.places.data);
+    const first = disk.setAside(w.places.data);
+    claimDemoFolder(w.places.data);
+    const second = disk.setAside(w.places.data);
+    assert.notEqual(first, second);
+    for (const aside of [first, second]) assert.ok(aside.startsWith(`${w.places.data}${asideMarker}1800000000000`), 'named by the moment given');
+    assert.ok(hasDemoMarker(first) && hasDemoMarker(second));
+    assert.deepEqual(disk.asides(w.places.data).sort(), [first, second].sort(), 'both are found as asides of the folder');
 });

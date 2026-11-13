@@ -262,7 +262,7 @@ export function asidesOf(folder: string): string[] {
 }
 
 /** The disk side of the above, for the person's request file. */
-export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: number) => boolean) {
+export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: number) => boolean, now: () => number = Date.now) {
     return {
         requested: (): boolean => existsSync(file),
         requestText: (): string => {
@@ -284,7 +284,11 @@ export function carryOutOnDisk(file: string, places: DemoPlaces, running: (pid: 
         self: process.pid,
         places,
         setAside: (folder: string): string => {
-            const aside = `${folder}${asideMarker}${Date.now()}`;
+            // Named by the moment, and numbered when a copy of that moment is there: an earlier carry-out's copy that could
+            // not be removed may carry the same millisecond, and a rename onto it would fail.
+            const stamp = `${folder}${asideMarker}${now()}`;
+            let aside = stamp;
+            for (let number = 2; existsSync(aside); number++) aside = `${stamp}-${number}`;
             renameSync(folder, aside);
             return aside;
         },
