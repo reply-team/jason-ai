@@ -61,7 +61,7 @@ public sealed class ReplyCounts(JasonDbContext db)
                 campaign.PublicId,
                 whole?.Replies ?? 0,
                 whole?.Threads ?? 0,
-                Ordered(lines.Where(row => row.ByCategory == 1).Select(row => new ReplyCategoryCount(row.Category, row.Replies, row.Threads))));
+                Ordered(lines.Where(row => row.ByCategory == 1).Select(row => new ReplyCategoryCount(row.Category!, row.Replies, row.Threads))));
         }).ToList();
 
         // A thread is a thread of its campaign, so the total adds the campaigns' counts up, a category's with its own.
@@ -81,15 +81,17 @@ public sealed class ReplyCounts(JasonDbContext db)
         return db.Database.SqlQueryRaw<ReplyCountLine>(Sql, JsonSerializer.Serialize(campaignIds), Utc(since), Utc(until));
     }
 
-    /// <summary>Most replies first, then the word in ordinal order, a reply with no category after every word it ties with.</summary>
+    /// <summary>Most replies first, then the word in ordinal order.</summary>
     private static List<ReplyCategoryCount> Ordered(IEnumerable<ReplyCategoryCount> categories) =>
         [.. categories
             .OrderByDescending(category => category.Replies)
-            .ThenBy(category => category.Category is null)
             .ThenBy(category => category.Category, StringComparer.Ordinal)];
 
     private static DateTime Utc(DateTime moment) => moment.Kind == DateTimeKind.Utc ? moment : moment.ToUniversalTime();
 }
 
-/// <summary>One group of the read: a campaign's category, or with <c>ByCategory</c> 0 the campaign whole.</summary>
+/// <summary>
+/// One group of the read: a campaign's category, which a verdict always names, or with <c>ByCategory</c> 0 the campaign
+/// whole, whose category is null.
+/// </summary>
 internal sealed record ReplyCountLine(int CampaignId, int ByCategory, string? Category, int Replies, int Threads);

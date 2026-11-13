@@ -366,11 +366,10 @@ that is not that attempt does not call them.
   message of one thread of one plugin in one campaign, counted once, under the latest verdict recorded on it there; a
   reply whose person has since been removed from the campaign is counted all the same. A row carries the campaign's
   `replies`, its `threads` — the conversations, a plugin and a thread together, that hold at least one reply counted —
-  and `categories`, one entry per word with its own `replies` and `threads`. A verdict line that names no category,
-  which `reply.record` never writes, is counted under one entry whose `category` is null, so the categories' `replies`
-  always add up to the row's. Their `threads` need not: one conversation holding replies of two categories is a thread
-  of each, and one thread of the campaign. The entries are listed by `replies`, most first, then by the word in ordinal
-  order, the null entry after every word it ties with. `total` adds the campaigns' rows up, a conversation counted in
+  and `categories`, one entry per word with its own `replies` and `threads`. Every reply counted is under exactly one
+  word, so the categories' `replies` add up to the row's. Their `threads` need not: one conversation holding replies of
+  two categories is a thread of each, and one thread of the campaign. The entries are listed by `replies`, most first,
+  then by the word in ordinal order. `total` adds the campaigns' rows up, a conversation counted in
   each campaign whose verdicts name it. A window that ends before it starts is `validation_failed`, and a campaign
   that does not exist `campaign_not_found`. `jason reply count` sends it.
 

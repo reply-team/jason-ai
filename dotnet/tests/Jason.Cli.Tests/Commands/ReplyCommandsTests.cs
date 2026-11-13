@@ -178,13 +178,13 @@ public class ReplyCommandsTests
     }
 
     /// <summary>
-    /// Each campaign by its name, read from the campaign listing, a row per category and one for all of its judged replies;
-    /// a reply whose verdict names no category under a word of its own, and the total last.
+    /// Each campaign by its name, read from the campaign listing, a row per category and one for all of its judged replies,
+    /// and the total last.
     /// </summary>
     [Fact]
     public async Task Human_mode_renders_each_campaign_s_categories_and_the_total()
     {
-        ReplyCategoryCount[] spring = [new("interested", 2, 1), new(null, 1, 1)];
+        ReplyCategoryCount[] spring = [new("interested", 2, 1), new("not_now", 1, 1)];
         var counts = JsonSerializer.Serialize(
             new ReplyCountResponse(
                 [new ReplyCountRow("cmp_A", 3, 2, spring), new ReplyCountRow("cmp_B", 0, 0, [])],
@@ -206,11 +206,11 @@ public class ReplyCommandsTests
         var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         Assert.Equal(["CAMPAIGN", "ID", "CATEGORY", "REPLIES", "THREADS"], Cells(lines[0]));
         Assert.Equal(["Spring outreach", "cmp_A", "interested", "2", "1"], Cells(lines[2]));
-        Assert.Equal(["Spring outreach", "cmp_A", "(no category)", "1", "1"], Cells(lines[3]));
+        Assert.Equal(["Spring outreach", "cmp_A", "not_now", "1", "1"], Cells(lines[3]));
         Assert.Equal(["Spring outreach", "cmp_A", "(all)", "3", "2"], Cells(lines[4]));
         Assert.Equal(["Partners", "cmp_B", "(all)", "0", "0"], Cells(lines[5]));
         Assert.Equal(["TOTAL", "-", "interested", "2", "1"], Cells(lines[6]));
-        Assert.Equal(["TOTAL", "-", "(no category)", "1", "1"], Cells(lines[7]));
+        Assert.Equal(["TOTAL", "-", "not_now", "1", "1"], Cells(lines[7]));
         Assert.Equal(["TOTAL", "-", "(all)", "3", "2"], Cells(lines[^1]));
     }
 

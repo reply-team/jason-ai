@@ -9,9 +9,6 @@ namespace Jason.Cli.Human;
 /// </summary>
 public static class ReplyRenderers
 {
-    /// <summary>What a row says in place of a category word where the verdicts name none.</summary>
-    public const string NoCategory = "(no category)";
-
     /// <summary>What a row says in place of a category word where it counts every judged reply of the campaign.</summary>
     public const string AllCategories = "(all)";
 
@@ -42,7 +39,7 @@ public static class ReplyRenderers
     {
         foreach (var category in categories)
         {
-            table.Row(name, id, category.Category ?? NoCategory, Number(category.Replies), Number(category.Threads));
+            table.Row(name, id, category.Category, Number(category.Replies), Number(category.Threads));
         }
 
         table.Row(name, id, AllCategories, Number(replies), Number(threads));

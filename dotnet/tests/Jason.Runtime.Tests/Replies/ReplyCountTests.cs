@@ -1,13 +1,10 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
-using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Jason.Runtime.Tests.Replies;
 
@@ -177,32 +174,35 @@ public class ReplyCountTests
     }
 
     /// <summary>
-    /// A verdict line that names no category, whether the field is missing or null, is a reply all the same: counted in
-    /// <c>replies</c> and listed as one entry whose category is null, so the categories always add up to the replies.
+    /// Every reply counted is counted under exactly one word, so the categories' replies add up to the replies, for each
+    /// campaign and in total, whatever was judged again, fell outside the window or shares a thread.
     /// </summary>
     [Fact]
-    public async Task A_verdict_without_a_category_is_counted_under_one_null_entry()
+    public async Task The_categories_replies_add_up_to_the_replies_per_campaign_and_in_total()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
         var spring = await CampaignAsync(db, "Spring");
+        var summer = await CampaignAsync(db, "Summer");
         await JudgeAsync(db, spring, "thr-1", "msg-1", At(9), "interested");
-        await UncategorisedAsync(database, spring, "thr-2", "msg-2", At(10), withField: false);
-        await UncategorisedAsync(database, spring, "thr-3", "msg-3", At(11), withField: true);
+        await JudgeAsync(db, spring, "thr-1", "msg-2", At(10), "not_now");
+        await JudgeAsync(db, spring, "thr-1", "msg-2", At(10), "interested");
+        await JudgeAsync(db, spring, "thr-2", "msg-3", At(11), "wrong_person");
+        await JudgeAsync(db, spring, "thr-3", "msg-4", DayStart.AddHours(-1), "interested");
+        await JudgeAsync(db, summer, "thr-4", "msg-5", At(9), "not_now");
+        await JudgeAsync(db, summer, "thr-4", "msg-6", At(9), "unsubscribe");
 
-        var counts = await Counts(db).CountAsync(new ReplyCountRequest([spring.PublicId], DayStart, DayEnd), Ct);
+        var counts = await Counts(db).CountAsync(new ReplyCountRequest([spring.PublicId, summer.PublicId], DayStart, DayEnd), Ct);
 
-        var row = Assert.Single(counts.Campaigns);
-        Assert.Equal((3, 3), (row.Replies, row.Threads));
-        Assert.Equal([new(null, 2, 2), new("interested", 1, 1)], row.Categories);
-        Assert.Equal(row.Replies, row.Categories.Sum(category => category.Replies));
-        Assert.Equal([new(null, 2, 2), new("interested", 1, 1)], counts.Total.Categories);
+        Assert.Equal([3, 2], counts.Campaigns.Select(row => row.Replies));
+        Assert.All(counts.Campaigns, row => Assert.Equal(row.Replies, row.Categories.Sum(category => category.Replies)));
+        Assert.Equal(5, counts.Total.Replies);
         Assert.Equal(counts.Total.Replies, counts.Total.Categories.Sum(category => category.Replies));
     }
 
-    /// <summary>The categories are listed by their replies, most first, then by the word, ordinal, and a null category after every word it ties with.</summary>
+    /// <summary>The categories are listed by their replies, most first, then by the word in ordinal order.</summary>
     [Fact]
-    public async Task Categories_are_listed_by_replies_then_by_word_with_no_category_after_its_ties()
+    public async Task Categories_are_listed_by_replies_then_by_word()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -212,11 +212,10 @@ public class ReplyCountTests
         await JudgeAsync(db, spring, "thr-3", "msg-3", At(9), "B");
         await JudgeAsync(db, spring, "thr-4", "msg-4", At(9), "c");
         await JudgeAsync(db, spring, "thr-5", "msg-5", At(9), "c");
-        await UncategorisedAsync(database, spring, "thr-6", "msg-6", At(9), withField: true);
 
         var row = Assert.Single((await Counts(db).CountAsync(new ReplyCountRequest([spring.PublicId], DayStart, DayEnd), Ct)).Campaigns);
 
-        Assert.Equal(["c", "B", "a", "b", null], row.Categories.Select(category => category.Category));
+        Assert.Equal(["c", "B", "a", "b"], row.Categories.Select(category => category.Category));
     }
 
     /// <summary>
@@ -379,38 +378,4 @@ public class ReplyCountTests
         JasonDbContext db, Campaign campaign, string thread, string message, DateTimeOffset at, string category, string plugin = "mailbox", string? contact = null) =>
         new ReplyService(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon))))
             .RecordAsync(new ReplyRecordRequest(campaign.PublicId, plugin, thread, message, at, category, 0.8, ReplyReaction.None, ContactId: contact, Actor: Ada), Ct);
-
-    /// <summary>
-    /// A verdict line naming no category, which <c>reply.record</c> never writes and its document does not allow: written as
-    /// a running installation keeps a line off its document, logged rather than refused, the field left out or null, to
-    /// hold the count to what it does with such a line.
-    /// </summary>
-    private static async Task UncategorisedAsync(TestDatabase database, Campaign campaign, string thread, string message, DateTimeOffset at, bool withField)
-    {
-        var options = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(options, database.File, JournalLines.Logged(NullLogger.Instance));
-        await using var db = new JasonDbContext(options.Options);
-        var line = new JsonObject
-        {
-            ["plugin"] = "mailbox",
-            ["thread"] = thread,
-            ["message_id"] = message,
-            ["message_at"] = InboundSync.Instant(at),
-            ["contact_id"] = null,
-            ["confidence"] = 0.5,
-            ["reaction"] = "none",
-            ["goal_id"] = null,
-            ["goal_kind"] = null,
-            ["decision_id"] = null,
-            ["answered_by"] = null,
-        };
-        if (withField)
-        {
-            line["category"] = null;
-        }
-
-        new JournalWriter(new FixedClock(new DateTimeOffset(Noon))).Append(
-            db, Ada, JournalKinds.ReplyClassified, null, key: InboundSync.VerdictKey("mailbox", thread, message), updated: line, campaignId: campaign.Id);
-        await db.SaveChangesAsync(Ct);
-    }
 }

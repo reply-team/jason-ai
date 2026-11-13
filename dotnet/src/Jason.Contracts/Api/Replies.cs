@@ -33,9 +33,9 @@ public sealed record ReplyCountRequest(IReadOnlyList<string>? CampaignIds, DateT
 
 /// <summary>
 /// The replies of one category word, as the verdicts that stand say it: how many, and in how many conversations, a
-/// conversation being one thread of one plugin. A null category is the replies whose verdict names none.
+/// conversation being one thread of one plugin.
 /// </summary>
-public sealed record ReplyCategoryCount(string? Category, int Replies, int Threads);
+public sealed record ReplyCategoryCount(string Category, int Replies, int Threads);
 
 /// <summary>
 /// One campaign's judged replies in the window: how many, in how many conversations, and the same by category. The
