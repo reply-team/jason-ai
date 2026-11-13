@@ -2,7 +2,7 @@
 // Full access is refused it by the rules that already keep the data directory from the chat: the permission model in
 // Ask first and Plan only, and the host's own rules, which name the file before it exists. (b) A plain command of a Full
 // access turn that would write it is refused the same way, before anything is read literally, since Full access is
-// never weaker than Ask first. (c) A program the agent writes and runs is not read; the confirmation says so.
+// never weaker than Ask first. (c) A program the AI writes and runs is not read; the confirmation says so.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -141,6 +141,6 @@ test('(a) and (b) hold in every spelling: from a grant folder by a relative path
     }
 });
 
-test('(c) what the bar does not hold is said in the confirmation itself: a program the agent writes and runs could choose Always', () => {
-    assert.match(fullAccessDialog().detail, /a program the agent writes and runs could choose it for you too\./);
+test('(c) what the bar does not hold is said in the confirmation itself: a program the AI writes and runs could choose Always', () => {
+    assert.match(fullAccessDialog().detail, /a program the AI writes and runs could choose it for you too\./);
 });
