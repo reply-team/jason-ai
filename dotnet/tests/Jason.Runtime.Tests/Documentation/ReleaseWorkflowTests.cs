@@ -2061,7 +2061,7 @@ public partial class ReleaseWorkflowTests
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var building = (YamlMappingNode)jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Value;
-        Assert.Equal("version", Scalar(building, "needs"));
+        Assert.Equal(["version", DemoJob], Needs(building));
 
         var decided = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "version"), "steps")).Children.Cast<YamlMappingNode>()
             .Single(step => Scalar(step, "id") == "version");
@@ -4140,11 +4140,18 @@ public partial class ReleaseWorkflowTests
         }
     }
 
-    /// <summary>Whether a step really asks an executable what version it is, rather than talking about it.</summary>
+    /// <summary>
+    /// Whether a step really asks an executable what version it is, rather than talking about it, or, in the demo job's one
+    /// publish, telling the desktop's prepare script the version to publish the sample's jason at, which asks no executable
+    /// anything (the sample is made with that jason, its runtime started and stopped, right after).
+    /// </summary>
     private static bool Checks(string step) =>
         step.Split('\n')
             .Select(line => line.Trim())
-            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
+            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#') && line != DemoPublish);
+
+    /// <summary>The demo job's publish of the release's jason for Linux, the one line the check above passes over.</summary>
+    private const string DemoPublish = "node scripts/prepare.mjs --rid linux-x64 --output bundles/demo --version \"$VERSION\"";
 
     /// <summary>
     /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it

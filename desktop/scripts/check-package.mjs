@@ -1,7 +1,7 @@
 // Reads a built package back and holds it to the configuration it was built from: the updater's app-update.yml as
 // electron-builder wrote it into the package, and the fuse wire of the binary Electron reads its fuses from.
 //
-//   node desktop/scripts/check-package.mjs --app <package> --platform win32|darwin|linux [--form deb|appimage]
+//   node desktop/scripts/check-package.mjs --app <package> --platform win32|darwin|linux [--form deb|appimage] [--demo <archive>]
 //
 // <package> is the folder holding Jason.exe on Windows and Jason.app on macOS, and on Linux the folder holding the
 // program: what a deb installs as /opt/Jason, or what an AppImage's --appimage-extract writes as squashfs-root, which
@@ -18,14 +18,20 @@
 // Windows it also names the publisher an update must be signed by, and electron-updater checks no signature when that
 // key is absent, so a Windows package must name the release's signer, and only it.
 //
+// A release's package carries the archive of the demo's sample its demo job made, at bundle/demo/jason-demo.zip in the
+// resources folder, which the desktop places at a demo's first start: --demo names that archive, and the package must
+// carry it byte for byte. A package built outside a release, a pull request's or a developer's, is checked without
+// --demo and must carry none; the desktop then makes the sample live.
+//
 // The fuse wire follows a fixed sentinel in the binary: a version byte, a length byte, then one byte per fuse, '0' off,
 // '1' on and 'r' removed. Every copy of the wire in the binary is read. A fuse the configuration does not set is said
 // as Electron left it.
 
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { configuration, fuses, signer } from '../electron-builder.config.mjs';
+import { configuration, demoArchive, fuses, signer } from '../electron-builder.config.mjs';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -246,26 +252,54 @@ function checkForm(app, form) {
 }
 
 /**
- * What the package says, line by line; throws when it is not what it was configured to be. `form` is a Linux package's,
- * deb or appimage, and only a Linux package has one.
+ * The archive of the demo's sample a package carries: a release's, named by `demo`, byte for byte; none at all in a
+ * package built outside a release, which names none.
  */
-export function checkPackage(app, platform, form) {
+function checkDemoArchive(app, platform, demo) {
+    const resources = platform === 'darwin' ? join(app, 'Contents', 'Resources') : join(app, 'resources');
+    const carried = join(resources, 'bundle', ...demoArchive.split('/'));
+    const named = `bundle/${demoArchive}`;
+    if (demo === undefined) {
+        if (existsSync(carried)) throw new Error(`${app} carries an archive of the demo’s sample at ${named}, and no release’s was named with --demo.`);
+        return [`${named}: none, so the desktop makes the sample live`];
+    }
+    if (!existsSync(carried)) throw new Error(`${app} carries no archive of the demo’s sample at ${named}, and a release’s package carries the one its demo job made.`);
+    const bytes = readFileSync(carried);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== createHash('sha256').update(readFileSync(demo)).digest('hex')) throw new Error(`${named} in ${app} is not the archive the release made, ${demo}.`);
+    return [`${named}: the release’s sample, ${bytes.length} bytes, sha256 ${digest}`];
+}
+
+/**
+ * What the package says, line by line; throws when it is not what it was configured to be. `form` is a Linux package's,
+ * deb or appimage, and only a Linux package has one. `demo` is the archive of the demo's sample a release's package
+ * carries; a package built outside a release is checked without one and carries none.
+ */
+export function checkPackage(app, platform, form, demo) {
     if (platform === 'linux' && form !== 'deb' && form !== 'appimage') throw new Error(`A Linux package is a deb or an AppImage: --form deb|appimage, not ${String(form)}.`);
     if (platform !== 'linux' && form !== undefined) throw new Error(`Only a Linux package has a form, and this one is ${platform}'s.`);
-    return [checkUpdater(app, platform), ...checkFuses(app, platform), ...(platform === 'linux' ? checkForm(app, form) : []), ...(platform === 'darwin' ? checkMacScheme(app) : [])];
+    return [
+        checkUpdater(app, platform),
+        ...checkFuses(app, platform),
+        ...(platform === 'linux' ? checkForm(app, form) : []),
+        ...(platform === 'darwin' ? checkMacScheme(app) : []),
+        ...checkDemoArchive(app, platform, demo),
+    ];
 }
 
 function main(argv) {
     const app = argv[argv.indexOf('--app') + 1];
     const platform = argv[argv.indexOf('--platform') + 1];
     const form = argv.includes('--form') ? argv[argv.indexOf('--form') + 1] : undefined;
+    const demo = argv.includes('--demo') ? argv[argv.indexOf('--demo') + 1] : undefined;
     const known = platform === 'win32' || platform === 'darwin' ? form === undefined : platform === 'linux' && (form === 'deb' || form === 'appimage');
-    if (!argv.includes('--app') || !argv.includes('--platform') || app === undefined || !known) {
-        process.stderr.write('usage: node check-package.mjs --app <package> --platform win32|darwin|linux [--form deb|appimage]\n');
+    const demoNamed = !argv.includes('--demo') || (demo !== undefined && !demo.startsWith('--'));
+    if (!argv.includes('--app') || !argv.includes('--platform') || app === undefined || !known || !demoNamed) {
+        process.stderr.write('usage: node check-package.mjs --app <package> --platform win32|darwin|linux [--form deb|appimage] [--demo <archive>]\n');
         return 2;
     }
     try {
-        for (const line of checkPackage(app, platform, form)) process.stdout.write(`${line}\n`);
+        for (const line of checkPackage(app, platform, form, demo)) process.stdout.write(`${line}\n`);
         return 0;
     } catch (error) {
         process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
