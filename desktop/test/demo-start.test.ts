@@ -174,7 +174,7 @@ test('the update, the installer’s stop and the uninstall stop the demo’s run
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),'));
     const flat = main.split(/\s+/).join(' ');
-    assert.ok(flat.includes('prepare: (demo) => prepareDemo(demo, { harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))), place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
+    assert.ok(flat.includes('prepareLive = (demo) => prepareDemo(demo, { harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))), place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
     assert.ok(flat.includes('open: openDemoDirectory,'));
     assert.ok(main.includes('fixedSettings: (data) => writeDemoSettings(data, harnessRoot('));
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');

@@ -26,7 +26,7 @@ import {
     type PlacingOutcome,
 } from '../src/demo-archive.ts';
 import { claimDemoFolder, demoMarkerName, hasDemoMarker, markPlacedFolder } from '../src/demo-folders.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftByAPlacing, requestStartOver } from '../src/demo-over.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftByAMaking, leftByAPlacing, placingInFlight, requestStartOver } from '../src/demo-over.ts';
 import { markerPath, readMarker, type DemoPlaces } from '../src/demo-seed.ts';
 import { fileLines, LogHold } from '../src/log.ts';
 
@@ -239,7 +239,7 @@ async function placeOn(
         cli,
         archive: w.archive,
         places: w.places,
-        request: () => requestStartOver(w.request, 4242, false, true),
+        request: () => requestStartOver(w.request, 4242, true, true),
         hold: () => hold.hold(),
         now: () => (clock += 1000),
     });
@@ -310,7 +310,7 @@ test('the request left for a placing names it, so a start cut short during the i
             return { exit: 0, stdout: '{}', stderr: '' };
         },
     };
-    const placing = beginPlacing({ cli, archive: w.archive, places: w.places, request: () => requestStartOver(w.request, 4242, false, true), hold: () => undefined });
+    const placing = beginPlacing({ cli, archive: w.archive, places: w.places, request: () => requestStartOver(w.request, 4242, true, true), hold: () => undefined });
     assert.equal((await placing).kind, 'placed');
     assert.ok(leftByAPlacing(during));
     // A request that cannot be left places nothing: no hold, no import.
@@ -412,7 +412,7 @@ test('a start cut short during the import leaves a root without the marker, whic
     claimDemoFolder(w.places.data);
     // The import made the root and the desktop ended before marking it; its request names the placing.
     mkdirSync(join(w.places.harnessRoot, 'projects'), { recursive: true });
-    requestStartOver(w.request, 4242, false, true);
+    requestStartOver(w.request, 4242, true, true);
     carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, () => false), runtimeAlive: () => false, exists: existsSync, marked: hasDemoMarker });
     assert.equal(existsSync(w.places.harnessRoot), false);
     assert.equal(existsSync(w.places.data), false);
@@ -460,4 +460,24 @@ test('a placing that fails before it settles is ended as failed, never left wait
     });
     assert.equal(outcome, 'made');
     assert.deepEqual(order, ['clear', 'release', 'prepareLive']);
+});
+
+test('a second start while another run places the demo carries nothing out and prepares nothing', (t) => {
+    const w = world(t);
+    claimDemoFolder(w.places.data);
+    mkdirSync(join(w.places.harnessRoot, 'projects'), { recursive: true });
+    requestStartOver(w.request, 4242, true, true);
+    const text = readFileSync(w.request, 'utf8');
+    assert.ok(leftByAMaking(text) && leftByAPlacing(text));
+    // The placing run is alive: the carry-out leaves everything, without waiting, and the start prepares nothing.
+    let waited = 0;
+    carryOutStartOver({ ...carryOutOnDisk(w.request, w.places, (pid) => pid === 4242), runtimeAlive: () => false, wait: () => void (waited += 1), exists: existsSync, marked: hasDemoMarker });
+    assert.equal(waited, 0);
+    assert.ok(existsSync(w.request) && existsSync(w.places.harnessRoot));
+    assert.equal(placingInFlight(text, 1, (pid) => pid === 4242), true);
+    // Not while that run has gone, nor for the run itself, nor for a request that names no placing.
+    assert.equal(placingInFlight(text, 1, () => false), false);
+    assert.equal(placingInFlight(text, 4242, () => true), false);
+    assert.equal(placingInFlight(['pid=4242', 'making', ''].join('\n'), 1, () => true), false);
+    assert.equal(placingInFlight(null, 1, () => true), false);
 });

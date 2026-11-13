@@ -76,6 +76,17 @@ export function dropStartOver(file: string, log: Pick<Logger, 'warn'>): void {
     }
 }
 
+/**
+ * Whether another run, still running, is placing the prepared demo: the request it left names a placing and a process
+ * that is not this one and runs. A second start in those seconds writes nothing into the demo: the import would place
+ * over it or move it aside.
+ */
+export function placingInFlight(text: string | null, self: number, running: (pid: number) => boolean): boolean {
+    if (text === null || !leftByAPlacing(text)) return false;
+    const asking = askedBy(text);
+    return asking !== null && asking !== self && running(asking);
+}
+
 /** The process that asked, or null when the text does not say. */
 export function askedBy(text: string): number | null {
     const found = /^pid=(\d+)$/m.exec(text);

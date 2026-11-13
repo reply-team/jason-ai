@@ -15,7 +15,7 @@ import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
 import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
-import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
+import { carriedOf, isOtherCopy, removeOtherCopies, type Carried } from './bundle-copy.ts';
 import { cliAt } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
@@ -37,16 +37,17 @@ import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
-import { fileLogger, limitsFrom, type Logger } from './log.ts';
+import { fileLines, fileLogger, limitsFrom, LogHold, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, requestStartOver } from './demo-over.ts';
+import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, placingInFlight, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
 import { processIsRunning } from './own-runtime.ts';
 import { applyMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterRun, keepFirstStart, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
-import { claimDemoFolder, hasDemoMarker } from './demo-folders.ts';
+import { claimDemoFolder, hasDemoMarker, markPlacedFolder } from './demo-folders.ts';
+import { beginPlacing, clearPlaced, demoArchiveOf, placingPlan, placingWords, settlePlacing, writeSampleWhole, type PlacingOutcome, type PlacingPlan } from './demo-archive.ts';
 import { openDemoDirectory, prepareDemo, writeDemoRoute } from './demo-start.ts';
 import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
@@ -193,9 +194,10 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
 /** Brings the window forward; the desk's own once it is open. */
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
-/** The desktop's log before run() makes its own, under the data directory this start was given. */
+/** The desktop's log before run() makes its own, under the data directory this start was given; held while the demo is placed. */
 function startLog(): Logger {
-    return fileLogger(desktopPaths(dataDirectory(process.env, homedir())).logs);
+    const logs = desktopPaths(dataDirectory(process.env, homedir())).logs;
+    return logHold.logger(() => fileLines(logs));
 }
 
 /**
@@ -240,12 +242,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
-    const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
+    // Held while the prepared demo is placed (`demo-archive.ts`); its file is opened, and the limits read, once it is let go.
+    const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(paths.installationSettings))));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
     // What this start carries (`bundle-copy.ts`): an AppImage's copy under <data>/desktop/bundle/<version>/, the bundle
-    // where it is installed for anything else; with no copy, nothing that outlasts the run names the mount's jason.
-    const carried = carriedOf({ form, packaged, version, bundles: paths.bundle });
+    // where it is installed for anything else; with no copy, nothing that outlasts the run names the mount's jason. A start
+    // that places the prepared demo made it already, for the import.
+    const carried = carriedAtStart ?? carriedOf({ form, packaged, version, bundles: paths.bundle });
     if (carried.failure !== null) log.error('bundle_copy_failed', { Differs: carried.failure.differs });
     const { bundle, uncopied } = carried;
     log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
@@ -326,12 +330,15 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // The stop is waited for at most `demoStopCapMs`; the quit then goes on all the same.
     holdDemoQuit(app, runOn.mode, {
         stop: async () => {
+            // An import still placing the demo is let end first: the runtime it starts is then the one stopped.
+            if (placement !== null) await placement;
             const outcome = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
             log.info('demo_runtime_stopped', { Outcome: outcome.kind });
         },
         timedOut: () => log.warn('demo_runtime_stop_timed_out', {}),
     });
     if (runOn.unopened !== null) log.warn('demo_unopened', {});
+    if (demoPlacing.kind === 'make') log.warn('demo_archive_unplaced', { Step: demoPlacing.step, Code: 'none' });
     if (startOverNotCarriedOut !== null) log.warn('demo_start_over_not_carried_out', { Cause: startOverNotCarriedOut });
     // The count and the re-pair loop begin at the first pairing that succeeds: the start's, or a Reload's after a start
     // that failed.
@@ -676,7 +683,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         void bridges.close();
     });
 
-    await showStarting(window, 'Starting Jason…', false);
+    await showStarting(window, placement !== null ? placingWords : 'Starting Jason…', false);
     if (uncopied !== null) {
         startInFlight = false;
         desk.notStarted();
@@ -691,6 +698,29 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     }
 
     try {
+        // The prepared demo, placed from the first instant of this start, is waited for before the runtime is started; a
+        // placing that failed has been taken away and the demo prepared for its sample to be made, as before.
+        if (placement !== null) {
+            setPreparing(true);
+            try {
+                await settlePlacing(placement, {
+                    log,
+                    release: () => logHold.release(),
+                    markRoot: () => markPlacedFolder(demoWhere.harnessRoot),
+                    seal: () => writeSampleWhole(demoWhere.data),
+                    drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),
+                    runtimeAlive: () => demoRuntimeAlive(desktopPaths(demoWhere.data).runFile),
+                    stopRuntime: async () => {
+                        const stopped = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
+                        return stopped.kind === 'stopped' || stopped.kind === 'none';
+                    },
+                    clear: () => clearPlaced(demoWhere),
+                    prepareLive: () => prepareLive(demoWhere.data),
+                });
+            } finally {
+                setPreparing(false);
+            }
+        }
         const started = await startInstallation({
             cli,
             paths,
@@ -820,6 +850,17 @@ let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
 let personsOwn: PersonsOwn | undefined;
 let demoWhere!: DemoPlaces;
+/**
+ * The prepared demo (`demo-archive.ts`): what this start does with the archive the application carries, decided by
+ * `chooseInstallation`; the import, once begun by `startDesktop`; what it carries, made for the import; and the demo's
+ * preparation for a sample made at the start, which a placing that failed falls back to.
+ */
+let demoPlacing: PlacingPlan = { kind: 'none' };
+let placement: Promise<PlacingOutcome> | null = null;
+let carriedAtStart: Carried | null = null;
+let prepareLive: (demo: string) => void = () => undefined;
+/** The desktop's log, held while the prepared demo is placed: `<data>/logs/` is a part an import places. */
+const logHold = new LogHold();
 /** Why the start over the run before asked for was not carried out at this start, as a code; null when nothing was refused. */
 let startOverNotCarriedOut: string | null = null;
 let installationWasNew!: boolean;
@@ -878,20 +919,29 @@ function chooseInstallation(installerStart: boolean): void {
             }
         }
     }
+    // The demo's start-up order in one place (`demo-start.ts`): the provider and its route, then the fixed settings. It runs
+    // after the directory is made and before any runtime start, and a step that fails makes this run the person's own.
+    prepareLive = (demo) =>
+        prepareDemo(demo, {
+            harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))),
+            place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
+            route: writeDemoRoute,
+            fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+            runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),
+        });
+    // A demo that holds nothing yet is placed from the archive the application carries, when it is fresh, rather than made
+    // (`demo-archive.ts`): it is then not prepared here, since the import moves aside what it finds, its harness root
+    // included, which the import makes.
+    // A second start while another run places the demo prepares nothing either; it loses the instance lock and quits.
+    const placingElsewhere = placingInFlight(readText(desktopPaths(personDirectory).demoStartOver), process.pid, processIsRunning);
+    demoPlacing =
+        readMode(desktopPaths(personDirectory).mode) === 'demo' && !installerStart ? placingPlan({ archive: demoArchiveOf(bundleDirectory()), places: demoWhere, now: new Date() }) : { kind: 'none' };
     runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
         open: openDemoDirectory,
-        // The demo's start-up order in one place (`demo-start.ts`): the provider and its route, then the fixed settings. It runs
-        // after the directory is made and before any runtime start, and a step that fails makes this run the person's own.
-        prepare: (demo) =>
-            prepareDemo(demo, {
-                harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))),
-                place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
-                route: writeDemoRoute,
-                fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
-                runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),
-            }),
+        prepare: (demo) => (demoPlacing.kind === 'place' || placingElsewhere ? undefined : prepareLive(demo)),
         keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
     });
+    if (runOn.mode !== 'demo') demoPlacing = { kind: 'none' };
     if (refused && runOn.mode === 'live') runOn = { ...runOn, unopened: demoUnopened };
     // The person's own directories, which a demo run's chat refuses whole: read while the person's variables still stand.
     personsOwn = personsOwnOf(runOn, () => personHarness);
@@ -917,7 +967,6 @@ function startDesktop(): void {
     const stoppingRuntime = uninstalling === null && stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
     chooseInstallation(uninstalling !== null || stoppingRuntime);
     keepElectronUnderData();
-    const early = startLog();
     if (uninstalling !== null) {
         // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
         // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
@@ -930,6 +979,10 @@ function startDesktop(): void {
     } else if (!app.requestSingleInstanceLock(fromArgs.kind === 'link' ? { link: fromArgs.raw } : undefined)) {
         app.quit();
     } else {
+        // The prepared demo is placed from here, the first instant this start is the only one, beside the window's own
+        // start and before this start's log is opened (`demo-archive.ts`).
+        placement = beginDemoPlacement();
+        const early = startLog();
         // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray. A second
         // start's link comes in its additionalData, which Electron passes as it was given; its argv may be reordered or
         // carry what Chromium added (electron.d.ts, `second-instance`).
@@ -950,4 +1003,28 @@ function startDesktop(): void {
         app.on('window-all-closed', () => app.quit());
         void app.whenReady().then(() => run(links, installationWasNew));
     }
+}
+
+/**
+ * Begins `jason import` of the prepared demo when this start places it (`placingPlan`), with the jason this start carries
+ * (on an AppImage its copy, made here for the import) on the demo's data directory. A start whose jason is not carried
+ * answers a failed placing at once; it then shows why it cannot start, as before.
+ */
+function beginDemoPlacement(): Promise<PlacingOutcome> | null {
+    if (demoPlacing.kind !== 'place') return null;
+    const form = linuxForm();
+    const packaged = bundleDirectory();
+    const version = bundleVersion(packaged);
+    carriedAtStart = carriedOf({ form, packaged, version, bundles: desktopPaths(runOn.data).bundle });
+    if (carriedAtStart.uncopied !== null || version === null) return Promise.resolve({ kind: 'failed', step: 'executable', code: 'none' });
+    const env = withoutMount(withPath(process.env, process.env.PATH ?? ''), mountOf(form, process.env));
+    return beginPlacing({
+        cli: cliAt(join(carriedAtStart.bundle, process.platform === 'win32' ? 'jason.exe' : 'jason'), env),
+        archive: demoPlacing.archive,
+        places: demoWhere,
+        // A making's request that names a placing: a second start while it runs carries nothing out (`carryOutStartOver`)
+        // and prepares nothing (`placingInFlight`); a next start after a run cut short starts the demo over.
+        request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true, true),
+        hold: () => logHold.hold(),
+    });
 }
