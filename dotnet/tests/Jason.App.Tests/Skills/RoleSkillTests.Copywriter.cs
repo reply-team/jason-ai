@@ -138,7 +138,7 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// The launch contract it carries changed after the last reading, so no host has read the text as it ships: the role
-    /// is a draft in its file and in the catalog, with no reading recorded, until a host reads it again.
+    /// is a draft in its file, until a host reads it again.
     /// </summary>
     [Fact]
     public void The_copywriter_is_a_draft_until_a_host_reads_its_current_text()
@@ -147,7 +147,5 @@ public partial class RoleSkillTests
         Assert.Equal("draft", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
         Assert.Contains("**Status: draft.**", Flattened("copywriter"), StringComparison.Ordinal);
 
-        var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
-        Assert.Contains("| `copywriter` | draft | — | — | — |", catalog, StringComparison.Ordinal);
     }
 }

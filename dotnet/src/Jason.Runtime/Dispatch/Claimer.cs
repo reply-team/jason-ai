@@ -582,9 +582,10 @@ public sealed class Claimer(
         {
             // A question nobody has answered yet, about this item. It is left exactly as it is: asking the same
             // person the same thing twice is not an improvement, and a second pending row is one the database
-            // would refuse anyway. Whether its subject still matches is not asked here, because it cannot have
-            // stopped matching — a pending row sits on an item that is awaiting_approval, and such an item is
-            // never claimed, so nothing could have edited the work since. Reaching here at all means something
+            // would refuse anyway. Whether its subject still matches is not asked here: a pending row sits on an
+            // item that is awaiting_approval, which is never claimed, and an edit of that item's input withdraws
+            // the question in the same save that hands the item back to the queue, so the claim meets such an
+            // item with no live decision and asks about what it now says. Reaching here at all means something
             // let the item back into the queue with the decision still open, and the honest answer to that is to
             // put it back where it was waiting.
             ApprovalGate.Wait(db, journal, item, now);

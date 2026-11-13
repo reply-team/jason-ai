@@ -48,6 +48,7 @@ const day = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 export type Route =
     | { screen: 'attention'; kind?: 'approvals' | 'questions'; id?: string; decided?: true }
     | { screen: 'system' }
+    | { screen: 'accounts' }
     | { screen: 'settings' }
     | { screen: 'chat' }
     | { screen: 'workitems'; tab: Tab; id?: string; filters: WorkItemFilters }
@@ -85,6 +86,7 @@ export function parseRoute(hash: string): Route {
     const [path = '', query = ''] = hash.replace(/^#/, '').split('?');
     const segments = path.split('/').filter((s) => s.length > 0);
     if (segments[0] === 'system') return { screen: 'system' };
+    if (segments[0] === 'accounts') return { screen: 'accounts' };
     if (segments[0] === 'settings') return { screen: 'settings' };
     if (segments[0] === 'chat') return { screen: 'chat' };
     if (segments[0] === 'workitems') return workItems(segments.slice(1), query);
@@ -244,6 +246,7 @@ function decode(segment: string): string | null {
 
 export function href(route: Route): string {
     if (route.screen === 'system') return '#/system';
+    if (route.screen === 'accounts') return '#/accounts';
     if (route.screen === 'settings') return '#/settings';
     if (route.screen === 'chat') return '#/chat';
     if (route.screen === 'workitems') {

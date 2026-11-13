@@ -28,7 +28,7 @@ public sealed class OperationDescribeService(JasonDbContext db, RouteRegistry ro
         var snapshot = plugins.Snapshot;
         // What is described is the plugin the work would reach: a campaign's read on request goes where its searches go.
         var routedAs = AudienceReadService.RoutedAs(contract.Id);
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, routedAs) is not { } resolution)
+        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, routedAs, channel: null) is not { } resolution)
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,

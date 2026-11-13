@@ -63,7 +63,8 @@ link that leaves it opens in the system browser, and only when it is `https:`.
 ## What you see
 
 The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
-asks "Who do you want to reach?". What you type there starts a set-up chat on the AI you connected, about no campaign
+asks "Who do you want to reach?" and says under it that this interface is optional, since everything there can also be done
+from a terminal with your AI, through Jason's CLI and API. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
@@ -77,7 +78,7 @@ shows before anything is typed and what you send waits, while the window is open
 - The **Feed**, the sidebar's first item, is the desktop's main chat (below).
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System and Settings, open in a page panel of the same
+- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light; one that
@@ -163,6 +164,11 @@ lists each key and each card's grant.
   Codex, ends it with Codex's own words), and on a turn on a key the exact key is replaced by `[key]` in every line of text and every
   step the host says, and a host's error text also loses the key's first six and last four characters and any token
   shaped as a provider's key, before the page shows it or the conversation keeps it.
+- **The model list.** A chat's model menu starts with "Default (recommended)", which passes no model, so the host chooses
+  and a new chat starts there. Claude Code's entries follow with a name to read each ("Opus (latest)", "Sonnet (latest)"),
+  while the alias is what the host is given and the version it stands for is the provider's to move. Codex's list is
+  asked of Codex at most once a day; Claude Code documents no way to list its models without a turn, so its list is the
+  desktop's own. A chat that chose a model before keeps it.
 - **Reply.** Signed in with `reply auth login`, or with a key on standard input that only the Reply CLI keeps, then the
   plugin installed and, only where you have set no default route, wired as the default. A card says "configured" when the
   runtime accepted it, never "connected". What the desktop tells Reply about itself is one label in the User-Agent of
@@ -199,6 +205,8 @@ lists each key and each card's grant.
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
+  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts,
+  beside the notification channels as the runtime reports them; see [the browser UI](ui.md#accounts).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 

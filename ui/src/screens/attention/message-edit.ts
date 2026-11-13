@@ -1,0 +1,155 @@
+import { ApiError, type Api } from '../../api/client';
+import type { Approval, ApprovalSummary, Page, WorkItem } from '../../api/types';
+
+/** The two operations that put a person text in front of an approver: a first message, and a reply in a thread. */
+export const SENDS = 'message.send';
+export const REPLIES = 'conversation.reply';
+export const isMessage = (operation: string): boolean => operation === SENDS || operation === REPLIES;
+
+const record = (value: unknown): Record<string, unknown> | null =>
+    value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+
+/** The words of a message as the arguments carry them. An absent field and a null one are the same: no text. */
+export type Words = { subject: string | null; body: string | null; compose: string | null };
+
+/**
+ * A first message keeps its words in args.message (a subject, a body, how it is composed); a reply keeps its text in
+ * args.body and is always final text, with no subject of its own.
+ */
+export function wordsOf(args: unknown, operation: string = SENDS): Words {
+    if (operation === REPLIES) return { subject: null, body: text(record(args)?.['body']), compose: null };
+    const message = record(record(args)?.['message']);
+    return { subject: text(message?.['subject']), body: text(message?.['body']), compose: text(message?.['compose']) };
+}
+
+/** What the runtime approved: the arguments inside the approval subject. */
+export const approvedArgs = (approval: Approval): unknown => record(record(approval.subject['input'])?.['args']);
+
+/** What would be sent now: the arguments the work item holds. */
+export const heldArgs = (item: WorkItem): unknown => item.context['input'];
+
+/** The same JSON value: objects by their members whatever the order of the keys, arrays by position. */
+export function sameDocument(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (Array.isArray(a) || Array.isArray(b)) {
+        return (
+            Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameDocument(x, b[i]))
+        );
+    }
+    const left = record(a);
+    const right = record(b);
+    if (!left || !right) return false;
+    const keys = Object.keys(left);
+    return (
+        keys.length === Object.keys(right).length && keys.every((k) => k in right && sameDocument(left[k], right[k]))
+    );
+}
+
+/**
+ * Whether the work item no longer holds what the approval was asked about. The approval is of the whole call: its
+ * subject carries the arguments the runtime composed from the item (it copies the item input as it stands, adding
+ * nothing to it and leaving nothing out), so the two documents are compared whole, deep and without regard to the order
+ * of keys; any difference, in the text, the sender, the channel, the time it may go or a reply's thread, is a change
+ * of what a person would send. Two equal documents are the same JSON in both places, so they cannot compare as
+ * different. The person is the item's own contact, which the arguments do not hold, and is compared by its identifier.
+ */
+export function isStale(approval: Approval, item: WorkItem): boolean {
+    if (!isMessage(approval.operation)) return false;
+    if (!sameDocument(approvedArgs(approval) ?? {}, heldArgs(item) ?? {})) return true;
+    const contacts = record(approval.subject['input'])?.['contacts'];
+    const asked = Array.isArray(contacts) ? text(record(contacts[0])?.['id']) : null;
+    return asked !== null && item.contact_id !== undefined && item.contact_id !== asked;
+}
+
+/** A pending message written as text can be edited; a template cannot, and neither can an approval already decided. */
+export function editable(approval: Approval): boolean {
+    if (approval.status !== 'pending' || !isMessage(approval.operation)) return false;
+    const words = wordsOf(approvedArgs(approval), approval.operation);
+    return words.body !== null && words.compose !== 'template';
+}
+
+/** Whether the message has a subject to edit: an email does, a LinkedIn message and a reply do not. */
+export function hasSubject(args: unknown, operation: string = SENDS): boolean {
+    if (operation === REPLIES) return false;
+    const message = record(record(args)?.['message']);
+    return message !== null && ('subject' in message || message['format'] === 'email');
+}
+
+export const EDIT_REASON = 'Message text edited on the approval card.';
+
+type Patch = { work_item_id: string; set: { input: Record<string, unknown> }; reason: string };
+
+/**
+ * The patch that saves an edit: the item arguments exactly as they are now, with the text replaced and nothing else
+ * (a first message: its subject and body; a reply: its body). The caller passes the arguments just read, so no other
+ * argument goes back changed.
+ */
+export function editPatch(operation: string, workItemId: string, held: unknown, subject: string, body: string): Patch {
+    const args = record(held);
+    if (!args) throw new Error('The work item holds no message to edit.');
+    if (operation === REPLIES)
+        return { work_item_id: workItemId, set: { input: { ...args, body } }, reason: EDIT_REASON };
+    const message = record(args['message']);
+    if (!message) throw new Error('The work item holds no message to edit.');
+    const next = { ...message, body, ...(hasSubject(held, operation) ? { subject } : {}) };
+    return { work_item_id: workItemId, set: { input: { ...args, message: next } }, reason: EDIT_REASON };
+}
+
+/** A sentence for what the runtime said, or for what went wrong; the runtime own words when it has them. */
+export const sentence = (error: unknown): string => (error instanceof ApiError ? error.message : String(error));
+
+export const readItem = (api: Api, id: string): Promise<WorkItem> =>
+    api.call<WorkItem>('workitem.get', { work_item_id: id });
+
+/** The text moved under the editor: what the item holds now is not what the editor opened with. */
+export class TextMoved extends Error {
+    constructor(public readonly fresh: WorkItem) {
+        super('The text changed while you were editing; here is the new text.');
+    }
+}
+
+/**
+ * Reads the item again and, if its text is still the text the editor opened with, writes the edit over the arguments
+ * just read. If the text moved meanwhile (a chat edited it), nothing is written and the fresh item comes back in the
+ * error, so a person never replaces words they have not seen.
+ */
+export async function saveEdit(
+    api: Api,
+    operation: string,
+    id: string,
+    subject: string,
+    body: string,
+    opened: Words,
+): Promise<WorkItem> {
+    const item = await readItem(api, id);
+    const now = wordsOf(heldArgs(item), operation);
+    if (now.subject !== opened.subject || now.body !== opened.body) throw new TextMoved(item);
+    return api.call<WorkItem>('workitem.update', editPatch(operation, id, heldArgs(item), subject, body), 'write');
+}
+
+/**
+ * After a save the runtime supersedes the pending approval and asks again under the new text. Asks for the item
+ * pending approvals until one other than the old one shows, up to `tries` times, `delayMs` apart; null when none came.
+ */
+export async function awaitNewApproval(
+    api: Api,
+    workItemId: string,
+    oldId: string,
+    {
+        tries = 30,
+        delayMs = 1000,
+        stopped = () => false,
+    }: { tries?: number; delayMs?: number; stopped?: () => boolean } = {},
+): Promise<string | null> {
+    for (let attempt = 0; attempt < tries && !stopped(); attempt++) {
+        const page = await api.call<Page<ApprovalSummary>>('approval.list', {
+            work_item_id: workItemId,
+            statuses: ['pending'],
+        });
+        const fresh = page.items.find((a) => a.id !== oldId);
+        if (fresh) return fresh.id;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    return null;
+}

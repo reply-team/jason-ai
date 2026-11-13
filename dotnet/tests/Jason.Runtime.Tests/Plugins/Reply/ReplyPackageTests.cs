@@ -187,6 +187,21 @@ public class ReplyPackageTests
         Regex.IsMatch(entry, "^((0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)) (sha256:[0-9a-f]{64})$", RegexOptions.CultureInvariant);
 
     [Fact]
+    [Critical(Family.R1, "the desktop's reply-cli minimum is at least the package's")]
+    public void The_desktop_asks_for_a_reply_cli_at_least_the_one_the_package_needs()
+    {
+        // The desktop offers reply-cli's update below a version at least the one this package needs; one that asked for
+        // less would call Reply ready while the package, and so every Reply operation, is unavailable. It may ask for more
+        // where an act of its own needs a later reply-cli.
+        var setup = File.ReadAllText(Path.Combine(Documentation.Workflows.RepositoryRoot(), "desktop", "src", "setup-model.ts"));
+        var desktop = System.Text.RegularExpressions.Regex.Match(setup, @"export const replyMinimumVersion = '(?<version>[0-9]+\.[0-9]+\.[0-9]+)';");
+        Assert.True(desktop.Success, "desktop/src/setup-model.ts declares no replyMinimumVersion of the form 'X.Y.Z'.");
+        Assert.True(
+            Version.Parse(desktop.Groups["version"].Value) >= Version.Parse(ReplyCliRelease.Version),
+            $"The desktop asks for reply-cli {desktop.Groups["version"].Value}, less than the {ReplyCliRelease.Version} this package needs.");
+    }
+
+    [Fact]
     public async Task The_program_it_declares_resolves_to_the_stand_in_and_answers_the_version_it_asks_for()
     {
         await using var api = await ReplyPlugins.StartAsync(Ct);
@@ -201,15 +216,6 @@ public class ReplyPackageTests
         var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md"));
         Assert.Contains($"**Version {ReplyCliRelease.Version} or newer.**", readme, StringComparison.Ordinal);
 
-        // The desktop offers reply-cli's update below a version at least the one this package needs; one that asked for
-        // less would call Reply ready while the package, and so every Reply operation, is unavailable. It may ask for more
-        // where an act of its own needs a later reply-cli.
-        var setup = File.ReadAllText(Path.Combine(Documentation.Workflows.RepositoryRoot(), "desktop", "src", "setup-model.ts"));
-        var desktop = System.Text.RegularExpressions.Regex.Match(setup, @"export const replyMinimumVersion = '(?<version>[0-9]+\.[0-9]+\.[0-9]+)';");
-        Assert.True(desktop.Success, "desktop/src/setup-model.ts declares no replyMinimumVersion of the form 'X.Y.Z'.");
-        Assert.True(
-            Version.Parse(desktop.Groups["version"].Value) >= Version.Parse(ReplyCliRelease.Version),
-            $"The desktop asks for reply-cli {desktop.Groups["version"].Value}, less than the {ReplyCliRelease.Version} this package needs.");
         Assert.NotNull(executable.Version);
         Assert.NotNull(executable.MinVersion);
         Assert.True(Version.Parse(executable.Version) >= Version.Parse(executable.MinVersion));

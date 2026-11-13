@@ -152,14 +152,14 @@ public sealed class ContactThreadService(JasonDbContext db, PluginRegistry plugi
     {
         foreach (var campaign in snapshot.Campaigns.Keys.Order(StringComparer.Ordinal))
         {
-            if (RouteResolver.Resolve(snapshot, campaign, operation) is { } resolution)
+            if (RouteResolver.Resolve(snapshot, campaign, operation, channel: null) is { } resolution)
             {
                 yield return resolution.Route;
             }
         }
 
         // A campaign id no route names resolves to the global routes.
-        if (RouteResolver.Resolve(snapshot, string.Empty, operation) is { } global)
+        if (RouteResolver.Resolve(snapshot, string.Empty, operation, channel: null) is { } global)
         {
             yield return global.Route;
         }

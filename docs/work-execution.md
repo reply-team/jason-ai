@@ -68,7 +68,9 @@ as `input_invalid` on the attempt rather than as a refused request.
 
 `workitem.update` re-reads the arguments only when the patch names the reserved key — `set` writing
 `input`, or `unset` naming it — and measures them against the item's **own** operation, which is not
-patchable. An `ai_role` item is untouched by all of this: its context is a brief, and nothing in the
+patchable. A patch that changes the arguments of an item awaiting a person's approval withdraws that
+question, and the claim asks again about the new arguments ("Approvals" below); a refused patch changes
+nothing. An `ai_role` item is untouched by all of this: its context is a brief, and nothing in the
 runtime reads the meaning of a brief.
 
 ## Creating work twice
@@ -320,6 +322,17 @@ attempt that asked it and whose answer wakes the review that carries the work on
   work that can never run is the one row that would make `approval.list` untrue.
 - **a second decision on the same approval** writes nothing and answers `approval_not_pending`: both
   rows are moved in one transaction, each guarded by the status it was read at.
+- **an edit of the parked item's input** withdraws the question. A `workitem.update` whose patch leaves
+  `context.input` different from what the item held supersedes the pending approval, with the editor as its actor and
+  `input_changed` as its reason, and moves the item from `awaiting_approval` to `created`, in the save that writes the
+  patch; an edit that leaves the input as it was touches nothing of the approval. Nothing is asked at the update: Jason
+  asks again when it next takes the work, at once where dispatch runs and when the campaign runs again where it is
+  paused, under what the item now says and with the reason `approval_required` that any first question carries. A
+  standing approval or the campaign's allowance never lets such an item go: they answer only work nobody was ever asked
+  about. An approval or a rejection that names the withdrawn question afterwards answers `approval_not_pending` and
+  approves nothing, whichever request arrived first, by the same guards: an edit that read the item before an approval
+  committed writes nothing and answers `concurrent_update`, and sent again it meets work that is approved and has not
+  run, whose approval the next claim supersedes as above.
 
 Journal: `workitem_awaiting_approval`, `approval_requested`, `approval_approved`, `approval_rejected`,
 `approval_superseded`, `approval_cancelled`, `approval_standing_applied`. Those lines carry identifiers only — the approval, the

@@ -5,11 +5,17 @@ namespace Jason.Runtime.Routing;
 /// <summary>
 /// The precedence, and the one rule that surprises people:
 /// <code>
-/// campaign operation override → campaign default → global operation override → global default
+/// campaign operation and channel → campaign operation override → campaign default
+///   → global operation and channel → global operation override → global default
 /// </code>
 /// <para>
-/// <b>Masking is exact.</b> A campaign default hides <i>every</i> global operation override for that campaign;
-/// keeping one global exception inside such a campaign takes an explicit campaign operation override. The
+/// A channel level answers only a call that names a channel: the caller reads it from the argument the operation's
+/// document names (<c>route_channel_argument</c>), and a call that names none — an operation that names no such
+/// argument, or a filter left out — is routed by its operation alone, never by a channel route.
+/// </para>
+/// <para>
+/// <b>Masking is exact.</b> A campaign default hides <i>every</i> global route for that campaign, the channel routes
+/// included; keeping one global exception inside such a campaign takes an explicit campaign route. The
 /// alternative — merging the levels — would mean a campaign that named its provider could still have one
 /// operation quietly sent somewhere else, which is precisely the surprise routing exists to prevent. Bindings
 /// are never merged either: the level that wins brings its own, or none.
@@ -22,8 +28,12 @@ namespace Jason.Runtime.Routing;
 /// </summary>
 public static class RouteResolver
 {
-    /// <summary>The route that wins for this campaign and operation, and the level it won at; null when nothing routes it.</summary>
-    public static Resolution? Resolve(RouteSnapshot snapshot, string campaignId, string operation)
+    /// <summary>
+    /// The route that wins for this campaign, operation and channel, and the level it won at; null when nothing routes it.
+    /// <paramref name="channel"/> is the channel the call names for its route, and null where it names none. It is
+    /// required, so every caller says which: a channel route is never taken by a call that forgot to name its channel.
+    /// </summary>
+    public static Resolution? Resolve(RouteSnapshot snapshot, string campaignId, string operation, string? channel)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(campaignId);
@@ -31,6 +41,11 @@ public static class RouteResolver
 
         if (snapshot.Campaigns.TryGetValue(campaignId, out var campaign))
         {
+            if (campaign.ChannelRoute(operation, channel) is { } campaignChannel)
+            {
+                return new Resolution(campaignChannel, RouteScope.CampaignChannel);
+            }
+
             if (campaign.Operations.TryGetValue(operation, out var campaignOperation))
             {
                 return new Resolution(campaignOperation, RouteScope.CampaignOperation);
@@ -40,6 +55,11 @@ public static class RouteResolver
             {
                 return new Resolution(campaignDefault, RouteScope.CampaignDefault);
             }
+        }
+
+        if (snapshot.Global.ChannelRoute(operation, channel) is { } globalChannel)
+        {
+            return new Resolution(globalChannel, RouteScope.GlobalChannel);
         }
 
         if (snapshot.Global.Operations.TryGetValue(operation, out var globalOperation))
@@ -58,19 +78,25 @@ public static class RouteResolver
     /// campaign's route for the search's own operation, then each of the campaign's routes and each global one, in the
     /// order of precedence; and the operation's own route where none names them any more, which the claim then refuses as
     /// made elsewhere. A binding is found by its identity, so the one found is the very binding the search ran under.
+    /// <para>
+    /// A search names no channel, so its own two routes are resolved without one. The walk of every route includes the
+    /// channel routes, since a route that names the account is one wherever it sits: at each scope its channel routes
+    /// (operations ordinally, then channels ordinally, <see cref="RouteSet.ChannelRoutes"/>), its operation routes
+    /// (ordinally), then its default — the campaign's scope before the global one.
+    /// </para>
     /// </summary>
     public static Resolution? ForSearch(RouteSnapshot snapshot, string campaignId, string operation, string searchOperation, string pluginId, string? bindingIdentity)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(pluginId);
 
-        var own = Resolve(snapshot, campaignId, operation);
+        var own = Resolve(snapshot, campaignId, operation, channel: null);
         if (Names(own))
         {
             return own;
         }
 
-        if (Resolve(snapshot, campaignId, searchOperation) is { } searched && Names(searched))
+        if (Resolve(snapshot, campaignId, searchOperation, channel: null) is { } searched && Names(searched))
         {
             return searched;
         }
@@ -78,8 +104,10 @@ public static class RouteResolver
         var campaign = snapshot.Campaigns.TryGetValue(campaignId, out var held) ? held : RouteSet.Empty;
         IEnumerable<Resolution> every =
         [
+            .. campaign.ChannelRoutes.Select(entry => new Resolution(entry.Route, RouteScope.CampaignChannel)),
             .. campaign.Operations.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => new Resolution(entry.Value, RouteScope.CampaignOperation)),
             .. campaign.Default is { } campaignDefault ? [new Resolution(campaignDefault, RouteScope.CampaignDefault)] : Array.Empty<Resolution>(),
+            .. snapshot.Global.ChannelRoutes.Select(entry => new Resolution(entry.Route, RouteScope.GlobalChannel)),
             .. snapshot.Global.Operations.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry => new Resolution(entry.Value, RouteScope.GlobalOperation)),
             .. snapshot.Global.Default is { } globalDefault ? [new Resolution(globalDefault, RouteScope.GlobalDefault)] : Array.Empty<Resolution>(),
         ];

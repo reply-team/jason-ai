@@ -54,7 +54,7 @@ public sealed class RouteService(
 
         var routes = registry.Snapshot;
         var snapshot = plugins.Snapshot;
-        if (RouteResolver.Resolve(routes, campaign.PublicId, contract.Id) is not { } resolution)
+        if (RouteResolver.Resolve(routes, campaign.PublicId, contract.Id, channel: null) is not { } resolution)
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,
