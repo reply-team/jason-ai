@@ -9,9 +9,10 @@ namespace Jason.Cli.Session;
 
 /// <summary>
 /// The act behind <c>jason session open</c> with no item: a new terminal window at a folder the installation records, a
-/// campaign's, a project's or the harness root, running the person's own agent host or the system's plain shell, with no
-/// first input. Of the runtime it asks only reads — <c>campaign.get</c>, <c>project.get</c>, <c>system.info</c> and, when
-/// no program is named, <c>preference.list</c> — and it writes nothing there or into any folder.
+/// campaign's, a project's or the harness root, or at the folder the command runs in, running the person's own agent host
+/// or the system's plain shell, with no first input; the host may be asked to continue one of its own conversations
+/// instead of starting a new one. Of the runtime it asks only reads — <c>campaign.get</c>, <c>project.get</c>,
+/// <c>system.info</c> and, when no program is named, <c>preference.list</c> — and it writes nothing there or into any folder.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,11 +21,15 @@ namespace Jason.Cli.Session;
 /// the root; neither is the project of the folder the command runs in, found by its nearest marker as every verb that
 /// takes a project finds it (<see cref="WorkingFolder.FillProjectAsync"/>, said on stderr, never a campaign), else the
 /// root. The root is a place only when it is a folder with the root's marker. Nothing falls back to the home folder: a
-/// folder named and not recorded is said, never replaced by another.
+/// folder named and not recorded is said, never replaced by another. <c>--here</c> is the folder the command runs in, as
+/// it is: no marker is read there and no read of the runtime's names it, and it must be there.
 /// </para>
 /// <para>
 /// The program: <c>--host</c> names a host, else the preference <c>agent.interactive_host</c> does, else Claude Code, found
 /// on the search path as the item form finds it; <c>--shell</c> is the system's plain shell (<see cref="TerminalPlan.Shell"/>).
+/// <c>--resume</c> puts the host's own words and the conversation's id after its program
+/// (<see cref="AgentHosts.ResumeArguments"/>); a host with no such words is refused as soon as the host is known, before
+/// its program or a terminal is looked for.
 /// The terminal is the one the item form starts, through the same seam, so the data directory reaches it as it reaches
 /// the item form's: inherited on Windows and Linux, exported by the script on macOS.
 /// </para>
@@ -36,21 +41,57 @@ namespace Jason.Cli.Session;
 /// </remarks>
 public static class FolderSessionOpener
 {
-    /// <summary>Opens the session; <paramref name="host"/> null and <paramref name="shell"/> false mean the preference names the host.</summary>
-    public static async Task<int> OpenAsync(
-        CliEnvironment env, string? campaignId, string? project, AgentHostKind? host, bool shell, bool dryRun, bool human, CancellationToken cancellationToken)
+    /// <summary>
+    /// What the folder form was asked: the folder (<paramref name="CampaignId"/>, <paramref name="Project"/> or
+    /// <paramref name="Here"/>, at most one of them), the program (<paramref name="Host"/> null and <paramref name="Shell"/>
+    /// false mean the preference names the host) and the conversation the host continues, if any.
+    /// </summary>
+    public sealed record Request(string? CampaignId, string? Project, bool Here, AgentHostKind? Host, bool Shell, string? Resume);
+
+    /// <summary>The level the answer gives a session opened with <c>--here</c>, and the name macOS's script takes from it.</summary>
+    public const string HereLevel = "here";
+
+    /// <summary>Opens the session.</summary>
+    public static async Task<int> OpenAsync(CliEnvironment env, Request request, bool dryRun, bool human, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(request);
 
-        var (resolved, folder, scriptName) = await ResolveAsync(env, campaignId, project, cancellationToken).ConfigureAwait(false);
-        if (folder is null)
+        var host = request.Host;
+        if (host is { } given && CannotResume(env, request, given) is { } refusedAtOnce)
         {
-            return resolved;
+            return refusedAtOnce;
+        }
+
+        string level;
+        string path;
+        string scriptName;
+        string missing;
+        if (request.Here)
+        {
+            if (env.WorkingDirectory is not { Length: > 0 } working)
+            {
+                return Refuse(env, CliErrors.FolderMissing, "The folder this command runs in cannot be named, so nothing was started.");
+            }
+
+            (level, path, scriptName) = (HereLevel, working, HereLevel);
+            missing = $"The folder this command runs in, {working}, is not there, so nothing was started.";
+        }
+        else
+        {
+            var (resolved, folder, recordedName) = await ResolveAsync(env, request.CampaignId, request.Project, cancellationToken).ConfigureAwait(false);
+            if (folder is null)
+            {
+                return resolved;
+            }
+
+            (level, path, scriptName) = (SessionOpener.Level(folder.Level), folder.Path, recordedName);
+            missing = SessionOpener.Missing(folder);
         }
 
         IReadOnlyList<string>? program = null;
         string? hostWord = null;
-        if (!shell)
+        if (!request.Shell)
         {
             if (host is null)
             {
@@ -73,6 +114,11 @@ public static class FolderSessionOpener
                         CliErrors.HostUnknown,
                         $"The preference {SessionOpener.PreferenceKey} names '{word}', which this jason does not know as a host; it knows {AgentHosts.Vocabulary}. Nothing was started. {SessionOpener.ChooseAnother}");
                 }
+
+                if (CannotResume(env, request, host.Value) is { } refused)
+                {
+                    return refused;
+                }
             }
 
             hostWord = AgentHosts.Word(host.Value);
@@ -82,12 +128,12 @@ public static class FolderSessionOpener
                 return Refuse(env, CliErrors.HostNotFound, SessionOpener.NotFound(hostWord, AgentHosts.Of(host.Value).CommandWord, lookup));
             }
 
-            program = found;
+            program = request.Resume is { } id ? [.. found, .. AgentHosts.ResumeArguments(host.Value, id)!] : found;
         }
 
-        if (!Directory.Exists(folder.Path))
+        if (!Directory.Exists(path))
         {
-            return Refuse(env, CliErrors.FolderMissing, SessionOpener.Missing(folder));
+            return Refuse(env, CliErrors.FolderMissing, missing);
         }
 
         var terminals = env.Terminals;
@@ -97,10 +143,10 @@ public static class FolderSessionOpener
         var what = hostWord ?? "a shell";
         if (terminals is null || terminal is null)
         {
-            return Refuse(env, CliErrors.TerminalNotFound, $"No terminal was found to start {what} in, so nothing was started; in a terminal of your own, go to {folder.Path}.");
+            return Refuse(env, CliErrors.TerminalNotFound, $"No terminal was found to start {what} in, so nothing was started; in a terminal of your own, go to {path}.");
         }
 
-        if (shell)
+        if (request.Shell)
         {
             program = TerminalPlan.Shell(terminals.Platform, terminals.SystemDirectory, SessionOpener.Variable(env, "SHELL"));
             if (program is null)
@@ -109,17 +155,30 @@ public static class FolderSessionOpener
             }
         }
 
-        var launch = TerminalPlan.Compose(terminals.Platform, terminal, folder.Path, program!, scriptName, SessionOpener.DataDirectory(env));
+        var launch = TerminalPlan.Compose(terminals.Platform, terminal, path, program!, scriptName, SessionOpener.DataDirectory(env));
         if (!dryRun && !terminals.Start(launch, out var problem))
         {
             return Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
         }
 
+        var continuing = request.Resume is { } continued ? $", continuing its conversation {continued}" : string.Empty;
         env.Out.WriteLine(human
-            ? $"{(dryRun ? "Would start" : "Started")} {what} in {launch.Terminal} at {folder.Path}."
-            : Printed(folder, hostWord, launch, dryRun, program![0]));
+            ? $"{(dryRun ? "Would start" : "Started")} {what} in {launch.Terminal} at {path}{continuing}."
+            : Printed(level, path, hostWord, request.Resume, launch, dryRun, program![0]));
         return ExitCodes.Success;
     }
+
+    /// <summary>
+    /// The refusal of a resume the host has no words for, or null where nothing is to be resumed or the host has them:
+    /// decided as soon as the host is known, before its program or a terminal is looked for.
+    /// </summary>
+    private static int? CannotResume(CliEnvironment env, Request request, AgentHostKind host) =>
+        request.Resume is not null && AgentHosts.Of(host).ResumeWord is null
+            ? Refuse(
+                env,
+                CliErrors.HostCannotResume,
+                $"{AgentHosts.Word(host)} has no way this jason knows to continue one of its own conversations, so nothing was started; --resume is taken by {AgentHosts.ResumeVocabulary}.")
+            : null;
 
     /// <summary>
     /// The folder, by the reads the flags call for, and the name macOS's script takes from its level. A refusal the runtime
@@ -239,20 +298,26 @@ public static class FolderSessionOpener
 
     /// <summary>
     /// The answer: <c>program</c> is the program's path, as in the item form's answer (the shell's under <c>--shell</c>),
-    /// and <c>shell</c> says which of the two was started.
+    /// <c>shell</c> says which of the two was started, and <c>resume</c>, only where one was asked for, is the id of the
+    /// conversation the host continues.
     /// </summary>
-    private static string Printed(PromptFolder folder, string? host, TerminalLaunch launch, bool dryRun, string program)
+    private static string Printed(string level, string path, string? host, string? resume, TerminalLaunch launch, bool dryRun, string program)
     {
         var printed = new JsonObject
         {
             ["kind"] = "folder",
-            ["folder"] = new JsonObject { ["level"] = SessionOpener.Level(folder.Level), ["path"] = folder.Path },
+            ["folder"] = new JsonObject { ["level"] = level, ["path"] = path },
             ["host"] = host,
             ["shell"] = host is null,
             ["program"] = program,
-            ["terminal"] = launch.Terminal,
-            ["started"] = !dryRun,
         };
+        if (resume is not null)
+        {
+            printed["resume"] = resume;
+        }
+
+        printed["terminal"] = launch.Terminal;
+        printed["started"] = !dryRun;
         if (dryRun)
         {
             printed["argv"] = new JsonArray([.. launch.Argv.Select(word => (JsonNode?)JsonValue.Create(word))]);

@@ -247,10 +247,10 @@ public class VerbMapTests
         Assert.Equal(["open"], group.Subcommands.Select(command => command.Name));
 
         // Its two forms are these options and no others: an item's (--approval, --question) and a folder's (--campaign,
-        // --project, --host, --shell), with --dry-run and --human for both. A further option is a change of the declared
-        // exception and is made in the open, with its text in CliApp.
+        // --project, --here, --host, --shell, --resume), with --dry-run and --human for both. A further option is a change
+        // of the declared exception and is made in the open, with its text in CliApp.
         Assert.Equal(
-            ["--approval", "--question", "--campaign", "--project", "--host", "--shell", "--dry-run", "--human"],
+            ["--approval", "--question", "--campaign", "--project", "--here", "--host", "--shell", "--resume", "--dry-run", "--human"],
             group.Subcommands.Single().Options.Select(option => option.Name).Where(name => name.StartsWith("--", StringComparison.Ordinal)));
         Assert.DoesNotContain(
             typeof(Contracts.Api.Operations).GetFields().Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue()!),

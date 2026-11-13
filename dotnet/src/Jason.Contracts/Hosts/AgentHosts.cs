@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 
 namespace Jason.Contracts.Hosts;
@@ -38,6 +39,11 @@ public enum HomeMarkerKind
 /// (<c>jason session open</c>), or null where the host takes that prompt as its one positional word. Read from each
 /// host's own command-line reference; the table in <c>docs/execution-profiles.md</c> names the page and version.
 /// </param>
+/// <param name="ResumeWord">
+/// The word a conversation's id follows when a person's host is started to continue one of its own conversations
+/// (<c>jason session open --resume</c>), an option or a subcommand, or null where Jason knows no such word for the host,
+/// which then cannot be asked to. Read from each host's own <c>--help</c>.
+/// </param>
 public sealed record AgentHostFacts(
     AgentHostKind Kind,
     string CommandWord,
@@ -46,13 +52,14 @@ public sealed record AgentHostFacts(
     string WorkSkills,
     HostInstructionFile? Instructions,
     HomeMarkerKind MarkerKind = HomeMarkerKind.Directory,
-    string? InteractivePromptFlag = null);
+    string? InteractivePromptFlag = null,
+    string? ResumeWord = null);
 
 /// <summary>
 /// The one table of agent hosts: one row per <see cref="AgentHostKind"/>, held to the enum by tests and to the runtime's
 /// registrations by another, so a host is added as a value, a row and a registration together or not at all.
 /// </summary>
-public static class AgentHosts
+public static partial class AgentHosts
 {
     /// <summary>The person's memory file in every harness folder; every host's instructions reach it.</summary>
     public const string MemoryFile = "AGENTS.md";
@@ -60,11 +67,13 @@ public static class AgentHosts
     /// <summary>Every host, in the order of the enum.</summary>
     public static IReadOnlyList<AgentHostFacts> All { get; } =
     [
-        new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile), HomeMarkerKind.Directory),
+        // Claude Code continues a conversation by its session id after --resume, and Codex by its thread id after its resume
+        // subcommand; each as its own --help says.
+        new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile), HomeMarkerKind.Directory, ResumeWord: "--resume"),
 
         // Codex keeps its sign-in and settings in ~/.codex and reads skills from ~/.agents/skills and from the
         // .agents/skills folder of the directory it runs in; it reads AGENTS.md itself, so it needs no import file.
-        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory),
+        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory, ResumeWord: "resume"),
         new(AgentHostKind.CopilotCli, "copilot", ".copilot/config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File, "-i"),
         new(AgentHostKind.CursorCli, "agent", ".cursor/cli-config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File),
 
@@ -83,6 +92,10 @@ public static class AgentHosts
 
     /// <summary>The words a caller may send, in the order of the enum, for a refusal to name.</summary>
     public static string Vocabulary { get; } = string.Join(", ", Enum.GetValues<AgentHostKind>().Select(Word));
+
+    /// <summary>The words of the hosts that can continue a conversation by its id, in the order of the enum, for a refusal to name.</summary>
+    public static string ResumeVocabulary { get; } =
+        string.Join(", ", Enum.GetValues<AgentHostKind>().Where(kind => Of(kind).ResumeWord is not null).Select(Word));
 
     /// <summary>The row of <paramref name="kind"/>.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The kind has no row: the table and the enum have drifted apart.</exception>
@@ -126,6 +139,32 @@ public static class AgentHosts
         ArgumentException.ThrowIfNullOrEmpty(prompt);
         return Of(kind).InteractivePromptFlag is { } flag ? [flag, prompt] : [prompt];
     }
+
+    /// <summary>
+    /// Whether <paramref name="id"/> has the one shape a host's conversation id is taken in: a letter or a digit, then at
+    /// most 199 letters, digits, dots, underscores, colons and hyphens, all of them ASCII. Nothing else is handed to a host:
+    /// no white space, no quote, no separator of a path, and no first character a host would read as an option.
+    /// </summary>
+    public static bool IsConversationId(string? id) => id is not null && ConversationIdShape().IsMatch(id);
+
+    /// <summary>
+    /// What follows the host's program to continue its own conversation <paramref name="id"/> instead of starting a new
+    /// one: the host's <see cref="AgentHostFacts.ResumeWord"/> and the id, each one argument; or null where the host has
+    /// no such word. Nothing else is passed, as for a first prompt.
+    /// </summary>
+    /// <exception cref="ArgumentException">The id is not of the shape <see cref="IsConversationId"/> takes.</exception>
+    public static IReadOnlyList<string>? ResumeArguments(AgentHostKind kind, string id)
+    {
+        if (!IsConversationId(id))
+        {
+            throw new ArgumentException("A conversation's id is a letter or digit, then at most 199 letters, digits, dots, underscores, colons or hyphens.", nameof(id));
+        }
+
+        return Of(kind).ResumeWord is { } word ? [word, id] : null;
+    }
+
+    [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._:-]{0,199}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex ConversationIdShape();
 
     /// <summary>A relative path of the table resolved under <paramref name="folder"/>, with the platform's separator.</summary>
     public static string Under(string folder, string relative) =>

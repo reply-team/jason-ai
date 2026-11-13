@@ -403,6 +403,14 @@ public sealed class FolderSessionTests : IDisposable
     [InlineData("--project", "")]
     [InlineData("--host", "")]
     [InlineData("--host", "Claude-Code")]
+    [InlineData("--here", "--campaign", "cmp_1")]
+    [InlineData("--here", "--project", "prj_1")]
+    [InlineData("--approval", "apr_1", "--here")]
+    [InlineData("--question", "dec_1", "--here")]
+    [InlineData("--resume", "abc", "--shell")]
+    [InlineData("--here", "--resume", "abc", "--shell")]
+    [InlineData("--approval", "apr_1", "--resume", "abc")]
+    [InlineData("--question", "dec_1", "--resume", "abc")]
     public async Task Flags_that_do_not_go_together_or_say_nothing_are_a_usage_error_that_asks_nothing(params string[] flags)
     {
         _run.Programs.AddProgram("claude");
@@ -675,6 +683,260 @@ public sealed class FolderSessionTests : IDisposable
 
         Assert.Equal(ExitCodes.RuntimeUnavailable, exit);
         Assert.Empty(_run.Terminals.Launches);
+    }
+
+    // ---- Here ----
+
+    /// <summary>
+    /// --here opens at the folder the command runs in, as it is: no marker is read there, so a project's marker in it names
+    /// nothing and nothing is said on stderr; of the runtime only the preference is asked, since no program was named.
+    /// </summary>
+    [Fact]
+    public async Task Here_opens_at_the_folder_the_command_runs_in_and_reads_no_marker()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        Mark(_projectFolder, new HarnessMarker(HarnessMarker.Project, "prj_1"));
+        _run.WorkingDirectory = _projectFolder;
+
+        var exit = await _run.Cli("session", "open", "--here");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(["preference.list"], _run.Asked);
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal([_run.ConsoleHost, "--", claude], launch.Argv);
+        Assert.Equal(_projectFolder, launch.WorkingDirectory);
+        var answer = Answer();
+        Assert.Equal(["kind", "folder", "host", "shell", "program", "terminal", "started"], answer.Select(field => field.Key).ToArray());
+        Assert.Equal("here", (string?)answer["folder"]!["level"]);
+        Assert.Equal(_projectFolder, (string?)answer["folder"]!["path"]);
+        Assert.Empty(_run.Error.ToString());
+    }
+
+    /// <summary>A folder that is no harness folder at all is a place for --here; with --host or --shell nothing is asked of the runtime.</summary>
+    [Theory]
+    [InlineData("--host", "codex")]
+    [InlineData("--shell")]
+    public async Task Here_with_a_program_named_asks_the_runtime_nothing(params string[] program)
+    {
+        _run.Programs.AddProgram("codex");
+        SystemPowerShell();
+        var elsewhere = Path.Combine(_run.DataDirectory, "elsewhere").Replace('\\', '/');
+        Directory.CreateDirectory(elsewhere);
+        _run.WorkingDirectory = elsewhere;
+
+        var exit = await _run.Cli(["session", "open", "--here", .. program]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Empty(_run.Asked);
+        Assert.Equal(elsewhere, Assert.Single(_run.Terminals.Launches).WorkingDirectory);
+    }
+
+    /// <summary>The folder the command runs in must be there: one deleted under the shell, or one the system cannot name, starts nothing.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Here_where_the_folder_is_not_there_is_refused(bool named)
+    {
+        _run.Programs.AddProgram("claude");
+        var gone = Path.Combine(_run.DataDirectory, "gone").Replace('\\', '/');
+        _run.WorkingDirectory = named ? gone : null;
+
+        var exit = await _run.Cli("session", "open", "--here", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("folder_missing", Code());
+        Assert.Equal(
+            named
+                ? "The folder this command runs in, " + gone + ", is not there, so nothing was started."
+                : "The folder this command runs in cannot be named, so nothing was started.",
+            _run.Error.ToString().TrimEnd());
+    }
+
+    // ---- Resume ----
+
+    public static TheoryData<string, string, string> ResumingHosts() => new()
+    {
+        { "claude_code", "claude", "--resume" },
+        { "codex", "codex", "resume" },
+    };
+
+    public static TheoryData<string, string> HostsThatCannotResume() => new()
+    {
+        { "copilot_cli", "copilot" },
+        { "cursor_cli", "agent" },
+        { "gemini_cli", "gemini" },
+        { "antigravity_cli", "agy" },
+    };
+
+    private const string Conversation = "0f8e2c1a-5b7d-4e3f-9a6b-1c2d3e4f5a6b";
+
+    /// <summary>--resume puts the host's own words and the id after its program, and nothing else; the answer carries the id.</summary>
+    [Theory]
+    [MemberData(nameof(ResumingHosts))]
+    public async Task Resume_gives_the_host_its_own_words_and_the_id(string word, string command, string resume)
+    {
+        var program = _run.Programs.AddProgram(command);
+        _run.WorkingDirectory = _projectFolder;
+
+        var exit = await _run.Cli("session", "open", "--here", "--host", word, "--resume", Conversation);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Empty(_run.Asked);
+        Assert.Equal([_run.ConsoleHost, "--", program, resume, Conversation], Assert.Single(_run.Terminals.Launches).Argv);
+        var answer = Answer();
+        Assert.Equal(["kind", "folder", "host", "shell", "program", "resume", "terminal", "started"], answer.Select(field => field.Key).ToArray());
+        Assert.Equal(Conversation, (string?)answer["resume"]);
+    }
+
+    /// <summary>Without --host the preference names the host that resumes, at any folder the verb opens at.</summary>
+    [Theory]
+    [MemberData(nameof(ResumingHosts))]
+    public async Task Resume_takes_the_host_the_preference_names(string word, string command, string resume)
+    {
+        _run.Preference = "{\"host\":\"" + word + "\"}";
+        var program = _run.Programs.AddProgram(command);
+
+        var exit = await _run.Cli("session", "open", "--campaign", "cmp_1", "--resume", Conversation);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(["campaign.get", "preference.list"], _run.Asked);
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal([_run.ConsoleHost, "--", program, resume, Conversation], launch.Argv);
+        Assert.Equal(_run.CampaignFolder, launch.WorkingDirectory);
+    }
+
+    /// <summary>
+    /// A host with no words to resume by is refused in the envelope, before its program or a terminal is looked for: with no
+    /// program and no terminal on this machine the refusal is still this one. Named by --host, nothing is asked of the runtime.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(HostsThatCannotResume))]
+    public async Task A_host_that_cannot_resume_is_refused_before_anything_is_looked_for(string word, string command)
+    {
+        _ = command;
+        File.Delete(_run.ConsoleHost);
+        _run.WorkingDirectory = _projectFolder;
+
+        var exit = await _run.Cli("session", "open", "--here", "--host", word, "--resume", Conversation);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Asked);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("host_cannot_resume", Code());
+        Assert.Equal(
+            word + " has no way this jason knows to continue one of its own conversations, so nothing was started; --resume is taken by claude_code, codex.",
+            _run.Error.ToString().TrimEnd());
+        Assert.Equal(Message(), _run.Error.ToString().TrimEnd());
+    }
+
+    /// <summary>A host the preference names that cannot resume is refused after the preference is read, and before any lookup.</summary>
+    [Theory]
+    [MemberData(nameof(HostsThatCannotResume))]
+    public async Task A_preferred_host_that_cannot_resume_is_refused_after_the_preference(string word, string command)
+    {
+        _run.Programs.AddProgram(command);
+        _run.Preference = "{\"host\":\"" + word + "\"}";
+
+        var exit = await _run.Cli("session", "open", "--resume", Conversation);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(["system.info", "preference.list"], _run.Asked);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("host_cannot_resume", Code());
+    }
+
+    /// <summary>The id is held to its shape at both edges before anything is asked: one character and two hundred are taken.</summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(200)]
+    public async Task Resume_takes_an_id_at_both_edges_of_its_length(int length)
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        _run.WorkingDirectory = _projectFolder;
+        var id = "a" + new string('7', length - 1);
+
+        var exit = await _run.Cli("session", "open", "--here", "--host", "claude_code", "--resume", id);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([_run.ConsoleHost, "--", claude, "--resume", id], Assert.Single(_run.Terminals.Launches).Argv);
+    }
+
+    public static TheoryData<string> BadIds() =>
+    [
+        string.Empty,
+        "a" + new string('7', 200),
+        "-rf",
+        ".hidden",
+        "a b",
+        "a;b",
+        "a'b",
+        "a\n",
+        "a/b",
+        "café",
+    ];
+
+    /// <summary>An id outside the shape is a usage error that asks nothing and starts nothing: past two hundred, a bad first or later character.</summary>
+    [Theory]
+    [MemberData(nameof(BadIds))]
+    public async Task Resume_with_an_id_outside_its_shape_is_a_usage_error(string id)
+    {
+        _run.Programs.AddProgram("claude");
+        _run.WorkingDirectory = _projectFolder;
+
+        var exit = await _run.Cli("session", "open", "--here", "--host", "claude_code", "--resume=" + id);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Empty(_run.Asked);
+        Assert.Empty(_run.Terminals.Launches);
+    }
+
+    /// <summary>A dry run starts nothing and prints the folder and the whole command, the host's words and the id among it.</summary>
+    [Fact]
+    public async Task A_dry_run_prints_the_folder_and_the_words()
+    {
+        var codex = _run.Programs.AddProgram("codex");
+        _run.WorkingDirectory = _projectFolder;
+
+        var exit = await _run.Cli("session", "open", "--here", "--host", "codex", "--resume", Conversation, "--dry-run");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        var answer = Answer();
+        Assert.False((bool)answer["started"]!);
+        Assert.Equal(_projectFolder, (string?)answer["folder"]!["path"]);
+        Assert.Equal([_run.ConsoleHost, "--", codex, "resume", Conversation], answer["argv"]!.AsArray().Select(word => word!.GetValue<string>()));
+    }
+
+    /// <summary>On macOS the script quotes the host's words and the id as it quotes every word, and exports the data directory.</summary>
+    [Fact]
+    public async Task On_macos_the_script_quotes_the_words_and_the_id()
+    {
+        _run.Terminals.Platform = TerminalPlatform.MacOs;
+        var claude = _run.Programs.AddProgram("claude");
+        _run.Variables[JasonPaths.DataDirectoryVariable] = _run.DataDirectory;
+        _run.WorkingDirectory = _projectFolder;
+        const string Id = "thread_01.part:2-b";
+
+        var exit = await _run.Cli("session", "open", "--here", "--host", "claude_code", "--resume", Id, "--dry-run");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var answer = Answer();
+        Assert.Equal(["/usr/bin/open", "-a", "Terminal", "jason-here.command"], answer["argv"]!.AsArray().Select(word => word!.GetValue<string>()));
+        var script = answer["script"]!.GetValue<string>().Split('\n');
+        Assert.Contains("cd -- " + TerminalPlan.ShellQuote(_projectFolder) + " || exit 1", script);
+        Assert.Contains("export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory), script);
+        Assert.Equal("exec " + TerminalPlan.ShellQuote(claude) + " '--resume' 'thread_01.part:2-b'", script.Last(line => line.Length > 0));
+    }
+
+    [Fact]
+    public async Task Human_says_which_conversation_continues()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.WorkingDirectory = _projectFolder;
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--here", "--host", "claude_code", "--resume", Conversation, "--human", "--dry-run"));
+        Assert.Equal("Would start claude_code in conhost at " + _projectFolder + ", continuing its conversation " + Conversation + ".", _run.Output.ToString().TrimEnd());
     }
 
     // ---- Helpers ----

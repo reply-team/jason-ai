@@ -287,10 +287,29 @@ public partial class PageClaimsTests
 
         Assert.Contains("At a folder (no item)", help, StringComparison.Ordinal);
         Assert.Contains("with no first input", help, StringComparison.Ordinal);
-        foreach (var flag in new[] { "--campaign", "--project", "--host", "--shell" })
+        foreach (var flag in new[] { "--campaign", "--project", "--here", "--host", "--shell", "--resume" })
         {
             Assert.Contains(flag, help, StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// The folder form's two later options, <c>--here</c> and <c>--resume</c>, are said wherever the folder form's options
+    /// are listed: the declared exception, the page that is the verb's contract, the handbook and the skill an agent reads
+    /// before it opens a window on a person's desktop.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md", "`--here` opens it at the folder the command runs in", "`--resume <id>` has the host continue its own conversation of that id")]
+    [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "<c>--here</c> opens it at the folder the command runs in", "<c>--resume</c> has the host continue its own conversation of that id")]
+    [InlineData("docs/ui.md", "jason session open --here --host claude_code --resume <conversation-id>", "`host_cannot_resume`")]
+    [InlineData("docs/handbook.md", "jason session open --here", "--resume <conversation-id>")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md", "`--here` opens it at the folder the command runs in", "`--resume <id>` continues the host's own conversation")]
+    public void Every_page_that_lists_the_folder_forms_options_says_here_and_resume(string page, string here, string resume)
+    {
+        var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
+
+        Assert.Contains(here, text, StringComparison.Ordinal);
+        Assert.Contains(resume, text, StringComparison.Ordinal);
     }
 
     /// <summary>The help says what the brief asks of the agent, never what the agent cannot do.</summary>
