@@ -119,16 +119,6 @@ export interface DesktopFullAccessStanding {
     newChats: boolean;
 }
 
-/**
- * The standing choice of Full access, which only the person's answer to the desktop's own box gives: while it stands,
- * the menu enters Full access without the box, and with `newChats` a new chat on a host that can take Full access starts
- * in it. `givenAt` is when it was given, ISO-8601 UTC.
- */
-export interface DesktopFullAccessStanding {
-    givenAt: string;
-    newChats: boolean;
-}
-
 /** A model the chat's box offers on a host: `id` the name the host takes, `label` the words to show, and its efforts. */
 export interface DesktopModel {
     id: string;
