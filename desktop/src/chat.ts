@@ -798,7 +798,7 @@ export class Chat {
             const name = folder.split(/[\\/]/).filter(Boolean).at(-1) ?? folder;
             this.#options.emit(replyTo, {
                 kind: 'notice',
-                text: `Left out of this chat: the folder “${name}” has skills, agents or commands of its own in its .claude folder, and a chat does not load those.`,
+                text: `Left out of this chat: the folder “${name}” has skills, subagents or commands of its own in its .claude folder, and a chat does not load those.`,
             });
         }
         return kept;
@@ -964,7 +964,7 @@ export class Chat {
      */
     async create(campaignId?: unknown, host?: unknown): Promise<ConversationSummary> {
         if (campaignId === undefined || campaignId === null) return this.#summaryOf(await this.#startsNew(this.#made(null, 'New chat'), host));
-        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
+        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused("That is not an agent's id.");
         const existing = this.#ofCampaign(campaignId);
         if (existing !== undefined) return this.#summaryOf(existing);
         const read = await this.#readCampaign(campaignId, false);
@@ -1275,7 +1275,7 @@ export class Chat {
      */
     async attach(id: unknown, campaignId: unknown): Promise<ConversationSummary> {
         const conversation = this.#own(id);
-        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
+        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused("That is not an agent's id.");
         const refusal = () => {
             if (conversation.main === true) return "The Feed is about no agent. Open the agent's own conversation from the agent.";
             if (this.#running.has(conversation.id)) return stillAnswering('choose its agent');

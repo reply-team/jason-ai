@@ -458,7 +458,7 @@ test('a conversation whose turn runs is neither removed nor started afresh, and 
     assert.deepEqual(readdirSync(r.b.paths.conversations), []);
     assert.throws(() => r.chat.open(chat.id), { message: 'That conversation is not one this desktop keeps.' });
     for (const bad of ['', 'conv_../x', 42, null]) assert.throws(() => r.chat.open(bad), { message: 'That conversation is not one this desktop keeps.' });
-    await assert.rejects(r.chat.create('../cmp'), { message: 'That is not a campaign id.' });
+    await assert.rejects(r.chat.create('../cmp'), { message: "That is not an agent's id." });
 });
 
 test('a conversation that never had a turn is not listed and leaves no record, and Start afresh on it writes nothing', async (t) => {

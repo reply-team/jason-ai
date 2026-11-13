@@ -371,7 +371,7 @@ configuration (aliases, shell options), so such a program can still act as you. 
 connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
-Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said once.
+Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
 Out of the box Full access is never a default; given this time, it is gone when you close Jason. It is not offered for
 the Feed, whose turns are handed lines that others and providers wrote without you asking for them.
 
