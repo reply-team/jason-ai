@@ -112,7 +112,9 @@ them on.
   `~/.jason-demo`), and this file stays in `<data>`. Before the demo's runtime first starts, the desktop writes the demo's
   own `<data>-demo/config/settings.json`, after it has placed the demo provider in `<data>-demo/plugins/demo/` (from the copy the application carries) and written `Routes:Default` naming it, so no route stands without its plugin: a harness root beside yours with `-demo` after it (`~/Jason` gives
   `~/Jason-demo`), the responder off and the campaign manager left only to answered decisions, so a terminal with
-  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. The top bar's Demo | Live
+  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. Where the demo is placed
+  from the archive the application carries (see [the demo](#the-demo)), that settings file and the provider come with the
+  archive instead. The top bar's Demo | Live
   switch writes this file and starts the desktop again, on your own environment, and a new installation's first start
   writes it as `demo` before anything else. Quitting a demo run, the switch to
   Live included, stops the demo's runtime first, waiting at most fifteen seconds; your own runtime is never stopped by
@@ -274,23 +276,32 @@ did. A top bar heads every screen in both modes: in your own installation a gree
 dot, **Demo data** and "Nothing here is real or sent." (in a narrow window, "Sample data. Nothing is sent."). On its right
 the **Demo | Live** switch marks the mode in force; choosing the other writes the mode and starts the desktop again on that
 installation, and **Back to Your Own Installation** in the tray and the Jason menu does what **Live** does, for a demo
-whose start failed. The first time the demo opens, the page opens at once and the sample fills it as it is made, with
-**Preparing the demo…** in the top bar until it is ready, which takes a little over a minute; until then the switch, **Start
-the Demo Over** and **Back to Your Own Installation** wait for it, each saying so. If the desktop quits before the sample
-is whole, the next start of the demo starts it over by itself and makes it whole. **Start the Demo Over**, beside it
+whose start failed. The first time the demo opens, its sample is placed rather than made: the application carries the
+sample as an archive that `jason export` wrote when the release was built, and `jason import` places it into the demo's
+two folders, beginning as the window opens and ending before the demo's runtime starts, which takes a few seconds behind
+**Preparing the demo…**. The sample is made at the start instead when the archive is older than twenty-one days, by the
+moment the archive itself records, so an old installer never opens on an empty Dashboard; when the application carries
+no archive, which is so of a build made outside a release; and when the import fails, after what it placed is taken away.
+Then the page opens at once and the sample fills it as it is made, with **Preparing the demo…** in the top bar until it
+is ready, which takes a little over a minute. Until the sample is ready, placed or made, the switch, **Start the Demo
+Over** and **Back to Your Own Installation** wait for it, each saying so. If the desktop quits before the sample is
+whole, the next start of the demo starts it over by itself and makes it whole. **Start the Demo Over**, beside it
 in the same menus, asks once ("Start the demo over?": everything you did in the demo is removed and it starts again from
 the beginning; your own installation is not touched), stops the demo's runtime, leaves a request in your own installation's
 `desktop/` folder and starts the desktop again. The next start carries the request out before anything names the demo's
 directory: it takes each of the demo's two folders out of the demo's name with one rename, deletes the renamed copies as far
-as it can, and then makes and fills the sample again, so what you did in it is gone and the story moves from its start. A
+as it can, and then places the sample again, or makes it as above, so what you did in it is gone and the story moves from
+its start. A
 copy it could not delete is left, marked, and removed by the next start over, by Remove What Jason Placed or by the
 uninstall. If the start cannot carry the request out, it keeps it and opens your own installation, and the next demo start
 tries again.
 
 **What the sample holds.** An invented seller and one project with four campaigns in different states (two running,
 one paused, one a draft), fifty-four invented people at `.example` addresses, twenty-eight messages already approved and
-sent, and ten waiting for your approval. A few of the people who were written to answer over the first minutes, because
-the demo provider reports their written replies through events as any provider that reads events does. The sample starts today, with no past, and it is email only; it raises no question, and a person whose
+sent, and ten waiting for your approval. A few of the people who were written to answer within minutes of the story's start, because
+the demo provider reports their written replies through events as any provider that reads events does. The sample's
+story began when the release was built, or, where the sample is made at the start, that day, with no past before it, so
+the Dashboard's thirty days hold it for thirty days after; it is email only; it raises no question, and a person whose
 message is waiting for your approval never answers it.
 
 **What is off in the demo, and why.** The demo has no real account and never gets one, so the acts that connect or change
@@ -323,7 +334,8 @@ yours: `~/.jason` gives `~/.jason-demo` and `~/Jason` gives `~/Jason-demo`, what
 name for you. The demo's harness root is set in the demo's own settings file, never inside either data directory. It is
 made from your harness root as it stands when the demo is set up, so if you change `Harness:Root` later, Remove What
 Jason Placed and the uninstall take off the `-demo` folder of the new root and the old one stays behind. Each of the two
-folders carries a mark file, `.jason-demo-folder`, written when the desktop makes it: a folder of the same name without the
+folders carries a mark file, `.jason-demo-folder`, written when the desktop makes it or, for a harness root `jason import`
+made, carried in the archive or written once the import has ended: a folder of the same name without the
 mark is never used, written into or removed, and the desktop opens your own installation instead. Which
 installation the desktop runs on is one word, `live` or `demo`, in `<data>/desktop/mode` of your own installation (see
 Its own files, above), and a start is Live unless it says `demo`.

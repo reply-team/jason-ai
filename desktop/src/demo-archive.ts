@@ -337,3 +337,6 @@ export function writeSampleWhole(data: string): void {
         throw error;
     }
 }
+
+/** What the starting page says while the prepared demo is placed: the words of the mark the page shows while it is made. */
+export const placingWords = 'Preparing the demo…';
