@@ -173,7 +173,7 @@ const sendRef = (send: StorySend): Arg => ref(`wi:${send.key}`);
 export function buildSeed(story: Story): SeedStep[] {
     const actor = ['--actor', operatorActor(story)] as const;
     const sender = story.senders.find((s) => s.channel === 'email') ?? story.senders[0];
-    if (!sender) throw new Error('The story needs a sender.');
+    if (!sender?.address) throw new Error('The story needs an email sender with an address.');
     const steps: SeedStep[] = [
         { kind: 'settings' },
         { kind: 'place-plugin' },

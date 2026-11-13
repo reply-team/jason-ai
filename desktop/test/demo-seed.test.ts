@@ -172,6 +172,33 @@ test('a seeded demo started again with one open review gets that review cancelle
     assert.deepEqual(await cancelOpenReviews(refusing, 'human:a'), { step: 'workitem cancel', detail: 'no' });
 });
 
+test('the real story the package carries: the one set runs through the seed, every person once, every given send approved and no waiting one', async () => {
+    const text = readFileSync(join(repository, 'plugins', 'demo', 'modules', 'story.js'), 'utf8');
+    const story = parseStory(text);
+    assert.equal(story.people.length, 54);
+    assert.equal(story.companies.length, 18);
+    assert.equal(story.campaigns.length, 4);
+    assert.equal(story.operator.actor, 'dana.whitfield');
+    // Invented: only .example addresses, and every company a person names is one the module lists.
+    for (const person of story.people) {
+        for (const channel of person.channels) if (channel.channel === 'email') assert.match(channel.value, /^[a-z0-9.]+@[a-z0-9-]+\.example$/);
+        assert.ok(story.companies.some((company) => company.key === person.company), `${person.key} names no company of the story`);
+    }
+    const run = await seeded({ text });
+    assert.equal(run.outcome.kind, 'seeded');
+    assert.equal(run.imported.length, 54);
+    assert.equal(new Set(run.imported).size, 54);
+    const sends = story.people.flatMap((person) => person.sends);
+    const given = sends.filter((send) => send.approval === 'given');
+    assert.ok(given.length > 0 && given.length < sends.length, 'the story has both approved and waiting sends');
+    assert.equal(run.workItems.length, sends.filter((send) => story.campaigns.find((c) => c.key === story.people.find((p) => p.sends.includes(send))?.campaign)?.status !== 'draft').length);
+    assert.equal(run.approved.length, given.length);
+    assert.ok(run.approved.every((line) => line.includes('--actor human:dana.whitfield')));
+    const senderOf = (item: { body: unknown }) => (item.body as { context: { input: { sender: { external_id: string; address: string } } } }).context.input.sender;
+    for (const item of run.workItems) assert.deepEqual(senderOf(item), { external_id: 'demo-sender-email', address: 'dana@tillerwave.example' });
+    assert.ok(run.events.indexOf('write story_start') > run.events.map((e, i) => (e.includes('=succeeded') ? i : -1)).reduce((a, b) => Math.max(a, b), -1));
+});
+
 test('no step is called demo: the nouns are the harness\'s own', () => {
     for (const pair of verbsUsed(buildSeed(fixture()))) assert.doesNotMatch(pair, /demo|seed/i);
 });
@@ -369,8 +396,8 @@ interface Run {
 }
 
 /** Runs the seed against a fake runtime that answers the way the real verbs do, with an in-memory disk. */
-async function seeded(options: { failAt?: string; neverSucceed?: boolean } = {}): Promise<Run> {
-    const story = fixture();
+async function seeded(options: { failAt?: string; neverSucceed?: boolean; text?: string } = {}): Promise<Run> {
+    const story = options.text === undefined ? fixture() : parseStory(options.text);
     const files = new Map<string, string>();
     const calls: string[] = [];
     const events: string[] = [];
@@ -456,7 +483,7 @@ async function seeded(options: { failAt?: string; neverSucceed?: boolean } = {})
         makeDirectory: () => undefined,
         removeTree: () => undefined,
         placePlugin: () => undefined,
-        readStory: () => moduleText(story),
+        readStory: () => options.text ?? moduleText(story),
         progress: (message) => void progress.push(message),
         sleep: async () => undefined,
         now: () => new Date('2026-11-13T12:00:00.000Z'),

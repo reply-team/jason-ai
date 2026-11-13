@@ -51,7 +51,8 @@ export interface StorySender {
     external_id: string;
     channel: string;
     name: string;
-    address: string;
+    /** Null for an account that only fills `sender.list`, as the LinkedIn one does. */
+    address: string | null;
 }
 
 export interface StoryCampaign {
@@ -115,7 +116,7 @@ function checked(value: unknown): Story {
     for (const sender of senders) {
         const s = object(sender, 'sender');
         text(s['external_id'], 'sender id');
-        text(s['address'], 'sender address');
+        if (s['channel'] === 'email') text(s['address'], 'sender address');
     }
     const campaigns = list(root['campaigns'], 'campaigns');
     const keys = new Set<string>();
