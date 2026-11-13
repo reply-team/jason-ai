@@ -92,7 +92,7 @@ describe('the Recent header', () => {
 });
 
 describe('the search', () => {
-    it('opens a box with the placeholder Search agents and filters rows by title and by the agent’s name', async () => {
+    it('opens a box with the placeholder Search agents and filters rows by their title alone', async () => {
         await renderConsole(seedAgents);
         await waitFor(() => expect(rows()).toHaveLength(4));
         expect(side().queryByRole('textbox', { name: 'Search agents' })).toBeNull();
@@ -100,9 +100,9 @@ describe('the search', () => {
         expect(box().getAttribute('placeholder')).toBe('Search agents');
         fireEvent.input(box(), { target: { value: 'help' } });
         expect(titles()).toEqual(['Help me start']);
-        // The chat is called Q4 push; its agent is Spring.
+        // The chat is called Q4 push; its agent's name, Spring, is not searched.
         fireEvent.input(box(), { target: { value: 'SPRING' } });
-        expect(titles()).toEqual(['Q4 push']);
+        expect(titles()).toEqual([]);
         fireEvent.input(box(), { target: { value: 'q4' } });
         expect(titles()).toEqual(['Q4 push']);
     });
@@ -240,6 +240,23 @@ describe('a row', () => {
             attention.questions.value = [];
         });
         await waitFor(() => expect(dot('Q4 push')).toBe('active'));
+    });
+
+    it('pulses the dot of a chat whose turn runs now, and no other', async () => {
+        const desktop = await renderConsole(seedAgents);
+        await waitFor(() => expect(rows()).toHaveLength(4));
+        const pulsing = () =>
+            rows()
+                .filter((each) => each.querySelector('.rdot.running'))
+                .map((each) => each.querySelector('.rt')?.textContent);
+        expect(pulsing()).toEqual([]);
+        flush(() => {
+            conversations.value = conversations.value.map((each) =>
+                each.id === 'conv_a' ? { ...each, running: true } : each,
+            );
+        });
+        await waitFor(() => expect(pulsing()).toEqual(['Autumn']));
+        expect(desktop).toBeTruthy();
     });
 
     it('opens its chat when clicked, as before', async () => {

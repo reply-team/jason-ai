@@ -24,6 +24,8 @@ export interface RecentRow {
     /** The agent's state, whether or not something waits; null for a chat with no agent or one not read yet. */
     state: 'active' | 'paused' | 'draft' | null;
     dot: RecentDot;
+    /** Whether a turn of the chat runs now. */
+    running: boolean;
     age: string;
 }
 
@@ -31,6 +33,8 @@ export interface RecentInput {
     conversations: readonly DesktopConversation[];
     /** The title a chat the console holds says now, by conversation id. */
     titles: (id: string) => string | undefined;
+    /** Whether a chat the console holds has a turn running now; undefined for one it does not hold. */
+    running?: (id: string) => boolean | undefined;
     campaigns: readonly CampaignSummary[];
     approvals: readonly ApprovalSummary[];
     questions: readonly DecisionSummary[];
@@ -59,6 +63,7 @@ export function recentRows(input: RecentInput): RecentRow[] {
                 agent: agent?.name ?? null,
                 waiting,
                 state: state ?? null,
+                running: input.running?.(conversation.id) ?? conversation.running,
                 dot: waiting > 0 ? 'waiting' : (state ?? 'none'),
                 age: ageOf(conversation.updatedAt, input.now),
             } satisfies RecentRow;
@@ -81,11 +86,11 @@ export function inFilter(row: RecentRow, filter: RecentFilter): boolean {
     }
 }
 
-/** Whether a row's title or its agent's name holds the text, whatever the case; no text matches every row. */
+/** Whether a row's title holds the text, whatever the case; no text matches every row. */
 export function matches(row: RecentRow, text: string): boolean {
     const wanted = text.trim().toLowerCase();
     if (wanted === '') return true;
-    return row.title.toLowerCase().includes(wanted) || (row.agent?.toLowerCase().includes(wanted) ?? false);
+    return row.title.toLowerCase().includes(wanted);
 }
 
 /** The rows to draw: all that match while a search text or a filter is active, else the first `limit`. */

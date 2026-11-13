@@ -95,7 +95,11 @@ function rowView(row: RecentRow): Html {
         ${row.id === currentChat.value ? html`aria-current="true"` : null}
         ${act('side.chat', row.id)}
     >
-        <span class="rdot ${row.dot}" title="${dotTitles[row.dot]}" aria-hidden="true"></span>
+        <span
+            class="rdot ${row.dot}${row.running ? ' running' : ''}"
+            title="${dotTitles[row.dot]}"
+            aria-hidden="true"
+        ></span>
         <span class="rt">${row.title}</span>
         ${row.waiting > 0 ? html`<span class="count" aria-hidden="true">${row.waiting}</span>` : null}
         <span class="t" aria-hidden="true">${row.age}</span>
@@ -128,6 +132,7 @@ export function recentView(): Html {
     const rows = recentRows({
         conversations: conversations.value,
         titles: (id) => chats.value[id]?.title,
+        running: (id) => chats.value[id]?.running,
         campaigns: campaigns.value,
         approvals: attention.approvals.value,
         questions: attention.questions.value,

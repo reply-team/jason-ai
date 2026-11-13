@@ -31,6 +31,7 @@ const row = (fields: Partial<RecentRow>): RecentRow => ({
     agent: null,
     waiting: 0,
     state: null,
+    running: false,
     dot: 'none',
     age: 'now',
     ...fields,
@@ -81,6 +82,22 @@ describe('the rows under Recent', () => {
         expect(rows[0]!.age).toBe('5 min');
     });
 
+    it('says a turn runs now from the chat the console holds, else from the desktop’s list', () => {
+        const listed = [conversation({ id: 'c1', running: true }), conversation({ id: 'c2' })];
+        const input = {
+            conversations: listed,
+            titles: () => undefined,
+            campaigns: [],
+            approvals: [],
+            questions: [],
+            now,
+        };
+        expect(recentRows(input).map((each) => each.running)).toEqual([true, false]);
+        expect(
+            recentRows({ ...input, running: (id) => (id === 'c2' ? true : false) }).map((each) => each.running),
+        ).toEqual([false, true]);
+    });
+
     it('puts a chat with no agent under All alone', () => {
         const chat = rows[4]!;
         expect(['all', 'needs', 'live', 'paused', 'draft'].filter((each) => inFilter(chat, each as never))).toEqual([
@@ -99,10 +116,10 @@ describe('the rows under Recent', () => {
 });
 
 describe('searching and paging', () => {
-    it('matches the title or the agent’s name, whatever the case, and every row for no text', () => {
+    it('matches the title alone, whatever the case, and every row for no text', () => {
         const renamed = row({ title: 'Q4 push', agent: 'Spring' });
-        expect(matches(renamed, 'q4')).toBe(true);
-        expect(matches(renamed, ' SPRING ')).toBe(true);
+        expect(matches(renamed, ' Q4 ')).toBe(true);
+        expect(matches(renamed, 'spring')).toBe(false);
         expect(matches(renamed, 'autumn')).toBe(false);
         expect(matches(row({ title: 'Plain' }), '')).toBe(true);
         expect(matches(row({ title: 'Plain' }), 'spring')).toBe(false);
