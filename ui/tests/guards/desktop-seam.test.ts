@@ -11,6 +11,7 @@ const top = {
     platform: true,
     onCommand: true,
     theme: true,
+    dailyTrends: true,
     mode: true,
     openIn: true,
     pairing: true,
@@ -20,6 +21,8 @@ const top = {
     fullAccess: true,
 } as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
+// Whether the Dashboard shows its daily trends: read as the page loads, told whenever the switch is flipped.
+const dailyTrends = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['dailyTrends'], true>;
 // Live or Demo, the installation the desktop runs on: read once as the page loads, and set, which starts it again; and
 // whether the demo's sample is still being made, said again when it is ready.
 const mode = { get: true, set: true, startOver: true, onPreparing: true } as const satisfies Record<
@@ -86,6 +89,7 @@ const status = {
 const held: [
     Exactly<keyof typeof top, keyof JasonDesktop>,
     Exactly<keyof typeof theme, keyof JasonDesktop['theme']>,
+    Exactly<keyof typeof dailyTrends, keyof JasonDesktop['dailyTrends']>,
     Exactly<keyof typeof mode, keyof JasonDesktop['mode']>,
     Exactly<keyof typeof openIn, keyof JasonDesktop['openIn']>,
     Exactly<keyof typeof chat, keyof JasonDesktop['chat']>,
@@ -94,15 +98,16 @@ const held: [
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof fullAccess, keyof JasonDesktop['fullAccess']>,
     Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
-] = [true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true, true, true, true, true, true]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
                     name !== 'theme' &&
+                    name !== 'dailyTrends' &&
                     name !== 'mode' &&
                     name !== 'openIn' &&
                     name !== 'pairing' &&
@@ -112,6 +117,7 @@ describe('the desktop seam', () => {
                     name !== 'fullAccess',
             ),
             ...Object.keys(theme).map((name) => `theme.${name}`),
+            ...Object.keys(dailyTrends).map((name) => `dailyTrends.${name}`),
             ...Object.keys(mode).map((name) => `mode.${name}`),
             ...Object.keys(openIn).map((name) => `openIn.${name}`),
             ...Object.keys(pairing).map((name) => `pairing.${name}`),
@@ -124,6 +130,8 @@ describe('the desktop seam', () => {
             'onCommand',
             'theme.get',
             'theme.set',
+            'dailyTrends.get',
+            'dailyTrends.set',
             'mode.get',
             'mode.set',
             'mode.startOver',

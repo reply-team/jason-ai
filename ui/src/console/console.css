@@ -1537,6 +1537,27 @@ body,
     color: var(--faint);
     font-size: 12.5px;
 }
+.jc-console .dash-trend {
+    margin-left: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.jc-console .dash-trend.up {
+    color: var(--green, #1a7f4b);
+}
+.jc-console .dash-trend.down {
+    color: var(--red, #c0392b);
+}
+.jc-console .dash-trend.flat {
+    color: var(--faint);
+}
+.jc-console .dash-trends-switch {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--faint);
+}
 .jc-console .dash-categories {
     margin-bottom: 12px;
 }

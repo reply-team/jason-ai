@@ -52,7 +52,7 @@ import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
-import { readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
+import { applyDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
 import { SkillsGate } from './skills-gate.ts';
@@ -542,6 +542,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    handle(seam, 'dailyTrends.get', origin, () => settings.dailyTrends ?? null, refused);
+    handle(
+        seam,
+        'dailyTrends.set',
+        origin,
+        (on) => void (settings = applyDailyTrends(on, settings, (next) => writeSettings(paths.settings, next))),
+        refused,
+    );
     handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened, preparing: sampleMaking }), refused);
     handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);
     handle(seam, 'mode.startOver', origin, () => startOver(), refused);

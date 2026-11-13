@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     categoryLabel,
+    categoryTrend,
     cut,
     dashboardWindow,
     greetingFor,
@@ -10,9 +11,13 @@ import {
     rateOf,
     startingRange,
     threadsIn,
+    tileTrendsOf,
     tilesOf,
+    trendOf,
+    trendWindows,
     type ActivityRead,
     type ReplyCountRead,
+    type TrendReads,
 } from './dashboard-model';
 
 describe('the greeting by the hour', () => {
@@ -205,5 +210,85 @@ describe('why a custom range asks for nothing', () => {
         expect(rangeProblem({ from: '2026-10-02', to: '2026-10-01' }, now, 'UTC')).toBe('backwards');
         expect(rangeProblem({ from: '2026-10-17', to: '2026-10-20' }, now, 'UTC')).toBe('future');
         expect(rangeProblem({ from: '2026-10-01', to: '2026-10-30' }, now, 'UTC')).toBeNull();
+    });
+});
+
+describe('the daily trends', () => {
+    it('counts the last 24 hours back from this second and the 24 before them, meeting and never overlapping', () => {
+        expect(trendWindows(new Date('2026-10-16T09:00:00.123Z'))).toEqual({
+            last: { since: '2026-10-15T09:00:00.123Z', until: '2026-10-16T09:00:00.123Z' },
+            before: { since: '2026-10-14T09:00:00.123Z', until: '2026-10-15T09:00:00.123Z' },
+        });
+    });
+    it('is a plus and green for a rise, a minus and red for a fall, and neutral at zero', () => {
+        expect(trendOf(7, 3)).toEqual({ text: '+4', tone: 'up' });
+        expect(trendOf(3, 7)).toEqual({ text: '\u22124', tone: 'down' });
+        expect(trendOf(5, 5)).toEqual({ text: '±0', tone: 'flat' });
+        expect(trendOf(0, 0)).toEqual({ text: '±0', tone: 'flat' });
+    });
+
+    const replies = (...threads: [string, number][]): ReplyCountRead => ({
+        total: {
+            replies: 0,
+            threads: 0,
+            categories: threads.map(([category, n]) => ({ category, replies: n, threads: n })),
+        },
+    });
+    const reads = (last: Partial<TrendReads['last']>, before: Partial<TrendReads['before']>): TrendReads => ({
+        last: { activity: null, replies: null, ...last },
+        before: { activity: null, replies: null, ...before },
+    });
+
+    it('compares contacted and replied, and the threads of the two words, between the windows', () => {
+        const trends = tileTrendsOf(
+            reads(
+                { activity: { contacted: 9, replied: 2 }, replies: replies(['interested', 4], ['meeting_booked', 1]) },
+                { activity: { contacted: 4, replied: 5 }, replies: replies(['interested', 4]) },
+            ),
+        );
+        expect(trends.contacted).toEqual({ text: '+5', tone: 'up' });
+        expect(trends.replied).toEqual({ text: '\u22123', tone: 'down' });
+        expect(trends.interested).toEqual({ text: '±0', tone: 'flat' });
+        expect(trends.meetings).toEqual({ text: '+1', tone: 'up' });
+    });
+    it('takes a word absent from a window that was read as none, and shows no trend for a window that was not', () => {
+        expect(
+            categoryTrend(
+                reads({ replies: replies(['other', 1]) }, { replies: replies(['interested', 2]) }),
+                'interested',
+            ),
+        ).toEqual({
+            text: '\u22122',
+            tone: 'down',
+        });
+        const unread = tileTrendsOf(
+            reads({ activity: { contacted: 1, replied: 1 } }, { replies: replies(['interested', 2]) }),
+        );
+        expect(unread).toEqual({ contacted: null, replied: null, interested: null, meetings: null });
+        expect(tileTrendsOf(null).contacted).toBeNull();
+        expect(categoryTrend(null, 'interested')).toBeNull();
+    });
+    it('puts a tile’s trend on the four tiles that count something, and none on Needs you or Bounce rate', () => {
+        const trends = {
+            contacted: trendOf(2, 1),
+            replied: trendOf(1, 1),
+            interested: trendOf(0, 1),
+            meetings: trendOf(3, 0),
+        };
+        const tiles = tilesOf({
+            approvals: 0,
+            questions: 0,
+            waitingKnown: true,
+            activity: { contacted: 5, replied: 1 },
+            trends,
+        });
+        expect(tiles.map((each) => each.trend ?? null)).toEqual([
+            null,
+            trends.contacted,
+            trends.replied,
+            trends.interested,
+            trends.meetings,
+            null,
+        ]);
     });
 });

@@ -44,6 +44,10 @@ const desktop = {
         get: () => ipcRenderer.invoke('jason:theme.get'),
         set: (choice: 'system' | 'light' | 'dark') => ipcRenderer.invoke('jason:theme.set', choice),
     },
+    dailyTrends: {
+        get: () => ipcRenderer.invoke('jason:dailyTrends.get'),
+        set: (on: boolean) => ipcRenderer.invoke('jason:dailyTrends.set', on),
+    },
     mode: {
         get: () => ipcRenderer.invoke('jason:mode.get'),
         set: (mode: 'live' | 'demo') => ipcRenderer.invoke('jason:mode.set', mode),

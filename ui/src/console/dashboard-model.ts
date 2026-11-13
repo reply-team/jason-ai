@@ -125,6 +125,77 @@ export function categoryLabel(word: string): string {
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+const hour = 60 * 60 * 1000;
+
+/** The last 24 hours, counted back from this second, and the 24 before them: two windows that meet and never overlap. */
+export function trendWindows(now: Date): {
+    last: { since: string; until: string };
+    before: { since: string; until: string };
+} {
+    const at = (back: number) => new Date(now.getTime() - back * hour).toISOString();
+    return {
+        last: { since: at(24), until: now.toISOString() },
+        before: { since: at(48), until: at(24) },
+    };
+}
+
+/** What changed between two windows: a signed number and which way it went. */
+export interface Trend {
+    text: string;
+    tone: 'up' | 'down' | 'flat';
+}
+
+export function trendOf(last: number, before: number): Trend {
+    const change = last - before;
+    if (change > 0) return { text: `+${change}`, tone: 'up' };
+    if (change < 0) return { text: `\u2212${-change}`, tone: 'down' };
+    return { text: t('dash.trend.zero'), tone: 'flat' };
+}
+
+/** What one 24-hour window held: the counts, and the replies a role judged; null for a read that failed. */
+export interface WindowRead {
+    activity: ActivityRead | null;
+    replies: ReplyCountRead | null;
+}
+
+export interface TrendReads {
+    last: WindowRead;
+    before: WindowRead;
+}
+
+const change = (last: number | null, before: number | null): Trend | null =>
+    last === null || before === null ? null : trendOf(last, before);
+
+/** The conversations of a word in a window that was read: none where the word is absent; null for a read that failed. */
+const threadsOrNone = (read: ReplyCountRead | null, word: string): number | null =>
+    read === null ? null : (threadsIn(read, word) ?? 0);
+
+/** The trend of a category's conversations; null while either window is unread. */
+export function categoryTrend(reads: TrendReads | null, word: string): Trend | null {
+    return reads === null
+        ? null
+        : change(threadsOrNone(reads.last.replies, word), threadsOrNone(reads.before.replies, word));
+}
+
+/** The trends of the four tiles that count something, each null while a window it needs is unread. */
+export interface TileTrends {
+    contacted: Trend | null;
+    replied: Trend | null;
+    interested: Trend | null;
+    meetings: Trend | null;
+}
+
+export function tileTrendsOf(reads: TrendReads | null): TileTrends {
+    return {
+        contacted: reads
+            ? change(reads.last.activity?.contacted ?? null, reads.before.activity?.contacted ?? null)
+            : null,
+        replied: reads ? change(reads.last.activity?.replied ?? null, reads.before.activity?.replied ?? null) : null,
+        interested: categoryTrend(reads, interestedWord),
+        meetings: categoryTrend(reads, meetingBookedWord),
+    };
+}
+
 export interface Tile {
     label: string;
     /** The number, or null where no fact stands behind it. */
@@ -132,6 +203,8 @@ export interface Tile {
     sub: string | null;
     /** What the number is, said on hover; absent for a tile that needs none. */
     hint?: string;
+    /** How the number moved over the last 24 hours; absent where no trend is shown. */
+    trend?: Trend | null;
 }
 
 /** The six tiles in order. Interested and Meetings booked count conversations judged so; Bounce rate has no fact yet. */
@@ -142,6 +215,7 @@ export function tilesOf(input: {
     waitingKnown: boolean;
     activity: ActivityRead | null;
     replies?: ReplyCountRead | null;
+    trends?: TileTrends | null;
 }): Tile[] {
     const { activity } = input;
     const rate = activity ? rateOf(activity.replied, activity.contacted) : null;
@@ -151,23 +225,31 @@ export function tilesOf(input: {
             value: input.waitingKnown ? input.approvals + input.questions : null,
             sub: input.waitingKnown ? needsSubline(input.approvals, input.questions) : null,
         },
-        { label: t('dash.tile.contacted'), value: activity?.contacted ?? null, sub: null },
+        {
+            label: t('dash.tile.contacted'),
+            value: activity?.contacted ?? null,
+            sub: null,
+            trend: input.trends?.contacted ?? null,
+        },
         {
             label: t('dash.tile.replied'),
             value: activity?.replied ?? null,
             sub: rate === null ? null : t('dash.rate', { rate }),
+            trend: input.trends?.replied ?? null,
         },
         {
             label: t('dash.tile.interested'),
             value: threadsIn(input.replies ?? null, interestedWord),
             sub: null,
             hint: t('dash.tile.interested.hint'),
+            trend: input.trends?.interested ?? null,
         },
         {
             label: t('dash.tile.meetings'),
             value: threadsIn(input.replies ?? null, meetingBookedWord),
             sub: null,
             hint: t('dash.tile.meetings.hint'),
+            trend: input.trends?.meetings ?? null,
         },
         { label: t('dash.tile.bounce'), value: null, sub: null },
     ];

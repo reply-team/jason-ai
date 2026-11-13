@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals-react';
 import type { CampaignActivityResponse } from '../api/types';
+import type { JasonDesktop } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { archivedLeftOut } from '../screens/campaigns/store';
@@ -7,6 +8,7 @@ import { act, argsOf, define } from './actions';
 import * as campaigns from './campaigns';
 import {
     categoryLabel,
+    categoryTrend,
     cut,
     dashboardPeriods,
     dashboardWindow,
@@ -17,11 +19,15 @@ import {
     progressOf,
     rangeProblem,
     startingRange,
+    tileTrendsOf,
     tilesOf,
+    trendWindows,
     type ActivityRead,
     type CustomRange,
     type DashboardPeriod,
     type ReplyCountRead,
+    type Trend,
+    type TrendReads,
 } from './dashboard-model';
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
 import { html, type Html } from './html';
@@ -47,16 +53,79 @@ export const replies = signal<ReplyCountRead | null>(null);
 /** Where the replies' read stands: asked for nothing (a custom range that asks for none), waiting, answered or failed. */
 export const repliesStatus = signal<'not_asked' | 'loading' | 'read' | 'failed'>('loading');
 
+/** Whether the daily trends are shown; on unless the desktop kept that the person turned them off. */
+export const trendsOn = signal(true);
+/** The last 24 hours read against the 24 before them, whatever the period; null until read, off, or when nothing was read. */
+export const trendReads = signal<TrendReads | null>(null);
+
 /** The period's counts across the agents not archived, and by agent; null until read or when the read failed. */
 export const activity = signal<{ total: ActivityRead; byCampaign: Record<string, ActivityRead> } | null>(null);
 
 let generation = 0;
+let trendGeneration = 0;
+
+/** The two adjacent 24-hour windows, read at once; a window whose read failed is unknown, and a late answer is dropped. */
+async function reloadTrends(): Promise<void> {
+    const mine = ++trendGeneration;
+    if (!trendsOn.value) {
+        trendReads.value = null;
+        return;
+    }
+    const { last, before } = trendWindows(new Date());
+    let api;
+    try {
+        api = here().api;
+    } catch {
+        // The console is gone: nothing to read for.
+        return;
+    }
+    const counts = async (window: { since: string; until: string }): Promise<ActivityRead | null> => {
+        try {
+            const read = await api.call<CampaignActivityResponse>('campaign.activity', {
+                ...archivedLeftOut,
+                ...window,
+            });
+            return { contacted: read.total.contacted, replied: read.total.replied };
+        } catch {
+            return null;
+        }
+    };
+    const judged = async (window: { since: string; until: string }): Promise<ReplyCountRead | null> => {
+        try {
+            return await api.call<ReplyCountRead>('reply.count', window);
+        } catch {
+            return null;
+        }
+    };
+    const [lastCounts, lastReplies, beforeCounts, beforeReplies] = await Promise.all([
+        counts(last),
+        judged(last),
+        counts(before),
+        judged(before),
+    ]);
+    if (mine !== trendGeneration) return;
+    trendReads.value = {
+        last: { activity: lastCounts, replies: lastReplies },
+        before: { activity: beforeCounts, replies: beforeReplies },
+    };
+}
+
+/** What the desktop kept of the switch: off only when it was told off; a tab with no such member shows them, unremembered. */
+async function keptTrendsChoice(): Promise<boolean> {
+    try {
+        const seam = (here().desktop as Partial<Pick<JasonDesktop, 'dailyTrends'>>).dailyTrends;
+        return (await seam?.get?.()) !== false;
+    } catch {
+        return true;
+    }
+}
 /** How many Dashboard panels are open: the journal's reload reads the counts again only for one that is. */
 let open = 0;
 
 /** The period's counts and replies; a late answer is dropped, and a failed read leaves its numbers unknown. */
 export async function reload(): Promise<void> {
     const mine = ++generation;
+    void reloadTrends();
     const window = dashboardWindow(period.value, new Date(), zone, custom.value);
     if (window === null) {
         activity.value = null;
@@ -105,7 +174,12 @@ export function watching(on: boolean): void {
         custom.value = { from: '', to: '' };
         replies.value = null;
         repliesStatus.value = 'loading';
-        void reload();
+        void keptTrendsChoice()
+            .then((shown) => {
+                trendsOn.value = shown;
+                return reload();
+            })
+            .catch(() => undefined);
     }
 }
 
@@ -124,6 +198,18 @@ define('dash.range', ([end], element) => {
     if ((end !== 'from' && end !== 'to') || !(element instanceof HTMLInputElement)) return;
     custom.value = { ...custom.value, [end]: element.value };
     void reload();
+});
+define('dash.trends', (_args, element) => {
+    if (!(element instanceof HTMLInputElement)) return;
+    trendsOn.value = element.checked;
+    try {
+        void (here().desktop as Partial<Pick<JasonDesktop, 'dailyTrends'>>).dailyTrends
+            ?.set?.(element.checked)
+            ?.catch(() => undefined);
+    } catch {
+        // A desktop with no such member: the switch holds for this page alone.
+    }
+    void reloadTrends();
 });
 define('dash.new', () => here().dock.show('start'));
 define('dash.needs', () => here().dock.show('needs'));
@@ -222,6 +308,10 @@ function header(waiting: number): Html {
         </div>
         <div class="acts">
             ${periodControl()}
+            <label class="dash-trends-switch">
+                <input type="checkbox" data-change="dash.trends" ${trendsOn.value ? html`checked` : null} />
+                ${t('dash.trends')}
+            </label>
             ${
                 waiting > 0
                     ? html`<button class="btn p" type="button" ${act('dash.needs')}>
@@ -236,6 +326,13 @@ function header(waiting: number): Html {
     </div>`;
 }
 
+/** The change over the last 24 hours, beside a number; nothing where there is none to show. */
+function trendView(trend: Trend | null): Html | null {
+    return trend === null
+        ? null
+        : html`<span class="dash-trend ${trend.tone}" title="${t('dash.trend.hint')}">${trend.text}</span>`;
+}
+
 function tiles(): Html {
     const read = activity.value;
     const list = tilesOf({
@@ -244,6 +341,7 @@ function tiles(): Html {
         waitingKnown: needs.attention.loaded.value,
         activity: read === null ? null : read.total,
         replies: replies.value,
+        trends: trendsOn.value ? tileTrendsOf(trendReads.value) : null,
     });
     return html`<div class="dash-tiles" role="group" aria-label="${t('dash.tiles')}">
         ${list.map(
@@ -259,7 +357,7 @@ function tiles(): Html {
                             ? html`<b class="dash-none" aria-label="${t('dash.tile.none')}">${t('dash.dash')}</b
                                   ><span class="rel">${t('dash.tile.none')}</span>`
                             : html`<b>${tile.value}</b
-                                  >${tile.sub === null ? null : html`<span class="rel">${tile.sub}</span>`}`
+                                  >${trendView(tile.trend ?? null)}${tile.sub === null ? null : html`<span class="rel">${tile.sub}</span>`}`
                     }
                 </div>`,
         )}
@@ -418,7 +516,10 @@ function categories(): Html {
                                     (each) =>
                                         html`<tr data-category="${each.category}">
                                             <td>${categoryLabel(each.category)}</td>
-                                            <td>${each.threads}</td>
+                                            <td>
+                                                ${each.threads}
+                                                ${trendView(trendsOn.value ? categoryTrend(trendReads.value, each.category) : null)}
+                                            </td>
                                             <td>${each.replies}</td>
                                         </tr>`,
                                 )}
