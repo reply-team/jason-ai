@@ -29,6 +29,7 @@ const row = (fields: Partial<RecentRow>): RecentRow => ({
     id: 'conv_1',
     title: 'A chat',
     agent: null,
+    aboutAgent: false,
     waiting: 0,
     state: null,
     running: false,
@@ -96,6 +97,13 @@ describe('the rows under Recent', () => {
         expect(
             recentRows({ ...input, running: (id) => (id === 'c2' ? true : false) }).map((each) => each.running),
         ).toEqual([false, true]);
+    });
+
+    it('knows a chat about no campaign from one whose campaign the page does not hold', () => {
+        expect(rows[4]!.aboutAgent).toBe(false);
+        expect(rows[3]!.aboutAgent).toBe(true);
+        expect(rows[3]!.agent).toBeNull();
+        expect(rows[3]!.dot).toBe('none');
     });
 
     it('puts a chat with no agent under All alone', () => {

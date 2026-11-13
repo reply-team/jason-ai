@@ -80,6 +80,12 @@ define('recent.more', () => {
     limit.value += pageSize;
 });
 
+/** The dot's title: its state when the page holds one, "No agent" only for a chat about no campaign, else none. */
+function dotTitle(row: RecentRow): Html | null {
+    if (row.dot === 'none' && row.aboutAgent) return null;
+    return html`title="${dotTitles[row.dot]}"`;
+}
+
 function rowView(row: RecentRow): Html {
     const said = [
         row.waiting > 0 ? t('recent.waiting', { count: String(row.waiting) }) : null,
@@ -96,11 +102,7 @@ function rowView(row: RecentRow): Html {
         ${row.id === currentChat.value ? html`aria-current="true"` : null}
         ${act('side.chat', row.id)}
     >
-        <span
-            class="rdot ${row.dot}${row.running ? ' running' : ''}"
-            title="${dotTitles[row.dot]}"
-            aria-hidden="true"
-        ></span>
+        <span class="rdot ${row.dot}${row.running ? ' running' : ''}" ${dotTitle(row)} aria-hidden="true"></span>
         <span class="rt">${row.title}</span>
         ${row.waiting > 0 ? html`<span class="count" aria-hidden="true">${row.waiting}</span>` : null}
         <span class="t" aria-hidden="true">${row.age}</span>

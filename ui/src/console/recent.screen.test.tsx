@@ -259,6 +259,19 @@ describe('a row', () => {
         expect(desktop).toBeTruthy();
     });
 
+    it('titles the ring No agent only for a chat about no campaign, and gives a chat whose agent is not held none', async () => {
+        await renderConsole((desktop) => {
+            seedAgents(desktop);
+            desktop.keep({ id: 'conv_g', campaignId: 'cmp_gone', title: 'Archived one', updatedAt: minutes(10.5) });
+        });
+        await waitFor(() => expect(rows()).toHaveLength(5));
+        const ring = (name: string) => row(name).querySelector('.rdot');
+        expect(ring('Help me start')?.className).toContain('none');
+        expect(ring('Help me start')?.getAttribute('title')).toBe('No agent');
+        expect(ring('Archived one')?.className).toContain('none');
+        expect(ring('Archived one')?.hasAttribute('title')).toBe(false);
+    });
+
     it('opens its chat when clicked, as before', async () => {
         const desktop = await renderConsole(seedAgents);
         await waitFor(() => expect(rows()).toHaveLength(4));

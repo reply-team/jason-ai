@@ -19,6 +19,8 @@ export interface RecentRow {
     title: string;
     /** The name of the agent the chat is about; null for a chat with no agent. */
     agent: string | null;
+    /** Whether the conversation is about a campaign at all, whether or not the page holds that campaign. */
+    aboutAgent: boolean;
     /** Pending approvals plus pending questions of the row's agent. */
     waiting: number;
     /** The agent's state, whether or not something waits; null for a chat with no agent or one not read yet. */
@@ -61,6 +63,7 @@ export function recentRows(input: RecentInput): RecentRow[] {
                 id: conversation.id,
                 title: input.titles(conversation.id) ?? conversation.title,
                 agent: agent?.name ?? null,
+                aboutAgent: conversation.campaignId !== null,
                 waiting,
                 state: state ?? null,
                 running: input.running?.(conversation.id) ?? conversation.running,
