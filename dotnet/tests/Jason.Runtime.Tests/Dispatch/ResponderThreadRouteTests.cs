@@ -113,6 +113,31 @@ public class ResponderThreadRouteTests
         Assert.Equal((Responder.ReadOperation, plugin, "sha256:" + plugin), (claimed.Plan!.Contract.Id, claimed.Plan.Plugin.Manifest.Id, claimed.Plan.BindingIdentity));
     }
 
+    /// <summary>
+    /// A thread id the campaign saw at both plugins — a LinkedIn thread at the social plugin, then an email thread at the
+    /// mailer — is read where the read's own route says, the mailer, since the claim resolves the read over every line of
+    /// the thread. So the LinkedIn reply gets no read, which would fetch the email conversation and draft the answer from
+    /// it: its responder is created ready, to find the thread itself.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_on_an_id_two_plugins_hold_gets_no_read_where_the_read_s_own_route_names_another_plugin()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Routed(harness);
+        var campaign = await CampaignAsync(harness);
+        await SeenByEventsAsync(harness, campaign, "123", Social, "sha256:" + Social);
+        await SeenByInboundReadAsync(harness, campaign, "123", Mailer, "sha256:" + Mailer);
+
+        Assert.True(await harness.RespondAsync(Ct) >= 1);
+
+        await using var db = harness.Open();
+        var responders = await db.WorkItems.Where(item => item.Role == Responder.Role).ToListAsync(Ct);
+        var linkedIn = Assert.Single(responders, item => (string?)item.Context["inbound_reply"]!["channel"] == "linkedin");
+        Assert.Null((string?)linkedIn.Context["inbound_reply"]!["read"]);
+        var reads = await db.WorkItems.Where(item => item.Operation == Responder.ReadOperation).Select(item => item.PublicId).ToListAsync(Ct);
+        Assert.All(reads, read => Assert.Contains(responders, item => item != linkedIn && (string?)item.Context["inbound_reply"]!["read"] == read));
+    }
+
     /// <summary>A reply the inbound read saw at the account the read is routed to is read there, as it always was.</summary>
     [Fact]
     public async Task A_reply_seen_at_the_read_s_own_account_is_read_there()

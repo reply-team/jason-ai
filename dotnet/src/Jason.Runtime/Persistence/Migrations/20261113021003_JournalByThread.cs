@@ -20,7 +20,8 @@ namespace Jason.Runtime.Persistence.Migrations
             // of the body, for that kind only, makes it a seek. It adds an index and nothing else: the journal's columns,
             // its other indexes and its append-only triggers are as they were, and the model knows nothing of it, since
             // an expression is not a property. An older executable started on this database writes lines as before, and
-            // SQLite keeps the index for it.
+            // SQLite keeps the index for it. The index is outside the model, as the journal's triggers are, so a later
+            // migration that rebuilds the journal table must create it again.
             migrationBuilder.Sql(
                 $"CREATE INDEX {Index} ON journal (campaign_id, json_extract(new_json, '$.thread')) WHERE kind = 'inbound_reply_observed';");
         }

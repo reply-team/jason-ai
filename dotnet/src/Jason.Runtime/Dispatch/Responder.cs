@@ -369,15 +369,21 @@ public sealed class Responder(
     /// The read of the thread, where the thread was seen: the plugin the line names, and by preference the account its read
     /// ran under, taken from the line itself, when a route active now names that plugin (<see cref="RouteResolver.ForThread"/>)
     /// and it performs the read; none when no route names it, or when the thread's identifier is one the operation's
-    /// input refuses — validation refuses before anything is added, so nothing is left behind. The claim routes the read
-    /// by the same rule, over the campaign's lines of the thread.
+    /// input refuses — validation refuses before anything is added, so nothing is left behind. The route is resolved as
+    /// the claim will resolve the read, over every line of the campaign naming the thread, and must name the line's plugin:
+    /// an id the campaign saw at more than one plugin is read where the read's own route says, and where that is another
+    /// plugin the read would fetch another conversation than the one this line answers, so none is made.
     /// </summary>
     private async Task<WorkItem?> ReadAsync(JasonDbContext db, Active campaign, Line line, Reply reply, string? contact, ResponderOptions options, CancellationToken ct)
     {
         var seen = await ThreadSightings.OfLineAsync(db, line.Id, ct).ConfigureAwait(false);
-        if (seen is null
-            || !string.Equals(seen.PluginId, reply.Plugin, StringComparison.Ordinal)
-            || RouteResolver.ForThread(routes.Snapshot, campaign.PublicId, ReadOperation, ThreadSightings.ListOperation, [seen]) is not { } resolution
+        if (seen is null || !string.Equals(seen.PluginId, reply.Plugin, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var all = await ThreadSightings.InCampaignAsync(db, campaign.Id, reply.Thread, ct).ConfigureAwait(false);
+        if (RouteResolver.ForThread(routes.Snapshot, campaign.PublicId, ReadOperation, ThreadSightings.ListOperation, all.Count > 0 ? all : [seen]) is not { } resolution
             || !seen.NamesThePlugin(resolution.Route)
             || ProviderOpPreflight.Routable(plugins.Snapshot, ReadContract, resolution.Route) is not null)
         {
