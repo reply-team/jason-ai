@@ -256,7 +256,7 @@ public partial class ReleaseWorkflowTests
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "desktop", "test", "check-package.test.ts")), "desktop/test/check-package.test.ts is not in the tree.");
 
         var windows = Scalar(ActionStep(WindowsDesktopVerify), "run")!.Split('\n').Select(line => line.Trim()).ToList();
-        var call = windows.IndexOf("node desktop/scripts/check-package.mjs --app $app --platform win32");
+        var call = windows.IndexOf("node desktop/scripts/check-package.mjs --app $app --platform win32 @demo");
         Assert.True(call >= 0, "The Windows check never reads the feed and the fuses back from the application the installer carries.");
         Assert.Equal("if ($LASTEXITCODE -ne 0) { throw \"The application the installer carries is not what it was configured to be: its feed or its fuses.\" }", windows[call + 1]);
         Assert.True(call > windows.IndexOf("& $sevenZip x (Join-Path $opened '$PLUGINSDIR/app-64.7z') \"-o$app\" -y | Out-Null"), "The Windows check reads the application before the installer is opened.");
@@ -267,13 +267,13 @@ public partial class ReleaseWorkflowTests
         Assert.True(loop >= 0 && end > loop, "The Mac check has no loop over both architectures.");
         foreach (var (app, what) in new[] { ("\"$app\"", "application"), ("\"$unzipped/Jason.app\"", "application inside the zip") })
         {
-            var line = $"node desktop/scripts/check-package.mjs --app {app} --platform darwin || {{ echo \"::error title=Desktop::The $arch {what} is not what it was configured to be: its feed or its fuses.\"; exit 1; }}";
+            var line = $"node desktop/scripts/check-package.mjs --app {app} --platform darwin \"${{demo[@]}}\" || {{ echo \"::error title=Desktop::The $arch {what} is not what it was configured to be: its feed or its fuses.\"; exit 1; }}";
             var at = mac.IndexOf(line);
             Assert.True(at > loop && at < end, $"The Mac check never reads the feed and the fuses back from each architecture's {what}.");
         }
 
         Assert.True(
-            mac.IndexOf("node desktop/scripts/check-package.mjs --app \"$unzipped/Jason.app\" --platform darwin || { echo \"::error title=Desktop::The $arch application inside the zip is not what it was configured to be: its feed or its fuses.\"; exit 1; }")
+            mac.IndexOf("node desktop/scripts/check-package.mjs --app \"$unzipped/Jason.app\" --platform darwin \"${demo[@]}\" || { echo \"::error title=Desktop::The $arch application inside the zip is not what it was configured to be: its feed or its fuses.\"; exit 1; }")
                 > mac.IndexOf("ditto -x -k \"$zip\" \"$unzipped\""),
             "The Mac check reads the application inside the zip before the zip is opened.");
     }
