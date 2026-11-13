@@ -23,7 +23,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { pairingLink } from './descriptor.ts';
+import { isOwnPage, pairingLink } from './descriptor.ts';
 import { invokeChannels, type Handler, type InvokeMember } from './ipc.ts';
 import type { Logger } from './log.ts';
 
@@ -474,6 +474,26 @@ export function bridgeLink(link: string, port: number, code: string): string {
     const at = link.indexOf('#');
     if (at < 0) return `${link}#/?${pair}`;
     return link.slice(at).includes('?') ? `${link}&${pair}` : `${link}?${pair}`;
+}
+
+/**
+ * The second way to the system browser, beside the https-only one: a page of the runtime's own UI, held here, at the
+ * moment it is opened, to the runtime's origin as the run file says it now and to a path under `/ui/`, whatever its
+ * caller held it to. main.ts's navigation lock hands it the system's opener; the log names the act and never the link.
+ */
+export async function openOwnPage(url: string, deps: { origin(): string | null; open(url: string): Promise<void>; log: Logger }): Promise<void> {
+    const here = deps.origin();
+    if (here === null || !isOwnPage(url, here)) {
+        deps.log.warn('own_page_refused', {});
+        throw new Error("Only Jason's own page goes to the browser this way.");
+    }
+    try {
+        await deps.open(url);
+    } catch (error) {
+        deps.log.warn('link_open_failed', {});
+        throw error;
+    }
+    deps.log.info('own_page_opened', {});
 }
 
 export interface TabDeps {

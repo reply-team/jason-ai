@@ -151,7 +151,7 @@ test('inside the navigation lock a URL reaches the system browser only through i
     assert.deepEqual(Object.keys(navigationOpeners).sort(), ['leave', 'ownPage']);
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
     assert.equal([...main.matchAll(/\bshell\s*\.\s*openExternal\b/g)].length, 2, 'main.ts hands a URL to the system browser in two places');
-    assert.match(main, /const ownPage = \(url: string\): Promise<void> => \{\s*const here = origin\(\);\s*if \(here === null \|\| !isOwnPage\(url, here\)\)/, 'ownPage holds the address to the runtime\'s own page first');
+    assert.match(main, /const ownPage = \(url: string\): Promise<void> => openOwnPage\(url, \{ origin, log, open: \(held\) => shell\.openExternal\(held\) \}\);/, 'ownPage hands the system opener to openOwnPage, which holds the address itself');
     const lock = (body: string) => `function lockNavigation(contents) {\n${body}\n}\n`;
     const both = '    const leave = (url) => void shell.openExternal(url);\n    const ownPage = (url) => void shell.openExternal(url);';
     assert.deepEqual(processViolations('src/main.ts', lock(both)), []);
@@ -163,6 +163,25 @@ test('inside the navigation lock a URL reaches the system browser only through i
     ]) {
         assert.notDeepEqual(processViolations('src/main.ts', lock(planted)), [], planted);
     }
+});
+
+test('the opener of the runtime\'s own page is called only by the bridge\'s opening act, and a planted call anywhere else fires the rule', () => {
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    assert.match(main, /browser: \(\) => openTab\(\{ origin, cli, bridge: \(\) => bridges\.ensure\(\), open: ownPage, log \}\),/);
+    const lock = "function lockNavigation(contents) {\n    const ownPage = (url) => openOwnPage(url, { origin, log, open: (held) => shell.openExternal(held) });\n}\n";
+    const wired = `import { openOwnPage, openTab } from './browser-bridge.ts';\n${lock}\nconst { leave: toBrowser, ownPage } = lockNavigation(window.webContents, origin, log);\n    browser: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),\n`;
+    assert.deepEqual(processViolations('src/main.ts', wired), []);
+    for (const planted of [
+        'void ownPage(link);',
+        '    openLink: ownPage,',
+        "    other: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),",
+        'const opener = ownPage;',
+        'void openOwnPage(link, deps);',
+    ]) {
+        assert.notDeepEqual(processViolations('src/main.ts', `${wired}${planted}\n`), [], planted);
+    }
+    assert.notDeepEqual(processViolations('src/setup.ts', "import { openOwnPage } from './browser-bridge.ts';\nvoid openOwnPage(link, deps);\n"), []);
+    assert.deepEqual(processViolations('src/browser-bridge.ts', 'export async function openOwnPage(url, deps) {}\n'), []);
 });
 
 test('utilityProcess is refused everywhere', () => {

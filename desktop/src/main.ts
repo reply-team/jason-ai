@@ -32,11 +32,11 @@ import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
-import { isOwnPage, loopbackOrigin, runtimeOrigin } from './descriptor.ts';
+import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember } from './ipc.ts';
-import { BridgeHolder, BrowserBridge, openTab } from './browser-bridge.ts';
+import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
@@ -146,20 +146,8 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
             },
         );
     };
-    const ownPage = (url: string): Promise<void> => {
-        const here = origin();
-        if (here === null || !isOwnPage(url, here)) {
-            log.warn('own_page_refused', {});
-            return Promise.reject(new Error("Only Jason's own page goes to the browser this way."));
-        }
-        return shell.openExternal(url).then(
-            () => log.info('own_page_opened', {}),
-            (error: unknown) => {
-                log.warn('link_open_failed', {});
-                throw error;
-            },
-        );
-    };
+    // Held to the runtime's own page as the run file says it at this moment, whatever the caller held (`openOwnPage`).
+    const ownPage = (url: string): Promise<void> => openOwnPage(url, { origin, log, open: (held) => shell.openExternal(held) });
     const guard = (event: { preventDefault(): void }, url: string) => {
         const here = origin();
         if (here !== null && originOf(url) === here) return;

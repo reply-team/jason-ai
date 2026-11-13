@@ -8,7 +8,7 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { bridgeLink, bridgeMembers, BridgeHolder, BrowserBridge, elsewhere, fullAccessElsewhere, modeElsewhere, openTab, type BridgeOptions } from '../src/browser-bridge.ts';
+import { bridgeLink, bridgeMembers, BridgeHolder, BrowserBridge, elsewhere, fullAccessElsewhere, modeElsewhere, openOwnPage, openTab, type BridgeOptions } from '../src/browser-bridge.ts';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { registerChat } from '../src/chat-ipc.ts';
@@ -16,7 +16,7 @@ import { fullAccessConsent } from '../src/chat-modes.ts';
 import { writeStanding } from '../src/full-access-standing.ts';
 import { invokeChannels, withMembers, type Handler, type InvokeMember, type IpcRegistrar } from '../src/ipc.ts';
 import { isOwnPage } from '../src/descriptor.ts';
-import { fileLogger } from '../src/log.ts';
+import { fileLogger, holesOf, templates } from '../src/log.ts';
 import { bench, memoryLog, outsideStandIn, placeSandboxFiles } from './harness.ts';
 
 const runtime = 'http://127.0.0.1:41234';
@@ -573,6 +573,49 @@ test('the opener of the tab opens only a page of the runtime\'s own UI at the ru
     for (const url of [`${runtime}/v1/status`, `${runtime}/uix/`, 'http://127.0.0.1:9999/ui/', 'https://example.com/ui/', `http://user@127.0.0.1:41234/ui/`, 'http://localhost:41234/ui/', 'file:///ui/', 'not a link']) {
         assert.equal(isOwnPage(url, runtime), false, url);
     }
+});
+
+test('the opener holds the link itself, to the runtime\'s origin as the run file says it at the moment it opens, and to /ui/', async () => {
+    const opened: string[] = [];
+    const now = { origin: runtime as string | null };
+    const deps = { origin: () => now.origin, open: async (url: string) => void opened.push(url), log: memoryLog() };
+    const link = `${runtime}/ui/#/attention?t=T&d=50123.${'C'.repeat(22)}`;
+    await openOwnPage(link, deps);
+    assert.deepEqual(opened, [link]);
+    // A caller that held the link to the origin of a moment ago is not trusted: the runtime moved, the link is refused.
+    now.origin = 'http://127.0.0.1:50000';
+    await assert.rejects(openOwnPage(link, deps));
+    now.origin = null;
+    await assert.rejects(openOwnPage(link, deps));
+    now.origin = runtime;
+    for (const url of [`${runtime}/v1/status`, 'https://example.com/ui/', `${runtime}/uix/`]) await assert.rejects(openOwnPage(url, deps), url);
+    assert.deepEqual(opened, [link], 'nothing refused reached the system opener');
+});
+
+test('the log names the act of opening and never the link: its two lines have no hole, and the code is in no field', async () => {
+    assert.deepEqual(holesOf(templates.own_page_opened), []);
+    assert.deepEqual(holesOf(templates.own_page_refused), []);
+    const log = memoryLog();
+    const code = 'C'.repeat(22);
+    await openOwnPage(`${runtime}/ui/#/?t=T&d=1.${code}`, { origin: () => runtime, open: async () => undefined, log });
+    await assert.rejects(openOwnPage(`http://127.0.0.1:9/ui/#/?d=1.${code}`, { origin: () => runtime, open: async () => undefined, log }));
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['own_page_opened', {}], ['own_page_refused', {}]]);
+});
+
+test('the code rides in the link\'s fragment and nowhere else: not before the fragment, not to the CLI, not in the log', async (t) => {
+    const r = await rig(t);
+    const asked: string[][] = [];
+    const opened: string[] = [];
+    const log = memoryLog();
+    const cli = { run: async (args: readonly string[]) => (asked.push([...args]), { exit: 0, stdout: json({ url: `${runtime}/ui/#/attention?t=TICKET` }), stderr: '' }) };
+    assert.equal(await openTab({ origin: () => runtime, cli, bridge: async () => r.bridge, open: async (link) => void opened.push(link), log }), null);
+    const link = opened[0] ?? '';
+    const code = /d=\d+\.([A-Za-z0-9_-]{22})$/.exec(link)?.[1] ?? '';
+    assert.equal(code.length, 22);
+    assert.equal(link.indexOf(code), link.lastIndexOf(code), 'once in the link');
+    assert.ok(link.indexOf(code) > link.indexOf('#'), 'after the fragment begins');
+    assert.ok(!JSON.stringify(asked).includes(code), 'never on the CLI\'s command line');
+    assert.ok(!JSON.stringify([...log.lines, ...r.log.lines]).includes(code), 'never in the log');
 });
 
 test('the tab is opened at the link the CLI printed, held to the runtime\'s origin and /ui/, with a code that pairs once', async (t) => {

@@ -123,6 +123,24 @@ export const navigationOpeners: Readonly<Record<string, string>> = {
     ownPage: "a page of the runtime's own UI at its origin, under /ui/: the chat in a browser tab",
 };
 
+/**
+ * Who may call the opener of the runtime's own page: the browser bridge's opening act alone. In main.ts, `ownPage` is
+ * named outside the navigation lock only where the lock hands it out and where `openTab` is given it as its opener;
+ * `openOwnPage` is named only by its module and, in main.ts, by its import and inside the lock.
+ */
+export const ownPageCaller = "src/main.ts: openTab's open, in the Open in browser place, the bridge's opening act";
+
+const ownPageName = /\bownPage\b/g;
+const ownPageHandedOut = /=\s*lockNavigation\(/;
+const ownPageToTab = /\bopenTab\(\{[^\n]*\bopen:\s*ownPage\b/;
+const openOwnPageName = /\bopenOwnPage\b/g;
+
+/** The line of `text` that holds `index`. */
+function lineAt(text: string, index: number): string {
+    const end = text.indexOf('\n', index);
+    return text.slice(text.lastIndexOf('\n', index) + 1, end < 0 ? text.length : end);
+}
+
 /** The opener an `openExternal` call at `index` is written in: the nearest `const <name> = (` before it, or null. */
 function openerAt(text: string, from: number, index: number): string | null {
     let name: string | null = null;
@@ -218,6 +236,28 @@ export function processViolations(path: string, text: string): string[] {
         }
         opened.set(opener, (opened.get(opener) ?? 0) + 1);
         if (opened.get(opener) === 2) found.push(`${path} hands a URL to the system browser more than once in ${opener}`);
+    }
+    const outsideLock = (index: number) => lock === null || index < lock.start || index > lock.end;
+    if (path !== 'src/browser-bridge.ts') {
+        for (const match of text.matchAll(openOwnPageName)) {
+            const line = lineAt(text, match.index);
+            if (path !== 'src/main.ts' || (outsideLock(match.index) && !/^import\s/.test(line))) {
+                found.push(`${path} names the opener of the runtime's own page outside main.ts's navigation lock`);
+            }
+        }
+    }
+    if (path === 'src/main.ts') {
+        const seen = { handedOut: 0, toTab: 0 };
+        for (const match of text.matchAll(ownPageName)) {
+            if (!outsideLock(match.index)) continue;
+            const line = lineAt(text, match.index);
+            // A line of a comment names it and calls nothing.
+            if (/^\s*(?:\*|\/\/|\/\*)/.test(line)) continue;
+            if (ownPageHandedOut.test(line)) seen.handedOut++;
+            else if (ownPageToTab.test(line)) seen.toTab++;
+            else found.push(`${path} uses the opener of the runtime's own page other than as ${ownPageCaller}`);
+        }
+        if (seen.handedOut > 1 || seen.toTab > 1) found.push(`${path} hands the opener of the runtime's own page to more than ${ownPageCaller}`);
     }
     return found;
 }
