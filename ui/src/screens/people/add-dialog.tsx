@@ -33,7 +33,7 @@ export function AddDialog({ person, onClose }: Props) {
         try {
             const result = await store.add(api, person.id, campaign.id, reason.trim() || undefined);
             const item = result.items[0];
-            if (item?.status === 'rejected') setRefused(item.error?.message ?? 'The campaign refused this person.');
+            if (item?.status === 'rejected') setRefused(item.error?.message ?? 'The agent refused this person.');
             else if (item?.status === 'already_member') setSaid(`${campaign.name} already has them.`);
             else onClose();
         } catch (error) {
@@ -46,8 +46,8 @@ export function AddDialog({ person, onClose }: Props) {
 
     return (
         <Dialog
-            title={'Add to campaign'}
-            label="Add to campaign"
+            title={'Add to agent'}
+            label="Add to agent"
             onClose={onClose}
             buttons={
                 <>
@@ -64,11 +64,11 @@ export function AddDialog({ person, onClose }: Props) {
         >
             <div className="field">
                 <CampaignPicker
-                    label={campaign?.name ?? 'Choose a campaign'}
-                    none="Choose a campaign"
+                    label={campaign?.name ?? 'Choose an agent'}
+                    none="Choose an agent"
                     onPick={setCampaign}
                 />
-                {excluded && <div className="hint">They were excluded from this campaign; adding re-enrols them.</div>}
+                {excluded && <div className="hint">They were excluded from this agent; adding re-enrols them.</div>}
             </div>
             <div className="field">
                 <label htmlFor="add-reason">Reason (optional, kept in the journal)</label>

@@ -30,9 +30,9 @@ export function CampaignsPicker({
         <>
             <MultiSearchPicker
                 opener={opener}
-                label={chosen.length > 0 ? 'Campaigns' : 'All campaigns'}
+                label={chosen.length > 0 ? 'Agents' : 'All agents'}
                 set={chosen.length > 0}
-                placeholder="Find a campaign"
+                placeholder="Find an agent"
                 max={max}
                 chosen={chosen.map((campaign) => campaign.id)}
                 search={async (query) =>

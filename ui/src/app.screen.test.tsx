@@ -16,7 +16,7 @@ describe('the shell', () => {
             'Chat',
             'Attention',
             'Performance',
-            'Campaigns',
+            'Agents',
             'Work items',
             'People',
             'System',

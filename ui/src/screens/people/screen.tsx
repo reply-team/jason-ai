@@ -57,7 +57,7 @@ export function PeopleScreen() {
         ? store.campaign.value?.id === filters.campaign
             ? store.campaign.value.name
             : '…'
-        : 'All campaigns';
+        : 'All agents';
 
     return (
         <div className={`main${selected ? '' : ' single'}`}>
@@ -75,7 +75,7 @@ export function PeopleScreen() {
                     />
                     <CampaignPicker
                         label={campaignLabel}
-                        none="All campaigns"
+                        none="All agents"
                         onPick={(picked) => {
                             if (picked) store.campaign.value = picked;
                             narrow(withValue(filters, 'campaign', picked?.id));
@@ -117,7 +117,7 @@ export function PeopleScreen() {
                         <div className="empty">Nobody matches.</div>
                     ) : (
                         <EmptyStart
-                            sentence="Nobody yet. People come in when a campaign finds or imports them: start with a campaign, set up in a chat with Jason."
+                            sentence="Nobody yet. People come in when an agent finds or imports them: start with an agent, set up in a chat with Jason."
                             start={chat ? () => chat() : null}
                         />
                     )

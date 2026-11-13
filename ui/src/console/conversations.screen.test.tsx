@@ -170,7 +170,7 @@ describe('the desktop’s conversations', () => {
         });
         expect(note.textContent).toContain('The version of Claude Code could not be read');
         expect(within(note).getByRole('button', { name: 'Check again' })).toBeTruthy();
-        expect(within(panel).getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'claude');
+        expect(within(panel).getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'claude');
         expect(within(panel).getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
         fireEvent.change(within(panel).getByRole('textbox', { name: 'Your message' }), {
             target: { value: 'And now?' },
@@ -256,10 +256,20 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(names()).toEqual(['Spring', 'Autumn outreach']));
     });
 
+    it('shows a suggestion in the word the page uses for a campaign, and sends the word the runtime uses', async () => {
+        const { desktop } = renderConsole();
+        const chip = await waitFor(() => screen.getByRole('button', { name: 'Help me start a new agent.' }));
+        expect(screen.getByRole('button', { name: 'How are my agents doing?' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Help me start a new campaign.' })).toBeNull();
+        fireEvent.click(chip);
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        expect(calls(desktop, 'chat.send')[0]!.args[1]).toBe('Help me start a new campaign.');
+    });
+
     it('sends a turn with the host alone: the conversation the desktop keeps decides the campaign', async () => {
         const { desktop } = renderConsole();
-        await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
-        fireEvent.click(within(side()).getByRole('button', { name: 'Campaigns' }));
+        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
+        fireEvent.click(within(side()).getByRole('button', { name: 'Agents' }));
         const spring = await waitFor(() => screen.getByText('Spring', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
         const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
@@ -286,7 +296,7 @@ describe('the desktop’s conversations', () => {
         expect(chats.value[id]).toMatchObject({ campaignId: 'cmp_2', title: 'Autumn' });
         await waitFor(() => expect(within(listed()).getByRole('button', { name: 'Autumn' })).toBeTruthy());
         // From now on it is that campaign's conversation: the Campaigns list's Chat opens it, and no other.
-        fireEvent.click(within(side()).getByRole('button', { name: 'Campaigns' }));
+        fireEvent.click(within(side()).getByRole('button', { name: 'Agents' }));
         const autumn = await waitFor(() => screen.getByText('Autumn', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(autumn).getByRole('button', { name: 'Chat' }));
         await waitFor(() => expect(calls(desktop, 'chat.create').at(-1)!.args).toEqual(['cmp_2']));
@@ -319,7 +329,7 @@ describe('the desktop’s conversations', () => {
 
     it('says a pick the desktop refused in its own words, and keeps the choice open', async () => {
         const desktop = chatDesktop();
-        desktop.refuse.set('chat.attach', 'That campaign has its conversation already. Open it from the campaign.');
+        desktop.refuse.set('chat.attach', 'That agent has its conversation already. Open it from the agent.');
         renderConsole(desktop);
         const id = await send(desktop, 'Make two campaigns');
         flush(() => {
@@ -328,7 +338,7 @@ describe('the desktop’s conversations', () => {
         });
         await waitFor(() => screen.getByRole('button', { name: 'Spring' }));
         fireEvent.click(screen.getByRole('button', { name: 'Spring' }));
-        await waitFor(() => screen.getByText('That campaign has its conversation already. Open it from the campaign.'));
+        await waitFor(() => screen.getByText('That agent has its conversation already. Open it from the agent.'));
         expect(chats.value[id]?.campaignId).toBeNull();
         expect(within(document.querySelector<HTMLElement>('.chat-pick')!).getAllByRole('button')).toHaveLength(2);
     });
@@ -342,7 +352,7 @@ describe('the desktop’s conversations', () => {
         );
         flush(() => desktop.emit(id, { kind: 'fresh', reason: 'not_found' }));
         await waitFor(() =>
-            screen.getByText("The agent's memory of this conversation was gone; it starts from the last messages."),
+            screen.getByText("The AI's memory of this conversation was gone; it starts from the last messages."),
         );
     });
 
@@ -380,12 +390,12 @@ describe('the desktop’s conversations', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Start afresh' }));
         await waitFor(() => expect(calls(desktop, 'chat.restart').map((each) => each.args)).toEqual([[id]]));
         await waitFor(() =>
-            screen.getByText("Started afresh: the agent's next turn begins without its memory of this conversation."),
+            screen.getByText("Started afresh: the AI's next turn begins without its memory of this conversation."),
         );
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
         const asking = screen.getByRole('alertdialog', { name: 'Remove this conversation?' });
-        expect(asking.textContent).toContain('the agent host keeps its own transcript of it');
+        expect(asking.textContent).toContain('the AI host keeps its own transcript of it');
         expect(calls(desktop, 'chat.remove')).toHaveLength(0);
         fireEvent.click(within(asking).getByRole('button', { name: 'Keep it' }));
         expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -504,7 +514,7 @@ describe('the desktop’s conversations', () => {
     it('opens one conversation for two quick clicks on a campaign’s Chat', async () => {
         const { desktop } = renderConsole();
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-        fireEvent.click(within(side()).getByRole('button', { name: 'Campaigns' }));
+        fireEvent.click(within(side()).getByRole('button', { name: 'Agents' }));
         const spring = await waitFor(() => screen.getByText('Spring', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
@@ -536,7 +546,7 @@ describe('the desktop’s conversations', () => {
             expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Keep it' })),
         );
         const described = document.getElementById(dialog.getAttribute('aria-describedby') ?? '');
-        expect(described?.textContent).toContain('the agent host keeps its own transcript of it');
+        expect(described?.textContent).toContain('the AI host keeps its own transcript of it');
         // While it asks, the conversation takes nothing else.
         expect(screen.getByRole('textbox', { name: 'Your message' })).toHaveProperty('disabled', true);
         expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);

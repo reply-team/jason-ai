@@ -99,8 +99,8 @@ export function CampaignPeople({
         <div className="panel-body people-tab">
             <Search
                 value={query}
-                label="Search people on this campaign"
-                placeholder="Search people on this campaign"
+                label="Search this agent's people"
+                placeholder="Search this agent's people"
                 onSearch={onSearch}
             />
             <Chips

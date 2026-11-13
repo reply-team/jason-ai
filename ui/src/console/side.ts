@@ -14,7 +14,7 @@ import { chats, conversations, currentChat, feedId, feedUnseen, here, type Panel
 
 const panels: readonly { panel: PanelName; label: string; icon: IconName }[] = [
     { panel: 'needs', label: 'Needs you', icon: 'att' },
-    { panel: 'campaigns', label: 'Campaigns', icon: 'camp' },
+    { panel: 'campaigns', label: 'Agents', icon: 'camp' },
     { panel: 'activity', label: 'Activity', icon: 'pulse' },
     { panel: 'connect', label: 'Connect', icon: 'plug' },
 ];

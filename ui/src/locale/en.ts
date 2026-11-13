@@ -2,7 +2,7 @@
 export const en = {
     'nav.attention': 'Attention',
     'nav.performance': 'Performance',
-    'nav.campaigns': 'Campaigns',
+    'nav.campaigns': 'Agents',
     'nav.workitems': 'Work items',
     'nav.people': 'People',
     'nav.system': 'System',
@@ -28,10 +28,10 @@ export const en = {
     'settings.theme.dark': 'Dark',
     'chat.title': 'Chat',
     'chat.desktop':
-        'The chat with your agent is part of the desktop application. It starts an agent on this computer and asks you before the agent acts, which a browser tab cannot do.',
+        'The chat with the AI is part of the desktop application. It starts the AI on this computer and asks you before the AI acts, which a browser tab cannot do.',
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
-        'Everything here also works from a session with your agent in a terminal, with the skills Jason deployed.',
+        'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
 } as const;

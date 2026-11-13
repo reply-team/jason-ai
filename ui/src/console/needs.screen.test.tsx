@@ -79,11 +79,11 @@ describe('Needs you', () => {
             within(card)
                 .getAllByRole('button')
                 .map((each) => words(each)),
-        ).toEqual(['Open your campaigns']);
-        expect(screen.queryByRole('heading', { name: 'Campaigns', level: 1 })).toBeNull();
+        ).toEqual(['Open your agents']);
+        expect(screen.queryByRole('heading', { name: 'Agents', level: 1 })).toBeNull();
 
-        fireEvent.click(within(card).getByRole('button', { name: 'Open your campaigns' }));
-        await waitFor(() => expect(screen.getByRole('heading', { name: 'Campaigns', level: 1 })).toBeTruthy());
+        fireEvent.click(within(card).getByRole('button', { name: 'Open your agents' }));
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Agents', level: 1 })).toBeTruthy());
     });
 
     it('filters to approvals or to questions, and says in a line of its own when a filter holds nothing', async () => {

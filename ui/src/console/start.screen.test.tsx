@@ -151,7 +151,7 @@ describe('the start screen', () => {
             within(startForm()).getByRole('status', { name: 'The chat starts in Full access' }),
         );
         expect(line.textContent).toContain(
-            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+            'Full access: the AI runs commands without asking, except those Jason cannot read.',
         );
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
         ask('Heads of sales at logistics firms in Poland');
@@ -345,7 +345,7 @@ describe('the start screen', () => {
         release();
         const message = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         await waitFor(() => expect((message as HTMLTextAreaElement).value).toBe('Heads of sales in Poland'));
-        expect(screen.getAllByText(/No agent host that drives the chat was found/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/No AI host that drives the chat was found/).length).toBeGreaterThan(0);
         expect(calls(desktop, 'chat.send')).toHaveLength(0);
     });
 });

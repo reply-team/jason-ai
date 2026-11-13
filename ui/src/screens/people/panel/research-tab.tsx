@@ -83,7 +83,7 @@ export function ResearchTab({ person, campaignId, now, zone }: Props) {
                         {offered.length > 1 ? (
                             <select
                                 className="select"
-                                aria-label="The campaign the researcher works in"
+                                aria-label="The agent the researcher works in"
                                 value={chosen}
                                 onChange={(event) => setCampaign(event.target.value)}
                             >

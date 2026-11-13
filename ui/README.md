@@ -24,20 +24,23 @@ The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` an
 
 ## Two shells, one build
 
+The words of the page: an **agent** is the harness's campaign with its chat, and only on the screen. Identifiers, routes,
+API fields, file names, test ids and fixtures keep `campaign`. The AI that runs commands is "the AI", never "the agent".
+
 The same build mounts one of two shells, chosen once as the page loads (`src/main.tsx`):
 
 - **In a browser, the classic shell**: the sidebar and the screens under `src/screens/`, and a Chat screen that says
-  the chat with an agent is part of the desktop application, where a page can start an agent on the computer and ask
+  the chat with the AI is part of the desktop application, where a page can start the AI on the computer and ask
   the person before it acts.
 - **Inside Jason Desktop, the console** (`src/console/`). The desktop puts `window.jasonDesktop` on the page before the
   page runs; with it there, the chat is home, in a dock (dockview) with panels beside it: what needs the person
-  (approvals and questions), the campaigns, the journal's activity, and Connect, which shows the agent hosts found on
+  (approvals and questions), the agents, the journal's activity, and Connect, which shows the AI hosts found on
   the computer, the model keys, the Reply connection and the notification channels. The browser's other screens open in a page panel
   of the same dock. The console reaches the desktop only through the seam typed in `src/platform/desktop.d.ts`, and the
   runtime only through the API client and the journal stream (`src/platform/journal-stream.ts`, a WebSocket at
   `GET /v1/journal.stream` under the page's own pairing).
 
-The console's live panels read the same facts as the classic Attention and Campaigns screens, with the same
+The console's live panels read the same facts as the classic Attention and Agents screens, with the same
 operations, and for now duplicate them: the classic screens stay for the browser. Each panel keeps its lists apart
 from the screen's, so the page panel can show that screen at a table or a filter of its own while a journal line
 re-reads the panel.

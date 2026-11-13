@@ -81,7 +81,7 @@ describe('Campaigns', () => {
         expect(location.hash).toBe('#/campaigns?view=activity&period=today');
     });
 
-    it('Find a campaign and Archived ask the list again, and the counts for what it shows, leaving the open campaign alone', async () => {
+    it('Find an agent and Archived ask the list again, and the counts for what it shows, leaving the open campaign alone', async () => {
         const api = new FakeApi()
             .answer(
                 'campaign.list',
@@ -106,7 +106,7 @@ describe('Campaigns', () => {
         open(api, { ...table, id: 'cmp_1', tab: 'settings' });
         expect(await screen.findByRole('link', { name: '3 waiting' })).toBeTruthy();
         await screen.findByRole('cell', { name: /^Autumn/ });
-        const find = screen.getByRole('searchbox', { name: 'Find a campaign' });
+        const find = screen.getByRole('searchbox', { name: 'Find an agent' });
 
         fireEvent.input(find, { target: { value: 'spr' } });
         await waitFor(() => expect(sent(api, 'campaign.list')).toHaveLength(2), { timeout: 2000 });
@@ -157,7 +157,7 @@ describe('Campaigns', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
 
         const replied = await screen.findByRole('columnheader', { name: 'Replied' });
-        expect(replied.getAttribute('title')).toBe('Their first reply in this campaign came in the period.');
+        expect(replied.getAttribute('title')).toBe('Their first reply to this agent came in the period.');
     });
 
     it('a number opens the campaign’s people under that count, a zero opens nothing, and the rest of the row opens the campaign', async () => {
@@ -235,7 +235,7 @@ describe('The campaign panel', () => {
         expect(screen.getByText('offer')).toBeTruthy();
         expect(screen.getByText('A two-week pilot of the reconciliation tool.')).toBeTruthy();
         expect(screen.getByText('Provider ids')).toBeTruthy();
-        expect(screen.getByText('Raw campaign record')).toBeTruthy();
+        expect(screen.getByText('Raw agent record')).toBeTruthy();
         expect(screen.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected')).toBe('true');
         expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
             'Sequence',
@@ -252,7 +252,7 @@ describe('The campaign panel', () => {
         const api = new FakeApi().answer('campaign.list', 'campaign.list/screen-empty');
         open(api);
         await screen.findByText(
-            'No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you.',
+            'No agents yet. An agent is set up in a chat with Jason: say who you want to reach, and the AI sets it up with you.',
         );
         expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
         expect(sent(api, 'campaign.list')).toEqual([fixtures['campaign.list/screen-empty'].request]);
@@ -539,7 +539,7 @@ describe('A campaign’s people', () => {
         );
         open(api, people());
         await row('Ben Example');
-        const search = screen.getByRole('searchbox', { name: 'Search people on this campaign' });
+        const search = screen.getByRole('searchbox', { name: "Search this agent's people" });
 
         fireEvent.input(search, { target: { value: 'ada' } });
 
@@ -615,7 +615,7 @@ describe('A campaign’s people', () => {
         const said = fixtures[answered].response;
         if ('error' in said) {
             expect((await screen.findByRole('alert')).textContent).toContain(said.error.message);
-            fireEvent.click(screen.getByRole('button', { name: 'Back to the campaign' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Back to the agent' }));
         }
         expect(await screen.findByRole('button', { name: /^Waiting\s*2$/ })).toBeTruthy();
         await waitFor(() => expect(screen.queryByText('Ada Example')).toBeNull());
@@ -638,7 +638,7 @@ describe('A campaign’s people', () => {
         fireEvent.click(await row('Ben Example'));
         expect(await screen.findByRole('heading', { level: 2, name: 'Follow up on LinkedIn?' })).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back to the campaign' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to the agent' }));
         expect(await screen.findByRole('heading', { level: 2, name: 'Spring' })).toBeTruthy();
     });
 
@@ -842,7 +842,7 @@ describe('A campaign’s Sequence', () => {
         expect(await screen.findByRole('button', { name: 'Approve' })).toBeTruthy();
         expect(sent(api, 'approval.get')).toEqual([fixtures['approval.get/for-campaign-row'].request]);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back to the campaign' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to the agent' }));
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(3));
         expect(sent(api, 'journal.list').at(-1)).toEqual(fixtures['journal.list/by-campaign-changes'].request);
         expect(await screen.findByText(/Holding the sends over the holiday\./)).toBeTruthy();
@@ -952,7 +952,7 @@ describe('A campaign’s Inbox', () => {
             .answer('journal.list', 'journal.list/by-campaign-replies-none');
         open(api, { ...pilot, id: fixtures['campaign.get/inbox-quiet'].request.campaign_id });
 
-        expect(await screen.findByText('No reply has been observed in this campaign yet.')).toBeTruthy();
+        expect(await screen.findByText('No reply to this agent has been observed yet.')).toBeTruthy();
         expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign-replies-none'].request]);
         expect(sent(api, 'route.resolve')).toEqual([]);
         expect(sent(api, 'contact.threads')).toEqual([]);
@@ -965,7 +965,7 @@ describe('A campaign’s Inbox', () => {
             .answer('campaign.get', 'campaign.get/inbox-quiet')
             .answer('journal.list', 'journal.list/by-campaign-replies-none');
         open(api, { ...pilot, id: fixtures['campaign.get/inbox-quiet'].request.campaign_id });
-        expect(await screen.findByText('No reply has been observed in this campaign yet.')).toBeTruthy();
+        expect(await screen.findByText('No reply to this agent has been observed yet.')).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Refresh the inbox' }));
 
@@ -1002,7 +1002,7 @@ describe('A campaign’s Inbox', () => {
 describe('A campaign’s Results', () => {
     /** The figures as the page shows them: each tile's name and its number. */
     async function figures(): Promise<string[]> {
-        const group = await screen.findByRole('group', { name: 'The campaign’s results' });
+        const group = await screen.findByRole('group', { name: 'The agent’s results' });
         await waitFor(() => expect(group.getAttribute('aria-busy')).toBe('false'));
         return within(group)
             .getAllByRole('figure')
@@ -1164,7 +1164,7 @@ describe('What the panel does', () => {
         fireEvent.click(within(actions()).getByRole('button', { name: 'Pause' }));
         const dialog = await screen.findByRole('dialog', { name: 'Pause Spring' });
         expect(dialog.textContent).toContain(
-            "Jason stops releasing this campaign's work. Work already running finishes. Reply's sequence keeps sending until a role pauses it there. Your reason is recorded.",
+            "Jason stops releasing this agent's work. Work already running finishes. Reply's sequence keeps sending until a role pauses it there. Your reason is recorded.",
         );
         fireEvent.input(within(dialog).getByRole('textbox', { name: 'Reason' }), {
             target: { value: 'Holding the sends over the holiday.' },
@@ -1184,7 +1184,7 @@ describe('What the panel does', () => {
         expect(offered(settings())).toEqual([]);
         fireEvent.click(within(actions()).getByRole('button', { name: 'Resume' }));
         const start = await screen.findByRole('dialog', { name: 'Resume Spring' });
-        expect(start.textContent).toContain("Jason releases this campaign's work again.");
+        expect(start.textContent).toContain("Jason releases this agent's work again.");
         // Another campaign is opened while Resume is on its way: the answer, and what is read after it, leave it open.
         const release = api.hold('campaign.start');
         fireEvent.click(within(start).getByRole('button', { name: 'Resume' }));
@@ -1250,7 +1250,7 @@ describe('What the panel does', () => {
         expect(offered(settings())).toEqual([]);
         fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
         const start = await screen.findByRole('dialog', { name: `Start ${autumn.name}` });
-        expect(start.textContent).toContain("Jason starts releasing this campaign's work.");
+        expect(start.textContent).toContain("Jason starts releasing this agent's work.");
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(sent(api, 'campaign.start')).toEqual([]);
@@ -1292,7 +1292,7 @@ describe('What the panel does', () => {
         open(api, { ...details, id: winter.id });
         await screen.findByRole('heading', { level: 2, name: winter.name });
 
-        expect(screen.getByText('Raw campaign record')).toBeTruthy();
+        expect(screen.getByText('Raw agent record')).toBeTruthy();
         // The header offers no move to an archived campaign, and Settings none either.
         expect(offered(actions())).toEqual([]);
         expect(offered(settings())).toEqual([]);

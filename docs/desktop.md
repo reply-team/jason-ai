@@ -62,6 +62,10 @@ link that leaves it opens in the system browser, and only when it is `https:`.
 
 ## What you see
 
+The window calls a campaign with its chat an **agent** (**Agents** in the sidebar and the View menu). That is the harness's
+campaign and nothing else: the commands, the API and the ids keep `campaign`, and so do the rest of these pages. The AI that
+runs commands is called the AI.
+
 The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
 asks "Who do you want to reach?" and says under it that this interface is optional, since everything there can also be done
 from a terminal with your AI, through Jason's CLI and API. What you type there starts a set-up chat on the AI you connected, about no campaign
@@ -72,8 +76,8 @@ shows before anything is typed and what you send waits, while the window is open
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
-  **Open your campaigns**.
-- **Campaigns** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
+  **Open your agents**.
+- **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab.
 - The **Feed**, the sidebar's first item, is the desktop's main chat (below).
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
@@ -85,7 +89,7 @@ shows before anything is typed and what you send waits, while the window is open
 existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
 its settings and the starting page and the window's background before the page loads follow it.
 
-The View menu carries the keys (New Chat, What Needs You, Performance, Campaigns, Work Items, People, System, Reload).
+The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
@@ -356,15 +360,15 @@ Plan only is kept with the chat: it holds after a restart of the desktop and aft
 leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
 also lists Full access. Full access is chosen only after a confirmation, with Cancel focused and Escape answering
-Cancel, unless you gave the standing choice (below). In Full access the agent runs commands and changes files on this computer without
-asking, except a command Jason cannot read plainly or one that changes what an agent loads: that is a card titled "Full
+Cancel, unless you gave the standing choice (below). In Full access the AI runs commands and changes files on this computer without
+asking, except a command Jason cannot read plainly or one that changes what the AI loads: that is a card titled "Full
 access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. A held card offers no
 "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
 every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
-not a tool of the chat. Jason does not read a program the agent writes to a file and runs, nor your own shell
+not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
 configuration (aliases, shell options), so such a program can still act as you. None of your own MCP servers or
-connectors reaches a turn. The agent works in a folder of its own; when Full access ends, the chat says where it is,
+connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
 Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said once.

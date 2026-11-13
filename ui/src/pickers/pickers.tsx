@@ -352,7 +352,7 @@ export function MultiSearchPicker({
                                     className={at === active ? 'active' : ''}
                                     aria-selected={on}
                                     disabled={full(entry)}
-                                    title={full(entry) ? `At most ${max} campaigns` : undefined}
+                                    title={full(entry) ? `At most ${max} agents` : undefined}
                                     onMouseEnter={() => setActive(at)}
                                     onClick={() => toggle(at)}
                                 >

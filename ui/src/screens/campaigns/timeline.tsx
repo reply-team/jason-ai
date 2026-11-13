@@ -147,7 +147,7 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
                                 <span className="what">
                                     <span className="name">{question.question}</span>
                                     <span className="in">
-                                        {question.contact_name ?? 'about the campaign'} · asked{' '}
+                                        {question.contact_name ?? 'about the agent'} · asked{' '}
                                         {relative(new Date(question.raised_at), now)}
                                     </span>
                                 </span>

@@ -18,8 +18,8 @@ export function Filters({ tab, filters }: Props) {
     return (
         <FiltersBar>
             <CampaignPicker
-                label={filters.campaign ? (campaign?.name ?? '…') : 'All campaigns'}
-                none="All campaigns"
+                label={filters.campaign ? (campaign?.name ?? '…') : 'All agents'}
+                none="All agents"
                 onPick={(picked) => {
                     if (picked) store.campaign.value = picked;
                     set({ ...filters, campaign: picked?.id });

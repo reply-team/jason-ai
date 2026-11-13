@@ -118,7 +118,7 @@ export function AddPeopleDialog({ campaign, onAdded, onClose }: Props) {
                 .filter((item) => item.status === 'rejected')
                 .map((item) => (
                     <Notice key={item.index} danger alert={false}>
-                        {item.error?.message ?? 'The campaign refused this person.'}
+                        {item.error?.message ?? 'The agent refused this person.'}
                     </Notice>
                 ))}
             {refused && <Notice danger>{refused}</Notice>}

@@ -272,7 +272,7 @@ function planStands(chat: Chat): boolean {
 }
 
 /** What the line under the composer says while the desktop holds the chat in Full access. */
-export const fullAccessLine = 'Full access: the agent runs commands without asking, except those Jason cannot read.';
+export const fullAccessLine = 'Full access: the AI runs commands without asking, except those Jason cannot read.';
 
 /** What the line under the composer says while the desktop holds the chat in Auto-edit. */
 export const autoEditLine =

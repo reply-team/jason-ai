@@ -461,12 +461,12 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             attach: answering('chat.attach', (id, campaignId) => {
                 const record = own(id);
                 if (!record) return notKept;
-                if (record.running) return answeringStill('choose its campaign');
-                if (record.campaignId !== null) return { refused: 'This conversation is already about a campaign.' };
+                if (record.running) return answeringStill('choose its agent');
+                if (record.campaignId !== null) return { refused: 'This conversation is already about an agent.' };
                 if ([...kept.values()].some((each) => each.campaignId === campaignId))
-                    return { refused: 'That campaign has its conversation already. Open it from the campaign.' };
+                    return { refused: 'That agent has its conversation already. Open it from the agent.' };
                 if (!(picks.get(record.id) ?? []).includes(campaignId as string))
-                    return { refused: 'That campaign is not one this chat made. Open it from the campaign.' };
+                    return { refused: 'That agent is not one this chat made. Open it from the agent.' };
                 record.campaignId = campaignId as string;
                 // A name a person gave stays, as the desktop keeps it.
                 if (!namedByPerson.has(record.id))
@@ -506,10 +506,10 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 // Full access is refused before anything is asked on a host where it cannot apply, as the desktop does.
                 const listed = stub.status.hosts.find((each) => each.id === host);
                 if (mode === 'full_access' && (listed === undefined || listed.fullAccess !== null))
-                    return { refused: listed?.fullAccess ?? 'That is not an agent host this desktop knows.' };
+                    return { refused: listed?.fullAccess ?? 'That is not an AI host this desktop knows.' };
                 // So is Auto-edit, with no box to answer.
                 if (mode === 'auto_edit' && (listed === undefined || listed.autoEdit !== null))
-                    return { refused: listed?.autoEdit ?? 'That is not an agent host this desktop knows.' };
+                    return { refused: listed?.autoEdit ?? 'That is not an AI host this desktop knows.' };
                 // Full access waits for the person's yes to the desktop's own box, unless the standing choice stands; a no
                 // answers the conversation as it was.
                 if (mode === 'full_access' && stub.standing === null && !stub.confirmFullAccess)

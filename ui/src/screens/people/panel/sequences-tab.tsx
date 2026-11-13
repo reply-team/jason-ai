@@ -61,7 +61,7 @@ export function SequencesTab({ person, now, zone }: Props) {
     if (campaigns.length === 0)
         return (
             <div className="panel-body">
-                <div className="empty">Not in any campaign.</div>
+                <div className="empty">Not added to any agent.</div>
             </div>
         );
     return (
@@ -213,11 +213,7 @@ function MembershipActs({ person, campaign, onSaid, onHalf }: ActsProps) {
                 </span>
             )}
             {asking === 'move' && (
-                <CampaignPicker
-                    label={target?.name ?? 'Choose a campaign'}
-                    none="Choose a campaign"
-                    onPick={setTarget}
-                />
+                <CampaignPicker label={target?.name ?? 'Choose an agent'} none="Choose an agent" onPick={setTarget} />
             )}
             <label htmlFor={id}>Reason (optional, kept in the journal)</label>
             <input id={id} className="input" value={reason} onChange={(event) => setReason(event.target.value)} />

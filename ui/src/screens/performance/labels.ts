@@ -11,7 +11,7 @@ export const counts: readonly { key: ActivityCount; label: string; hint: string 
         label: 'People',
         hint: "Something happened to them in the period: they are in at least one of the period's counts.",
     },
-    { key: 'added', label: 'Added', hint: 'Added to a campaign, or added back after a removal, in the period.' },
+    { key: 'added', label: 'Added', hint: 'Added to an agent, or added back after a removal, in the period.' },
     {
         key: 'worked_on',
         label: 'Worked on',
@@ -22,7 +22,7 @@ export const counts: readonly { key: ActivityCount; label: string; hint: string 
         label: 'Contacted',
         hint: "Something was sent to them, or they were put into the provider's sequence, in the period.",
     },
-    { key: 'replied', label: 'Replied', hint: 'Their first reply in a campaign came in the period.' },
+    { key: 'replied', label: 'Replied', hint: 'Their first reply to an agent came in the period.' },
     {
         key: 'opted_out',
         label: 'Opted out',
@@ -31,7 +31,7 @@ export const counts: readonly { key: ActivityCount; label: string; hint: string 
     {
         key: 'removed',
         label: 'Removed',
-        hint: 'They were taken out of a campaign in the period, whether added back since or not.',
+        hint: 'They were removed from an agent in the period, whether added back since or not.',
     },
 ];
 
