@@ -49,8 +49,17 @@ public class CiRunsTests
     /// <summary>The job that reports a check a rule skipped, as a success under that check's own name.</summary>
     private const string StandIn = "skipped-by-rule";
 
-    /// <summary>What a test step adds to the whole suite's command to test the critical tier alone.</summary>
+    /// <summary>What the release workflow's test step adds to the whole suite's command to test the critical tier alone.</summary>
     private const string TierFilter = "-- --filter-trait \"Category=Critical\"";
+
+    /// <summary>What a test step of ci.yml adds to the script that runs the tests to test the critical tier alone.</summary>
+    private const string TierSwitch = "-Critical";
+
+    /// <summary>The script every test step of ci.yml runs the tests through.</summary>
+    private static readonly string[] TestScript = [".github", "scripts", "Invoke-Tests.ps1"];
+
+    /// <summary>The job whose legs test the suite.</summary>
+    private const string Testing = "build-test-publish";
 
     /// <summary>What the linux-x64 leg is called when a draft's push tests the critical tier alone: not a name any ruleset requires.</summary>
     private const string TierLeg = "linux-x64 (critical tier)";
@@ -865,10 +874,10 @@ public class CiRunsTests
         var decided = Decide(run);
 
         Assert.True(decided.Outputs["tier"] == (tier ? "true" : "false"), $"{kind} handed on tier '{decided.Outputs["tier"]}': {decided.Summary}");
-        var testing = Assert.Single(TestSteps(Mapping(Jobs(), "build-test-publish")), step => StepRuns(step, decided.Outputs));
+        var testing = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), step => StepRuns(step, decided.Outputs));
         var command = Scalar(testing, "run")!;
         Assert.True(
-            command.Contains(TierFilter, StringComparison.Ordinal) == tier,
+            Tiered(command) == tier,
             $"{kind} runs '{command}', and {(tier ? "it tests the critical tier alone" : "only a draft's push, a pull request into a release branch and the version pull request test less than the whole suite")}");
         Assert.Contains(tier ? "tests -> the critical tier" : set is "tested" or "none" ? "tests -> none" : "tests -> the whole suite", decided.Stdout, StringComparison.Ordinal);
     }
@@ -939,7 +948,7 @@ public class CiRunsTests
 
     /// <summary>
     /// Only one step of the workflows filters the suite: the linux-x64 job's step a draft's push, a pull request into a
-    /// release branch and the version pull request run, which is the job's whole-suite step with the tier's filter after it,
+    /// release branch and the version pull request run, which is the job's whole-suite step with the tier's switch after it,
     /// so both test the same build. The release workflow's step is the only other one that filters, and it carries the same
     /// filter: the tag is the tree the release's pull request tested whole, so at the tag the critical tier runs under the
     /// tag's version. Every other test step — the job's whole-suite step and the suite under a release's version — runs the
@@ -950,11 +959,12 @@ public class CiRunsTests
     public void Only_the_step_that_tests_the_critical_tier_filters_the_suite()
     {
         var jobs = Jobs();
-        var steps = TestSteps(Mapping(jobs, "build-test-publish"));
+        var steps = TestSteps(Mapping(jobs, Testing));
         var tier = Assert.Single(steps, step => Scalar(step, "if") == "needs.version.outputs.tier == 'true'");
         var whole = Assert.Single(steps, step => Scalar(step, "if") == "needs.version.outputs.tier != 'true'");
         Assert.Equal(2, steps.Count);
-        Assert.Equal($"{Scalar(whole, "run")} {TierFilter}", Scalar(tier, "run"));
+        Assert.Equal($"{Scalar(whole, "run")} {TierSwitch}", Scalar(tier, "run"));
+        Assert.False(Tiered(Scalar(whole, "run")!), "the whole suite's step tests the critical tier alone");
 
         var atTheTag = Mapping(Parse(Read(Release)), "jobs").Children.Values.Cast<YamlMappingNode>().SelectMany(TestSteps)
             .Select(step => Scalar(step, "run")!)
@@ -967,7 +977,7 @@ public class CiRunsTests
             .Select(step => Scalar(step, "run")!)
             .ToList();
         Assert.True(others.Count >= 2, $"Only {others.Count} other test steps were found: {string.Join(" | ", others)}");
-        Assert.All(others, command => Assert.False(command.Contains("filter", StringComparison.Ordinal), $"'{command}' filters the suite"));
+        Assert.All(others, command => Assert.False(command.Contains("filter", StringComparison.OrdinalIgnoreCase) || Tiered(command), $"'{command}' filters the suite"));
     }
 
     /// <summary>
@@ -1514,6 +1524,181 @@ public class CiRunsTests
         Assert.All(release, call => Assert.Null(Scalar(Mapping(call, "with"), "retention-days")));
     }
 
+    // --- a failed test run again ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Every step of ci.yml that tests runs the suite through one script, which hands each <c>dotnet test</c> the test
+    /// platform's own repeat: a failed test is run again, alone, at most twice. The whole suite's step and the suite under a
+    /// release's version filter nothing; the tier's step adds the Critical trait and nothing else. Each step is run as a
+    /// runner runs it, with a stand-in for <c>dotnet</c>, so the commands below are the ones a runner makes.
+    /// </summary>
+    [Fact]
+    public void Every_test_step_runs_the_suite_with_the_platform_s_repeat_of_a_failed_test()
+    {
+        var steps = TestSteps(Mapping(Jobs(), Testing)).Concat(TestSteps(Mapping(Jobs(), "release-stamp"))).ToList();
+        Assert.Equal(3, steps.Count);
+        foreach (var step in steps)
+        {
+            var run = Scalar(step, "run")!;
+            Assert.Contains("./.github/scripts/Invoke-Tests.ps1 ", run, StringComparison.Ordinal);
+            Assert.DoesNotContain("dotnet test", run, StringComparison.Ordinal);
+            Assert.Equal("pwsh", Scalar(step, "shell"));
+
+            var tests = RunTests(step, [[]]);
+            Assert.True(tests.Exit == 0, tests.Output);
+            var call = Assert.Single(tests.Calls);
+            var critical = Tiered(run) ? "--filter-trait Category=Critical " : string.Empty;
+            Assert.Equal(
+                $"test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version={TestedVersion} --results-directory <results>/1 -- {critical}--retry-failed-tests 2 --report-xunit-trx",
+                call);
+        }
+    }
+
+    /// <summary>
+    /// A test that fails and then passes on a repeat keeps the run green, and is named: on the job's summary under "passed
+    /// after a repeat", with the attempt it passed on, and as a warning among the run's annotations. Nothing else is named.
+    /// </summary>
+    [Fact]
+    public void A_test_that_passes_on_a_repeat_keeps_the_run_green_and_is_named_on_the_summary()
+    {
+        var tests = RunTests(
+            Assert.Single(TestSteps(Mapping(Jobs(), "release-stamp"))),
+            [[
+                [("Acme.Tests.Starts.Once", "Failed"), ("Acme.Tests.Steady", "Passed"), ("Acme.Tests.Starts.Twice", "Failed")],
+                [("Acme.Tests.Starts.Once", "Passed"), ("Acme.Tests.Starts.Twice", "Failed")],
+                [("Acme.Tests.Starts.Twice", "Passed")],
+            ]]);
+
+        Assert.True(tests.Exit == 0, tests.Output);
+        Assert.Contains("Passed after a repeat: 2", tests.Summary, StringComparison.Ordinal);
+        Assert.Contains("- `Acme.Tests.Starts.Once (passed on attempt 2 of 3)`", tests.Summary, StringComparison.Ordinal);
+        Assert.Contains("- `Acme.Tests.Starts.Twice (passed on attempt 3 of 3)`", tests.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("Acme.Tests.Steady", tests.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("Failed every attempt", tests.Summary, StringComparison.Ordinal);
+        Assert.Contains("::warning title=Passed after a repeat (The suite under a release's version)::Acme.Tests.Starts.Once (passed on attempt 2 of 3)", tests.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A test that fails every attempt fails the run, and is named; a test that passed on a repeat beside it is still named
+    /// as one. And a run whose platform reports a failure with no report at all fails too, with nothing named as repeated.
+    /// </summary>
+    [Fact]
+    public void A_test_that_fails_every_attempt_fails_the_run_and_a_run_that_failed_without_a_report_fails_too()
+    {
+        var step = Assert.Single(TestSteps(Mapping(Jobs(), "release-stamp")));
+
+        var failed = RunTests(
+            step,
+            [[
+                [("Acme.Tests.Never", "Failed"), ("Acme.Tests.Later", "Failed")],
+                [("Acme.Tests.Never", "Failed"), ("Acme.Tests.Later", "Passed")],
+                [("Acme.Tests.Never", "Failed")],
+            ]],
+            exits: [2]);
+        Assert.Equal(1, failed.Exit);
+        Assert.Contains("Failed every attempt: 1", failed.Summary, StringComparison.Ordinal);
+        Assert.Contains("- `Acme.Tests.Never (failed 3 attempts)`", failed.Summary, StringComparison.Ordinal);
+        Assert.Contains("- `Acme.Tests.Later (passed on attempt 2 of 3)`", failed.Summary, StringComparison.Ordinal);
+
+        var unreported = RunTests(step, [[]], exits: [8]);
+        Assert.Equal(1, unreported.Exit);
+        Assert.Contains("Passed after a repeat: none.", unreported.Summary, StringComparison.Ordinal);
+        Assert.Contains("dotnet/Jason.slnx exited 8", unreported.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The repeat is the test platform's own, so every test project references its package, at the one version the
+    /// central file pins: a project without it would refuse the option and run nothing.
+    /// </summary>
+    [Fact]
+    public void Every_test_project_references_the_platform_s_repeat()
+    {
+        var tests = Path.Combine(RepositoryRoot(), "dotnet", "tests");
+        var projects = Directory.GetDirectories(tests).Select(Path.GetFileName).Where(name => name!.EndsWith(".Tests", StringComparison.Ordinal)).ToList();
+        Assert.True(projects.Count >= 5, $"only {projects.Count} test projects were found");
+        Assert.All(projects, name => Assert.Contains(
+            "<PackageReference Include=\"Microsoft.Testing.Extensions.Retry\" />",
+            File.ReadAllText(Path.Combine(tests, name!, $"{name}.csproj")),
+            StringComparison.Ordinal));
+        Assert.Matches(
+            "<PackageVersion Include=\"Microsoft.Testing.Extensions.Retry\" Version=\"[0-9.]+\" />",
+            File.ReadAllText(Path.Combine(RepositoryRoot(), "dotnet", "Directory.Packages.props")));
+    }
+
+    /// <summary>The version a test step is told the build carries. Made up.</summary>
+    private const string TestedVersion = "0.0.0-dev";
+
+    /// <summary>One test result as a report names it: the test, and Passed or Failed.</summary>
+    private sealed record Outcome(string Test, string Result)
+    {
+        public static implicit operator Outcome((string Test, string Result) pair) => new(pair.Test, pair.Result);
+    }
+
+    /// <summary>
+    /// A test step of ci.yml run as a runner runs it, from the repository's root, with a stand-in for <c>dotnet</c>: a
+    /// PowerShell function, which a command name finds before any program. Each call is recorded, with the results
+    /// directory written as <c>&lt;results&gt;</c>, writes one report per attempt that <paramref name="attempts"/> gives
+    /// for that call — each attempt the tests it ran and how each ended, in the layout the platform's repeat writes — and
+    /// exits with the code <paramref name="exits"/> gives that call, 0 when it gives none. The step is told its own
+    /// environment's names with made-up values, and <paramref name="environment"/> over them.
+    /// </summary>
+    private static (int Exit, List<string> Calls, string Summary, string Output) RunTests(
+        YamlMappingNode step, Outcome[][][] attempts, int[]? exits = null, Dictionary<string, string>? environment = null)
+    {
+        using var tree = new TempTree();
+        var results = Path.Combine(tree.Root, "test-results");
+        var calls = Path.Combine(tree.Root, "calls");
+        File.WriteAllText(calls, string.Empty);
+        var summary = Path.Combine(tree.Root, "summary");
+        File.WriteAllText(summary, string.Empty);
+        var plan = Path.Combine(tree.Root, "plan.json");
+        File.WriteAllText(plan, JsonSerializer.Serialize(new
+        {
+            attempts = attempts.Select(call => call.Select(attempt => attempt.Select(outcome => new[] { outcome.Test, outcome.Result }))),
+            exits = exits ?? [],
+        }));
+        var script = Path.Combine(tree.Root, "step.ps1");
+        File.WriteAllText(script, Scalar(step, "run"));
+
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, $$"""
+            $ErrorActionPreference = 'Stop'
+            $global:called = 0
+            function dotnet {
+                $plan = Get-Content -Raw -LiteralPath '{{plan}}' | ConvertFrom-Json
+                $directory = $args[[array]::IndexOf($args, '--results-directory') + 1]
+                Add-Content -LiteralPath '{{calls}}' -Value (($args -join ' ').Replace('{{results}}', '<results>').Replace('\', '/'))
+                $call = $global:called
+                $global:called++
+                $attempt = 0
+                foreach ($tests in @(if ($call -lt @($plan.attempts).Count) { $plan.attempts[$call] })) {
+                    $attempt++
+                    $into = Join-Path $directory "Retries/run/$attempt"
+                    New-Item -ItemType Directory -Force -Path $into | Out-Null
+                    $lines = @($tests | ForEach-Object { "<UnitTestResult testName=`"$($_[0])`" outcome=`"$($_[1])`" />" })
+                    Set-Content -LiteralPath (Join-Path $into 'attempt.trx') -Value "<TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><Results>$($lines -join '')</Results></TestRun>"
+                }
+                $global:LASTEXITCODE = if ($call -lt @($plan.exits).Count) { $plan.exits[$call] } else { 0 }
+            }
+            Set-Location -LiteralPath '{{RepositoryRoot()}}'
+            & '{{script}}'
+            exit $LASTEXITCODE
+            """);
+
+        var told = Node(step, "env") is YamlMappingNode env
+            ? Variables(env).ToDictionary(pair => pair.Key, pair => pair.Key == "VERSION" ? TestedVersion : $"a {pair.Key.ToLowerInvariant()}", StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, value) in environment ?? [])
+        {
+            told[name] = value;
+        }
+
+        told["RUNNER_TEMP"] = tree.Root;
+        told["GITHUB_STEP_SUMMARY"] = summary;
+        var ran = Pwsh(told, "-File", harness);
+        return (ran.Exit, [.. File.ReadAllLines(calls).Where(line => line.Length > 0)], File.ReadAllText(summary), ran.Stdout + ran.Stderr);
+    }
+
     // --- what a run decides and reports --------------------------------------------------------------------------
 
     /// <summary>
@@ -1868,11 +2053,15 @@ public class CiRunsTests
     private static List<string> Grants(YamlMappingNode permissions) =>
         [.. permissions.Children.Select(pair => $"{pair.Key}={pair.Value}").Order(StringComparer.Ordinal)];
 
-    /// <summary>A job's steps that run the test suite.</summary>
+    /// <summary>A job's steps that run the test suite: by <c>dotnet test</c>, or through the script that runs it.</summary>
     private static List<YamlMappingNode> TestSteps(YamlMappingNode job) =>
         Node(job, "steps") is YamlSequenceNode steps
-            ? [.. steps.Children.Cast<YamlMappingNode>().Where(step => Scalar(step, "run")?.Contains("dotnet test", StringComparison.Ordinal) == true)]
+            ? [.. steps.Children.Cast<YamlMappingNode>().Where(step => Scalar(step, "run") is { } run
+                && (run.Contains("dotnet test", StringComparison.Ordinal) || run.Contains("Invoke-Tests.ps1", StringComparison.Ordinal)))]
             : [];
+
+    /// <summary>Whether a test step of ci.yml tests the critical tier alone: it hands the script the tier's switch.</summary>
+    private static bool Tiered(string command) => Regex.IsMatch(command, $@"\s{TierSwitch}(\s|$)");
 
     /// <summary>Whether a step runs, given what the version job decided: on no condition, or on the tier's word.</summary>
     private static bool StepRuns(YamlMappingNode step, Dictionary<string, string> decided) =>

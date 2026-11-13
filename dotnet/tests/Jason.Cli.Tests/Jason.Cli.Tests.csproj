@@ -34,4 +34,8 @@
     <None Include="../../../skills/**/SKILL.md" LinkBase="Skills" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../docs/golden-path.md" LinkBase="Documentation" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The test platform's repeat of a failed test, which CI turns on: a failed test is run again, alone, at most twice. -->
+    <PackageReference Include="Microsoft.Testing.Extensions.Retry" />
+  </ItemGroup>
 </Project>

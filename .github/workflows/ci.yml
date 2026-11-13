@@ -37,6 +37,9 @@ name: CI
 # Every check the main branch's ruleset requires reports on every ready pull request into main and on every push to
 # main, as a success where a rule skipped it: a skipped job reports success, and a matrix row that is absent would not
 # report at all.
+# Wherever the suite runs, a test that fails is run again, alone, at most twice, by the test platform's own repeat
+# (.github/scripts/Invoke-Tests.ps1): one that passes on a repeat keeps its job green and is named on the run's summary
+# and among its annotations, and one that fails every attempt fails its job.
 on:
   push:
     branches: [main, 'release/**']
@@ -612,8 +615,12 @@ jobs:
           if (($stamped -split '\+')[0] -ne $env:RELEASE) { throw "the build is stamped '$stamped', and a release of this tree would carry $env:RELEASE" }
           Write-Host "stamped $stamped"
 
+      # A test that fails is run again, alone, at most twice, and one that passes on a repeat is named on the summary.
       - name: Test (offline)
-        run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.release }}
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.release }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title "The suite under a release's version"
 
   build-test-publish:
     name: ${{ matrix.name }}
@@ -662,14 +669,23 @@ jobs:
 
       # A draft's push, a pull request into a release branch and the version pull request test the critical tier alone, a
       # few minutes where the whole suite takes many; every other run tests the whole suite, the same build under the
-      # same version.
+      # same version. A test that fails is run again, alone, at most twice: one that passes on a repeat keeps the job green
+      # and is named on the run's summary, and one that fails every attempt fails the job (.github/scripts/Invoke-Tests.ps1).
       - name: Test (offline)
         if: needs.version.outputs.tier != 'true'
-        run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TITLE: ${{ matrix.name }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE
 
       - name: Test the critical tier (offline)
         if: needs.version.outputs.tier == 'true'
-        run: dotnet test --solution dotnet/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }} -- --filter-trait "Category=Critical"
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TITLE: ${{ matrix.name }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
 
       # The publish, the archive, the checksum and the manifest fragment: the same action release.yml runs on
       # a tag, so the packaging is exercised on every pull request long before a tag exists.

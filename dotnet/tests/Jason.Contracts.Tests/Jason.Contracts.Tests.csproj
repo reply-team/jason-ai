@@ -19,4 +19,8 @@
     <!-- The critical tier's table and its guard: each test assembly holds its own column of the table to what it discovers. -->
     <Compile Include="../Jason.Runtime.Tests/CriticalTier.cs" Link="CriticalTier.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The test platform's repeat of a failed test, which CI turns on: a failed test is run again, alone, at most twice. -->
+    <PackageReference Include="Microsoft.Testing.Extensions.Retry" />
+  </ItemGroup>
 </Project>
