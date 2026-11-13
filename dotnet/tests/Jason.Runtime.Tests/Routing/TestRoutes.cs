@@ -77,6 +77,7 @@ public static class TestRoutes
             ["Default"] = Describe(current.Default),
             ["Operations"] = new JsonObject(current.Operations.Select(entry =>
                 KeyValuePair.Create(entry.Key, Describe(entry.Value)))),
+            ["MisplacedChannels"] = new JsonArray([.. current.MisplacedChannels.Select(path => JsonValue.Create(path))]),
         };
 
         return described.ToJsonString(JasonJson.Options);

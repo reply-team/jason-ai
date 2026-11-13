@@ -42,6 +42,7 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload['setup'], keyof JasonDesktop['setup']>>,
     Holds<Equal<keyof DesktopPreload['links'], keyof JasonDesktop['links']>>,
     Holds<Equal<keyof DesktopPreload['theme'], keyof JasonDesktop['theme']>>,
+    Holds<Equal<keyof DesktopPreload['pairing'], keyof JasonDesktop['pairing']>>,
     Holds<Equal<keyof DesktopPreload['fullAccess'], keyof JasonDesktop['fullAccess']>>,
     Holds<DesktopPreload extends JasonDesktop ? true : false>,
 ];
@@ -61,6 +62,7 @@ type DeclaredCalls =
     | Calls<JasonDesktop['setup'], 'setup'>
     | Calls<JasonDesktop['links'], 'links'>
     | Calls<JasonDesktop['theme'], 'theme'>
+    | Calls<JasonDesktop['pairing'], 'pairing'>
     | Calls<JasonDesktop['fullAccess'], 'fullAccess'>;
 type DeclaredSubscriptions =
     | Subscriptions<JasonDesktop, ''>

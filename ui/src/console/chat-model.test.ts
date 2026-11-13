@@ -13,6 +13,8 @@ import {
     turnOptions,
     withModels,
     fullAccessLine,
+    autoEditLine,
+    olderDesktopAutoEdit,
     modeChoices,
     olderDesktop,
     failed,
@@ -387,6 +389,7 @@ describe('the model and the effort a chat is sent with', () => {
         install: null,
         belowFloor: null,
         fullAccess: null,
+        autoEdit: null,
         models: [
             { id: 'opus', label: 'Opus', efforts: every },
             { id: 'haiku', label: 'Haiku', efforts: [] },
@@ -526,6 +529,7 @@ describe('the hosts as a desktop of another version answers them', () => {
         const current: DesktopHost = {
             ...older,
             fullAccess: null,
+            autoEdit: null,
             models: [{ id: 'opus', label: 'Opus', efforts: ['low'] }],
             typedModel: true,
             modelsUnread: null,
@@ -543,14 +547,34 @@ describe('the hosts as a desktop of another version answers them', () => {
         } as unknown as DesktopHost;
         expect(withModels([older])[0]?.fullAccess).toBe(olderDesktop);
     });
+
+    it('reads a host listed without Auto-edit as one on which Auto-edit cannot be chosen, keeping what else it lists', () => {
+        const listed = {
+            id: 'claude',
+            label: 'Claude Code',
+            fullAccess: null,
+            models: [],
+            typedModel: true,
+            modelsUnread: null,
+        } as unknown as DesktopHost;
+        const [read] = withModels([listed]);
+        expect(read?.autoEdit).toBe('This version of Jason Desktop does not offer Auto-edit.');
+        expect(read?.autoEdit).toBe(olderDesktopAutoEdit);
+        expect(read?.fullAccess).toBeNull();
+        expect(read?.typedModel).toBe(true);
+        expect(modeChoices(read!).find((each) => each.mode === 'auto_edit')?.disabled).toBe(olderDesktopAutoEdit);
+    });
 });
 
 describe("a chat's access mode", () => {
-    const claude = { id: 'claude', label: 'Claude Code', fullAccess: null } as unknown as DesktopHost;
+    const claude = { id: 'claude', label: 'Claude Code', fullAccess: null, autoEdit: null } as unknown as DesktopHost;
+    const codexAutoEdit =
+        'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
     const codex = {
         id: 'codex',
         label: 'Codex',
         fullAccess: 'Full access runs on Claude Code only.',
+        autoEdit: codexAutoEdit,
     } as unknown as DesktopHost;
 
     it('is Ask first in a new chat, and is what the desktop says it is, never what the page asked for', () => {
@@ -578,19 +602,20 @@ describe("a chat's access mode", () => {
         expect(fromRecord(record as unknown as DesktopConversationRecord, 'claude').mode).toBe('ask_first');
     });
 
-    it("offers the three modes, Full access disabled with the desktop's reason on a host that has none", () => {
+    it("offers the four modes, narrow to wide with Full access last, each disabled with the desktop's reason", () => {
         expect(modeChoices(claude)).toEqual([
             { mode: 'ask_first', label: 'Ask first', disabled: null },
             { mode: 'plan_only', label: 'Plan only', disabled: null },
+            { mode: 'auto_edit', label: 'Auto-edit', disabled: null },
             { mode: 'full_access', label: 'Full access', disabled: null },
         ]);
-        expect(modeChoices(codex)[2]).toEqual({
+        expect(modeChoices(codex)[3]).toEqual({
             mode: 'full_access',
             label: 'Full access',
             disabled: 'Full access runs on Claude Code only.',
         });
-        expect(modeChoices(null)[2]?.disabled).toBe('Full access runs on Claude Code only.');
-        expect(modeChoices(claude, true)[2]?.disabled).toBe(
+        expect(modeChoices(null)[3]?.disabled).toBe('Full access runs on Claude Code only.');
+        expect(modeChoices(claude, true)[3]?.disabled).toBe(
             'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
         );
         expect(
@@ -598,8 +623,26 @@ describe("a chat's access mode", () => {
                 .slice(0, 2)
                 .map((each) => each.disabled),
         ).toEqual([null, null]);
-        expect(modeChoices(codex, true)[2]?.disabled).toBe('Full access runs on Claude Code only.');
-        expect(modeChoices(claude).map((each) => each.mode)).not.toContain('auto_edit');
+        expect(modeChoices(codex, true)[3]?.disabled).toBe('Full access runs on Claude Code only.');
+    });
+
+    it("disables Auto-edit on Codex, with no host and for the Feed in the desktop's words, and nowhere else", () => {
+        expect(modeChoices(codex)[2]).toEqual({ mode: 'auto_edit', label: 'Auto-edit', disabled: codexAutoEdit });
+        expect(modeChoices(null)[2]?.disabled).toBe(codexAutoEdit);
+        expect(modeChoices(claude, true)[2]?.disabled).toBe(
+            'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.',
+        );
+        expect(modeChoices(codex, true)[2]?.disabled).toBe(codexAutoEdit);
+        // A Claude Code below Full access's floor still offers Auto-edit: it needs no hook.
+        const below = { ...claude, fullAccess: 'Full access needs a newer Claude Code.' } as DesktopHost;
+        expect(modeChoices(below)[2]?.disabled).toBeNull();
+        expect(modeChoices(below)[3]?.disabled).toBe('Full access needs a newer Claude Code.');
+    });
+
+    it('says Auto-edit is on in its own line under the composer', () => {
+        expect(autoEditLine).toBe(
+            "Auto-edit: the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first.",
+        );
     });
 
     it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {

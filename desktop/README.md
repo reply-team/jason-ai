@@ -379,9 +379,55 @@ applies to the turns a person starts by sending, from the next one on.
   the chat to Ask first, and takes back the standing choice: that tool has already run. **The limit:** the refusals read what a command's text and a tool's
   input show; they are not a sandbox, and a program the agent writes and runs acts with the person's account. The
   confirmation says so.
-- Leaving Full access while a turn runs in it stops that turn, and the page gives the waiting message back as Stop does:
-  no turn follows by itself. A change to Plan only stops the running turn the same way, so the menu never says Plan only
-  while a turn could still ask to change something; a change from Plan only to Ask first lets the running turn finish
+- **Auto-edit** is Ask first, except that the six file commands run with no card on paths in the chat folder
+  (`autoEditJudgement`, `src/chat-permission-model.ts`, over `src/chat-auto-edit.ts`). Its command line is Ask first's,
+  byte for byte: no `--permission-mode`, no `acceptEdits`, no `defaultMode` and no hook; the permission tool alone
+  decides, and the broker uses `autoEditJudgement` in place of `judge` for a turn started in it. That judgement returns
+  `judge`'s result unchanged unless `judge` says ask, the tool is `Bash`, and the literal reading (`readLiteral`, with
+  `~` held) is a run of the six commands joined by `&&`, `;`, `||` or new lines, each named bare, with nothing piped in
+  or redirected and no folder of its own; then it allows. Every option is read wherever it stands before `--`, since
+  GNU's tools take one after an operand; an option outside the list, an abbreviated long option, a lone `-` or an empty
+  word leaves the card:
+
+  | Command | Options it runs with | Operands at least |
+  | --- | --- | --- |
+  | `mkdir` | `-p`, `-v`, `--parents`, `--verbose` | 1 |
+  | `touch` | `-c`, `--no-create` | 1 |
+  | `mv` | `-n`, `-v`, `--no-clobber`, `--verbose` | 2 |
+  | `cp` | `-n`, `-v`, `-p`, `--no-clobber`, `--verbose` | 2 |
+  | `rm` | `-d`, `-v`, `--dir`, `--verbose` | 1 |
+  | `rmdir` | `-v`, `--verbose` | 1 |
+
+  Each operand must hold no `..` component, pass the spelling check Ask first applies (`judgeSpelling`), name no device
+  on Windows (`con`, `nul`, `com1`, `lpt1` and the like, with any extension), and lie strictly inside
+  `<data>/desktop/chat` both as written and once links are followed (`located`), the folder itself excluded; the names
+  an agent loads (`guardedPlace`, `namesLocalJason`) and every refusal over the resolved words stay as in Ask first.
+  A link or a junction that leads nowhere, at the operand or at any folder above it in the chat folder, is a card: the
+  scope's `entry` (`entryOf`, `src/chat-real-path.ts`) finds something there that the real path reader cannot follow,
+  and a `touch` or a `cp` through it would write where it leads. A scope without `entry` runs nothing unasked. For a
+  `mv` or a `cp`, the path it writes when its last operand is a folder, that operand with each source's name after it,
+  is judged as one more operand for every copy and move, whatever the last operand is at the judgement, since an
+  earlier part of the line may make it a folder; and a `mv` whose destination or written path ends in the first part of
+  a guarded name of two parts (`.github`) is a card, since the folder moved there may hold the rest. A file named like
+  one of the six (with a program extension on Windows, folded where names fold) or like jason, directly in the chat
+  folder, is a card when an operand names it or when the command runs that program and such a file is already there:
+  where the search path holds the current folder the shell would run it in place of the system's.
+  The chain rule: once a `mv` or a `cp` names or writes a path, no later operand of the same command line may lie
+  inside it, since what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`), on a
+  host that does not drive the chat and for the Feed (`feedAutoEdit`); each host's listing carries `autoEdit`, the
+  reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation, no switch and
+  no standing entry; it is held in memory alone, for that conversation, like Full access, so a record never says it, a
+  restart opens Ask first, Start afresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
+  first. The page draws its line under the composer from the mode the desktop holds, with the same Change button as
+  Full access's. **The limits:** the chat folder is shared by the chats that are not in Full access, so a chat in
+  Auto-edit can remove a file another chat left there; a hard link already in the folder is not told by its path, so a
+  command that writes through it reaches the file it shares; and the judgement is made before the command runs, so a
+  link put into the folder by something else between the two is the same limit Ask first's Write has.
+- A change to a mode narrower than the running turn's stops that turn, narrow to wide being Plan only, Ask first,
+  Auto-edit, Full access, and the page gives the waiting message back as Stop does: no turn follows by itself. So
+  leaving Full access, or leaving Auto-edit for a narrower mode (Ask first or Plan only), stops the turn that runs in
+  it, and a change to Plan only stops any running turn, so the menu never says a mode while the running turn could
+  still do more than it lets; a change to a wider mode, Auto-edit to Full access included, lets the running turn finish
   in the mode it started in.
 - **No turn starts by itself.** Every turn is a person's send:
   - a message the person sends while a turn runs waits in the page and goes as the next turn once that one ends well, in

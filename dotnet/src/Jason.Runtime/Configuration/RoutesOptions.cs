@@ -60,6 +60,14 @@ public sealed partial class RoutesOptions
     public Dictionary<string, OperationRouteEntry> Operations { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// The paths of channel routes written where no operation stands above them — under <c>Routes:Default</c>, or at the
+    /// top of the section — each as <c>…:Channels:&lt;channel&gt;</c>. A channel route is a route of one operation, so
+    /// none of these is a route. Read as nothing, they would leave the default's plugin quietly taking every send on that
+    /// channel, so the reload refuses each one by its path.
+    /// </summary>
+    internal List<string> MisplacedChannels { get; } = [];
+
+    /// <summary>
     /// Read rather than bound. The configuration system flattens a file into string keys and string values, and
     /// the standard binder cannot make a <see cref="JsonObject"/> out of one at all, so a binding is rebuilt
     /// here: an object from a section with named children, an array from one whose children are 0…n-1, and a
@@ -107,10 +115,31 @@ public sealed partial class RoutesOptions
         var global = section.GetSection(nameof(Default));
         options.Default = global.Exists() ? Entry(global) : null;
 
+        options.MisplacedChannels.Clear();
+        Misplaced(options, global.GetSection(nameof(OperationRouteEntry.Channels)), $"{Section}:{nameof(Default)}:{nameof(OperationRouteEntry.Channels)}");
+        Misplaced(options, section.GetSection(nameof(OperationRouteEntry.Channels)), $"{Section}:{nameof(OperationRouteEntry.Channels)}");
+
         options.Operations.Clear();
         foreach (var operation in section.GetSection(nameof(Operations)).GetChildren())
         {
             options.Operations[operation.Key] = OperationEntry(operation);
+        }
+    }
+
+    /// <summary>
+    /// Records a <c>Channels</c> written where no operation stands above it: each channel under it by its whole path, or
+    /// the map's own path where text stands there instead.
+    /// </summary>
+    private static void Misplaced(RoutesOptions options, IConfigurationSection channels, string path)
+    {
+        if (channels.Value is { Length: > 0 })
+        {
+            options.MisplacedChannels.Add(path);
+        }
+
+        foreach (var channel in channels.GetChildren())
+        {
+            options.MisplacedChannels.Add($"{path}:{channel.Key}");
         }
     }
 

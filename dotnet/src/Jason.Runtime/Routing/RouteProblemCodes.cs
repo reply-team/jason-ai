@@ -45,8 +45,10 @@ public static class RouteProblemCodes
 
     /// <summary>
     /// The route names a channel, and the plugin it names reads no events (its manifest declares no <c>contracts.events</c>).
-    /// A reply to a send on a channel route reaches a campaign only through the events of the account the send went from,
-    /// so such a route would leave the reply unseen. Asked of a channel route only, after the plugin is found to perform the
+    /// Every operation that takes channel routes is about what is sent on the channel (<c>message.send</c> and
+    /// <c>conversation.reply</c> send it, <c>sender.list</c> names the accounts that will), and a reply to what is sent on a
+    /// channel route reaches a campaign only through the events of the account it went from, so such a route would leave
+    /// the reply unseen. Asked of a channel route only, after the plugin is found to perform the
     /// operation and speak its contract, and asked again of every channel route at every reload, so a package that stops
     /// reading events while a channel route names it refuses the reload.
     /// </summary>
