@@ -376,12 +376,11 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(Jason.Contracts.Notifications.AttentionAct.Session, Jason.Contracts.Notifications.AttentionLinks.Parse($"jason://attention/{collection}/{id}/session")?.Act);
     }
 
-    [Theory]
-    [InlineData]
-    [InlineData("--approval", "apr_1", "--question", "dec_1")]
-    public async Task Neither_or_both_of_the_items_is_a_usage_error_that_asks_nothing(params string[] items)
+    /// <summary>Both items at once is a usage error; neither is the folder form, held by <see cref="FolderSessionTests"/>.</summary>
+    [Fact]
+    public async Task Both_items_is_a_usage_error_that_asks_nothing()
     {
-        var exit = await _run.Cli(["session", "open", .. items]);
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1", "--question", "dec_1");
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Empty(_run.Asked);
@@ -698,6 +697,15 @@ public sealed class SessionOpenerTests : IDisposable
 
         public string? Campaign { get; set; }
 
+        /// <summary>The answer to <c>project.get</c>, or null for the runtime's not-found.</summary>
+        public string? Project { get; set; }
+
+        /// <summary>The answer to <c>system.info</c>, or null for the runtime's not-found.</summary>
+        public string? SystemInfo { get; set; }
+
+        /// <summary>Operations answered with a 404 and this body in place of their answer, the runtime's own refusal.</summary>
+        public Dictionary<string, string> Refusals { get; } = [];
+
         /// <summary>The value of <c>agent.interactive_host</c>, or null for a key that is unset.</summary>
         public string? Preference { get; set; }
 
@@ -738,11 +746,18 @@ public sealed class SessionOpenerTests : IDisposable
                 var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
                 Asked.Add(operation);
                 Bodies.Add(request.Content?.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult() ?? string.Empty);
+                if (Refusals.TryGetValue(operation, out var refusal))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent(refusal, System.Text.Encoding.UTF8, "application/json") };
+                }
+
                 var answer = operation switch
                 {
                     "approval.get" => Item,
                     "decision.get" => Item is null ? null : CopyPromptTests.Fixture("decision.get", "pending-with-options"),
                     "campaign.get" => Campaign,
+                    "project.get" => Project,
+                    "system.info" => SystemInfo,
                     "preference.list" => PreferencesAnswer ? PreferencesBody ?? Preferences() : null,
                     _ => null,
                 };
