@@ -35,7 +35,8 @@ import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { eventChannels, handle, type InvokeMember } from './ipc.ts';
+import { eventChannels, handle, withMembers, type InvokeMember } from './ipc.ts';
+import { BridgeHolder, BrowserBridge } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, placesProblem, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
@@ -162,7 +163,13 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
     return leave;
 }
 
-function registerSetup(setup: Setup, origin: () => string | null, log: Logger, window: () => BrowserWindow | null): void {
+/**
+ * Every member the page may ask for is registered here, through `ipc.ts`, which checks the window's sender and keeps each
+ * handler in one registry: the browser bridge reaches the same handlers through it (`browser-bridge.ts`).
+ */
+const seam = withMembers(ipcMain);
+
+function registerSetup(setup: Setup, origin: () => string | null, log: Logger, changed: () => void): void {
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
     const members: [InvokeMember, (...args: unknown[]) => unknown][] = [
         ['setup.status', () => setup.status()],
@@ -181,8 +188,8 @@ function registerSetup(setup: Setup, origin: () => string | null, log: Logger, w
         ['setup.replyUnblock', (id) => setup.replyUnblock(id)],
         ['setup.replyDelete', (channel, id, options) => setup.replyDelete(channel, id, options)],
     ];
-    for (const [member, handler] of members) handle(ipcMain, member, origin, handler, refused);
-    setup.onChanged(() => window()?.webContents.send(eventChannels['setup.changed']));
+    for (const [member, handler] of members) handle(seam, member, origin, handler, refused);
+    setup.onChanged(changed);
 }
 
 /** Brings the window forward; the desk's own once it is open. */
@@ -289,9 +296,17 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     // The origin is read from the run file on every check, because the runtime may come back on another port.
     const origin = () => runtimeOrigin(readText(paths.runFile) ?? '');
+    // The bridge a browser tab reaches the chat through: opened only when the person first opens the chat in a browser,
+    // closed with the window and at quit.
+    const bridges = new BridgeHolder(() => BrowserBridge.open({ origin, members: seam.members, log }));
+    // The one way an event reaches the page: the window, and every tab paired with the bridge for the channels a tab reads.
+    const toPage = (channel: keyof typeof eventChannels, ...args: unknown[]) => {
+        current?.webContents.send(eventChannels[channel], ...args);
+        bridges.publish(channel, args);
+    };
     const toBrowser = lockNavigation(window.webContents, origin, log);
     // A link waits for the page that takes it: a page that goes, by a load or a reload, takes no more until the next asks.
-    handle(ipcMain, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    handle(seam, 'links.take', origin, () => links.take(), (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     window.webContents.on('did-start-navigation', (details) => {
         if (details.isMainFrame && !details.isSameDocument) links.away();
     });
@@ -502,7 +517,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const models = new ModelLists({
         file: paths.models,
         ask: codexAsker({ paths, env, bundle, dataNamed, bundleVersion: version, keyFor: (id) => keys.keyFor(id) }),
-        changed: () => current?.webContents.send(eventChannels['setup.changed']),
+        changed: () => toPage('setup.changed'),
         ...loggedModels(log),
     });
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
@@ -513,11 +528,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         },
         write: (next: DesktopSettings) => writeSettings(paths.settings, next),
     };
-    handle(ipcMain, 'theme.get', origin, () => settings.theme, refused);
-    handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
-    handle(ipcMain, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);
-    handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
-    handle(ipcMain, 'mode.startOver', origin, () => startOver(), refused);
+    handle(seam, 'theme.get', origin, () => settings.theme, refused);
+    handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);
+    handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
+    handle(seam, 'mode.startOver', origin, () => startOver(), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
@@ -525,7 +540,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         state: () => readWindowPairing(paths.windowPairing),
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
-    handle(ipcMain, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
+    handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
     registerSetup(
         new Setup({
             paths,
@@ -558,7 +573,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }),
         origin,
         log,
-        () => current,
+        () => toPage('setup.changed'),
     );
     // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
     const skillsGate = new SkillsGate();
@@ -580,7 +595,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // The Open folder button of the notice that says a Full access grant's folder is kept: the file manager shows the
         // folder where it stands. Nothing is run or opened with a program.
         openFolder: (path) => shell.showItemInFolder(path),
-        emit: (chatId, event) => current?.webContents.send(eventChannels['chat.event'], chatId, event),
+        emit: (chatId, event) => toPage('chat.event', chatId, event),
         // The desktop asks the person itself whenever Full access is chosen with no standing choice: the page cannot answer
         // for them, nor give the standing choice. This time and Always say yes; Cancel is the default and Escape answers
         // it. With no window there is no one to ask.
@@ -594,10 +609,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
         standingChanged: (standing, why) => {
             loggedTurns(log).standingChanged(standing, why);
-            current?.webContents.send(eventChannels['fullAccess.changed'], standing);
+            toPage('fullAccess.changed', standing);
         },
     });
-    registerChat(ipcMain, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
+    registerChat(seam, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
     // place used last is kept in this run's own settings.
@@ -623,17 +638,20 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         terminalFlags,
         log: (event, fields) => log.info(event, fields),
     });
-    handle(ipcMain, 'openIn.targets', origin, (campaignId) => openIn.targets(campaignId), refused);
-    handle(ipcMain, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
+    handle(seam, 'openIn.targets', origin, (campaignId) => openIn.targets(campaignId), refused);
+    handle(seam, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".
     // Nor does a listing of Codex's models: it is ended the way a turn's host is, and the asks that wait are dropped.
+    // Nor does a browser tab's bridge: its sessions end with it.
     window.on('closed', () => {
         chat.closeAll();
         models.close();
+        void bridges.close();
     });
     app.on('before-quit', () => {
         chat.closeAll();
         models.close();
+        void bridges.close();
     });
 
     await showStarting(window, 'Starting Jason…', false);

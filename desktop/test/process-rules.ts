@@ -80,6 +80,20 @@ const programsWhole = new RegExp(String.raw`import\s*\*\s*as\s+\w+\s*from\s*${pr
 /** The one module allowed to register an IPC handler, because it checks every sender's origin first. */
 export const ipcModule = 'src/ipc.ts';
 
+/**
+ * The modules that may listen on a port, each with what it serves. Both listen on the loopback address alone, on a port
+ * the system picks, and check every request's Host before anything else of it is read.
+ */
+export const listeningModules: Readonly<Record<string, string>> = {
+    'src/chat-permission-endpoint.ts': "a chat turn's permission prompt tool and its Full access hook, for that turn's host alone, behind the turn's secret",
+    'src/browser-bridge.ts': "the chat's view for a browser tab the desktop opened, behind the runtime's origin and a code the tab traded once",
+};
+
+/** A server module of Node imported or required by any form: what a listening socket is made with. */
+const serverModule = /(?:from\s*|require\s*\(\s*|import\s*\(\s*)['"](?:node:)?(?:http|https|http2|net|tls|dgram)['"]/;
+/** A server made or a socket listened on, by any name: the calls a module must not make outside the named ones. */
+const listening = /\b(?:createServer|createSecureServer|createSocket)\s*\(|\.\s*listen\s*\(|\bWebSocketServer\b/;
+
 /** The child_process functions a named module may import: both take a file and arguments and start no shell. */
 const allowedImports = new Set(['execFile', 'spawn']);
 
@@ -168,6 +182,9 @@ export function processViolations(path: string, text: string): string[] {
     if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);
     if (!(path in runFileCalls) && (runFileNamed.test(text) || programsWhole.test(text))) {
         found.push(`${path} imports the program runner; only the runner itself and a set-up chat's naming run may`);
+    }
+    if (!(path in listeningModules) && (serverModule.test(text) || listening.test(text))) {
+        found.push(`${path} may listen on a port; only ${Object.keys(listeningModules).join(', ')} may`);
     }
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);

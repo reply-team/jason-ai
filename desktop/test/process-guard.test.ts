@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, listingCallers, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
+import { ipcModule, listeningModules, listingCallers, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -25,9 +25,38 @@ test('every source under src/ and scripts/ starts processes only where it is nam
 });
 
 test('every named module is there, so renaming one cannot pass by leaving the rule nothing to hold', () => {
-    for (const path of [...Object.keys(processModules), ipcModule]) {
+    for (const path of [...Object.keys(processModules), ipcModule, ...Object.keys(listeningModules)]) {
         assert.ok(statSync(join(root, path)).isFile(), `${path} is named by the guard and missing`);
     }
+});
+
+test('only the two named modules listen: the permission endpoint and the browser bridge', () => {
+    assert.deepEqual(Object.keys(listeningModules).sort(), ['src/browser-bridge.ts', 'src/chat-permission-endpoint.ts']);
+    for (const path of Object.keys(listeningModules)) {
+        const text = readFileSync(join(root, path), 'utf8');
+        assert.ok(text.includes("listen(0, '127.0.0.1'"), `${path} listens on the loopback address, on a port the system picks`);
+        assert.ok(/request\.headers\.host !== `127\.0\.0\.1:\$\{/.test(text), `${path} checks the Host`);
+    }
+});
+
+test('a server or a listen planted in a module that is not named is refused, by any form of the import', () => {
+    for (const planted of [
+        "import { createServer } from 'node:http';",
+        "import http from 'http';",
+        "import * as net from 'node:net';",
+        "const tls = require('node:tls');",
+        "const dgram = await import('dgram');",
+        "import { createSecureServer } from 'node:http2';",
+        'const server = createServer(serve);',
+        "server.listen(0, '127.0.0.1');",
+        'const wss = new WebSocketServer({ port: 0 });',
+    ]) {
+        const found = processViolations('src/setup.ts', planted + '\n');
+        assert.ok(found.some((line) => /may listen on a port/.test(line)), planted);
+    }
+    assert.deepEqual(processViolations('src/browser-bridge.ts', "import { createServer } from 'node:http';\nserver.listen(0, '127.0.0.1');\n"), []);
+    // A word that only names a program is no server.
+    assert.deepEqual(processViolations('src/chat-literal.ts', "if (program === 'net') return true;\n"), []);
 });
 
 test('a spawn planted in a module that is not named is refused', () => {
