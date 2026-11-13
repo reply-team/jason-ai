@@ -1252,14 +1252,13 @@ body,
     margin: 0 auto;
     padding: 0 20px;
 }
-/* Demo, or a demo that could not be opened: the strip heads the window above the sidebar and the dock, and the shell
-   takes the height that is left. */
-.jc-console.demo {
+/* The bar heads the window above the sidebar and the dock in both modes, and the shell takes the height that is left. */
+.jc-console {
     display: flex;
     flex-direction: column;
     height: 100vh;
 }
-.jc-console.demo > .shell {
+.jc-console > .shell {
     flex: 1;
     min-height: 0;
     height: auto;
@@ -1270,15 +1269,40 @@ body,
     align-items: center;
     gap: 12px;
     padding: 6px 14px;
-    background: var(--amber-2);
-    color: var(--amber);
     border-bottom: 1px solid var(--line);
     font-size: 13px;
 }
-.jc-console .mode-strip-long,
-.jc-console .mode-strip-short {
+/* The demo is told from Live by a warm tone, Live by a calm green mark. */
+.jc-console .mode-strip.mode-demo {
+    background: var(--amber-2);
+    color: var(--amber);
+}
+.jc-console .mode-strip.mode-live {
+    background: var(--green-2);
+    color: var(--green);
+}
+.jc-console .mode-strip.mode-live .mode-dot {
+    background: var(--green);
+}
+.jc-console .mode-strip.mode-demo .mode-dot {
+    background: var(--amber);
+}
+.jc-console .mode-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.jc-console .mode-spacer {
     flex: 1;
-    min-width: 0;
+}
+.jc-console .mode-open-in {
+    display: flex;
+    flex: none;
+    align-items: center;
+}
+.jc-console .mode-open-in:empty {
+    display: none;
 }
 .jc-console .mode-strip-short {
     display: none;
@@ -1286,18 +1310,19 @@ body,
 .jc-console .mode-strip-refusal {
     font-weight: 600;
 }
+.jc-console .mode-unopened {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: var(--amber);
+}
 .jc-console .mode-switch {
     display: flex;
     flex: none;
     gap: 4px;
 }
-.jc-console .mode-switch button {
-    padding: 2px 10px;
-    border: 1px solid currentColor;
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-}
+.jc-console .mode-switch button,
 .jc-console .mode-unopened-close {
     flex: none;
     padding: 2px 10px;
@@ -1310,22 +1335,16 @@ body,
     background: var(--amber);
     color: var(--amber-2);
 }
-/* A narrow window takes the strip's short form. */
+.jc-console .mode-strip.mode-live .mode-switch button.on {
+    background: var(--green);
+    color: var(--green-2);
+}
+/* A narrow window takes the short form. */
 @media (max-width: 1000px) {
-    .jc-console .mode-strip:not(.mode-unopened) .mode-strip-long {
+    .jc-console .mode-strip .mode-strip-long {
         display: none;
     }
     .jc-console .mode-strip-short {
         display: inline;
     }
-}
-/* The start screen's one line offering the demo. */
-.jc-console .start .start-demo {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-}
-.jc-console .start .start-demo-refusal {
-    color: var(--amber);
 }
