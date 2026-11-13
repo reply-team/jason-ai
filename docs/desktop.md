@@ -111,7 +111,9 @@ them on.
   either. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What Jason
   Placed: each says to go back to your own installation, and the tray and the Jason menu offer Back to Your Own
   Installation. When the demo's directory cannot be made or used, the desktop opens your own installation instead, sets
-  this file back to `live` and says so at the top of the window.
+  this file back to `live` and says so at the top of the window. A Live and a Demo desktop are separate instances, each
+  with its own profile, so while a demo run is still stopping its runtime after a switch, a click on Jason's icon may
+  open Live first; the start the switch asked for then only brings that window forward.
 - `<data>/desktop/chat/`: the chat's working folder. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.

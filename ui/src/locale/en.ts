@@ -42,6 +42,7 @@ export const en = {
     'mode.offer': 'See Jason with sample data',
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',
+    'mode.unsupported': 'This version of the desktop cannot switch to the demo.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
 } as const;

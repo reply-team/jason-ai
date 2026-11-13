@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoUnopened, enterRun, modeUnkept, offersOf, openDirectory, parseMode, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
+import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoUnopened, enterRun, isSettingsVariable, modeUnkept, offersOf, openDirectory, parseMode, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
 import { dataDirectory, desktopPaths } from '../src/paths.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'mode-'));
@@ -143,15 +143,26 @@ test('a packaged desktop starts again with nothing after the program, an unpacka
 });
 
 // The one ordering guard left on the main module's text: what runs before Electron resolves any path cannot be run here.
-test('the main module reads the record before any path is resolved, and only then points the process at the run', () => {
+test('a start reads the record before it resolves any path, and only then points the process at the run', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const chosen = main.indexOf('const personDirectory = dataDirectory(process.env, homedir());');
-    const started = main.indexOf('const runOn: StartRun = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {');
-    const entered = main.indexOf('const personEnvironment = enterRun(process.env, runOn);');
-    const firstPath = main.indexOf('const installationWasNew = isNewInstallation(');
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    const chosen = choose.indexOf('const personDirectory = dataDirectory(process.env, homedir());');
+    const started = choose.indexOf('runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {');
+    const entered = choose.indexOf('personEnvironment = enterRun(process.env, runOn);');
+    const firstPath = choose.indexOf('installationWasNew = isNewInstallation(');
     assert.ok(chosen > 0 && started > chosen && entered > started && firstPath > entered);
-    // Nothing before the choice resolves the data directory at the module's top level.
-    assert.equal(main.slice(main.indexOf('const unsandboxed'), chosen).includes('dataDirectory('), false);
+    // In the start, nothing between the link's decision and the choice resolves a path, and the profile, the logs and
+    // the lock follow the choice.
+    const start = main.slice(main.indexOf('function startDesktop('));
+    const decided = start.indexOf('const fromArgs = linkIn(');
+    const choice = start.indexOf('chooseInstallation(uninstalling');
+    const between = start.slice(start.indexOf('    const uninstalling = uninstallStart('), choice);
+    for (const path of ['dataDirectory(', 'startLog(', 'keepElectronUnderData(', 'desktopPaths(']) assert.equal(between.includes(path), false, path);
+    assert.ok(decided > 0 && choice > decided);
+    for (const after of ['keepElectronUnderData();\n    const early = startLog();', 'app.requestSingleInstanceLock(']) assert.ok(start.indexOf(after) > choice, after);
+    // Nothing at the module's top resolves the data directory before a start chooses, but the sandbox's refusal.
+    const top = main.slice(main.indexOf('const unsandboxed'), main.indexOf('function chooseInstallation('));
+    assert.equal(top.replace(/if \(unsandboxed !== null\) \{[\s\S]*?\} else \{/, '').includes('dataDirectory('), false);
 });
 
 const noPreparation = { prepare: () => undefined };
@@ -242,10 +253,45 @@ test('a demo run points this process at the demo’s directory and away from a h
     const env: Environment = { PATH: '/bin', JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' };
     const person = enterRun(env, run);
     assert.deepEqual(env, { PATH: '/bin', JASON_DATA_DIR: '/p/.jason-demo' });
-    assert.deepEqual(person, { dataDirectory: undefined, harnessRoot: { JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' } });
+    assert.deepEqual(person, { dataDirectory: undefined, settings: { JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' } });
     const live: Environment = { PATH: '/bin', JASON_DATA_DIR: '/x', JASON_Harness__Root: '/r' };
     enterRun(live, { person: '/x', data: '/x', mode: 'live' });
     assert.deepEqual(live, { PATH: '/bin', JASON_DATA_DIR: '/x', JASON_Harness__Root: '/r' });
+});
+
+test('a route, a role switch or any other runtime setting given by the environment does not reach a demo run’s environment', () => {
+    const env: Environment = {
+        PATH: '/bin',
+        JASON_Routes__Default__Plugin: 'reply',
+        jason_responder__onreply: 'true',
+        JASON_Plugins__Grants__reply__0: 'api.example',
+        JASON_DATA_DIR: '/p/.jason',
+        JASON_NO_UNDERSCORES: 'kept',
+        JASON_: 'kept too',
+        NOT_JASON__Routes: 'kept as well',
+    };
+    const person = enterRun(env, { person: '/p/.jason', data: '/p/.jason-demo', mode: 'demo' });
+    assert.deepEqual(env, { PATH: '/bin', JASON_DATA_DIR: '/p/.jason-demo', JASON_NO_UNDERSCORES: 'kept', JASON_: 'kept too', NOT_JASON__Routes: 'kept as well' });
+    assert.equal(Object.keys(env).some(isSettingsVariable), false);
+    assert.deepEqual(person.settings, { JASON_Routes__Default__Plugin: 'reply', jason_responder__onreply: 'true', JASON_Plugins__Grants__reply__0: 'api.example' });
+});
+
+test('back to Live puts back every runtime settings variable byte for byte, names included, and nothing added since', () => {
+    const original: Environment = {
+        PATH: '/bin',
+        JASON_Routes__Default__Plugin: 'reply',
+        jason_Manager__ReviewSeconds: ' 300 ',
+        JASON_HARNESS__ROOT: '/p/Ünïcode Root',
+        JASON_DATA_DIR: '/p/data',
+    };
+    const env: Environment = { ...original };
+    const person = enterRun(env, { person: '/p/data', data: '/p/data-demo', mode: 'demo' });
+    // A variable set during the run, as a settings variable, is no part of the person's environment.
+    env.JASON_Dispatcher__TickSeconds = '2';
+    let inherited: Environment | null = null;
+    relaunchAsPerson({ env, person, relaunch: () => void (inherited = { ...env }), quit: () => undefined });
+    assert.deepEqual(inherited, original);
+    assert.deepEqual(Object.keys(inherited!).sort(), Object.keys(original).sort());
 });
 
 /** One start of the desktop as the main module makes it, against a home of its own: the record read, the process pointed at the run. */

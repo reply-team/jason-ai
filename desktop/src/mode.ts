@@ -135,46 +135,53 @@ export function startOn(person: string, record: Mode, installerStart: boolean, d
 /** A process environment, as `process.env` is one. */
 export type Environment = Record<string, string | undefined>;
 
-/** The two variables a demo run changes in its own process, as the person's environment held them at start. */
+/** What a demo run changes in its own process's environment, as the person's environment held it at start. */
 export interface PersonEnvironment {
     /** `JASON_DATA_DIR` as the person gave it, or undefined when they gave none. */
     dataDirectory: string | undefined;
     /**
-     * Each spelling of `JASON_Harness__Root` the environment held, with its value: the runtime reads the name without
-     * regard to case.
+     * Every runtime settings variable the environment held, `JASON_<Section>__<Key>` in any spelling, by its exact name
+     * with its exact value.
      */
-    harnessRoot: Record<string, string>;
+    settings: Record<string, string>;
 }
 
-const harnessRootVariable = 'JASON_HARNESS__ROOT';
+/** Whether a variable is one of the runtime's settings: `JASON_`, a section, then `__` and a key, in any case. */
+export function isSettingsVariable(name: string): boolean {
+    return /^JASON_[^_]+__./i.test(name);
+}
 
 /**
  * Points this process at the run's installation and answers what the person's environment said. A demo run sets
- * `JASON_DATA_DIR` to the demo's directory and takes away a `JASON_Harness__Root` the person set, so the demo's runtime
- * reads its harness root from the demo's settings file (`writeDemoSettings`), as a terminal with `JASON_DATA_DIR` alone
- * would. A Live run changes nothing.
+ * `JASON_DATA_DIR` to the demo's directory and takes away every runtime settings variable the person set (a harness
+ * root, a route, a role's switch), so the demo's runtime is configured by the demo's own settings file
+ * (`writeDemoSettings`) and nothing else, as a terminal with `JASON_DATA_DIR` alone would be. Variables without a
+ * double underscore stay. A Live run changes nothing.
  */
 export function enterRun(env: Environment, run: RunsOn): PersonEnvironment {
-    const harnessRoot: Record<string, string> = {};
+    const settings: Record<string, string> = {};
     for (const [name, value] of Object.entries(env)) {
-        if (name.toUpperCase() === harnessRootVariable && value !== undefined) harnessRoot[name] = value;
+        if (isSettingsVariable(name) && value !== undefined) settings[name] = value;
     }
-    const person = { dataDirectory: env.JASON_DATA_DIR, harnessRoot };
+    const person = { dataDirectory: env.JASON_DATA_DIR, settings };
     if (run.mode === 'demo') {
         env.JASON_DATA_DIR = run.data;
-        for (const name of Object.keys(harnessRoot)) delete env[name];
+        for (const name of Object.keys(settings)) delete env[name];
     }
     return person;
 }
 
-/** Puts back the variables `enterRun` changed, exactly as the person's environment held them: their values, or none. */
+/**
+ * Puts back what `enterRun` changed, exactly as the person's environment held it: `JASON_DATA_DIR` as theirs or none,
+ * and every runtime settings variable by its name and value, with none of their own added since.
+ */
 export function leaveRun(env: Environment, person: PersonEnvironment): void {
     if (person.dataDirectory === undefined) delete env.JASON_DATA_DIR;
     else env.JASON_DATA_DIR = person.dataDirectory;
     for (const name of Object.keys(env)) {
-        if (name.toUpperCase() === harnessRootVariable && !(name in person.harnessRoot)) delete env[name];
+        if (isSettingsVariable(name) && !(name in person.settings)) delete env[name];
     }
-    Object.assign(env, person.harnessRoot);
+    Object.assign(env, person.settings);
 }
 
 /**
