@@ -33,7 +33,7 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, demoMenu, enterRun, offersOf, openDirectory, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type StartRun } from './mode.ts';
+import { applyMode, demoMenu, enterRun, offersOf, openDirectory, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime } from './demo-runtime.ts';
 import { writeDemoSettings } from './demo-settings.ts';
 import { permissionAllowed } from './permissions.ts';
@@ -651,30 +651,13 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
-// Which installation this run is on (`mode.ts`), decided before anything resolves a path: the record in the person's
-// directory says Live or Demo, and for Demo the demo's directory becomes this run's data directory, so the profile, the
-// lock, the logs, the runtime it starts, the chat's hosts and every jason verb are the demo installation's by the rule
-// they already follow. The installer's and the uninstaller's starts ignore the record.
-const installerStart =
-    uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform }) !== null ||
-    stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
-const personDirectory = dataDirectory(process.env, homedir());
-// A demo directory that cannot be made or used makes this run the person's own: the record goes back to Live, and the
-// first screen says the demo could not be opened.
-// Before the demo's runtime is ever started, its settings are written into its own settings file (`prepare`, the seam
-// for whatever else the demo installation must hold before it runs); the harness root is a sibling of the person's.
-const runOn: StartRun = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
-    open: openDirectory,
-    prepare: (demo) => writeDemoSettings(demo, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
-    keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
-});
-// What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
-const personEnvironment = enterRun(process.env, runOn);
-// Whether this installation is new is read next: before Electron makes its profile under the data directory, before the
-// single-instance lock, before anything is written there, on either start below.
-const installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
-// Whether an earlier version's page left its storage on disk, read before Electron is ready (`window-pairing.ts`).
-const earlierPageWasFound = earlierPageFound(desktopPaths(dataDirectory(process.env, homedir())).electron);
+// Which installation this run is on, what the person's environment said, whether the installation is new and whether an
+// earlier page left its storage: decided once by `chooseInstallation`, after the sandbox and the link, before anything
+// else of a start resolves a path, and read only by what runs after it.
+let runOn!: StartRun;
+let personEnvironment!: PersonEnvironment;
+let installationWasNew!: boolean;
+let earlierPageWasFound!: boolean;
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -687,25 +670,53 @@ if (unsandboxed !== null) {
     startDesktop();
 }
 
-function startDesktop(): void {
-    keepElectronUnderData();
+/**
+ * Which installation this run is on (`mode.ts`): the record in the person's directory says Live or Demo, and for Demo
+ * the demo's directory becomes this run's data directory, so the profile, the lock, the logs, the runtime it starts, the
+ * chat's hosts and every jason verb are the demo installation's by the rule they already follow. The installer's and
+ * the uninstaller's starts ignore the record. A demo directory that cannot be made, used or prepared makes this run the
+ * person's own: the record goes back to Live, and the first screen says the demo could not be opened. Before the demo's
+ * runtime is ever started, its settings are written into its own settings file (`prepare`, the seam for whatever else
+ * the demo installation must hold before it runs); the harness root is a sibling of the person's.
+ */
+function chooseInstallation(installerStart: boolean): void {
+    const personDirectory = dataDirectory(process.env, homedir());
+    runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
+        open: openDirectory,
+        prepare: (demo) => writeDemoSettings(demo, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+        keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
+    });
+    // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
+    personEnvironment = enterRun(process.env, runOn);
+    // Whether this installation is new is read next: before Electron makes its profile under the data directory, before
+    // the single-instance lock, before anything is written there.
+    installationWasNew = isNewInstallation(desktopPaths(dataDirectory(process.env, homedir())).data);
+    // Whether an earlier version's page left its storage on disk, read before Electron is ready (`window-pairing.ts`).
+    earlierPageWasFound = earlierPageFound(desktopPaths(dataDirectory(process.env, homedir())).electron);
+}
 
+function startDesktop(): void {
     // A start that carries a link carries it alone (`linkIn`): one with anything beside it, a flag of the desktop's own
-    // or a switch a crafted address put there, does nothing and quits, before any other branch of a start is decided.
+    // or a switch a crafted address put there, does nothing and quits, before any other branch of a start is decided,
+    // the choice of installation included.
     const fromArgs = linkIn(process.argv.slice(1), process.platform);
-    const early = startLog();
     if (fromArgs.kind === 'refused') {
-        early.warn('deep_link_refused', { Code: fromArgs.reason });
+        keepElectronUnderData();
+        startLog().warn('deep_link_refused', { Code: fromArgs.reason });
         app.exit(1);
         return;
     }
 
     const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
+    const stoppingRuntime = uninstalling === null && stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
+    chooseInstallation(uninstalling !== null || stoppingRuntime);
+    keepElectronUnderData();
+    const early = startLog();
     if (uninstalling !== null) {
         // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
         // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
         void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
-    } else if (stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform })) {
+    } else if (stoppingRuntime) {
         // The nsis installer's and uninstaller's start when a runtime runs from the carried jason.exe: it stops that
         // runtime through jason runtime stop and exits, and opens no window; the installer looks again rather than read
         // the code.

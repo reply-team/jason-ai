@@ -169,11 +169,14 @@ test('the main process decides a start\'s link after the sandbox and before ever
     const start = main.indexOf('function startDesktop(): void {');
     const decided = main.indexOf('const fromArgs = linkIn(process.argv.slice(1), process.platform);');
     assert.ok(sandbox > 0 && start > sandbox && decided > start, 'the link is decided inside the start the sandbox lets through');
-    for (const later of ['uninstallStart(process.argv', 'stopRuntimeStart(process.argv', 'app.requestSingleInstanceLock(', 'app.whenReady().then(() => run(links, installationWasNew))']) {
+    for (const later of ['uninstallStart(process.argv', 'stopRuntimeStart(process.argv', 'chooseInstallation(uninstalling', 'app.requestSingleInstanceLock(', 'app.whenReady().then(() => run(links, installationWasNew))']) {
         assert.ok(main.indexOf(later) > decided, `${later} comes after the link is decided`);
     }
-    // A refused start does nothing else and quits.
-    assert.ok(main.includes("    if (fromArgs.kind === 'refused') {\n        early.warn('deep_link_refused', { Code: fromArgs.reason });\n        app.exit(1);\n        return;\n    }"));
+    // A refused start does nothing else and quits: it logs under the person's own directory, and no installation is
+    // chosen, so no demo directory is made or prepared for it.
+    const refused = "    if (fromArgs.kind === 'refused') {\n        keepElectronUnderData();\n        startLog().warn('deep_link_refused', { Code: fromArgs.reason });\n        app.exit(1);\n        return;\n    }";
+    assert.ok(main.includes(refused));
+    assert.ok(main.indexOf('chooseInstallation(uninstalling') > main.indexOf(refused));
     // The lock carries a start's link to the running application, which reads it from additionalData alone.
     assert.ok(main.includes("app.requestSingleInstanceLock(fromArgs.kind === 'link' ? { link: fromArgs.raw } : undefined)"));
     assert.ok(main.includes("app.on('second-instance', (_event, argv, _directory, data) => {\n            const link = linkOf(data);"));
