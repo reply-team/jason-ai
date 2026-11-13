@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoUnopened, enterRun, modeUnkept, offersOf, openDirectory, parseMode, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
+import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoUnopened, enterRun, isSettingsVariable, modeUnkept, offersOf, openDirectory, parseMode, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
 import { dataDirectory, desktopPaths } from '../src/paths.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'mode-'));
@@ -242,10 +242,45 @@ test('a demo run points this process at the demo’s directory and away from a h
     const env: Environment = { PATH: '/bin', JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' };
     const person = enterRun(env, run);
     assert.deepEqual(env, { PATH: '/bin', JASON_DATA_DIR: '/p/.jason-demo' });
-    assert.deepEqual(person, { dataDirectory: undefined, harnessRoot: { JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' } });
+    assert.deepEqual(person, { dataDirectory: undefined, settings: { JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' } });
     const live: Environment = { PATH: '/bin', JASON_DATA_DIR: '/x', JASON_Harness__Root: '/r' };
     enterRun(live, { person: '/x', data: '/x', mode: 'live' });
     assert.deepEqual(live, { PATH: '/bin', JASON_DATA_DIR: '/x', JASON_Harness__Root: '/r' });
+});
+
+test('a route, a role switch or any other runtime setting given by the environment does not reach a demo run’s environment', () => {
+    const env: Environment = {
+        PATH: '/bin',
+        JASON_Routes__Default__Plugin: 'reply',
+        jason_responder__onreply: 'true',
+        JASON_Plugins__Grants__reply__0: 'api.example',
+        JASON_DATA_DIR: '/p/.jason',
+        JASON_NO_UNDERSCORES: 'kept',
+        JASON_: 'kept too',
+        NOT_JASON__Routes: 'kept as well',
+    };
+    const person = enterRun(env, { person: '/p/.jason', data: '/p/.jason-demo', mode: 'demo' });
+    assert.deepEqual(env, { PATH: '/bin', JASON_DATA_DIR: '/p/.jason-demo', JASON_NO_UNDERSCORES: 'kept', JASON_: 'kept too', NOT_JASON__Routes: 'kept as well' });
+    assert.equal(Object.keys(env).some(isSettingsVariable), false);
+    assert.deepEqual(person.settings, { JASON_Routes__Default__Plugin: 'reply', jason_responder__onreply: 'true', JASON_Plugins__Grants__reply__0: 'api.example' });
+});
+
+test('back to Live puts back every runtime settings variable byte for byte, names included, and nothing added since', () => {
+    const original: Environment = {
+        PATH: '/bin',
+        JASON_Routes__Default__Plugin: 'reply',
+        jason_Manager__ReviewSeconds: ' 300 ',
+        JASON_HARNESS__ROOT: '/p/Ünïcode Root',
+        JASON_DATA_DIR: '/p/data',
+    };
+    const env: Environment = { ...original };
+    const person = enterRun(env, { person: '/p/data', data: '/p/data-demo', mode: 'demo' });
+    // A variable set during the run, as a settings variable, is no part of the person's environment.
+    env.JASON_Dispatcher__TickSeconds = '2';
+    let inherited: Environment | null = null;
+    relaunchAsPerson({ env, person, relaunch: () => void (inherited = { ...env }), quit: () => undefined });
+    assert.deepEqual(inherited, original);
+    assert.deepEqual(Object.keys(inherited!).sort(), Object.keys(original).sort());
 });
 
 /** One start of the desktop as the main module makes it, against a home of its own: the record read, the process pointed at the run. */
