@@ -96,6 +96,12 @@ export interface DesktopChatOptions {
      * send whose effort the model does not take, and one with an effort and no model, before any host starts.
      */
     effort?: DesktopEffort;
+    /**
+     * The mode the turn was approved for: the plan card's go names `ask_first`. The desktop refuses the send, with a
+     * `done` that says why and before any host starts, when the conversation is in another mode; absent, the turn runs
+     * in the mode the conversation is in.
+     */
+    mode?: DesktopChatMode;
 }
 
 /**
@@ -180,7 +186,8 @@ export interface DesktopRefusal {
  */
 export type DesktopKeptEntry =
     | { kind: 'user'; text: string }
-    | { kind: 'text'; text: string }
+    /** `plan`, when present, marks the last words of a Plan only turn that ended well as its live plan. */
+    | { kind: 'text'; text: string; plan?: true }
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
     | { kind: 'error'; text: string }
@@ -258,8 +265,13 @@ export type DesktopChatEvent =
      * conversation.
      */
     | { kind: 'notice'; text: string; folder?: string }
-    /** The turn is over: `error` is null when it ended well, else the host's own words for why it did not. */
-    | { kind: 'done'; error: string | null };
+    /**
+     * The turn is over: `error` is null when it ended well, else the host's own words for why it did not. `plan` is
+     * present, and true, when a turn in Plan only ended well with its words last, in a chat still in Plan only and not
+     * the Feed: those words, the last `text` event, are its plan, which the page offers as a card. Every earlier plan is
+     * no card any more once a turn has ended.
+     */
+    | { kind: 'done'; error: string | null; plan?: true };
 
 /** An agent host or a key provider the chat's dropdown lists, found on this machine or not. */
 export interface DesktopHost {

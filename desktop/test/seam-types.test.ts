@@ -96,9 +96,12 @@ type ConversationsAreTheSeam = [
     Holds<Equal<Extract<ChatEvent, { kind: Conversational }>, Extract<DesktopChatEvent, { kind: Conversational }>>>,
 ];
 
-// A turn names the conversation and the host, the model and the effort; never a campaign, which the conversation's
-// record decides.
-type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort'>>];
+// A turn names the conversation and the host, the model, the effort and the mode it was approved for; never a campaign,
+// which the conversation's record decides.
+type SendIsTheSeam = [Holds<Equal<ChatSendOptions, DesktopChatOptions>>, Holds<Equal<keyof DesktopChatOptions, 'host' | 'model' | 'effort' | 'mode'>>];
+
+// A turn's end reaches the page as the desktop says it, with the mark of a plan.
+type DoneIsTheSeam = Holds<Equal<Extract<ChatEvent, { kind: 'done' }>, Extract<DesktopChatEvent, { kind: 'done' }>>>;
 
 // A refusal reaches the page as the value the desktop answers it with.
 type RefusalIsTheSeam = Holds<Equal<ChatRefusal, DesktopRefusal>>;
@@ -128,6 +131,7 @@ export type SeamHeld = [
     EventChannelsAreTheSeam,
     ConversationsAreTheSeam,
     SendIsTheSeam,
+    DoneIsTheSeam,
     LinkIsTheSeam,
     StandingIsTheSeam,
 ];

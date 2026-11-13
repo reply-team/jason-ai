@@ -277,7 +277,13 @@ applies to the turns a person starts by sending, from the next one on.
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
-  it stays with the chat after a restart, an update and Start afresh.
+  it stays with the chat after a restart, an update and Start afresh. A Plan only turn that ends with no error, not
+  stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
+  the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
+  fits them to the record takes the mark off. The mark goes from every entry at each turn's end, at
+  Start afresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
+  send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
+  any host starts.
 - **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
   confirmation, a message box the main process shows, with Cancel focused and Escape answering Cancel, each time Full
   access is chosen while no standing choice stands. Its buttons are "Give full access this time" and "Always on this
