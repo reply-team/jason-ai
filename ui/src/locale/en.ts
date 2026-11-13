@@ -49,7 +49,7 @@ export const en = {
     'dash.afternoon': 'Good afternoon',
     'dash.evening': 'Good evening',
     'dash.sub.live': 'Here is where your real work stands.',
-    'dash.sub.demo': 'Jason has been working while you were away.',
+    'dash.sub.demo': 'The numbers here are the sample’s.',
     'dash.new': 'New GTM agent',
     'dash.review': 'Review {n} waiting',
     'dash.tiles': 'Where things stand',

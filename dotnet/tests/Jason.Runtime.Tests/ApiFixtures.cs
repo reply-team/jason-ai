@@ -61,6 +61,7 @@ public static class ApiFixtures
         "block.get/unknown",
         "block.list/cleared",
         "block.list/open",
+        "campaign.activity/all-30-days",
         "campaign.activity/all-7-days",
         "campaign.activity/all-today",
         "campaign.activity/audience",

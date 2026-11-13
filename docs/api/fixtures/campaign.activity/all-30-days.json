@@ -1,0 +1,53 @@
+{
+  "operation": "campaign.activity",
+  "case": "all-30-days",
+  "request": {
+    "since": "2026-09-17T00:00:00.000Z",
+    "until": "2026-10-16T09:00:00.000Z",
+    "exclude_archived_contacts": true
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 23,
+        "added": 23,
+        "worked_on": 17,
+        "contacted": 11,
+        "replied": 3,
+        "opted_out": 2,
+        "removed": 2
+      },
+      {
+        "campaign_id": "cmp_2",
+        "people": 2,
+        "added": 2,
+        "worked_on": 1,
+        "contacted": 0,
+        "replied": 0,
+        "opted_out": 0,
+        "removed": 0
+      },
+      {
+        "campaign_id": "cmp_3",
+        "people": 2,
+        "added": 2,
+        "worked_on": 0,
+        "contacted": 0,
+        "replied": 0,
+        "opted_out": 0,
+        "removed": 0
+      }
+    ],
+    "total": {
+      "people": 23,
+      "added": 23,
+      "worked_on": 18,
+      "contacted": 11,
+      "replied": 3,
+      "opted_out": 2,
+      "removed": 2
+    }
+  }
+}

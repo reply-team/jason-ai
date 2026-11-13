@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
@@ -14,10 +14,14 @@ import { attention, filter } from './needs';
 import { chats, lines } from './state';
 
 // The Dashboard: opened from the sidebar row after the Feed, drawn from the reads the console already makes and one
-// read of the thirty days' counts. That read has no recording yet, so these rows leave it unreachable: its tiles are
-// dashes, and the panel's drawing of counts is held by setting what a read would hold.
+// read of the thirty days' counts, recorded for the window that ends at the moment these rows fix.
 
-type Options = { approvals?: 'approval.list/pending' | 'approval.list/empty'; none?: boolean };
+type Options = {
+    approvals?: 'approval.list/pending' | 'approval.list/empty';
+    none?: boolean;
+    /** The thirty days' read does not answer. */
+    unread?: boolean;
+};
 
 function renderConsole(options: Options = {}) {
     const fake = new FakeApi()
@@ -28,7 +32,8 @@ function renderConsole(options: Options = {}) {
         )
         .answer('campaign.list', options.none ? 'campaign.list/screen-empty' : 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    fake.unreachable('campaign.activity');
+    if (options.unread) fake.unreachable('campaign.activity');
+    else fake.answer('campaign.activity', 'campaign.activity/all-30-days');
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -65,6 +70,8 @@ const part = (label: string, selector: string) => words(tile(dash(), label).quer
 const settled = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
     chats.value = {};
     lines.value = [];
     attention.loaded.value = false;
@@ -79,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     mode.value = 'live';
 });
 
@@ -110,12 +118,21 @@ describe('the Dashboard', () => {
             expect(part(label, 'b')).toBe('–');
             expect(part(label, '.rel')).toBe('no data yet');
         }
-        // The read of the thirty days did not answer: its tiles are dashes as well, and no tile reads zero.
-        expect(part('Contacted · 30 days', 'b')).toBe('–');
-        expect(part('Replied · 30 days', 'b')).toBe('–');
+        // The two the runtime has a fact for show it, and no tile reads zero.
+        await waitFor(() => expect(part('Contacted · 30 days', 'b')).toBe('11'));
+        expect(part('Replied · 30 days', 'b')).toBe('3');
         expect(
-            [...panel.querySelectorAll('.dash-tile b')].map((each) => words(each)).filter((each) => each === '0'),
+            [...dash().querySelectorAll('.dash-tile b')].map((each) => words(each)).filter((each) => each === '0'),
         ).toEqual([]);
+    });
+
+    it('shows dashes with no data yet for the thirty days’ tiles while their read does not answer', async () => {
+        renderConsole({ unread: true });
+        await open();
+        await settled();
+        expect(part('Contacted · 30 days', 'b')).toBe('–');
+        expect(part('Contacted · 30 days', '.rel')).toBe('no data yet');
+        expect(part('Replied · 30 days', 'b')).toBe('–');
     });
 
     it('counts what waits in the first tile with its subline', async () => {
@@ -130,24 +147,25 @@ describe('the Dashboard', () => {
     });
 
     it('draws the thirty days’ counts, the reply rate under replied, and a bar of contacted over people', async () => {
-        renderConsole();
+        const { fake } = renderConsole();
         await open();
-        await settled();
-        dashboard.activity.value = {
-            total: { contacted: 40, replied: 5 },
-            byCampaign: { cmp_1: { contacted: 11, replied: 2 } },
-        };
-        await waitFor(() => expect(part('Contacted · 30 days', 'b')).toBe('40'));
-        expect(part('Replied · 30 days', 'b')).toBe('5');
-        expect(part('Replied · 30 days', '.rel')).toBe('12.5% reply rate');
+        await waitFor(() => expect(part('Contacted · 30 days', 'b')).toBe('11'));
+        expect(part('Replied · 30 days', 'b')).toBe('3');
+        expect(part('Replied · 30 days', '.rel')).toBe('27.3% reply rate');
+        const asked = fake.calls.find((each) => each.operation === 'campaign.activity')!;
+        expect(asked.body).toEqual({
+            exclude_archived_contacts: true,
+            since: '2026-09-17T00:00:00.000Z',
+            until: '2026-10-16T09:00:00.000Z',
+        });
         const row = dash().querySelector<HTMLElement>('.dash-agents tr[data-id="cmp_1"]')!;
         const cells = [...row.querySelectorAll('td')].map((each) => words(each));
-        expect(cells.slice(3, 6)).toEqual(['11', '2', '–']);
+        expect(cells.slice(3, 6)).toEqual(['11', '3', '–']);
         expect(row.querySelector('progress')?.getAttribute('value')).toBe(String(11 / 22));
     });
 
     it('shows no reply rate when nobody was contacted', async () => {
-        renderConsole();
+        renderConsole({ unread: true });
         const panel = await open();
         await settled();
         dashboard.activity.value = { total: { contacted: 0, replied: 0 }, byCampaign: {} };
@@ -165,12 +183,12 @@ describe('the Dashboard header', () => {
         expect(words(panel.querySelector('.ph')!)).toContain('Here is where your real work stands.');
     });
 
-    it('says the demo’s own line in the demo', async () => {
+    it('says in the demo that the numbers are the sample’s', async () => {
         mode.value = 'demo';
         renderConsole();
         const panel = await open();
         const head = words(panel.querySelector('.ph')!);
-        expect(head).toContain('Jason has been working while you were away.');
+        expect(head).toContain('The numbers here are the sample’s.');
         expect(head).not.toContain('real work');
     });
 
