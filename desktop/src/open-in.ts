@@ -249,7 +249,7 @@ export class OpenIn {
             const scope = campaignId === undefined || campaignId === null ? null : String(campaignId);
             const answer = await deps.cli.run(['session', 'open', ...deps.terminalFlags(target, scope)]);
             if (answer.exit !== 0) {
-                refusal = { refused: cliSentence(answer.stdout) ?? 'A terminal could not be opened.' };
+                refusal = { refused: cliSentence(answer.stdout) ?? (answer.exit === 3 ? "Jason's runtime is not running." : 'A terminal could not be opened.') };
             }
         } else if (target === 'files') {
             const program = fileManager(deps.probes);

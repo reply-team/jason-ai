@@ -77,7 +77,7 @@ test('an editor is started with the folder: its program, or on macOS open with t
 });
 
 test('the terminal entries name the folder by the campaign and the place by a host or a shell, in one function', () => {
-    assert.deepEqual(terminalFlags('claude', null), ['--host', 'claude']);
+    assert.deepEqual(terminalFlags('claude', null), ['--host', 'claude_code']);
     assert.deepEqual(terminalFlags('codex', 'cmp_01'), ['--campaign', 'cmp_01', '--host', 'codex']);
     assert.deepEqual(terminalFlags('terminal', 'cmp_01'), ['--campaign', 'cmp_01', '--shell']);
     assert.deepEqual(terminalFlags('terminal', null), ['--shell']);
@@ -214,7 +214,7 @@ test('the three terminals run the bundled jason session open, with the flags of 
     assert.equal(await b.openIn.open('codex', 'cmp_01'), null);
     assert.equal(await b.openIn.open('terminal', 'cmp_01'), null);
     assert.deepEqual(b.cliCalls.filter((call) => call[0] === 'session'), [
-        ['session', 'open', '--host', 'claude'],
+        ['session', 'open', '--host', 'claude_code'],
         ['session', 'open', '--campaign', 'cmp_01', '--host', 'codex'],
         ['session', 'open', '--campaign', 'cmp_01', '--shell'],
     ]);

@@ -7,5 +7,5 @@ import type { TerminalFlags } from './open-in.ts';
  */
 export const terminalFlags: TerminalFlags = (kind, campaignId) => [
     ...(campaignId === null ? [] : ['--campaign', campaignId]),
-    ...(kind === 'terminal' ? ['--shell'] : ['--host', kind]),
+    ...(kind === 'terminal' ? ['--shell'] : ['--host', kind === 'claude' ? 'claude_code' : kind]),
 ];
