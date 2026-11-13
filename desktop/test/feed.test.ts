@@ -60,7 +60,21 @@ test('every kind the Feed takes is a kind the runtime writes itself, read from t
     for (const kind of feedKinds) assert.ok(reserved.has(constants.get(kind) ?? ''), `${kind} is not in JournalKinds.Reserved`);
     assert.deepEqual(
         [...feedKinds].sort(),
-        ['approval_requested', 'campaign_created', 'campaign_paused', 'campaign_started', 'decision_raised', 'inbound_reply_observed', 'provider_blocked', 'workitem_expired', 'workitem_failed'],
+        [
+            'approval_approved',
+            'approval_rejected',
+            'approval_requested',
+            'campaign_archived',
+            'campaign_created',
+            'campaign_paused',
+            'campaign_started',
+            'decision_answered',
+            'decision_raised',
+            'inbound_reply_observed',
+            'provider_blocked',
+            'workitem_expired',
+            'workitem_failed',
+        ],
     );
 });
 
@@ -78,6 +92,21 @@ test('a journal line becomes a Feed line of identifiers, its kind and its moment
         campaign_id: cmp(2),
         count: 1,
     });
+});
+
+test('a decided line (an approval approved or rejected, a question answered, a campaign archived) keeps ids and a moment, never the option chosen', () => {
+    for (const kind of ['approval_approved', 'approval_rejected', 'decision_answered', 'campaign_archived'] as const) {
+        const made = lineOf(journal({ kind, work_item_id: wi(4), new: { decision_id: 'dec_1', chosen_option: 'Send the discount offer' } }));
+        assert.deepEqual(made, { kind: 'line', journal_kind: kind, journal_id: jrn(1), at: '2026-11-11T10:00:00.000Z', campaign_id: cmp(1), work_item_id: wi(4), count: 1 });
+        assert.ok(!JSON.stringify(made).includes('discount'), kind);
+        // The decision's actor and reason (a person's words) are on the journal line and in neither the kept line nor the block.
+        const decided = lineOf(journal({ kind, reason: 'Reason only the decider wrote', actor: { type: 'human', id: 'grace' }, new: { decision_id: 'dec_1', chosen_option: 'Send the discount offer' } }));
+        assert.ok(decided !== null);
+        const block = feedBlock([decided], 0) ?? '';
+        for (const text of [JSON.stringify(decided), block]) {
+            for (const said of ['actor', 'reason', 'Reason only', 'grace', 'human', 'chosen_option', 'discount']) assert.ok(!text.includes(said), `${kind}: ${said}`);
+        }
+    }
 });
 
 test('a line outside the table, with no campaign, or with an id or a moment out of shape is no Feed line', () => {
