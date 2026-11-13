@@ -53,26 +53,38 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     // again when it ends, since a turn may have named the session the entry continues.
     const turnRuns = chatId !== undefined && chats.value[chatId]?.running === true;
     const [answer, setAnswer] = useState<DesktopOpenInAnswer | null>(null);
+    // The chat the answer was read for: its entry is drawn only while that chat is still the one in front.
+    const [answerChat, setAnswerChat] = useState<string | undefined>(undefined);
     const [problem, setProblem] = useState<string | null>(null);
     const [menu, setMenu] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const root = useRef<HTMLDivElement>(null);
+    // Each read is numbered; an answer that lands after a later read was asked for is dropped, so a slow read for one chat
+    // never overwrites the answer for the chat in front now.
+    const reads = useRef(0);
 
     const read = useCallback(async () => {
+        const asked = ++reads.current;
         try {
             const kept = await desktop.openIn.targets(campaignId, chatId);
+            if (asked !== reads.current) return;
             if (refused(kept)) {
                 setAnswer(null);
                 setProblem(kept.refused);
             } else {
                 setAnswer(kept);
+                setAnswerChat(chatId);
                 setProblem(null);
             }
         } catch (error) {
+            if (asked !== reads.current) return;
             setAnswer(null);
             setProblem(error instanceof Error ? error.message : String(error));
         }
     }, [desktop, campaignId, chatId]);
+    // The entry is drawn only with a chat in front, and only from the answer read for that chat.
+    const continuing =
+        chatId !== undefined && answerChat === chatId && answer?.continue !== undefined ? answer.continue : undefined;
 
     // A turn of the chat in front that starts or ends asks for the places again.
     useEffect(() => {
@@ -234,10 +246,10 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                         ),
                     )}
                     {mode.value === 'demo' && <div className="open-in-note">{t('openIn.demoNote')}</div>}
-                    {answer.continue !== undefined && (
+                    {continuing !== undefined && (
                         <ContinueEntry
-                            offered={answer.continue}
-                            running={answer.continue.running || turnRuns}
+                            offered={continuing}
+                            running={continuing.running || turnRuns}
                             onChoose={(offered) => void continueChat(offered)}
                         />
                     )}
@@ -261,7 +273,7 @@ function ContinueEntry({
     onChoose: (offered: DesktopOpenInContinue) => void;
 }) {
     return (
-        <div className="open-in-continue" role="group">
+        <div className="open-in-continue" role="group" aria-label={t('openIn.continue', { place: offered.label })}>
             <button type="button" role="menuitem" disabled={running} onClick={() => onChoose(offered)}>
                 <span>{t('openIn.continue', { place: offered.label })}</span>
                 <small>
