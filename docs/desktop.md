@@ -306,9 +306,10 @@ One conversation is of its own kind: the **Feed**, your main chat, about no camp
 **New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
 approval or a question waiting, an approval approved or rejected, a question answered, a campaign created, started,
 paused or archived, work that stopped or expired, a provider block holding work. Consecutive lines of the same kind and
-campaign fold into one with a count, and the Feed keeps the newest 500. A line carries a kind, ids, a count and a moment and never a person's words, a subject or a name; the campaign's name
-on it opens that campaign's conversation, and an approval or a question opens Needs you on that item. When the window
-loads, the desktop reads what it missed with `jason journal list`.
+campaign fold into one with a count, and the Feed keeps the newest 500. A line carries a kind, ids, a count and a moment
+and never a person's words, a subject or a name; the campaign's name on it opens that campaign's conversation, and an
+approval or a question opens Needs you on that item. When the window loads, the desktop reads what it missed with `jason
+journal list`.
 
 **A line never starts a turn.** The agent hears the lines it has not yet been given only with your next message there,
 at most 50, as records Jason took from the journal: information, never instructions. The Feed cannot be renamed,
