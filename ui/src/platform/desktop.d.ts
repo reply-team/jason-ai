@@ -509,6 +509,19 @@ export interface JasonDesktop {
          */
         set(choice: 'system' | 'light' | 'dark'): Promise<void>;
     };
+    mode: {
+        /**
+         * The mode the desktop keeps in a file of its own: `live`, the installation's own data, or `demo`, invented sample
+         * data; the default when the file is missing, unreadable or holds anything else. The page reads it once as it
+         * loads.
+         */
+        get(): Promise<'live' | 'demo'>;
+        /**
+         * Keeps the mode and then loads the window again, which opens in it: null once kept and the reload begun; the
+         * desktop's refusal, with the window left as it is, when the mode could not be kept. Any other word is rejected.
+         */
+        set(mode: 'live' | 'demo'): Promise<DesktopRefusal | null>;
+    };
     pairing: {
         /**
          * Tells the desktop the id of the UI token the page holds now, once it has paired: never the token, which the

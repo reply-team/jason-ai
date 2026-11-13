@@ -9,6 +9,8 @@ export interface DesktopPaths {
     desktop: string;
     /** `<data>/desktop/settings.json`. */
     settings: string;
+    /** `<data>/desktop/mode`: the window's mode, Live or Demo, one word, the main process's alone (`mode.ts`). */
+    mode: string;
     /** `<data>/desktop/full-access.json`: the standing choice of Full access, the main process's alone (`full-access-standing.ts`). */
     fullAccess: string;
     /** `<data>/desktop/chat/`: the chat's working folder. */
@@ -76,6 +78,7 @@ export function desktopPaths(data: string): DesktopPaths {
         data,
         desktop,
         settings: join(desktop, 'settings.json'),
+        mode: join(desktop, 'mode'),
         fullAccess: join(desktop, 'full-access.json'),
         chat: join(desktop, 'chat'),
         chatFull: join(desktop, 'chat-full'),

@@ -33,6 +33,7 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
+import { applyMode, readMode, writeMode, type Mode } from './mode.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
@@ -409,6 +410,22 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(ipcMain, 'theme.get', origin, () => settings.theme, refused);
     handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    // Live or Demo, kept in a file of the desktop's own and read afresh at each ask: the page reads it once as it loads,
+    // so a mode set is written first and the window loaded again after; a write that fails reloads nothing.
+    const modeDeps = {
+        write: (mode: Mode) => {
+            try {
+                writeMode(paths.mode, mode);
+            } catch (error) {
+                log.warn('mode_write_failed', { Mode: mode });
+                throw error;
+            }
+            log.info('mode_set', { Mode: mode });
+        },
+        reload: () => current?.webContents.reload(),
+    };
+    handle(ipcMain, 'mode.get', origin, () => readMode(paths.mode), refused);
+    handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
