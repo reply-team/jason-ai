@@ -231,6 +231,18 @@ test('on Windows a folder whose path holds a comma is not given to File Explorer
     assert.deepEqual(b.copied, ['C:\\Jason, Inc']);
 });
 
+test('on macOS a folder whose last name ends in .app, in any case, is not given to Finder, with a sentence that points to Copy path; editors and Copy path still take it', async () => {
+    for (const root of ['/Users/ada/Jason/odd.app', '/Users/ada/Jason/ODD.App']) {
+        const b = bench({ probes: mac, root, folders: [root] });
+        const answer = (await b.openIn.open('files')) as { refused: string };
+        assert.match(answer.refused, /named like an application.*Copy path/, root);
+        assert.deepEqual(b.started, [], root);
+        assert.deepEqual(b.kept, [], root);
+        assert.equal(await b.openIn.open('copy'), null);
+        assert.deepEqual(b.copied, [root]);
+    }
+});
+
 test('a Windows editor found as an .exe on the PATH is started by that file, and a batch file is not', () => {
     const exe = probes('win32', [], { cursor: 'C:\\Tools\\bin\\cursor.exe', zed: 'C:\\Tools\\bin\\zed.cmd' });
     assert.deepEqual(findEditor('cursor', exe), { kind: 'program', path: 'C:\\Tools\\bin\\cursor.exe' });

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
@@ -271,6 +271,33 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect((mainPart() as HTMLButtonElement).disabled).toBe(false);
         expect(document.querySelector('.open-in-problem')).toBeNull();
         expect(within(menu()).getAllByRole('menuitem').length).toBeGreaterThan(1);
+    });
+
+    it('names the plain terminal by the main part’s word in its toast', async () => {
+        const desktop = await renderConsole(kept);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^New terminal/ }));
+        await waitFor(() => expect(opens(desktop)).toHaveLength(1));
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Terminal'));
+        await waitFor(() =>
+            expect(document.querySelector('.open-in-toast')?.textContent).toBe(
+                'Opened Jason in Terminal. Jason there works with the same data as this window.',
+            ),
+        );
+    });
+
+    it('draws no menu and attaches no outside-click or Escape listener while the places are still refused', async () => {
+        const desktop = chatDesktop();
+        desktop.refuse.set('openIn.targets', 'Jason’s folder is not there yet; it is made with the first agent.');
+        await renderConsole(kept, desktop);
+        await waitFor(() => expect(document.querySelector('.open-in-problem')).not.toBeNull());
+        const added = vi.spyOn(document, 'addEventListener');
+        fireEvent.click(arrow());
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(1));
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(added.mock.calls.filter(([type]) => type === 'mousedown' || type === 'keydown')).toEqual([]);
+        added.mockRestore();
     });
 
     it('reads the places again when the window regains focus', async () => {

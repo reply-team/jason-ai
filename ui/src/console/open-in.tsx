@@ -69,7 +69,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     }, [read]);
 
     useEffect(() => {
-        if (!menu) return;
+        if (!menu || answer === null) return;
         const away = (event: MouseEvent) => {
             if (root.current && !root.current.contains(event.target as Node)) setMenu(false);
         };
@@ -82,7 +82,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
             document.removeEventListener('mousedown', away);
             document.removeEventListener('keydown', escape);
         };
-    }, [menu]);
+    }, [menu, answer]);
 
     const open = async (place: DesktopOpenInPlace) => {
         setMenu(false);
@@ -108,7 +108,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
             setToast(
                 t('openIn.opened', {
                     folder,
-                    place: place === 'terminal' ? t('openIn.terminal') : chosen === undefined ? '' : nameOf(chosen),
+                    place: chosen === undefined ? '' : nameOf(chosen),
                 }) +
                     (same
                         ? ' ' + t('openIn.sameData')

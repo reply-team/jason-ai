@@ -155,9 +155,15 @@ test('the detached start of Open in is called only by main.ts, and a planted cal
     assert.deepEqual(processViolations('src/main.ts', planted('start: (line) => startDetached(line, env),')), []);
     for (const path of ['src/chat.ts', 'src/setup.ts', 'src/open-in.ts', 'src/ipc.ts']) {
         const found = processViolations(path, planted("await startDetached({ file: 'x', args: [] }, env);"));
-        assert.equal(found.length, 1, path);
-        assert.match(found[0] ?? '', /starts a detached program/);
+        assert.equal(found.length, 2, path);
+        assert.ok(found.some((line) => /starts a detached program/.test(line)), path);
     }
+    // The module itself is named in no other form either: a re-export, a namespace import, a require or a dynamic import.
+    for (const form of ["export { startDetached as go } from './open-in-start.ts';", "import * as s from './open-in-start';", "const s = require('./open-in-start.ts');", "const s = await import('./open-in-start.ts');"]) {
+        assert.notDeepEqual(processViolations('src/ipc.ts', form + '\n'), [], form);
+        assert.ok(processViolations('src/ipc.ts', form + '\n').some((line) => /imports the detached starter's module/.test(line)), form);
+    }
+    assert.deepEqual(processViolations('src/main.ts', "import { startDetached } from './open-in-start.ts';\n"), []);
 });
 
 test('a process is signalled only on two lines: a look whether a process runs, with signal 0, and the end of a chat turn', () => {

@@ -44,6 +44,8 @@ export const startDetachedCallers: Readonly<Record<string, string>> = {
 };
 
 const detachedStart = /\bstartDetached\b/;
+/** The starter's module named in any form (import, re-export, require, dynamic import), so no alias or computed access passes. */
+const detachedModule = /['"`][^'"`]*\/open-in-start(?:\.ts|\.js)?['"`]/;
 
 /**
  * The modules that call the program runner, `runFile`, with a command line of their own, and how many calls each makes:
@@ -158,6 +160,9 @@ export function processViolations(path: string, text: string): string[] {
     }
     if (detachedStart.test(text) && path !== 'src/open-in-start.ts' && !(path in startDetachedCallers)) {
         found.push(`${path} starts a detached program; only ${Object.keys(startDetachedCallers).join(', ')} may`);
+    }
+    if (detachedModule.test(text) && path !== 'src/open-in-start.ts' && !(path in startDetachedCallers)) {
+        found.push(`${path} imports the detached starter's module; only ${Object.keys(startDetachedCallers).join(', ')} may`);
     }
     const runs = [...text.matchAll(runFileCall)].length - [...text.matchAll(runFileDefinition)].length;
     if (runs > (runFileCalls[path] ?? 0)) found.push(`${path} calls the program runner ${runs} times; only the runner itself and a set-up chat's one naming run may`);
