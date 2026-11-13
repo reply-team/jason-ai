@@ -206,6 +206,7 @@ function liveAgents(): Html {
     return html`<section class="card dash-card dash-agents">
         <div class="hd">
             <h3>${t('dash.agents')}</h3>
+            <span class="meta dash-period">${t('dash.agents.period')}</span>
             <button class="btn sm" type="button" ${act('dash.agents')}>${t('dash.agents.all')}</button>
         </div>
         <div class="bd">

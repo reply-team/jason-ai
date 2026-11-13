@@ -181,6 +181,10 @@ describe('the Dashboard', () => {
         const cells = [...row.querySelectorAll('td')].map((each) => words(each));
         expect(cells.slice(3, 6)).toEqual(['11', '3', '–']);
         expect(row.querySelector('progress')?.getAttribute('value')).toBe(String(11 / 22));
+        expect(row.querySelector('progress')?.getAttribute('aria-label')).toBe(
+            'Contacted in the last 30 days, of the people in Spring',
+        );
+        expect(words(dash().querySelector('.dash-agents .hd .dash-period')!)).toBe('the last 30 days');
     });
 
     it('shows no reply rate when nobody was contacted', async () => {
