@@ -383,7 +383,8 @@
 .jc-console .brand .wordmark.dark {
     display: none;
 }
-.jc-console .brand .alpha {
+.jc-console .brand .alpha,
+.jc-console .start .alpha {
     flex: none;
     padding: 1px 7px;
     border-radius: 999px;
@@ -1219,4 +1220,20 @@ body,
 }
 .jc-console .start .start-demo-refusal {
     color: var(--amber);
+}
+
+/* The start screen's note about the interface being optional, with its close button. */
+.jc-console .start .start-optional {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.jc-console .start .start-optional-close {
+    flex: none;
+    margin-left: auto;
+}
+.jc-console .start .start-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }

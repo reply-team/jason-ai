@@ -1,5 +1,5 @@
 import { computed, effect } from '@preact/signals-react';
-import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopEffort, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { act, define } from './actions';
@@ -696,6 +696,179 @@ function threadOf(chatId: string) {
     });
 }
 
+/**
+ * The controls beside a composer: the AI host, the model and its effort, and the access mode. The chat's own composer
+ * and the start screen's draw the same ones; `change` and `choose` say where a choice goes (the chat's record, or the
+ * start screen's draft before any chat exists). Nothing here decides what a mode offers: `modeChoices` does.
+ */
+export function ChatControls({
+    chat,
+    change,
+    choose,
+    takeBack: takeBackChosen,
+    modeMenu,
+}: {
+    chat: Chat;
+    change: (next: (each: Chat) => Chat) => void;
+    choose: (mode: DesktopChatMode) => void;
+    takeBack: () => void;
+    modeMenu?: RefObject<HTMLSelectElement>;
+}) {
+    const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
+    const host = hostOf(chat);
+    const ownHeld = heldHostOf(chat);
+    const standing = host ? onHost(chat, host.id) : chat;
+    const picked = host ? modelView(standing, host) : null;
+    const onThisHost = (next: (each: Chat) => Chat) => change((each) => (host ? next(onHost(each, host.id)) : each));
+    return (
+        <>
+            <select
+                aria-label="AI host"
+                disabled={chat.removing}
+                value={host?.id ?? ownHeld?.id ?? ''}
+                onChange={(event) => {
+                    const chosen = event.target.value;
+                    change((each) => hostChosen(each, chosen));
+                    // A host Full access or Auto-edit cannot be chosen on takes the chat back to Ask first.
+                    const next = drive.find((each) => each.id === chosen);
+                    if (chat.mode === 'full_access' && next !== undefined && next.fullAccess !== null)
+                        choose('ask_first');
+                    if (chat.mode === 'auto_edit' && next !== undefined && next.autoEdit !== null) choose('ask_first');
+                }}
+            >
+                {drive.map((each) => (
+                    <option key={each.id} value={each.id}>
+                        {each.label}
+                    </option>
+                ))}
+                {held.map((each) => (
+                    <option key={each.id} value={each.id} disabled>
+                        {each.label}: {each.belowFloor!.replaceAll('`', '')}
+                    </option>
+                ))}
+                {other.map((each) => (
+                    <option key={each.id} value={each.id} disabled>
+                        {each.label}: runs campaign work, not the chat yet
+                    </option>
+                ))}
+            </select>
+            {host &&
+                picked &&
+                (host.models.length > 0 || host.typedModel || picked.kept !== null || host.modelsUnread !== null) && (
+                    <select
+                        className="model"
+                        aria-label="Model"
+                        disabled={chat.removing || host.modelsUnread !== null}
+                        value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
+                        onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
+                    >
+                        <option value="">Default (recommended)</option>
+                        {host.models.map((each) => (
+                            <option key={each.id} value={each.id}>
+                                {each.label}
+                            </option>
+                        ))}
+                        {picked.kept !== null && (
+                            <option value={picked.kept}>
+                                {picked.kept}: no longer listed, so the turn uses {host.label}'s own model with no
+                                effort
+                            </option>
+                        )}
+                        {host.typedModel && <option value={anotherModel}>Another model…</option>}
+                    </select>
+                )}
+            {host && picked?.typing && (
+                <input
+                    className="model-name"
+                    type="text"
+                    aria-label="Model name"
+                    placeholder="Full model name"
+                    spellCheck={false}
+                    disabled={chat.removing}
+                    value={standing.model ?? ''}
+                    onChange={(event) => onThisHost((each) => modelTyped(each, event.target.value))}
+                />
+            )}
+            {picked?.offer && picked.offer.efforts.length > 0 && (
+                <select
+                    className="effort"
+                    aria-label="Effort"
+                    disabled={chat.removing}
+                    value={
+                        standing.effort !== null && picked.offer.efforts.includes(standing.effort)
+                            ? standing.effort
+                            : ''
+                    }
+                    onChange={(event) =>
+                        onThisHost((each) => effortChosen(each, event.target.value as DesktopEffort | ''))
+                    }
+                >
+                    <option value="">Default effort</option>
+                    {picked.offer.efforts.map((each) => (
+                        <option key={each} value={each}>
+                            {effortWords[each]}
+                        </option>
+                    ))}
+                </select>
+            )}
+            <select
+                ref={modeMenu}
+                className="mode"
+                aria-label="Access mode"
+                disabled={chat.removing}
+                value={chat.mode}
+                onFocus={() => readStandingAgain(here().desktop)}
+                onChange={(event) =>
+                    event.target.value === takeBack ? takeBackChosen() : choose(event.target.value as DesktopChatMode)
+                }
+            >
+                {modeChoices(host, chat.main === true).map((each) => (
+                    <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
+                        {each.disabled === null ? each.label : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
+                    </option>
+                ))}
+                {/* While Always stands, its take-back follows the modes; choosing it leaves the mode as it is. */}
+                {fullAccessStanding.value !== null && <option value={takeBack}>{takeBackWords}</option>}
+            </select>
+        </>
+    );
+}
+
+/** What a host and a mode say under a composer: what Codex reads and reaches, and that Full access or Auto-edit is on. */
+export function ChatNotes({ chat, modeMenu }: { chat: Chat; modeMenu: RefObject<HTMLSelectElement> }) {
+    const host = hostOf(chat);
+    return (
+        <>
+            {host?.id === 'codex' && (
+                <div className="note codex-config" role="note" aria-label="What Codex reads">
+                    {codexConfigLine}
+                </div>
+            )}
+            {host !== null && codexHosts.has(host.id) && (
+                <div className="note codex-reach" role="note" aria-label="What a Codex command can reach">
+                    {codexReachLine((here().desktop as { platform?: string }).platform)}
+                </div>
+            )}
+            {chat.mode === 'full_access' && (
+                <div className="note am full-access" role="status" aria-label="Full access is on">
+                    {fullAccessLine}{' '}
+                    <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
+                        Change
+                    </button>
+                </div>
+            )}
+            {chat.mode === 'auto_edit' && (
+                <div className="note auto-edit" role="status" aria-label="Auto-edit is on">
+                    {autoEditLine}{' '}
+                    <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
+                        Change
+                    </button>
+                </div>
+            )}
+        </>
+    );
+}
+
 export function ChatPanel({ chatId }: { chatId: string }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
@@ -747,16 +920,13 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
     const keptByDesktop = conversations.value.some((each) => each.id === chatId);
     const closeRename = () => changeChat(chatId, (each) => ({ ...each, renaming: null }));
-    const { drive, held, other } = chatHosts(setup.value?.hosts ?? []);
+    const { held } = chatHosts(setup.value?.hosts ?? []);
     const host = hostOf(chat);
     // The chat's own host, held: its sentence alone is said, and the menu keeps naming it until another is chosen.
     const ownHeld = heldHostOf(chat);
     const heldSaid = ownHeld ? [ownHeld] : held;
     // The model and effort shown are the ones chosen on the host the next turn runs on (`onHost`).
     const standing = host ? onHost(chat, host.id) : chat;
-    const picked = host ? modelView(standing, host) : null;
-    const onThisHost = (change: (each: Chat) => Chat) =>
-        changeChat(chatId, (each) => (host ? change(onHost(each, host.id)) : each));
     // "Another model" with no name typed yet: nothing is sent until a name is, or another choice made.
     const nameMissing = host !== null && sendHeld(standing, host);
     const send = (event?: FormEvent) => {
@@ -957,122 +1127,13 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     onKeyDown={enter}
                 />
                 <div className="crow">
-                    <select
-                        aria-label="AI host"
-                        disabled={chat.removing}
-                        value={host?.id ?? ownHeld?.id ?? ''}
-                        onChange={(event) => {
-                            const chosen = event.target.value;
-                            changeChat(chatId, (each) => hostChosen(each, chosen));
-                            // A host Full access or Auto-edit cannot be chosen on takes the chat back to Ask first.
-                            const next = drive.find((each) => each.id === chosen);
-                            if (chat.mode === 'full_access' && next !== undefined && next.fullAccess !== null)
-                                chooseMode(chatId, 'ask_first');
-                            if (chat.mode === 'auto_edit' && next !== undefined && next.autoEdit !== null)
-                                chooseMode(chatId, 'ask_first');
-                        }}
-                    >
-                        {drive.map((each) => (
-                            <option key={each.id} value={each.id}>
-                                {each.label}
-                            </option>
-                        ))}
-                        {held.map((each) => (
-                            <option key={each.id} value={each.id} disabled>
-                                {each.label}: {each.belowFloor!.replaceAll('`', '')}
-                            </option>
-                        ))}
-                        {other.map((each) => (
-                            <option key={each.id} value={each.id} disabled>
-                                {each.label}: runs campaign work, not the chat yet
-                            </option>
-                        ))}
-                    </select>
-                    {host &&
-                        picked &&
-                        (host.models.length > 0 ||
-                            host.typedModel ||
-                            picked.kept !== null ||
-                            host.modelsUnread !== null) && (
-                            <select
-                                className="model"
-                                aria-label="Model"
-                                disabled={chat.removing || host.modelsUnread !== null}
-                                value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
-                                onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
-                            >
-                                <option value="">Default (recommended)</option>
-                                {host.models.map((each) => (
-                                    <option key={each.id} value={each.id}>
-                                        {each.label}
-                                    </option>
-                                ))}
-                                {picked.kept !== null && (
-                                    <option value={picked.kept}>
-                                        {picked.kept}: no longer listed, so the turn uses {host.label}'s own model with
-                                        no effort
-                                    </option>
-                                )}
-                                {host.typedModel && <option value={anotherModel}>Another model…</option>}
-                            </select>
-                        )}
-                    {host && picked?.typing && (
-                        <input
-                            className="model-name"
-                            type="text"
-                            aria-label="Model name"
-                            placeholder="Full model name"
-                            spellCheck={false}
-                            disabled={chat.removing}
-                            value={standing.model ?? ''}
-                            onChange={(event) => onThisHost((each) => modelTyped(each, event.target.value))}
-                        />
-                    )}
-                    {picked?.offer && picked.offer.efforts.length > 0 && (
-                        <select
-                            className="effort"
-                            aria-label="Effort"
-                            disabled={chat.removing}
-                            value={
-                                standing.effort !== null && picked.offer.efforts.includes(standing.effort)
-                                    ? standing.effort
-                                    : ''
-                            }
-                            onChange={(event) =>
-                                onThisHost((each) => effortChosen(each, event.target.value as DesktopEffort | ''))
-                            }
-                        >
-                            <option value="">Default effort</option>
-                            {picked.offer.efforts.map((each) => (
-                                <option key={each} value={each}>
-                                    {effortWords[each]}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                    <select
-                        ref={modeMenu}
-                        className="mode"
-                        aria-label="Access mode"
-                        disabled={chat.removing}
-                        value={chat.mode}
-                        onFocus={() => readStandingAgain(here().desktop)}
-                        onChange={(event) =>
-                            event.target.value === takeBack
-                                ? takeBackChoice(chatId)
-                                : chooseMode(chatId, event.target.value as DesktopChatMode)
-                        }
-                    >
-                        {modeChoices(host, chat.main === true).map((each) => (
-                            <option key={each.mode} value={each.mode} disabled={each.disabled !== null}>
-                                {each.disabled === null
-                                    ? each.label
-                                    : `${each.label}: ${each.disabled.replaceAll('`', '')}`}
-                            </option>
-                        ))}
-                        {/* While Always stands, its take-back follows the modes; choosing it leaves the mode as it is. */}
-                        {fullAccessStanding.value !== null && <option value={takeBack}>{takeBackWords}</option>}
-                    </select>
+                    <ChatControls
+                        chat={chat}
+                        change={(next) => changeChat(chatId, next)}
+                        choose={(mode) => chooseMode(chatId, mode)}
+                        takeBack={() => takeBackChoice(chatId)}
+                        modeMenu={modeMenu}
+                    />
                     <span className="grow" />
                     {chat.running ? (
                         <>
@@ -1113,32 +1174,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </button>
                     )}
                 </div>
-                {host?.id === 'codex' && (
-                    <div className="note codex-config" role="note" aria-label="What Codex reads">
-                        {codexConfigLine}
-                    </div>
-                )}
-                {host !== null && codexHosts.has(host.id) && (
-                    <div className="note codex-reach" role="note" aria-label="What a Codex command can reach">
-                        {codexReachLine((here().desktop as { platform?: string }).platform)}
-                    </div>
-                )}
-                {chat.mode === 'full_access' && (
-                    <div className="note am full-access" role="status" aria-label="Full access is on">
-                        {fullAccessLine}{' '}
-                        <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
-                            Change
-                        </button>
-                    </div>
-                )}
-                {chat.mode === 'auto_edit' && (
-                    <div className="note auto-edit" role="status" aria-label="Auto-edit is on">
-                        {autoEditLine}{' '}
-                        <button className="btn sm" type="button" onClick={() => modeMenu.current?.focus()}>
-                            Change
-                        </button>
-                    </div>
-                )}
+                <ChatNotes chat={chat} modeMenu={modeMenu} />
             </form>
         </div>
     );

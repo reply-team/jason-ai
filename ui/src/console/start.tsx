@@ -1,14 +1,15 @@
 import { effect, signal } from '@preact/signals-react';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
-import { fullAccessStanding } from '../platform/full-access';
+import type { DesktopChatMode } from '../platform/desktop';
+import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { mode, modeRefusal, switchMode } from '../platform/mode';
-import { hostOf, sendTurn, startChat } from './chat';
-import { fullAccessLine, newChat } from './chat-model';
+import { ChatControls, ChatNotes, hostOf, isRefusal, sendTurn, startChat } from './chat';
+import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
-import { here, setup, setupError } from './state';
+import { changeChat, chats, here, messageOf, setup, setupError } from './state';
 
 // The start screen: the window opens on the question who the person wants to reach. What is sent there starts a set-up
 // chat. With no AI that drives the chat the AI card comes first and the message waits there, to go once one is
@@ -29,17 +30,49 @@ export const startWaiting = signal<string | null>(null);
  */
 export const startMaking = signal<string | null>(null);
 
-/** The person's Change on the start screen's Full access line: the chat this message makes starts in Ask first. */
-export const startAskFirst = signal(false);
+/** What the controls beside the start screen's box have chosen: the host, model and effort the chat's first turn names. */
+export const startPick = signal<Chat>(newChat('', null));
+
+/** The access mode the person chose beside the box; null while none was chosen, which leaves the standing default. */
+export const startMode = signal<DesktopChatMode | null>(null);
 
 /**
- * Whether the chat a message sent from here makes would start in Full access: the standing choice says new chats start
- * in it and the host that chat would run on can take it, and the person did not change that here. The start screen then
- * shows the chat's Full access line before anything is sent.
+ * The mode a chat made now would start in when the person chose none: Full access when the standing choice says new
+ * chats start in it and the host that chat would run on can take it, Ask first otherwise.
  */
-function startsInFullAccess(): boolean {
-    if (startAskFirst.value || fullAccessStanding.value?.newChats !== true || setup.value === null) return false;
-    return hostOf(newChat('', null))?.fullAccess === null;
+function defaultMode(): DesktopChatMode {
+    if (fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
+    return hostOf(startPick.value)?.fullAccess === null ? 'full_access' : 'ask_first';
+}
+
+/** The mode the start screen shows and the chat it makes ends up in. */
+const shownMode = (): DesktopChatMode => startMode.value ?? defaultMode();
+
+/** The choices on the start screen as a chat, so the chat's own controls draw them. */
+const startChatNow = (): Chat => ({ ...startPick.value, mode: shownMode() });
+
+/** The key under which this browser keeps that the note on the start screen was closed. */
+export const noteKey = 'jason.ui.start-note-closed';
+
+export function noteWasClosed(): boolean {
+    try {
+        return localStorage.getItem(noteKey) === '1';
+    } catch {
+        return false;
+    }
+}
+
+/** Whether the person closed the note about the interface being optional; kept by this browser, never by the runtime. */
+export const noteClosed = signal(noteWasClosed());
+
+/** Closes the note for good in this browser. */
+export function closeNote(): void {
+    noteClosed.value = true;
+    try {
+        localStorage.setItem(noteKey, '1');
+    } catch {
+        // A browser that keeps nothing shows the note again next time.
+    }
 }
 
 /** Whether the setup, once read, holds an AI that can drive the chat; null while it is not read. */
@@ -55,9 +88,11 @@ const aiConnected = (): boolean | null => {
 async function begin(text: string): Promise<void> {
     startMaking.value = text;
     let id: string | null;
+    // What the start screen showed decides: a chat it did not say starts in Full access never does.
+    const pick = startPick.value;
+    const wanted = shownMode();
     try {
-        // What the start screen showed decides: a chat it did not say starts in Full access never does.
-        id = await startChat(undefined, { askFirst: !startsInFullAccess() });
+        id = await startChat(undefined, { askFirst: !(wanted === 'full_access' && defaultMode() === 'full_access') });
     } finally {
         startMaking.value = null;
     }
@@ -65,7 +100,25 @@ async function begin(text: string): Promise<void> {
         startDraft.value = text;
         return;
     }
-    startAskFirst.value = false;
+    startPick.value = newChat('', null);
+    startMode.value = null;
+    // The chat's first turn names what the controls chose; a mode the desktop did not start the chat in is asked of it.
+    changeChat(id, (each) => ({
+        ...each,
+        host: pick.host,
+        model: pick.model,
+        effort: pick.effort,
+        typing: pick.typing,
+    }));
+    if (chats.value[id]?.mode !== wanted) {
+        try {
+            const answer = await here().desktop.chat.setMode(id, wanted, hostOf(chats.value[id]!)?.id ?? '');
+            if (isRefusal(answer)) changeChat(id, (each) => told(each, answer.refused));
+            else changeChat(id, (each) => moded(each, answer.mode));
+        } catch (error) {
+            changeChat(id, (each) => told(each, messageOf(error)));
+        }
+    }
     here().dock.showChat(id);
     here().dock.close('start');
     sendTurn(id, text, true);
@@ -96,6 +149,7 @@ export function takeBack(): void {
 }
 
 export function StartPanel() {
+    const modeMenu = useRef<HTMLSelectElement>(null);
     const waiting = startWaiting.value;
     const making = startMaking.value;
     const connected = aiConnected();
@@ -129,12 +183,27 @@ export function StartPanel() {
             <div className="panel-body">
                 <div className="ph">
                     <div>
-                        <h1>Who do you want to reach?</h1>
+                        <div className="start-title">
+                            <h1>Who do you want to reach?</h1>
+                            <span className="alpha">Alpha</span>
+                        </div>
                         <p>Say who it is, and Jason sets the agent up with you in a chat.</p>
-                        <p className="start-optional">
-                            This interface is optional: everything here can also be done from a terminal with your AI,
-                            through Jason's CLI and API.
-                        </p>
+                        {!noteClosed.value && (
+                            <p className="start-optional" role="note">
+                                <span>
+                                    <strong>{t('start.note.lead')}</strong> {t('start.note.body')}
+                                </span>
+                                <button
+                                    className="btn sm start-optional-close"
+                                    type="button"
+                                    title={t('start.note.close')}
+                                    aria-label={t('start.note.close')}
+                                    onClick={closeNote}
+                                >
+                                    ×
+                                </button>
+                            </p>
+                        )}
                         {mode.value === 'live' && (
                             <p className="start-demo">
                                 <button className="btn sm" type="button" onClick={() => void switchMode('demo')}>
@@ -182,7 +251,7 @@ export function StartPanel() {
                     <textarea
                         ref={box}
                         rows={3}
-                        placeholder="For example: heads of sales at logistics companies in Poland"
+                        placeholder={t('start.placeholder')}
                         aria-label="Who do you want to reach?"
                         value={startDraft.value}
                         disabled={held}
@@ -190,18 +259,25 @@ export function StartPanel() {
                         onKeyDown={enter}
                     />
                     <div className="crow">
-                        <button className="btn p" type="submit" disabled={held} title={why}>
-                            Start
+                        <ChatControls
+                            chat={startChatNow()}
+                            change={(next) => (startPick.value = next(startPick.value))}
+                            choose={(mode) => (startMode.value = mode)}
+                            takeBack={() => void takeBackStanding(here().desktop).catch(() => undefined)}
+                            modeMenu={modeMenu}
+                        />
+                        <span className="grow" />
+                        <button
+                            className="send"
+                            type="submit"
+                            disabled={held}
+                            title={why ?? t('start.send')}
+                            aria-label={t('start.send')}
+                        >
+                            ↑
                         </button>
                     </div>
-                    {startsInFullAccess() && (
-                        <div className="note am full-access" role="status" aria-label="The chat starts in Full access">
-                            {fullAccessLine}{' '}
-                            <button className="btn sm" type="button" onClick={() => (startAskFirst.value = true)}>
-                                Change
-                            </button>
-                        </div>
-                    )}
+                    <ChatNotes chat={startChatNow()} modeMenu={modeMenu} />
                 </form>
             </div>
         </div>

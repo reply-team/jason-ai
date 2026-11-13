@@ -13,7 +13,18 @@ import { Console } from './console';
 import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { fullAccessStanding } from '../platform/full-access';
-import { startAskFirst, startDraft, startMaking, startWaiting, submitStart } from './start';
+import {
+    noteClosed,
+    noteKey,
+    noteWasClosed,
+    startDraft,
+    startMaking,
+    startMode,
+    startPick,
+    startWaiting,
+    submitStart,
+} from './start';
+import { newChat } from './chat-model';
 
 // The window opens on the question who the person wants to reach. What is sent there starts a set-up chat; with no AI
 // connected the AI card comes first and the message waits; Reply is asked for when the work needs a way to send.
@@ -63,7 +74,7 @@ const ask = (text: string) => {
     fireEvent.change(within(startForm()).getByRole('textbox', { name: 'Who do you want to reach?' }), {
         target: { value: text },
     });
-    fireEvent.click(within(startForm()).getByRole('button', { name: 'Start' }));
+    fireEvent.click(within(startForm()).getByRole('button', { name: 'Send' }));
 };
 
 beforeEach(() => {
@@ -78,7 +89,10 @@ beforeEach(() => {
     startMaking.value = null;
     setupError.value = null;
     replyDismissed.value = [];
-    startAskFirst.value = false;
+    startMode.value = null;
+    startPick.value = newChat('', null);
+    noteClosed.value = false;
+    localStorage.removeItem(noteKey);
     fullAccessStanding.value = null;
 });
 
@@ -112,20 +126,54 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
     });
 
-    it('says on the first screen that this interface is optional, and why', async () => {
+    it("says on the first screen that this interface is optional, and why, and that it is the person's own", async () => {
         renderConsole(stubDesktop());
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?', level: 1 }));
-        const note = screen.getByText(/This interface is optional/);
+        const note = screen.getByRole('note');
+        expect(note.querySelector('strong')!.textContent).toBe('This interface is optional.');
         expect(note.textContent).toMatch(/terminal/);
         expect(note.textContent).toMatch(/with your AI/);
         expect(note.textContent).toMatch(/CLI and API/);
+        expect(note.textContent).toMatch(/change it, extend it or build it again/);
         expect(note.textContent).not.toMatch(/agent/);
+    });
+
+    it('closes the note with its x, and keeps it closed in this browser', async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => screen.getByRole('note'));
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        expect(screen.queryByRole('note')).toBeNull();
+        expect(localStorage.getItem(noteKey)).toBe('1');
+        // A window opened again in this browser reads the choice back; nothing of it went to the runtime.
+        expect(noteWasClosed()).toBe(true);
+    });
+
+    it("marks the title Alpha, as the sidebar's brand does", async () => {
+        renderConsole(stubDesktop());
+        const heading = await waitFor(() =>
+            screen.getByRole('heading', { name: 'Who do you want to reach?', level: 1 }),
+        );
+        const mark = heading.parentElement!.querySelector('.alpha');
+        expect(mark?.textContent).toBe('Alpha');
+    });
+
+    it('asks for what the person sells and who to reach, and promises no page is read', async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => startForm());
+        expect(box().placeholder).toBe('Tell Jason what you sell and who you want to reach.');
+        expect(box().placeholder).not.toMatch(/website/i);
+    });
+
+    it("has no attach button, as the chat's box has none", async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => startForm());
+        expect(within(startForm()).queryByRole('button', { name: /attach/i })).toBeNull();
     });
 
     it('takes the focus into the box when the window opens, and says why Start does nothing for an empty box', async () => {
         renderConsole(stubDesktop());
         await waitFor(() => expect(document.activeElement).toBe(box()));
-        expect(within(startForm()).getByRole('button', { name: 'Start' }).getAttribute('title')).toBe(
+        expect(within(startForm()).getByRole('button', { name: 'Send' }).getAttribute('title')).toBe(
             'Write who you want to reach first',
         );
     });
@@ -142,16 +190,43 @@ describe('the start screen', () => {
         expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
     });
 
-    it('with "start new chats in Full access" shows the chat\'s Full access line before anything is sent, and the chat starts in it', async () => {
+    it("draws the chat's own controls beside the box: host, model, effort and access mode", async () => {
+        renderConsole(stubDesktop());
+        await ready();
+        const form = startForm();
+        expect(within(form).getByRole('combobox', { name: 'AI host' })).toBeTruthy();
+        expect(within(form).getByRole('combobox', { name: 'Model' })).toBeTruthy();
+        expect(within(form).getByRole('combobox', { name: 'Access mode' })).toBeTruthy();
+    });
+
+    it('sends the host, model and mode the controls chose with the chat it makes', async () => {
+        const desktop = renderConsole(stubDesktop());
+        await ready();
+        const form = startForm();
+        const model = within(form).getByRole('combobox', { name: 'Model' }) as HTMLSelectElement;
+        const picked = Array.from(model.options).find((each) => each.value !== '' && !each.disabled);
+        expect(picked).toBeDefined();
+        fireEvent.change(model, { target: { value: picked!.value } });
+        fireEvent.change(within(form).getByRole('combobox', { name: 'Access mode' }), {
+            target: { value: 'plan_only' },
+        });
+        ask('Heads of sales at logistics firms in Poland');
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        expect((calls(desktop, 'chat.send')[0]!.args[2] as { model?: string }).model).toBe(picked!.value);
+        expect(calls(desktop, 'chat.setMode').map((each) => each.args[1])).toContain('plan_only');
+    });
+
+    it('with "start new chats in Full access" shows the access mode as Full access with the chat\'s line, and the chat starts in it', async () => {
         const desktop = stubDesktop();
         desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
         renderConsole(desktop);
         await ready();
-        const line = await waitFor(() =>
-            within(startForm()).getByRole('status', { name: 'The chat starts in Full access' }),
-        );
+        const line = await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
         expect(line.textContent).toContain(
             'Full access: the AI runs commands without asking, except those Jason cannot read.',
+        );
+        expect((within(startForm()).getByRole('combobox', { name: 'Access mode' }) as HTMLSelectElement).value).toBe(
+            'full_access',
         );
         expect(calls(desktop, 'chat.create')).toHaveLength(0);
         ask('Heads of sales at logistics firms in Poland');
@@ -160,16 +235,16 @@ describe('the start screen', () => {
         await waitFor(() => screen.getByRole('status', { name: 'Full access is on' }));
     });
 
-    it("Change on the start screen's Full access line makes that chat start in Ask first", async () => {
+    it('choosing Ask first in the access mode makes that chat start in Ask first', async () => {
         const desktop = stubDesktop();
         desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
         renderConsole(desktop);
         await ready();
-        const line = await waitFor(() =>
-            within(startForm()).getByRole('status', { name: 'The chat starts in Full access' }),
-        );
-        fireEvent.click(within(line).getByRole('button', { name: 'Change' }));
-        expect(within(startForm()).queryByRole('status', { name: 'The chat starts in Full access' })).toBeNull();
+        await waitFor(() => within(startForm()).getByRole('status', { name: 'Full access is on' }));
+        fireEvent.change(within(startForm()).getByRole('combobox', { name: 'Access mode' }), {
+            target: { value: 'ask_first' },
+        });
+        expect(within(startForm()).queryByRole('status', { name: 'Full access is on' })).toBeNull();
         ask('Heads of sales at logistics firms in Poland');
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
         expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
@@ -177,13 +252,30 @@ describe('the start screen', () => {
         expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
     });
 
-    it('shows no Full access line without "start new chats", and the chat is made as before', async () => {
+    it('shows Ask first and no Full access line without "start new chats"', async () => {
         const desktop = stubDesktop();
         desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
         renderConsole(desktop);
         await ready();
         await waitFor(() => expect(fullAccessStanding.value).not.toBeNull());
-        expect(within(startForm()).queryByRole('status', { name: 'The chat starts in Full access' })).toBeNull();
+        expect(within(startForm()).queryByRole('status', { name: 'Full access is on' })).toBeNull();
+        expect((within(startForm()).getByRole('combobox', { name: 'Access mode' }) as HTMLSelectElement).value).toBe(
+            'ask_first',
+        );
+    });
+
+    it('where the host offers no Full access, as in the demo, the access mode refuses it in the own words of the chat', async () => {
+        const refusal = 'Full access is not offered here.';
+        const demo: DesktopSetup = {
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) => (each.id === 'claude' ? { ...each, fullAccess: refusal } : each)),
+        };
+        renderConsole(stubDesktop(demo));
+        await ready();
+        const menu = within(startForm()).getByRole('combobox', { name: 'Access mode' }) as HTMLSelectElement;
+        const full = Array.from(menu.options).find((each) => each.value === 'full_access')!;
+        expect(full.disabled).toBe(true);
+        expect(full.textContent).toContain(refusal);
     });
 
     it('sends nothing for an empty message', async () => {
@@ -324,7 +416,7 @@ describe('the start screen', () => {
         const note = await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
         expect(note.textContent).toContain('Starting the chat');
         expect(box().disabled).toBe(true);
-        expect(within(startForm()).getByRole('button', { name: 'Start' }).hasAttribute('disabled')).toBe(true);
+        expect(within(startForm()).getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
         flush(() => submitStart('A second message'));
         expect(startWaiting.value).toBeNull();
         release();

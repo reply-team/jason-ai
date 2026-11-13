@@ -26,6 +26,12 @@ export const en = {
     'settings.theme.system': 'Same as the system',
     'settings.theme.light': 'Light',
     'settings.theme.dark': 'Dark',
+    'start.placeholder': 'Tell Jason what you sell and who you want to reach.',
+    'start.send': 'Send',
+    'start.note.lead': 'This interface is optional.',
+    'start.note.body':
+        "Everything here can also be done from a terminal with your AI, through Jason's CLI and API. The interface is yours too: change it, extend it or build it again on the same API, with Claude Code or Codex, and Jason serves your build in its place.",
+    'start.note.close': 'Close',
     'chat.title': 'Chat',
     'chat.desktop':
         'The chat with the AI is part of the desktop application. It starts the AI on this computer and asks you before the AI acts, which a browser tab cannot do.',
