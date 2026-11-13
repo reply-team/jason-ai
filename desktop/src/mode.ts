@@ -97,16 +97,30 @@ export function openDirectory(directory: string): void {
     rmSync(probe, { force: true });
 }
 
+export interface StartDeps {
+    /** Makes the demo's directory and proves it usable (`openDirectory`); throws when it cannot. */
+    open(directory: string): void;
+    /**
+     * The seam after the demo's directory is made and before the demo's runtime is ever started: what the demo
+     * installation must hold before it runs, its settings first (`writeDemoSettings`). Throws when it cannot, which makes
+     * the start the person's own as an unusable directory does. Never called for a Live start.
+     */
+    prepare(directory: string): void;
+    /** Keeps the mode in the person's record; throws when it cannot. */
+    keep(mode: Mode): void;
+}
+
 /**
- * The installation a start runs on (`runsOn`), with the demo's directory opened first: one that cannot be made or used
- * makes the start the person's own, sets the record back to Live (a record that cannot be set back changes nothing of
- * that) and says so.
+ * The installation a start runs on (`runsOn`), with the demo's directory opened and prepared first: one that cannot be
+ * made, used or prepared makes the start the person's own, sets the record back to Live (a record that cannot be set
+ * back changes nothing of that) and says so.
  */
-export function startOn(person: string, record: Mode, installerStart: boolean, deps: { open(directory: string): void; keep(mode: Mode): void }): StartRun {
+export function startOn(person: string, record: Mode, installerStart: boolean, deps: StartDeps): StartRun {
     const run = runsOn(person, record, installerStart);
     if (run.mode !== 'demo') return { ...run, unopened: null };
     try {
         deps.open(run.data);
+        deps.prepare(run.data);
         return { ...run, unopened: null };
     } catch {
         try {
@@ -116,6 +130,104 @@ export function startOn(person: string, record: Mode, installerStart: boolean, d
         }
         return { person, data: person, mode: 'live', unopened: demoUnopened };
     }
+}
+
+/** A process environment, as `process.env` is one. */
+export type Environment = Record<string, string | undefined>;
+
+/** The two variables a demo run changes in its own process, as the person's environment held them at start. */
+export interface PersonEnvironment {
+    /** `JASON_DATA_DIR` as the person gave it, or undefined when they gave none. */
+    dataDirectory: string | undefined;
+    /**
+     * Each spelling of `JASON_Harness__Root` the environment held, with its value: the runtime reads the name without
+     * regard to case.
+     */
+    harnessRoot: Record<string, string>;
+}
+
+const harnessRootVariable = 'JASON_HARNESS__ROOT';
+
+/**
+ * Points this process at the run's installation and answers what the person's environment said. A demo run sets
+ * `JASON_DATA_DIR` to the demo's directory and takes away a `JASON_Harness__Root` the person set, so the demo's runtime
+ * reads its harness root from the demo's settings file (`writeDemoSettings`), as a terminal with `JASON_DATA_DIR` alone
+ * would. A Live run changes nothing.
+ */
+export function enterRun(env: Environment, run: RunsOn): PersonEnvironment {
+    const harnessRoot: Record<string, string> = {};
+    for (const [name, value] of Object.entries(env)) {
+        if (name.toUpperCase() === harnessRootVariable && value !== undefined) harnessRoot[name] = value;
+    }
+    const person = { dataDirectory: env.JASON_DATA_DIR, harnessRoot };
+    if (run.mode === 'demo') {
+        env.JASON_DATA_DIR = run.data;
+        for (const name of Object.keys(harnessRoot)) delete env[name];
+    }
+    return person;
+}
+
+/** Puts back the variables `enterRun` changed, exactly as the person's environment held them: their values, or none. */
+export function leaveRun(env: Environment, person: PersonEnvironment): void {
+    if (person.dataDirectory === undefined) delete env.JASON_DATA_DIR;
+    else env.JASON_DATA_DIR = person.dataDirectory;
+    for (const name of Object.keys(env)) {
+        if (name.toUpperCase() === harnessRootVariable && !(name in person.harnessRoot)) delete env[name];
+    }
+    Object.assign(env, person.harnessRoot);
+}
+
+/**
+ * The desktop starting itself again: the person's environment first, since the new start inherits this process's, so
+ * it reads the record in the person's own directory whatever this run was; then the new start asked for, then this
+ * one's quit.
+ */
+export function relaunchAsPerson(deps: { env: Environment; person: PersonEnvironment; relaunch(): void; quit(): void }): void {
+    leaveRun(deps.env, deps.person);
+    deps.relaunch();
+    deps.quit();
+}
+
+/** What a run offers of what outlasts it: everything in Live; in Demo none of it, and the way back instead. */
+export interface Offers {
+    updates: boolean;
+    autostart: boolean;
+    command: boolean;
+    removal: boolean;
+    /** Back to Your Own Installation, in the tray and the application's menu. */
+    back: boolean;
+}
+
+export function offersOf(mode: Mode): Offers {
+    const live = mode === 'live';
+    return { updates: live, autostart: live, command: live, removal: live, back: !live };
+}
+
+/** The label of the way back, in the tray and the application's menu of a demo run. */
+export const backLabel = 'Back to Your Own Installation';
+
+/** A menu line as the desk draws it: a label, and whether it can be chosen. */
+export interface MenuLine {
+    label: string;
+    enabled: boolean;
+}
+
+/**
+ * What the desk draws in place of each act a demo run does not offer, and the way back; null in Live, where the desk
+ * draws the acts themselves. Remove What Jason Placed has a line only where the platform offers the act at all.
+ */
+export interface DemoMenu {
+    updates: MenuLine;
+    autostart: MenuLine;
+    command: MenuLine;
+    removal: MenuLine | null;
+    back: MenuLine;
+}
+
+export function demoMenu(mode: Mode, removalOnPlatform: boolean): DemoMenu | null {
+    if (mode !== 'demo') return null;
+    const off = (item: 'updates' | 'autostart' | 'command' | 'removal'): MenuLine => ({ label: demoMenuLine(item), enabled: false });
+    return { updates: off('updates'), autostart: off('autostart'), command: off('command'), removal: removalOnPlatform ? off('removal') : null, back: { label: backLabel, enabled: true } };
 }
 
 /**

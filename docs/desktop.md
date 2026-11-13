@@ -102,11 +102,16 @@ them on.
 - `<data>/desktop/settings.json`: the desktop's settings (a `feed`, the theme, and the version whose skills were last deployed).
 - `<data>/desktop/mode`: which installation the desktop runs on, one word, `live` or `demo`; a file that is missing or
   says anything else is Live. For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
-  `~/.jason-demo`), and this file stays in `<data>`. The window's Demo and Live buttons write it and start the desktop
-  again. Quitting a demo run, the switch to Live included, stops the demo's runtime first; your own runtime is never
-  stopped by either. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What
-  Jason Placed: each says to go back to your own installation. When the demo's directory cannot be made or used, the desktop opens your own
-  installation instead, sets this file back to `live` and says so at the top of the window.
+  `~/.jason-demo`), and this file stays in `<data>`. Before the demo's runtime first starts, the desktop writes the demo's
+  own `<data>-demo/config/settings.json`: a harness root beside yours with `-demo` after it (`~/Jason` gives
+  `~/Jason-demo`), the responder off and the campaign manager left only to answered decisions, so a terminal with
+  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. The window's Demo and
+  Live buttons write this file and start the desktop again, on your own environment. Quitting a demo run, the switch to
+  Live included, stops the demo's runtime first, waiting at most fifteen seconds; your own runtime is never stopped by
+  either. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What Jason
+  Placed: each says to go back to your own installation, and the tray and the Jason menu offer Back to Your Own
+  Installation. When the demo's directory cannot be made or used, the desktop opens your own installation instead, sets
+  this file back to `live` and says so at the top of the window.
 - `<data>/desktop/chat/`: the chat's working folder. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.
