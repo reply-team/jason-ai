@@ -44,7 +44,7 @@ const listed = () => within(side()).getByRole('navigation', { name: 'Conversatio
 const names = () =>
     within(listed())
         .getAllByRole('button')
-        .map((each) => each.textContent?.trim());
+        .map((each) => each.querySelector('.rt')?.textContent?.trim());
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
 const thread = () =>
     document.querySelector<HTMLElement>('.dv-active-group .thread') ?? document.querySelector<HTMLElement>('.thread')!;
@@ -652,7 +652,7 @@ describe('the desktop’s conversations', () => {
             within(listed())
                 .getAllByRole('button')
                 .filter((each) => each.getAttribute('aria-current') === 'true')
-                .map((each) => each.textContent?.trim());
+                .map((each) => each.querySelector('.rt')?.textContent?.trim());
         expect(current()).toEqual([]);
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         await waitFor(() => expect(current()).toEqual(['Spring']));

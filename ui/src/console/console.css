@@ -1573,3 +1573,108 @@ body,
     font-size: 11px;
     color: var(--muted);
 }
+
+.jc-console .recent {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.jc-console .recent .rl {
+    flex: 1;
+}
+.jc-console .rtools {
+    display: flex;
+    gap: 2px;
+    margin-right: -8px;
+}
+.jc-console .rbtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--faint);
+    cursor: pointer;
+}
+.jc-console .rbtn:hover,
+.jc-console .rbtn[aria-pressed='true'] {
+    background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .rbtn[data-active='true'] {
+    color: var(--accent);
+}
+.jc-console .recent .menu {
+    left: auto;
+    right: 10px;
+    top: calc(100% + 2px);
+    min-width: 170px;
+}
+.jc-console .mhead {
+    padding: 6px 8px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--faint);
+}
+.jc-console .menuitem[role='menuitemradio'] {
+    align-items: center;
+}
+.jc-console .menuitem[role='menuitemradio'] svg {
+    grid-row: auto;
+}
+.jc-console .rsearch {
+    padding: 4px 14px 2px;
+}
+.jc-console .rsearch .inp {
+    width: 100%;
+    box-sizing: border-box;
+}
+.jc-console .recent-row .rt {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.jc-console .recent-row .t {
+    margin-left: 0;
+}
+.jc-console .recent-row .count {
+    margin-left: 0;
+}
+.jc-console .rdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+.jc-console .rdot.waiting {
+    background: #e3a03a;
+}
+.jc-console .rdot.active {
+    background: var(--green);
+}
+.jc-console .rdot.paused {
+    background: var(--faint);
+}
+.jc-console .rdot.draft {
+    border: 1.5px solid var(--blue);
+}
+.jc-console .rdot.none {
+    border: 1.5px solid var(--line);
+}
+.jc-console .rmore {
+    color: var(--mute);
+    justify-content: center;
+}
+.jc-console .rnone {
+    padding: 4px 18px;
+    font-size: 12.5px;
+    color: var(--faint);
+}
+.jc-console .rdot.running {
+    animation: pulse 1.2s ease-in-out infinite;
+}
