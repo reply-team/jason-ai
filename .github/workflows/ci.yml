@@ -42,9 +42,10 @@ name: CI
 # own name, which the rulesets require and which is green only when the package and every part of that platform this run
 # made succeeded. The parts' and the package's checks are reported too, and no ruleset requires them.
 # Where the whole suite runs, each part writes the test methods it ran, each package job lists the whole suite's test
-# methods on its platform without running any of it, and the platform's check compares the two by method and says on the
-# run's summary both numbers, each part's, and every method listed and run by no part, run and not listed, or run in
-# more than one part; where there is any, it raises a warning naming the platform and both numbers, and stays green.
+# methods on its platform without running any of it, and the platform's check compares the two by method, each method
+# known by its test assembly and its full name, and says on the run's summary both numbers, each part's, and every
+# method listed and run by no part, run and not listed, or run in more than one part; where there is any, it raises a
+# warning naming the platform and both numbers, and stays green.
 # Wherever the suite runs, a test that fails is run again, alone, at most twice, by the test platform's own repeat
 # (.github/scripts/Invoke-Tests.ps1): one that passes on a repeat keeps its job green and is named on the run's summary
 # and among its annotations, and one that fails every attempt fails its job. On Windows, a job that builds leaves its
@@ -749,11 +750,13 @@ jobs:
           path: ${{ runner.temp }}/tests-counted
 
       # The parts together ran every test method the whole suite lists, each in one part, compared by method: a theory is
-      # listed once however its rows are, and its rows are known only when it runs. Said on the run's summary with each
-      # part's methods and rows, and every method listed and run by no part, run and not listed, or run in more than one
-      # part, up to twenty of each by name. A difference - any of those, a part with no count, a platform with no listing -
-      # is raised as a warning naming the platform and both numbers, and the check stays green; the one line that names
-      # the warning makes it an error that fails the check.
+      # listed once however its rows are, and its rows are known only when it runs. A method is known by its test assembly
+      # and its full name, `Jason.App.Tests: Namespace.Class.Method`: a class compiled into more than one test assembly is
+      # a method of each, run in each assembly's part, and run twice only when its assembly runs it twice. Said on the
+      # run's summary with each part's methods and rows, and every method listed and run by no part, run and not listed,
+      # or run in more than one part, up to twenty of each by name. A difference - any of those, a part with no count, a
+      # platform with no listing - is raised as a warning naming the platform and both numbers, and the check stays green;
+      # the one line that names the warning makes it an error that fails the check.
       - name: The parts ran the tests the whole suite lists
         if: needs.version.outputs.tier != 'true'
         shell: pwsh
@@ -874,9 +877,9 @@ jobs:
       - name: Build (warnings are errors)
         run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
-      # The whole suite the platform's parts are measured against, on a run of the whole suite: the full name of every test
-      # method each test project's built assembly holds, as the test framework's own runner discovers it on this platform,
-      # each once, and none of it run. A theory is one method however many rows it runs. A test that runs only when asked
+      # The whole suite the platform's parts are measured against, on a run of the whole suite: every test method each test
+      # project's built assembly holds, by the assembly's name and the method's full name, as the test framework's own
+      # runner discovers it on this platform, each once, and none of it run. A theory is one method however many rows it runs. A test that runs only when asked
       # by name is left out, since no part asks for it. A listing that cannot be read leaves the suite unlisted, with a
       # warning, and the platform's check says so: the count is a report, and never fails this job.
       - name: List the whole suite
@@ -895,7 +898,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { $failed += "$($project.Name) exited $LASTEXITCODE"; continue }
             try { $tests = @(($output -join "`n") | ConvertFrom-Json) } catch { $failed += "$($project.Name) listed no JSON"; continue }
             $before = $methods.Count
-            foreach ($test in @($tests | Where-Object { -not $_.Explicit })) { [void] $methods.Add("$($test.Class).$($test.Method)") }
+            foreach ($test in @($tests | Where-Object { -not $_.Explicit })) {
+              $assembly = if ("$($test.Assembly)") { [IO.Path]::GetFileNameWithoutExtension("$($test.Assembly)") } else { $project.Name }
+              [void] $methods.Add("${assembly}: $($test.Class).$($test.Method)")
+            }
             Write-Host "$($project.Name) lists $($methods.Count - $before) test methods"
           }
           if ($failed.Count -gt 0) {

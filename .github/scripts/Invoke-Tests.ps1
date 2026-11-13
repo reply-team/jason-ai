@@ -32,8 +32,8 @@ Classes whose tests are not run, named as Classes names them.
 
 .PARAMETER Ran
 A file what the first attempt ran is written to, over every target, read from that attempt's own reports, as JSON: the
-number of tests it ran (rows, each row of a theory one), and the full name of every test method it ran, each once. A test
-run again after a failure is counted once. Nothing is written when no attempt left a report.
+number of tests it ran (rows, each row of a theory one), and every test method it ran, each once, by its test assembly's
+name and its full name: Jason.App.Tests: Namespace.Class.Method. A test run again after a failure is counted once. Nothing is written when no attempt left a report.
 
 .PARAMETER Critical
 Runs the critical tier alone: the tests that carry the Critical trait.
@@ -125,7 +125,7 @@ foreach ($run in @($retries | ForEach-Object { Get-ChildItem -LiteralPath $_.Ful
 }
 
 # What the first attempt ran, over every target: each run's attempt 1 holds every test its target ran once, and its test
-# definitions name each test's method.
+# definitions name each test's method and the assembly it is in.
 if ($Ran) {
     $first = @(foreach ($run in @($retries | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory })) {
         $attempt = Join-Path $run.FullName '1'
@@ -138,7 +138,7 @@ if ($Ran) {
             [xml] $trx = Get-Content -Raw -LiteralPath $report.FullName
             $rows += @($trx.SelectNodes("//*[local-name()='UnitTestResult']")).Count
             foreach ($method in @($trx.SelectNodes("//*[local-name()='UnitTest']/*[local-name()='TestMethod']"))) {
-                [void] $methods.Add("$($method.className).$($method.name)")
+                [void] $methods.Add("$([IO.Path]::GetFileNameWithoutExtension("$($method.codeBase)")): $($method.className).$($method.name)")
             }
         }
         $Ran = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Ran)

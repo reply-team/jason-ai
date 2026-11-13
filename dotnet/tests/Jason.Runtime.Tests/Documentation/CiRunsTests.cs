@@ -2001,8 +2001,8 @@ public class CiRunsTests
 
     /// <summary>
     /// A part of the whole suite writes what its first attempt ran, over every project it runs, from that attempt's own
-    /// reports: the full name of every test method, each once however many rows of a theory ran, and the number of tests,
-    /// the rows. A test run again after a failure is counted once. A part none of whose attempts left a report writes
+    /// reports: every test method, by its test assembly and its full name, each once however many rows of a theory ran,
+    /// and the number of tests, the rows. A test run again after a failure is counted once. A part none of whose attempts left a report writes
     /// nothing, and neither the critical tier's step nor the suite under a release's version writes anything. Run as a
     /// runner runs the step, with a stand-in for <c>dotnet</c>.
     /// </summary>
@@ -2029,7 +2029,9 @@ public class CiRunsTests
         Assert.Equal(3, tests.Calls.Count);
         var ran = Ran(tests.Counted);
         Assert.Equal(7, ran.Rows);
-        Assert.Equal(["Acme.Tests.One.Fails", "Acme.Tests.One.Passes", "Acme.Tests.One.Skips", "Acme.Tests.Rows.Each", "Acme.Tests.Two+Nested.Runs"], ran.Methods);
+        Assert.Equal(
+            ["Jason.Cli.Tests: Acme.Tests.One.Fails", "Jason.Cli.Tests: Acme.Tests.One.Passes", "Jason.Cli.Tests: Acme.Tests.One.Skips", "Jason.Cli.Tests: Acme.Tests.Rows.Each", "Jason.Contracts.Tests: Acme.Tests.Two+Nested.Runs"],
+            ran.Methods);
 
         Assert.Null(RunTests(step, [[]], environment: Told(leg)).Counted);
         var tier = Assert.Single(steps, candidate => Scalar(candidate, "if") == "needs.version.outputs.tier == 'true'");
@@ -2059,9 +2061,9 @@ public class CiRunsTests
 
     /// <summary>
     /// Each platform's package job, on a run of the whole suite, lists the whole suite after its build, and runs none of
-    /// it: each test project's built assembly is asked by the test framework's own runner for every test it holds, and the
-    /// full name of each test method is kept once, a theory once however many rows it has; a test that runs only when
-    /// asked by name is left out. The names are kept as an artifact named by the platform, three days, for the platform's
+    /// it: each test project's built assembly is asked by the test framework's own runner for every test it holds, and each
+    /// test method is kept once, by its assembly's name — the listing's own, or the project's where it gives none — and its
+    /// full name, a theory once however many rows it has; a test that runs only when asked by name is left out. The names are kept as an artifact named by the platform, three days, for the platform's
     /// check.
     /// </summary>
     [Fact]
@@ -2086,11 +2088,11 @@ public class CiRunsTests
         var listed = ListSuite(new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["Jason.App.Tests"] = """
-                [{"Class":"Acme.A","Method":"One","Explicit":false},
-                 {"Class":"Acme.A","Method":"Rows","Explicit":false},
-                 {"Class":"Acme.A","Method":"Rows","Explicit":false},
-                 {"Class":"Acme.A+Nested","Method":"Inner","Explicit":false},
-                 {"Class":"Acme.A","Method":"Asked","Explicit":true}]
+                [{"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"One","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"Rows","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"Rows","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A+Nested","Method":"Inner","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"Asked","Explicit":true}]
                 """,
             ["Jason.Runtime.Tests"] = """[{"Class":"Acme.R","Method":"One","Explicit":false}]""",
         });
@@ -2099,7 +2101,7 @@ public class CiRunsTests
             .Where(name => Regex.IsMatch(name, @"^Jason\.[A-Za-z]+\.Tests$")).Order(StringComparer.Ordinal).ToList();
         Assert.True(projects.Count >= 5, $"only {projects.Count} test projects were found");
         Assert.Equal(projects.Select(project => $"dotnet/tests/{project}/bin/Release/net10.0/{project}.dll -list full/json"), listed.Calls);
-        Assert.Equal(["Acme.A+Nested.Inner", "Acme.A.One", "Acme.A.Rows", "Acme.R.One"], Ran(listed.Listed).Methods);
+        Assert.Equal(["Jason.App.Tests: Acme.A+Nested.Inner", "Jason.App.Tests: Acme.A.One", "Jason.App.Tests: Acme.A.Rows", "Jason.Runtime.Tests: Acme.R.One"], Ran(listed.Listed).Methods);
         Assert.DoesNotContain("::warning", listed.Output, StringComparison.Ordinal);
     }
 
@@ -2149,7 +2151,8 @@ public class CiRunsTests
 
     /// <summary>
     /// The comparison is by test method, for its platform: the methods the whole suite lists against the methods the parts
-    /// ran. It says both numbers, each part's methods and rows, and the rows in all as information compared with nothing,
+    /// ran, each known by its test assembly and its full name, so a class compiled into two test assemblies is a method of
+    /// each and runs once in each, and only a method its own assembly ran in two parts ran twice. It says both numbers, each part's methods and rows, and the rows in all as information compared with nothing,
     /// since a theory's rows are counted when it runs and not when it is listed. A difference is raised as a warning naming
     /// the platform and both numbers, and the check stays green: a method listed and run by no part, a method run and not
     /// listed, a method run in more than one part — each named on the summary — a part with no count, or no listing.
@@ -2157,10 +2160,11 @@ public class CiRunsTests
     /// </summary>
     [Theory]
     [InlineData("every listed method ran in one part", "agree", "linux-x64: the parts ran 24 test methods, the whole suite lists 24", "", "")]
-    [InlineData("a listed method ran in no part", "unrun", "linux-x64: the parts ran 24 test methods, the whole suite lists 25", "listed and run by no part: 1, run and not listed: 0, run in more than one part: 0", "- `Acme.Extra.Listed`")]
-    [InlineData("a method ran that is not listed", "unlisted-method", "linux-x64: the parts ran 25 test methods, the whole suite lists 24", "listed and run by no part: 0, run and not listed: 1, run in more than one part: 0", "- `Acme.Extra.Ran`")]
-    [InlineData("a method ran in two parts", "twice", "linux-x64: the parts ran 24 test methods, the whole suite lists 24", "listed and run by no part: 0, run and not listed: 0, run in more than one part: 1", "- `Acme.P2.Test1` (Runtime 1 of 6, Runtime 3 of 6)")]
-    [InlineData("a part has no count", "uncounted", "linux-x64: the parts ran 21 test methods, the whole suite lists 24; not counted: Runtime 2 of 6", "listed and run by no part: 3, run and not listed: 0, run in more than one part: 0", "- `Acme.P3.Test1`")]
+    [InlineData("a class compiled into two assemblies ran in each one's part", "linked", "linux-x64: the parts ran 26 test methods, the whole suite lists 26", "", "")]
+    [InlineData("a listed method ran in no part", "unrun", "linux-x64: the parts ran 24 test methods, the whole suite lists 25", "listed and run by no part: 1, run and not listed: 0, run in more than one part: 0", "- `Jason.Runtime.Tests: Acme.Extra.Listed`")]
+    [InlineData("a method ran that is not listed", "unlisted-method", "linux-x64: the parts ran 25 test methods, the whole suite lists 24", "listed and run by no part: 0, run and not listed: 1, run in more than one part: 0", "- `Jason.App.Tests: Acme.Extra.Ran`")]
+    [InlineData("a method of one assembly ran in two parts", "twice", "linux-x64: the parts ran 24 test methods, the whole suite lists 24", "listed and run by no part: 0, run and not listed: 0, run in more than one part: 1", "- `Jason.Runtime.Tests: Acme.P2.Test1` (Runtime 1 of 6, Runtime 3 of 6)")]
+    [InlineData("a part has no count", "uncounted", "linux-x64: the parts ran 21 test methods, the whole suite lists 24; not counted: Runtime 2 of 6", "listed and run by no part: 3, run and not listed: 0, run in more than one part: 0", "- `Jason.Runtime.Tests: Acme.P3.Test1`")]
     [InlineData("the whole suite was not listed", "unlisted", "linux-x64: the parts ran 24 test methods, the whole suite lists no number: it was not listed", "", "")]
     [InlineData("another platform's counts differ", "elsewhere", "linux-x64: the parts ran 24 test methods, the whole suite lists 24", "", "")]
     public void The_comparison_is_by_test_method_and_warns_where_the_sets_differ(string what, string kind, string line, string facts, string named)
@@ -2170,7 +2174,7 @@ public class CiRunsTests
         Assert.Contains("### linux-x64: the tests counted", compared.Summary, StringComparison.Ordinal);
         Assert.Contains(line, compared.Summary, StringComparison.Ordinal);
         Assert.Contains("| Part | Test methods it ran | Tests it ran |", compared.Summary, StringComparison.Ordinal);
-        Assert.Contains(kind == "unlisted-method" ? "| App | 4 | 10 |" : "| App | 3 | 10 |", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains(kind is "unlisted-method" or "linked" ? "| App | 4 | 10 |" : "| App | 3 | 10 |", compared.Summary, StringComparison.Ordinal);
         Assert.Contains(kind == "uncounted" ? "| Runtime 2 of 6 | not counted | not counted |" : "| Runtime 2 of 6 | 3 | 80 |", compared.Summary, StringComparison.Ordinal);
         Assert.Contains(
             $"The parts ran {(kind == "uncounted" ? 280 : 360)} tests in all, a theory's every row. This is compared with nothing: a theory's rows are counted when it runs, not when it is listed.",
@@ -2182,7 +2186,7 @@ public class CiRunsTests
             Assert.Contains(named, compared.Summary, StringComparison.Ordinal);
         }
 
-        var warned = kind is "agree" or "elsewhere" ? null : facts.Length > 0 ? $"{line}; {facts}" : line;
+        var warned = kind is "agree" or "elsewhere" or "linked" ? null : facts.Length > 0 ? $"{line}; {facts}" : line;
         if (warned is null)
         {
             Assert.DoesNotContain("::warning", compared.Output, StringComparison.Ordinal);
@@ -2200,11 +2204,11 @@ public class CiRunsTests
     public void A_difference_names_twenty_methods_and_counts_the_rest()
     {
         var counts = Counts("agree");
-        var listing = Ran(counts["tests-listed-linux-x64"]).Methods.Concat(Enumerable.Range(10, 25).Select(at => $"Acme.Extra.Listed{at}"));
+        var listing = Ran(counts["tests-listed-linux-x64"]).Methods.Concat(Enumerable.Range(10, 25).Select(at => $"Jason.App.Tests: Acme.Extra.Listed{at}"));
         counts["tests-listed-linux-x64"] = JsonSerializer.Serialize(new { methods = listing });
         var compared = CompareCounts(counts);
         Assert.Contains("Listed, and run by no part: 25", compared.Summary, StringComparison.Ordinal);
-        Assert.Contains("- `Acme.Extra.Listed29`", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains("- `Jason.App.Tests: Acme.Extra.Listed29`", compared.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain("Acme.Extra.Listed30", compared.Summary, StringComparison.Ordinal);
         Assert.Contains("- and 5 more", compared.Summary, StringComparison.Ordinal);
     }
@@ -2227,7 +2231,7 @@ public class CiRunsTests
         Assert.True(ran.Exit == 0, ran.Output);
         var listed = ListSuite(new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["Jason.App.Tests"] = """[{"Class":"Acme.Skills.Codes","Method":"Each","Explicit":false},{"Class":"Acme.Skills.Codes","Method":"Single","Explicit":false}]""",
+            ["Jason.App.Tests"] = """[{"Assembly":"/work/Jason.App.Tests.dll","Class":"Acme.Skills.Codes","Method":"Each","Explicit":false},{"Assembly":"/work/Jason.App.Tests.dll","Class":"Acme.Skills.Codes","Method":"Single","Explicit":false}]""",
         });
         Assert.True(listed.Exit == 0, listed.Output);
 
@@ -2273,11 +2277,12 @@ public class CiRunsTests
 
     /// <summary>
     /// The counts of a push to main as the fetch leaves them, by artifact name, for linux-x64 and win-x64: the parts of each
-    /// platform in turn ran three methods each, <c>Acme.P&lt;n&gt;.Test1</c> to <c>Test3</c>, and 10, 20, 40, 80, 80, 80,
-    /// 40 and 10 rows, and the whole suite lists those 24 methods; as <paramref name="kind"/> changes it — <c>unrun</c> lists
-    /// one method more, <c>unlisted-method</c> runs one more in App, <c>twice</c> runs Runtime 1 of 6's first method in
-    /// Runtime 3 of 6 as well, <c>uncounted</c> drops Runtime 2 of 6's file, <c>unlisted</c> drops the listing, and
-    /// <c>elsewhere</c> gives win-x64 a listing that differs.
+    /// platform in turn ran three methods each, <c>Acme.P&lt;n&gt;.Test1</c> to <c>Test3</c>, in the assembly of the part's
+    /// project, and 10, 20, 40, 80, 80, 80, 40 and 10 rows, and the whole suite lists those 24 methods; as
+    /// <paramref name="kind"/> changes it — <c>linked</c> runs one class in App's and in Cli's assembly and lists it in both,
+    /// <c>unrun</c> lists one method more, <c>unlisted-method</c> runs one more in App, <c>twice</c> runs Runtime 1 of 6's
+    /// first method in Runtime 3 of 6 as well, <c>uncounted</c> drops Runtime 2 of 6's file, <c>unlisted</c> drops the
+    /// listing, and <c>elsewhere</c> gives win-x64 a listing that differs.
     /// </summary>
     private static Dictionary<string, string> Counts(string kind)
     {
@@ -2291,7 +2296,14 @@ public class CiRunsTests
             var listed = new List<string>();
             for (var at = 0; at < parts.Count; at++)
             {
-                var methods = Enumerable.Range(1, 3).Select(test => $"Acme.P{at}.Test{test}").ToList();
+                var assembly = parts[at] switch { "App" => "Jason.App.Tests", "Cli, Contracts and PluginHost" => "Jason.Cli.Tests", _ => "Jason.Runtime.Tests" };
+                var methods = Enumerable.Range(1, 3).Select(test => $"{assembly}: Acme.P{at}.Test{test}").ToList();
+                if (rid == "linux-x64" && kind == "linked" && assembly is "Jason.App.Tests" or "Jason.Cli.Tests")
+                {
+                    methods.Add($"{assembly}: Jason.Runtime.Tests.CriticalTierTests.Every_case_is_named");
+                }
+
+
                 listed.AddRange(methods);
                 if (rid == "linux-x64" && kind == "uncounted" && parts[at] == "Runtime 2 of 6")
                 {
@@ -2301,12 +2313,12 @@ public class CiRunsTests
                 var ran = new List<string>(methods);
                 if (rid == "linux-x64" && kind == "unlisted-method" && parts[at] == "App")
                 {
-                    ran.Add("Acme.Extra.Ran");
+                    ran.Add("Jason.App.Tests: Acme.Extra.Ran");
                 }
 
                 if (rid == "linux-x64" && kind == "twice" && parts[at] == "Runtime 3 of 6")
                 {
-                    ran.Add("Acme.P2.Test1");
+                    ran.Add("Jason.Runtime.Tests: Acme.P2.Test1");
                 }
 
                 counts[$"tests-ran-{rid}-{parts[at]}"] = JsonSerializer.Serialize(new { rows = rows[at], methods = ran });
@@ -2314,12 +2326,12 @@ public class CiRunsTests
 
             if (rid == "linux-x64" && kind == "unrun")
             {
-                listed.Add("Acme.Extra.Listed");
+                listed.Add("Jason.Runtime.Tests: Acme.Extra.Listed");
             }
 
             if (rid == "win-x64" && kind == "elsewhere")
             {
-                listed.Add("Acme.Extra.Elsewhere");
+                listed.Add("Jason.Runtime.Tests: Acme.Extra.Elsewhere");
             }
 
             if (!(rid == "linux-x64" && kind == "unlisted"))
@@ -2645,6 +2657,7 @@ public class CiRunsTests
                 Add-Content -LiteralPath '{{calls}}' -Value (($args -join ' ').Replace('{{results}}', '<results>').Replace('\', '/'))
                 $call = $global:called
                 $global:called++
+                $assembly = if ($args -contains '--project') { [IO.Path]::GetFileNameWithoutExtension($args[[array]::IndexOf($args, '--project') + 1]) } else { 'Jason.Solution' }
                 $attempt = 0
                 foreach ($tests in @(if ($call -lt @($plan.attempts).Count) { $plan.attempts[$call] })) {
                     $attempt++
@@ -2654,7 +2667,7 @@ public class CiRunsTests
                     $definitions = @($tests | ForEach-Object {
                         $full = "$($_[0])".Split('(')[0]
                         $at = $full.LastIndexOf('.')
-                        "<UnitTest name=`"$([Security.SecurityElement]::Escape($_[0]))`"><TestMethod className=`"$($full.Substring(0, $at))`" name=`"$($full.Substring($at + 1))`" /></UnitTest>"
+                        "<UnitTest name=`"$([Security.SecurityElement]::Escape($_[0]))`"><TestMethod codeBase=`"/work/bin/Release/net10.0/$assembly.dll`" className=`"$($full.Substring(0, $at))`" name=`"$($full.Substring($at + 1))`" /></UnitTest>"
                     })
                     Set-Content -LiteralPath (Join-Path $into 'attempt.trx') -Value "<TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><TestDefinitions>$($definitions -join '')</TestDefinitions><Results>$($lines -join '')</Results></TestRun>"
                 }
