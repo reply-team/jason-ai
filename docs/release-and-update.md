@@ -134,7 +134,7 @@ machine: a deb update installs with `dpkg` and asks for an administrator's passw
 replaces the file where it is. Removing the desktop on Linux starts with Remove What Jason Placed… in the Jason menu,
 which takes off what the desktop placed; then `sudo apt remove jason-desktop` removes the deb, or deleting the file
 removes the AppImage, and the data directory, the harness root and the updater's cache,
-`~/.cache/jason-desktop-updater`, stay. A candidate writes the
+`~/.cache/jason-desktop-updater`, stay. The demo's two folders go with the first step. A candidate writes the
 same three feed names a release does, and its release is marked a pre-release, which the latest release never is, so no
 installed desktop reads a candidate's feed: the desktop updates to stable releases only.
 
@@ -161,7 +161,7 @@ previous release's `jason-desktop-linux-x64.deb` with `sudo apt install`.
 **Taking the desktop off** is in two steps, what it placed and then the application, and the data directory, the
 harness root and the updater's cache stay either way. On Windows the uninstaller does both: it stops the runtime the
 application carries, removes nothing when that runtime does not stop, and takes off the PATH command's files that are
-its own, Open Jason at Login and the runtime's logon start when that start names the application's own `jason`. On
+its own, Open Jason at Login and the runtime's logon start when that start names the application's own `jason`, and the demo's data directory and harness root. On
 macOS and on Linux no installer starts the application to clean up, so choose Remove What Jason Placed… in the Jason menu
 (or the tray's) first: it takes the same steps, stops a runtime started from any copy of an AppImage's `jason`, removes
 those copies once nothing runs from them, says what came of each step and what to do by hand for one that failed, and

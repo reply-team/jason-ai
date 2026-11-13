@@ -331,11 +331,12 @@ export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'l
  * the jason it carries, `conversations` the record of every conversation, `models.json` the models Codex offered when
  * last asked, `claude-keyed` and `codex-keyed` the hosts' folders for the turns on a provider's key with those turns'
  * transcripts, `skills-records` what the desktop placed in the chat folder's skills folders, `full-access.json` the
- * standing choice of Full access and `full-access-taken-back` the mark of a take-back owed, which these rules keep a
- * Claude Code turn from reading or editing. A Codex turn has no fence of the desktop's: only its own read-only sandbox,
- * which the desktop does not narrow, holds it (`codexArguments`).
+ * standing choice of Full access, `full-access-taken-back` the mark of a take-back owed and `mode` the record of which
+ * installation the desktop runs on, which these rules keep a Claude Code turn from reading or editing. A Codex turn has
+ * no fence of the desktop's: only its own read-only sandbox, which the desktop does not narrow, holds it
+ * (`codexArguments`).
  */
-export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json'];
+export const knownDesktopEntries: readonly string[] = ['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over'];
 
 /** The known names, then every name that is there and is not one of them, spelled as it is. */
 function namesOf(known: readonly string[], present: readonly string[], kept: string): string[] {
@@ -347,9 +348,17 @@ function namesOf(known: readonly string[], present: readonly string[], kept: str
  * `desktop` but the chat folder (the turns' configurations among them), the known ones whether they exist or not,
  * refused to its file tools and to the file commands it recognises in Bash (`cat`, `head`, a redirection). Without them
  * a read-only command such as `cat` reads outside the working directories without asking; the permission model refuses
- * the same paths when it is asked.
+ * the same paths when it is asked. In a demo run the person's own directories (`whole`: the person's data directory and
+ * harness root) are refused whole, the folder and everything under it, with no entry left open.
  */
-export function dataRules(platform: Platform, data: string, dataEntries: readonly string[], desktopEntries: readonly string[], grant?: { id: string; present: readonly string[] }): string[] {
+export function dataRules(
+    platform: Platform,
+    data: string,
+    dataEntries: readonly string[],
+    desktopEntries: readonly string[],
+    grant?: { id: string; present: readonly string[] },
+    whole: readonly string[] = [],
+): string[] {
     const paths = platform === 'win32' ? win32 : posix;
     const desktop = paths.join(data, 'desktop');
     // A Full access turn runs in its grant's folder below `chat-full`: the chat folder is then closed to it as every other
@@ -358,8 +367,11 @@ export function dataRules(platform: Platform, data: string, dataEntries: readonl
         ...namesOf(knownDataEntries, dataEntries, 'desktop').map((name) => paths.join(data, name)),
         ...namesOf(knownDesktopEntries, desktopEntries, grant === undefined ? 'chat' : 'chat-full').map((name) => paths.join(desktop, name)),
         ...(grant === undefined ? [] : [paths.join(desktop, 'chat'), ...grant.present.filter((name) => name !== grant.id).map((name) => paths.join(desktop, 'chat-full', name))]),
+        ...whole,
     ];
-    return targets.flatMap((target) => {
+    // On macOS each folder is also named under the data volume's prefix, which shows the same folder (a firmlink).
+    const spellings = platform === 'darwin' ? targets.flatMap((target) => [target, posix.join('/System/Volumes/Data', posix.resolve(target))]) : targets;
+    return spellings.flatMap((target) => {
         const rule = rulePath(platform, target);
         return [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`];
     });

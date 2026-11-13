@@ -54,15 +54,18 @@ test('a completed bundle carries the licence and the notices beside the executab
     writeFileSync(join(repository, 'THIRD-PARTY-NOTICES'), 'notices');
     mkdirSync(join(repository, 'skills', 'runtime', 'a'), { recursive: true });
     writeFileSync(join(repository, 'skills', 'runtime', 'a', 'SKILL.md'), 'a');
+    mkdirSync(join(repository, 'plugins', 'demo'), { recursive: true });
+    writeFileSync(join(repository, 'plugins', 'demo', 'plugin.yaml'), 'id: demo');
     const folder = join(repository, 'out');
     mkdirSync(folder);
     writeFileSync(join(folder, 'jason.exe'), 'exe');
     writeFileSync(join(folder, 'jason.pdb'), 'symbols');
     complete(folder, '0.34.0-rc.1', repository);
-    assert.deepEqual(readdirSync(folder).sort(), ['LICENSE', 'THIRD-PARTY-NOTICES', 'jason.exe', 'skills', 'version.json']);
+    assert.deepEqual(readdirSync(folder).sort(), ['LICENSE', 'THIRD-PARTY-NOTICES', 'jason.exe', 'plugins', 'skills', 'version.json']);
     assert.equal(readFileSync(join(folder, 'LICENSE'), 'utf8'), 'MIT');
     assert.equal(readFileSync(join(folder, 'THIRD-PARTY-NOTICES'), 'utf8'), 'notices');
     assert.equal(readFileSync(join(folder, 'skills', 'runtime', 'a', 'SKILL.md'), 'utf8'), 'a');
+    assert.equal(readFileSync(join(folder, 'plugins', 'demo', 'plugin.yaml'), 'utf8'), 'id: demo');
     assert.deepEqual(JSON.parse(readFileSync(join(folder, 'version.json'), 'utf8')), { version: '0.34.0-rc.1' });
     // What prepare completes is what a pack accepts, at that version and no other.
     checkBundle(folder, '0.34.0-rc.1', 'win32');

@@ -222,10 +222,13 @@ const targetsOf = (rules: readonly string[]) => [...new Set(rules.map((rule) => 
 
 test('the data rules refuse every entry of the data directory but desktop, and every entry of desktop but the chat folder', () => {
     const rules = dataRules('darwin', '/Users/a/.jason', ['config', 'run', 'jason.db', 'desktop', 'Desktop'], ['settings.json', 'chat', 'provider-keys', 'notes.txt']);
-    assert.deepEqual(targetsOf(rules), [
+    // On macOS each folder is named under the data volume's prefix too, the same folder by a firmlink.
+    const plain = targetsOf(rules).filter((target) => !target.startsWith('//System/Volumes/Data/'));
+    assert.deepEqual(targetsOf(rules).filter((target) => target.startsWith('//System/Volumes/Data/')), plain.map((target) => `//System/Volumes/Data${target.slice(1)}`));
+    assert.deepEqual(plain, [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json'].map((name) => `//Users/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
     ]);
     assert.deepEqual(rules.slice(0, 4), ['Read(//Users/a/.jason/config)', 'Read(//Users/a/.jason/config/**)', 'Edit(//Users/a/.jason/config)', 'Edit(//Users/a/.jason/config/**)']);
@@ -237,8 +240,21 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
         ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
-        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json'].map((name) => `//home/a/.jason/desktop/${name}`),
+        ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
+});
+
+test('in a demo run the data rules refuse the person\'s data directory and harness root whole, and in the person\'s own installation nothing more', () => {
+    const live = dataRules('linux', '/home/a/.jason-demo', ['config'], ['chat']);
+    const demo = dataRules('linux', '/home/a/.jason-demo', ['config'], ['chat'], undefined, ['/home/a/.jason', '/home/a/Jason']);
+    assert.deepEqual(demo.slice(0, live.length), live);
+    assert.deepEqual(demo.slice(live.length), [
+        'Read(//home/a/.jason)', 'Read(//home/a/.jason/**)', 'Edit(//home/a/.jason)', 'Edit(//home/a/.jason/**)',
+        'Read(//home/a/Jason)', 'Read(//home/a/Jason/**)', 'Edit(//home/a/Jason)', 'Edit(//home/a/Jason/**)',
+    ]);
+    assert.deepEqual(dataRules('linux', '/home/a/.jason', [], [], undefined, []), dataRules('linux', '/home/a/.jason', [], []));
+    const windows = dataRules('win32', 'C:\\Users\\a\\.jason-demo', [], [], { id: 'grant-1', present: ['grant-1'] }, ['C:\\Users\\a\\.jason', 'C:\\Users\\a\\Jason']);
+    for (const rule of ['Read(//c/Users/a/.jason/**)', 'Edit(//c/Users/a/.jason)', 'Edit(//c/Users/a/Jason/**)']) assert.ok(windows.includes(rule), rule);
 });
 
 test('a Claude Code turn neither reads nor edits the record of a conversation: the data rules name the conversations folder whether it exists or not', () => {

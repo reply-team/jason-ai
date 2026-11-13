@@ -4,7 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
-import { heldByWhatRuns, programName, readLiteral, type HeldReason, type LiteralCommand } from './chat-literal.ts';
+import { followsLinksIn, heldByWhatRuns, linkOperands, programName, readLiteral, systemLaunchers, type HeldReason, type LiteralCommand } from './chat-literal.ts';
 import { powerShellRunsInFullAccess } from './chat-modes.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -27,6 +27,12 @@ export interface ChatScope {
      * when it carries none. Absent, taken to be `home`. Under Full access a `~` is held where the two differ.
      */
     shellHome?: string;
+    /**
+     * In a demo run, the person's own installation's directories: its data directory and its harness root, each refused
+     * whole in every mode, Full access included, with no folder in them that the chat may use. Absent or empty in the
+     * person's own installation, where the data directory is the one fenced folder.
+     */
+    personsOwn?: readonly string[];
     /** The files refused first: the installation's settings file and the runtime's run file. */
     protectedFiles: readonly string[];
     /** The deny list's commands. */
@@ -41,6 +47,11 @@ export interface ChatScope {
      * Auto-edit runs nothing unasked.
      */
     entry?: (path: string) => 'present' | 'unresolved' | null;
+    /**
+     * The text of an existing file, so an edit is judged by the file as it would read after it (`writtenText`); null when
+     * nothing readable is there. Absent, an edit is judged by its replacement alone.
+     */
+    text?: (path: string) => string | null;
 }
 
 export type Judgement =
@@ -148,8 +159,9 @@ export const replyNoCardForms: readonly string[] = (() => {
 })();
 
 const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
+const personsRefusal = 'That path is the person\'s own installation, and this chat runs in the demo: the chat neither reads nor writes it. Nothing was done.';
 const deviceRefusal = 'That path names a device or a volume, not a file in a folder: the chat neither reads nor writes it. Nothing was done.';
-const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat never writes there. Nothing was done.';
+const networkRefusal = 'That path is on another computer, or reaches this one as another computer would: the chat neither reads nor writes there. Nothing was done.';
 const climbRefusal = 'That pattern climbs out of its folder with ..: the chat does not take it. Name the folder as the path instead. Nothing was done.';
 const braceRefusal = 'That pattern has a brace group that can name another folder: the chat does not take it. Name the folder as the path instead. Nothing was done.';
 const ownToolRefusal = 'That tool answers the chat\'s own permission requests: only the person answers them. Nothing was done.';
@@ -179,23 +191,112 @@ function shorten(text: string): string {
     return text.length > detailLimit ? `${text.slice(0, detailLimit)}…` : text;
 }
 
-/** A path as the platform spells it whole: slashes, the `\\?\` and `\\?\UNC\` forms, `..` and relative paths settled. */
+/**
+ * The home folder's spellings a path may begin with, each followed by a separator or nothing: `~` and the variables a
+ * shell reads it from, in the spelling of each shell the chat may run (Git Bash, PowerShell, the command prompt). On
+ * Windows a variable's name is read in any case, as Windows reads it.
+ */
+const homeSpellings = ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}'];
+
+/** A path with a leading home spelling (`homeSpellings`) replaced by the home folder; any other path as it is. */
+function homeExpanded(value: string, scope: ChatScope): string {
+    for (const spelling of homeSpellings) {
+        const head = value.slice(0, spelling.length);
+        const same = scope.platform === 'win32' && spelling !== '~' ? head.toLowerCase() === spelling.toLowerCase() : head === spelling;
+        if (same && /^([\\/]|$)/.test(value.slice(spelling.length))) return `${scope.home}${value.slice(spelling.length)}`;
+    }
+    return value;
+}
+
+/**
+ * A `file:` URL's path: a host other than none is kept as a network path's host, `localhost` among them on Windows, where
+ * it names the machine as another computer would. Any other value as it is.
+ */
+function urlPath(value: string, platform: Platform): string {
+    const url = /^file:(\/\/([^/\\]*))?([\\/].*)?$/i.exec(value);
+    if (url === null) return value;
+    let path = url[3] ?? '/';
+    try {
+        path = decodeURIComponent(path);
+    } catch {
+        // A malformed escape is read as written.
+    }
+    const host = url[2] ?? '';
+    if (host !== '' && !(platform !== 'win32' && host.toLowerCase() === 'localhost')) return `//${host}${path}`;
+    // `file:///C:/x` is the drive's own path on Windows.
+    return platform === 'win32' && /^[\\/][A-Za-z]:([\\/]|$)/.test(path) ? path.slice(1) : path;
+}
+
+/** The prefix under which macOS also shows the data volume's folders (a firmlink): `/System/Volumes/Data/Users` is `/Users`. */
+const dataVolume = '/system/volumes/data';
+
+/**
+ * A path in the one spelling every check of the chat compares, before anything is looked up. Every site that matches a
+ * path against the chat's folders, the data directory or the person's own directories reaches it through this function,
+ * directly or through `located`:
+ * - a leading home spelling (`homeExpanded`) is the home folder, at any depth below it;
+ * - a `file:` URL is its path (`urlPath`);
+ * - on Windows, slashes are backslashes, a `\\?\` or `\\.\` form of a drive's path is the plain path, `\\?\UNC\` is a
+ *   network path, any other `\\?\` or `\\.\` form is a device path, kept as it is spelled (`device`), and each component
+ *   is read as Windows opens it: without a stream after a colon and without trailing dots and spaces;
+ * - on macOS, a path under the data volume's prefix is the same path without it;
+ * - `..` and a relative path are settled against the folder the path is read in (`scope.cwd`, which a literal directory
+ *   change sets for the commands after it).
+ */
 function spelled(value: string, scope: ChatScope): string {
-    let text = value;
+    let text = urlPath(homeExpanded(value, scope), scope.platform);
     if (scope.platform === 'win32') {
         text = text.replace(/\//g, '\\');
         if (/^\\\\[?.]\\UNC\\/i.test(text)) text = `\\\\${text.slice(8)}`;
-        else if (/^\\\\[?.]\\/.test(text)) text = text.slice(4);
+        else if (/^\\\\[?.]\\[a-z]:\\/i.test(text)) text = text.slice(4);
+        // A device's or a volume's namespace names no folder this resolves: the path is kept as spelled, a device path.
+        else if (/^\\\\[?.]\\/.test(text) || /^\\\\[?.]$/.test(text)) return text;
     }
-    return pathsOf(scope.platform).resolve(scope.cwd, text);
+    const paths = pathsOf(scope.platform);
+    let path = paths.resolve(scope.cwd, text);
+    if (scope.platform === 'win32') {
+        const root = win32.parse(path).root;
+        const parts = path.slice(root.length).split('\\').map((part) => part.replace(/:[\s\S]*$/, '').replace(/[. ]+$/, '')).filter((part) => part !== '');
+        path = `${root}${parts.join('\\')}`;
+    }
+    return volumeFolded(scope.platform, path);
 }
 
-/** A path that could reach another computer: never looked up, since a lookup can send the machine's credentials. */
+/** On macOS, a path under the data volume's prefix as the same path without it (`dataVolume`); any other as it is. */
+function volumeFolded(platform: Platform, path: string): string {
+    if (platform !== 'darwin') return path;
+    const key = path.toLowerCase();
+    return key === dataVolume || key.startsWith(`${dataVolume}/`) ? path.slice(dataVolume.length) || '/' : path;
+}
+
+/**
+ * A path that names another computer, whatever the computer, or on Windows a device path (`device`): never looked up,
+ * since a lookup can send the machine's credentials, and never matched against a folder, since it names none.
+ */
 function network(platform: Platform, path: string): boolean {
     return platform === 'win32' ? path.startsWith('\\\\') : path.startsWith('/net/');
 }
 
-/** Where a path really is: its nearest existing parent's real path, with the rest of the path after it. */
+/** On Windows, a path in a device's or a volume's namespace (`\\.\GLOBALROOT\...`, `\\?\Volume{...}\...`), as `spelled` keeps it. */
+function device(platform: Platform, path: string): boolean {
+    return platform === 'win32' && /^\\\\[?.](\\|$)/.test(path);
+}
+
+/** The refusal of a path that names another computer or a device (`network`); null for any other. */
+function remoteRefusal(platform: Platform, path: string): string | null {
+    if (device(platform, path)) return deviceRefusal;
+    return network(platform, path) ? networkRefusal : null;
+}
+
+/** The computer a network path (`network`) names. */
+function computerOf(platform: Platform, path: string): string {
+    return platform === 'win32' ? (path.slice(2).split('\\')[0] ?? '') : (path.slice('/net/'.length).split('/')[0] ?? '');
+}
+
+/**
+ * Where a path really is: its one spelling (`spelled`), then its nearest existing parent's real path with the rest of the
+ * path after it, links, junctions and short names followed. A network path is never looked up.
+ */
 function located(value: string, scope: ChatScope): string {
     const paths = pathsOf(scope.platform);
     const path = spelled(value, scope);
@@ -204,7 +305,8 @@ function located(value: string, scope: ChatScope): string {
     let at = path;
     for (;;) {
         const real = scope.real(at);
-        if (real !== null) return rest.length === 0 ? real : paths.join(real, ...rest.reverse());
+        // A link may lead to the data volume's spelling of a folder: the real path is folded as the spelling was.
+        if (real !== null) return volumeFolded(scope.platform, rest.length === 0 ? real : paths.join(real, ...rest.reverse()));
         const up = paths.dirname(at);
         if (up === at) return path;
         rest.push(paths.basename(at));
@@ -217,6 +319,29 @@ function inside(scope: ChatScope, root: string, path: string): boolean {
     const folder = keyOf(scope.platform, root);
     const key = keyOf(scope.platform, path);
     return key === folder || key.startsWith(folder.endsWith(separator) ? folder : `${folder}${separator}`);
+}
+
+/** The person's own directories a demo run fences off whole; none in the person's own installation. */
+function personsOwnOf(scope: ChatScope): readonly string[] {
+    return scope.personsOwn ?? [];
+}
+
+/** True when a located path is in one of the person's own directories (`ChatScope.personsOwn`). */
+function inPersonsOwn(scope: ChatScope, path: string): boolean {
+    return personsOwnOf(scope).some((folder) => inside(scope, located(folder, scope), path));
+}
+
+/**
+ * The fenced folders as located paths: the data directory, and in a demo run the person's own directories. A place that
+ * holds one of them, or is one, may walk into it.
+ */
+function fencedFolders(scope: ChatScope): string[] {
+    return [scope.data, ...personsOwnOf(scope)].map((folder) => located(folder, scope));
+}
+
+/** True when a located place is a fenced folder or a folder holding one, so a walk of it may reach the fenced data. */
+function holdsFenced(scope: ChatScope, place: string): boolean {
+    return fencedFolders(scope).some((folder) => inside(scope, place, folder));
 }
 
 /** The working folder a located path lies in, the chat folder first, and whether it is the chat folder; null when none. */
@@ -322,22 +447,28 @@ function judgeSpelling(value: string, scope: ChatScope): Judgement | null {
 }
 
 /**
- * A write whose path Windows reads as another name is judged as that name too: a refusal, or a guard's card, is said as
- * itself, and anything else is the spelling's card.
+ * A path whose spelling is a card (one that begins with `~`, or that Windows reads as another name) is judged in its one
+ * spelling (`spelled`) too, read or write: a refusal there is said as itself, and so is a guard's card for a write with a
+ * Windows name; anything else is the spelling's card.
  */
 function judgePath(value: string, scope: ChatScope, writes: boolean): Judgement {
     const spelling = judgeSpelling(value, scope);
     if (spelling === null) return judgeLocated(value, scope, writes);
-    if (!(writes && spelling.verdict === 'ask' && spelling.title === windowsNameTitle)) return spelling;
+    if (spelling.verdict !== 'ask') return spelling;
     const judged = judgeLocated(value, scope, writes);
-    return judged.verdict === 'deny' || (judged.verdict === 'ask' && guardTitles.has(judged.title)) ? judged : spelling;
+    if (judged.verdict === 'deny') return judged;
+    return writes && spelling.title === windowsNameTitle && judged.verdict === 'ask' && guardTitles.has(judged.title) ? judged : spelling;
 }
 
 function judgeLocated(value: string, scope: ChatScope, writes: boolean): Judgement {
-    if (writes && network(scope.platform, spelled(value, scope))) return { verdict: 'deny', message: networkRefusal };
+    // A path that names another computer, or this one as another computer would, is outside every chat's folders: never
+    // read and never written, in every mode.
+    const remote = remoteRefusal(scope.platform, spelled(value, scope));
+    if (remote !== null) return { verdict: 'deny', message: remote };
     const paths = pathsOf(scope.platform);
     const path = located(value, scope);
     const key = keyOf(scope.platform, path);
+    if (inPersonsOwn(scope, path)) return { verdict: 'deny', message: personsRefusal };
     if (scope.protectedFiles.some((file) => keyOf(scope.platform, located(file, scope)) === key)) return { verdict: 'deny', message: dataRefusal };
     const chat = located(scope.chat, scope);
     if (inside(scope, located(scope.data, scope), path) && !inside(scope, chat, path)) return { verdict: 'deny', message: dataRefusal };
@@ -359,13 +490,11 @@ const walkTitles: Readonly<Record<string, string>> = {
 };
 
 /**
- * True when a folder holds the data directory, read as a walk would most likely reach it: a leading `~` as the home
- * folder, and on Windows each component without its trailing dots and spaces, as Windows reads the name.
+ * True when a folder holds the data directory or, in a demo run, one of the person's own directories, read in its one
+ * spelling (`spelled`), as a walk would most likely reach it.
  */
 function holdsData(value: string, scope: ChatScope): boolean {
-    let text = /^~([\\/]|$)/.test(value) ? `${scope.home}${value.slice(1)}` : value;
-    if (scope.platform === 'win32') text = text.split(/[\\/]/).map((part) => (part === '.' || part === '..' ? part : part.replace(/[. ]+$/, ''))).join('\\');
-    return inside(scope, located(text, scope), located(scope.data, scope));
+    return holdsFenced(scope, located(value, scope));
 }
 
 /**
@@ -442,14 +571,17 @@ export function isCompound(command: string): boolean {
  */
 const runsAnother = new Set(
     ('cmd sh bash zsh pwsh powershell env sudo xargs npx wsl start python python3 py node deno bun ruby perl php npm pnpm yarn make '
-        + 'timeout nohup time command exec watch nice stdbuf setsid doas').split(' '),
+        + 'timeout nohup time command exec watch nice stdbuf setsid doas alacritty gdb lldb').split(' '),
 );
 const interpreterStem = /^(python|pythonw|node|nodejs|ruby|perl|php)[0-9.]*$/;
 
-/** True when a program's name, without a folder or an executable's extension, is one that runs another program or a script. */
+/**
+ * True when a program's name, without a folder or an executable's extension, is one that runs another program or a script,
+ * or hands a file or a command to the system's own opener or scheduler (`systemLaunchers`).
+ */
 function runsAnotherProgram(name: string): boolean {
     const key = name.toLowerCase();
-    return runsAnother.has(key) || interpreterStem.test(key);
+    return runsAnother.has(key) || interpreterStem.test(key) || systemLaunchers.has(key);
 }
 
 /**
@@ -466,6 +598,8 @@ export function commandPrefix(command: string): string | null {
     const words = command.trim().split(/\s+/);
     if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word) && !/(^|[^.])\.\.([\\/]|$)/.test(word))) return null;
     if (words.some(namesReply)) return null;
+    // A link a command makes leads where no later command's words say: each is a card of its own.
+    if (linkOperands(words) !== null || followsLinksIn(words)) return null;
     const [program, first] = words;
     if (program === undefined || first === undefined || first.startsWith('-')) return null;
     if (/[\\/:]/.test(program) || runsAnotherProgram(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
@@ -673,27 +807,47 @@ function namesLocalJason(command: string, scope: ChatScope): boolean {
  * True when the command's text names the data directory, or anything in it outside the chat folder, in any literal
  * spelling a shell takes: the native path, its forward-slash form, Git Bash's and the host rules' `/c/...` on Windows,
  * and `~/.jason`, `$HOME/.jason` or `.jason` under the home folder's variable in any shell's spelling (`$USERPROFILE`
- * among them, since Git Bash is the Windows shell) when the data directory is the default one. A name that only begins
- * like it is not it.
+ * among them, since Git Bash is the Windows shell) when the data directory is the default one, or in a demo run when it
+ * is any folder directly in the home folder. A name that only begins like it is not it.
  */
 function namesData(command: string, scope: ChatScope): boolean {
+    return namesFolder(command, scope, scope.data, scope.chat, personsOwnOf(scope).length > 0 ? null : '.jason');
+}
+
+/**
+ * True when the command's text names one of the person's own directories (`ChatScope.personsOwn`), or anything in it, in
+ * the spellings `namesData` reads, the home folder's spellings for one directly in the home folder. A name that only
+ * begins like it is not it: `~/.jason` never names `~/.jason-demo`, nor `~/Jason` `~/Jason-demo`.
+ */
+function namesPersonsOwn(command: string, scope: ChatScope): boolean {
+    return personsOwnOf(scope).some((folder) => namesFolder(command, scope, folder, null, null));
+}
+
+/**
+ * True when the command's text names a folder, or anything in it outside the one folder it excepts, in any literal
+ * spelling a shell takes; the home folder's spellings when the folder is directly in the home folder and, where a name is
+ * given, has that name.
+ */
+function namesFolder(command: string, scope: ChatScope, folder: string, except: string | null, homeName: string | null): boolean {
     const paths = pathsOf(scope.platform);
     const text = pathText(scope.platform, command);
-    const data = pathText(scope.platform, paths.resolve(scope.data)).replace(/\/$/, '');
-    const chat = pathText(scope.platform, paths.resolve(scope.chat));
-    const chatRest = chat.startsWith(`${data}/`) ? chat.slice(data.length) : null;
-    const spellings = [data];
-    const drive = /^([a-z]):\//i.exec(data);
-    if (drive) spellings.push(`/${drive[1]}${data.slice(2)}`);
-    if (data === `${pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '')}/.jason`) {
-        for (const home of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}']) spellings.push(pathText(scope.platform, `${home}/.jason`));
+    const named = pathText(scope.platform, paths.resolve(folder)).replace(/\/$/, '');
+    const excepted = except === null ? null : pathText(scope.platform, paths.resolve(except));
+    const exceptRest = excepted !== null && excepted.startsWith(`${named}/`) ? excepted.slice(named.length) : null;
+    const spellings = [named];
+    const drive = /^([a-z]):\//i.exec(named);
+    if (drive) spellings.push(`/${drive[1]}${named.slice(2)}`);
+    const home = pathText(scope.platform, paths.resolve(scope.home)).replace(/\/$/, '');
+    const name = named.startsWith(`${home}/`) ? named.slice(home.length + 1) : null;
+    if (name !== null && name !== '' && !name.includes('/') && (homeName === null || name === keyOf(scope.platform, homeName))) {
+        for (const variable of ['~', '$HOME', '${HOME}', '%USERPROFILE%', '$env:USERPROFILE', '$USERPROFILE', '${USERPROFILE}']) spellings.push(pathText(scope.platform, `${variable}/${name}`));
     }
     for (const spelling of spellings) {
         for (let at = text.indexOf(spelling); at >= 0; at = text.indexOf(spelling, at + 1)) {
             const rest = text.slice(at + spelling.length);
             if (/^[A-Za-z0-9._-]/.test(rest)) continue;
-            const named = posix.normalize(`/${/^[^\s"'`;|&<>()]*/.exec(rest)?.[0] ?? ''}`);
-            if (chatRest !== null && (named === chatRest || named.startsWith(`${chatRest}/`))) continue;
+            const under = posix.normalize(`/${/^[^\s"'`;|&<>()]*/.exec(rest)?.[0] ?? ''}`);
+            if (exceptRest !== null && (under === exceptRest || under.startsWith(`${exceptRest}/`))) continue;
             return true;
         }
     }
@@ -705,11 +859,67 @@ function namesData(command: string, scope: ChatScope): boolean {
  * links, junctions and Windows' short names followed, and Git Bash's `/c/...` read as the drive's path. A word is split
  * on `=`, `@` and `,` as on spaces, so a value joined to an option, a file a program reads by `@`, or one item of a list
  * is located on its own; a piece that begins with one dash and a letter is also located without those two characters,
- * as a one-dash option's joined value (`-T../x`). A piece the shell would expand first (a variable, a `~`) is left to the
- * variable's name and the text's spellings.
+ * as a one-dash option's joined value (`-T../x`). A piece that begins with a home spelling is the home folder's
+ * (`homeExpanded`); any other piece the shell would expand first (a variable, `~user`) is left to the variable's name and
+ * the text's spellings.
  */
 function placesOf(command: string, scope: ChatScope): string[] {
-    return placesOfWords(command.split(/[\s;|&<>()`]+/).map(unquoted), scope, false);
+    const links = command
+        .split(/&&|\|\||[;|&\n\r()`]/)
+        .flatMap((part) => commandPlaces(part.trim().split(/\s+/).map(unquoted).filter((word) => word !== ''), scope, false));
+    return [...placesOfWords(command.split(/[\s;|&<>()`]+/).map(unquoted), scope, false), ...links];
+}
+
+/**
+ * The places a link a command makes may lead to (`linkOperands`): each of its words located from the folder the link is
+ * made in as well as from the command's own, since a link's relative target is read from the link's own folder, not from
+ * the folder the command runs in. Every word is taken for a target, and every word and its parent for the folder the
+ * link may be made in: more places than the link names, which only adds refusals.
+ */
+function commandPlaces(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
+    return [...linkPlaces(words, scope, literal), ...directoryPlaces(words, scope, literal)];
+}
+
+/** The programs whose own option names the folder the words after it are read from: `-C` and `--directory`. */
+const directoryPrograms: ReadonlySet<string> = new Set(['tar', 'bsdtar', 'gtar', 'git', 'make', 'gmake', 'ninja']);
+
+/**
+ * The places a program's words name when its own option sets the folder they are read from (`tar -C`, `git -C`,
+ * `make --directory=`): every word after the program located from each such folder, as words after a literal `cd` are.
+ */
+function directoryPlaces(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
+    const at = words.findIndex((word) => directoryPrograms.has(programName(word)));
+    if (at < 0) return [];
+    const rest = words.slice(at + 1);
+    const folders: string[] = [];
+    rest.forEach((word, index) => {
+        const next = rest[index + 1];
+        if ((word === '--directory' || /^-[A-Za-z]*C$/.test(word)) && next !== undefined) folders.push(next);
+        else if (word.startsWith('--directory=')) folders.push(word.slice('--directory='.length));
+        else if (/^-C./.test(word)) folders.push(word.slice(2));
+    });
+    return folders
+        .map((folder) => nativeSpelling(folder, scope))
+        .filter((folder) => folder !== '' && folder.length <= pathLimit(scope.platform) && (literal || !/^~[^\\/]|[$%]/.test(homeExpanded(folder, scope))))
+        .flatMap((folder) => {
+            const cwd = located(folder, scope);
+            return network(scope.platform, cwd) ? [] : placesOfWords(rest, { ...scope, cwd }, literal);
+        });
+}
+
+function linkPlaces(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
+    const operands = (linkOperands(words) ?? [])
+        .map((word) => nativeSpelling(word, scope))
+        .filter((word) => word.length <= pathLimit(scope.platform) && (literal || !/^~|[$%]/.test(homeExpanded(word, scope))));
+    const paths = pathsOf(scope.platform);
+    const folders = new Set<string>();
+    for (const word of operands) {
+        const at = located(word, scope);
+        if (network(scope.platform, at)) continue;
+        folders.add(at);
+        folders.add(paths.dirname(at));
+    }
+    return [...folders].flatMap((folder) => operands.map((word) => located(word, { ...scope, cwd: folder })));
 }
 
 /**
@@ -722,7 +932,14 @@ function placesOfWords(words: readonly string[], scope: ChatScope, literal: bool
         const pieces = new Set([word, ...word.split(/[=@,]/)]);
         for (const piece of [...pieces]) if (/^-[A-Za-z]/.test(piece)) pieces.add(piece.slice(2));
         for (const value of pieces) {
-            if (value === '' || value.length > pathLimit(scope.platform) || (!literal && /^~|[$%]/.test(value))) continue;
+            if (value === '' || value.length > pathLimit(scope.platform)) continue;
+            if (!literal && /^~|[$%]/.test(homeExpanded(value, scope))) {
+                // A path names its host before anything the shell expands after it: such a word is that host's, whatever
+                // the rest becomes.
+                const path = spelled(nativeSpelling(value, scope), scope);
+                if (network(scope.platform, path) && !/[$%`~]/.test(computerOf(scope.platform, path))) places.push(path);
+                continue;
+            }
             places.push(located(nativeSpelling(value, scope), scope));
         }
     }
@@ -740,6 +957,38 @@ function wordNamesData(places: readonly string[], scope: ChatScope): boolean {
     const data = located(scope.data, scope);
     const chat = located(scope.chat, scope);
     return places.some((path) => inside(scope, data, path) && !inside(scope, chat, path));
+}
+
+/**
+ * The places a command's words name as the shell passes them on: each command of the literal reading (`readLiteral`),
+ * its quoted words as the shell reads them, read from the folder a literal directory change, absolute or relative, sets
+ * for it. None when the command is not read literally. A reading for refusals only, so that Ask first refuses what Full
+ * access's reading would refuse; what Full access holds stays held.
+ */
+function literalPlaces(tool: string, command: string, scope: ChatScope): string[] {
+    const reading = readLiteral(tool, command, { platform: scope.platform, home: shellHomeOf(scope), relativeDirectories: true });
+    if (reading.held) return [];
+    return reading.commands.flatMap((each) => {
+        const at = each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) };
+        return [...placesOfWords([...each.words, ...each.targets], at, true), ...commandPlaces(each.words, at, true)];
+    });
+}
+
+/**
+ * The refusal of a place a command's words name on another computer, or reaching this one as another computer would, or
+ * in a device's namespace (`remoteRefusal`); null when none does.
+ */
+function wordNamesHost(places: readonly string[], scope: ChatScope): string | null {
+    for (const path of places) {
+        const refused = remoteRefusal(scope.platform, path);
+        if (refused !== null) return refused;
+    }
+    return null;
+}
+
+/** True when a place the command's words name is in one of the person's own directories (`ChatScope.personsOwn`). */
+function wordNamesPersonsOwn(places: readonly string[], scope: ChatScope): boolean {
+    return places.some((path) => inPersonsOwn(scope, path));
 }
 
 /** The programs whose `mcp` command adds, removes or lists the MCP servers that host loads: Claude Code and Codex. */
@@ -765,7 +1014,10 @@ function changesServers(command: string, scope: ChatScope): boolean {
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
     if (namesConfinedVariable(command)) return { verdict: 'deny', message: confinedRefusal };
     if (changesSearch(command)) return { verdict: 'deny', message: lookupRefusal };
-    const places = placesOf(command, scope);
+    const places = [...placesOf(command, scope), ...literalPlaces(tool, command, scope)];
+    const remote = wordNamesHost(places, scope);
+    if (remote !== null) return { verdict: 'deny', message: remote };
+    if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope)) return { verdict: 'deny', message: personsRefusal };
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
     if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
@@ -792,23 +1044,47 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     // the person's to answer, each time.
     if (tool !== 'Bash') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     if (!isCompound(command) && replyNoCardForms.includes(command.trim().split(/\s+/).join(' '))) return allow;
-    // A command that names a folder holding the data directory may walk it: a card each time, never covered by a grant.
-    const data = located(scope.data, scope);
-    const prefix = places.some((path) => inside(scope, path, data)) ? null : commandPrefix(command);
+    // A command that names a folder holding the data directory, or in a demo run one of the person's own directories, may
+    // walk it: a card each time, never covered by a grant.
+    const prefix = places.some((path) => holdsFenced(scope, path)) ? null : commandPrefix(command);
     if (prefix === null) return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
     return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: `${tool}:${prefix}`, covers: `${prefix} \u2026` };
 }
 
 const contentRefusal = 'That file names a command or an operation that is a person\'s own act or changes the installation, the variable that confines jason, or the installation\'s own data: the chat never writes it. Nothing was written.';
 
-/** The text a writer tool would put in a file: a whole file's content, or each replacement of an edit. */
-function writtenText(tool: string, input: Record<string, unknown>): string[] {
+/**
+ * The text a writer tool would put in a file: a whole file's content, or each replacement of an edit, and for an edit
+ * the whole file as it would read after it, where the file can be read (`ChatScope.text`): a replacement can complete a
+ * word the file already begins.
+ */
+function writtenText(tool: string, input: Record<string, unknown>, scope: ChatScope): string[] {
     const texts: unknown[] = [];
     if (tool === 'Write') texts.push(input['content']);
     if (tool === 'Edit') texts.push(input['new_string']);
     if (tool === 'NotebookEdit') texts.push(input['new_source']);
-    if (tool === 'MultiEdit' && Array.isArray(input['edits'])) for (const edit of input['edits'] as unknown[]) texts.push((edit as { new_string?: unknown } | null)?.new_string);
+    const edits = tool === 'Edit' ? [input] : tool === 'MultiEdit' && Array.isArray(input['edits']) ? (input['edits'] as unknown[]) : [];
+    if (tool === 'MultiEdit') for (const edit of edits) texts.push((edit as { new_string?: unknown } | null)?.new_string);
+    const path = input['file_path'];
+    if (edits.length > 0 && typeof path === 'string' && scope.text !== undefined) {
+        const before = scope.text(located(path, scope));
+        const after = before === null ? null : edited(before, edits);
+        if (after !== null) texts.push(after);
+    }
     return texts.filter((text): text is string => typeof text === 'string');
+}
+
+/** A file's text after its edits, applied in order as the writer tool applies them; null where one does not apply. */
+function edited(text: string, edits: readonly unknown[]): string | null {
+    let after = text;
+    for (const edit of edits) {
+        const { old_string: from, new_string: to, replace_all: all } = (edit ?? {}) as { old_string?: unknown; new_string?: unknown; replace_all?: unknown };
+        if (typeof from !== 'string' || typeof to !== 'string' || from === '') return null;
+        const at = after.indexOf(from);
+        if (at < 0) return null;
+        after = all === true ? after.split(from).join(to) : `${after.slice(0, at)}${to}${after.slice(at + from.length)}`;
+    }
+    return after;
 }
 
 /**
@@ -818,8 +1094,127 @@ function writtenText(tool: string, input: Record<string, unknown>): string[] {
  * a program assembles at run time is not seen here. Null for any other tool, and for text that shows none of these.
  */
 export function writtenRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
-    for (const text of writtenText(tool, input)) if (textRefused(text, scope)) return contentRefusal;
+    const texts = writtenText(tool, input, scope);
+    for (const text of texts) if (textRefused(text, scope)) return contentRefusal;
+    const path = input['file_path'] ?? input['notebook_path'];
+    if (typeof path !== 'string') return null;
+    for (const text of texts) {
+        const kind = scriptKind(tool, path, text);
+        if (kind === null) continue;
+        if (scriptCommands(kind, text).some((commands) => launchesIn(commands, kind))) return launchRefusal;
+        const refused = scriptRefusal(kind, text, path, scope);
+        if (refused !== null) return refused;
+    }
     return null;
+}
+
+/**
+ * The refusal a script the chat writes would meet as a command (`refusalOver`): its lines read as a shell reads them,
+ * the script whole and each line alone, from the file's own folder, a literal `cd` in it setting the folder for what
+ * follows, so a relative path and a directory change are located as a command's are. Null when none.
+ */
+function scriptRefusal(kind: ScriptKind, text: string, path: string, scope: ChatScope): string | null {
+    const at = { ...scope, cwd: pathsOf(scope.platform).dirname(located(path, scope)) };
+    const tool = /\.(ps1|psm1|psd1)$/i.test(path) ? 'PowerShell' : 'Bash';
+    for (const commands of scriptCommands(kind, text)) {
+        const lines = commands.split(/\r?\n/).map((line) => (kind === 'make' ? line.replace(/^\s+/, '').replace(/^[@+-]+/, '') : line)).filter((line) => line.trim() !== '');
+        const whole = lines.join('\n');
+        // A script's lines run one after another in the folder the lines before them left, as commands joined by `&&` do.
+        const chained = lines.join(' && ');
+        const places = [...placesOf(whole, at), ...literalPlaces(tool, whole, at), ...literalPlaces(tool, chained, at), ...lines.flatMap((line) => literalPlaces(tool, line, at))];
+        const refused = refusalOver(whole, places, at);
+        if (refused !== null) return refused;
+    }
+    return null;
+}
+
+const launchRefusal = 'That file starts a program through the system\'s own opener, launcher, session or scheduler, or hands a command to a process already running, which runs outside the chat\'s fence: the chat never writes it. Nothing was written.';
+
+/** What a written file is run as, by its name or its first line: a shell's or PowerShell's script, a makefile, a package's scripts, a notebook. */
+type ScriptKind = 'shell' | 'make' | 'package' | 'notebook';
+
+const scriptExtension = /\.(sh|bash|zsh|ksh|dash|fish|csh|tcsh|command|tool|ps1|psm1|psd1|bat|cmd|btm)$/;
+const makeNames: ReadonlySet<string> = new Set(['makefile', 'gnumakefile', 'bsdmakefile', 'justfile']);
+const shellStartupNames: ReadonlySet<string> = new Set(['.bashrc', '.bash_profile', '.bash_login', '.profile', '.zshrc', '.zprofile', '.zshenv', '.zlogin', '.kshrc', '.envrc']);
+
+function scriptKind(tool: string, path: string, text: string): ScriptKind | null {
+    const parts = path.toLowerCase().split(/[\\/]+/);
+    const name = parts.at(-1) ?? '';
+    if (tool === 'NotebookEdit' || name.endsWith('.ipynb')) return 'notebook';
+    if (name === 'package.json') return 'package';
+    if (makeNames.has(name) || /\.(mk|mak|make)$/.test(name)) return 'make';
+    const hooks = (parts.at(-2) === 'hooks' && parts.at(-3) === '.git') || parts.at(-2) === '.husky';
+    return scriptExtension.test(name) || shellStartupNames.has(name) || hooks || text.startsWith('#!') ? 'shell' : null;
+}
+
+/** The command texts a written file of a kind runs: the file itself, a package's script strings, a notebook's shell lines. */
+function scriptCommands(kind: ScriptKind, text: string): string[] {
+    if (kind === 'package') {
+        const strings: string[] = [];
+        // Each value, a script's command among them; a key, which a colon follows, is a name.
+        for (const match of text.matchAll(/"((?:[^"\\]|\\.)*)"(\s*:)?/g)) {
+            if (match[2] !== undefined) continue;
+            try {
+                strings.push(JSON.parse(`"${match[1] ?? ''}"`) as string);
+            } catch {
+                strings.push(match[1] ?? '');
+            }
+        }
+        return strings;
+    }
+    if (kind === 'notebook') {
+        if (/^\s*%%(bash|sh|zsh|script|cmd|powershell|pwsh|system)\b/.test(text)) return [text];
+        return text.split(/\r?\n/).filter((line) => /^\s*(!|%(system|sx|sc)\b)/.test(line)).map((line) => line.replace(/^\s*(!|%(system|sx|sc)\b)/, ''));
+    }
+    return [text];
+}
+
+/** Words that stand before a program without being one: a shell's and PowerShell's keywords, cmd's `call`, make's `shell`. */
+const beforeProgram: ReadonlySet<string> = new Set(['if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'while', 'until', 'for', 'case', 'esac', 'function', 'select', '!', '&', 'call', 'shell', 'try', 'catch', 'finally']);
+
+/** The wrappers whose next word that is no option is the program they run. */
+const wrappers: ReadonlySet<string> = new Set(
+    ('env timeout nice ionice stdbuf time command builtin exec xargs watch flock chronic unbuffer caffeinate taskset strace '
+        + 'ltrace chroot busybox bash sh zsh dash ksh fish cmd pwsh powershell').split(' '),
+);
+
+/**
+ * True when a written file that is run as a script (`scriptKind`) starts a program of `systemLaunchers` or hands a command
+ * to one already running: read at each place a program stands — the start of a line or of a command after an operator, a
+ * substitution or a bracket, past a keyword, an assignment and make's prefixes, and after a wrapper and its options.
+ * Prose in any other file is not read this way, since the launchers' names are words too (`open`, `start`, `at`).
+ */
+function launchesIn(text: string, kind: ScriptKind): boolean {
+    for (const line of text.split(/\r?\n/)) {
+        let body = kind === 'make' ? line.replace(/^\s+/, '').replace(/^[@+-]+/, '') : line;
+        if (/^\s*(#|rem(\s|$)|::)/i.test(body)) continue;
+        body = body.replace(/\s#.*$/, '');
+        for (const part of body.split(/&&|\|\||\$\(|[;|&`(){}]/)) {
+            const words = part.trim().split(/\s+/).map((word) => word.replace(/^['"@]+|['"]+$/g, '')).filter((word) => word !== '');
+            if (programLaunches(words)) return true;
+        }
+    }
+    return false;
+}
+
+function programLaunches(words: readonly string[]): boolean {
+    let at = 0;
+    while (at < words.length) {
+        const word = words[at] as string;
+        if (beforeProgram.has(word.toLowerCase()) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+            at++;
+            continue;
+        }
+        // A name spliced by quotes or a backslash (`ex''plorer`, `e\xplorer`) is read as the shell reads it; a backslash
+        // is also a Windows folder's separator, so the name is read both ways.
+        const unspliced = word.replace(/['"]/g, '');
+        const program = programName(unspliced);
+        if (systemLaunchers.has(program) || systemLaunchers.has(programName(unspliced.replace(/\\(.)/g, '$1')))) return true;
+        if (!wrappers.has(program)) return false;
+        at++;
+        while (at < words.length && /^(-|\/[A-Za-z?]{1,2}$|\d+(\.\d+)?[smhd]?$|[A-Za-z_][A-Za-z0-9_]*=)/.test(words[at] as string)) at++;
+    }
+    return false;
 }
 
 /**
@@ -828,7 +1223,7 @@ export function writtenRefusal(tool: string, input: Record<string, unknown>, sco
  * variable or the installation's data in any literal spelling, or clears the environment around a jason.
  */
 function textRefused(text: string, scope: ChatScope): boolean {
-    if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || jasonIn(text, scope) === 'deny') return true;
+    if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || namesPersonsOwn(text, scope) || jasonIn(text, scope) === 'deny') return true;
     return respelledRefusal(text, scope) !== null;
 }
 
@@ -993,6 +1388,7 @@ function respelledRefusal(text: string, scope: ChatScope): string | null {
     for (const plain of readingsOf(text)) {
         if (plain === text) continue;
         if (namesConfinedVariable(plain)) return confinedRefusal;
+        if (namesPersonsOwn(plain, scope)) return personsRefusal;
         if (namesDataVariable(plain, scope) || namesData(plain, scope)) return dataRefusal;
         if (jasonIn(plain, scope) === 'deny') return commandRefusal;
     }
@@ -1077,7 +1473,8 @@ function withoutHereDocuments(command: string): { text: string; fedToShell: bool
 /**
  * Whether a piece of a word could expand into the data directory: one that begins with `~` other than the home folder's
  * own, one with a variable and a glob, and a glob whose fixed beginning is the data directory, a folder holding it or a
- * name it begins with, or a place in it outside the chat folder. A `~` folder is read as the home folder.
+ * name it begins with, or a place in it outside the chat folder. A `~` folder is read as the home folder. In a demo run
+ * each of the person's own directories is read the same way, whole.
  */
 function couldReachData(piece: string, scope: ChatScope): boolean {
     let value = piece;
@@ -1089,7 +1486,7 @@ function couldReachData(piece: string, scope: ChatScope): boolean {
     if (glob < 0) {
         if (!piece.startsWith('~')) return false;
         const path = spelled(value, scope);
-        return inside(scope, spelled(scope.data, scope), path) && !inside(scope, spelled(scope.chat, scope), path);
+        return fencedSpellings(scope).some(({ folder, except }) => inside(scope, folder, path) && !(except !== null && inside(scope, except, path)));
     }
     const fixed = value.slice(0, glob);
     if (/[$%]/.test(fixed)) return true;
@@ -1098,10 +1495,19 @@ function couldReachData(piece: string, scope: ChatScope): boolean {
     const partial = leading === '' || /[\\/]$/.test(leading) ? '' : (leading.split(/[\\/]/).pop() ?? '');
     const folder = spelled(partial === '' ? leading || '.' : leading.slice(0, leading.length - partial.length) || '.', scope);
     const start = keyOf(scope.platform, pathsOf(scope.platform).join(folder, partial));
-    const data = keyOf(scope.platform, spelled(scope.data, scope));
-    const chat = spelled(scope.chat, scope);
-    if (data === start || data.startsWith(start)) return true;
-    return inside(scope, data, folder) && !inside(scope, chat, folder);
+    return fencedSpellings(scope).some(({ folder: fenced, except }) => {
+        const key = keyOf(scope.platform, fenced);
+        if (key === start || key.startsWith(start)) return true;
+        return inside(scope, key, folder) && !(except !== null && inside(scope, except, folder));
+    });
+}
+
+/** The fenced folders as spelled: the data directory with the chat folder excepted, and the person's own directories whole. */
+function fencedSpellings(scope: ChatScope): { folder: string; except: string | null }[] {
+    return [
+        { folder: spelled(scope.data, scope), except: spelled(scope.chat, scope) },
+        ...personsOwnOf(scope).map((folder) => ({ folder: spelled(folder, scope), except: null })),
+    ];
 }
 
 /**
@@ -1200,6 +1606,9 @@ function literalJudgement(tool: string, command: string | null, scope: ChatScope
 function refusalOver(text: string, places: readonly string[], scope: ChatScope): string | null {
     if (namesConfinedVariable(text)) return confinedRefusal;
     if (changesSearch(text)) return lookupRefusal;
+    const remote = wordNamesHost(places, scope);
+    if (remote !== null) return remote;
+    if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(places, scope)) return personsRefusal;
     if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(places, scope)) return dataRefusal;
     if (jasonIn(text, scope) === 'deny') return commandRefusal;
     const own = chatsOwnPlace(places, scope);
@@ -1224,7 +1633,7 @@ function literalOutcome(tool: string, command: string, scope: ChatScope): FullAc
     if (reading.held) return heldFor(reading.reason);
     // Each command's words are located against the folder it runs in: a directory change's literal absolute target.
     const commands = reading.commands.map((each) => ({ command: each, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) } }));
-    const places = commands.flatMap(({ command: each, scope: at }) => placesOfWords([...each.words, ...each.targets], at, true));
+    const places = commands.flatMap(({ command: each, scope: at }) => [...placesOfWords([...each.words, ...each.targets], at, true), ...commandPlaces(each.words, at, true)]);
     // (a) Refused, over the resolved words, a URL's percent-escapes decoded.
     const resolved = reading.commands.map((each) => [...each.words, ...each.targets].join(' ')).join('\n');
     for (const text of new Set([resolved, percentDecoded(resolved)])) {
@@ -1244,8 +1653,7 @@ function literalOutcome(tool: string, command: string, scope: ChatScope): FullAc
     const folded = reading.commands.map((each) => [...each.words, ...each.targets].filter((word) => !word.startsWith('-')).join(' ')).join('\n').toUpperCase();
     if (tool === 'PowerShell' && scope.platform === 'win32' && namesSearch(folded)) return heldFor('search');
     if (commands.some(({ command: each, scope: at }) => namesLocalJason([...each.words, ...each.targets].join(' '), at))) return heldFor('local_jason');
-    const data = located(scope.data, scope);
-    if (places.some((path) => inside(scope, path, data))) return heldFor('holds_data');
+    if (places.some((path) => holdsFenced(scope, path))) return heldFor('holds_data');
     // (c) Runs.
     return { outcome: 'runs' };
 }

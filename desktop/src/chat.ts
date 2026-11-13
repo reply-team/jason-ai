@@ -64,7 +64,7 @@ import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permiss
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
-import { entryOf, realPathOf } from './chat-real-path.ts';
+import { entryOf, realPathOf, textOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
@@ -75,6 +75,7 @@ import {
     feedAutoEdit,
     feedFullAccess,
     fullAccessConsent,
+    demoFullAccess,
     fullAccessNotYet,
     fullAccessOffered,
     fullAccessSentence,
@@ -92,7 +93,8 @@ import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
-import type { DesktopPaths } from './paths.ts';
+import { desktopPaths, type DesktopPaths } from './paths.ts';
+import type { PersonsOwn } from './mode.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
     checkingSandbox,
@@ -209,6 +211,12 @@ export interface ChatOptions {
     bundle: string;
     /** Whether the desktop runs with a data directory `JASON_DATA_DIR` names, which the host is then given too. */
     dataNamed: boolean;
+    /**
+     * In a demo run, the person's own installation: its data directory and its harness root, which a Claude Code turn
+     * neither reads nor writes, whole, in every mode (`ChatScope.personsOwn`, `dataRules`). Absent in the person's own
+     * installation, where the fence is the data directory alone.
+     */
+    personsOwn?: PersonsOwn | undefined;
     /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
     bundleVersion: string | null;
     cli: Cli;
@@ -236,6 +244,11 @@ export interface ChatOptions {
     unchecked?(): void;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
+    /**
+     * Whether this is a demo run: Full access is then not offered by any path, the menu, the standing choice, a chat
+     * reopened or a request (`demoFullAccess`), and the standing choice is neither read, written nor taken back.
+     */
+    demo?: boolean;
     /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
     skillsGate?: Pick<SkillsGate, 'held' | 'wait'>;
     /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
@@ -591,10 +604,10 @@ export class Chat {
         sweepTurnFiles(options.paths.turns);
         // A take-back the last run owed is done before any chat is made; one the file still will not take keeps the
         // choice taken back for this run too.
-        if (takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
+        if (options.demo !== true && takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
         // A standing choice is in force only while its take-back could be recorded: where its folder takes no new file,
         // it is held as taken back for this run.
-        if (!this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
+        if (options.demo !== true && !this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
         // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
         // never stops for either.
@@ -834,7 +847,7 @@ export class Chat {
     }
 
     #fullAccessOffered(): boolean {
-        return this.#options.fullAccessOffered ?? fullAccessOffered;
+        return this.#options.demo !== true && (this.#options.fullAccessOffered ?? fullAccessOffered);
     }
 
     #modeOf(conversation: Conversation): ChatMode {
@@ -866,6 +879,7 @@ export class Chat {
         // Always answered and its file not written: Full access is given this time, and the chat says so once it is.
         let unkept = false;
         if (mode === 'full_access') {
+            if (this.#options.demo === true) throw new ChatRefused(demoFullAccess);
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = programOf(host);
             if (program === 'codex') throw new ChatRefused(codexFullAccess);
@@ -1005,6 +1019,8 @@ export class Chat {
      */
     #standingFor(mode: ChatMode, program: string | undefined): Standing | null {
         if (mode !== 'full_access' || program !== 'claude') return null;
+        // A demo run offers no Full access, so no standing choice applies there.
+        if (this.#options.demo === true) return null;
         if (this.#takenBack || takeBackOwed(this.#options.paths.fullAccess)) return null;
         return readStanding(this.#options.paths.fullAccess, 'claude');
     }
@@ -1766,6 +1782,7 @@ export class Chat {
                 const id = newTurnId();
                 turnId = id;
                 running.turnId = id;
+                const persons = this.#options.personsOwn;
                 const scope: ChatScope = {
                     platform: this.#platform,
                     cwd: folder,
@@ -1776,11 +1793,13 @@ export class Chat {
                     // The host's environment is built from this one (`hostEnvironment`), so its shell's `~` is this HOME;
                     // a Full access turn names it to the host explicitly (`turnHome`), so the two cannot differ.
                     shellHome: turnHome,
-                    protectedFiles: [paths.installationSettings, paths.runFile],
+                    ...(persons === undefined ? {} : { personsOwn: [persons.data, persons.harnessRoot] }),
+                    protectedFiles: [paths.installationSettings, paths.runFile, ...(persons === undefined ? [] : [desktopPaths(persons.data).installationSettings, desktopPaths(persons.data).runFile])],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     real: realPathOf,
                     entry: entryOf,
+                    text: textOf,
                 };
                 this.#broker.openTurn(replyTo, id, scope, running.mode);
                 const secret = newSecret();
@@ -1798,7 +1817,7 @@ export class Chat {
                 // The host's data rules name the grants present at this turn's start; a grant opened later is refused by the
                 // permission model's data rule alone, since a deny wins over an allow and no rule says "all of chat-full but mine".
                 const rules = [
-                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }),
+                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }, persons === undefined ? [] : [persons.data, persons.harnessRoot]),
                     ...chatRules(this.#platform, folder),
                 ];
                 argsFor = (resumed) =>

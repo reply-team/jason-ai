@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import type { DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
@@ -224,6 +224,8 @@ export interface SetupDeps {
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
+    /** Whether this is a demo run, where Full access is not offered on any host (`demoFullAccess`). */
+    demo?: boolean;
     /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
     ownChatFolder?: (chat: string, records: string) => void;
     /**
@@ -390,7 +392,19 @@ export class Setup {
         // While this version does not offer it, every host that drives the chat says so.
         const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
         const fullAccessOn = (program: string, drives: boolean) =>
-            !drives ? null : !offeredHere ? fullAccessNotYet : program === 'codex' ? codexFullAccess : program === 'claude' ? (claude === null ? null : claude.fullAccess) : null;
+            !drives
+                ? null
+                : this.#deps.demo === true
+                  ? demoFullAccess
+                  : !offeredHere
+                    ? fullAccessNotYet
+                    : program === 'codex'
+                      ? codexFullAccess
+                      : program === 'claude'
+                        ? claude === null
+                            ? null
+                            : claude.fullAccess
+                        : null;
         const autoEditOn = (program: string, drives: boolean) => (drives && program === 'codex' ? codexAutoEdit : null);
         const programHosts: HostState[] = [];
         for (const host of hosts) {
