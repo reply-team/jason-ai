@@ -70,7 +70,10 @@ const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each
 const box = () =>
     within(startForm()).getByRole('textbox', { name: 'Who do you want to reach?' }) as HTMLTextAreaElement;
 const startForm = () => screen.getByRole('form', { name: 'Start' });
-const ready = () => waitFor(() => expect(setup.value).not.toBeNull());
+const ready = async () => {
+    await waitFor(() => startForm());
+    await waitFor(() => expect(setup.value).not.toBeNull());
+};
 const ask = (text: string) => {
     fireEvent.change(within(startForm()).getByRole('textbox', { name: 'Who do you want to reach?' }), {
         target: { value: text },
@@ -196,6 +199,7 @@ describe('the start screen', () => {
 
     it('adds that a website link is enough where Claude Code drives the chat', async () => {
         renderConsole(stubDesktop());
+        await waitFor(() => startForm());
         await ready();
         expect(box().placeholder).toBe(
             'Tell Jason what you sell and who you want to reach. A website link is enough to start.',
@@ -210,6 +214,7 @@ describe('the start screen', () => {
             ),
         };
         renderConsole(stubDesktop(both));
+        await waitFor(() => startForm());
         await ready();
         fireEvent.click(item(openMenu(/Model:/), 'Codex'));
         expect(box().placeholder).toBe('Tell Jason what you sell and who you want to reach.');
@@ -217,6 +222,7 @@ describe('the start screen', () => {
 
     it('says the first sentence alone with no AI host', async () => {
         renderConsole(stubDesktop(noHost));
+        await waitFor(() => startForm());
         await ready();
         expect(box().placeholder).toBe('Tell Jason what you sell and who you want to reach.');
     });
