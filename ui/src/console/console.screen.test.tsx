@@ -212,6 +212,14 @@ describe('the console', () => {
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
+    it('describes the Activity panel by the roles, not by agents', async () => {
+        renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('button', { name: 'Activity' }));
+        show('Activity');
+        const activity = await waitFor(() => panel('Activity'));
+        expect(words(activity)).toContain('What Jason and its roles do, as the journal records it.');
+    });
+
     it('picks a model and, where the model takes one, an effort beside the host, and sends both with the turn', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);

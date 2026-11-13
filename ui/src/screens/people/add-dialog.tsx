@@ -33,7 +33,8 @@ export function AddDialog({ person, onClose }: Props) {
         try {
             const result = await store.add(api, person.id, campaign.id, reason.trim() || undefined);
             const item = result.items[0];
-            if (item?.status === 'rejected') setRefused(item.error?.message ?? 'The agent refused this person.');
+            if (item?.status === 'rejected')
+                setRefused(item.error?.message ?? 'This person could not be added to the agent.');
             else if (item?.status === 'already_member') setSaid(`${campaign.name} already has them.`);
             else onClose();
         } catch (error) {
