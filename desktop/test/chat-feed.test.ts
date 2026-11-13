@@ -432,7 +432,7 @@ test('a catch-up keeps the sends and the listed roles\' work among the succeeded
     const r = rig(t);
     const feed = r.chat.feed([journalLine(1)]);
     const done = (n: number, fields: Record<string, unknown>) =>
-        journalLine(n, { kind: 'workitem_succeeded', campaign_id: cmp(1), work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_operation', work_item_role: null, work_item_operation: null, ...fields });
+        journalLine(n, { kind: 'workitem_succeeded', campaign_id: cmp(1), work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_op', work_item_role: null, work_item_operation: null, ...fields });
     // Newest first, as the runtime answers: reads, a manager's work, a registered role's and a send are filtered by the desktop.
     writeFileSync(
         r.journal,
@@ -456,6 +456,60 @@ test('a catch-up keeps the sends and the listed roles\' work among the succeeded
     );
     const record = recordOf(r, feed.id);
     for (const said of ['closer-for-ada', 'manager', 'contact.list', 'conversation.list']) assert.ok(!record.includes(said), said);
+});
+
+test('a catch-up merges the two pages by their ids, the other kinds\' lines among the sends', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(1)]);
+    const done = (n: number, fields: Record<string, unknown>) =>
+        journalLine(n, { kind: 'workitem_succeeded', work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_op', work_item_role: null, work_item_operation: null, ...fields });
+    // One file serves both requests, each filtered by the kinds it names: the approvals between the sends are the first page's.
+    writeFileSync(
+        r.journal,
+        JSON.stringify([
+            done(8, { work_item_operation: 'conversation.reply' }),
+            journalLine(7, { kind: 'approval_requested', campaign_id: cmp(7) }),
+            done(6, { work_item_operation: 'message.send', campaign_id: cmp(6) }),
+            journalLine(5, { kind: 'decision_raised', campaign_id: cmp(5) }),
+            done(4, { work_item_operation: 'message.send', campaign_id: cmp(4) }),
+            journalLine(1),
+        ]),
+    );
+    const after = r.again();
+    after.feed([], { catchUp: true });
+    await after.idle();
+    assert.deepEqual(
+        after.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind)),
+        [jrn(1), jrn(4), jrn(5), jrn(6), jrn(7), jrn(8)],
+    );
+});
+
+test('a catch-up whose read of the other kinds failed puts nothing in, the succeeded work with it; one whose succeeded read failed puts in the rest', async (t) => {
+    const r = rig(t);
+    const feed = r.chat.feed([journalLine(1)]);
+    const done = (n: number) =>
+        journalLine(n, { kind: 'workitem_succeeded', work_item_id: `wi_${ulid(n)}`, work_item_kind: 'provider_op', work_item_role: null, work_item_operation: 'message.send', campaign_id: cmp(n) });
+    writeFileSync(r.journal, JSON.stringify([done(6), journalLine(5, { kind: 'approval_requested', campaign_id: cmp(5) }), journalLine(1)]));
+    const entries = (chat: Chat) => chat.open(feed.id).entries.map((entry) => (entry.kind === 'line' ? entry.journal_id : entry.kind));
+    // The read of the Feed's kinds fails, the succeeded one answers: nothing goes in, so the span is read again next time.
+    r.b.env.STUB_JOURNAL_FAILS_EXCEPT = 'workitem_succeeded';
+    const first = r.again();
+    first.feed([], { catchUp: true });
+    await first.idle();
+    assert.deepEqual(entries(first), [jrn(1)], 'no sends alone, no moment moved past the other kinds');
+    // The succeeded read fails, the other answers: its lines go in and no send is caught up.
+    delete r.b.env.STUB_JOURNAL_FAILS_EXCEPT;
+    r.b.env.STUB_JOURNAL_FAILS_KIND = 'workitem_succeeded';
+    const second = r.again();
+    second.feed([], { catchUp: true });
+    await second.idle();
+    assert.deepEqual(entries(second), [jrn(1), jrn(5)]);
+    // Both answering, the next catch-up reads the span again and the send comes in.
+    delete r.b.env.STUB_JOURNAL_FAILS_KIND;
+    const third = r.again();
+    third.feed([], { catchUp: true });
+    await third.idle();
+    assert.deepEqual(entries(third), [jrn(1), jrn(5), jrn(6)]);
 });
 
 test('the catch-up runs at each load of the page, as each first ask carries it, and takes no line twice, folded ones included, across a restart', async (t) => {

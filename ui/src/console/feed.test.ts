@@ -129,7 +129,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
             kind: 'workitem_succeeded',
             work_item_id: 'wi_01JD0000000000000000000001',
             work_item_operation: 'message.send',
-            work_item_kind: 'provider_operation',
+            work_item_kind: 'provider_op',
         });
         expect(toFeedLine(sent)).toEqual({
             id: sent.id,
@@ -161,6 +161,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
             { work_item_role: 'critic' },
             { work_item_role: "Ada's closer" },
             { work_item_operation: 'contact.list', work_item_role: 'researcher' },
+            { work_item_operation: 'message.send', work_item_role: 'researcher' },
             { work_item_operation: 'toString' },
             { work_item_role: 'constructor' },
             {},

@@ -3,9 +3,9 @@
 // campaign created, started, paused or archived, an approval given or declined, a question answered, and work that
 // stopped; and, of the work that succeeded, a send that went out and the work of five roles. A line keeps identifiers,
 // the kind, the moment and a count, and for a succeeded work item the operation or the role from a closed list,
-// and never a person's text: no reason, no old or new value, no campaign or contact name. Lines of the same kind and
-// campaign that follow one another fold into one, at most `feedLimit` are kept, and a turn of the Feed is given the
-// lines no turn was given yet, set apart as records (`feedBlock` in `chat-header.ts`): each kept line is marked once
+// and never a person's text: no reason, no old or new value, no campaign or contact name. Lines of the same kind,
+// campaign, operation and role that follow one another fold into one (sends that alternate with other lines are shown one
+// by one), at most `feedLimit` are kept, and a turn of the Feed is given the lines no turn was given yet, set apart as records (`feedBlock` in `chat-header.ts`): each kept line is marked once
 // it was given, on the record, so the order the runtime commits lines in decides nothing. A line never starts a turn.
 
 import type { KeptEntry } from './chat-conversations.ts';
@@ -79,7 +79,7 @@ export interface LineEntry {
     operation?: FeedOperation;
     /** On a `workitem_succeeded` line, the shipped role whose work finished; else absent. */
     role?: FeedRole;
-    /** How many journal lines it stands for: more than one when lines of its kind and campaign followed one another. */
+    /** How many journal lines it stands for: more than one when lines of its kind, campaign, operation and role followed one another. */
     count: number;
     /**
      * Present, and true, once a turn whose host started was given the line with this count. A line is kept without it,
@@ -111,10 +111,12 @@ const absent = (value: unknown) => value === null || value === undefined;
 
 /**
  * What a succeeded work item says of itself that the Feed keeps: its operation if it names one and that is on the list,
- * else its role if that is on the list, else nothing (null: the line is none of the Feed's). A name outside the lists
- * is never kept.
+ * or its role if that is on the list, else nothing (null: the line is none of the Feed's). A name outside the lists is
+ * never kept, and one naming both is refused.
  */
 function whoOf(operation: unknown, role: unknown): { operation: FeedOperation } | { role: FeedRole } | null {
+    // The runtime makes no item with both; a line naming both is out of shape, and neither name is kept.
+    if (!absent(operation) && !absent(role)) return null;
     if (!absent(operation)) return isOperation(operation) ? { operation } : null;
     return isRole(role) ? { role } : null;
 }
@@ -164,7 +166,6 @@ export function keptLineOf(value: unknown): LineEntry | null {
     if (kind === succeededKind) {
         // A record of this kind names exactly one of the two, from the lists; a hand-edited one naming both, or a name
         // outside them, is refused. Of any other kind the members are not read.
-        if (!absent(operation) && !absent(role)) return null;
         const named = whoOf(operation, role);
         if (named === null) return null;
         who = named;
@@ -176,8 +177,9 @@ export function keptLineOf(value: unknown): LineEntry | null {
 }
 
 /**
- * Puts a line at the end of the entries: folded into the last entry when that is a line of the same kind and campaign,
- * which then takes the newest id, moment and work item and counts one more; else as an entry of its own.
+ * Puts a line at the end of the entries: folded into the last entry when that is a line of the same kind, campaign,
+ * operation and role, which then takes the newest id, moment and work item and counts one more; else as an entry of its
+ * own.
  */
 export function take(entries: KeptEntry[], line: LineEntry): { line: LineEntry; folded: boolean } {
     const last = entries.at(-1);

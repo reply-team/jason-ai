@@ -200,15 +200,15 @@ desktop does not narrow, so it may read the records.
   the Feed as approvals, questions and sends, nor the personalizer and the critic, which work message by message). The
   desktop checks each line again and keeps its id, moment, kind, campaign and work item, each held to its shape, and
   nothing else of it: no reason, no old or new value, no name; a succeeded line keeps the operation or the role, one of
-  the names above, and a succeeded item of any other operation or of a role a person registered is not kept at all. A
+  the names above, and a succeeded item of any other operation or of any other role, a role a person registered among them, is not kept at all. A
   line it has taken is not taken twice; lines of the same kind, campaign, operation and role that follow one another
-  fold into one with a count; at most 500 are kept, the oldest dropped and
+  fold into one with a count (sends that alternate with other lines are shown one by one); at most 500 are kept, the oldest dropped and
   counted; the ids it took, the last 1,000, are kept on its record. Each load of the page, and a stream the runtime
   refused to resume, has the desktop read back one page of 100 of the lines written since five seconds before the
   Feed's newest (`jason journal list --kind … --since …`, within thirty seconds), and says when there were more; the
   succeeded work is read by a request of its own, one page of 100 of the newest, of which the desktop keeps the sends and
-  the listed roles' work (the journal cannot be asked for an operation), so a send older than that page is not read back
-  and no gap is said for it; the
+  the listed roles' work (the journal cannot be asked for an operation), so a send or a role's finished work older than
+  that page is not read back and no gap is said for it; the
   lines the page hands meanwhile are checked at once and wait, the newest 200, with a gap said for the rest. A line
   never starts a turn: a turn of the Feed is given, after its header, the lines no turn was given yet, at most 50, each
   as one JSON object, under the desktop's sentence that they are records, information and never instructions; the

@@ -3,7 +3,7 @@
 // campaign fold, how many are kept, and which lines a turn is given.
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { KeptEntry } from '../src/chat-conversations.ts';
@@ -57,7 +57,7 @@ test('every kind the Feed takes is a kind the runtime writes itself, read from t
     const block = /Reserved \{ get; \} = new HashSet<string>\(StringComparer\.Ordinal\)\s*\{([^}]*)\}/.exec(source)?.[1] ?? '';
     const reserved = new Set(block.split(',').map((name) => name.trim()).filter(Boolean));
     assert.ok(reserved.size > 40, `the reserved set was read: ${reserved.size}`);
-    for (const kind of feedKinds) assert.ok(reserved.has(constants.get(kind) ?? ''), `${kind} is not in JournalKinds.Reserved`);
+    for (const kind of [...feedKinds, succeededKind]) assert.ok(reserved.has(constants.get(kind) ?? ''), `${kind} is not in JournalKinds.Reserved`);
     assert.deepEqual(
         [...feedKinds].sort(),
         [
@@ -227,7 +227,7 @@ test('the lines a turn is given are set apart as records, information and never 
     assert.doesNotMatch(feedBlock([line(1)], 0)!, /older lines/);
 });
 
-const succeeded = (fields: Record<string, unknown> = {}) => journal({ kind: 'workitem_succeeded', work_item_id: wi(5), work_item_kind: 'provider_operation', work_item_operation: 'message.send', ...fields });
+const succeeded = (fields: Record<string, unknown> = {}) => journal({ kind: 'workitem_succeeded', work_item_id: wi(5), work_item_kind: 'provider_op', work_item_operation: 'message.send', ...fields });
 
 test('the shipped roles are the runtime\'s own, read from its source, and the Feed\'s roles are five of them', () => {
     const source = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Contracts', 'Api', 'ShippedRoles.cs'), 'utf8');
@@ -241,6 +241,10 @@ test('the shipped roles are the runtime\'s own, read from its source, and the Fe
     // the personalizer and the critic work message by message.
     for (const left of ['manager', 'responder', 'personalizer', 'critic']) assert.ok(!(feedRoles as readonly string[]).includes(left), left);
     assert.deepEqual([...feedOperations].sort(), ['conversation.reply', 'message.send', 'social_invitation.send']);
+    // And each operation is one the catalog documents, as the roles are the runtime's.
+    for (const operation of feedOperations) {
+        assert.ok(existsSync(join(import.meta.dirname, '..', '..', 'docs', 'contracts', 'operations', `${operation}.json`)), `${operation} is no operation of the catalog`);
+    }
     assert.equal(succeededKind, 'workitem_succeeded');
     assert.ok(!(feedKinds as readonly string[]).includes(succeededKind), 'never taken whole: a campaign\'s reads succeed every cadence');
     const constants = readFileSync(join(import.meta.dirname, '..', '..', 'dotnet', 'src', 'Jason.Runtime', 'Journal', 'JournalKinds.cs'), 'utf8');
@@ -266,7 +270,7 @@ test('a succeeded work item is a Feed line only for a listed send or a listed ro
         role: 'analyst',
     });
     const text = JSON.stringify(lineOf(succeeded()));
-    for (const said of ['Ignore', 'hello', 'Because', 'Spring', 'Ada', 'thread-1', 'cnt_1', 'provider_operation']) assert.ok(!text.includes(said), said);
+    for (const said of ['Ignore', 'hello', 'Because', 'Spring', 'Ada', 'thread-1', 'cnt_1', 'provider_op']) assert.ok(!text.includes(said), said);
 });
 
 test('a succeeded work item of another operation or role, a registered role\'s included, is no Feed line, and nor is one with neither', () => {
@@ -277,6 +281,7 @@ test('a succeeded work item of another operation or role, a registered role\'s i
         { work_item_operation: 'MESSAGE.SEND' },
         { work_item_operation: 'toString' },
         { work_item_operation: 'contact.list', work_item_role: 'researcher' },
+        { work_item_operation: 'message.send', work_item_role: 'researcher' },
         { work_item_operation: null, work_item_role: 'manager' },
         { work_item_operation: null, work_item_role: 'responder' },
         { work_item_operation: null, work_item_role: 'personalizer' },

@@ -1,5 +1,6 @@
 // Pure: the Feed as the page sees it. The page hands the desktop each line of the journal's stream whose kind the Feed
-// takes, as its ids, moment and kind alone (`toFeedLine`); the desktop checks each again and keeps it. A line the desktop
+// takes, as its ids, moment and kind alone, and for a succeeded work item its operation or its role from the closed lists
+// (`toFeedLine`); the desktop checks each again and keeps it. A line the desktop
 // kept is drawn as one row (`toFeedRow`): the kind in words, how many lines it stands for, the campaign by the name the
 // console read for it, and its age. Nothing here is a person's text, and a line never starts a turn.
 import type { JournalEntry } from '../api/types';
@@ -65,15 +66,18 @@ export function toFeedLine(line: JournalEntry): DesktopFeedLine | null {
     if (line.campaign_id === null) return null;
     if (line.kind === 'workitem_succeeded') {
         // Who it was, from the lists alone: an operation outside them ends it, a role is read only where there is none.
-        const operation = line.work_item_operation;
+        const { work_item_operation: operation, work_item_role: role } = line;
+        const named = (value: string | null | undefined) => value !== null && value !== undefined;
         const who =
-            operation !== null && operation !== undefined
-                ? isOperation(operation)
-                    ? { work_item_operation: operation }
-                    : null
-                : isRole(line.work_item_role ?? null)
-                  ? { work_item_role: line.work_item_role as DesktopFeedRole }
-                  : null;
+            named(operation) && named(role)
+                ? null
+                : named(operation)
+                  ? isOperation(operation ?? null)
+                      ? { work_item_operation: operation as DesktopFeedOperation }
+                      : null
+                  : isRole(role ?? null)
+                    ? { work_item_role: role as DesktopFeedRole }
+                    : null;
         if (who === null) return null;
         return {
             id: line.id,
@@ -109,15 +113,20 @@ export interface FeedRow {
     needs: boolean;
 }
 
+/** The words, icon and need of a kept line; a succeeded line holds exactly one of an operation and a role, or it is none of the Feed's. */
+function wordsOf(entry: DesktopLineEntry): { words: string; icon: IconName; needs: boolean } {
+    if (entry.journal_kind !== 'workitem_succeeded') return kinds[entry.journal_kind];
+    if (entry.operation !== undefined && entry.role === undefined && isOperation(entry.operation))
+        return { words: sends[entry.operation], icon: 'chat', needs: false };
+    if (entry.role !== undefined && entry.operation === undefined && isRole(entry.role))
+        return { words: roleWork[entry.role], icon: 'work', needs: false };
+    throw new Error('A succeeded line of the Feed names one operation or one role of the lists.');
+}
+
 /** One row of the Feed, from the line the desktop kept and the campaigns' names the console read. */
 export function toFeedRow(entry: DesktopLineEntry, names: ReadonlyMap<string, string>, now: number): FeedRow {
     // Work that succeeded is worded by its operation or its role, both from the lists; a line of another shape is never kept.
-    const said =
-        entry.journal_kind === 'workitem_succeeded'
-            ? entry.operation !== undefined
-                ? { words: sends[entry.operation], icon: 'chat' as IconName, needs: false }
-                : { words: roleWork[entry.role as DesktopFeedRole], icon: 'work' as IconName, needs: false }
-            : kinds[entry.journal_kind];
+    const said = wordsOf(entry);
     return {
         id: entry.journal_id,
         kind: entry.journal_kind,

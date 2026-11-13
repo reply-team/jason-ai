@@ -574,7 +574,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             <h2>The Feed</h2>
             <p>
                 What happens in your agents comes here: a reply, an approval or a question waiting, an agent created,
-                started or paused, work that stopped, a provider block holding work. Ask about any of it below.
+                started or paused, a message, a reply or an invitation that went out, work that finished or stopped, a
+                provider block holding work. Ask about any of it below.
             </p>
         </div>`;
     if (chat.entries.length === 0)
