@@ -27,6 +27,8 @@ export const templates = {
     link_opened: 'An https link was handed to the system browser',
     link_refused: 'A link that is not https was refused',
     link_open_failed: 'The system browser was asked to open a link and did not',
+    own_page_opened: "Jason's own page was handed to the system browser",
+    own_page_refused: "A link that is not Jason's own page was refused",
     ipc_refused: 'A call on {Channel} from outside {Origin} was refused',
     cli_exited: 'jason {Verb} exited {Exit} after {ElapsedMs} ms',
     program_exited: '{Program} {Verb} exited {Exit} after {ElapsedMs} ms',
@@ -114,6 +116,12 @@ export const templates = {
     open_in: 'The folder was opened in {Place}',
     open_in_refused: 'The folder could not be opened in {Place}',
     open_in_remember_failed: 'The place Open in used last could not be kept',
+    bridge_opened: 'The browser bridge listens on 127.0.0.1:{Port}',
+    bridge_closed: 'The browser bridge closed, ending {Sessions} sessions',
+    bridge_paired: 'A browser tab paired with the bridge; {Sessions} sessions are live',
+    bridge_refused: 'The browser bridge refused a request: {Why}, member {Member}',
+    bridge_stream_closed: 'An event stream of the browser bridge was closed: {Why}',
+    bridge_tab_refused: 'A browser tab could not be opened: {Why}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

@@ -5,7 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { isPlace, type PlaceId } from './open-in.ts';
+import { isPlace, notFolderPlaces, type PlaceId } from './open-in.ts';
 
 export interface DesktopSettings {
     /**
@@ -60,7 +60,7 @@ export function parseSettings(text: string | null): DesktopSettings {
         feed: typeof value.feed === 'string' && isFeed(value.feed) ? value.feed : null,
         skillsDeployedFor: typeof value.skills_deployed_for === 'string' ? value.skills_deployed_for : null,
         theme: isTheme(value.theme) ? value.theme : null,
-        ...(isPlace(value.open_in) && value.open_in !== 'copy' ? { openIn: value.open_in } : {}),
+        ...(isPlace(value.open_in) && !notFolderPlaces.includes(value.open_in) ? { openIn: value.open_in } : {}),
     };
 }
 
