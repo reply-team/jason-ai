@@ -51,7 +51,7 @@ public static class RouteCommands
         command.Options.Add(channel);
         command.Options.Add(human);
 
-        command.SetAction((parseResult, cancellationToken) =>
+        command.SetAction(async (parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
@@ -59,7 +59,12 @@ public static class RouteCommands
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("channel", parseResult.GetValue(channel));
 
-            return OperationRunner.RunAsync(env, Operations.RouteResolve, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Resolution), cancellationToken);
+            if (await RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), cancellationToken).ConfigureAwait(false) is { } refused)
+            {
+                return refused;
+            }
+
+            return await OperationRunner.RunAsync(env, Operations.RouteResolve, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Resolution), cancellationToken).ConfigureAwait(false);
         });
 
         return command;
@@ -170,29 +175,38 @@ public static class RouteCommands
     }
 
     /// <summary>
-    /// A write that names a channel, asked of a runtime that does not know channels: it ignores the member it does not
-    /// read, and would replace, or take away, the operation's own route, the very route the channel was meant to leave
-    /// alone. So the running runtime is asked, by the <c>system.info</c> read every client already makes, whether it counts
-    /// channel routes, and a runtime that does not is not sent the write; the person is told to restart or update it. A
-    /// write that names no channel asks nothing first. Null is clear to send, or the runtime could not be reached, which
-    /// the write itself then reports as it always does.
+    /// A request that names a channel, asked of a runtime that does not know channels: it ignores the member it does not
+    /// read, so a write would replace, or take away, the operation's own route, the very route the channel was meant to
+    /// leave alone, and a read would answer for the operation's own route as though it were the channel's. So the running
+    /// runtime is asked, by the <c>system.info</c> read every client already makes, whether it counts channel routes, and
+    /// a request is sent only to one that says it does. Where that cannot be read, or the answer has no routes section or
+    /// no such count, the request is not sent on a guess: it is refused as <c>runtime_too_old</c>, exit 1, and the person
+    /// is told to restart or update the runtime. A runtime that cannot be reached at all is reported as every verb reports
+    /// it. A request that names no channel asks nothing first. Null is clear to send.
     /// </summary>
-    private static async Task<int?> RefusedForAnOlderRuntimeAsync(CliEnvironment env, string? channel, CancellationToken cancellationToken)
+    internal static async Task<int?> RefusedForAnOlderRuntimeAsync(CliEnvironment env, string? channel, CancellationToken cancellationToken)
     {
         if (channel is null)
         {
             return null;
         }
 
-        var (_, response) = await OperationRunner.SendAsync(env with { Out = TextWriter.Null }, Operations.SystemInfo, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
-        if (response is not { IsSuccess: true } || Info(response.Body) is not { } info || info.Routes?.ChannelRouteCount is not null)
+        var (exit, response) = await OperationRunner.SendAsync(env, Operations.SystemInfo, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
+        if (response is null)
+        {
+            return exit;
+        }
+
+        var info = response.IsSuccess ? Info(response.Body) : null;
+        if (info?.Routes?.ChannelRouteCount is not null)
         {
             return null;
         }
 
+        var running = info is null ? "The runtime that is running could not be asked what it knows" : $"The runtime that is running ({info.RuntimeVersion}) does not know channel routes";
         env.Out.WriteLine(CliErrors.Serialize(
             CliErrors.RuntimeTooOld,
-            $"The runtime that is running ({info.RuntimeVersion}) does not know channel routes, so it would ignore --channel and change the operation's own route instead. Nothing was sent. Restart it so that it runs this jason, or update it with 'jason update apply'.",
+            $"{running}, so it would ignore --channel and answer or change the operation's own route instead. Nothing was sent. Restart it so that it runs this jason, or update it with 'jason update apply'.",
             retryable: false));
         return ExitCodes.ApiError;
     }

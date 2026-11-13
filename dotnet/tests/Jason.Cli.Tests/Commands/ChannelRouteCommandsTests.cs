@@ -28,8 +28,9 @@ public class ChannelRouteCommandsTests
         var without = await run.RunAsync("route", "resolve", "--campaign", "cmp_A", "--operation", "message.send");
 
         Assert.Equal((ExitCodes.Success, ExitCodes.Success), (with, without));
-        run.AssertPosted(0, Operations.RouteResolve, """{"campaign_id":"cmp_A","operation":"message.send","channel":"linkedin"}""");
-        run.AssertPosted(1, Operations.RouteResolve, """{"campaign_id":"cmp_A","operation":"message.send"}""");
+        Assert.Equal([Operations.SystemInfo, Operations.RouteResolve, Operations.RouteResolve], run.Asked);
+        run.AssertPosted(1, Operations.RouteResolve, """{"campaign_id":"cmp_A","operation":"message.send","channel":"linkedin"}""");
+        run.AssertPosted(2, Operations.RouteResolve, """{"campaign_id":"cmp_A","operation":"message.send"}""");
     }
 
     [Fact]
@@ -40,7 +41,8 @@ public class ChannelRouteCommandsTests
         var exit = await run.RunAsync("operation", "describe", "message.send", "--campaign", "cmp_A", "--channel", "email");
 
         Assert.Equal(ExitCodes.Success, exit);
-        run.AssertPosted(0, Operations.OperationDescribe, """{"campaign_id":"cmp_A","operation":"message.send","channel":"email"}""");
+        Assert.Equal([Operations.SystemInfo, Operations.OperationDescribe], run.Asked);
+        run.AssertPosted(1, Operations.OperationDescribe, """{"campaign_id":"cmp_A","operation":"message.send","channel":"email"}""");
     }
 
     /// <summary>
@@ -126,17 +128,75 @@ public class ChannelRouteCommandsTests
         Assert.Equal([verb == "set" ? Operations.RouteSet : Operations.RouteUnset], run.Asked);
     }
 
-    /// <summary>A runtime that cannot be asked is not read as an old one: the write itself reports what it meets.</summary>
-    [Fact]
-    public async Task A_runtime_that_does_not_answer_the_question_is_left_to_the_write_to_report()
+    /// <summary>
+    /// A runtime that cannot say what it knows is not sent a request on a guess: the answer that is not a success is
+    /// refused like an old runtime's, whatever verb names the channel.
+    /// </summary>
+    [Theory]
+    [InlineData("set")]
+    [InlineData("unset")]
+    [InlineData("resolve")]
+    [InlineData("describe")]
+    public async Task A_runtime_that_cannot_say_what_it_knows_is_not_sent_a_channel_on_a_guess(string verb)
     {
         using var run = new Run(infoStatus: HttpStatusCode.InternalServerError, info: "{}");
 
-        var exit = await run.RunAsync("--actor", "human:ada", "route", "unset", "--campaign", "cmp_A", "--operation", "message.send", "--channel", "linkedin");
+        var exit = await run.RunAsync(ChannelVerb(verb));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal([Operations.SystemInfo], run.Asked);
+        Assert.Equal("runtime_too_old", JsonSerializer.Deserialize<ErrorResponse>(run.Text, JasonJson.Options)!.Error.Code);
+    }
+
+    /// <summary>
+    /// A read that names a channel is held to the same rule as a write: an older runtime ignores the member and would
+    /// answer for the operation's own route, which the person would take for the channel's.
+    /// </summary>
+    [Theory]
+    [InlineData("resolve", true)]
+    [InlineData("resolve", false)]
+    [InlineData("describe", true)]
+    [InlineData("describe", false)]
+    public async Task A_read_that_names_a_channel_is_not_sent_to_a_runtime_older_than_channel_routes(string verb, bool noRoutesSection)
+    {
+        var info = noRoutesSection ? """{"runtime_version":"0.1.0-dev","api_version":"v1","instance_id":"rt_LIVE","pid":77}""" : Info(channelRoutes: null);
+        using var run = new Run(info: info);
+
+        var exit = await run.RunAsync(ChannelVerb(verb));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal([Operations.SystemInfo], run.Asked);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(run.Text, JasonJson.Options)!.Error;
+        Assert.Equal("runtime_too_old", error.Code);
+        Assert.Contains("restart", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("jason update", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A read that names no channel asks the runtime nothing first.</summary>
+    [Theory]
+    [InlineData("resolve")]
+    [InlineData("describe")]
+    public async Task A_read_that_names_no_channel_asks_nothing_first(string verb)
+    {
+        using var run = new Run(info: Info(channelRoutes: null));
+        string[] args = verb == "resolve"
+            ? ["route", "resolve", "--campaign", "cmp_A", "--operation", "message.send"]
+            : ["operation", "describe", "message.send", "--campaign", "cmp_A"];
+
+        var exit = await run.RunAsync(args);
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal([Operations.SystemInfo, Operations.RouteUnset], run.Asked);
+        Assert.Single(run.Asked);
+        Assert.NotEqual(Operations.SystemInfo, run.Asked[0]);
     }
+
+    private static string[] ChannelVerb(string verb) => verb switch
+    {
+        "set" => ["--actor", "human:ada", "route", "set", "--campaign", "cmp_A", "--operation", "message.send", "--channel", "linkedin", "--plugin", "social"],
+        "unset" => ["--actor", "human:ada", "route", "unset", "--campaign", "cmp_A", "--operation", "message.send", "--channel", "linkedin"],
+        "resolve" => ["route", "resolve", "--campaign", "cmp_A", "--operation", "message.send", "--channel", "linkedin"],
+        _ => ["operation", "describe", "message.send", "--campaign", "cmp_A", "--channel", "linkedin"],
+    };
 
     [Fact]
     public async Task Human_route_list_names_a_channel_route_as_its_operation_on_its_channel()
@@ -270,9 +330,10 @@ public class ChannelRouteCommandsTests
         private readonly CliEnvironment _environment;
         private readonly List<(string Operation, string Body)> _calls = [];
 
-        public Run(string info = "{}", string answer = "{}", HttpStatusCode infoStatus = HttpStatusCode.OK)
+        public Run(string? info = null, string answer = "{}", HttpStatusCode infoStatus = HttpStatusCode.OK)
         {
             _paths.WriteDescriptor(Live);
+            info ??= Info(channelRoutes: 0);
             _environment = new CliEnvironment(
                 Output,
                 Error,

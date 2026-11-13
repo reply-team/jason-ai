@@ -39,14 +39,20 @@ public static class OperationCommands
         command.Options.Add(channel);
         command.Options.Add(human);
 
-        command.SetAction((parseResult, cancellationToken) =>
+        command.SetAction(async (parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment());
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(campaign))
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("channel", parseResult.GetValue(channel));
-            return OperationRunner.RunAsync(env, Operations.OperationDescribe, body, new RunOptions(parseResult.GetValue(human), OperationRenderers.Description), cancellationToken);
+
+            if (await RouteCommands.RefusedForAnOlderRuntimeAsync(env, parseResult.GetValue(channel), cancellationToken).ConfigureAwait(false) is { } refused)
+            {
+                return refused;
+            }
+
+            return await OperationRunner.RunAsync(env, Operations.OperationDescribe, body, new RunOptions(parseResult.GetValue(human), OperationRenderers.Description), cancellationToken).ConfigureAwait(false);
         });
 
         return command;
