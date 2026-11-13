@@ -13,7 +13,7 @@ import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './ke
 import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
-import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
+import { quietWatcher, RemovalAct, removalOffered, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import { demoMenuLine } from './mode.ts';
 import { menuItemOf, type Updater } from './updates.ts';
 
@@ -45,7 +45,8 @@ export interface DeskDeps {
     removal: Pick<RemovalDeps, 'scope' | 'remove'> | null;
     /**
      * Whether this run is the demo's: the update, the start at logon and the jason command are then not offered, each
-     * line saying so (`demoMenuLine`), since each would write something of the demo that outlasts the run.
+     * line saying so (`demoMenuLine`), since each would write something of the demo that outlasts the run; nor is Remove
+     * What Jason Placed, which never runs with the demo's directory in the process's environment.
      */
     demo: boolean;
 }
@@ -247,6 +248,7 @@ export class Desk {
 
     /** Remove What Jason Placed: in the Jason menu and the tray's, beside the other acts on the installation. */
     private removalItems(): MenuItemConstructorOptions[] {
+        if (this.deps.demo && removalOffered(process.platform)) return [{ label: demoMenuLine('removal'), enabled: false }];
         if (this.removal === null) return [];
         return [{ label: removeLabel, enabled: app.isPackaged && !this.removing(), click: () => void this.removeAct() }];
     }

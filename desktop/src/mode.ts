@@ -118,9 +118,12 @@ export function startOn(person: string, record: Mode, installerStart: boolean, d
     }
 }
 
-/** What a demo run's menu says where the person's installation offers an update, the start at logon or the PATH command. */
-export function demoMenuLine(item: 'updates' | 'autostart' | 'command'): string {
-    const what = { updates: 'Updates', autostart: 'Start the Runtime at Logon', command: 'The jason command' }[item];
+/**
+ * What a demo run's menu says where the person's installation offers an update, the start at logon, the PATH command or
+ * Remove What Jason Placed: none of them runs with the demo's directory in the process's environment.
+ */
+export function demoMenuLine(item: 'updates' | 'autostart' | 'command' | 'removal'): string {
+    const what = { updates: 'Updates', autostart: 'Start the Runtime at Logon', command: 'The jason command', removal: 'Remove What Jason Placed' }[item];
     return `${what}: not in the demo. Go back to your own installation for this.`;
 }
 

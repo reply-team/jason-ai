@@ -225,7 +225,7 @@ test('a live start and an installer start look at no demo directory', () => {
     assert.deepEqual(opened, []);
 });
 
-test('the demo’s menu says, where an update, the PATH command or the start at logon would be, to go back to your own installation', () => {
-    for (const item of ['updates', 'autostart', 'command'] as const) assert.match(demoMenuLine(item), /go back to your own installation/i);
+test('the demo’s menu says, where an update, the PATH command, the start at logon or Remove What Jason Placed would be, to go back to your own installation', () => {
+    for (const item of ['updates', 'autostart', 'command', 'removal'] as const) assert.match(demoMenuLine(item), /go back to your own installation/i);
     assert.notEqual(demoMenuLine('updates'), demoMenuLine('autostart'));
 });
