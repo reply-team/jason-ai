@@ -15,12 +15,39 @@ namespace Jason.Runtime.Routing;
 public sealed record Route(string PluginId, JsonObject? Binding, string? BindingIdentity);
 
 /// <summary>
-/// One scope's routes: a default, and the operations that override it. Global and campaign have the same shape,
-/// so the precedence is four lookups over two of these rather than four kinds of thing.
+/// One scope's routes: a default, the operations that override it, and the channels that override an operation —
+/// operation, then channel, then the route. Global and campaign have the same shape, so the precedence is six lookups
+/// over two of these rather than six kinds of thing. A set made without channel routes holds none
+/// (<see cref="Channels"/> is null), so every set made before they existed means what it meant.
 /// </summary>
-public sealed record RouteSet(Route? Default, IReadOnlyDictionary<string, Route> Operations)
+public sealed record RouteSet(
+    Route? Default,
+    IReadOnlyDictionary<string, Route> Operations,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, Route>>? Channels = null)
 {
     public static RouteSet Empty { get; } = new(null, new Dictionary<string, Route>(StringComparer.Ordinal));
+
+    /// <summary>
+    /// Every channel route of the set in one fixed order: operations ordinally, then each operation's channels ordinally.
+    /// What walks every route walks them in this order, so its answer never depends on how a dictionary was filled.
+    /// </summary>
+    public IEnumerable<(string Operation, string Channel, Route Route)> ChannelRoutes =>
+        Channels is null
+            ? []
+            : Channels
+                .OrderBy(entry => entry.Key, StringComparer.Ordinal)
+                .SelectMany(entry => entry.Value
+                    .OrderBy(channel => channel.Key, StringComparer.Ordinal)
+                    .Select(channel => (entry.Key, channel.Key, channel.Value)));
+
+    /// <summary>The route <paramref name="channel"/> has under <paramref name="operation"/>; null where it has none, and always for no channel.</summary>
+    public Route? ChannelRoute(string operation, string? channel) =>
+        channel is not null
+        && Channels is not null
+        && Channels.TryGetValue(operation, out var channels)
+        && channels.TryGetValue(channel, out var route)
+            ? route
+            : null;
 }
 
 /// <summary>

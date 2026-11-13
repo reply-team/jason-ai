@@ -36,7 +36,7 @@ public class RouteResolverTests
     {
         var snapshot = Snapshot(campaignOperation, campaignDefault, globalOperation, globalDefault);
 
-        var resolution = RouteResolver.Resolve(snapshot, Campaign, Operation);
+        var resolution = RouteResolver.Resolve(snapshot, Campaign, Operation, channel: null);
 
         Assert.NotNull(resolution);
         Assert.Equal(expected, resolution.Route.PluginId);
@@ -45,7 +45,7 @@ public class RouteResolverTests
 
     [Fact]
     public void Nothing_configured_resolves_to_nothing() =>
-        Assert.Null(RouteResolver.Resolve(Snapshot(null, null, null, null), Campaign, Operation));
+        Assert.Null(RouteResolver.Resolve(Snapshot(null, null, null, null), Campaign, Operation, channel: null));
 
     [Fact]
     [Critical(Family.W11, "exact masking")]
@@ -53,19 +53,19 @@ public class RouteResolverTests
     {
         var masked = Snapshot(campaignOperation: null, campaignDefault: "house", globalOperation: "special", globalDefault: "fallback");
 
-        var hidden = RouteResolver.Resolve(masked, Campaign, Operation);
+        var hidden = RouteResolver.Resolve(masked, Campaign, Operation, channel: null);
 
         Assert.Equal("house", hidden!.Route.PluginId);
         Assert.Equal(RouteScope.CampaignDefault, hidden.Scope);
 
         // The same global override still wins everywhere the campaign default does not reach.
-        var elsewhere = RouteResolver.Resolve(masked, OtherCampaign, Operation);
+        var elsewhere = RouteResolver.Resolve(masked, OtherCampaign, Operation, channel: null);
         Assert.Equal("special", elsewhere!.Route.PluginId);
         Assert.Equal(RouteScope.GlobalOperation, elsewhere.Scope);
 
         // Bringing it back inside the campaign takes saying so.
         var restored = Snapshot(campaignOperation: "special", campaignDefault: "house", globalOperation: "special", globalDefault: "fallback");
-        var back = RouteResolver.Resolve(restored, Campaign, Operation);
+        var back = RouteResolver.Resolve(restored, Campaign, Operation, channel: null);
         Assert.Equal("special", back!.Route.PluginId);
         Assert.Equal(RouteScope.CampaignOperation, back.Scope);
     }
@@ -75,7 +75,7 @@ public class RouteResolverTests
     {
         var snapshot = Snapshot(campaignOperation: "A", campaignDefault: "B", globalOperation: "C", globalDefault: "D");
 
-        var resolution = RouteResolver.Resolve(snapshot, Campaign, "list_membership.add");
+        var resolution = RouteResolver.Resolve(snapshot, Campaign, "list_membership.add", channel: null);
 
         Assert.Equal("B", resolution!.Route.PluginId);
         Assert.Equal(RouteScope.CampaignDefault, resolution.Scope);
@@ -91,8 +91,8 @@ public class RouteResolverTests
             new RouteSet(new Route("fallback", null, null), Operations()),
             new Dictionary<string, RouteSet>(StringComparer.Ordinal) { [Campaign] = RouteSet.Empty });
 
-        Assert.Equal(RouteScope.GlobalDefault, RouteResolver.Resolve(snapshot, Campaign, Operation)!.Scope);
-        Assert.Equal(RouteScope.GlobalDefault, RouteResolver.Resolve(snapshot, OtherCampaign, Operation)!.Scope);
+        Assert.Equal(RouteScope.GlobalDefault, RouteResolver.Resolve(snapshot, Campaign, Operation, channel: null)!.Scope);
+        Assert.Equal(RouteScope.GlobalDefault, RouteResolver.Resolve(snapshot, OtherCampaign, Operation, channel: null)!.Scope);
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ public class RouteResolverTests
             new RouteSet(global, Operations()),
             new Dictionary<string, RouteSet>(StringComparer.Ordinal) { [Campaign] = new(campaign, Operations()) });
 
-        var resolution = RouteResolver.Resolve(snapshot, Campaign, Operation);
+        var resolution = RouteResolver.Resolve(snapshot, Campaign, Operation, channel: null);
 
         Assert.Equal("sha256:west", resolution!.Route.BindingIdentity);
         Assert.Equal("west", (string?)resolution.Route.Binding!["workspace"]);
@@ -130,7 +130,7 @@ public class RouteResolverTests
         Assert.NotEmpty(OperationCatalog.All);
         foreach (var contract in OperationCatalog.All)
         {
-            Assert.Null(RouteResolver.Resolve(snapshot, Campaign, contract.Id));
+            Assert.Null(RouteResolver.Resolve(snapshot, Campaign, contract.Id, channel: null));
         }
     }
 

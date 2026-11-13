@@ -214,7 +214,7 @@ public sealed partial class AudienceReadService(
         var campaign = await CampaignService.LoadAsync(db, campaignId, ct).ConfigureAwait(false);
         var contract = OperationCatalog.Find(operation)!;
         var pluginSnapshot = plugins.Snapshot;
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, SearchLanding.Search) is not { } resolution)
+        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, SearchLanding.Search, channel: null) is not { } resolution)
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,

@@ -190,6 +190,7 @@ public class OperationCatalogTests
     [InlineData("dispatch")]
     [InlineData("channel_arguments")]
     [InlineData("channel_templates")]
+    [InlineData("route_channel_argument")]
     public void A_document_that_leaves_out_a_field_added_since_the_first_three_is_refused_by_name(string field)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -223,6 +224,9 @@ public class OperationCatalogTests
     [InlineData("channel_templates", "\"email\"")]
     [InlineData("channel_templates", "[1]")]
     [InlineData("channel_templates", "{}")]
+    [InlineData("route_channel_argument", "[\"channel\"]")]
+    [InlineData("route_channel_argument", "1")]
+    [InlineData("route_channel_argument", "{}")]
     public void A_new_field_of_the_wrong_shape_is_refused_by_name(string field, string value)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -433,6 +437,116 @@ public class OperationCatalogTests
         Assert.Contains("message.send.json", error.Message, StringComparison.Ordinal);
         Assert.Contains("channel_templates", error.Message, StringComparison.Ordinal);
         Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A route may name a channel under an operation only where the document names the argument that channel is read
+    /// from. The name is read as the document writes it, the channels a route may name are the argument's own enum, and a
+    /// document that names none says so with a null.
+    /// </summary>
+    [Fact]
+    public void A_document_names_the_argument_a_route_reads_its_channel_from()
+    {
+        var contract = OperationContract.Parse("message.send.json", RouteChannelArgument("\"channel\""));
+        var none = OperationContract.Parse("campaign.get.json", (JsonObject)JsonNode.Parse(Minimal())!);
+
+        Assert.Equal("channel", contract.RouteChannelArgument);
+        Assert.Equal(["email", "linkedin"], contract.RouteChannels);
+        Assert.Null(none.RouteChannelArgument);
+        Assert.Null(none.RouteChannels);
+    }
+
+    /// <summary>
+    /// A route is held to the channels the named argument may take, so the argument has to be one a call can carry, a
+    /// string whose enum is that closed list, and every value of it a channel: a name the contract's channel rules know,
+    /// spelled as they keep it. An open pattern, such as the address a person is found by, offers no list to hold a route
+    /// to; a format or an owner is not a channel. Where the arguments name the channel the operation consumes, the route
+    /// reads that same argument, so a call is never routed by one channel and sent on another.
+    /// </summary>
+    [Theory]
+    [InlineData("\"medium\"", """{ "type": "string", "enum": ["email", "linkedin"] }""", "from_args", "does not declare")]
+    [InlineData("\"medium\"", """{ "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" }""", "from_args", "`enum`")]
+    [InlineData("\"medium\"", """{ "type": "integer", "enum": [1, 2] }""", "from_args", "`enum`")]
+    [InlineData("\"medium\"", """{ "enum": ["email", "linkedin"] }""", "from_args", "`enum`")]
+    [InlineData("\"medium\"", """{ "type": "string", "enum": [] }""", "from_args", "`enum`")]
+    [InlineData("\"medium\"", """{ "$ref": "#/$defs/medium" }""", "from_args", "`enum`")]
+    [InlineData("\"medium\"", """{ "type": "string", "enum": ["own", "team"] }""", "none", "`own`")]
+    [InlineData("\"medium\"", """{ "type": "string", "enum": ["email", "linkedin_message"] }""", "none", "`linkedin_message`")]
+    [InlineData("\"medium\"", """{ "type": "string", "enum": ["email", "LinkedIn"] }""", "none", "`LinkedIn`")]
+    [InlineData("\"medium\"", """{ "type": "string", "enum": ["email", 1] }""", "none", "`1`")]
+    [InlineData("\"medium\"", """{ "type": "string", "enum": ["email", "linkedin"] }""", "from_args", "`channel`")]
+    public void An_argument_a_route_cannot_read_a_channel_from_is_refused(string name, string argument, string channel, string expected)
+    {
+        var document = RouteChannelArgument(name);
+        if (!expected.Equals("does not declare", StringComparison.Ordinal))
+        {
+            document["input_schema"]!["properties"]!["args"]!["properties"]!["medium"] = JsonNode.Parse(argument);
+        }
+
+        if (channel == "none")
+        {
+            document["preflight"]!["channel"] = "none";
+            document["contact_projection"]!["channels"] = "none";
+            document["preflight"]!["provider_contact"] = "find_only";
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("message.send.json", document));
+
+        Assert.Contains("message.send.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("route_channel_argument", error.Message, StringComparison.Ordinal);
+        Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The argument may be one a caller leaves out, as a filter is: a call without it carries no channel, and the contract
+    /// reads it as none, so the route is the operation's own, as it is where no document names an argument at all. A value
+    /// the argument does not offer is read as none too, never as a channel a route could be chosen by.
+    /// </summary>
+    [Fact]
+    public void An_optional_argument_a_call_leaves_out_carries_no_channel()
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["input_schema"] = JsonNode.Parse(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "args": {
+                  "type": "object",
+                  "required": ["whose"],
+                  "properties": {
+                    "whose": { "type": "string", "enum": ["own", "team"] },
+                    "sender_channel": { "type": "string", "enum": ["email", "linkedin"] }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+            """);
+        document["route_channel_argument"] = "sender_channel";
+
+        var contract = OperationContract.Parse("sender.list.json", document);
+
+        Assert.Equal("sender_channel", contract.RouteChannelArgument);
+        Assert.Null(contract.RouteChannel(JsonNode.Parse("""{ "whose": "own" }""")));
+        Assert.Equal("linkedin", contract.RouteChannel(JsonNode.Parse("""{ "whose": "own", "sender_channel": "linkedin" }""")));
+        Assert.Null(contract.RouteChannel(JsonNode.Parse("""{ "whose": "own", "sender_channel": "fax" }""")));
+        Assert.Null(contract.RouteChannel(JsonNode.Parse("""{ "whose": "own", "sender_channel": 1 }""")));
+        Assert.Null(contract.RouteChannel(JsonNode.Parse("""{ "whose": "own", "Sender_channel": "linkedin" }""")));
+        Assert.Null(contract.RouteChannel(null));
+        Assert.Null(contract.RouteChannel(JsonNode.Parse("[]")));
+        Assert.Null(OperationContract.Parse("campaign.get.json", (JsonObject)JsonNode.Parse(Minimal())!).RouteChannel(JsonNode.Parse("""{ "sender_channel": "email" }""")));
+    }
+
+    /// <summary>
+    /// The smallest document about one person whose arguments name the channel it consumes, with <paramref name="name"/>
+    /// as the argument a route reads its channel from.
+    /// </summary>
+    private static JsonObject RouteChannelArgument(string name)
+    {
+        var document = ChannelArguments("null");
+        document["route_channel_argument"] = JsonNode.Parse(name);
+        return document;
     }
 
     /// <summary>
@@ -1053,6 +1167,7 @@ public class OperationCatalogTests
           "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
           "channel_arguments": null,
           "channel_templates": null,
+          "route_channel_argument": null,
           "dispatch": { "in_paused_campaign": "waits", "in_archived_campaign": "cancelled", "under_provider_block": "waits" },
           "contact_projection": null,
           "precondition": "none",

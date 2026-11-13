@@ -523,7 +523,7 @@ public sealed class InboundSync(
             return false;
         }
 
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, Operation) is not { } resolution)
+        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, Operation, channel: null) is not { } resolution)
         {
             await SkipAsync(db, campaign, InboundSkipCodes.NoRoute, options, now, ct).ConfigureAwait(false);
             return false;

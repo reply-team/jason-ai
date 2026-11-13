@@ -2154,7 +2154,9 @@ public partial class ClaimerTests
             LoadedPlugin? plugin = null,
             Route? route = null,
             ISuppressionCheck? register = null,
-            PatternTiming? timing = null)
+            PatternTiming? timing = null,
+            Func<string, RouteSnapshot>? routes = null,
+            IReadOnlyList<LoadedPlugin>? others = null)
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
             var clock = new FixedClock(Noon);
@@ -2164,7 +2166,7 @@ public partial class ClaimerTests
             if (plugin is not null)
             {
                 plugins.Replace(
-                    new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [plugin]),
+                    new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [plugin, .. others ?? []]),
                     new ReloadReport(Noon, SnapshotSource.Startup, Activated: true, [], []));
             }
 
@@ -2177,6 +2179,11 @@ public partial class ClaimerTests
                     plugins.Snapshot.Id,
                     new RouteSet(route, RouteSet.Empty.Operations),
                     RouteSnapshot.Empty(Noon, plugins.Snapshot.Id).Campaigns));
+            }
+
+            if (routes is not null)
+            {
+                routing.Replace(routes(plugins.Snapshot.Id));
             }
 
             Claimer = new Claimer(

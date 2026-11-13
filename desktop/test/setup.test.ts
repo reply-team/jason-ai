@@ -762,10 +762,10 @@ test('each host carries the models it offers with their efforts, and a listing a
     const every = ['low', 'medium', 'high', 'xhigh', 'max'];
     let byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
     assert.deepEqual(byId.get('claude')?.models, [
-        { id: 'opus', label: 'Opus', efforts: every },
-        { id: 'sonnet', label: 'Sonnet', efforts: every },
-        { id: 'haiku', label: 'Haiku', efforts: every },
-        { id: 'fable', label: 'Fable', efforts: every },
+        { id: 'opus', label: 'Opus (latest)', efforts: every },
+        { id: 'sonnet', label: 'Sonnet (latest)', efforts: every },
+        { id: 'haiku', label: 'Haiku (latest)', efforts: every },
+        { id: 'fable', label: 'Fable (latest)', efforts: every },
     ]);
     assert.equal(byId.get('claude')?.typedModel, true);
     assert.equal(byId.get('claude-api-key')?.typedModel, true);

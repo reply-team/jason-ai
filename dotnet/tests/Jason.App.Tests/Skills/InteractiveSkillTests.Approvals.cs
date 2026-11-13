@@ -7,7 +7,7 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// The approvals skill was read against 0.27.0 and has moved since — it names the act that approves a search and allows
     /// more people under its audience — so it is a draft again until a host reads it against a published version. The
-    /// front matter, the body and the catalog's bullet say draft, and the catalog records no reading of this text.
+    /// front matter and the body say draft, and the catalog records no reading of this text.
     /// </summary>
     [Fact]
     public void The_approvals_skill_is_a_draft_until_a_host_reads_its_current_text()
@@ -18,7 +18,6 @@ public partial class InteractiveSkillTests
         Assert.DoesNotContain("**Status: verified**", Flattened(Name), StringComparison.Ordinal);
 
         var catalog = File.ReadAllText(SkillPack.Catalog());
-        Assert.Contains($"[`{Name}`]({Name}/SKILL.md) — **draft.**", catalog, StringComparison.Ordinal);
         Assert.DoesNotContain($"| `{Name}` | Claude Code", catalog, StringComparison.Ordinal);
     }
 

@@ -411,6 +411,13 @@ describe('the model and the effort a chat is sent with', () => {
         expect(turnOptions(fresh, claude)).toEqual({ host: 'claude' });
     });
 
+    it('keeps a chat on the alias it chose before names were shown: the id is what is sent, the menu shows its display name', () => {
+        const named: DesktopHost = { ...claude, models: [{ id: 'opus', label: 'Opus (latest)', efforts: every }] };
+        const before = { ...fresh, model: 'opus', effort: 'high' as const };
+        expect(modelView(before, named).offer?.label).toBe('Opus (latest)');
+        expect(turnOptions(before, named)).toEqual({ host: 'claude', model: 'opus', effort: 'high' });
+    });
+
     it('names the model chosen, and the effort only where that model takes it', () => {
         const opus = effortChosen(modelChosen(fresh, claude, 'opus'), 'xhigh');
         expect(turnOptions(opus, claude)).toEqual({ host: 'claude', model: 'opus', effort: 'xhigh' });

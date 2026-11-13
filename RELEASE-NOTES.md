@@ -19,14 +19,14 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.37.0-unwritten
+# Jason 0.37.0
 
 ## What is new since 0.36.0
 
 The desktop's chat is fenced more tightly: it loads none of your own MCP servers or connectors, it runs Codex on Windows only where Codex's sandbox keeps Jason's data unreadable, and the CLI declines, inside a chat turn, the commands that give your word or change the installation.
 
 - **The chat loads none of your own MCP servers or connectors,** on Claude Code and on Codex. Every MCP tool call the chat does make goes through its permission model. What you give up: the chat no longer reads your Codex `config.toml`, so a provider or a profile set there is not used; connect a key on the Connect card instead.
-- **On Windows, a Codex chat runs only where Codex's elevated sandbox keeps Jason's data unreadable.** The desktop checks this itself, with no model, at the first Codex message of a run. Where the check fails, the chat says so and names `codex sandbox setup --elevated`, or Claude Code.
+- **On Windows, a Codex chat runs only where Codex's elevated sandbox keeps Jason's data unreadable.** The desktop checks this itself, with no model, at the first Codex message of a run. Where the check fails, the chat says so and names `codex sandbox setup --elevated`, or Claude Code. On the one real machine checked so far, the elevated sandbox did not pass this check (see Known issues).
 - **The CLI refuses a person's word and changes to the installation inside a chat turn.** Every desktop chat turn carries `JASON_CONFINED`, and under it the CLI refuses, before any request, the commands that give your word or change this installation, with one sentence and exit 1. This is a higher bar, not a boundary: a program that holds the run token can still act as you.
 - **The desktop's Reply card acts on accounts through reply-cli's own `account` verbs**: connect, reconnect and the waiting list; an email account's daily limit; pause and resume of a LinkedIn account; unblock of a mailbox; and delete of either. Each change asks you first in a confirmation that names the account and the act; a connection link opens in your browser or is copied for you, and is never logged or kept. An agent's chat is refused these acts in every mode.
 - **A plugin's secret stays out of an AI role's agent.** A secret given through the runtime's environment, by either of the two ways the plugin guide offers, no longer reaches the agent a role starts.
@@ -36,7 +36,7 @@ The desktop's chat is fenced more tightly: it loads none of your own MCP servers
 
 - **Appending to a file several plugins write at once** no longer fails one of them while the others keep writing: the wait for the file counts as stuck only while nobody makes progress, and a holder that writes nothing still fails the append after ten seconds.
 - **A search the provider no longer has ends.** A read or a stop of a search that fails `search_not_found` (the provider holds no search under the reference for the account the binding signs in as: deleted there, or that account changed) ends it `cancelled`, with its `audience_search_ended` line. In 0.36.0 such a search of an archived campaign was followed for good, and every route change that dropped the last route to its account was refused (`route_orphans_search`), removing the plugin included; in a campaign that runs it ended `stalled` only once the stall bound had passed.
-- **A second search waits behind one whose start answer was lost.** A search item whose start may have acted, open again with no record of its search, now holds the campaign's next search as a running search does (`search_unfinished`, its `workitem_waiting` line naming it under `behind_search`); in 0.36.0 the next search was claimed and spent while the first might be running. Of two such searches the older goes first, and a search item that has ended holds nobody.
+- **A second search waits behind one whose start answer was lost.** A search item whose start may have acted, open again with no record of its search, now holds the campaign's next search as a running search does (`search_unfinished`, its `workitem_waiting` line naming it under `behind_search`); in 0.36.0 the next search was claimed and spent while the first might be running. Of two such searches the older goes first, and a search item that has ended holds nobody. Where a search whose start answer was lost ends for good, its hold on the campaign's next search is released while the provider may still be running it, so check the provider before the next search spends.
 - **An update between a lost answer and its repeat no longer refuses the repeat for good.** A repeat of `audience.search`, `campaign.enroll` or `campaign.activate` after a lost answer is held to the plugin, the account and the input, no longer to the package's version, since each one's recovery read finds the earlier act at the account; `jason update apply` replaces an unedited package, and 0.36.0 then refused the repeat `provider_answer_lost` for good. The two sends the work item's key settles still go only under the package version that kept the key.
 
 ## Upgrading from 0.36.0
@@ -44,8 +44,9 @@ The desktop's chat is fenced more tightly: it loads none of your own MCP servers
 Nothing stops: no setting is renamed, and no start refuses a setting 0.36.0 took. This release adds no database migration.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` and `jason ui install` follow, and `jason plugin install <id> --replace` for each package you installed and did not edit.
+- **The packages:** reply 0.15.1 (0.15.0 in 0.36.0), README and changelog only; journal-forwarder 1.3.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0 as in 0.36.0.
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the disk image for your machine from this release, or let an installed desktop offer the update.
-- **Codex on Windows needs its elevated sandbox for the chat.** Have an administrator run `codex sandbox setup --elevated` once, or chat on Claude Code; until then the chat declines a Codex message and says so.
+- **On Windows, chat on Claude Code.** The chat runs Codex only where Codex's elevated sandbox keeps Jason's data unreadable, and on the one real machine checked so far it did not, even once set up (see Known issues).
 - **The chat no longer uses the providers in Codex's `config.toml`.** Connect a key on the Connect card.
 - **The desktop's Reply card needs reply-cli 0.21.0 or newer;** below it, the card offers to update reply-cli where npm is installed.
 - **Claude Code older than 2.1.257 runs no chat turn;** update Claude Code first.
@@ -90,7 +91,9 @@ its own, so a typeahead asking a filter's values at every key starts one per key
 
 Codex in the desktop's chat reads and advises and acts through nothing: its sandbox is read-only.
 
-The Windows check of Codex's sandbox has been proven against a stand-in, not on a real machine without the elevated setup. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
+On Windows the chat may decline Codex even after an administrator has set up Codex's elevated sandbox: that sandbox can still read part of Jason's data, a settings file in Jason's data folder among it, and on the one real machine checked it could. The chat then declines every Codex message until the desktop quits, and its sentence still names `codex sandbox setup --elevated`, which does not help there. Use Claude Code for the chat on Windows meanwhile; the next release changes the check.
+
+The Windows check of Codex's sandbox has not been seen on a real machine without the elevated setup. Whether naming the elevated sandbox raises an administrator prompt where it is not set up has not been seen.
 
 On a Mac and on Linux, a read-only Codex turn can read the runtime's run file, so if the loopback interface is reachable from it, a command in a Codex chat could reach Jason's runtime. That has not been probed.
 
@@ -104,7 +107,8 @@ Not yet seen on a real machine:
 
 - The Linux packages by hand on Ubuntu 24.04: the tray on GNOME and KDE, the keyring, start at login across a sign-out, a deb update's password prompt, the AppImage replacing itself, Remove What Jason Placed, and a `jason-desktop://` link clicked.
 - The chat with real hosts and keys: a wrong key on each provider, which account pays when a plan is signed in, each effort level, and Plan only on a real Claude Code.
-- Reply with a real account: the shared mailbox page, LinkedIn ids for Reconnect, and the confirmation box in a packaged build.
+- On Windows, a click on one of Jason's notifications bringing the desktop to the front on Needs you, with the desktop open and with it closed.
+- The Reply card's account acts on a real Reply account: connecting an account and reconnecting one, pausing a LinkedIn account and resuming it, and the link pages they open in the browser; with them the shared mailbox page, LinkedIn ids for Reconnect, and the confirmation box in a packaged build.
 - On macOS, Remove What Jason Placed and the LaunchAgent; on every system, how the icon looks in the menu, the dock and the taskbar.
 
 The AppImage refuses to start on a system that refuses its sandbox, with a sentence naming the deb; that refusal has not been seen either.

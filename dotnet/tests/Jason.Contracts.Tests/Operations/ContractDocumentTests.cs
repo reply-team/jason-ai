@@ -16,7 +16,8 @@ public class ContractDocumentTests
         "id", "version", "l1", "intent",
         "reach", "reversibility", "approval", "approval_artefact", "approval_departs", "protective_floor",
         "approval_reason", "before_repeating", "idempotency_key", "per_item_results", "accepts_collection", "cost",
-        "cost_basis", "meter", "invariants", "preflight", "channel_arguments", "channel_templates", "dispatch", "contact_projection",
+        "cost_basis", "meter", "invariants", "preflight", "channel_arguments", "channel_templates", "route_channel_argument", "dispatch",
+        "contact_projection",
         "precondition", "preview",
         "input_schema", "output_schema", "external_ids",
         "recovery_read", "repeat_after_ambiguous", "failure_codes", "timeout_ms", "conformance",
@@ -443,6 +444,48 @@ public class ContractDocumentTests
         var expected = id is "message.send" ? new[] { "email", "linkedin" } : null;
 
         Assert.Equal(expected, Contract(id).ChannelTemplates);
+    }
+
+    /// <summary>
+    /// A route may name a channel under three operations, and each document names the argument the channel is read from:
+    /// the two that write to a person on the channel a call names, and the list of sending accounts, whose filter names the
+    /// channel a later send goes on. Not the six whose `channel` is the address a person is found by, which a route by
+    /// channel would split at the provider; not the invitation, whose one channel its operation route already is; not
+    /// the conversation list, which inbound sync reads from the campaign's one plugin. Every other document says so with a
+    /// null, so a fourth is a change to this row made on purpose.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void Only_the_two_writes_and_the_sender_list_name_the_argument_a_route_reads_its_channel_from(string id)
+    {
+        var expected = id switch
+        {
+            "message.send" or "conversation.reply" => "channel",
+            "sender.list" => "sender_channel",
+            _ => null,
+        };
+
+        Assert.Equal(expected, Contract(id).RouteChannelArgument);
+        Assert.Equal(expected is null ? null : new[] { "email", "linkedin" }, Contract(id).RouteChannels);
+    }
+
+    /// <summary>
+    /// The sender list's filter is one a caller may leave out, and a list asked for without it carries no channel: it
+    /// resolves by the operation's own route, as it does where no route names a channel. The two writes always carry one.
+    /// </summary>
+    [Fact]
+    public void The_sender_list_without_its_filter_carries_no_channel_and_the_two_writes_always_carry_one()
+    {
+        var senders = Contract("sender.list");
+        var required = (JsonArray?)senders.ArgumentSchema["required"] ?? [];
+
+        Assert.DoesNotContain(required, name => name?.GetValue<string>() == "sender_channel");
+        Assert.Null(senders.RouteChannel(JsonNode.Parse("""{ "whose": "own" }""")));
+        Assert.Equal("linkedin", senders.RouteChannel(JsonNode.Parse("""{ "whose": "own", "sender_channel": "linkedin" }""")));
+        foreach (var id in new[] { "message.send", "conversation.reply" })
+        {
+            Assert.Contains(((JsonArray)Contract(id).ArgumentSchema["required"]!).Select(name => name!.GetValue<string>()), name => name == "channel");
+        }
     }
 
     /// <summary>

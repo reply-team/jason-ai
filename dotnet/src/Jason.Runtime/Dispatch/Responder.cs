@@ -367,7 +367,7 @@ public sealed class Responder(
     /// </summary>
     private async Task<WorkItem?> ReadAsync(Active campaign, Reply reply, string? contact, ResponderOptions options, CancellationToken ct)
     {
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, ReadOperation) is not { } resolution
+        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, ReadOperation, channel: null) is not { } resolution
             || !string.Equals(resolution.Route.PluginId, reply.Plugin, StringComparison.Ordinal))
         {
             return null;

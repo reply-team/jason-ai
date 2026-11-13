@@ -121,6 +121,8 @@ describe('what the console draws from the runtime', () => {
             channel: null,
             subject: null,
             body: null,
+            compose: null,
+            example: null,
             facts: ['Reach: act (bookkeeping until the campaign is live)', 'Reversibility: irreversible'],
         });
         expect(
