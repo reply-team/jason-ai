@@ -712,16 +712,29 @@ function makesLink(program: string, args: readonly string[]): boolean {
 
 /**
  * The words of a command that gives a place another name (`makesLink`), searched from each word of it, so that a link
- * made under a wrapper (`cmd /c mklink`) is found too: every word after the program that is no option. Null when no word
- * starts such a command.
+ * made under a wrapper (`cmd /c mklink`) is found too: every word after the program that is no option, and the value
+ * of an option joined to it by `=` or `:` (`--target-directory=a`, `-Target:a`). Null when no word starts such a
+ * command.
  */
 export function linkOperands(words: readonly string[]): string[] | null {
     for (let at = 0; at < words.length; at++) {
         const args = words.slice(at + 1);
         if (!makesLink(programName(words[at] ?? ''), args)) continue;
-        return args.filter((word) => word !== '' && !word.startsWith('-') && !/^\/[A-Za-z]{1,2}$/.test(word));
+        return args.flatMap((word) => {
+            const joined = /^--?[A-Za-z][A-Za-z-]*[=:](.+)$/.exec(word);
+            if (joined !== null) return [joined[1] as string];
+            return word === '' || word.startsWith('-') || /^\/[A-Za-z]{1,2}$/.test(word) ? [] : [word];
+        });
     }
     return null;
+}
+
+/**
+ * True when a command, its program first, walks a folder tree following the links in it (`followsLinks`): held in
+ * Full access, and never covered by "always".
+ */
+export function followsLinksIn(words: readonly string[]): boolean {
+    return followsLinks(programName(words[0] ?? ''), words.slice(1));
 }
 
 /**
@@ -738,7 +751,8 @@ function followsLinks(program: string, args: readonly string[]): boolean {
     if (program === 'ack') return any((word) => longOption(word, ['follow']));
     if (tarPrograms.has(program)) {
         const old = args[0] !== undefined && /^[A-Za-z]+$/.test(args[0]) && args[0].includes('h');
-        return old || any((word) => shortOption(word, 'h', 'fCbHKLNTVXIF') || longOption(word, ['dereference']));
+        // `-L` is bsdtar's, and so the tar of macOS and Windows: it follows every link it meets.
+        return old || any((word) => shortOption(word, 'hL', 'fCbHKNTVXIF') || longOption(word, ['dereference']));
     }
     if (program === 'cp' || program === 'gcp') return any((word) => shortOption(word, 'L', 'tS') || longOption(word, ['dereference']));
     if (program === 'rsync') return any((word) => shortOption(word, 'LkK', 'eBfTM') || longOption(word, ['copy-links', 'copy-dirlinks', 'keep-dirlinks', 'copy-unsafe-links']));
@@ -751,6 +765,15 @@ function followsLinks(program: string, args: readonly string[]): boolean {
     if (program === 'xcopy') return any((word) => /^\/{1,2}[se]$/i.test(word));
     if (program === 'findstr') return any((word) => /^\/{1,2}s$/i.test(word));
     if (program === 'where') return any((word) => /^\/{1,2}r$/i.test(word));
+    // 7-Zip follows a link while it adds, unless told to store it (`-snl`).
+    if (/^7z[arz]?$/.test(program)) return (args[0] === 'a' || args[0] === 'u') && !any((word) => /^-snl$/i.test(word));
+    if (program === 'cpio' || program === 'bsdcpio') return any((word) => shortOption(word, 'L', 'EFHIMORWC') || longOption(word, ['dereference']));
+    // scp follows every link it meets in a recursive copy.
+    if (program === 'scp') return any((word) => shortOption(word, 'r', 'cFiJlopPSDX'));
+    if (program === 'pax') return any((word) => shortOption(word, 'L', 'fopsx'));
+    if (program === 'copy-item' || program === 'cpi' || program === 'copy') return any((word) => /^-r/i.test(word));
+    if (program === 'compress-archive') return true;
+    if (program === 'get-childitem' || program === 'gci' || program === 'dir') return any((word) => /^-fo/i.test(word));
     return false;
 }
 

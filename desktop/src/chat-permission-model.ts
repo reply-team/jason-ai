@@ -4,7 +4,7 @@
 
 import { posix, win32 } from 'node:path';
 import { fileCommandsOf, fileGrammars } from './chat-auto-edit.ts';
-import { heldByWhatRuns, linkOperands, programName, readLiteral, systemLaunchers, type HeldReason, type LiteralCommand } from './chat-literal.ts';
+import { followsLinksIn, heldByWhatRuns, linkOperands, programName, readLiteral, systemLaunchers, type HeldReason, type LiteralCommand } from './chat-literal.ts';
 import { powerShellRunsInFullAccess } from './chat-modes.ts';
 import { serverName } from './chat-permission-endpoint.ts';
 
@@ -47,6 +47,11 @@ export interface ChatScope {
      * Auto-edit runs nothing unasked.
      */
     entry?: (path: string) => 'present' | 'unresolved' | null;
+    /**
+     * The text of an existing file, so an edit is judged by the file as it would read after it (`writtenText`); null when
+     * nothing readable is there. Absent, an edit is judged by its replacement alone.
+     */
+    text?: (path: string) => string | null;
 }
 
 export type Judgement =
@@ -594,7 +599,7 @@ export function commandPrefix(command: string): string | null {
     if (!words.every((word) => /^[A-Za-z0-9._/:@+=,%-]+$/.test(word) && !/(^|[^.])\.\.([\\/]|$)/.test(word))) return null;
     if (words.some(namesReply)) return null;
     // A link a command makes leads where no later command's words say: each is a card of its own.
-    if (linkOperands(words) !== null) return null;
+    if (linkOperands(words) !== null || followsLinksIn(words)) return null;
     const [program, first] = words;
     if (program === undefined || first === undefined || first.startsWith('-')) return null;
     if (/[\\/:]/.test(program) || runsAnotherProgram(program.toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, ''))) return null;
@@ -861,7 +866,7 @@ function namesFolder(command: string, scope: ChatScope, folder: string, except: 
 function placesOf(command: string, scope: ChatScope): string[] {
     const links = command
         .split(/&&|\|\||[;|&\n\r()`]/)
-        .flatMap((part) => linkPlaces(part.trim().split(/\s+/).map(unquoted).filter((word) => word !== ''), scope, false));
+        .flatMap((part) => commandPlaces(part.trim().split(/\s+/).map(unquoted).filter((word) => word !== ''), scope, false));
     return [...placesOfWords(command.split(/[\s;|&<>()`]+/).map(unquoted), scope, false), ...links];
 }
 
@@ -871,6 +876,37 @@ function placesOf(command: string, scope: ChatScope): string[] {
  * the folder the command runs in. Every word is taken for a target, and every word and its parent for the folder the
  * link may be made in: more places than the link names, which only adds refusals.
  */
+function commandPlaces(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
+    return [...linkPlaces(words, scope, literal), ...directoryPlaces(words, scope, literal)];
+}
+
+/** The programs whose own option names the folder the words after it are read from: `-C` and `--directory`. */
+const directoryPrograms: ReadonlySet<string> = new Set(['tar', 'bsdtar', 'gtar', 'git', 'make', 'gmake', 'ninja']);
+
+/**
+ * The places a program's words name when its own option sets the folder they are read from (`tar -C`, `git -C`,
+ * `make --directory=`): every word after the program located from each such folder, as words after a literal `cd` are.
+ */
+function directoryPlaces(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
+    const at = words.findIndex((word) => directoryPrograms.has(programName(word)));
+    if (at < 0) return [];
+    const rest = words.slice(at + 1);
+    const folders: string[] = [];
+    rest.forEach((word, index) => {
+        const next = rest[index + 1];
+        if ((word === '--directory' || /^-[A-Za-z]*C$/.test(word)) && next !== undefined) folders.push(next);
+        else if (word.startsWith('--directory=')) folders.push(word.slice('--directory='.length));
+        else if (/^-C./.test(word)) folders.push(word.slice(2));
+    });
+    return folders
+        .map((folder) => nativeSpelling(folder, scope))
+        .filter((folder) => folder !== '' && folder.length <= pathLimit(scope.platform) && (literal || !/^~[^\\/]|[$%]/.test(homeExpanded(folder, scope))))
+        .flatMap((folder) => {
+            const cwd = located(folder, scope);
+            return network(scope.platform, cwd) ? [] : placesOfWords(rest, { ...scope, cwd }, literal);
+        });
+}
+
 function linkPlaces(words: readonly string[], scope: ChatScope, literal: boolean): string[] {
     const operands = (linkOperands(words) ?? [])
         .map((word) => nativeSpelling(word, scope))
@@ -934,7 +970,7 @@ function literalPlaces(tool: string, command: string, scope: ChatScope): string[
     if (reading.held) return [];
     return reading.commands.flatMap((each) => {
         const at = each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) };
-        return [...placesOfWords([...each.words, ...each.targets], at, true), ...linkPlaces(each.words, at, true)];
+        return [...placesOfWords([...each.words, ...each.targets], at, true), ...commandPlaces(each.words, at, true)];
     });
 }
 
@@ -1017,14 +1053,38 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
 
 const contentRefusal = 'That file names a command or an operation that is a person\'s own act or changes the installation, the variable that confines jason, or the installation\'s own data: the chat never writes it. Nothing was written.';
 
-/** The text a writer tool would put in a file: a whole file's content, or each replacement of an edit. */
-function writtenText(tool: string, input: Record<string, unknown>): string[] {
+/**
+ * The text a writer tool would put in a file: a whole file's content, or each replacement of an edit, and for an edit
+ * the whole file as it would read after it, where the file can be read (`ChatScope.text`): a replacement can complete a
+ * word the file already begins.
+ */
+function writtenText(tool: string, input: Record<string, unknown>, scope: ChatScope): string[] {
     const texts: unknown[] = [];
     if (tool === 'Write') texts.push(input['content']);
     if (tool === 'Edit') texts.push(input['new_string']);
     if (tool === 'NotebookEdit') texts.push(input['new_source']);
-    if (tool === 'MultiEdit' && Array.isArray(input['edits'])) for (const edit of input['edits'] as unknown[]) texts.push((edit as { new_string?: unknown } | null)?.new_string);
+    const edits = tool === 'Edit' ? [input] : tool === 'MultiEdit' && Array.isArray(input['edits']) ? (input['edits'] as unknown[]) : [];
+    if (tool === 'MultiEdit') for (const edit of edits) texts.push((edit as { new_string?: unknown } | null)?.new_string);
+    const path = input['file_path'];
+    if (edits.length > 0 && typeof path === 'string' && scope.text !== undefined) {
+        const before = scope.text(located(path, scope));
+        const after = before === null ? null : edited(before, edits);
+        if (after !== null) texts.push(after);
+    }
     return texts.filter((text): text is string => typeof text === 'string');
+}
+
+/** A file's text after its edits, applied in order as the writer tool applies them; null where one does not apply. */
+function edited(text: string, edits: readonly unknown[]): string | null {
+    let after = text;
+    for (const edit of edits) {
+        const { old_string: from, new_string: to, replace_all: all } = (edit ?? {}) as { old_string?: unknown; new_string?: unknown; replace_all?: unknown };
+        if (typeof from !== 'string' || typeof to !== 'string' || from === '') return null;
+        const at = after.indexOf(from);
+        if (at < 0) return null;
+        after = all === true ? after.split(from).join(to) : `${after.slice(0, at)}${to}${after.slice(at + from.length)}`;
+    }
+    return after;
 }
 
 /**
@@ -1034,8 +1094,37 @@ function writtenText(tool: string, input: Record<string, unknown>): string[] {
  * a program assembles at run time is not seen here. Null for any other tool, and for text that shows none of these.
  */
 export function writtenRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
-    for (const text of writtenText(tool, input)) if (textRefused(text, scope)) return contentRefusal;
-    if (writtenLaunch(tool, input)) return launchRefusal;
+    const texts = writtenText(tool, input, scope);
+    for (const text of texts) if (textRefused(text, scope)) return contentRefusal;
+    const path = input['file_path'] ?? input['notebook_path'];
+    if (typeof path !== 'string') return null;
+    for (const text of texts) {
+        const kind = scriptKind(tool, path, text);
+        if (kind === null) continue;
+        if (scriptCommands(kind, text).some((commands) => launchesIn(commands, kind))) return launchRefusal;
+        const refused = scriptRefusal(kind, text, path, scope);
+        if (refused !== null) return refused;
+    }
+    return null;
+}
+
+/**
+ * The refusal a script the chat writes would meet as a command (`refusalOver`): its lines read as a shell reads them,
+ * the script whole and each line alone, from the file's own folder, a literal `cd` in it setting the folder for what
+ * follows, so a relative path and a directory change are located as a command's are. Null when none.
+ */
+function scriptRefusal(kind: ScriptKind, text: string, path: string, scope: ChatScope): string | null {
+    const at = { ...scope, cwd: pathsOf(scope.platform).dirname(located(path, scope)) };
+    const tool = /\.(ps1|psm1|psd1)$/i.test(path) ? 'PowerShell' : 'Bash';
+    for (const commands of scriptCommands(kind, text)) {
+        const lines = commands.split(/\r?\n/).map((line) => (kind === 'make' ? line.replace(/^\s+/, '').replace(/^[@+-]+/, '') : line)).filter((line) => line.trim() !== '');
+        const whole = lines.join('\n');
+        // A script's lines run one after another in the folder the lines before them left, as commands joined by `&&` do.
+        const chained = lines.join(' && ');
+        const places = [...placesOf(whole, at), ...literalPlaces(tool, whole, at), ...literalPlaces(tool, chained, at), ...lines.flatMap((line) => literalPlaces(tool, line, at))];
+        const refused = refusalOver(whole, places, at);
+        if (refused !== null) return refused;
+    }
     return null;
 }
 
@@ -1095,17 +1184,6 @@ const wrappers: ReadonlySet<string> = new Set(
  * substitution or a bracket, past a keyword, an assignment and make's prefixes, and after a wrapper and its options.
  * Prose in any other file is not read this way, since the launchers' names are words too (`open`, `start`, `at`).
  */
-function writtenLaunch(tool: string, input: Record<string, unknown>): boolean {
-    const path = input['file_path'] ?? input['notebook_path'];
-    if (typeof path !== 'string') return false;
-    for (const text of writtenText(tool, input)) {
-        const kind = scriptKind(tool, path, text);
-        if (kind === null) continue;
-        for (const commands of scriptCommands(kind, text)) if (launchesIn(commands, kind)) return true;
-    }
-    return false;
-}
-
 function launchesIn(text: string, kind: ScriptKind): boolean {
     for (const line of text.split(/\r?\n/)) {
         let body = kind === 'make' ? line.replace(/^\s+/, '').replace(/^[@+-]+/, '') : line;
@@ -1127,8 +1205,11 @@ function programLaunches(words: readonly string[]): boolean {
             at++;
             continue;
         }
-        const program = programName(word);
-        if (systemLaunchers.has(program)) return true;
+        // A name spliced by quotes or a backslash (`ex''plorer`, `e\xplorer`) is read as the shell reads it; a backslash
+        // is also a Windows folder's separator, so the name is read both ways.
+        const unspliced = word.replace(/['"]/g, '');
+        const program = programName(unspliced);
+        if (systemLaunchers.has(program) || systemLaunchers.has(programName(unspliced.replace(/\\(.)/g, '$1')))) return true;
         if (!wrappers.has(program)) return false;
         at++;
         while (at < words.length && /^(-|\/[A-Za-z?]{1,2}$|\d+(\.\d+)?[smhd]?$|[A-Za-z_][A-Za-z0-9_]*=)/.test(words[at] as string)) at++;
@@ -1552,7 +1633,7 @@ function literalOutcome(tool: string, command: string, scope: ChatScope): FullAc
     if (reading.held) return heldFor(reading.reason);
     // Each command's words are located against the folder it runs in: a directory change's literal absolute target.
     const commands = reading.commands.map((each) => ({ command: each, scope: each.cwd === null ? scope : { ...scope, cwd: located(nativeSpelling(each.cwd, scope), scope) } }));
-    const places = commands.flatMap(({ command: each, scope: at }) => [...placesOfWords([...each.words, ...each.targets], at, true), ...linkPlaces(each.words, at, true)]);
+    const places = commands.flatMap(({ command: each, scope: at }) => [...placesOfWords([...each.words, ...each.targets], at, true), ...commandPlaces(each.words, at, true)]);
     // (a) Refused, over the resolved words, a URL's percent-escapes decoded.
     const resolved = reading.commands.map((each) => [...each.words, ...each.targets].join(' ')).join('\n');
     for (const text of new Set([resolved, percentDecoded(resolved)])) {

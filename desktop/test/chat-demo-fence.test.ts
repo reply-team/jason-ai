@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
 import { PermissionBroker, type ToolAnswer } from '../src/chat-permission-broker.ts';
 import { fullAccessJudgement, judge, type ChatScope } from '../src/chat-permission-model.ts';
 import type { ChatMode } from '../src/chat-modes.ts';
+import { heldByWhatRuns, readLiteral } from '../src/chat-literal.ts';
+import { realPathOf, textLimit, textOf } from '../src/chat-real-path.ts';
 
 // In a demo run the desktop runs on `~/.jason-demo` and the person's own installation is `~/.jason` with its harness root
 // `~/Jason`: the chat refuses both whole, in every mode, Full access included.
@@ -540,4 +545,135 @@ test('full_access: a script the chat writes that starts a launcher, or hands a c
             assert.deepEqual(fullAccessJudgement(tool, input, scope), { outcome: 'runs' }, `${scope.platform} ${JSON.stringify(input)}`);
         }
     }
+});
+
+// ---- A written script read as a command, an edit by the file after it, a folder set by a program's own option --------
+
+/** A Full access judgement of a writer tool, refused with a sentence the pattern matches. */
+function writeRefused(scope: ChatScope, tool: string, input: Record<string, unknown>, sentence: RegExp): void {
+    const judged = fullAccessJudgement(tool, input, scope);
+    const said = `${scope.platform} ${tool} ${JSON.stringify(input)}`;
+    assert.equal(judged.outcome, 'refused', `${said}: ${JSON.stringify(judged)}`);
+    if (judged.outcome === 'refused') assert.match(judged.message, sentence, said);
+}
+
+const inChat = (scope: ChatScope, name: string) => `${scope.chat}${scope.platform === 'win32' ? '\\' : '/'}${name}`;
+
+test('full_access: a script the chat writes is read as a command from its own folder, a directory change in it followed', () => {
+    for (const scope of [demoMac(), demoWindows(), linuxOf(demoMac())]) {
+        for (const content of [
+            'cat ../../../Jason/Northwind/notes.md\n',
+            'cd ~ && cat Jason/Northwind/notes.md\n',
+            'cd ../../..\ntar -cf - Jason > o.tar\n',
+            'tar -C ~ -cf o.tar Jason\n',
+            'ln -s ../../../../../../Jason a/b/c/p\n',
+            'echo start\ncp ../../../.jason/config/settings.json x\n',
+        ]) {
+            writeRefused(scope, 'Write', { file_path: inChat(scope, 's.sh'), content }, persons);
+        }
+        writeRefused(scope, 'Write', { file_path: inChat(scope, 'Makefile'), content: 'all:\n\t@cat ../../../Jason/Northwind/notes.md\n' }, persons);
+        writeRefused(scope, 'Write', { file_path: inChat(scope, 'package.json'), content: '{"scripts":{"x":"cat ../../../Jason/Northwind/notes.md"}}' }, persons);
+    }
+    for (const scope of [liveMac(), liveWindows()]) {
+        for (const content of ['cat ../../run/runtime.json\n', 'cd .. && cd .. && cat config/settings.json\n', 'cd ~\ncat .jason/run/runtime.json\n']) {
+            writeRefused(scope, 'Write', { file_path: inChat(scope, 's.sh'), content }, ownData);
+        }
+        // A script that reads only the chat's own folder, or names nothing at all, is written.
+        for (const content of ['cat notes.md\nmkdir -p sub && cd sub && cat a.md\n', 'npm test\n']) {
+            assert.deepEqual(fullAccessJudgement('Write', { file_path: inChat(scope, 's.sh'), content }, scope), { outcome: 'runs' }, `${scope.platform} ${content}`);
+        }
+    }
+});
+
+test('full_access: an edit is judged by the file as it would read after it, where a replacement completes a word the file begins', () => {
+    const files = new Map<string, string>();
+    const reading = (scope: ChatScope): ChatScope => ({ ...scope, text: (path) => files.get(path) ?? null });
+    for (const scope of [reading(demoMac()), reading(liveMac()), reading(demoWindows())]) {
+        files.clear();
+        files.set(inChat(scope, 's.sh'), 'exXYZ s.bat\n');
+        files.set(inChat(scope, 'run.sh'), 'jason ruXYZ\n');
+        files.set(inChat(scope, 'notes.md'), 'see ~/.jaXYZ\n');
+        writeRefused(scope, 'Edit', { file_path: inChat(scope, 's.sh'), old_string: 'XYZ', new_string: 'plorer.exe' }, launchSentence);
+        writeRefused(scope, 'MultiEdit', { file_path: inChat(scope, 's.sh'), edits: [{ old_string: 'XYZ', new_string: 'plorer.exe' }] }, launchSentence);
+        writeRefused(scope, 'Edit', { file_path: inChat(scope, 'run.sh'), old_string: 'XYZ', new_string: 'ntime stop' }, /never writes it/);
+        writeRefused(scope, 'Edit', { file_path: inChat(scope, 'notes.md'), old_string: 'XYZ', new_string: 'son/run/runtime.json' }, /never writes it/);
+        // An edit whose text is not in the file changes nothing, and is judged by its replacement alone.
+        assert.deepEqual(fullAccessJudgement('Edit', { file_path: inChat(scope, 's.sh'), old_string: 'absent', new_string: 'plorer.exe' }, scope), { outcome: 'runs' });
+    }
+    // With no way to read the file, the replacement alone is judged, as before.
+    assert.deepEqual(fullAccessJudgement('Edit', { file_path: inChat(liveMac(), 's.sh'), old_string: 'XYZ', new_string: 'plorer.exe' }, liveMac()), { outcome: 'runs' });
+});
+
+test('full_access: a launcher\'s name spliced by quotes or a backslash in a written script is read as the shell reads it', () => {
+    for (const scope of [demoMac(), liveWindows()]) {
+        for (const content of ["ex''plorer.exe s.bat\n", 'e\\xplorer.exe s.bat\n', 'o"pe"n s.command\n', "nohu''p ./s.sh\n"]) {
+            writeRefused(scope, 'Write', { file_path: inChat(scope, 's.sh'), content }, launchSentence);
+        }
+        writeRefused(scope, 'Write', { file_path: inChat(scope, 's.ps1'), content: '& C:\\Windows\\explorer.exe s.bat\n' }, launchSentence);
+    }
+});
+
+for (const mode of modes) {
+    test(`${mode}: a program's own option that sets the folder its words are read from is followed, and a fenced place there refused`, async () => {
+        for (const scope of [demoMac(), linuxOf(demoMac()), demoWindows()]) {
+            for (const command of [
+                'tar -C ../../.. -cf o.tar Jason',
+                'tar -C ~ -cf o.tar Jason',
+                'tar --directory=../../.. -cf o.tar Jason',
+                'tar --directory ../../.. -cf o.tar Jason',
+                'tar -xzf a.tgz -C ../../.. Jason/Northwind/notes.md',
+                'git -C ../../.. archive -o o.zip HEAD Jason',
+                'make -C ../../.. -f Jason/Northwind/Makefile',
+            ]) {
+                await refusedIn(mode, scope, 'Bash', { command }, persons);
+            }
+        }
+        for (const scope of [liveMac(), liveWindows()]) {
+            await refusedIn(mode, scope, 'Bash', { command: 'tar -C ../.. -cf o.tar run' }, ownData);
+            await refusedIn(mode, scope, 'Bash', { command: 'git -C ../.. show HEAD:config/settings.json' }, ownData);
+        }
+    });
+
+    test(`${mode}: a link's target joined to an option by = or : is located from the link's folder too`, async () => {
+        for (const scope of [demoMac(), linuxOf(demoMac()), demoWindows()]) {
+            await refusedIn(mode, scope, 'Bash', { command: 'ln -s --target-directory=a/b/c ../../../../../../Jason' }, persons);
+            await refusedIn(mode, scope, 'Bash', { command: 'ln -s -t a/b/c ../../../../../../Jason' }, persons);
+        }
+        await refusedIn(mode, demoWindows(), 'PowerShell', { command: 'New-Item -ItemType SymbolicLink -Path:a/b/c/p -Target:../../../../../../Jason' }, persons);
+        await refusedIn(mode, demoWindows(), 'PowerShell', { command: 'New-Item -ItemType:Junction -Path:a\\b\\c\\p -Value:..\\..\\..\\..\\..\\..\\Jason' }, persons);
+        await refusedIn(mode, liveWindows(), 'PowerShell', { command: 'New-Item -ItemType:SymbolicLink -Path:a/b/c/r -Target:../../../../../run' }, ownData);
+    });
+
+    test(`${mode}: an archiver or a copy that follows links while it walks is never run unasked, nor covered by "always"`, async () => {
+        for (const scope of [demoWindows(), liveMac(), linuxOf(demoMac())]) {
+            for (const command of ['7z a o.7z a', '7za u o.7z a', 'scp -r a host:x', 'pax -L -w -f o.pax a', 'bsdtar -L -cf o.tar a', 'cpio -oL -F o.cpio']) {
+                await heldOrCarded(mode, scope, 'Bash', command, 'link');
+            }
+        }
+        if (mode !== 'full_access') return;
+        for (const command of ['7z a -snl o.7z a', '7z x o.7z', 'scp a host:x']) {
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, demoWindows()), { outcome: 'runs' }, command);
+        }
+        for (const command of ['Copy-Item -Recurse a b', 'Compress-Archive -Path a -DestinationPath o.zip', 'Get-ChildItem -Recurse -FollowSymlink a']) {
+            const reading = readLiteral('PowerShell', command, { platform: 'win32', home: null });
+            assert.equal(reading.held ? reading.reason : heldByWhatRuns(reading.commands), 'link', command);
+        }
+    });
+}
+
+test('the text an edit is judged by is the file on disk, read only when it is a file no larger than the limit', (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'jason-text-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const script = join(root, 's.sh');
+    writeFileSync(script, 'exXYZ s.bat\n');
+    assert.equal(textOf(script), 'exXYZ s.bat\n');
+    assert.equal(textOf(root), null);
+    assert.equal(textOf(join(root, 'absent.sh')), null);
+    const large = join(root, 'large.sh');
+    writeFileSync(large, Buffer.alloc(textLimit + 1, 0x61));
+    assert.equal(textOf(large), null);
+    const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
+    const scope: ChatScope = { platform, cwd: root, chat: root, added: [], data: join(root, 'data'), home: root, protectedFiles: [], denied: [], deniedOperations: [], real: realPathOf, text: textOf };
+    const judged = fullAccessJudgement('Edit', { file_path: script, old_string: 'XYZ', new_string: 'plorer.exe' }, scope);
+    assert.equal(judged.outcome, 'refused', JSON.stringify(judged));
 });
