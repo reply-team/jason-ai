@@ -1525,6 +1525,14 @@ body,
 .jc-console .dash-agents progress {
     width: 90px;
 }
+.jc-console .dash-period-pick {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+.jc-console .dash-categories {
+    margin-bottom: 12px;
+}
 /* The start screen: the mark by the title, the note under the box, and the two menu buttons under the box. */
 .jc-console .start .start-title {
     display: flex;

@@ -3,9 +3,25 @@ import type { CampaignActivityResponse } from '../api/types';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { archivedLeftOut } from '../screens/campaigns/store';
-import { act, define } from './actions';
+import { act, argsOf, define } from './actions';
 import * as campaigns from './campaigns';
-import { cut, dashboardWindow, greetingFor, progressOf, tilesOf, type ActivityRead } from './dashboard-model';
+import {
+    categoryLabel,
+    cut,
+    dashboardPeriods,
+    dashboardWindow,
+    defaultDashboardPeriod,
+    greetingFor,
+    isDashboardPeriod,
+    periodWords,
+    progressOf,
+    startingRange,
+    tilesOf,
+    type ActivityRead,
+    type CustomRange,
+    type DashboardPeriod,
+    type ReplyCountRead,
+} from './dashboard-model';
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
 import { html, type Html } from './html';
 import { svg } from './icons';
@@ -14,42 +30,71 @@ import * as needs from './needs';
 import { clock, here, lines } from './state';
 
 // The Dashboard: where things stand, drawn only from reads the console already makes. Needs you and the Agents panel
-// are read by their own modules; the one read of its own is the thirty days' counts, asked the way the Performance
-// screen asks them. A number no read gives is a dash, never a zero.
+// are read by their own modules; its own reads are the period's counts, asked the way the Performance screen asks
+// them, and the replies a role judged, by category. One period holds for all of them and is not remembered. A number
+// no read gives is a dash, never a zero.
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-/** The thirty days' counts across the agents not archived, and by agent; null until read or when the read failed. */
+/** The period every tile and card counts over; the Dashboard opens on thirty days each time. */
+export const period = signal<DashboardPeriod>(defaultDashboardPeriod);
+/** The days of a custom period; only read while the period is Custom. */
+export const custom = signal<CustomRange>({ from: '', to: '' });
+
+/** What `reply.count` answered for the period; null until read, while no window is asked for, or when the read failed. */
+export const replies = signal<ReplyCountRead | null>(null);
+
+/** The period's counts across the agents not archived, and by agent; null until read or when the read failed. */
 export const activity = signal<{ total: ActivityRead; byCampaign: Record<string, ActivityRead> } | null>(null);
 
 let generation = 0;
 /** How many Dashboard panels are open: the journal's reload reads the counts again only for one that is. */
 let open = 0;
 
-/** The thirty days' counts; a late answer is dropped, and a failed read leaves the counts unknown. */
+/** The period's counts and replies; a late answer is dropped, and a failed read leaves its numbers unknown. */
 export async function reload(): Promise<void> {
     const mine = ++generation;
-    try {
-        const read = await here().api.call<CampaignActivityResponse>('campaign.activity', {
-            ...archivedLeftOut,
-            ...dashboardWindow(new Date(), zone),
-        });
-        if (mine !== generation) return;
-        activity.value = {
-            total: { contacted: read.total.contacted, replied: read.total.replied },
-            byCampaign: Object.fromEntries(
-                read.campaigns.map((row) => [row.campaign_id, { contacted: row.contacted, replied: row.replied }]),
-            ),
-        };
-    } catch {
-        if (mine === generation) activity.value = null;
+    const window = dashboardWindow(period.value, new Date(), zone, custom.value);
+    if (window === null) {
+        activity.value = null;
+        replies.value = null;
+        return;
     }
+    const counts = async () => {
+        try {
+            const read = await here().api.call<CampaignActivityResponse>('campaign.activity', {
+                ...archivedLeftOut,
+                ...window,
+            });
+            if (mine !== generation) return;
+            activity.value = {
+                total: { contacted: read.total.contacted, replied: read.total.replied },
+                byCampaign: Object.fromEntries(
+                    read.campaigns.map((row) => [row.campaign_id, { contacted: row.contacted, replied: row.replied }]),
+                ),
+            };
+        } catch {
+            if (mine === generation) activity.value = null;
+        }
+    };
+    const judged = async () => {
+        try {
+            const read = await here().api.call<ReplyCountRead>('reply.count', window);
+            if (mine === generation) replies.value = read;
+        } catch {
+            if (mine === generation) replies.value = null;
+        }
+    };
+    await Promise.all([counts(), judged()]);
 }
 
 /** Called by the panel as it opens and closes. */
 export function watching(on: boolean): void {
     open = Math.max(0, open + (on ? 1 : -1));
-    if (on) void reload();
+    if (on) {
+        period.value = defaultDashboardPeriod;
+        void reload();
+    }
 }
 
 /** The journal said something changed: the counts are read again when a Dashboard is open. */
@@ -57,6 +102,17 @@ export function reloadIfOpen(): void {
     if (open > 0) void reload();
 }
 
+define('dash.period', (_args, element) => {
+    if (!(element instanceof HTMLSelectElement) || !isDashboardPeriod(element.value)) return;
+    if (element.value === 'custom' && !custom.value.from) custom.value = startingRange(new Date(), zone);
+    period.value = element.value;
+    void reload();
+});
+define('dash.range', ([end], element) => {
+    if ((end !== 'from' && end !== 'to') || !(element instanceof HTMLInputElement)) return;
+    custom.value = { ...custom.value, [end]: element.value };
+    void reload();
+});
 define('dash.new', () => here().dock.show('start'));
 define('dash.needs', () => here().dock.show('needs'));
 define('dash.agents', () => here().dock.show('campaigns'));
@@ -99,6 +155,38 @@ function recent(now: number): { row: FeedRow; who: string }[] {
     return found;
 }
 
+function periodControl(): Html {
+    return html`<span class="dash-period-pick">
+        <select class="inp" aria-label="${t('dash.period')}" data-change="dash.period">
+            ${dashboardPeriods.map(
+                (each) =>
+                    html`<option value="${each}" ${period.value === each ? html`selected` : null}>
+                        ${t(`dash.period.${each}`)}
+                    </option>`,
+            )}
+        </select>
+        ${
+            period.value === 'custom'
+                ? html`<input
+                          class="inp"
+                          type="date"
+                          aria-label="${t('dash.period.from')}"
+                          value="${custom.value.from}"
+                          data-change="dash.range"
+                          ${argsOf('from')}
+                      /><input
+                          class="inp"
+                          type="date"
+                          aria-label="${t('dash.period.to')}"
+                          value="${custom.value.to}"
+                          data-change="dash.range"
+                          ${argsOf('to')}
+                      />`
+                : null
+        }
+    </span>`;
+}
+
 function header(waiting: number): Html {
     // The installation knows no person's name, so the greeting has none and no comma.
     const hour = new Date(clock.value).getHours();
@@ -108,6 +196,7 @@ function header(waiting: number): Html {
             <p>${mode.value === 'demo' ? t('dash.sub.demo') : t('dash.sub.live')}</p>
         </div>
         <div class="acts">
+            ${periodControl()}
             ${
                 waiting > 0
                     ? html`<button class="btn p" type="button" ${act('dash.needs')}>
@@ -129,11 +218,16 @@ function tiles(): Html {
         questions: needs.attention.questions.value.length,
         waitingKnown: needs.attention.loaded.value,
         activity: read === null ? null : read.total,
+        replies: replies.value,
     });
     return html`<div class="dash-tiles" role="group" aria-label="${t('dash.tiles')}">
         ${list.map(
             (tile) =>
-                html`<div class="dash-tile" data-tile="${tile.label}">
+                html`<div
+                    class="dash-tile"
+                    data-tile="${tile.label}"
+                    ${tile.hint === undefined ? null : html`title="${tile.hint}"`}
+                >
                     <span class="label">${tile.label}</span>
                     ${
                         tile.value === null
@@ -206,7 +300,7 @@ function liveAgents(): Html {
     return html`<section class="card dash-card dash-agents">
         <div class="hd">
             <h3>${t('dash.agents')}</h3>
-            <span class="meta dash-period">${t('dash.agents.period')}</span>
+            <span class="meta dash-period">${t('dash.agents.period', { period: periodWords(period.value) })}</span>
             <button class="btn sm" type="button" ${act('dash.agents')}>${t('dash.agents.all')}</button>
         </div>
         <div class="bd">
@@ -256,7 +350,7 @@ function liveAgents(): Html {
                                                   : html`<progress
                                                         value="${progress}"
                                                         max="1"
-                                                        aria-label="${t('dash.progress', { agent: row.name })}"
+                                                        aria-label="${t('dash.progress', { period: periodWords(period.value), agent: row.name })}"
                                                     ></progress>`
                                           }
                                       </td>
@@ -264,6 +358,43 @@ function liveAgents(): Html {
                               })}
                           </tbody>
                       </table>`
+            }
+        </div>
+    </section>`;
+}
+
+function categories(): Html {
+    const read = replies.value;
+    return html`<section class="card dash-card dash-categories">
+        <div class="hd">
+            <h3>${t('dash.cats')}</h3>
+            <span class="meta dash-period">${periodWords(period.value)}</span>
+        </div>
+        <div class="bd">
+            ${
+                read === null
+                    ? html`<div class="empty dash-cats-none">${t('dash.cats.unread')}</div>`
+                    : read.total.categories.length === 0
+                      ? html`<div class="empty dash-cats-none">${t('dash.cats.none')}</div>`
+                      : html`<table class="t">
+                            <thead>
+                                <tr>
+                                    <th>${t('dash.cats.col.category')}</th>
+                                    <th>${t('dash.cats.col.threads')}</th>
+                                    <th>${t('dash.cats.col.replies')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${read.total.categories.map(
+                                    (each) =>
+                                        html`<tr data-category="${each.category}">
+                                            <td>${categoryLabel(each.category)}</td>
+                                            <td>${each.threads}</td>
+                                            <td>${each.replies}</td>
+                                        </tr>`,
+                                )}
+                            </tbody>
+                        </table>`
             }
         </div>
     </section>`;
@@ -323,6 +454,6 @@ export function dashboardView(): Html {
     return html`<div class="panel-body dash">
         ${header(waiting)} ${tiles()}
         <div class="dash-grid">${decide(now)} ${liveAgents()}</div>
-        ${recentActivity(now)}
+        ${categories()} ${recentActivity(now)}
     </div>`;
 }

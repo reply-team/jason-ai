@@ -46,6 +46,7 @@ export class FakeApi implements Api {
     private readonly answers = new Map<string, FixtureName[]>();
     private readonly held = new Map<string, { when: (body: object) => boolean; until: Promise<void> }>();
     private readonly gone = new Map<string, (body: object) => boolean>();
+    private readonly standIns = new Map<string, (body: object) => unknown>();
 
     /** The paired person the client puts on every write, as the recordings were made with. */
     constructor(private readonly actorId = 'ada') {}
@@ -56,6 +57,15 @@ export class FakeApi implements Api {
      */
     answer(operation: string, ...cases: FixtureName[]): this {
         this.answers.set(operation, cases);
+        return this;
+    }
+
+    /**
+     * A hand-written answer for an operation that has no recorded exchange yet: it answers any request, and is to be
+     * replaced by `answer` with the recording. Nothing recorded stands behind it.
+     */
+    standIn(operation: string, respond: (body: object) => unknown): this {
+        this.standIns.set(operation, respond);
         return this;
     }
 
@@ -91,6 +101,8 @@ export class FakeApi implements Api {
         const call = { operation, body: given, kind };
         this.calls.push(call);
         if (this.gone.get(operation)?.(given)) throw new TypeError('Failed to fetch');
+        const standIn = this.standIns.get(operation);
+        if (standIn) return standIn(given) as T;
         const body = kind === 'write' ? { ...given, actor: { type: 'human', id: this.actorId } } : given;
         const held = this.held.get(operation);
         if (held?.when(given)) await held.until;
