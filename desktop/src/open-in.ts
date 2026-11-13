@@ -5,12 +5,16 @@
  * own record (the campaign's recorded folder, else the harness root). Nothing here starts a process: an editor and the
  * file manager are started by `open-in-start.ts`, the three terminals by the bundled `jason session open`, and nothing is
  * written into the person's folders.
+ *
+ * One more entry continues the chat in front in a terminal: the page names the chat and nothing else, and the host and the
+ * session the host named are read from the desktop's own record of that chat (`continuableOf`), the working folder from
+ * the run. It is offered only for a session of Claude Code or Codex that a plain turn named, and it is never the default.
  */
 
 import { posix, win32 } from 'node:path';
 
 /** Every place the menu can offer, in the order it offers them. */
-export const placeIds = ['claude', 'codex', 'terminal', 'vscode', 'cursor', 'antigravity', 'windsurf', 'zed', 'files', 'copy'] as const;
+export const placeIds = ['claude', 'codex', 'terminal', 'vscode', 'cursor', 'antigravity', 'windsurf', 'zed', 'files', 'browser', 'copy'] as const;
 export type PlaceId = (typeof placeIds)[number];
 
 export const isPlace = (value: unknown): value is PlaceId => typeof value === 'string' && (placeIds as readonly string[]).includes(value);
@@ -31,6 +35,7 @@ const labels: Readonly<Record<PlaceId, string>> = {
     windsurf: 'Windsurf',
     zed: 'Zed',
     files: 'File manager',
+    browser: 'Browser',
     copy: 'Copy path',
 };
 
@@ -39,12 +44,24 @@ export interface Place {
     label: string;
 }
 
+/** The hosts a chat can be continued in, by the id the chat keeps each one's session under. */
+export type ContinueHost = 'claude' | 'codex';
+
+/** The entry that continues the chat in front: its host, by name, and whether a turn of the chat runs now. Never the session's id. */
+export interface ContinueOffer {
+    host: ContinueHost;
+    label: string;
+    running: boolean;
+}
+
 /** What the menu is drawn from: the places on this computer, the one the main part opens, and the folder's name. */
 export interface OpenInAnswer {
     places: Place[];
     default: PlaceId;
     /** The last part of the folder's path, for the button's words; never the path. */
     folder: string;
+    /** Present only when the chat the page named may be continued in a terminal. */
+    continue?: ContinueOffer;
 }
 
 export interface OpenInRefusal {
@@ -154,33 +171,44 @@ export function editorLine(found: Found, folder: string): Line {
     return found.kind === 'app' ? { file: '/usr/bin/open', args: ['-a', found.path, folder] } : { file: found.path, args: [folder] };
 }
 
-/** The places this computer has, in the menu's order; the three terminal entries need no program of the desktop's. */
-export function placesFound(probes: Probes, hosts: { claude: boolean; codex: boolean }): Place[] {
+/**
+ * The places this computer has, in the menu's order; the three terminal entries need no program of the desktop's. A
+ * browser is offered where the desktop can open the chat in one (`browser`): it opens the chat, not the folder.
+ */
+export function placesFound(probes: Probes, hosts: { claude: boolean; codex: boolean }, browser = false): Place[] {
     const found: PlaceId[] = [];
     if (hosts.claude) found.push('claude');
     if (hosts.codex) found.push('codex');
     found.push('terminal');
     for (const id of editorIds) if (findEditor(id, probes) !== null) found.push(id);
     if (fileManager(probes) !== null) found.push('files');
+    if (browser) found.push('browser');
     found.push('copy');
-    // The generic places (Terminal, Copy path, and the file manager where the system has no name for it) carry no label: the
-    // page has its own words for them. A product's name (VS Code, Finder, File Explorer, Claude Code) is the desktop's.
-    return found.map((id) => ({ id, label: id === 'files' ? fileManagerName(probes.platform) : id === 'terminal' || id === 'copy' ? '' : labels[id] }));
+    // The generic places (Terminal, a browser, Copy path, and the file manager where the system has no name for it) carry no
+    // label: the page has its own words for them. A product's name (VS Code, Finder, File Explorer, Claude Code) is the
+    // desktop's.
+    return found.map((id) => ({ id, label: id === 'files' ? fileManagerName(probes.platform) : id === 'terminal' || id === 'browser' || id === 'copy' ? '' : labels[id] }));
 }
+
+/** The places that do not open the folder, so are never the main part's: Copy path, and a browser, which opens the chat. */
+export const notFolderPlaces: readonly PlaceId[] = ['copy', 'browser'];
 
 /**
  * The place the main part opens: the one used last while it is still here, else Claude Code, else the first place that
- * opens something. Copy path is never the default; a terminal is always there.
+ * opens something. Copy path and a browser are never the default; a terminal is always there.
  */
 export function defaultPlace(places: readonly Place[], remembered: PlaceId | null): PlaceId {
     const here = (id: PlaceId) => places.some((place) => place.id === id);
-    if (remembered !== null && remembered !== 'copy' && here(remembered)) return remembered;
+    if (remembered !== null && !notFolderPlaces.includes(remembered) && here(remembered)) return remembered;
     if (here('claude')) return 'claude';
-    return places.find((place) => place.id !== 'copy')?.id ?? 'terminal';
+    return places.find((place) => !notFolderPlaces.includes(place.id))?.id ?? 'terminal';
 }
 
 /** The arguments `jason session open` is given for a terminal; one function holds the form the CLI takes. */
 export type TerminalFlags = (kind: TerminalKind, campaignId: string | null) => string[];
+
+/** The arguments `jason session open` is given to continue a host's own conversation of that id, in the working folder. */
+export type ContinueFlags = (host: ContinueHost, session: string) => string[];
 
 export interface OpenInDeps {
     probes: Probes;
@@ -198,8 +226,26 @@ export interface OpenInDeps {
     /** Writes to the clipboard, from the main process. */
     copy(text: string): void;
     terminalFlags: TerminalFlags;
+    /**
+     * Opens the chat in a tab of the system's browser (`browser-bridge.ts`): the sentence why it could not, or null.
+     * Absent, a browser is not offered.
+     */
+    browser?(): Promise<string | null>;
     log?(event: 'open_in' | 'open_in_refused', fields: { Place: PlaceId }): void;
+    /**
+     * The session a terminal may continue the chat by, read from the desktop's own record, with whether a turn of it runs
+     * now; null for a chat the desktop does not keep, an id of no shape, or a chat with no such session (`Chat.continuable`).
+     */
+    continuable(chatId: unknown): { host: ContinueHost; session: string; running: boolean } | null;
+    /** The folder a plain turn of the chat runs in: the working folder of a chat continued in a terminal. */
+    chatFolder(): string;
+    continueFlags: ContinueFlags;
+    logContinue?(event: 'open_in_continued' | 'open_in_continue_refused', fields: { Host: ContinueHost }): void;
 }
+
+/** The refusals of the entry that continues a chat, in the desktop's own words. */
+export const notContinuable = 'This chat cannot be continued in a terminal.';
+export const continueRunning = 'A turn of this chat is running. Stop it or wait for it to end, then continue it in a terminal.';
 
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
 
@@ -253,19 +299,54 @@ export class OpenIn {
         return this.#deps.isDirectory(root) ? root : { refused: "Jason's folder is not there yet; it is made with the first agent." };
     }
 
-    /** What the menu offers for the folder of the open chat's campaign, or of the harness root with none. */
-    async targets(campaignId?: unknown): Promise<OpenInAnswer | OpenInRefusal> {
+    /**
+     * What the menu offers for the folder of the open chat's campaign, or of the harness root with none; and, where the page
+     * names the chat in front and that chat may be continued in a terminal, the entry that does it.
+     */
+    async targets(campaignId?: unknown, chatId?: unknown): Promise<OpenInAnswer | OpenInRefusal> {
         const folder = await this.#folder(campaignId);
         if (typeof folder !== 'string') return folder;
-        const places = placesFound(this.#deps.probes, this.#deps.hosts());
+        const places = placesFound(this.#deps.probes, this.#deps.hosts(), this.#deps.browser !== undefined);
         const name = (this.#deps.probes.platform === 'win32' ? win32 : posix).basename(folder);
-        return { places, default: defaultPlace(places, this.#deps.remembered()), folder: name };
+        const answer: OpenInAnswer = { places, default: defaultPlace(places, this.#deps.remembered()), folder: name };
+        const found = chatId === undefined || chatId === null ? null : this.#deps.continuable(chatId);
+        if (found !== null) answer.continue = { host: found.host, label: labels[found.host], running: found.running };
+        return answer;
+    }
+
+    /**
+     * Continues the chat in a terminal: the host and the id of the session it named are read from the desktop's own record
+     * of the chat, and the bundled `jason session open --here` opens it in the folder a plain turn runs in. Nothing the page
+     * sends but the chat's id is read. Refused, with nothing run, for a chat that may not be continued or whose turn runs;
+     * a refusal of the CLI is said in its own sentence. Never kept as the next default.
+     */
+    async continueChat(chatId: unknown): Promise<OpenInRefusal | null> {
+        const deps = this.#deps;
+        const found = deps.continuable(chatId);
+        if (found === null) return { refused: notContinuable };
+        if (found.running) return { refused: continueRunning };
+        const answer = await deps.cli.run(['session', 'open', ...deps.continueFlags(found.host, found.session)], { cwd: deps.chatFolder() });
+        if (answer.exit === 0) {
+            deps.logContinue?.('open_in_continued', { Host: found.host });
+            return null;
+        }
+        deps.logContinue?.('open_in_continue_refused', { Host: found.host });
+        // A usage error is said on stderr, its first line the sentence; a refusal is the JSON of its error on stdout.
+        const usage = answer.exit === 2 ? (answer.stderr.split(/\r?\n/)[0] ?? '').trim() : '';
+        const sentence = answer.exit === 3 ? "Jason's runtime is not running." : (cliSentence(answer.stdout) ?? (usage === '' ? null : usage) ?? 'A terminal could not be opened.');
+        return { refused: sentence };
     }
 
     /** Opens the folder in the place the name says; a name not on this computer's list, or a path, is refused. */
     async open(target: unknown, campaignId?: unknown): Promise<OpenInRefusal | null> {
-        const places = placesFound(this.#deps.probes, this.#deps.hosts());
+        const places = placesFound(this.#deps.probes, this.#deps.hosts(), this.#deps.browser !== undefined);
         if (!isPlace(target) || !places.some((place) => place.id === target)) return { refused: 'That is not a place this computer can open the folder in.' };
+        // A browser opens the chat, not a folder: none is read, and it is never kept as the place used last.
+        if (target === 'browser') {
+            const failed = this.#deps.browser === undefined ? 'That is not a place this computer can open the folder in.' : await this.#deps.browser();
+            this.#deps.log?.(failed === null ? 'open_in' : 'open_in_refused', { Place: target });
+            return failed === null ? null : { refused: failed };
+        }
         const folder = await this.#folder(campaignId);
         if (typeof folder !== 'string') return folder;
         const deps = this.#deps;
@@ -301,7 +382,7 @@ export class OpenIn {
             deps.log?.('open_in_refused', { Place: target });
             return refusal;
         }
-        if (target !== 'copy') deps.remember(target);
+        if (!notFolderPlaces.includes(target)) deps.remember(target);
         deps.log?.('open_in', { Place: target });
         return null;
     }

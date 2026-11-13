@@ -43,6 +43,10 @@ export function pairingLink(stdout: string, origin: string): string | null {
     }
     if (typeof raw !== 'object' || raw === null) return null;
     const url = (raw as { url?: unknown }).url;
-    if (typeof url !== 'string' || loopbackOrigin(url) !== origin) return null;
-    return new URL(url).pathname.startsWith('/ui/') ? url : null;
+    return typeof url === 'string' && isOwnPage(url, origin) ? url : null;
+}
+
+/** Whether an address is a page of the runtime's own UI: at the runtime's origin, under `/ui/`. */
+export function isOwnPage(url: string, origin: string): boolean {
+    return loopbackOrigin(url) === origin && new URL(url).pathname.startsWith('/ui/');
 }

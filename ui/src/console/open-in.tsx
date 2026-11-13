@@ -1,26 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DesktopOpenInAnswer, DesktopOpenInPlace, DesktopRefusal, JasonDesktop } from '../platform/desktop';
+import type {
+    DesktopOpenInAnswer,
+    DesktopOpenInContinue,
+    DesktopOpenInPlace,
+    DesktopRefusal,
+    JasonDesktop,
+} from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
 import { activePanel, chats, currentChat } from './state';
 
 // "Open in": the split button of the console's top bar, in Live and in Demo alike. The main part opens the folder in the
 // default place, the arrow lists every place this computer has. The page names a place and, where a campaign's chat is
-// in front, that campaign; it never holds or sends a path, and the folder's name it shows comes from the desktop.
+// in front, that campaign; it never holds or sends a path, and the folder's name it shows comes from the desktop. Where
+// a chat is in front and the desktop offers it, the menu's last group continues that chat in a terminal: the page sends
+// the chat's id alone, and the host and the session are the desktop's to read from its own record.
 
 const editorIds = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
 
 const refused = (answer: unknown): answer is DesktopRefusal =>
     typeof answer === 'object' && answer !== null && 'refused' in answer;
 
+/** The chat whose panel is the one in front, or undefined: with Agents, Needs you or Activity in front there is none. */
+function chatInFront(): string | undefined {
+    const id = currentChat.value;
+    return id === null || activePanel.value !== 'chat:' + id ? undefined : id;
+}
+
 /**
  * The campaign of the chat in front, or undefined: only while that chat's panel is the one in front is its campaign's
  * folder the one meant; with Agents, Needs you or Activity in front the folder is the harness root.
  */
 function campaignOfChat(): string | undefined {
-    const id = currentChat.value;
-    if (id === null || activePanel.value !== 'chat:' + id) return undefined;
-    return chats.value[id]?.campaignId ?? undefined;
+    const id = chatInFront();
+    return id === undefined ? undefined : (chats.value[id]?.campaignId ?? undefined);
 }
 
 /** The words for a place: the desktop's product name where it sends one, else the page's own word for the place. */
@@ -30,36 +43,55 @@ function nameOf(place: { id: DesktopOpenInPlace; label: string }): string {
         ? t('openIn.place.terminal')
         : place.id === 'files'
           ? t('openIn.place.files')
-          : t('openIn.copy');
+          : place.id === 'browser'
+            ? t('openIn.place.browser')
+            : t('openIn.copy');
 }
 
 export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     const campaignId = campaignOfChat();
+    const chatId = chatInFront();
+    // Whether the page sees a turn of the chat in front run: the entry is disabled meanwhile, and the places are read
+    // again when it ends, since a turn may have named the session the entry continues.
+    const turnRuns = chatId !== undefined && chats.value[chatId]?.running === true;
     const [answer, setAnswer] = useState<DesktopOpenInAnswer | null>(null);
+    // The chat the answer was read for: its entry is drawn only while that chat is still the one in front.
+    const [answerChat, setAnswerChat] = useState<string | undefined>(undefined);
     const [problem, setProblem] = useState<string | null>(null);
     const [menu, setMenu] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const root = useRef<HTMLDivElement>(null);
+    // Each read is numbered; an answer that lands after a later read was asked for is dropped, so a slow read for one chat
+    // never overwrites the answer for the chat in front now.
+    const reads = useRef(0);
 
     const read = useCallback(async () => {
+        const asked = ++reads.current;
         try {
-            const kept = await desktop.openIn.targets(campaignId);
+            const kept = await desktop.openIn.targets(campaignId, chatId);
+            if (asked !== reads.current) return;
             if (refused(kept)) {
                 setAnswer(null);
                 setProblem(kept.refused);
             } else {
                 setAnswer(kept);
+                setAnswerChat(chatId);
                 setProblem(null);
             }
         } catch (error) {
+            if (asked !== reads.current) return;
             setAnswer(null);
             setProblem(error instanceof Error ? error.message : String(error));
         }
-    }, [desktop, campaignId]);
+    }, [desktop, campaignId, chatId]);
+    // The entry is drawn only with a chat in front, and only from the answer read for that chat.
+    const continuing =
+        chatId !== undefined && answerChat === chatId && answer?.continue !== undefined ? answer.continue : undefined;
 
+    // A turn of the chat in front that starts or ends asks for the places again.
     useEffect(() => {
         void read();
-    }, [read]);
+    }, [read, turnRuns]);
 
     // A refusal is not for good: the window coming back to the front reads the places again.
     useEffect(() => {
@@ -99,6 +131,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         const chosen = answer?.places.find((each) => each.id === place);
         const folder = answer?.folder ?? '';
         if (place === 'copy') setToast(t('openIn.copied', { folder }));
+        else if (place === 'browser') setToast(t('openIn.browserOpened'));
         else {
             // Jason in a terminal works with this window's data. An editor already running keeps the environment it started
             // with, so in the demo an editor is said to be the other way about, and the file manager says nothing of data.
@@ -117,6 +150,21 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                           : ''),
             );
         }
+    };
+
+    const continueChat = async (offered: DesktopOpenInContinue) => {
+        setMenu(false);
+        if (chatId === undefined) return;
+        const said = await desktop.openIn.continueChat(chatId).then(
+            (result) => (result === null ? null : result.refused),
+            (error: unknown) => (error instanceof Error ? error.message : String(error)),
+        );
+        await read();
+        if (said !== null) {
+            setProblem(said);
+            return;
+        }
+        setToast(t('openIn.continued', { place: offered.label }) + ' ' + t('openIn.sameData'));
     };
 
     useEffect(() => {
@@ -192,7 +240,11 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     {rest.map((place) =>
                         item(
                             place,
-                            place.id === 'copy' ? answer.folder : undefined,
+                            place.id === 'copy'
+                                ? answer.folder
+                                : place.id === 'browser'
+                                  ? t('openIn.browser')
+                                  : undefined,
                             place.id === 'terminal'
                                 ? t('openIn.terminal')
                                 : place.id === 'copy'
@@ -201,8 +253,40 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                         ),
                     )}
                     {mode.value === 'demo' && <div className="open-in-note">{t('openIn.demoNote')}</div>}
+                    {continuing !== undefined && (
+                        <ContinueEntry
+                            offered={continuing}
+                            running={continuing.running || turnRuns}
+                            onChoose={(offered) => void continueChat(offered)}
+                        />
+                    )}
                 </div>
             )}
+        </div>
+    );
+}
+
+/**
+ * The menu's last group: the entry that continues the chat in front in a terminal, with the sentence that says the window's
+ * permission cards do not follow it there; while a turn of the chat runs it is disabled, and says so instead.
+ */
+function ContinueEntry({
+    offered,
+    running,
+    onChoose,
+}: {
+    offered: DesktopOpenInContinue;
+    running: boolean;
+    onChoose: (offered: DesktopOpenInContinue) => void;
+}) {
+    return (
+        <div className="open-in-continue" role="group" aria-label={t('openIn.continue', { place: offered.label })}>
+            <button type="button" role="menuitem" disabled={running} onClick={() => onChoose(offered)}>
+                <span>{t('openIn.continue', { place: offered.label })}</span>
+                <small>
+                    {running ? t('openIn.continueRunning') : t('openIn.continueNote', { place: offered.label })}
+                </small>
+            </button>
         </div>
     );
 }

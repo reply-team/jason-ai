@@ -1,0 +1,26 @@
+.jc-console.tab-chat {
+    display: flex;
+    gap: 16px;
+    height: calc(100vh - 140px);
+    min-height: 360px;
+}
+.tab-chat .tab-list {
+    width: 220px;
+    flex: none;
+    overflow-y: auto;
+}
+.tab-chat .tab-list ul {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+}
+.tab-chat .tab-list li button {
+    width: 100%;
+    text-align: left;
+}
+.tab-chat .tab-panel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}

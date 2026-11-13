@@ -1002,10 +1002,10 @@ test('the main process loads the page through openOnTheSample, says the mark to 
     assert.ok(opened.indexOf('loadWindow(') > 0 && opened.indexOf('loadWindow(') < opened.indexOf('});'), 'the page is loaded inside it');
     // The mark: the page reads it with the mode and hears it change; the menu draws its lines again.
     assert.ok(main.includes("({ mode: runOn.mode, unopened: runOn.unopened, preparing: sampleMaking })"));
-    assert.ok(main.includes("current?.webContents.send(eventChannels['mode.preparing'], on);"));
+    assert.ok(main.includes("toPage('mode.preparing', on);"));
     assert.ok(main.includes('desk.setDemo(demoMenu(runOn.mode, removalOffered(process.platform), on));'));
     // A switch, the way back and a start over are refused while the sample is made.
-    assert.ok(main.includes("handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);"));
+    assert.ok(main.includes("handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);"));
     assert.ok(main.includes("const refusal = applyMode('live', modeDeps, sampleMaking);"));
     const startOver = main.slice(main.indexOf('const startOver = async ()'));
     const held = startOver.indexOf('if (sampleMaking) return { refused: demoPreparing };');

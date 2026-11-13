@@ -8,6 +8,7 @@ import type {
     DesktopFullAccessStanding,
     DesktopLink,
     DesktopOpenInAnswer,
+    DesktopOpenInContinue,
     DesktopOpenInPlace,
     DesktopRefusal,
     DesktopReplyCopied,
@@ -204,6 +205,12 @@ export interface StubDesktop extends JasonDesktop {
      */
     openInKept: DesktopOpenInAnswer;
     /**
+     * By the chat's id, the entry `openIn.targets` adds when the page names that chat: none unless a test gives one, as
+     * the desktop offers it only for a chat whose session a plain turn named. `openIn.continueChat` answers null or the
+     * refusal a test set, and changes no default.
+     */
+    openInContinue: Map<string, DesktopOpenInContinue>;
+    /**
      * Calls the test refuses, by name, with the sentence: a chat call answers it as a value (`{ refused }`), as the
      * desktop does; a setup call rejects with it.
      */
@@ -371,11 +378,17 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             },
         },
         openIn: {
-            targets: answering('openIn.targets', () => structuredClone(stub.openInKept)),
+            targets: answering('openIn.targets', (_campaignId, chatId) => {
+                const offered = typeof chatId === 'string' ? stub.openInContinue.get(chatId) : undefined;
+                return structuredClone(
+                    offered === undefined ? stub.openInKept : { ...stub.openInKept, continue: offered },
+                );
+            }),
             open: answering('openIn.open', (target) => {
                 if (target !== 'copy') stub.openInKept.default = target as DesktopOpenInPlace;
                 return null;
             }),
+            continueChat: answering('openIn.continueChat', () => null),
         },
         pairing: { paired: call('pairing.paired') },
         calls,
@@ -399,6 +412,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             default: 'claude',
             folder: 'Jason',
         },
+        openInContinue: new Map(),
         kept,
         names,
         keep,

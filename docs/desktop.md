@@ -212,8 +212,21 @@ than shown.
 **What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
 and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
 own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
-refused, as the commands that start a session on your computer. It does not continue the chat you
-had, and it does not open the data directory.
+refused, as the commands that start a session on your computer. It does not open the data directory; the one folder of it
+a terminal is opened in is the chat's own, to continue a chat.
+
+**Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
+Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs
+`jason session open --here --host <host> --resume <id>` in the folder the chat's turns run in, `<data>/desktop/chat`, so
+nothing is copied, no transcript is written and nothing goes into your folders. The page names only the chat; the desktop
+reads the program and the conversation's id from its own record of the chat. The entry is there only when the chat's last
+turn ran on Claude Code or Codex with your own sign-in, outside Full access, and that program named its conversation in a
+turn of that kind. A chat on a provider's key, one whose conversation a Full access turn named or carried on, and one no
+turn of this kind has named since an earlier version of the desktop kept it show no entry. While a turn of the chat runs,
+the entry is shown but cannot be chosen, and says to stop the turn or wait for it to end. Beside it the menu says "It
+continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and
+this window does not show what happens there." It is never the default. A refusal of the command line is said in its own
+words, and in the demo the terminal works with the demo's data, as the other terminals do.
 
 ## The demo
 

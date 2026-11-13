@@ -75,6 +75,8 @@ export interface Console {
     api: Api;
     desktop: JasonDesktop;
     dock: Dock;
+    /** Set when the console is bound in a browser tab over the desktop's bridge: what only the desktop's window may do is not offered. */
+    tab?: boolean;
 }
 
 let current: Console | null = null;
@@ -90,4 +92,9 @@ export function bind(console: Console): () => void {
 export function here(): Console {
     if (!current) throw new Error('The console is not mounted.');
     return current;
+}
+
+/** Whether the console was bound in a browser tab. The one fact every control a tab may not use is hidden by. */
+export function inTab(): boolean {
+    return current?.tab === true;
 }
