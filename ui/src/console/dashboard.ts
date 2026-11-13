@@ -44,6 +44,8 @@ export const custom = signal<CustomRange>({ from: '', to: '' });
 
 /** What `reply.count` answered for the period; null until read, while no window is asked for, or when the read failed. */
 export const replies = signal<ReplyCountRead | null>(null);
+/** Where the replies' read stands: asked for nothing (a custom range that asks for none), waiting, answered or failed. */
+export const repliesStatus = signal<'not_asked' | 'loading' | 'read' | 'failed'>('loading');
 
 /** The period's counts across the agents not archived, and by agent; null until read or when the read failed. */
 export const activity = signal<{ total: ActivityRead; byCampaign: Record<string, ActivityRead> } | null>(null);
@@ -59,8 +61,10 @@ export async function reload(): Promise<void> {
     if (window === null) {
         activity.value = null;
         replies.value = null;
+        repliesStatus.value = 'not_asked';
         return;
     }
+    if (replies.value === null) repliesStatus.value = 'loading';
     const counts = async () => {
         try {
             const read = await here().api.call<CampaignActivityResponse>('campaign.activity', {
@@ -81,9 +85,13 @@ export async function reload(): Promise<void> {
     const judged = async () => {
         try {
             const read = await here().api.call<ReplyCountRead>('reply.count', window);
-            if (mine === generation) replies.value = read;
+            if (mine !== generation) return;
+            replies.value = read;
+            repliesStatus.value = 'read';
         } catch {
-            if (mine === generation) replies.value = null;
+            if (mine !== generation) return;
+            replies.value = null;
+            repliesStatus.value = 'failed';
         }
     };
     await Promise.all([counts(), judged()]);
@@ -94,6 +102,9 @@ export function watching(on: boolean): void {
     open = Math.max(0, open + (on ? 1 : -1));
     if (on) {
         period.value = defaultDashboardPeriod;
+        custom.value = { from: '', to: '' };
+        replies.value = null;
+        repliesStatus.value = 'loading';
         void reload();
     }
 }
@@ -157,6 +168,8 @@ function recent(now: number): { row: FeedRow; who: string }[] {
 }
 
 function periodControl(): Html {
+    const hint = rangeHint();
+    const described = hint === null ? null : html`aria-describedby="dash-range-hint"`;
     return html`<span class="dash-period-pick">
         <select class="inp" aria-label="${t('dash.period')}" data-change="dash.period">
             ${dashboardPeriods.map(
@@ -172,6 +185,7 @@ function periodControl(): Html {
                           class="inp"
                           type="date"
                           aria-label="${t('dash.period.from')}"
+                          ${described}
                           value="${custom.value.from}"
                           data-change="dash.range"
                           ${argsOf('from')}
@@ -179,20 +193,23 @@ function periodControl(): Html {
                           class="inp"
                           type="date"
                           aria-label="${t('dash.period.to')}"
+                          ${described}
                           value="${custom.value.to}"
                           data-change="dash.range"
                           ${argsOf('to')}
                       />`
                 : null
         }
-        ${rangeHint()}
+        ${hint}
     </span>`;
 }
 
 function rangeHint(): Html | null {
     if (period.value !== 'custom') return null;
     const problem = rangeProblem(custom.value, new Date(), zone);
-    return problem === null ? null : html`<p class="dash-range-hint" role="status">${t(`dash.range.${problem}`)}</p>`;
+    return problem === null
+        ? null
+        : html`<p class="dash-range-hint" id="dash-range-hint" role="status">${t(`dash.range.${problem}`)}</p>`;
 }
 
 function header(waiting: number): Html {
@@ -381,7 +398,11 @@ function categories(): Html {
         <div class="bd">
             ${
                 read === null
-                    ? html`<div class="empty dash-cats-none">${t('dash.cats.unread')}</div>`
+                    ? repliesStatus.value === 'failed'
+                        ? html`<div class="empty dash-cats-failed">${t('dash.cats.unread')}</div>`
+                        : repliesStatus.value === 'loading'
+                          ? html`<div class="empty dash-cats-reading">${t('dash.cats.reading')}</div>`
+                          : null
                     : read.total.categories.length === 0
                       ? html`<div class="empty dash-cats-none">${t('dash.cats.none')}</div>`
                       : html`<table class="t">

@@ -91,6 +91,7 @@ beforeEach(() => {
     consoleCampaigns.read.value = false;
     dashboard.activity.value = null;
     dashboard.replies.value = null;
+    dashboard.repliesStatus.value = 'loading';
     dashboard.period.value = '30d';
     dashboard.custom.value = { from: '', to: '' };
     mode.value = 'live';
@@ -266,6 +267,31 @@ describe('the categories card', () => {
         expect(words(card.querySelector('.hd .dash-period')!)).toBe('the last 30 days');
     });
 
+    it('says it is reading while the first answer is awaited, and carries no failure sentence', async () => {
+        const { fake } = renderConsole();
+        const release = fake.hold('reply.count');
+        await open();
+        await waitFor(() => expect(words(dash().querySelector('.dash-categories .bd')!)).toBe('Reading the replies…'));
+        expect(dash().querySelector('.dash-cats-failed')).toBeNull();
+        release();
+        await waitFor(() => expect(dash().querySelector('.dash-categories tbody tr')).toBeTruthy());
+    });
+
+    it('says nothing in the card for a custom range that asks for nothing, the hint being the only explanation', async () => {
+        renderConsole({ anyWindow: true });
+        await open();
+        const select = dash().querySelector<HTMLSelectElement>('select[data-change="dash.period"]')!;
+        select.value = 'custom';
+        fireEvent.change(select);
+        await waitFor(() => expect(dash().querySelector('input[aria-label="From"]')).toBeTruthy());
+        const from = dash().querySelector<HTMLInputElement>('input[aria-label="From"]')!;
+        from.value = '2026-10-20';
+        fireEvent.change(from);
+        await waitFor(() => expect(dash().querySelector('.dash-range-hint')).toBeTruthy());
+        await waitFor(() => expect(words(dash().querySelector('.dash-categories .bd')!)).toBe(''));
+        expect(dash().textContent).not.toContain('could not be read');
+    });
+
     it('says no reply was judged when the answer has no category', async () => {
         renderConsole();
         await open();
@@ -390,6 +416,23 @@ describe('the period', () => {
         expect(part('Contacted', 'b')).toBe('–');
     });
 
+    it('links the range line to both date fields', async () => {
+        renderConsole({ anyWindow: true });
+        await open();
+        choose('custom');
+        await waitFor(() => expect(dash().querySelector('input[aria-label="From"]')).toBeTruthy());
+        const from = dash().querySelector<HTMLInputElement>('input[aria-label="From"]')!;
+        from.value = '2026-10-20';
+        fireEvent.change(from);
+        await waitFor(() => expect(dash().querySelector('.dash-range-hint')).toBeTruthy());
+        const hint = dash().querySelector('.dash-range-hint')!;
+        expect(hint.id).toBe('dash-range-hint');
+        for (const label of ['From', 'To'])
+            expect(dash().querySelector(`input[aria-label="${label}"]`)!.getAttribute('aria-describedby')).toBe(
+                hint.id,
+            );
+    });
+
     it('has no range line for a range that asks, nor outside Custom', async () => {
         renderConsole({ anyWindow: true });
         await open();
@@ -399,6 +442,26 @@ describe('the period', () => {
         choose('7d');
         await waitFor(() => expect(dash().querySelector('input[aria-label="From"]')).toBeNull());
         expect(dash().querySelector('.dash-range-hint')).toBeNull();
+    });
+
+    it('does not remember custom dates either: Custom opens on the thirty days again', async () => {
+        renderConsole({ anyWindow: true });
+        await open();
+        choose('custom');
+        await waitFor(() => expect(dash().querySelector('input[aria-label="From"]')).toBeTruthy());
+        const from = dash().querySelector<HTMLInputElement>('input[aria-label="From"]')!;
+        from.value = '2026-09-01';
+        fireEvent.change(from);
+        await waitFor(() => expect(dashboard.custom.value.from).toBe('2026-09-01'));
+        dashboard.watching(false);
+        dashboard.watching(true);
+        await waitFor(() => expect(chosen()).toBe('30d'));
+        expect(dashboard.custom.value).toEqual({ from: '', to: '' });
+        choose('custom');
+        await waitFor(() =>
+            expect(dash().querySelector<HTMLInputElement>('input[aria-label="From"]')!.value).toBe('2026-09-17'),
+        );
+        dashboard.watching(false);
     });
 
     it('does not remember the choice: the Dashboard opens on thirty days again', async () => {
