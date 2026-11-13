@@ -146,7 +146,7 @@ public sealed class TerminalPlanTests : IDisposable
     [InlineData("/Users/marta/jason test", "'/Users/marta/jason test'")]
     [InlineData("/Users/marta/marta's jason", "'/Users/marta/marta'\\''s jason'")]
     [InlineData("/Users/marta/$HOME/jason", "'/Users/marta/$HOME/jason'")]
-    [InlineData("/Users/marta/jason\nrm -rf ~", "'/Users/marta/jason\nrm -rf ~'")]
+    [InlineData("/Users/marta/jason\nexit 7", "'/Users/marta/jason\nexit 7'")]
     public void The_exported_data_directory_is_quoted_like_every_other_word_of_the_script(string dataDirectory, string quoted)
     {
         var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
