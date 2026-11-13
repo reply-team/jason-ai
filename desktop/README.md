@@ -402,8 +402,18 @@ applies to the turns a person starts by sending, from the next one on.
   on Windows (`con`, `nul`, `com1`, `lpt1` and the like, with any extension), and lie strictly inside
   `<data>/desktop/chat` both as written and once links are followed (`located`), the folder itself excluded; the names
   an agent loads (`guardedPlace`, `namesLocalJason`) and every refusal over the resolved words stay as in Ask first.
-  The chain rule: once a `mv` or a `cp` names a path, no later operand of the same command line may lie inside it, since
-  what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`), on a
+  A link or a junction that leads nowhere, at the operand or at any folder above it in the chat folder, is a card: the
+  scope's `entry` (`entryOf`, `src/chat-real-path.ts`) finds something there that the real path reader cannot follow,
+  and a `touch` or a `cp` through it would write where it leads. A scope without `entry` runs nothing unasked. For a
+  `mv` or a `cp`, the path it writes when its last operand is a folder, that operand with each source's name after it,
+  is judged as one more operand for every copy and move, whatever the last operand is at the judgement, since an
+  earlier part of the line may make it a folder; and a `mv` whose destination or written path ends in the first part of
+  a guarded name of two parts (`.github`) is a card, since the folder moved there may hold the rest. A file named like
+  one of the six (with a program extension on Windows, folded where names fold) or like jason, directly in the chat
+  folder, is a card when an operand names it or when the command runs that program and such a file is already there:
+  where the search path holds the current folder the shell would run it in place of the system's.
+  The chain rule: once a `mv` or a `cp` names or writes a path, no later operand of the same command line may lie
+  inside it, since what the earlier part made there is not what the judgement saw. Auto-edit is refused on Codex (`codexAutoEdit`), on a
   host that does not drive the chat and for the Feed (`feedAutoEdit`); each host's listing carries `autoEdit`, the
   reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation, no switch and
   no standing entry; it is held in memory alone, for that conversation, like Full access, so a record never says it, a
