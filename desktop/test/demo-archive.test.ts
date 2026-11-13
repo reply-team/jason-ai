@@ -25,7 +25,7 @@ import {
     type PlacingEnd,
     type PlacingOutcome,
 } from '../src/demo-archive.ts';
-import { claimDemoFolder, demoMarkerName, hasDemoMarker, markPlacedFolder } from '../src/demo-folders.ts';
+import { claimDemoFolder, demoMarkerName, demoMarkerText, hasDemoMarker, markPlacedFolder } from '../src/demo-folders.ts';
 import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftByAMaking, leftByAPlacing, placingInFlight, requestStartOver } from '../src/demo-over.ts';
 import { markerPath, readMarker, type DemoPlaces } from '../src/demo-seed.ts';
 import { fileLines, LogHold } from '../src/log.ts';
@@ -188,7 +188,7 @@ interface Seen {
  * a part present goes aside into `<data>/replaced-*`; then the parts and the root are written and a runtime started.
  * `fails` ends it with the verb's error code before anything is written, or after the parts and before the start.
  */
-function importer(places: DemoPlaces, fails: 'before' | 'after' | null = null) {
+function importer(places: DemoPlaces, fails: 'before' | 'after' | null = null, marked = true) {
     const seen: Seen = { args: null, logsThere: null, rootThere: null, data: null, asides: [], started: false };
     const refusal = (code: string): CliResult => ({ exit: 1, stdout: JSON.stringify({ error: { code, message: `nothing at ${places.data} was written`, retryable: false } }), stderr: '' });
     const cli: Cli = {
@@ -214,6 +214,8 @@ function importer(places: DemoPlaces, fails: 'before' | 'after' | null = null) {
             writeFileSync(join(places.data, 'config', 'settings.json'), JSON.stringify({ Routes: { Default: { Plugin: 'demo' } } }));
             mkdirSync(join(places.harnessRoot, 'projects', 'sample'), { recursive: true });
             writeFileSync(join(places.harnessRoot, 'projects', 'sample', 'AGENTS.md'), '');
+            // The root as an export carries it: the demo's, with the marker it was given where it was made.
+            if (marked) writeFileSync(join(places.harnessRoot, demoMarkerName), demoMarkerText);
             if (fails === 'after') return refusal('runtime_start_failed');
             seen.started = true;
             return { exit: 0, stdout: '{}', stderr: '' };
@@ -281,7 +283,8 @@ const seal = (data: string) => readMarker({ readText: (file) => (existsSync(file
 
 test('a fresh archive is placed by jason import, before any log line reaches the disk and into a harness root that is not there', async (t) => {
     const w = world(t);
-    const { cli, seen } = importer(w.places);
+    // An archive whose root carries no marker: the end marks it.
+    const { cli, seen } = importer(w.places, null, false);
     const { outcome, lines, order } = await placeOn(w, cli);
     assert.equal(outcome, 'placed');
     assert.deepEqual(seen.args, ['import', w.archive, '--root', w.places.harnessRoot]);
@@ -438,7 +441,13 @@ test('the root an import made is marked only where it is a folder of its own', (
     mkdirSync(folder);
     markPlacedFolder(folder);
     assert.ok(hasDemoMarker(folder));
-    assert.throws(() => markPlacedFolder(folder), 'a marker already there is not written over');
+    // The archive's root carries the marker it had where it was made: it is kept as it is.
+    assert.doesNotThrow(() => markPlacedFolder(folder));
+    assert.ok(hasDemoMarker(folder));
+    // A file of the marker's name that is not the marker is made the marker: the folder is the import's own.
+    writeFileSync(join(folder, demoMarkerName), 'something else');
+    markPlacedFolder(folder);
+    assert.ok(hasDemoMarker(folder));
     writeFileSync(join(root, 'file'), '');
     assert.throws(() => markPlacedFolder(join(root, 'file')));
 });

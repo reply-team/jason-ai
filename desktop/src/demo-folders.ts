@@ -62,11 +62,12 @@ export function claimDemoFolder(folder: string): void {
 /**
  * Marks a folder this start found absent and `jason import` then made: the prepared demo's harness root (`demo-archive.ts`),
  * which an import placing into a folder that holds anything, the marker included, would first move aside, so it is marked
- * only once the import has ended. Throws, writing nothing, when the path is not a folder of its own (a link, a file) or
- * already holds a file of the marker's name.
+ * only once the import has ended. The archive's root was the demo's where it was made, so it usually carries the marker
+ * already, and is then kept as it is. Throws, writing nothing, when the path is not a folder of its own (a link, a file).
  */
 export function markPlacedFolder(folder: string): void {
     const there = lstatSync(folder);
     if (!there.isDirectory() || there.isSymbolicLink()) throw new Error(demoFolderForeign);
-    writeFileSync(join(folder, demoMarkerName), demoMarkerText, { flag: 'wx' });
+    if (hasDemoMarker(folder)) return;
+    writeFileSync(join(folder, demoMarkerName), demoMarkerText);
 }
