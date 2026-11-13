@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Configuration;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
@@ -337,6 +338,11 @@ public sealed class RouteActivator(
             return RouteSet.Empty;
         }
 
+        foreach (var path in settings.MisplacedChannels)
+        {
+            problems.Add(MisplacedChannelProblem(path));
+        }
+
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
         var channels = new Dictionary<string, Dictionary<string, Route>>(StringComparer.Ordinal);
         foreach (var (operation, entry) in settings.Operations)
@@ -367,6 +373,37 @@ public sealed class RouteActivator(
 
         return new RouteSet(fallback, operations, Frozen(channels));
     }
+
+    /// <summary>
+    /// A channel route written where no operation stands above it, under <c>Routes:Default</c> or at the top of the
+    /// section: refused as a channel on no operation, whatever plugin it names, rather than read as nothing while the
+    /// default's plugin takes every send on that channel. The path is shown the way a refused setting's is, so a key that
+    /// is no channel is written as a placeholder.
+    /// </summary>
+    private static ErrorDetail MisplacedChannelProblem(string path)
+    {
+        var field = SettingKey.ShownPath(path, NoInstalledPlugins);
+        var channel = field[(field.LastIndexOf(':') + 1)..];
+        var problem = path.StartsWith(GlobalDefaultField + ":", StringComparison.Ordinal)
+            ? path.EndsWith(":" + nameof(OperationRouteEntry.Channels), StringComparison.Ordinal)
+                ? DefaultChannelsProblem
+                : DefaultChannelProblem(channel)
+            : SectionChannelsProblem;
+        return new ErrorDetail(field, problem.Code, problem.Message);
+    }
+
+    /// <summary>A map of channels under the default, written as text: no channel to name, and still no operation to stand under.</summary>
+    private static readonly RouteProblem DefaultChannelsProblem = new(
+        RouteProblemCodes.ChannelNotRoutable,
+        "a default route names no operation, so it takes no Channels: a channel route is a route of one operation, written under Routes:Operations:<operation>:Channels:<channel>.");
+
+    /// <summary>Channels at the top of the section, beside the default and the operations rather than under an operation.</summary>
+    private static readonly RouteProblem SectionChannelsProblem = new(
+        RouteProblemCodes.ChannelNotRoutable,
+        "Channels at the top of Routes names no operation: a channel route is a route of one operation, written under Routes:Operations:<operation>:Channels:<channel>.");
+
+    /// <summary>No plugin is known to be installed where a misplaced channel's path is shown: a channel is shown, and nothing else that is not a settings name.</summary>
+    private static readonly IReadOnlySet<string> NoInstalledPlugins = new HashSet<string>();
 
     /// <summary>The channel routes of one operation while a set is being built, made the first time one is added.</summary>
     private static Dictionary<string, Route> Under(Dictionary<string, Dictionary<string, Route>> channels, string operation)
@@ -586,10 +623,12 @@ public sealed class RouteActivator(
             return incompatible;
         }
 
-        // A send on a channel route goes out beside the provider's own campaigns, so the reply to it reaches a campaign only
-        // through the events of the account it went from. A plugin that reads none would leave that reply unseen while the
-        // campaign went on writing to a person who answered. Asked last of the operation's questions: a plugin that does
-        // not perform the operation at all is told that first.
+        // Every operation that takes channel routes is about what is sent on the channel — message.send and
+        // conversation.reply send it, sender.list names the accounts that will — and what is sent on a channel route goes
+        // out beside the provider's own campaigns, so a reply to it reaches the campaign only through the events of the
+        // account it went from. A plugin that reads none would leave that reply unseen while the campaign went on writing
+        // to a person who answered. Asked last of the operation's questions: a plugin that does not perform the operation
+        // at all is told that first.
         return channel is not null && !plugin.Manifest.ReadsEvents
             ? new RouteProblem(
                 RouteProblemCodes.ChannelPluginReadsNoEvents,

@@ -1,16 +1,18 @@
 // Pure: a chat's access mode, chosen per conversation from the menu beside the composer. Ask first is the default of every
-// new chat out of the box. Plan only reads and proposes and changes nothing. Full access runs Claude Code in its default
-// mode with a hook that lets a command run with no card where Jason reads it plainly, refuses what Ask first refuses, and
-// puts anything else to the person as Ask first's card; the deny list, the chat's confinement and the keys still hold
-// wherever the desktop can see the attempt. It is chosen through a confirmation that offers this time only or always on
-// this computer, the second with new chats starting in Full access as well; a conversation's Full access is held in
-// memory alone and never remembered past the window, and the standing choice is the main process's own file
-// (`full-access-standing.ts`), under a consent number. Codex has no Full access, nor has the Feed. Nothing here starts
-// a process or reads a file.
+// new chat out of the box. Plan only reads and proposes and changes nothing. Auto-edit is Ask first, except that the six
+// file commands run with no card on paths in the chat's own folder, read by Jason's literal reader and never by the host's
+// accept-edits mode; it has no confirmation and no standing choice, is held in memory alone, and is chosen on Claude Code
+// only, never for the Feed. Full access runs Claude Code in its default mode with a hook that lets a command run with no
+// card where Jason reads it plainly, refuses what Ask first refuses, and puts anything else to the person as Ask first's
+// card; the deny list, the chat's confinement and the keys still hold wherever the desktop can see the attempt. It is
+// chosen through a confirmation that offers this time only or always on this computer, the second with new chats
+// starting in Full access as well; a conversation's Full access is held in memory alone and never remembered past the
+// window, and the standing choice is the main process's own file (`full-access-standing.ts`), under a consent number.
+// Codex has no Full access, nor has the Feed. Nothing here starts a process or reads a file.
 
 import { compareVersions } from './host-version.ts';
 
-export type ChatMode = 'ask_first' | 'plan_only' | 'full_access';
+export type ChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
 /**
  * Whether the desktop offers Full access. Off: the menu shows it disabled with `fullAccessNotYet`, and the desktop
@@ -29,7 +31,8 @@ export const powerShellRunsInFullAccess = false;
 /** What the menu and the desktop say of Full access while the switch is off. */
 export const fullAccessNotYet = 'Full access is not in this version yet.';
 
-export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'full_access'];
+/** The modes in the menu's order: the default first, then narrow to wide. */
+export const chatModes: readonly ChatMode[] = ['ask_first', 'plan_only', 'auto_edit', 'full_access'];
 
 export function isChatMode(value: unknown): value is ChatMode {
     return typeof value === 'string' && (chatModes as readonly string[]).includes(value);
@@ -62,6 +65,12 @@ export const codexFullAccess = 'Full access runs on Claude Code only.';
  * providers wrote, the widest road for a steer.
  */
 export const feedFullAccess = 'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
+
+/** Why Auto-edit cannot be chosen on Codex: it never asks before it acts, so its turns only read. */
+export const codexAutoEdit = 'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
+
+/** Why Auto-edit cannot be chosen for the Feed: the reason Full access is not offered there. */
+export const feedAutoEdit = 'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
 
 /** What a chat in Plan only answers every request it does not take. */
 export const planRefusal = 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.';

@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import type { DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
@@ -102,6 +102,11 @@ export interface HostState {
      * (`fullAccessSentence`). Null where it can be chosen, and for a host that does not drive the chat.
      */
     fullAccess: string | null;
+    /**
+     * Why Auto-edit cannot be chosen for a chat on this host, in the desktop's words: Codex cannot ask before it acts
+     * (`codexAutoEdit`). Null where it can be chosen, and for a host that does not drive the chat.
+     */
+    autoEdit: string | null;
     /**
      * The models the chat's box offers on this host, each with the effort levels it takes: Claude Code's aliases at the
      * version read now, the list kept of what Codex offered, or a key provider's table (`offeredModels`).
@@ -386,6 +391,7 @@ export class Setup {
         const offeredHere = this.#deps.fullAccessOffered ?? fullAccessOffered;
         const fullAccessOn = (program: string, drives: boolean) =>
             !drives ? null : !offeredHere ? fullAccessNotYet : program === 'codex' ? codexFullAccess : program === 'claude' ? (claude === null ? null : claude.fullAccess) : null;
+        const autoEditOn = (program: string, drives: boolean) => (drives && program === 'codex' ? codexAutoEdit : null);
         const programHosts: HostState[] = [];
         for (const host of hosts) {
             const found = programs.find(host.program) !== null;
@@ -400,6 +406,7 @@ export class Setup {
                 install: found ? null : this.#installable(host.program),
                 belowFloor: own?.belowFloor ?? null,
                 fullAccess: fullAccessOn(host.program, host.drivesChat),
+                autoEdit: autoEditOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
             });
         }
@@ -413,6 +420,7 @@ export class Setup {
             install: null,
             belowFloor: provider.program === 'claude' ? (claude?.belowFloor ?? null) : null,
             fullAccess: fullAccessOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
+            autoEdit: autoEditOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             ...offered(provider.id, provider.label),
         }));
         // Shown from what is kept; Codex is asked again in the background where it is on the PATH or its key is stored.

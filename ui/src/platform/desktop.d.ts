@@ -101,11 +101,13 @@ export interface DesktopChatOptions {
 /**
  * A chat's access mode, chosen per conversation from the menu beside the composer. `ask_first`, the default of every new
  * chat out of the box: the agent asks on a card before anything the desktop does not settle itself. `plan_only`: it reads
- * and proposes, and changes nothing. `full_access`: it acts on this computer without asking; the desktop asks the person
+ * and proposes, and changes nothing. `auto_edit`: Ask first, except that the six file commands (mkdir, touch, mv, cp, rm,
+ * rmdir) run with no card on paths in the chat's own folder; no confirmation, held for that conversation only until the
+ * window closes, Claude Code only, never the Feed. `full_access`: it acts on this computer without asking; the desktop asks the person
  * to confirm each time it is chosen, unless they answered that box with Always (`DesktopFullAccessStanding`), and holds
  * it for that conversation only until the window closes. Codex has no Full access.
  */
-export type DesktopChatMode = 'ask_first' | 'plan_only' | 'full_access';
+export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
 /**
  * The standing choice of Full access, which only the person's answer to the desktop's own box gives: while it stands,
@@ -289,6 +291,11 @@ export interface DesktopHost {
      */
     fullAccess: string | null;
     /**
+     * Why Auto-edit cannot be chosen for a chat on it, in the desktop's words, on Codex; null where it can be. The menu
+     * shows the item disabled with this.
+     */
+    autoEdit: string | null;
+    /**
      * The models the chat's box offers on it: Claude Code's aliases, the models Codex offered when last asked (kept by
      * the desktop and asked again at most once a day), or a key provider's own; empty for a host that offers none here.
      */
@@ -470,6 +477,13 @@ export interface JasonDesktop {
          * window and starting page. The page calls it as it starts and whenever the choice changes.
          */
         set(choice: 'system' | 'light' | 'dark'): Promise<void>;
+    };
+    pairing: {
+        /**
+         * Tells the desktop the id of the UI token the page holds now, once it has paired: never the token, which the
+         * desktop refuses. The desktop then revokes the one the window held before, so the window keeps one pairing.
+         */
+        paired(tokenId: string): Promise<void>;
     };
     chat: {
         /**

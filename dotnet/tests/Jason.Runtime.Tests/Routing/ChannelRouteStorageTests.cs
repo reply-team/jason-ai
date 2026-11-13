@@ -417,7 +417,8 @@ public class ChannelRouteStorageTests
 
     /// <summary>
     /// Two providers that both send, so a channel of a send can go to one and the operation to the other, and the
-    /// checked-in provider that does not send, for the check a channel route shares with every route.
+    /// checked-in provider that does not send, for the check a channel route shares with every route. Both senders read
+    /// events, as a plugin a channel route names must; none of these rows is about one that does not.
     /// </summary>
     private static Task<RuntimeApiFixture> StartAsync(string? globalDefault = null) =>
         RuntimeApiFixture.StartAsync(
@@ -425,12 +426,16 @@ public class ChannelRouteStorageTests
             prepare: paths =>
             {
                 File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
-                TestPlugins.Write(paths, Mailer, TestPlugins.Manifest(Mailer, "[message.send, sender.list, campaign.get]"), "export function invoke() {}");
-                TestPlugins.Write(paths, Social, TestPlugins.Manifest(Social, "[message.send, sender.list, campaign.get]"), "export function invoke() {}");
+                TestPlugins.Write(paths, Mailer, ReadingEvents(Mailer), "export function invoke() {}");
+                TestPlugins.Write(paths, Social, ReadingEvents(Social), "export function invoke() {}");
                 TestPlugins.InstallOtherProvider(paths);
                 if (globalDefault is not null)
                 {
                     TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(globalDefault));
                 }
             });
+
+    private static string ReadingEvents(string id) =>
+        TestPlugins.Manifest(id, "[message.send, sender.list, campaign.get]")
+            .Replace("  operations: [1]\n", "  operations: [1]\n  events: [1]\n", StringComparison.Ordinal);
 }
