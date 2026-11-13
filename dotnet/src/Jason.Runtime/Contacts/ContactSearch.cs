@@ -6,10 +6,11 @@ namespace Jason.Runtime.Contacts;
 
 /// <summary>
 /// One text that finds a person by any part of what they are known by: a name (the whole name included), a company, a
-/// title, any channel value, the value of any custom field (<see cref="CustomValues"/>), never its key. Compared folded on both sides, so case, accents and script never decide; the characters a
-/// pattern would read as wildcards are escaped, so they match as written; a text that is a phone number once its spaces,
-/// dots, dashes and brackets go also matches by its digits, which is how a stored number is kept; and a pasted LinkedIn
-/// link matches by the profile path its key ends with, whichever spelling of the link was pasted.
+/// title, any channel value, the value of any custom field and never its key (<see cref="CustomValues"/>). Compared
+/// folded on both sides, so case, accents and script never decide; the characters a pattern would read as wildcards are
+/// escaped, so they match as written; a text that is a phone number once its spaces, dots, dashes and brackets go also
+/// matches by its digits, which is how a stored number is kept; and a pasted LinkedIn link matches by the profile path
+/// its key ends with, whichever spelling of the link was pasted.
 /// </summary>
 internal static class ContactSearch
 {

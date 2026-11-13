@@ -251,10 +251,11 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   membership carries `standing`: the counts of `campaign.summary` that count the person in that campaign now, read from
   the same definitions ([docs/work-execution.md](work-execution.md), "A campaign's people, counted"); `contact.list` and
   `campaign.list_contacts` carry the same.
-- `contact.list`: `query` finds any part of a name, a company, a title or any channel value. `summary` keeps the people
-  one count of `campaign.summary` counts in at least one campaign not archived, or in the one `campaign_id` names, and
-  composes with `query`, `order`, `include_archived` and the paging; with `channel` or `value` it is refused as
-  `validation_failed`.
+- `contact.list`: `query` finds any part of a name, a company, a title, any channel value or the value of any custom
+  field — a text or a number at any depth, never a field's name — and `campaign.list_contacts` finds by the same.
+  `summary` keeps the people one count of `campaign.summary` counts in at least one campaign not archived, or in the one
+  `campaign_id` names, and composes with `query`, `order`, `include_archived` and the paging; with `channel` or `value`
+  it is refused as `validation_failed`.
 - `contact.update`: Jason's own record of the person; the provider's contact is a `provider_op` work item.
 - `contact.archive`
 - `contact.threads`: a person's threads, read from the provider when a person asks, outside any work item.

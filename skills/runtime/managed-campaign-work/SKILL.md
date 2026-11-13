@@ -167,7 +167,7 @@ provider; that is a `campaign.enroll` work item that succeeded, and the provider
 `enrollment.list`. A campaign with no provider sequence has members, never enrolments: say "on the campaign" or
 "members", and never that they are enrolled at the provider, however `list-contacts` spells the state.
 To find one person among everyone the runtime knows, give `contact list` any part of what they are known by — a
-name, a company, an email, a phone however it is spaced, a LinkedIn link:
+name, a company, an email, a phone however it is spaced, a LinkedIn link, the value of a custom field:
 
 ```
 jason contact list --query "marta@"
