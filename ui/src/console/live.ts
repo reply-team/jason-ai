@@ -105,6 +105,10 @@ export interface ApprovalDetail {
     channel: string | null;
     subject: string | null;
     body: string | null;
+    /** `text` or `template` as the message names it; null where it names none (the text is final). */
+    compose: string | null;
+    /** The runtime's rendering of a template over this person, which the provider may render otherwise. */
+    example: { subject: string | null; body: string | null; unfilled: string[] } | null;
     facts: string[];
 }
 
@@ -117,6 +121,12 @@ const factNames: readonly [string, string][] = [
     ['reversibility', 'Reversibility'],
     ['cost', 'Cost'],
 ];
+
+function exampleOf(example: Record<string, unknown> | null): ApprovalDetail['example'] {
+    if (!example) return null;
+    const unfilled = Array.isArray(example['unfilled']) ? example['unfilled'].filter((n) => typeof n === 'string') : [];
+    return { subject: text(example['subject']), body: text(example['body']), unfilled };
+}
 
 /**
  * What an approval's preview says the act would do: its intent, its recipient, the account and the channel it goes
@@ -145,6 +155,8 @@ export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDeta
         channel: channel ? channelWords(channel) : null,
         subject: text(message?.['subject']),
         body: text(message?.['body']),
+        compose: text(message?.['compose']) ?? text(highlights?.['/args/message/compose']),
+        example: exampleOf(record(preview['example'])),
         facts,
     };
 }
