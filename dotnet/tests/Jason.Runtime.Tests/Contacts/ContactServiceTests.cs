@@ -247,6 +247,65 @@ public class ContactServiceTests
         Assert.Equal(expected, string.Join('|', names));
     }
 
+    /// <summary>
+    /// A listing's text also finds a person by the values of their custom fields: a text or a number at any depth, inside
+    /// an object or a list, folded as the other terms are whatever escaping the stored JSON uses, with wildcards taken as
+    /// written. Never by a key, never by the JSON's own punctuation, never by a flag or a null, and never by a text that
+    /// runs from one value into the next.
+    /// </summary>
+    [Theory]
+    [InlineData("retail", "Rita")]
+    [InlineData("RETA", "Rita")]
+    [InlineData("platinum", "Rita")]
+    [InlineData("nordics", "Rita")]
+    [InlineData("4217", "Rita")]
+    [InlineData("21", "Rita")]
+    [InlineData("industry", "")]
+    [InlineData("tier", "")]
+    [InlineData("\":", "")]
+    [InlineData("{", "")]
+    [InlineData("[", "")]
+    [InlineData(",", "")]
+    [InlineData("true", "")]
+    [InlineData("null", "")]
+    [InlineData("retail\u001fplatinum", "")]
+    [InlineData("50%", "Rita")]
+    [InlineData("%_off", "Rita")]
+    [InlineData("_off", "Rita")]
+    [InlineData("x off", "Wim")]
+    [InlineData("munchen", "Mona|Sven")]
+    [InlineData("MÜNCH", "Mona|Sven")]
+    [InlineData("cafe", "Mona|Sven")]
+    [InlineData("göteborg", "Mona")]
+    public async Task A_listing_finds_contacts_by_the_values_of_their_custom_fields_and_never_by_a_key(string query, string expected)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var service = NewService(db, new FixedClock(Noon));
+        var ct = TestContext.Current.CancellationToken;
+        await service.CreateAsync(Custom("Rita", new JsonObject
+        {
+            ["industry"] = "retail",
+            ["account"] = new JsonObject { ["tier"] = "Platinum", ["regions"] = new JsonArray("Nordics") },
+            ["seats"] = 4217,
+            ["active"] = true,
+            ["churned"] = null,
+            ["code"] = "50%_off",
+        }), ct);
+        await service.CreateAsync(Custom("Wim", new JsonObject { ["code"] = "50x off" }), ct);
+        // Written by the service, the stored JSON escapes every letter outside ASCII; written by hand, it need not.
+        await service.CreateAsync(Custom("Mona", new JsonObject { ["city"] = "München", ["venue"] = "Café", ["hq"] = "Göteborg" }), ct);
+        var sven = await service.CreateAsync(Custom("Sven", null), ct);
+        await db.Database.ExecuteSqlAsync($"UPDATE contacts SET custom_json = {"{\"city\":\"München\",\"venue\":\"Café\"}"} WHERE public_id = {sven.Id}", ct);
+        Assert.Equal(1, await db.Database.SqlQuery<int>($"SELECT COUNT(*) AS value FROM contacts WHERE custom_json LIKE '%\\u00fc%'").SingleAsync(ct));
+
+        var page = await service.ListAsync(new ContactListRequest(null, null, null, null, null, query), ct);
+
+        Assert.Equal(expected, string.Join('|', page.Items.Select(c => c.FirstName).Order(StringComparer.Ordinal)));
+    }
+
+    private static ContactCreateRequest Custom(string first, JsonObject? custom) => new(first, null, null, null, null, null, custom, null, null);
+
     [Theory]
     [InlineData(null, "foo@bar.com", 0, "value")]
     [InlineData(null, null, 201, "query")]

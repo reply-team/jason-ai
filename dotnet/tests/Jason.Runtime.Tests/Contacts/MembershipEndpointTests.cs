@@ -287,6 +287,45 @@ public class MembershipEndpointTests
         Assert.Empty(foundButNotOut.Items);
     }
 
+    /// <summary>The search of a campaign's people finds by a custom field's value as <c>contact.list</c> does, never by its key.</summary>
+    [Fact]
+    public async Task The_search_finds_by_a_custom_fields_value_and_never_by_its_key()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+        await using (var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var gus = await db.Contacts.SingleAsync(contact => contact.FirstName == "Gus", Ct);
+            gus.Custom = new JsonObject { ["industry"] = "Logística", ["account"] = new JsonObject { ["seats"] = 4217 } };
+            var oli = await db.Contacts.SingleAsync(contact => contact.FirstName == "Oli", Ct);
+            oli.Custom = new JsonObject { ["stage"] = "Pilot" };
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var since = new DateTimeOffset(CampaignWorld.Since, TimeSpan.Zero);
+        var until = new DateTimeOffset(CampaignWorld.Until, TimeSpan.Zero);
+
+        var byValue = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Query = "LOGISTICA" }, Ct);
+        var byNumber = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Query = "4217" }, Ct);
+        var byKey = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Query = "industry" }, Ct);
+        var bySyntax = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Query = "\":" }, Ct);
+        var repliedAndFound = await api.PostOkAsync<Page<MembershipItemDto>>(
+            Operations.CampaignListContacts,
+            new { CampaignId = world.Spring.PublicId, Activity = CampaignActivityFilter.Replied, Since = since, Until = until, Query = "pilot" },
+            Ct);
+
+        Assert.Equal(["Gus"], byValue.Items.Select(item => item.Contact.FirstName));
+        Assert.Equal(["Gus"], byNumber.Items.Select(item => item.Contact.FirstName));
+        Assert.Empty(byKey.Items);
+        Assert.Empty(bySyntax.Items);
+        Assert.Equal(["Oli"], repliedAndFound.Items.Select(item => item.Contact.FirstName));
+    }
+
     /// <summary>A listing asks for one thing at a time, by one count and its own period, and is refused by the field at fault.</summary>
     public static TheoryData<string, string[]> RefusedListings => new()
     {
