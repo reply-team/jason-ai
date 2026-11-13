@@ -173,7 +173,17 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
     it('copies the path from the menu without making Copy path the default', async () => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
-        // The file manager says nothing of data in the demo, and the same sentence as ever in Live.
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^Copy path/ }));
+        await waitFor(() => expect(opens(desktop)).toHaveLength(1));
+        expect(opens(desktop)[0]!.args).toEqual(['copy', undefined]);
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(1));
+        expect(mainPart().textContent).toBe('Open in Claude Code');
+    });
+
+    it('says nothing of data after the file manager in the demo, and the same sentence as ever in Live', async () => {
+        await renderConsole(kept);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         fireEvent.click(arrow());
         fireEvent.click(within(menu()).getByRole('menuitem', { name: /^File manager/ }));
         await waitFor(() =>
@@ -183,12 +193,6 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
                     : 'Opened Jason in File manager. Jason there works with the same data as this window.',
             ),
         );
-        fireEvent.click(arrow());
-        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^Copy path/ }));
-        await waitFor(() => expect(opens(desktop)).toHaveLength(1));
-        expect(opens(desktop)[0]!.args).toEqual(['copy', undefined]);
-        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(1));
-        expect(mainPart().textContent).toBe('Open in Claude Code');
     });
 
     it('carries our note in the demo’s menu, and none in Live', async () => {
