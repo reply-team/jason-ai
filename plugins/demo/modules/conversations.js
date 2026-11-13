@@ -130,11 +130,11 @@ export function conversationList(input) {
   return { result: { items: slice, has_more, vendor: { ordering: "last_activity_desc" } } };
 }
 
-function writtenThread(id) {
+function writtenThread(id, after = "") {
   const start = storyStart();
   const thread = threadById(id);
   if (start === null || thread === null) {
-    throw fail("permanent", "conversation_not_found", "The demo provider holds no thread under this identifier.");
+    throw fail("permanent", "conversation_not_found", "The demo provider holds no thread under this identifier." + after);
   }
 
   return { thread, start };
@@ -165,13 +165,14 @@ export function conversationGet(input) {
   };
 }
 
-/** A reply into a written thread is taken and goes to nobody, like every send here. */
+/**
+ * A reply into a written thread is taken and goes to nobody, like every send here. A thread exists only once the story has
+ * started, as the reads say, and it is this person's only where the thread's address on the channel is the one the runtime
+ * gives, in every case, and the pin, where there is one, is the thread's person.
+ */
 export function conversationReply(input) {
   const args = input.args;
-  const thread = threadById(args.thread.external_id);
-  if (thread === null) {
-    throw fail("permanent", "conversation_not_found", "The demo provider holds no thread under this identifier. Nothing was sent.");
-  }
+  const { thread } = writtenThread(args.thread.external_id, " Nothing was sent.");
 
   if (thread.channel !== args.channel) {
     throw fail("validation", "channel_mismatch", "The thread is on " + thread.channel + ", not on " + args.channel + ". Nothing was sent.");
@@ -180,8 +181,9 @@ export function conversationReply(input) {
   const contact = input.contacts[0];
   const pin = contact.external_ids.contact;
   const held = valueOf(thread.person, thread.channel);
-  const same = pin ? pin === thread.person.contact_id : held !== null && host.channelKey(thread.channel, held) === contact.channels[0].value;
-  if (!same) {
+  const atAddress = held !== null && host.channelKey(thread.channel, held) === contact.channels[0].value;
+  const byPin = !pin || pin === thread.person.contact_id;
+  if (!atAddress || !byPin) {
     throw fail("validation", "thread_contact_mismatch", "The thread is not this person's. Nothing was sent.");
   }
 

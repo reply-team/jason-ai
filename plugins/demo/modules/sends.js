@@ -52,6 +52,8 @@ function sender(args, channel, contact) {
   return account;
 }
 
+// A repeat under the same key is answered with the same reference, which is what the contract holds a repeat to; its
+// sent_at is the repeat's own moment, since a package that keeps nothing between runs has no first moment to give.
 function answer(item, contact, ref) {
   const answered = { result: { items: [item] }, external_ids: { contact: contact.id, send: ref } };
   if (contact.origin !== null) {

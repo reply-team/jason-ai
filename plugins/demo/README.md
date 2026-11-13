@@ -1,8 +1,8 @@
 # The demo provider
 
 A provider plugin that reaches nobody. Jason's demo installation, a second installation of Jason on a data directory of
-its own, routes every operation to it, so the sample story runs through the real runtime, its approvals, its work items
-and its journal, while nothing goes to anyone.
+its own, routes every operation this package performs to it, so the sample story runs through the real runtime, its
+approvals, its work items and its journal, while nothing goes to anyone.
 
 ## Why nothing can leave it
 
@@ -37,9 +37,19 @@ seed creates are one set.
 ## When the replies come
 
 A plugin run keeps nothing between runs, so the replies are written on a schedule. Each one lands at its own offset
-after the moment named under `Plugins:Config:demo:story_start` in the demo installation's settings, which the seed
-writes once the story's approved sends have gone. Without that moment the story has not started: no thread is listed
-and every events read answers an empty page.
+after the moment named under `Plugins:Config:demo:story_start` in the demo installation's settings. Without that moment
+the story has not started: no thread is listed, no thread can be replied into, and every events read answers an empty
+page.
+
+The seed writes the moment once the story's approved sends have gone, and then reloads the plugins
+(`jason plugin reload`): a plugin's configuration is read at a load and frozen there
+([docs/plugins.md](../../docs/plugins.md) §6), so a moment written without a reload starts nothing. The moment is an ISO-8601 date and time with seconds, an optional
+fraction, and `Z` or an offset, such as `2026-11-13T17:05:00Z` or `2026-11-13T10:05:00.250-07:00`; any other text,
+a moment without seconds among them, counts as no moment, and the story has not started. The moment is no secret: the
+threads show it as the time the story's messages went.
+
+An events read made before the start keeps the depth it asked for in its cursor, so the runtime's first read after the
+start, from that cursor, returns every reply that has landed.
 
 Every reply names the person by the contact this package pins when a send reaches them, and names no provider campaign,
 so the runtime brings a reply to a campaign only where a send to that person was made ([docs/events.md](../../docs/events.md)
