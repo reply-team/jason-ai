@@ -1543,10 +1543,10 @@ body,
     font-weight: 600;
 }
 .jc-console .dash-trend.up {
-    color: var(--green, #1a7f4b);
+    color: var(--green);
 }
 .jc-console .dash-trend.down {
-    color: var(--red, #c0392b);
+    color: var(--red);
 }
 .jc-console .dash-trend.flat {
     color: var(--faint);

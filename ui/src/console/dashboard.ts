@@ -63,6 +63,8 @@ export const activity = signal<{ total: ActivityRead; byCampaign: Record<string,
 
 let generation = 0;
 let trendGeneration = 0;
+/** Whether the person moved the switch since the Dashboard opened. */
+let switched = false;
 
 /** The two adjacent 24-hour windows, read at once; a window whose read failed is unknown, and a late answer is dropped. */
 async function reloadTrends(): Promise<void> {
@@ -123,9 +125,9 @@ async function keptTrendsChoice(): Promise<boolean> {
 let open = 0;
 
 /** The period's counts and replies; a late answer is dropped, and a failed read leaves its numbers unknown. */
-export async function reload(): Promise<void> {
+export async function reload(withTrends = true): Promise<void> {
     const mine = ++generation;
-    void reloadTrends();
+    if (withTrends) void reloadTrends();
     const window = dashboardWindow(period.value, new Date(), zone, custom.value);
     if (window === null) {
         activity.value = null;
@@ -174,9 +176,13 @@ export function watching(on: boolean): void {
         custom.value = { from: '', to: '' };
         replies.value = null;
         repliesStatus.value = 'loading';
+        trendReads.value = null;
+        trendGeneration += 1;
+        switched = false;
         void keptTrendsChoice()
             .then((shown) => {
-                trendsOn.value = shown;
+                // A click on the switch before the desktop answered is the person's, and stands.
+                if (!switched) trendsOn.value = shown;
                 return reload();
             })
             .catch(() => undefined);
@@ -192,15 +198,16 @@ define('dash.period', (_args, element) => {
     if (!(element instanceof HTMLSelectElement) || !isDashboardPeriod(element.value)) return;
     if (element.value === 'custom' && !custom.value.from) custom.value = startingRange(new Date(), zone);
     period.value = element.value;
-    void reload();
+    void reload(false);
 });
 define('dash.range', ([end], element) => {
     if ((end !== 'from' && end !== 'to') || !(element instanceof HTMLInputElement)) return;
     custom.value = { ...custom.value, [end]: element.value };
-    void reload();
+    void reload(false);
 });
 define('dash.trends', (_args, element) => {
     if (!(element instanceof HTMLInputElement)) return;
+    switched = true;
     trendsOn.value = element.checked;
     try {
         void (here().desktop as Partial<Pick<JasonDesktop, 'dailyTrends'>>).dailyTrends
