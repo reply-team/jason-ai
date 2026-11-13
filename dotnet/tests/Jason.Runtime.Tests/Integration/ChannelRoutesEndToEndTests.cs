@@ -22,7 +22,8 @@ namespace Jason.Runtime.Tests.Integration;
 /// <summary>
 /// One campaign that sends email through one plugin and LinkedIn messages through another, end to end: a real runtime on a
 /// held clock, the real claim, a real plugin host for every provider call, and two stand-in providers, each with an
-/// account of its own at the other end. Each channel's sends go to the plugin its channel route names; a reply on each is
+/// account of its own at the other end. Email goes to the plugin the operation's own route names, and LinkedIn to the one
+/// its channel route names, which wins on that channel; a reply on each is
 /// seen as the runtime sees a reply to a direct send, by reading that account's events, and answered at the account that
 /// holds the thread, while a reply routed to the other plugin is refused before a child exists; a deferred send on each
 /// holds its route against removal until its cancel, which goes where the send ran, lets it go.
@@ -64,21 +65,24 @@ public class ChannelRoutesEndToEndTests
 
         var campaign = await host.CampaignAsync(Ct, "Two channels");
         var contact = await ContactAsync(host, campaign);
-        await RouteAsync(host, campaign, "message.send", "email", Mailer, mailerBinding);
+        // The routes a person sets: each operation's own route sends its work to the mailer, and LinkedIn alone has a
+        // channel route to the social plugin, which wins over the operation's own route on that channel.
+        await RouteAsync(host, campaign, "message.send", channel: null, Mailer, mailerBinding);
         await RouteAsync(host, campaign, "message.send", "linkedin", Social, socialBinding);
-        await RouteAsync(host, campaign, "conversation.reply", "email", Mailer, mailerBinding);
+        await RouteAsync(host, campaign, "conversation.reply", channel: null, Mailer, mailerBinding);
         await RouteAsync(host, campaign, "conversation.reply", "linkedin", Social, socialBinding);
 
-        // 1. A send on each channel goes to the plugin its channel route names, at that route's account, and its attempt
-        //    says so: the plugin, the binding's identity and the channel scope that won.
+        // 1. An email send goes by the operation's own route to the mailer, and a LinkedIn send by its channel route to
+        //    the social plugin, each at its route's account, and each attempt says so: the plugin, the binding's identity
+        //    and the scope that won.
         var email = await SendAsync(host, campaign, contact, "email", sendAfter: null);
         var linkedin = await SendAsync(host, campaign, contact, "linkedin", sendAfter: null);
         await ApprovedAndSucceededAsync(host, email, linkedin);
 
-        await AssertRanAtAsync(host, email, Mailer, mailerAccount);
-        await AssertRanAtAsync(host, linkedin, Social, socialAccount);
-        Assert.Equal([email], ActsAt(mailbox));
-        Assert.Equal([linkedin], ActsAt(profile));
+        await AssertRanAtAsync(host, email, Mailer, mailerAccount, RouteScope.CampaignOperation);
+        await AssertRanAtAsync(host, linkedin, Social, socialAccount, RouteScope.CampaignChannel);
+        Assert.Equal([Feed, email], CallsAt(mailbox));
+        Assert.Equal([Feed, linkedin], CallsAt(profile));
 
         // 2. The person answers on each channel. Each account's next read of its events finds its thread moved by the
         //    other side, about the person its send pinned, and the campaign is told once per thread, by that person.
@@ -109,16 +113,16 @@ public class ChannelRoutesEndToEndTests
         Assert.Null(refusal.Launch);
         Assert.Equal((Social, socialAccount), (refusal.Provenance!.PluginId, refusal.Provenance.BindingIdentity));
         Assert.DoesNotContain(await ApprovalsAsync(host), approval => approval.WorkItemId == crossed);
-        Assert.DoesNotContain(crossed, ActsAt(mailbox));
-        Assert.DoesNotContain(crossed, ActsAt(profile));
+        Assert.Equal([Feed, email, Feed], CallsAt(mailbox));
+        Assert.Equal([Feed, linkedin, Feed], CallsAt(profile));
 
         await ApprovedAndSucceededAsync(host, mailReply, socialReply);
-        await AssertRanAtAsync(host, mailReply, Mailer, mailerAccount);
-        await AssertRanAtAsync(host, socialReply, Social, socialAccount);
+        await AssertRanAtAsync(host, mailReply, Mailer, mailerAccount, RouteScope.CampaignOperation);
+        await AssertRanAtAsync(host, socialReply, Social, socialAccount, RouteScope.CampaignChannel);
         Assert.Equal(MailerThread, (string?)(await host.GetAsync(mailReply, Ct)).Result!["items"]![0]!["thread_external_id"]);
         Assert.Equal(SocialThread, (string?)(await host.GetAsync(socialReply, Ct)).Result!["items"]![0]!["thread_external_id"]);
-        Assert.Equal([email, mailReply], ActsAt(mailbox));
-        Assert.Equal([linkedin, socialReply], ActsAt(profile));
+        Assert.Equal([Feed, email, Feed, mailReply], CallsAt(mailbox));
+        Assert.Equal([Feed, linkedin, Feed, socialReply], CallsAt(profile));
 
         // 4. A deferred send on each channel: two hours after the runtime's clock, which is long past by the machine's
         //    own, so only a guard that reads the runtime's clock still finds them held. Each result says the provider
@@ -133,20 +137,21 @@ public class ChannelRoutesEndToEndTests
             Assert.Equal(("accepted", true), ((string?)outcome["status"], (bool?)outcome["cancelable"]));
         }
 
-        Assert.Equal([email, mailReply, heldEmail], ActsAt(mailbox));
-        Assert.Equal([linkedin, socialReply, heldLinkedin], ActsAt(profile));
+        Assert.Equal([Feed, email, Feed, mailReply, heldEmail], CallsAt(mailbox));
+        Assert.Equal([Feed, linkedin, Feed, socialReply, heldLinkedin], CallsAt(profile));
 
         // The replies are answered, so their routes go first. A route of any operation that names the account a send ran
         // under keeps that send reachable, so while the LinkedIn reply route still named the LinkedIn account, taking the
         // LinkedIn send route away would strand nothing and the guard would rightly let it through; the same holds for
         // email. With the reply routes gone, each send route is the last one naming its account.
-        await UnrouteOkAsync(host, campaign, "conversation.reply", "email");
+        await UnrouteOkAsync(host, campaign, "conversation.reply", channel: null);
         await UnrouteOkAsync(host, campaign, "conversation.reply", "linkedin");
 
-        // 5. While each deferred send is held, taking away the route it ran under is refused and writes nothing.
+        // 5. While each deferred send is held, taking away the route it ran under is refused and writes nothing: the email
+        //    send ran under message.send's own route, the LinkedIn send under its channel route.
         var before = await RoutesAsync(host, campaign);
         var lines = await LineCountAsync(host, JournalKinds.RoutesUpdated);
-        foreach (var (channel, held) in new[] { ("email", heldEmail), ("linkedin", heldLinkedin) })
+        foreach (var (channel, held) in new[] { ((string?)null, heldEmail), ("linkedin", heldLinkedin) })
         {
             var (status, body) = await UnrouteAsync(host, campaign, "message.send", channel);
             Assert.Equal(HttpStatusCode.Conflict, status);
@@ -157,21 +162,21 @@ public class ChannelRoutesEndToEndTests
 
         Assert.Equal(before, await RoutesAsync(host, campaign));
         Assert.Equal(lines, await LineCountAsync(host, JournalKinds.RoutesUpdated));
-        Assert.Equal([email, mailReply, heldEmail], ActsAt(mailbox));
-        Assert.Equal([linkedin, socialReply, heldLinkedin], ActsAt(profile));
+        Assert.Equal([Feed, email, Feed, mailReply, heldEmail], CallsAt(mailbox));
+        Assert.Equal([Feed, linkedin, Feed, socialReply, heldLinkedin], CallsAt(profile));
 
         // 6. A cancel of each goes to the plugin and account its send ran under, with no route of its own.
         var cancelEmail = await CancelAsync(host, campaign, heldEmail);
         var cancelLinkedin = await CancelAsync(host, campaign, heldLinkedin);
         await SettleAsync(host, async () => await AllAsync(host, WorkItemStatus.Succeeded, cancelEmail, cancelLinkedin));
-        await AssertRanAtAsync(host, cancelEmail, Mailer, mailerAccount);
-        await AssertRanAtAsync(host, cancelLinkedin, Social, socialAccount);
-        Assert.Equal([email, mailReply, heldEmail, cancelEmail], ActsAt(mailbox));
-        Assert.Equal([linkedin, socialReply, heldLinkedin, cancelLinkedin], ActsAt(profile));
+        await AssertRanAtAsync(host, cancelEmail, Mailer, mailerAccount, RouteScope.CampaignOperation);
+        await AssertRanAtAsync(host, cancelLinkedin, Social, socialAccount, RouteScope.CampaignChannel);
+        Assert.Equal([Feed, email, Feed, mailReply, heldEmail, cancelEmail], CallsAt(mailbox));
+        Assert.Equal([Feed, linkedin, Feed, socialReply, heldLinkedin, cancelLinkedin], CallsAt(profile));
 
         // 7. Once each cancel succeeded, the same removal goes through, the clock unmoved: the moments are still to come.
         Assert.True(host.Clock.Now < later);
-        await UnrouteOkAsync(host, campaign, "message.send", "email");
+        await UnrouteOkAsync(host, campaign, "message.send", channel: null);
         await UnrouteOkAsync(host, campaign, "message.send", "linkedin");
         Assert.Equal(lines + 2, await LineCountAsync(host, JournalKinds.RoutesUpdated));
     }
@@ -331,9 +336,15 @@ public class ChannelRoutesEndToEndTests
             new JsonObject { ["prefix"] = "c-", ["events"] = new JsonArray([.. events]) }.ToJsonString(),
             new UTF8Encoding(false));
 
-    /// <summary>The work items whose acts reached the account, in the order they reached it.</summary>
-    private static string[] ActsAt(TestWorkspace account) =>
-        [.. account.KeyedCalls.Where(call => call.Subcommand == "ledger get").Select(call => call.Key)];
+    /// <summary>A read of the account's events, as its call log names it.</summary>
+    private const string Feed = "events feed";
+
+    /// <summary>
+    /// Everything that reached the account, in the order it came: each act as the work item whose key it carried, and any
+    /// other call by its name, a read of its events as <see cref="Feed"/>.
+    /// </summary>
+    private static string[] CallsAt(TestWorkspace account) =>
+        [.. account.KeyedCalls.Select(call => call.Subcommand == "ledger get" ? call.Key : call.Subcommand)];
 
     // ------------------------------------------------------------------------------------------------------------
     // The runtime and the work
@@ -351,6 +362,9 @@ public class ChannelRoutesEndToEndTests
             ["Triggers"] = new JsonArray(JournalKinds.DecisionAnswered),
             ["ReviewSeconds"] = ManagerOptions.MaximumReviewSeconds,
         };
+
+        // The row proves routing, not the responder, whose thread rules have rows of their own.
+        settings["Responder"] = new JsonObject { ["OnReply"] = false };
         return settings.ToJsonString();
     }
 
@@ -393,7 +407,7 @@ public class ChannelRoutesEndToEndTests
         return contact.Id;
     }
 
-    private static async Task RouteAsync(FakeHostRuntime host, string campaign, string operation, string channel, string plugin, JsonObject binding)
+    private static async Task RouteAsync(FakeHostRuntime host, string campaign, string operation, string? channel, string plugin, JsonObject binding)
     {
         var (status, body) = await host.Fixture.PostAsync(
             Operations.RouteSet,
@@ -402,16 +416,16 @@ public class ChannelRoutesEndToEndTests
         Assert.True(status == HttpStatusCode.OK, $"route.set answered {(int)status}: {body}");
     }
 
-    private static Task<(HttpStatusCode Status, string Body)> UnrouteAsync(FakeHostRuntime host, string campaign, string operation, string channel) =>
+    private static Task<(HttpStatusCode Status, string Body)> UnrouteAsync(FakeHostRuntime host, string campaign, string operation, string? channel) =>
         host.Fixture.PostAsync(
             Operations.RouteUnset,
             new { campaign_id = campaign, operation, channel, actor = new { type = "human", id = "operator" }, reason = "tidying routes" },
             Ct);
 
-    private static async Task UnrouteOkAsync(FakeHostRuntime host, string campaign, string operation, string channel)
+    private static async Task UnrouteOkAsync(FakeHostRuntime host, string campaign, string operation, string? channel)
     {
         var (status, body) = await UnrouteAsync(host, campaign, operation, channel);
-        Assert.True(status == HttpStatusCode.OK, $"route.unset of {operation}/{channel} answered {(int)status}: {body}");
+        Assert.True(status == HttpStatusCode.OK, $"route.unset of {operation}/{channel ?? "its own route"} answered {(int)status}: {body}");
     }
 
     private static async Task<string> RoutesAsync(FakeHostRuntime host, string campaign)
@@ -481,7 +495,7 @@ public class ChannelRoutesEndToEndTests
     private static async Task ApprovedAndSucceededAsync(FakeHostRuntime host, params string[] items)
     {
         await SettleAsync(host, async () => await AllAsync(host, WorkItemStatus.AwaitingApproval, items));
-        foreach (var approval in await ApprovalsAsync(host))
+        foreach (var approval in (await ApprovalsAsync(host)).Where(approval => items.Contains(approval.WorkItemId)))
         {
             await host.Fixture.PostOkAsync<ApprovalDto>(
                 Operations.ApprovalApprove,
@@ -532,13 +546,13 @@ public class ChannelRoutesEndToEndTests
         return true;
     }
 
-    /// <summary>The item succeeded in one attempt, which ran at that plugin and account by a campaign channel route or the send it follows.</summary>
-    private static async Task AssertRanAtAsync(FakeHostRuntime host, string item, string plugin, string account)
+    /// <summary>The item succeeded in one attempt, which ran at that plugin and account by a campaign route of that scope, its own or the one of the send it follows.</summary>
+    private static async Task AssertRanAtAsync(FakeHostRuntime host, string item, string plugin, string account, RouteScope scope)
     {
         var read = await host.GetAsync(item, Ct);
         var attempt = Assert.Single(read.Attempts!);
         Assert.Equal(AttemptStatus.Succeeded, attempt.Status);
-        Assert.Equal((plugin, account, RouteScope.CampaignChannel), (attempt.Provenance!.PluginId, attempt.Provenance.BindingIdentity, attempt.Provenance.RouteScope));
+        Assert.Equal((plugin, account, scope), (attempt.Provenance!.PluginId, attempt.Provenance.BindingIdentity, attempt.Provenance.RouteScope));
     }
 
     /// <summary>The campaign's <c>inbound_reply_observed</c> lines, as the events store wrote them.</summary>
