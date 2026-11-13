@@ -8,7 +8,7 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { bridgeLink, bridgeMembers, BridgeHolder, BrowserBridge, elsewhere, fullAccessElsewhere, modeElsewhere, openOwnPage, openTab, type BridgeOptions } from '../src/browser-bridge.ts';
+import { bridgeLink, bridgeMembers, BridgeHolder, BrowserBridge, autoEditElsewhere, elsewhere, fullAccessElsewhere, modeElsewhere, otherModeElsewhere, openOwnPage, openTab, type BridgeOptions } from '../src/browser-bridge.ts';
 import { Chat, type ChatEvent } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { registerChat } from '../src/chat-ipc.ts';
@@ -335,20 +335,51 @@ test('chat.send to a chat in Full access is refused, and the send handler never 
     assert.deepEqual(refusals(r).at(-1), { Why: 'full_access', Member: 'chat.send' });
 });
 
-test('chat.send is held to the chat\'s own mode: a tab naming another is refused, and one naming none sends in the mode the chat has', async (t) => {
-    const r = await rig(t, { listed: () => [{ id: 'cht_auto', mode: 'auto_edit' }, { id: 'cht_plan', mode: 'plan_only' }] });
+test('a tab sends only to a chat in Ask first or Plan only: Auto-edit, Full access and any other mode are refused, each by name', async (t) => {
+    const r = await rig(t, {
+        listed: () => [
+            { id: 'cht_ask', mode: 'ask_first' },
+            { id: 'cht_plan', mode: 'plan_only' },
+            { id: 'cht_auto', mode: 'auto_edit' },
+            { id: 'cht_full', mode: 'full_access' },
+            { id: 'cht_later', mode: 'some_later_mode' },
+        ],
+    });
     const secret = await r.pair();
-    for (const [chatId, mode] of [['cht_auto', 'full_access'], ['cht_auto', 'ask_first'], ['cht_plan', 'ask_first']]) {
+    for (const [chatId, sentence, why] of [
+        ['cht_auto', autoEditElsewhere, 'auto_edit'],
+        ['cht_full', fullAccessElsewhere, 'full_access'],
+        ['cht_later', otherModeElsewhere, 'other_mode'],
+    ]) {
+        const answer = await r.call(secret, 'chat.send', [chatId, 'hello', { host: 'claude' }]);
+        assert.equal(answer.status, 200);
+        assert.deepEqual(JSON.parse(answer.body), { result: { refused: sentence } }, chatId);
+        assert.deepEqual(refusals(r).at(-1), { Why: why, Member: 'chat.send' }, chatId);
+    }
+    assert.equal(autoEditElsewhere, 'This chat is in Auto-edit. Send messages to it from Jason Desktop.');
+    assert.ok(!r.calls.some((call) => call.member === 'chat.send'), 'no refused send was handled');
+    await r.call(secret, 'chat.send', ['cht_ask', 'hello', { host: 'claude', model: 'm' }]);
+    await r.call(secret, 'chat.send', ['cht_plan', 'hello', { host: 'claude' }]);
+    assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args), [
+        ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first' }],
+        ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }],
+    ]);
+});
+
+test('chat.send is held to the chat\'s own mode: a tab naming another is refused, and one naming none sends in the mode the chat has', async (t) => {
+    const r = await rig(t, { listed: () => [{ id: 'cht_ask', mode: 'ask_first' }, { id: 'cht_plan', mode: 'plan_only' }] });
+    const secret = await r.pair();
+    for (const [chatId, mode] of [['cht_ask', 'full_access'], ['cht_ask', 'auto_edit'], ['cht_ask', 'plan_only'], ['cht_plan', 'ask_first']]) {
         const answer = await r.call(secret, 'chat.send', [chatId, 'hello', { host: 'claude', mode }]);
         assert.deepEqual(JSON.parse(answer.body), { result: { refused: modeElsewhere } }, `${chatId} ${mode}`);
     }
     assert.ok(!r.calls.some((call) => call.member === 'chat.send'));
-    await r.call(secret, 'chat.send', ['cht_auto', 'hello', { host: 'claude', model: 'm' }]);
+    await r.call(secret, 'chat.send', ['cht_ask', 'hello', { host: 'claude', model: 'm' }]);
     await r.call(secret, 'chat.send', ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }]);
-    // A chat the desktop does not list is sent in Ask first, which the chat refuses as no conversation of its own.
+    // A chat the desktop does not hold is sent in Ask first, which the chat refuses as no conversation of its own.
     await r.call(secret, 'chat.send', ['cht_gone', 'hello']);
     assert.deepEqual(r.calls.filter((call) => call.member === 'chat.send').map((call) => call.args), [
-        ['cht_auto', 'hello', { host: 'claude', model: 'm', mode: 'auto_edit' }],
+        ['cht_ask', 'hello', { host: 'claude', model: 'm', mode: 'ask_first' }],
         ['cht_plan', 'hello', { host: 'claude', mode: 'plan_only' }],
         ['cht_gone', 'hello', { mode: 'ask_first' }],
     ]);

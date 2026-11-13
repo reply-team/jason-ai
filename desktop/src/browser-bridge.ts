@@ -31,6 +31,10 @@ import type { Logger } from './log.ts';
 export const elsewhere = "That is done in Jason Desktop's own window.";
 /** What a tab is told when it sends to a chat in Full access. */
 export const fullAccessElsewhere = "This chat is in Full access, so it takes messages only in Jason Desktop's own window.";
+/** What a tab is told when it sends to a chat in Auto-edit. */
+export const autoEditElsewhere = 'This chat is in Auto-edit. Send messages to it from Jason Desktop.';
+/** What a tab is told when it sends to a chat in a mode it does not send in and has no sentence of its own for. */
+export const otherModeElsewhere = 'This chat is in a mode a browser tab does not send in. Send messages to it from Jason Desktop.';
 /** What a tab is told when its send names a mode the chat is not in. */
 export const modeElsewhere = "A browser tab sends in the chat's own mode. Its mode is changed in Jason Desktop's own window.";
 
@@ -40,7 +44,7 @@ export const bridgeChannels: readonly BridgeChannel[] = ['chat.event', 'fullAcce
 export const isBridgeChannel = (channel: string): channel is BridgeChannel => (bridgeChannels as readonly string[]).includes(channel);
 
 /** A row's own rule: the arguments to hand the handler, or a refusal the tab is answered with as a value. */
-type Ruled = { args: unknown[] } | { refused: string; why: 'full_access' | 'mode' };
+type Ruled = { args: unknown[] } | { refused: string; why: 'full_access' | 'auto_edit' | 'other_mode' | 'mode' };
 
 interface Row {
     /** How many arguments the handler takes; what a tab sends past them is not handed on. */
@@ -48,7 +52,15 @@ interface Row {
     rule?: (args: unknown[], modeOf: (chatId: unknown) => string | null) => Promise<Ruled>;
 }
 
-const modes = ['plan_only', 'ask_first', 'auto_edit', 'full_access'];
+/** The modes a tab sends in: an allowlist, so a mode added later is refused until it is named here. */
+const tabModes: readonly string[] = ['ask_first', 'plan_only'];
+
+/** The refusal for a chat in a mode a tab does not send in, named where the mode has a sentence of its own. */
+function modeRefusal(mode: string): Ruled {
+    if (mode === 'full_access') return { refused: fullAccessElsewhere, why: 'full_access' };
+    if (mode === 'auto_edit') return { refused: autoEditElsewhere, why: 'auto_edit' };
+    return { refused: otherModeElsewhere, why: 'other_mode' };
+}
 
 /**
  * The table, exactly: six reads and four acts. Everything else the window may ask is outside it by not being here, among
@@ -69,14 +81,14 @@ const rows = new Map<InvokeMember, Row>([
         'chat.send',
         {
             arity: 3,
-            // The chat's mode is read as the chat holds it now, kept or not (`Chat.modeNow`); the send is refused for Full
-            // access, and otherwise carries that mode, which the chat checks again as it takes the send: a mode changed
-            // between the two refuses it. A chat the desktop does not hold is sent in Ask first, which the chat refuses.
+            // The chat's mode is read as the chat holds it now, kept or not (`Chat.modeNow`), with no side effect. A tab sends
+            // only to a chat in Ask first or Plan only; any other mode is refused. The send carries that mode, which the chat
+            // checks again as it takes the send: a mode changed between the two refuses it. A chat the desktop does not hold
+            // is sent in Ask first, which the chat refuses as no conversation of its own.
             rule: async (args, modeOf) => {
                 const [chatId, text, options] = args;
-                const read = modeOf(chatId);
-                const mode = read !== null && modes.includes(read) ? read : 'ask_first';
-                if (mode === 'full_access') return { refused: fullAccessElsewhere, why: 'full_access' };
+                const mode = modeOf(chatId) ?? 'ask_first';
+                if (!tabModes.includes(mode)) return modeRefusal(mode);
                 const given = typeof options === 'object' && options !== null && !Array.isArray(options) ? (options as Record<string, unknown>) : {};
                 if (given.mode !== undefined && given.mode !== mode) return { refused: modeElsewhere, why: 'mode' };
                 return { args: [chatId, text, { ...given, mode }] };
