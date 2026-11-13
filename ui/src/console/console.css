@@ -1100,7 +1100,10 @@ body,
     height: 100%;
     overflow-y: auto;
 }
+/* The shell's grid is a sidebar column and a content column; with no sidebar the one child would sit in the sidebar's
+   column, so the hosted page has the one column, as wide as the panel. */
 .jc-console .harness .app.chromeless {
+    grid-template-columns: minmax(0, 1fr);
     min-height: 100%;
 }
 /* Needs you: the filter over what waits and the card that says nothing does. */
