@@ -2,6 +2,7 @@ import { computed, effect } from '@preact/signals-react';
 import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopEffort, DesktopHost, DesktopRefusal } from '../platform/desktop';
+import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import {
     afresh,
@@ -363,8 +364,8 @@ export function heldHostOf(chat: Chat): DesktopHost | null {
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
 export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode): void {
-    // A chat in Full access takes no message from a tab, whichever way the message came.
-    if (inTab() && chats.value[id]?.mode === 'full_access') return;
+    // A chat a tab may not send to takes no message from it, whichever way the message came.
+    if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) return;
     const chat = chats.value[id];
     const words = text.trim();
     if (!chat || chat.running || !words) return;
@@ -477,8 +478,14 @@ const withCode = (sentence: string): Html[] =>
     sentence.split('`').map((part, at) => (at % 2 ? html`<code>${part}</code>` : html`${part}`));
 
 /** In a browser tab a card is only shown: the desktop's own window answers it. */
-const answeredInDesktop = 'This is answered in Jason Desktop.';
-const tabFullAccess = 'This chat is in Full access. Send messages to it from Jason Desktop.';
+const answeredInDesktop = t('chat.tab.answered');
+
+/** A tab may send only to a chat in Ask first or Plan only, as the bridge does; any other mode, an unknown one too, is locked. */
+export const tabMaySend = (mode: string): boolean => mode === 'ask_first' || mode === 'plan_only';
+
+/** The sentence beside a locked box: it names the mode. */
+export const tabLockedSentence = (mode: string): string =>
+    mode === 'full_access' ? t('chat.tab.full') : mode === 'auto_edit' ? t('chat.tab.auto') : t('chat.tab.other');
 
 function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 'permission' }>): Html {
     const buttons =
@@ -979,8 +986,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const standing = host ? onHost(chat, host.id) : chat;
     // "Another model" with no name typed yet: nothing is sent until a name is, or another choice made.
     const nameMissing = host !== null && sendHeld(standing, host);
-    // A chat in Full access takes no message from a tab; the desktop refuses it too.
-    const tabLocked = inTab() && chat.mode === 'full_access';
+    // A chat in a mode other than Ask first and Plan only takes no message from a tab; the desktop refuses it too.
+    const tabLocked = inTab() && !tabMaySend(chat.mode);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         const current = chats.value[chatId];
@@ -1172,7 +1179,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </div>
                     </div>
                 )}
-                {tabLocked && <div className="note am">{tabFullAccess}</div>}
+                {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
                 {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                 <textarea
                     id="box"

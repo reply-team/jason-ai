@@ -157,6 +157,22 @@ describe('what a tab never says yes to', () => {
         expect(called('chat.send')).toEqual([]);
     });
 
+    it.each([
+        ['ask_first', false, null],
+        ['plan_only', false, null],
+        ['auto_edit', true, 'This chat is in Auto-edit. Send messages to it from Jason Desktop.'],
+        ['full_access', true, 'This chat is in Full access. Send messages to it from Jason Desktop.'],
+        ['some_new_mode', true, 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.'],
+    ])('with the chat in %s the box is locked: %s', async (mode, locked, sentence) => {
+        await shown({ mode: mode as never });
+        const box = screen.getByRole('textbox', { name: 'Your message' }) as HTMLTextAreaElement;
+        const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
+        expect(box.disabled).toBe(locked);
+        expect(send.disabled).toBe(locked);
+        if (sentence === null) expect(screen.queryByText(/Send messages to it from Jason Desktop/)).toBeNull();
+        else expect(screen.getByText(sentence)).toBeTruthy();
+    });
+
     it('sends nothing from a suggestion chip in a Full access chat', async () => {
         await shown({ mode: 'full_access' });
         const chip = await waitFor(() => screen.getByRole('button', { name: 'How are my agents doing?' }));
