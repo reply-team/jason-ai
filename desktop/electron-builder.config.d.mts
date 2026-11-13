@@ -4,6 +4,8 @@ export const signer: string;
 export const fuses: Readonly<Record<string, boolean>>;
 export const chatFiles: readonly string[];
 export function electronChecksums(): Record<string, string>;
+/** Where a release's bundle carries the demo's sample archive, relative to the bundle, with forward slashes. */
+export const demoArchive: string;
 export function bundleFiles(platform: string): string[];
 export function releaseVersion(value: string | undefined): string;
 export function bundleFolder(arch: number): string;
