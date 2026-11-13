@@ -50,8 +50,9 @@ const desktop = {
         startOver: () => ipcRenderer.invoke('jason:mode.startOver'),
     },
     openIn: {
-        targets: (campaignId?: string) => ipcRenderer.invoke('jason:openIn.targets', campaignId),
+        targets: (campaignId?: string, chatId?: string) => ipcRenderer.invoke('jason:openIn.targets', campaignId, chatId),
         open: (target: string, campaignId?: string) => ipcRenderer.invoke('jason:openIn.open', target, campaignId),
+        continueChat: (chatId: string) => ipcRenderer.invoke('jason:openIn.continueChat', chatId),
     },
     pairing: {
         paired: (tokenId: string) => ipcRenderer.invoke('jason:pairing.paired', tokenId),

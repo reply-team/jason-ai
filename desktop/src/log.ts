@@ -114,6 +114,8 @@ export const templates = {
     open_in: 'The folder was opened in {Place}',
     open_in_refused: 'The folder could not be opened in {Place}',
     open_in_remember_failed: 'The place Open in used last could not be kept',
+    open_in_continued: 'A chat was continued in a terminal in {Host}',
+    open_in_continue_refused: 'A chat could not be continued in a terminal in {Host}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

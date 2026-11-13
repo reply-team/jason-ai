@@ -9,7 +9,8 @@ import { editorEnvironment, openInHarnessRoot } from '../src/open-in-env.ts';
 import { enterRun, type PersonEnvironment } from '../src/mode.ts';
 import { startDetached } from '../src/open-in-start.ts';
 import { verbOf } from '../src/installation.ts';
-import { terminalFlags } from '../src/open-in-terminal.ts';
+import { continueFlags, terminalFlags } from '../src/open-in-terminal.ts';
+import { continuableOf, type Conversation } from '../src/chat-conversations.ts';
 import { parseSettings, readSettings, writeSettings } from '../src/settings.ts';
 
 // Made-up machines: each probe answers from a list, so every system's detection is read without the system.
@@ -107,7 +108,26 @@ interface Bench {
     logged: string[];
 }
 
-function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boolean }; campaigns?: Record<string, unknown>; root?: string; folders?: string[]; failStart?: string; cliExit?: number; cliOut?: string; remembered?: PlaceId | null } = {}): Bench {
+/** A conversation as the desktop's record keeps it; the chat's answer is read from these by `continuableOf`, as the chat reads it. */
+const conversation = (id: string, fields: Partial<Conversation> = {}): Conversation => ({
+    id,
+    campaign_id: null,
+    title: 'New chat',
+    created_at: '2026-11-11T10:00:00.000Z',
+    updated_at: '2026-11-11T10:00:00.000Z',
+    sessions: {},
+    entries: [],
+    dropped: 0,
+    ...fields,
+});
+const chatA = 'conv_01JD0000000000000000000001';
+const chatB = 'conv_01JD0000000000000000000002';
+const keptChats = [
+    conversation(chatA, { sessions: { claude: 'session-a' }, plain_sessions: ['claude'], chosen: { host: 'claude', model: null, effort: null } }),
+    conversation(chatB, { sessions: { codex: 'thread-b' }, plain_sessions: ['codex'], chosen: { host: 'codex', model: null, effort: null } }),
+];
+
+function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boolean }; campaigns?: Record<string, unknown>; root?: string; folders?: string[]; failStart?: string; cliExit?: number; cliOut?: string; cliErr?: string; remembered?: PlaceId | null; chats?: Conversation[]; running?: string[]; chatFolder?: string } = {}): Bench {
     const cliCalls: string[][] = [];
     const cwds: (string | undefined)[] = [];
     const started: Line[] = [];
@@ -129,7 +149,7 @@ function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boo
                     const record = campaigns[args[2] ?? ''];
                     return Promise.resolve(record === undefined ? { exit: 1, stdout: '{"error":{"code":"not_found","message":"No such campaign."}}', stderr: '' } : { exit: 0, stdout: JSON.stringify(record), stderr: '' });
                 }
-                return Promise.resolve({ exit: options.cliExit ?? 0, stdout: options.cliOut ?? '{}', stderr: '' });
+                return Promise.resolve({ exit: options.cliExit ?? 0, stdout: options.cliOut ?? '{}', stderr: options.cliErr ?? '' });
             },
         },
         harnessRoot: () => options.root ?? 'C:\\Jason',
@@ -149,6 +169,15 @@ function bench(options: { probes?: Probes; hosts?: { claude: boolean; codex: boo
             return terminalFlags(kind, campaignId);
         },
         log: (event, fields) => void logged.push(`${event}:${fields.Place}`),
+        // As the chat answers (`Chat.continuable`): the record's session by `continuableOf`, and whether a turn runs.
+        continuable: (chatId) => {
+            const kept = (options.chats ?? keptChats).find((each) => each.id === chatId);
+            const found = kept === undefined ? null : continuableOf(kept);
+            return found === null ? null : { ...found, running: (options.running ?? []).includes(kept!.id) };
+        },
+        chatFolder: () => options.chatFolder ?? 'C:\\data\\desktop\\chat',
+        continueFlags,
+        logContinue: (event, fields) => void logged.push(`${event}:${fields.Host}`),
     };
     return { openIn: new OpenIn(deps), cwds, cliCalls, started, copied, kept, flagsGiven, remembered, logged };
 }
@@ -204,6 +233,9 @@ test('a runtime that is not running is said so when the campaign is read, as whe
         start: () => Promise.resolve(null),
         copy: () => undefined,
         terminalFlags,
+        continuable: () => null,
+        chatFolder: () => 'C:\\data\\desktop\\chat',
+        continueFlags,
     });
     assert.deepEqual(await down.targets('cmp_01'), { refused: "Jason's runtime is not running." });
     assert.deepEqual(await down.open('vscode', 'cmp_01'), { refused: "Jason's runtime is not running." });
@@ -440,21 +472,22 @@ function registrar(): { ipc: IpcRegistrar; listeners: Map<string, (event: { send
     return { ipc: { handle: (channel, listener) => void listeners.set(channel, listener) }, listeners };
 }
 
-test('the two calls answer only the runtime’s own page in its top frame: another origin, a subframe or no frame is refused before the handler runs', () => {
+test('the three calls answer only the runtime’s own page in its top frame: another origin, a subframe or no frame is refused before the handler runs', () => {
     const { ipc, listeners } = registrar();
     const reached: string[] = [];
     const why: string[] = [];
     handle(ipc, 'openIn.targets', () => 'http://127.0.0.1:7788', () => void reached.push('targets'), (channel) => void why.push(channel));
     handle(ipc, 'openIn.open', () => 'http://127.0.0.1:7788', () => void reached.push('open'), (channel) => void why.push(channel));
-    assert.deepEqual([...listeners.keys()].sort(), [invokeChannels['openIn.open'], invokeChannels['openIn.targets']].sort());
+    handle(ipc, 'openIn.continueChat', () => 'http://127.0.0.1:7788', () => void reached.push('continueChat'), (channel) => void why.push(channel));
+    assert.deepEqual([...listeners.keys()].sort(), [invokeChannels['openIn.open'], invokeChannels['openIn.targets'], invokeChannels['openIn.continueChat']].sort());
     for (const channel of listeners.values()) {
         for (const frame of [null, { url: 'http://127.0.0.1:7788/ui/', parent: {} }, { url: 'https://example.test/', parent: null }, { url: 'file:///x.html', parent: null }]) {
             assert.throws(() => channel({ senderFrame: frame }, 'vscode'), RefusedSender);
         }
         assert.doesNotThrow(() => channel({ senderFrame: { url: 'http://127.0.0.1:7788/ui/', parent: null } }, 'vscode'));
     }
-    assert.deepEqual(reached, ['targets', 'open']);
-    assert.equal(why.length, 8);
+    assert.deepEqual(reached, ['targets', 'open', 'continueChat']);
+    assert.equal(why.length, 12);
 });
 
 test('the chat’s AI cannot reach the acts: its tools carry no IPC, the chat’s sources name neither channel, and jason session is on its deny list', () => {
@@ -466,4 +499,104 @@ test('the chat’s AI cannot reach the acts: its tools carry no IPC, the chat’
         const text = here(`src/${name}`);
         assert.ok(!/openIn|open-in|jason:openIn/.test(text), `${name} reaches Open in`);
     }
+});
+
+// Continue this chat in a terminal: the page names the chat, and the desktop reads the host and the session from its own
+// record, and the working folder from the run.
+
+test('a chat whose session a terminal may continue is offered with its host’s name, and never its session id', async () => {
+    const b = bench();
+    const offered = (await b.openIn.targets(undefined, chatA)) as { continue?: unknown };
+    assert.deepEqual(offered.continue, { host: 'claude', label: 'Claude Code', running: false });
+    assert.deepEqual(((await b.openIn.targets('cmp_01', chatB)) as { continue?: unknown }).continue, { host: 'codex', label: 'Codex', running: false });
+    assert.ok(!JSON.stringify(offered).includes('session-a'), 'the session id never reaches the page');
+    // With no chat named, there is no entry, and the answer is as it was.
+    assert.ok(!('continue' in ((await b.openIn.targets()) as object)));
+    assert.ok(!('continue' in ((await b.openIn.targets('cmp_01')) as object)));
+});
+
+test('the entry is offered only when every condition holds: a row per condition that fails', async () => {
+    const chosen = (host: string) => ({ chosen: { host, model: null, effort: null } });
+    const rows: [string, Conversation][] = [
+        ['no session kept for Claude Code or Codex', conversation(chatA, chosen('claude'))],
+        ['a key provider’s session', conversation(chatA, { sessions: { deepseek: 'session-k' }, plain_sessions: ['deepseek'], ...chosen('deepseek') })],
+        ['a session no plain turn named', conversation(chatA, { sessions: { claude: 'session-a' }, ...chosen('claude') })],
+    ];
+    for (const [why, kept] of rows) {
+        const b = bench({ chats: [kept] });
+        assert.ok(!('continue' in ((await b.openIn.targets(undefined, chatA)) as object)), why);
+        assert.deepEqual(await b.openIn.continueChat(chatA), { refused: 'This chat cannot be continued in a terminal.' }, why);
+        assert.deepEqual(b.cliCalls, [], why);
+    }
+    // A turn that runs: the entry is drawn, as running, and the act is refused without asking the CLI.
+    const running = bench({ running: [chatA] });
+    assert.deepEqual(((await running.openIn.targets(undefined, chatA)) as { continue?: unknown }).continue, { host: 'claude', label: 'Claude Code', running: true });
+    assert.deepEqual(await running.openIn.continueChat(chatA), { refused: 'A turn of this chat is running. Stop it or wait for it to end, then continue it in a terminal.' });
+    assert.deepEqual(running.cliCalls, []);
+    // All of them hold: offered.
+    assert.deepEqual(((await bench().openIn.targets(undefined, chatA)) as { continue?: unknown }).continue, { host: 'claude', label: 'Claude Code', running: false });
+});
+
+test('the act runs the bundled jason session open --here with the host and the id from the record, in the folder a plain turn runs in', async () => {
+    const b = bench();
+    assert.equal(await b.openIn.continueChat(chatA), null);
+    assert.equal(await b.openIn.continueChat(chatB), null);
+    assert.deepEqual(b.cliCalls, [
+        ['session', 'open', '--here', '--host', 'claude_code', '--resume', 'session-a'],
+        ['session', 'open', '--here', '--host', 'codex', '--resume', 'thread-b'],
+    ]);
+    assert.deepEqual(b.cwds, ['C:\\data\\desktop\\chat', 'C:\\data\\desktop\\chat']);
+    assert.deepEqual(b.started, [], 'the detached starter is not used');
+    assert.deepEqual(b.logged, ['open_in_continued:claude', 'open_in_continued:codex']);
+    assert.deepEqual(continueFlags('claude', 'session-a'), ['--here', '--host', 'claude_code', '--resume', 'session-a']);
+});
+
+test('the entry is never the remembered default: continuing keeps nothing, and the main part opens what it opened before', async () => {
+    const b = bench({ remembered: 'zed' });
+    assert.equal(await b.openIn.continueChat(chatA), null);
+    assert.deepEqual(b.kept, []);
+    assert.equal(b.remembered.value, 'zed');
+    assert.equal(((await b.openIn.targets(undefined, chatA)) as { default: string }).default, 'zed');
+});
+
+test('what the page sends besides the chat’s id is never read: a path or a session id in its place, or after it, opens nothing of its own', async () => {
+    const b = bench();
+    const act = b.openIn.continueChat.bind(b.openIn) as (...args: unknown[]) => Promise<unknown>;
+    for (const given of ['session-a', 'C:\\Windows\\System32\\cmd.exe', '/bin/sh', '../x', 'conv_', '', null, undefined, 7, { id: chatA }, [chatA]]) {
+        assert.deepEqual(await act(given), { refused: 'This chat cannot be continued in a terminal.' }, String(given));
+    }
+    assert.deepEqual(b.cliCalls, []);
+    assert.equal(await act(chatA, 'other-session', 'C:\\Elsewhere', { cwd: '/tmp' }), null);
+    assert.deepEqual(b.cliCalls, [['session', 'open', '--here', '--host', 'claude_code', '--resume', 'session-a']]);
+    assert.deepEqual(b.cwds, ['C:\\data\\desktop\\chat']);
+    // The main process hands the act the chat's id alone.
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    assert.match(main, /handle\(ipcMain, 'openIn\.continueChat', origin, \(chatId\) => openIn\.continueChat\(chatId\), refused\);/);
+    assert.match(main, /handle\(ipcMain, 'openIn\.targets', origin, \(campaignId, chatId\) => openIn\.targets\(campaignId, chatId\), refused\);/);
+});
+
+test('a refusal of the CLI is said in the CLI’s own sentence; a runtime that is not running is said so; nothing is kept', async () => {
+    const cases: [Parameters<typeof bench>[0], string][] = [
+        [{ cliExit: 1, cliOut: '{"error":{"code":"host_cannot_resume","message":"Codex has no way this jason knows to continue one of its own conversations, so nothing was started."}}' }, 'Codex has no way this jason knows to continue one of its own conversations, so nothing was started.'],
+        [{ cliExit: 1, cliOut: '{"error":{"code":"terminal_not_found","message":"No terminal was found on this computer, so nothing was started."}}' }, 'No terminal was found on this computer, so nothing was started.'],
+        [{ cliExit: 2, cliOut: '', cliErr: "--here opens at the folder this command runs in; it is not taken with --campaign or --project.\nRun 'jason --help' for usage.\n" }, '--here opens at the folder this command runs in; it is not taken with --campaign or --project.'],
+        [{ cliExit: 3, cliOut: '{"error":{"code":"runtime_unreachable","message":"No runtime answered."}}' }, "Jason's runtime is not running."],
+        [{ cliExit: 1, cliOut: 'not json' }, 'A terminal could not be opened.'],
+        [{ cliExit: -1, cliOut: '', cliErr: 'spawn ENOENT' }, 'A terminal could not be opened.'],
+    ];
+    for (const [options, sentence] of cases) {
+        const b = bench(options);
+        assert.deepEqual(await b.openIn.continueChat(chatA), { refused: sentence }, sentence);
+        assert.deepEqual(b.kept, []);
+        assert.deepEqual(b.logged, ['open_in_continue_refused:claude']);
+    }
+});
+
+test('in a demo run the working folder is the run’s own chat folder, and the CLI is the run’s, which carries the demo’s data directory', async () => {
+    const b = bench({ chatFolder: '/home/ada/.jason-demo/desktop/chat' });
+    assert.equal(await b.openIn.continueChat(chatA), null);
+    assert.deepEqual(b.cwds, ['/home/ada/.jason-demo/desktop/chat']);
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    // `paths` is the run's (the demo's in a demo run) and `cli` the run's, the one the three terminals use.
+    assert.match(main, /const openIn = new OpenIn\(\{[\s\S]*?\n        cli,\n[\s\S]*?continuable: \(chatId\) => chat\.continuable\(chatId\),\n        chatFolder: \(\) => paths\.chat,\n/);
 });

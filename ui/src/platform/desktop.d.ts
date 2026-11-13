@@ -511,6 +511,19 @@ export interface DesktopOpenInAnswer {
     places: { id: DesktopOpenInPlace; label: string }[];
     default: DesktopOpenInPlace;
     folder: string;
+    /** Present only when the chat the page named may be continued in a terminal. */
+    continue?: DesktopOpenInContinue;
+}
+
+/**
+ * The entry that continues the chat in front in a terminal: the host whose own conversation it continues, by its product's
+ * name, and whether a turn of the chat runs now, while which the entry is drawn disabled. The session's id never reaches
+ * the page.
+ */
+export interface DesktopOpenInContinue {
+    host: 'claude' | 'codex';
+    label: string;
+    running: boolean;
 }
 
 export interface JasonDesktop {
@@ -555,9 +568,10 @@ export interface JasonDesktop {
         /**
          * The places this computer can open a folder in, for the folder of the campaign `campaignId` names (its recorded
          * folder) or, with none, the harness root; the desktop's refusal, with a sentence, when that folder is not recorded
-         * or not on this computer. In the demo the folders are the demo installation's.
+         * or not on this computer. In the demo the folders are the demo installation's. With `chatId`, the chat in front,
+         * the answer also carries the entry that continues it in a terminal, where that chat may be continued.
          */
-        targets(campaignId?: string): Promise<DesktopOpenInAnswer | DesktopRefusal>;
+        targets(campaignId?: string, chatId?: string): Promise<DesktopOpenInAnswer | DesktopRefusal>;
         /**
          * Opens that folder in the place `target` names, which the desktop holds against its own list; `campaignId` is the
          * campaign of the chat that is open, or absent. The page never sends a path. Null once opened (or copied); a refusal
@@ -565,6 +579,13 @@ export interface JasonDesktop {
          * place is kept as the next default, Copy path excepted.
          */
         open(target: DesktopOpenInPlace, campaignId?: string): Promise<DesktopRefusal | null>;
+        /**
+         * Continues the chat `chatId` names in a new terminal, with the host's own conversation: the desktop reads the host
+         * and the session from its own record of the chat and opens the terminal in the folder the chat's turns run in. The
+         * page sends the chat's id alone. Null once the terminal was opened; a refusal for a chat that may not be continued,
+         * one whose turn runs, or the command line's own sentence when it refused. Never the next default.
+         */
+        continueChat(chatId: string): Promise<DesktopRefusal | null>;
     };
     pairing: {
         /**
