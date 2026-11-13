@@ -1,4 +1,5 @@
 import type { UiPlugin } from '../platform/plugin';
+import { accountsPlugin } from './accounts';
 import { attentionPlugin } from './attention';
 import { campaignsPlugin } from './campaigns';
 import { chatPlugin } from './chat';
@@ -16,6 +17,7 @@ export const screenPlugins: readonly UiPlugin[] = [
     workItemsPlugin,
     peoplePlugin,
     systemPlugin,
+    accountsPlugin,
     settingsPlugin,
 ];
 
