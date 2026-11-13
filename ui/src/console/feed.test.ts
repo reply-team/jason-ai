@@ -75,7 +75,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
             'workitem_expired',
             'workitem_failed',
         ] satisfies DesktopFeedKind[]);
-        const words = feedKinds.map((kind) => toFeedRow(kept({ journal_kind: kind }), new Map(), now).words);
+        const words = feedKinds.map((kind) => toFeedRow(kept({ journal_kind: kind }), new Map(), now)!.words);
         expect(words).toEqual([
             'A reply arrived',
             'An approval waits',
@@ -93,7 +93,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
         ]);
     });
 
-    it("words a send that went out and a role's finished work from two closed lists, one to one with the desktop's", () => {
+    it("words a send that was taken and a role's finished work from two closed lists, one to one with the desktop's", () => {
         expect([...feedOperations].sort()).toEqual(['conversation.reply', 'message.send', 'social_invitation.send']);
         expect([...feedRoles].sort()).toEqual([
             'analyst',
@@ -103,7 +103,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
             'researcher',
         ]);
         const said = (fields: Partial<DesktopLineEntry>) =>
-            toFeedRow(kept({ journal_kind: 'workitem_succeeded', ...fields }), new Map(), now);
+            toFeedRow(kept({ journal_kind: 'workitem_succeeded', ...fields }), new Map(), now)!;
         expect(
             feedOperations.map((operation) => [
                 said({ operation }).words,
@@ -111,9 +111,9 @@ describe('the Feed as the page hands it lines and draws them', () => {
                 said({ operation }).needs,
             ]),
         ).toEqual([
-            ['A message went out', 'chat', false],
-            ['A reply went out', 'chat', false],
-            ['An invitation went out', 'chat', false],
+            ['A message was sent or scheduled', 'chat', false],
+            ['A reply was sent', 'chat', false],
+            ['An invitation was sent or scheduled', 'chat', false],
         ]);
         expect(feedRoles.map((role) => [said({ role }).words, said({ role }).icon, said({ role }).needs])).toEqual([
             ['A plan is ready', 'work', false],
@@ -122,6 +122,22 @@ describe('the Feed as the page hands it lines and draws them', () => {
             ['An analysis is ready', 'work', false],
             ['A deliverability check finished', 'work', false],
         ]);
+    });
+
+    it('draws nothing, and throws nothing, for a kept line of a kind, an operation or a role the page does not know', () => {
+        const unknown = [
+            kept({ journal_kind: 'a_kind_a_newer_desktop_kept' as DesktopLineEntry['journal_kind'] }),
+            kept({ journal_kind: 'toString' as DesktopLineEntry['journal_kind'] }),
+            kept({
+                journal_kind: 'workitem_succeeded',
+                operation: 'contact.list' as never,
+            }),
+            kept({ journal_kind: 'workitem_succeeded', role: 'manager' as never }),
+            kept({ journal_kind: 'workitem_succeeded' }),
+        ];
+        for (const entry of unknown) expect(toFeedRow(entry, new Map(), now), JSON.stringify(entry)).toBeNull();
+        // The lines beside it are still drawn.
+        expect(toFeedRow(kept({ journal_kind: 'campaign_started' }), new Map(), now)?.words).toBe('Agent started');
     });
 
     it("hands a succeeded work item only as a listed send or a listed role's work, and only those two members of it", () => {
@@ -179,7 +195,7 @@ describe('the Feed as the page hands it lines and draws them', () => {
 
     it('names the campaign as the console read it, else by its id, says the count and the age, and which lines lead to Needs you', () => {
         const names = new Map([['cmp_01JD0000000000000000000001', 'Spring']]);
-        expect(toFeedRow(kept({ count: 3 }), names, now)).toEqual({
+        expect(toFeedRow(kept({ count: 3 }), names, now)!).toEqual({
             id: 'jrn_01JD0000000000000000000001',
             kind: 'inbound_reply_observed',
             words: 'A reply arrived',
@@ -190,18 +206,18 @@ describe('the Feed as the page hands it lines and draws them', () => {
             age: '30 min',
             needs: false,
         });
-        const unnamed = toFeedRow(kept({ campaign_id: 'cmp_01JD0000000000000000000009' }), names, now);
+        const unnamed = toFeedRow(kept({ campaign_id: 'cmp_01JD0000000000000000000009' }), names, now)!;
         expect([unnamed.campaign, unnamed.count]).toEqual(['cmp_01JD0000000000000000000009', null]);
-        expect(toFeedRow(kept({ journal_kind: 'approval_requested' }), names, now).needs).toBe(true);
-        expect(toFeedRow(kept({ journal_kind: 'decision_raised' }), names, now).needs).toBe(true);
-        expect(toFeedRow(kept({ journal_kind: 'workitem_failed' }), names, now).needs).toBe(false);
+        expect(toFeedRow(kept({ journal_kind: 'approval_requested' }), names, now)!.needs).toBe(true);
+        expect(toFeedRow(kept({ journal_kind: 'decision_raised' }), names, now)!.needs).toBe(true);
+        expect(toFeedRow(kept({ journal_kind: 'workitem_failed' }), names, now)!.needs).toBe(false);
         for (const decided of [
             'approval_approved',
             'approval_rejected',
             'decision_answered',
             'campaign_archived',
         ] as const) {
-            expect(toFeedRow(kept({ journal_kind: decided }), names, now).needs).toBe(false);
+            expect(toFeedRow(kept({ journal_kind: decided }), names, now)!.needs).toBe(false);
         }
     });
 });

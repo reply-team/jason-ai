@@ -33,14 +33,14 @@ const kinds: Readonly<
 };
 
 /**
- * Work that succeeded is taken only as one of these, each with its words: a send that went out, by its operation, or the
+ * Work that succeeded is taken only as one of these, each with its words: a send the provider took, by its operation, or the
  * finished work of a shipped role. The tables are the lists, and the desktop holds the same two (`feed.ts` there): a
  * name in neither is no Feed line, and no fallback wording stands for it.
  */
 const sends: Readonly<Record<DesktopFeedOperation, string>> = {
-    'message.send': 'A message went out',
-    'conversation.reply': 'A reply went out',
-    'social_invitation.send': 'An invitation went out',
+    'message.send': 'A message was sent or scheduled',
+    'conversation.reply': 'A reply was sent',
+    'social_invitation.send': 'An invitation was sent or scheduled',
 };
 const roleWork: Readonly<Record<DesktopFeedRole, string>> = {
     planner: 'A plan is ready',
@@ -113,20 +113,27 @@ export interface FeedRow {
     needs: boolean;
 }
 
-/** The words, icon and need of a kept line; a succeeded line holds exactly one of an operation and a role, or it is none of the Feed's. */
-function wordsOf(entry: DesktopLineEntry): { words: string; icon: IconName; needs: boolean } {
-    if (entry.journal_kind !== 'workitem_succeeded') return kinds[entry.journal_kind];
-    if (entry.operation !== undefined && entry.role === undefined && isOperation(entry.operation))
-        return { words: sends[entry.operation], icon: 'chat', needs: false };
-    if (entry.role !== undefined && entry.operation === undefined && isRole(entry.role))
-        return { words: roleWork[entry.role], icon: 'work', needs: false };
-    throw new Error('A succeeded line of the Feed names one operation or one role of the lists.');
+/**
+ * The words, icon and need of a kept line, or null when the page does not know it: a kind outside the table, or a
+ * succeeded line that does not name exactly one operation or exactly one role of the lists. A newer desktop may keep
+ * what this page has no words for; such a line is not drawn, and the lines beside it are.
+ */
+function wordsOf(entry: DesktopLineEntry): { words: string; icon: IconName; needs: boolean } | null {
+    if (entry.journal_kind === 'workitem_succeeded') {
+        if (entry.operation !== undefined && entry.role === undefined && isOperation(entry.operation))
+            return { words: sends[entry.operation], icon: 'chat', needs: false };
+        if (entry.role !== undefined && entry.operation === undefined && isRole(entry.role))
+            return { words: roleWork[entry.role], icon: 'work', needs: false };
+        return null;
+    }
+    return isFeedKind(entry.journal_kind) ? kinds[entry.journal_kind] : null;
 }
 
-/** One row of the Feed, from the line the desktop kept and the campaigns' names the console read. */
-export function toFeedRow(entry: DesktopLineEntry, names: ReadonlyMap<string, string>, now: number): FeedRow {
-    // Work that succeeded is worded by its operation or its role, both from the lists; a line of another shape is never kept.
+/** One row of the Feed, from the line the desktop kept and the campaigns' names the console read; null for a line the page does not know. */
+export function toFeedRow(entry: DesktopLineEntry, names: ReadonlyMap<string, string>, now: number): FeedRow | null {
+    // Work that succeeded is worded by its operation or its role, both from the lists.
     const said = wordsOf(entry);
+    if (said === null) return null;
     return {
         id: entry.journal_id,
         kind: entry.journal_kind,

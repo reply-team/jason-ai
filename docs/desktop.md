@@ -305,10 +305,13 @@ model's to decide.
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
 **New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
 approval or a question waiting, an approval approved or rejected, a question answered, a campaign created, started,
-paused or archived, work that stopped or expired, a provider block holding work, a message, a reply or an invitation that
-went out, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability specialist.
-Consecutive lines of the same kind and campaign fold into one with a count; a message that went out and an invitation
-that went out are not the same kind of line, so sends that alternate with other lines are shown one by one. The Feed keeps
+paused or archived, work that stopped or expired, a provider block holding work, a message or an invitation sent or
+scheduled, a reply sent, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability specialist.
+Consecutive lines of the same kind and campaign fold into one with a count; a message sent or scheduled and an invitation
+sent or scheduled are not the same kind of line, so sends that alternate with other lines are shown one by one. A send is a line when it succeeded, which includes a
+send the provider took for a later moment, so the line says sent or scheduled and a scheduled send can still be cancelled.
+A kept line of a kind, an operation or a role the page has no words for, such as one a newer desktop kept, is not drawn.
+The Feed keeps
 the newest 500. A line carries a kind, ids, a count and a moment, and for a send or finished work which one it was, and
 never a person's words, a subject or a name; the campaign's name on it opens that campaign's conversation, and an
 approval or a question opens Needs you on that item. When the window loads, the desktop reads what it missed with

@@ -1,7 +1,7 @@
 // Pure: the Feed's lines. The Feed is the person's main chat, a conversation of its own kind, into which the desktop
 // puts a line for each journal line of a closed table of kinds: a reply observed, an approval or a question waiting, an
 // approval approved or rejected, a question answered, a campaign created, started, paused or archived, and work that
-// stopped; and, of the work that succeeded, a send that went out and the work of five roles. A line keeps identifiers,
+// stopped; and, of the work that succeeded, a send the provider took and the work of five roles. A line keeps identifiers,
 // the kind, the moment and a count, and for a succeeded work item the operation or the role from a closed list, and
 // never a person's text: no reason, no old or new value, no campaign or contact name. Lines of the same kind, campaign,
 // operation and role that follow one another fold into one (sends that alternate with other lines are shown one by
@@ -37,7 +37,7 @@ export const succeededKind = 'workitem_succeeded';
 
 export type FeedKind = (typeof feedKinds)[number] | typeof succeededKind;
 
-/** The operations of the catalog whose success is a send that went out. */
+/** The operations of the catalog whose success is a send the provider took, for now or for a later moment. */
 export const feedOperations = ['message.send', 'conversation.reply', 'social_invitation.send'] as const;
 export type FeedOperation = (typeof feedOperations)[number];
 
@@ -76,7 +76,7 @@ export interface LineEntry {
     campaign_id: string;
     /** The work item the line names, where it names one. */
     work_item_id?: string;
-    /** On a `workitem_succeeded` line, the operation of a send that went out; else absent. Exactly one of it and `role`. */
+    /** On a `workitem_succeeded` line, the operation of a send the provider took; else absent. Exactly one of it and `role`. */
     operation?: FeedOperation;
     /** On a `workitem_succeeded` line, the shipped role whose work finished; else absent. */
     role?: FeedRole;
