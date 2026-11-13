@@ -8,7 +8,6 @@ import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
 import { attention } from './needs';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
-import { t } from '../platform/i18n';
 import { activePanel, chats, conversations, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), Search, the Feed,
