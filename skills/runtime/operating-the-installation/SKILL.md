@@ -63,6 +63,10 @@ preference `agent.interactive_host`, a person's own word like every preference:
 `jason preference set agent.interactive_host --value-file host.json --actor human:<their-name>`, with `host.json`
 holding `{"host":"codex"}`, and `unset` goes back to `claude_code`.
 `--dry-run` prints what would start and starts nothing.
+With no item, `jason session open` opens a new terminal at a folder with no first input: `--campaign <id>` for a
+campaign's folder, `--project <id or slug>` for a project's, neither for the harness root; `--host <host>` names the
+host, or `--shell` opens a plain shell there. It too opens a window on the person's desktop, so run it only when they
+ask for one.
 
 ## Starting and stopping it
 
