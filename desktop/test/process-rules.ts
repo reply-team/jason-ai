@@ -135,6 +135,26 @@ const ownPageHandedOut = /=\s*lockNavigation\(/;
 const ownPageToTab = /\bopenTab\(\{[^\n]*\bopen:\s*ownPage\b/;
 const openOwnPageName = /\bopenOwnPage\b/g;
 
+/**
+ * The spellings that would reach what the rules above name by another name, each refused. This guard reads text: it
+ * holds these spellings and no computed name beyond them (a property reached through a value built at run time, a
+ * module loaded by a name made at run time other than as below), as the C# guard reads compiled IL and not reflection.
+ * - main.ts calls its navigation lock once, taking its two openers apart by name, so no other part of main.ts holds them
+ *   under another name or reaches one by a computed key.
+ * - `shell` is not reached by an index, aliased, taken apart or imported under another name outside the lock, so
+ *   `openExternal` and `openPath` are never called by a name the rules do not read.
+ * - Under src/, `listen` is not reached by an index, and a dynamic import names its module by a plain string.
+ */
+const lockCall = /\blockNavigation\s*\(/g;
+const lockDefinition = /\bfunction\s+lockNavigation\s*\(/g;
+const lockTakenApart = 'const { leave: toBrowser, ownPage } = lockNavigation(';
+const shellIndexed = /\bshell\s*\[/g;
+const shellAliased = /=\s*shell\b(?!\s*\.)/g;
+const shellRenamed = /import\s*\{[^}]*\bshell\s+as\b/g;
+const listenIndexed = /\[\s*['"`]listen['"`]\s*\]/;
+const dynamicImport = /\bimport\s*\(/g;
+const plainImport = /^import\s*\(\s*(?:'[^'`$\\]*'|"[^"`$\\]*")\s*\)/;
+
 /** The line of `text` that holds `index`. */
 function lineAt(text: string, index: number): string {
     const end = text.indexOf('\n', index);
@@ -258,6 +278,23 @@ export function processViolations(path: string, text: string): string[] {
             else found.push(`${path} uses the opener of the runtime's own page other than as ${ownPageCaller}`);
         }
         if (seen.handedOut > 1 || seen.toTab > 1) found.push(`${path} hands the opener of the runtime's own page to more than ${ownPageCaller}`);
+    }
+    const lockDefined = [...text.matchAll(lockDefinition)].length;
+    const lockCalls = [...text.matchAll(lockCall)].length - lockDefined;
+    // main.ts defines the lock and calls it once, taken apart as above; every other module names it nowhere.
+    if (lockDefined > 0 ? path !== 'src/main.ts' || lockCalls !== 1 || text.split(lockTakenApart).length !== 2 : lockCalls > 0) {
+        found.push(`${path} calls the navigation lock other than once, in main.ts, as ${lockTakenApart}`);
+    }
+    for (const pattern of [shellIndexed, shellAliased, shellRenamed]) {
+        for (const match of text.matchAll(pattern)) {
+            if (outsideLock(match.index)) found.push(`${path} reaches shell by another name outside main.ts's navigation lock: ${match[0].trim()}`);
+        }
+    }
+    if (path.startsWith('src/')) {
+        if (listenIndexed.test(text)) found.push(`${path} reaches listen by an index`);
+        for (const match of text.matchAll(dynamicImport)) {
+            if (!plainImport.test(text.slice(match.index))) found.push(`${path} imports a module by a name that is not a plain string`);
+        }
     }
     return found;
 }

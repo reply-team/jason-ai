@@ -142,7 +142,7 @@ test('a second IPC registration surface, webContents.ipc, is refused outside the
 test('shell.openPath is refused everywhere, and shell.openExternal anywhere but main.ts’s navigation lock', () => {
     assert.notDeepEqual(processViolations('src/main.ts', 'void shell.openPath(file);'), []);
     assert.notDeepEqual(processViolations('src/setup.ts', 'void shell.openExternal(url);'), []);
-    const locked = 'function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\n';
+    const locked = 'function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n';
     assert.deepEqual(processViolations('src/main.ts', locked), []);
     assert.notDeepEqual(processViolations('src/main.ts', `${locked}\nfunction other() {\n    void shell.openExternal('https://x');\n}\n`), []);
 });
@@ -152,7 +152,7 @@ test('inside the navigation lock a URL reaches the system browser only through i
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
     assert.equal([...main.matchAll(/\bshell\s*\.\s*openExternal\b/g)].length, 2, 'main.ts hands a URL to the system browser in two places');
     assert.match(main, /const ownPage = \(url: string\): Promise<void> => openOwnPage\(url, \{ origin, log, open: \(held\) => shell\.openExternal\(held\) \}\);/, 'ownPage hands the system opener to openOwnPage, which holds the address itself');
-    const lock = (body: string) => `function lockNavigation(contents) {\n${body}\n}\n`;
+    const lock = (body: string) => `function lockNavigation(contents) {\n${body}\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n`;
     const both = '    const leave = (url) => void shell.openExternal(url);\n    const ownPage = (url) => void shell.openExternal(url);';
     assert.deepEqual(processViolations('src/main.ts', lock(both)), []);
     for (const planted of [
@@ -182,6 +182,47 @@ test('the opener of the runtime\'s own page is called only by the bridge\'s open
     }
     assert.notDeepEqual(processViolations('src/setup.ts', "import { openOwnPage } from './browser-bridge.ts';\nvoid openOwnPage(link, deps);\n"), []);
     assert.deepEqual(processViolations('src/browser-bridge.ts', 'export async function openOwnPage(url, deps) {}\n'), []);
+});
+
+test('the navigation lock is called once, in main.ts, and taken apart only into its two openers by name', () => {
+    const defined = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n    const ownPage = (url) => openOwnPage(url, { origin, log, open: (held) => shell.openExternal(held) });\n}\n";
+    const once = 'const { leave: toBrowser, ownPage } = lockNavigation(window.webContents, origin, log);\n';
+    assert.deepEqual(processViolations('src/main.ts', defined + once), []);
+    for (const planted of [
+        'const { leave: toBrowser, ...rest } = lockNavigation(window.webContents, origin, log);\n',
+        "const nav = lockNavigation(window.webContents, origin, log);\nvoid nav['own' + 'Page'](link);\n",
+        once + 'const again = lockNavigation(other, origin, log);\n',
+        '',
+    ]) {
+        assert.notDeepEqual(processViolations('src/main.ts', defined + planted), [], planted);
+    }
+    assert.notDeepEqual(processViolations('src/desk.ts', 'const { leave } = lockNavigation(contents, origin, log);\n'), []);
+});
+
+test('shell is not reached by an index, an alias, a taking-apart or a renamed import outside the navigation lock', () => {
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n";
+    for (const planted of [
+        "void shell['openExternal'](link);",
+        'const s = shell;',
+        'const { openExternal } = shell;',
+        'const { openExternal: o } =shell;',
+        "import { app, shell as desktopShell } from 'electron';",
+    ]) {
+        assert.ok(processViolations('src/main.ts', `${lock}${planted}\n`).some((line) => /reaches shell by another name/.test(line)), planted);
+        assert.ok(processViolations('src/setup.ts', `${planted}\n`).some((line) => /reaches shell by another name/.test(line)), planted);
+    }
+    assert.deepEqual(processViolations('src/main.ts', lock), []);
+    assert.deepEqual(processViolations('src/setup.ts', "import { shell } from 'electron';\nshell.showItemInFolder(path);\nconst shellPath = 1;\n"), []);
+});
+
+test('under src/, listen is not reached by an index, and a dynamic import names its module by a plain string', () => {
+    for (const planted of ["server['listen'](0);", 'server["listen"](0);', 'server[ `listen` ](0);']) {
+        assert.ok(processViolations('src/chat-permission-endpoint.ts', planted).some((line) => /reaches listen by an index/.test(line)), planted);
+    }
+    for (const planted of ["await import('node:' + 'http');", 'await import(name);', 'await import(`node:${kind}`);', "await import( 'node:http' + '' );"]) {
+        assert.ok(processViolations('src/setup.ts', planted).some((line) => /imports a module by a name that is not a plain string/.test(line)), planted);
+    }
+    assert.deepEqual(processViolations('src/setup.ts', "const electron = await import('electron');\ntype E = typeof import(\"electron\");\n"), []);
 });
 
 test('utilityProcess is refused everywhere', () => {
