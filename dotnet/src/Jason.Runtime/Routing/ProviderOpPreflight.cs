@@ -440,8 +440,9 @@ public static class ProviderOpPreflight
     /// <summary>
     /// Where the work is routed: by its campaign's route for its operation and the channel its call names, except a read
     /// or a stop of a search the campaign made with a reference, which goes where that search ran
-    /// (<see cref="RouteResolver.ForSearch"/>), whatever its own operation resolves to now. The claim reads its facts by
-    /// the same answer.
+    /// (<see cref="RouteResolver.ForSearch"/>), and a read or a cancel of a send the campaign made with a reference, which
+    /// goes where that send ran (<see cref="RouteResolver.ForSend"/>), whatever its own operation resolves to now. The
+    /// claim reads its facts by the same answer.
     /// <para>
     /// The channel is the value of the argument the operation's document names for its route
     /// (<see cref="OperationContract.RouteChannel"/>), read from <c>context.input</c> as the item holds it before a child
@@ -454,11 +455,21 @@ public static class ProviderOpPreflight
         ArgumentNullException.ThrowIfNull(contract);
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(routes);
-        return CanonicalInput.NamesASearch(contract)
+        if (CanonicalInput.NamesASearch(contract)
             && facts.Search is { Status: WorkItemStatus.Succeeded, Reference: not null, PluginId: { } ranAt } search
-            && CanonicalInput.MakesASearch(search.Operation)
-            ? RouteResolver.ForSearch(routes, facts.Campaign.PublicId, contract.Id, search.Operation!, ranAt, search.BindingIdentity)
-            : RouteResolver.Resolve(routes, facts.Campaign.PublicId, contract.Id, contract.RouteChannel(facts.Item.Context[WorkItemService.InputKey]));
+            && CanonicalInput.MakesASearch(search.Operation))
+        {
+            return RouteResolver.ForSearch(routes, facts.Campaign.PublicId, contract.Id, search.Operation!, ranAt, search.BindingIdentity);
+        }
+
+        if (CanonicalInput.NamesASend(contract)
+            && facts.Send is { Status: WorkItemStatus.Succeeded, Reference: not null, PluginId: { } sentAt } send
+            && CanonicalInput.MakesASend(send.Operation))
+        {
+            return RouteResolver.ForSend(routes, facts.Campaign.PublicId, contract.Id, send.Operation!, send.Channel, sentAt, send.BindingIdentity);
+        }
+
+        return RouteResolver.Resolve(routes, facts.Campaign.PublicId, contract.Id, contract.RouteChannel(facts.Item.Context[WorkItemService.InputKey]));
     }
 
     /// <summary>

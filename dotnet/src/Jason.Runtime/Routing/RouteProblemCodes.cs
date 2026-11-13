@@ -83,4 +83,11 @@ public static class RouteProblemCodes
     /// and its stop would have nowhere to go while it goes on spending at the provider.
     /// </summary>
     public const string OrphansSearch = "route_orphans_search";
+
+    /// <summary>
+    /// The same of a send: the set would take the last active route naming the plugin and account a send ran under away
+    /// from it while the provider still holds it for a moment to come and no cancel of it has succeeded, so its cancel and
+    /// its status read would have nowhere to go before it goes out.
+    /// </summary>
+    public const string OrphansSend = "route_orphans_send";
 }

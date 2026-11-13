@@ -22,14 +22,20 @@ public abstract record NamedReference(
     string? PluginId,
     string? BindingIdentity);
 
-/// <summary>The send a read of one, or a take-back of one, names under <c>args.send</c>.</summary>
+/// <summary>
+/// The send a read of one, or a take-back of one, names under <c>args.send</c>. <paramref name="Channel"/> is the channel
+/// the send's own route was resolved by, read from its arguments as its operation's document names
+/// (<see cref="Jason.Contracts.Operations.OperationContract.RouteChannel"/>), and null where it named none: a read or a
+/// take-back of the send asks that route first among the campaign's, since it is the one the send went by.
+/// </summary>
 public sealed record NamedSend(
     string WorkItem,
     string? Operation,
     WorkItemStatus Status,
     string? Reference,
     string? PluginId,
-    string? BindingIdentity)
+    string? BindingIdentity,
+    string? Channel = null)
     : NamedReference(WorkItem, Operation, Status, Reference, PluginId, BindingIdentity);
 
 /// <summary>
