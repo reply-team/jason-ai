@@ -12,7 +12,8 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
-import { startDraft, startMaking, startWaiting, submitStart } from './start';
+import { fullAccessStanding } from '../platform/full-access';
+import { startAskFirst, startDraft, startMaking, startWaiting, submitStart } from './start';
 
 // The window opens on the question who the person wants to reach. What is sent there starts a set-up chat; with no AI
 // connected the AI card comes first and the message waits; Reply is asked for when the work needs a way to send.
@@ -77,6 +78,8 @@ beforeEach(() => {
     startMaking.value = null;
     setupError.value = null;
     replyDismissed.value = [];
+    startAskFirst.value = false;
+    fullAccessStanding.value = null;
 });
 
 /** Opens the Campaigns panel and the chat of the campaign named, from its row, as a person does. */
@@ -137,6 +140,50 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.send')[0]!.args[1]).toBe('Heads of sales at logistics firms in Poland');
         await waitFor(() => screen.getByRole('form', { name: 'Message' }));
         expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
+    });
+
+    it('with "start new chats in Full access" shows the chat\'s Full access line before anything is sent, and the chat starts in it', async () => {
+        const desktop = stubDesktop();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
+        renderConsole(desktop);
+        await ready();
+        const line = await waitFor(() =>
+            within(startForm()).getByRole('status', { name: 'The chat starts in Full access' }),
+        );
+        expect(line.textContent).toContain(
+            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+        );
+        expect(calls(desktop, 'chat.create')).toHaveLength(0);
+        ask('Heads of sales at logistics firms in Poland');
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [undefined, 'claude'] }]);
+        await waitFor(() => screen.getByRole('status', { name: 'Full access is on' }));
+    });
+
+    it("Change on the start screen's Full access line makes that chat start in Ask first", async () => {
+        const desktop = stubDesktop();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
+        renderConsole(desktop);
+        await ready();
+        const line = await waitFor(() =>
+            within(startForm()).getByRole('status', { name: 'The chat starts in Full access' }),
+        );
+        fireEvent.click(within(line).getByRole('button', { name: 'Change' }));
+        expect(within(startForm()).queryByRole('status', { name: 'The chat starts in Full access' })).toBeNull();
+        ask('Heads of sales at logistics firms in Poland');
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        expect(calls(desktop, 'chat.create')).toEqual([{ name: 'chat.create', args: [] }]);
+        await waitFor(() => screen.getByRole('form', { name: 'Message' }));
+        expect(screen.queryByRole('status', { name: 'Full access is on' })).toBeNull();
+    });
+
+    it('shows no Full access line without "start new chats", and the chat is made as before', async () => {
+        const desktop = stubDesktop();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
+        renderConsole(desktop);
+        await ready();
+        await waitFor(() => expect(fullAccessStanding.value).not.toBeNull());
+        expect(within(startForm()).queryByRole('status', { name: 'The chat starts in Full access' })).toBeNull();
     });
 
     it('sends nothing for an empty message', async () => {

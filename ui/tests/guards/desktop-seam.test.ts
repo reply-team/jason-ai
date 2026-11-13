@@ -14,6 +14,7 @@ const top = {
     chat: true,
     links: true,
     setup: true,
+    fullAccess: true,
 } as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
 const chat = {
@@ -33,6 +34,11 @@ const chat = {
     feed: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
+// The standing choice of Full access: read and taken back by the page, never given by it.
+const fullAccess = { standing: true, takeBack: true, onChanged: true } as const satisfies Record<
+    keyof JasonDesktop['fullAccess'],
+    true
+>;
 const setup = {
     status: true,
     connectReply: true,
@@ -68,19 +74,26 @@ const held: [
     Exactly<keyof typeof setup, keyof JasonDesktop['setup']>,
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
-] = [true, true, true, true, true, true];
+    Exactly<keyof typeof fullAccess, keyof JasonDesktop['fullAccess']>,
+] = [true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true, true]);
         expect([
             ...Object.keys(top).filter(
-                (name) => name !== 'theme' && name !== 'chat' && name !== 'links' && name !== 'setup',
+                (name) =>
+                    name !== 'theme' &&
+                    name !== 'chat' &&
+                    name !== 'links' &&
+                    name !== 'setup' &&
+                    name !== 'fullAccess',
             ),
             ...Object.keys(theme).map((name) => `theme.${name}`),
             ...Object.keys(chat).map((name) => `chat.${name}`),
             ...Object.keys(links).map((name) => `links.${name}`),
             ...Object.keys(setup).map((name) => `setup.${name}`),
+            ...Object.keys(fullAccess).map((name) => `fullAccess.${name}`),
         ]).toEqual([
             'platform',
             'onCommand',
@@ -117,6 +130,9 @@ describe('the desktop seam', () => {
             'setup.replyUnblock',
             'setup.replyDelete',
             'setup.onChanged',
+            'fullAccess.standing',
+            'fullAccess.takeBack',
+            'fullAccess.onChanged',
         ]);
         expect(Object.keys(status)).toEqual([
             'hosts',
