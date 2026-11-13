@@ -166,6 +166,34 @@ would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notificati
 `jason plugin reload`. A file it cannot parse is refused and left as it is. [desktop/README.md](../desktop/README.md)
 lists each key and each card's grant.
 
+## Open in
+
+The top bar has an **Open in** split button, in your own installation and in [the demo](#the-demo) alike. Its main part
+opens a folder in the place you used last, and its arrow lists every place available on this computer:
+
+- **Editors** that are installed: VS Code, Cursor, Antigravity, Windsurf and Zed, each found by its registered handler or
+  command on your system. One that is not installed is not listed.
+- **Claude Code** and **Codex**, each as a new session in a terminal window, for the hosts the desktop already finds.
+- **A plain terminal**, in a new window.
+- **The file manager**, and **Copy path**, which puts the folder's path on the clipboard.
+
+**The default** is Claude Code, until you use another place; the place you used last then becomes the default. The desktop
+keeps it in its own settings, in the data directory of the installation it runs on, and never in the window or in your folders.
+
+**Which folder opens.** With a campaign's chat open, the campaign's own folder, the one the installation records for it;
+otherwise the harness root. In the demo these are the demo's folders, and a terminal opened there works with the demo's data,
+so `jason` in it reads and changes the demo. The page names only the place and, where a campaign's chat is open, the
+campaign; it never sends a path, and the desktop resolves the folder from the installation's own record.
+
+**What starts.** The desktop starts the editors and the file manager itself. The three terminal entries run `jason session
+open` on the folder, with no first input sent to the host, so the session is yours to begin; typed by hand, the same verb
+does the same ([ui.md](ui.md) describes it).
+
+**What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
+and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
+own act, through the window's one object, and the chat's AI has no tool that reaches it. It does not continue the chat you
+had, and it does not open the data directory.
+
 ## The demo
 
 The demo is a second, real installation of Jason on invented people, so you can see the product work before you connect
