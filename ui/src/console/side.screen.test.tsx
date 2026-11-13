@@ -74,11 +74,11 @@ describe('the sidebar', () => {
         const recent = side().getByText('Recent');
         const conversationsNav = side().getByRole('navigation', { name: 'Conversations' });
         expect(recent.compareDocumentPosition(conversationsNav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        // Settings is above the version line, both in the foot.
+        // The foot holds Settings alone.
         const settings = side().getByRole('button', { name: 'Settings' });
         const version = document.querySelector<HTMLElement>('.sfoot')!;
-        expect(version.textContent).toContain('Jason ');
-        expect(settings.compareDocumentPosition(version) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(version.textContent?.trim()).toBe('Settings');
+        expect(version.contains(settings)).toBe(true);
     });
 
     it('opens Start from New GTM agent, bringing it forward, and makes no chat', async () => {

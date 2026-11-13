@@ -1249,24 +1249,17 @@ describe('the console', () => {
         expect(shown(":root[data-theme='dark'] .jc-console .brand .wordmark.light")).toContain('display: none');
     });
 
-    it("cuts the sidebar's version line with an ellipsis rather than scrolling, and keeps its whole text in the title", async () => {
+    it('holds only Settings in the sidebar foot, and not the runtime version', async () => {
         renderConsole(pending(new FakeApi()));
-        const version = `Jason ${fixtures['system.info/with-ui'].response.runtime_version}`;
         const foot = await waitFor(() => {
-            const found = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
-            expect(words(found).trim()).toBe(version);
-            return found;
+            const found = document.querySelector<HTMLElement>('.jc-console .side .sfoot');
+            expect(found).not.toBeNull();
+            return found!;
         });
-        expect(foot.title).toBe(version);
-        // The sidebar is drawn again as what it lists arrives, so the foot is read where it stands now.
-        const now = document.querySelector<HTMLElement>('.jc-console .side .sfoot')!;
-        const body = rules()
-            .filter((rule) => rule.selector.includes('sfoot') && now.matches(rule.selector))
-            .map((rule) => rule.body)
-            .join(';');
-        expect(body).toMatch(/white-space:\s*nowrap/);
-        expect(body).toMatch(/overflow:\s*hidden/);
-        expect(body).toMatch(/text-overflow:\s*ellipsis/);
+        expect(words(foot).trim()).toBe('Settings');
+        expect(document.querySelector('.jc-console .side')!.textContent).not.toContain(
+            fixtures['system.info/with-ui'].response.runtime_version,
+        );
     });
 
     it('says after a fresh start that lines written in between are not shown, and keeps the lines it has', async () => {

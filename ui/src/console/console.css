@@ -559,9 +559,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.jc-console .foot-links {
-    padding: 0 8px 6px;
-}
 .jc-console .pillc {
     display: inline-flex;
     align-items: center;

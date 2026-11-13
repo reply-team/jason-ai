@@ -1,7 +1,6 @@
 import { signal } from '@preact/signals-react';
 import { parseRoute, route } from '../router';
 import { registry } from '../platform/slots';
-import { info } from '../shell/shell';
 import { act, define } from './actions';
 import { html, type Html } from './html';
 import { svg, type IconName } from './icons';
@@ -11,7 +10,7 @@ import { activePanel, chats, conversations, currentChat, feedId, feedUnseen, her
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), the Feed,
 // Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
-// conversations under "Recent", and Settings in the foot beside the version.
+// conversations under "Recent", and Settings in the foot in the foot.
 
 /** Which of the sidebar's two menus is open. */
 const open = signal<'create' | 'more' | null>(null);
@@ -33,7 +32,7 @@ function pageOf(id: string): string | null {
 
 /** What More holds: each opens a panel of the console's own or a registered screen in the page panel. */
 const more: readonly { label: string; hint: string; icon: IconName; panel?: PanelName; screen?: string }[] = [
-    { label: 'Performance', hint: 'Counts of what happened, over a period', icon: 'perf', screen: 'performance' },
+    { label: 'Performance', hint: "Replies and what's working", icon: 'perf', screen: 'performance' },
     { label: 'Activity', hint: 'The latest lines of the journal', icon: 'pulse', panel: 'activity' },
     { label: 'Work items', hint: 'Work waiting, running and finished', icon: 'work', screen: 'workitems' },
     { label: 'Connect', hint: 'The AI and Reply', icon: 'plug', panel: 'connect' },
@@ -101,8 +100,6 @@ const entry = (title: string, hint: string, action: Html, icon: IconName): Html 
 
 export function sideView(): Html {
     const count = waitingCount();
-    // A long version is cut with an ellipsis at the sidebar's width; the title keeps all of it.
-    const version = `Jason ${info.value?.runtime_version ?? '…'}`;
     const feed = feedId.value;
     const menu = open.value;
     const pageRow = (id: string, label: string, icon: IconName): Html | null => {
@@ -134,11 +131,12 @@ export function sideView(): Html {
         </div>
         <div class="menuwrap create">
             <div class="newrow">
-                <button class="newbtn" type="button" ${act('side.start')}>${svg('plus', 15)}New GTM agent</button>
+                <button class="newbtn" type="button" ${act('side.start')}>${svg('plusc', 15)}New GTM agent</button>
                 <button
                     class="caret"
                     type="button"
                     aria-label="More to create"
+                    title="Create an agent or a chat, or connect an account"
                     aria-haspopup="menu"
                     aria-expanded="${menu === 'create' ? 'true' : 'false'}"
                     ${act('side.menu', 'create')}
@@ -241,11 +239,10 @@ export function sideView(): Html {
         ${
             settings === null
                 ? null
-                : html`<div class="foot-links">
+                : html`<div class="sfoot">
                       <button class="item" type="button" ${act('side.page', settings)}>
                           ${svg('gear', 15)}<span>Settings</span>
                       </button>
                   </div>`
-        }
-        <div class="sfoot meta" title="${version}">${version}</div>`;
+        }`;
 }
