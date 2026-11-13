@@ -282,7 +282,8 @@ or an agent asks, outside any work item: nothing is recorded, journaled or pinne
 - `workitem.list`
 - `workitem.count`
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
-  profile, the result format and the context.
+  profile, the result format and the context. A patch that changes `context.input` of work awaiting approval withdraws
+  the question, and the work goes back to the queue, where the claim asks again about what it now says.
 - `workitem.cancel`: stops the work for good.
 - `workitem.heartbeat`: the attempt's "I am still here".
 - `workitem.set_result`: progress worth keeping before the work is done; the whole result is replaced.
@@ -302,6 +303,8 @@ that is not that attempt does not call them.
   approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
   approving a search under another audience than the allowance names takes the allowance back in the same act.
 - `approval.reject`: the work ends, carrying the decision and the person who made it.
+- An approval whose work had its input edited while it was pending is `superseded`, by whoever edited it, and
+  either verb naming it answers `approval_not_pending`. [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.set_standing`: a person's word in advance for one campaign and one category of verdict: a drafted reply
   that answers such a verdict goes without being asked, under the operations, expiry and ceiling it names. With the
   search operation alone as its `operations`, the campaign's allowance: the searches under one of its audiences go

@@ -63,7 +63,8 @@ link that leaves it opens in the system browser, and only when it is `https:`.
 ## What you see
 
 The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
-asks "Who do you want to reach?". What you type there starts a set-up chat on the AI you connected, about no campaign
+asks "Who do you want to reach?" and says under it that this interface is optional, since everything there can also be done
+from a terminal with your AI, through Jason's CLI and API. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
@@ -77,7 +78,7 @@ shows before anything is typed and what you send waits, while the window is open
 - The **Feed**, the sidebar's first item, is the desktop's main chat (below).
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System and Settings, open in a page panel of the same
+- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
   dock. [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light; one that
@@ -109,6 +110,13 @@ them on.
   desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
+- `<data>/desktop/full-access.json`: the standing choice of Full access (below), kept for each host program that can take
+  it and removed when you take it back. No chat's command or edit can change it, and a chat on Claude Code cannot read
+  it, in any mode; where Codex's sandbox reads Jason's data folder a Codex command can read it, and it holds no secret. A
+  program the AI writes and that you let run, in any mode, can change it, as it can anything you can, and the
+  confirmation says so. Beside it, `full-access-taken-back` marks a take-back the file would not take: Jason holds the
+  choice as taken back while it is there and removes the file when it next starts. Where the folder takes no new file
+  when Jason starts, so that a take-back could not be marked, the choice is held as taken back until it next starts.
 - `<data>/desktop/skills-records/`: the record of what the desktop placed in the chat folder's skills folders, kept outside
   the chat folder, which the chat can neither read nor write.
 - `<data>/desktop/rollback/<version>/`: the application as it was before the last update (below).
@@ -147,6 +155,11 @@ lists each key and each card's grant.
   Codex, ends it with Codex's own words), and on a turn on a key the exact key is replaced by `[key]` in every line of text and every
   step the host says, and a host's error text also loses the key's first six and last four characters and any token
   shaped as a provider's key, before the page shows it or the conversation keeps it.
+- **The model list.** A chat's model menu starts with "Default (recommended)", which passes no model, so the host chooses
+  and a new chat starts there. Claude Code's entries follow with a name to read each ("Opus (latest)", "Sonnet (latest)"),
+  while the alias is what the host is given and the version it stands for is the provider's to move. Codex's list is
+  asked of Codex at most once a day; Claude Code documents no way to list its models without a turn, so its list is the
+  desktop's own. A chat that chose a model before keeps it.
 - **Reply.** Signed in with `reply auth login`, or with a key on standard input that only the Reply CLI keeps, then the
   plugin installed and, only where you have set no default route, wired as the default. A card says "configured" when the
   runtime accepted it, never "connected". What the desktop tells Reply about itself is one label in the User-Agent of
@@ -183,6 +196,8 @@ lists each key and each card's grant.
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
+  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts,
+  beside the notification channels as the runtime reports them; see [the browser UI](ui.md#accounts).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
@@ -281,8 +296,8 @@ refusal of the next section stays. A Codex turn runs in its read-only sandbox in
 Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh**
 leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
-also lists Full access. Full access is chosen only after a confirmation shown
-each time, with Cancel focused. In Full access the agent runs commands and changes files on this computer without
+also lists Full access. Full access is chosen only after a confirmation, with Cancel focused and Escape answering
+Cancel, unless you gave the standing choice (below). In Full access the agent runs commands and changes files on this computer without
 asking, except a command Jason cannot read plainly or one that changes what an agent loads: that is a card titled "Full
 access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. A held card offers no
 "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
@@ -294,8 +309,22 @@ connectors reaches a turn. The agent works in a folder of its own; when Full acc
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
 Added campaign or project folders whose `.claude` holds skills, agents or commands are left out of a turn, said once.
-Full access is never a default and is gone when you close Jason. It is not offered for the Feed, whose turns are handed
-lines that others and providers wrote without you asking for them.
+Out of the box Full access is never a default; given this time, it is gone when you close Jason. It is not offered for
+the Feed, whose turns are handed lines that others and providers wrote without you asking for them.
+
+The confirmation is answered in one of two ways. **Give full access this time** holds for that chat until you change
+its mode or close Jason. **Always on this computer** is the standing choice: every Claude Code chat on this computer
+then enters Full access from its menu without the confirmation, after a restart too. With **With Always, also start new
+chats in Full access** ticked, a new chat whose host can take Full access starts in it, its line under the composer
+shown from the first moment; a new chat on a host that cannot, Codex or a Claude Code too old for it, starts in Ask
+first with no notice, and the menu shows the mode it has. With This time that box is ignored, and its label says so. A
+chat reopened after a restart is in Ask first as before: the standing choice skips the confirmation, it never enters
+Full access by itself. You take it back with **Full access: ask each time again** in the mode menu, or **Ask each time
+again** on the System screen's Full access card, which only the desktop shows; a chat that is in Full access stays in
+it, its line still shown, and the next entry asks again. The page only reads the standing choice and takes it back;
+only the confirmation gives it. A tool that ran without Jason having seen it takes the standing choice back as well as
+ending the turn. A release that widens what Full access reaches asks again; a change of wording alone does not. The
+Feed is refused whatever stands, and a held card still offers no "Always".
 
 ### What runs without asking, what is refused, what is a card
 

@@ -9,6 +9,8 @@ export interface DesktopPaths {
     desktop: string;
     /** `<data>/desktop/settings.json`. */
     settings: string;
+    /** `<data>/desktop/full-access.json`: the standing choice of Full access, the main process's alone (`full-access-standing.ts`). */
+    fullAccess: string;
     /** `<data>/desktop/chat/`: the chat's working folder. */
     chat: string;
     /** `<data>/desktop/chat-full/`: one folder per Full access grant, `<id>/` in it, where that conversation's Full access turns run. */
@@ -69,6 +71,7 @@ export function desktopPaths(data: string): DesktopPaths {
         data,
         desktop,
         settings: join(desktop, 'settings.json'),
+        fullAccess: join(desktop, 'full-access.json'),
         chat: join(desktop, 'chat'),
         chatFull: join(desktop, 'chat-full'),
         chatFullEnded: join(desktop, 'chat-full-ended'),

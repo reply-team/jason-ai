@@ -173,12 +173,13 @@ public class GlobalChannelRouteTests
         Assert.Equal(RouteProblemCodes.ChannelPluginReadsNoEvents, detail.Code);
         Assert.Equal(before, api.Resolve<RouteRegistry>().Snapshot.Id);
         var listed = await api.PostOkAsync<RoutesDto>(Operations.RouteList, new { campaign_id = campaign }, Ct);
-        Assert.All(listed.Campaigns, routes => Assert.True(routes.Default is null && routes.Operations.Count == 0));
+        Assert.All(listed.Campaigns, routes => Assert.True(routes.Default is null && routes.Operations.Count == 0 && (routes.Channels is null || routes.Channels.Count == 0)));
     }
 
     /// <summary>
-    /// R6 at the reload's campaign half: a stored campaign row is checked again at every reload, whoever wrote it, so a row
-    /// naming a channel route to a plugin that never read events refuses the reload whole as the settings' would.
+    /// R6 at the reload's campaign half: a stored campaign channel route, a row of <c>campaign_channel_routes</c>, is checked
+    /// again at every reload, whoever wrote it, so a row naming a plugin that never read events refuses the reload whole as
+    /// the settings' would.
     /// </summary>
     [Fact]
     public async Task A_stored_campaign_channel_route_to_a_plugin_that_reads_no_events_rejects_the_whole_reload()
@@ -190,7 +191,7 @@ public class GlobalChannelRouteTests
         await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile)))
         {
             var id = await db.Campaigns.Where(c => c.PublicId == campaign).Select(c => c.Id).SingleAsync(Ct);
-            db.CampaignRoutes.Add(new CampaignRoute
+            db.CampaignChannelRoutes.Add(new CampaignChannelRoute
             {
                 CampaignId = id,
                 Operation = "message.send",

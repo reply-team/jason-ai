@@ -13,27 +13,19 @@ cadences — this pack changes when the profession's practice does, not when Jas
 > a plugin author reads is the file the runtime checks against. Where the two disagree, the contract decides,
 > and an operation named here that the contract does not carry is knowledge this build cannot yet execute.
 
-## Status
-
-Every skill here is **`draft`**, and that is a statement about evidence rather than about quality. In this
-repository `verified` means a named agent host read that exact text, its description and its body, while
-driving this runtime, and the digest of what it read is recorded. No host has done that with these texts yet.
-The knowledge itself was written and reviewed elsewhere over a year; what has not been tested is how it reads
-beside a runtime that owns campaign state, and that is what a reading would establish.
-
 ## The skills
 
-| Skill | Status | What it is for |
-|---|---|---|
-| [`sdr-operations`](sdr-operations/SKILL.md) | draft | The contract the rest of the pack argues from: 325 named operations in 21 families, each fixed by what it reaches, whether it can be undone, what approval it needs, what to read before repeating it, and what it costs; and where the runtime's own names, its `audience` family among them, are not the catalogue's. |
-| [`campaign-planning`](campaign-planning/SKILL.md) | draft | Turning a vague outbound goal into an executable plan: clarifying the goal until success is observable, and with Jason what the campaign's `goals` are, surfacing the constraints, and deciding the checkpoints. |
-| [`audience-building`](audience-building/SKILL.md) | draft | Turning raw prospect data into a deliberately shaped audience: who belongs, how two records become one person, what is actually reachable; and with Jason, an outward search read from what the provider declares, narrowed before it is widened, previewed and probed, never pulled to the maximum. |
-| [`campaign-launch`](campaign-launch/SKILL.md) | draft | Preparing and launching a campaign with every precondition checked and the user's explicit approval of what will be sent. |
-| [`inbox-triage`](inbox-triage/SKILL.md) | draft | Working the replies: what matters first, compact thread context, drafting together, sending only what was approved, and with Jason starting from what the responder left and never drafting a second answer beside one. |
-| [`performance-analysis`](performance-analysis/SKILL.md) | draft | An honest read on performance: the figures over a stated window, and a diagnosis that separates deliverability from copy from targeting. |
-| [`approval-boundaries`](approval-boundaries/SKILL.md) | draft | Where an agent must stop and ask: how an operation's approval class follows from its reversibility and its reach, and what a valid confirmation is; with Jason, a standing approval is a person's, per campaign and category of reply, or the campaign's allowance for searches, capped in people. |
-| [`sending-guardrails`](sending-guardrails/SKILL.md) | draft | Protecting sender reputation and inbox placement: authentication, warm-up, pacing, bounce interpretation and recovery. |
-| [`linkedin-guardrails`](linkedin-guardrails/SKILL.md) | draft | Keeping social accounts safe under automation: invitation pacing, messaging windows, daily limits, and recovery when a platform restricts an account. |
+| Skill | What it is for |
+|---|---|
+| [`sdr-operations`](sdr-operations/SKILL.md) | The contract the rest of the pack argues from: 325 named operations in 21 families, each fixed by what it reaches, whether it can be undone, what approval it needs, what to read before repeating it, and what it costs; and where the runtime's own names, its `audience` family among them, are not the catalogue's. |
+| [`campaign-planning`](campaign-planning/SKILL.md) | Turning a vague outbound goal into an executable plan: clarifying the goal until success is observable, and with Jason what the campaign's `goals` are, surfacing the constraints, and deciding the checkpoints. |
+| [`audience-building`](audience-building/SKILL.md) | Turning raw prospect data into a deliberately shaped audience: who belongs, how two records become one person, what is actually reachable; and with Jason, an outward search read from what the provider declares, narrowed before it is widened, previewed and probed, never pulled to the maximum. |
+| [`campaign-launch`](campaign-launch/SKILL.md) | Preparing and launching a campaign with every precondition checked and the user's explicit approval of what will be sent. |
+| [`inbox-triage`](inbox-triage/SKILL.md) | Working the replies: what matters first, compact thread context, drafting together, sending only what was approved, and with Jason starting from what the responder left and never drafting a second answer beside one. |
+| [`performance-analysis`](performance-analysis/SKILL.md) | An honest read on performance: the figures over a stated window, and a diagnosis that separates deliverability from copy from targeting. |
+| [`approval-boundaries`](approval-boundaries/SKILL.md) | Where an agent must stop and ask: how an operation's approval class follows from its reversibility and its reach, and what a valid confirmation is; with Jason, a standing approval is a person's, per campaign and category of reply, or the campaign's allowance for searches, capped in people. |
+| [`sending-guardrails`](sending-guardrails/SKILL.md) | Protecting sender reputation and inbox placement: authentication, warm-up, pacing, bounce interpretation and recovery. |
+| [`linkedin-guardrails`](linkedin-guardrails/SKILL.md) | Keeping social accounts safe under automation: invitation pacing, messaging windows, daily limits, and recovery when a platform restricts an account. |
 
 ## Where this came from, and what changed on the way in
 

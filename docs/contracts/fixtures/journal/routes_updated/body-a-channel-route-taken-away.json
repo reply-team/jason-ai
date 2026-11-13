@@ -1,7 +1,7 @@
 {
   "kind": "routes_updated",
   "version": 1,
-  "case": "a campaign's route for one channel of an operation taken away",
-  "body": { "key": "message.send", "old": { "plugin": "other-provider", "binding": null, "channel": "linkedin" }, "new": null },
+  "case": "a channel's route taken away, keyed by the operation and the channel",
+  "body": { "key": "message.send/linkedin", "old": { "plugin": "example-provider", "binding": { "account": "sender@example.com" } }, "new": null },
   "expect": "valid"
 }

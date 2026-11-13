@@ -35,6 +35,8 @@ export const invokeChannels = {
     'chat.setMode': 'jason:chat.setMode',
     'chat.openFolder': 'jason:chat.openFolder',
     'chat.feed': 'jason:chat.feed',
+    'fullAccess.standing': 'jason:fullAccess.standing',
+    'fullAccess.takeBack': 'jason:fullAccess.takeBack',
     'links.take': 'jason:links.take',
 } as const;
 
@@ -44,6 +46,7 @@ export const eventChannels = {
     'chat.event': 'jason:chat.event',
     'setup.changed': 'jason:setup.changed',
     'links.open': 'jason:links.open',
+    'fullAccess.changed': 'jason:fullAccess.changed',
 } as const;
 
 export type InvokeMember = keyof typeof invokeChannels;

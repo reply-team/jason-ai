@@ -2,7 +2,7 @@
   "kind": "workitem_released",
   "version": 1,
   "since": "0.1.0",
-  "summary": "A work item went back to the queue to be claimed again: its attempt failed in a way worth another attempt, a restart found its attempt never started, or a person approved the work it was waiting on.",
+  "summary": "A work item went back to the queue to be claimed again: its attempt failed in a way worth another attempt, a restart found its attempt never started, or the question it was waiting on ended, because a person approved it or because an edit of the work's input withdrew it. The `approval_approved` or `approval_superseded` line written in the same save tells which, and is the record of a person's decision; the line's `reason` is free text and decides nothing.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -16,7 +16,7 @@
     "additionalProperties": false,
     "required": ["key", "old", "new"],
     "properties": {
-      "key": { "type": "string", "description": "The attempt that ended, by its id; `status` where a person's approval released the work." },
+      "key": { "type": "string", "description": "The attempt that ended, by its id; `status` where the question the work was waiting on ended: a person approved it, or an edit of the work's input withdrew it. The `approval_approved` or `approval_superseded` line written in the same save tells which." },
       "old": { "type": ["null", "string"] },
       "new": { "type": ["object", "string"] }
     },

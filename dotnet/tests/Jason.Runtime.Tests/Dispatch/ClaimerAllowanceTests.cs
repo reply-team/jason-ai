@@ -4,6 +4,7 @@ using Jason.Runtime.Approvals;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Dispatch;
@@ -250,7 +251,43 @@ public partial class ClaimerTests
         Assert.Equal(again.LineId, (await fresh.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.ApprovalStandingApplied, Ct)).Key);
     }
 
-    private static JsonObject InRetail => new() { ["industries"] = new JsonArray("Retail"), ["titles"] = new JsonArray("Store Manager") };
+    /// <summary>
+    /// A top-up put to a person before the allowance existed, then edited while the question was open: the edit withdraws
+    /// the question and the claim asks again, and the allowance that now names its audience answers nothing, because
+    /// somebody was already asked about this search.
+    /// </summary>
+    [Fact]
+    public async Task Allowance_TopUpParkedThenEdited_IsAskedAgain_NotReleased()
+    {
+        using var harness = SearchHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var spring = await SpringAsync(harness, db);
+        var topUp = Search(db, spring, new JsonObject { ["audience"] = 1, ["count"] = 50 });
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, topUp.Status);
+
+        await AllowAsync(db, spring, 1);
+        var clock = new FixedClock(new DateTimeOffset(Noon));
+        await new WorkItemService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestOptions.PluginSettings()).UpdateAsync(
+            new WorkItemUpdateRequest(
+                topUp.PublicId, new JsonObject { [WorkItemService.InputKey] = new JsonObject { ["audience"] = 1, ["count"] = 40 } }, null,
+                default, default, default, default, default, default, default, default, Operator, null),
+            Ct);
+        Assert.Equal(WorkItemStatus.Created, topUp.Status);
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        Assert.Equal(
+            [ApprovalStatus.Superseded, ApprovalStatus.Pending],
+            await fresh.Approvals.AsNoTracking().Where(a => a.WorkItemId == topUp.Id).OrderBy(a => a.Id).Select(a => a.Status).ToListAsync(Ct));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == topUp.Id, Ct)).Status);
+        Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
+    }
+
+    private static JsonObject InRetail =>new() { ["industries"] = new JsonArray("Retail"), ["titles"] = new JsonArray("Store Manager") };
 
     /// <summary>A campaign whose first two searches made its audiences 1 (software) and 2 (logistics), each probe still waiting.</summary>
     private static async Task<Campaign> SpringAsync(Harness harness, JasonDbContext db)
