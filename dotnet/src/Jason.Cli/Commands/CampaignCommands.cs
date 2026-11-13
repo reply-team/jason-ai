@@ -696,7 +696,7 @@ public static class CampaignCommands
     /// </summary>
     private static Option<bool> ExcludeArchivedContactsOption() => new("--exclude-archived-contacts")
     {
-        Description = "Leave out archived contacts, whom contact list shows only with --include-archived; by default they are counted.",
+        Description = "Leave out archived contacts, whom contact list shows only with --include-archived; by default they are included.",
     };
 
     /// <summary>Sends <c>exclude_archived_contacts</c> only when the flag is given, so a request without it is what it always was.</summary>

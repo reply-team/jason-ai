@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Campaigns;
 
@@ -19,9 +21,17 @@ public class ArchivedContactsLeftOutTests
 
     private static DateTimeOffset Instant(DateTime moment) => new(moment, TimeSpan.Zero);
 
+    /// <summary>The world at ids that sort the same on every run, so a list's order by id is known; Rae and Hal archived.</summary>
     private static async Task<CampaignWorld> ArchivedAsync(RuntimeApiFixture api)
     {
-        var world = await CampaignWorld.WriteAsync(api, Ct);
+        var n = 500;
+        string Id(string prefix) => $"{prefix}_01K7QN{++n:D20}";
+        CampaignWorld world;
+        await using (var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope())
+        {
+            world = await CampaignWorld.WriteAsync(scope.ServiceProvider.GetRequiredService<JasonDbContext>(), Ct, Id);
+        }
+
         await CampaignWorld.WorkedOnAsync(api, world.People["Hal"], Ct, (world.Spring, 13), (world.Autumn, 13));
         foreach (var name in new[] { "Rae", "Hal" })
         {
@@ -168,6 +178,144 @@ public class ArchivedContactsLeftOutTests
         }
     }
 
+    /// <summary>
+    /// Across two campaigns that share people, Ada kept and Hal archived, each total with the option is the number of
+    /// distinct people the two campaigns' lists list under the same count: Ada once, Hal in neither.
+    /// </summary>
+    [Fact]
+    public async Task With_the_option_each_total_across_two_campaigns_is_the_people_their_lists_list()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await ArchivedAsync(api);
+        string[] both = [world.Spring.PublicId, world.Autumn.PublicId];
+        var since = Instant(CampaignWorld.Since);
+        var until = Instant(CampaignWorld.Until);
+
+        var summary = await api.PostOkAsync<CampaignSummaryResponse>(
+            Operations.CampaignSummary, new { campaign_ids = both, exclude_archived_contacts = true }, Ct);
+        var now = summary.Total;
+        var week = (await api.PostOkAsync<CampaignActivityResponse>(
+            Operations.CampaignActivity, new { campaign_ids = both, since, until, exclude_archived_contacts = true }, Ct)).Total;
+
+        async Task<string[]> ListedAsync(Func<string, object> body)
+        {
+            var people = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var campaign in both)
+            {
+                people.UnionWith((await api.PostOkAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, body(campaign), Ct)).Items
+                    .Select(item => item.Contact.Id));
+            }
+
+            return [.. people];
+        }
+
+        var everyone = await ListedAsync(campaign => new { campaign_id = campaign, limit = 100, exclude_archived_contacts = true });
+        Assert.Equal(now.People, everyone.Length);
+        Assert.Contains(world.People["Ada"].PublicId, everyone);
+        Assert.DoesNotContain(world.People["Hal"].PublicId, everyone);
+        Assert.True(now.People < summary.Campaigns.Sum(row => row.People), "Ada, in both campaigns, would count twice.");
+
+        var nowCounts = new Dictionary<CampaignSummaryFilter, int>
+        {
+            [CampaignSummaryFilter.Waiting] = now.Waiting,
+            [CampaignSummaryFilter.Failed] = now.Failed,
+            [CampaignSummaryFilter.Working] = now.Working,
+            [CampaignSummaryFilter.New] = now.New,
+            [CampaignSummaryFilter.Idle] = now.Idle,
+            [CampaignSummaryFilter.Sequence] = now.Sequence,
+            [CampaignSummaryFilter.Out] = now.Out,
+            [CampaignSummaryFilter.Removed] = now.Removed,
+        };
+        foreach (var (filter, number) in nowCounts)
+        {
+            var name = JsonSerializer.Serialize(filter, JasonJson.Options).Trim('"');
+            var listed = await ListedAsync(campaign => new { campaign_id = campaign, summary = name, limit = 100, exclude_archived_contacts = true });
+            Assert.True(number == listed.Length, $"summary {name}: the total says {number}, the lists {listed.Length}");
+        }
+
+        var weekCounts = new Dictionary<CampaignActivityFilter, int>
+        {
+            [CampaignActivityFilter.People] = week.People,
+            [CampaignActivityFilter.Added] = week.Added,
+            [CampaignActivityFilter.WorkedOn] = week.WorkedOn,
+            [CampaignActivityFilter.Contacted] = week.Contacted,
+            [CampaignActivityFilter.Replied] = week.Replied,
+            [CampaignActivityFilter.OptedOut] = week.OptedOut,
+            [CampaignActivityFilter.Removed] = week.Removed,
+        };
+        foreach (var (filter, number) in weekCounts)
+        {
+            var name = JsonSerializer.Serialize(filter, JasonJson.Options).Trim('"');
+            var listed = await ListedAsync(campaign => new { campaign_id = campaign, activity = name, since, until, limit = 100, exclude_archived_contacts = true });
+            Assert.True(number == listed.Length, $"activity {name}: the total says {number}, the lists {listed.Length}");
+        }
+    }
+
+    /// <summary>
+    /// The list with the option, paged by id and, under an activity count, by moment, at several page sizes: every page but
+    /// the last full, no one twice, and the pages together exactly the one page that holds everyone. Hal, archived, stands
+    /// inside both orders, never at an end, so the pages cross the place he is left out of.
+    /// </summary>
+    [Fact]
+    public async Task With_the_option_a_list_paged_past_an_archived_person_misses_and_repeats_no_one()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await ArchivedAsync(api);
+        var spring = world.Spring.PublicId;
+        var hal = world.People["Hal"].PublicId;
+
+        async Task<Page<MembershipItemDto>> PageAsync(JsonObject read, int limit, string? cursor, bool left)
+        {
+            var body = (JsonObject)read.DeepClone();
+            body["limit"] = limit;
+            if (cursor is not null)
+            {
+                body["cursor"] = cursor;
+            }
+
+            if (left)
+            {
+                body["exclude_archived_contacts"] = true;
+            }
+
+            return await api.PostOkAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, body, Ct);
+        }
+
+        (string Order, JsonObject Read)[] reads =
+        [
+            ("by id", new JsonObject { ["campaign_id"] = spring }),
+            ("by moment", new JsonObject
+            {
+                ["campaign_id"] = spring, ["activity"] = "worked_on", ["since"] = "2026-10-09T00:00:00Z", ["until"] = "2026-10-16T09:00:00Z",
+            }),
+        ];
+        foreach (var (order, read) in reads)
+        {
+            string[] everyone = [.. (await PageAsync(read, 100, null, left: false)).Items.Select(item => item.Contact.Id)];
+            string[] members = [.. (await PageAsync(read, 100, null, left: true)).Items.Select(item => item.Contact.Id)];
+            var at = Array.IndexOf(everyone, hal);
+            Assert.True(at > 0 && at < everyone.Length - 1, $"{order}: Hal stands at {at} of {everyone.Length}");
+            Assert.Equal(everyone.Where(id => id != hal && id != world.People["Rae"].PublicId), members);
+
+            foreach (var limit in new[] { 1, 2, 3, 5 })
+            {
+                var paged = new List<string>();
+                string? cursor = null;
+                do
+                {
+                    var page = await PageAsync(read, limit, cursor, left: true);
+                    cursor = page.NextCursor;
+                    Assert.True(cursor is null || page.Items.Count == limit, $"{order}, {limit} a page: a page short of its limit has a next one");
+                    paged.AddRange(page.Items.Select(item => item.Contact.Id));
+                    Assert.True(paged.Count <= members.Length, $"{order}, {limit} a page: more people than the list holds");
+                }
+                while (cursor is not null);
+
+                Assert.Equal(members, paged);
+            }
+        }
+    }
+
     /// <summary>False and null read as the option absent, on each of the three reads.</summary>
     [Theory]
     [InlineData("false")]
@@ -182,6 +330,7 @@ public class ArchivedContactsLeftOutTests
         (string Operation, string Body)[] reads =
         [
             (Operations.CampaignListContacts, $"{{\"campaign_id\":\"{spring}\",\"limit\":100"),
+            (Operations.CampaignListContacts, $"{{\"campaign_id\":\"{spring}\",\"summary\":\"out\",\"limit\":100"),
             (Operations.CampaignListContacts, $"{{\"campaign_id\":\"{spring}\",\"activity\":\"replied\",{Window},\"limit\":100"),
             (Operations.CampaignActivity, $"{{{Window}"),
             (Operations.CampaignActivityByPeriod, $"{{\"count\":\"replied\",\"period\":\"day\",\"zone\":\"UTC\",{Window}"),

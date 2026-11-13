@@ -161,7 +161,7 @@ import campaignSummarySomeAfter from '../../../docs/api/fixtures/campaign.summar
 import campaignSummarySomeWithoutArchived from '../../../docs/api/fixtures/campaign.summary/some-without-archived.json';
 import campaignSummarySummer from '../../../docs/api/fixtures/campaign.summary/summer.json';
 import campaignSummaryUnlinked from '../../../docs/api/fixtures/campaign.summary/unlinked.json';
-import campaignSummaryUnlinkedWithArchivedContacts from '../../../docs/api/fixtures/campaign.summary/unlinked-with-archived-contacts.json';
+import campaignSummaryUnlinkedArchivedNotLeftOut from '../../../docs/api/fixtures/campaign.summary/unlinked-archived-not-left-out.json';
 import campaignSummaryWithArchived from '../../../docs/api/fixtures/campaign.summary/with-archived.json';
 import contactGetArchived from '../../../docs/api/fixtures/contact.get/archived.json';
 import contactGetImported from '../../../docs/api/fixtures/contact.get/imported.json';
@@ -658,7 +658,7 @@ export const fixtures = {
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,
-    'campaign.summary/unlinked-with-archived-contacts': campaignSummaryUnlinkedWithArchivedContacts satisfies Exchange<
+    'campaign.summary/unlinked-archived-not-left-out': campaignSummaryUnlinkedArchivedNotLeftOut satisfies Exchange<
         CampaignSummaryRequest,
         CampaignSummaryResponse
     >,

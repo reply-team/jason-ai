@@ -108,10 +108,12 @@ and the ids keep `campaign`, and so does the rest of this page, which describes 
 Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
 **Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this browser's time
 zone (`jason campaign activity`). A person may be in several columns, and each column's name says on hover what it
-counts. Archived people are left out of every number and every list of a campaign, its Results included
-(`--exclude-archived-contacts`), as People leaves them out while Archived is not ticked. A search finds a campaign by its name, and the archived ones appear on request (`jason campaign list --query`,
-`--include-archived`); the view, the period and both filters are part of the page's address. Every number opens its
-campaign with exactly the people it counts (`jason campaign list-contacts --summary`, or `--activity` with the period),
+counts. A campaign's numbers, in the table and once it is open, its People tab and its Results leave archived people
+out (`--exclude-archived-contacts`), as People does while Archived is not ticked; its Inbox and What happened still
+show what happened with them. A search finds a campaign by its name, and the archived ones appear on request
+(`jason campaign list --query`, `--include-archived`); the view, the period and both filters are part of the page's
+address. Every number opens its campaign with exactly the people it counts (`jason campaign list-contacts --summary`,
+or `--activity` with the period),
 each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
 opens the person's panel in place, with the page's address left as the campaign's, and a failure shows the reason the
 runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,

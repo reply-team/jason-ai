@@ -364,7 +364,7 @@ public class CampaignCommandsTests
 
         var said = string.Join(" ", cli.Text.Split((char[])['\r', '\n', ' '], StringSplitOptions.RemoveEmptyEntries));
         Assert.True(
-            said.Contains("--exclude-archived-contacts Leave out archived contacts, whom contact list shows only with --include-archived; by default they are counted.", StringComparison.Ordinal),
+            said.Contains("--exclude-archived-contacts Leave out archived contacts, whom contact list shows only with --include-archived; by default they are included.", StringComparison.Ordinal),
             $"The help of campaign {verb} does not say it:{Environment.NewLine}{cli.Text}");
     }
 

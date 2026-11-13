@@ -1,6 +1,6 @@
 {
   "operation": "campaign.summary",
-  "case": "unlinked-with-archived-contacts",
+  "case": "unlinked-archived-not-left-out",
   "request": {
     "campaign_ids": [
       "cmp_2"

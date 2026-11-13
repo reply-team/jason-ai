@@ -548,6 +548,11 @@ public class RecordedExchangesTests
         Assert.Equal(
             new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1),
             Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "one", new { campaign_ids = new[] { seed.Spring }, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Campaigns));
+        // The same read with no exclude_archived_contacts in the request, as the CLI and an agent send it unless asked:
+        // archived people are counted, and this world archives nobody, so the row is the one above.
+        Assert.Equal(
+            new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1),
+            Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "one-archived-not-left-out", new { campaign_ids = new[] { seed.Spring }, since = WeekStart, until = Now }, Ct)).Campaigns));
 
         async Task<string[]> PeopleAsync(string @case, object body) =>
             [.. (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, @case, body, Ct)).Items.Select(item => item.Contact.FirstName!)];
@@ -562,9 +567,10 @@ public class RecordedExchangesTests
         Assert.Equal(["Oli"], await PeopleAsync("activity-removed", new { campaign_id = seed.Spring, activity = "removed", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true }));
         Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.CampaignListContacts, "query-too-long", new { campaign_id = seed.Spring, query = new string('a', 201), limit = 50, exclude_archived_contacts = true }, HttpStatusCode.BadRequest, Ct)).Code);
         Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "unlinked", new { campaign_ids = new[] { seed.Autumn }, exclude_archived_contacts = true }, Ct)).Campaigns).SequenceLinked);
-        // The People page narrowed to the same campaign with Archived ticked asks its numbers with archived people counted.
+        // The People page narrowed to the same campaign with Archived ticked: the request carries no
+        // exclude_archived_contacts, so archived people are counted; this world archives nobody.
         Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(
-            Operations.CampaignSummary, "unlinked-with-archived-contacts", new { campaign_ids = new[] { seed.Autumn } }, Ct)).Campaigns).SequenceLinked);
+            Operations.CampaignSummary, "unlinked-archived-not-left-out", new { campaign_ids = new[] { seed.Autumn } }, Ct)).Campaigns).SequenceLinked);
         Assert.Empty((await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "unlinked", new { campaign_id = seed.Autumn }, Ct)).ExternalIds);
         Assert.Equal(["Ada", "Hal"], await PeopleAsync("unlinked", new { campaign_id = seed.Autumn, limit = 50, exclude_archived_contacts = true }));
 
@@ -663,6 +669,8 @@ public class RecordedExchangesTests
         Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-two", new { campaign_ids = two, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
         Assert.Equal(new[] { 0, 0, 2, 1, 1, 0, 0 }, await SeriesAsync("contacted-one", new { campaign_ids = new[] { seed.Spring }, count = "contacted", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
         Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-one", new { campaign_ids = new[] { seed.Spring }, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC", exclude_archived_contacts = true }));
+        // The same series with no exclude_archived_contacts in the request, as the CLI and an agent ask it unless told to.
+        Assert.Equal(new[] { 0, 0, 1, 0, 1, 0, 0 }, await SeriesAsync("replied-one-archived-not-left-out", new { campaign_ids = new[] { seed.Spring }, count = "replied", period = "day", since = WeekStart, until = Now, zone = "UTC" }));
 
         async Task<string[]> CountedAsync(string @case, object body) =>
             [.. (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, @case, body, Ct)).Items.Select(item => item.Contact.FirstName!)];
