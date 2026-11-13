@@ -233,6 +233,8 @@ export type WorkItemUpdateRequest = {
     priority?: number;
     not_before?: string | null;
     due_at?: string | null;
+    set?: Record<string, unknown>;
+    reason?: string;
     actor?: ActorRef;
 };
 export type WorkItemCancelRequest = { work_item_id: string; reason?: string; actor?: ActorRef };

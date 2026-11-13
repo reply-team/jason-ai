@@ -75,6 +75,12 @@ describe('Attention', () => {
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty')
             .answer('approval.get', 'approval.get/email-message');
+        // A message approval is checked against its work item; no recording holds a message item, so this row holds it.
+        const call = fake.call.bind(fake);
+        fake.call = async (operation, body, kind) =>
+            operation === 'workitem.get'
+                ? ({ context: { input: fixtures['approval.get/email-message'].response.subject.input.args } } as never)
+                : call(operation, body, kind);
         renderApp(fake);
         await waitFor(() => screen.getByText('message.send Ines Duarte'));
         fireEvent.click(screen.getByText('message.send Ines Duarte'));

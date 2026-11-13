@@ -4,7 +4,8 @@ import { toApprovalDetail } from '../../console/live';
 import { fixtures } from '../../test/fixtures';
 import { MessageCard } from './message-card';
 
-const card = (preview: Record<string, unknown>) => render(<MessageCard detail={toApprovalDetail(preview)} />);
+const card = (preview: Record<string, unknown>, reply = false) =>
+    render(<MessageCard detail={toApprovalDetail(preview)} reply={reply} />);
 const email = fixtures['approval.get/email-message'].response.preview as unknown as Record<string, unknown>;
 const terms = () => Array.from(document.querySelectorAll('.message-card dt'), (dt) => dt.textContent);
 
@@ -20,7 +21,9 @@ describe('the message card', () => {
             'Notes from the meetup',
             'Hi Ines, thanks for the talk at the meetup.',
         ]);
-        expect(screen.getByText(/the provider adds its signature and its tracking when it sends/i)).toBeTruthy();
+        expect(
+            screen.getByText(/the sender's signature kept at the provider, and the provider's tracking/i),
+        ).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/as the recipient/i);
     });
 
@@ -52,6 +55,18 @@ describe('the message card', () => {
         expect(shown.textContent).toBe(body);
         expect(document.querySelector('.message-card b, .message-card script, .message-card i')).toBeNull();
         expect(shown.children.length).toBe(0);
+    });
+
+    it('shows a reply as who it goes to, the channel and the text', () => {
+        card(
+            {
+                contact: { name: 'Ines Duarte', value: 'ines@example.test' },
+                highlights: { '/args/channel': 'email', '/args/body': 'Thanks, Tuesday works.' },
+            },
+            true,
+        );
+        expect(terms()).toEqual(['To', 'Channel', 'Text']);
+        expect(screen.getByText('Thanks, Tuesday works.')).toBeTruthy();
     });
 
     it('shows nothing for an approval that is no message', () => {
