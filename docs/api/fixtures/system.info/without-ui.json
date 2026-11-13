@@ -43,7 +43,8 @@
         "20261029150321_SentFacts",
         "20261102051342_ResponderWatermark",
         "20261105002401_SubscriptionRunner",
-        "20261111143412_Audience"
+        "20261111143412_Audience",
+        "20261113000729_ChannelRoutes"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -77,7 +78,8 @@
         "20261029150321_SentFacts",
         "20261102051342_ResponderWatermark",
         "20261105002401_SubscriptionRunner",
-        "20261111143412_Audience"
+        "20261111143412_Audience",
+        "20261113000729_ChannelRoutes"
       ],
       "backup_file": null
     },

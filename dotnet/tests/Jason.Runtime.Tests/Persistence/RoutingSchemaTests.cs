@@ -142,6 +142,79 @@ public class RoutingSchemaTests
     }
 
     [Fact]
+    public async Task A_campaign_routes_one_channel_of_an_operation_once()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (_, campaignId) = await SeedAsync(db);
+        db.Set<CampaignChannelRoute>().Add(NewChannelRoute(campaignId, "message.send", "linkedin", "one"));
+        await db.SaveChangesAsync(Ct);
+
+        db.Set<CampaignChannelRoute>().Add(NewChannelRoute(campaignId, "message.send", "linkedin", "two"));
+
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
+        Assert.Contains("UNIQUE", failure.InnerException!.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An operation's own route is a row of <c>campaign_routes</c> and each of its channels' routes a row of the channel
+    /// table, so they live side by side, and the operation's own route is still one per campaign beside them.
+    /// </summary>
+    [Fact]
+    public async Task An_operation_route_and_one_route_per_channel_live_side_by_side()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (_, campaignId) = await SeedAsync(db);
+
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, operation: null, plugin: "one"));
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "one"));
+        db.Set<CampaignChannelRoute>().Add(NewChannelRoute(campaignId, "message.send", "linkedin", "two"));
+        db.Set<CampaignChannelRoute>().Add(NewChannelRoute(campaignId, "message.send", "email", "three"));
+        await db.SaveChangesAsync(Ct);
+        Assert.Equal((2, 2), (await db.Set<CampaignRoute>().CountAsync(Ct), await db.Set<CampaignChannelRoute>().CountAsync(Ct)));
+
+        db.Set<CampaignRoute>().Add(NewRoute(campaignId, "message.send", "four"));
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
+        Assert.Contains("UNIQUE", failure.InnerException!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_channel_route_binding_must_be_json()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedAsync(db);
+        using var connection = Connect(database);
+
+        var failure = Assert.Throws<SqliteException>(() => Execute(
+            connection,
+            "INSERT INTO campaign_channel_routes (campaign_id, operation, channel, plugin_id, binding_json, updated_at) VALUES (1, 'message.send', 'email', 'one', '{not json', '2026-01-01')"));
+
+        Assert.Contains("CHECK constraint failed: ck_campaign_channel_routes_binding_json", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A channel route is the campaign's, and goes with it as its other routes do, in the database rather than the change tracker.</summary>
+    [Fact]
+    public async Task Channel_routes_vanish_with_their_campaign()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (_, kept) = await SeedAsync(db);
+        var gone = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(gone);
+        await db.SaveChangesAsync(Ct);
+        db.Set<CampaignChannelRoute>().Add(NewChannelRoute(kept, "message.send", "linkedin", "one"));
+        db.Set<CampaignChannelRoute>().Add(NewChannelRoute(gone.Id, "message.send", "linkedin", "one"));
+        await db.SaveChangesAsync(Ct);
+
+        await db.Campaigns.Where(c => c.Id == gone.Id).ExecuteDeleteAsync(Ct);
+
+        var left = Assert.Single(await db.Set<CampaignChannelRoute>().AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(kept, left.CampaignId);
+    }
+
+    [Fact]
     public async Task A_route_binding_must_be_json()
     {
         using var database = new TestDatabase();
@@ -226,6 +299,17 @@ public class RoutingSchemaTests
         {
             CampaignId = campaignId,
             Operation = operation,
+            PluginId = plugin,
+            Binding = new JsonObject { ["account"] = "main" },
+            UpdatedAt = Noon,
+        };
+
+    private static CampaignChannelRoute NewChannelRoute(int campaignId, string operation, string channel, string plugin) =>
+        new()
+        {
+            CampaignId = campaignId,
+            Operation = operation,
+            Channel = channel,
             PluginId = plugin,
             Binding = new JsonObject { ["account"] = "main" },
             UpdatedAt = Noon,

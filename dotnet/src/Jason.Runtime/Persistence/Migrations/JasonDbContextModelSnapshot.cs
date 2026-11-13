@@ -625,6 +625,56 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.CampaignChannelRoute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Binding")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("binding_json");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("channel");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_campaign_channel_routes");
+
+                    b.HasIndex("CampaignId", "Operation", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_channel_routes_campaign_id_operation_channel");
+
+                    b.ToTable("campaign_channel_routes", t =>
+                        {
+                            t.HasCheckConstraint("ck_campaign_channel_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)");
+                        });
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>
                 {
                     b.Property<int>("Id")
@@ -2857,6 +2907,18 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasConstraintName("fk_campaigns_projects_project_id");
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.CampaignChannelRoute", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_campaign_channel_routes_campaigns_campaign_id");
+
+                    b.Navigation("Campaign");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>

@@ -73,7 +73,7 @@ public sealed class RouteService(
             throw DomainErrors.ValidationTimedOut(
             [
                 new ErrorDetail(
-                    Field(campaign.PublicId, contract.Id, resolution.Scope),
+                    Field(campaign.PublicId, contract.Id, channel: null, resolution.Scope),
                     SchemaValidator.PatternTimedOut,
                     $"the binding could not be measured against what '{route.PluginId}' declares, so whether this route can run is not known yet."),
             ]);
@@ -113,9 +113,10 @@ public sealed class RouteService(
     }
 
     /// <summary>
-    /// Sends one campaign's work — or one of its operations — to a plugin. The route is checked before the row
-    /// is written, so a request that could never be activated is refused as the request it is rather than stored
-    /// and then refused by its own activation.
+    /// Sends one campaign's work — or one of its operations, or one channel of an operation — to a plugin. The route
+    /// is checked before the row is written, so a request that could never be activated is refused as the request it
+    /// is rather than stored and then refused by its own activation. A channel route is a row of its own beside the
+    /// operation's: setting one never changes the operation's own route, nor the other way round.
     /// </summary>
     public async Task<RoutesDto> SetAsync(RouteSetRequest request, CancellationToken cancellationToken)
     {
@@ -129,6 +130,7 @@ public sealed class RouteService(
             errors.Add("plugin", "required", "plugin is required; a route names the plugin that performs the work.");
         }
 
+        var channel = ChannelOrNone(request.Channel, request.Operation, errors);
         errors.ThrowIfAny();
 
         var operation = OperationOrDefault(request.Operation);
@@ -138,9 +140,9 @@ public sealed class RouteService(
 
         // Before the row, never after it. The plugin set this is checked against is the set the write will be
         // activated over, because both happen under the reload gate.
-        if (RouteActivator.Check(plugins.Snapshot, operation, plugin, binding, _timing) is { } problem)
+        if (RouteActivator.Check(plugins.Snapshot, operation, channel, plugin, binding, _timing) is { } problem)
         {
-            var detail = new ErrorDetail(RouteActivator.CampaignField(campaign.PublicId, operation), problem.Code, problem.Message);
+            var detail = new ErrorDetail(RouteActivator.CampaignField(campaign.PublicId, operation, channel), problem.Code, problem.Message);
 
             // A binding no pattern could finish measuring is not refused: nothing was found wrong with it and nothing
             // has been written, so the request is answered as one to send again.
@@ -152,30 +154,61 @@ public sealed class RouteService(
         return await ActivateAsync(
             campaign,
             operation,
+            channel,
             actor,
             reason,
-            existing =>
+            async () =>
             {
-                var previous = Recorded(existing);
-                if (existing is null)
+                var now = clock.GetUtcNow().UtcDateTime;
+                if (channel is null)
                 {
-                    db.CampaignRoutes.Add(new CampaignRoute
+                    var existing = await OperationRowAsync(campaign, operation, cancellationToken).ConfigureAwait(false);
+                    var previous = Recorded(existing?.PluginId, existing?.Binding);
+                    if (existing is null)
                     {
-                        CampaignId = campaign.Id,
-                        Operation = operation,
-                        PluginId = plugin,
-                        Binding = binding,
-                        UpdatedAt = clock.GetUtcNow().UtcDateTime,
-                    });
+                        db.CampaignRoutes.Add(new CampaignRoute
+                        {
+                            CampaignId = campaign.Id,
+                            Operation = operation,
+                            PluginId = plugin,
+                            Binding = binding,
+                            UpdatedAt = now,
+                        });
+                    }
+                    else
+                    {
+                        existing.PluginId = plugin;
+                        existing.Binding = binding;
+                        existing.UpdatedAt = now;
+                    }
+
+                    return (previous, Recorded(plugin, binding));
                 }
                 else
                 {
-                    existing.PluginId = plugin;
-                    existing.Binding = binding;
-                    existing.UpdatedAt = clock.GetUtcNow().UtcDateTime;
-                }
+                    var existing = await ChannelRowAsync(campaign, operation!, channel, cancellationToken).ConfigureAwait(false);
+                    var previous = Recorded(existing?.PluginId, existing?.Binding);
+                    if (existing is null)
+                    {
+                        db.CampaignChannelRoutes.Add(new CampaignChannelRoute
+                        {
+                            CampaignId = campaign.Id,
+                            Operation = operation!,
+                            Channel = channel,
+                            PluginId = plugin,
+                            Binding = binding,
+                            UpdatedAt = now,
+                        });
+                    }
+                    else
+                    {
+                        existing.PluginId = plugin;
+                        existing.Binding = binding;
+                        existing.UpdatedAt = now;
+                    }
 
-                return (previous, new JsonObject { ["plugin"] = plugin, ["binding"] = binding?.DeepClone() });
+                    return (previous, Recorded(plugin, binding));
+                }
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -183,6 +216,9 @@ public sealed class RouteService(
     /// <summary>
     /// Takes one campaign route away, and with it whatever it was overriding. Removing a route that is not there
     /// is not an error — it is the state the caller asked for — and it activates nothing, because nothing changed.
+    /// A channel route and its operation's own route are taken away each on its own: the one not named stays. A channel
+    /// the operation's document would never let a route name is refused as <c>route.set</c> refuses it, before "not
+    /// there" is considered: answering "nothing to take away" for it would leave the route the caller meant in place.
     /// </summary>
     public async Task<RoutesDto> UnsetAsync(RouteUnsetRequest request, CancellationToken cancellationToken)
     {
@@ -191,28 +227,70 @@ public sealed class RouteService(
 
         var errors = new ValidationErrors();
         var reason = Reason(request.Reason, errors);
+        var channel = ChannelOrNone(request.Channel, request.Operation, errors);
         errors.ThrowIfAny();
 
         var operation = OperationOrDefault(request.Operation);
         var campaign = await LiveCampaignAsync(request.CampaignId, cancellationToken).ConfigureAwait(false);
+        if (operation is not null && channel is not null && RouteActivator.ChannelProblem(operation, channel) is { } problem)
+        {
+            throw new ValidationException([new ErrorDetail(RouteActivator.CampaignField(campaign.PublicId, operation, channel), problem.Code, problem.Message)]);
+        }
 
         return await ActivateAsync(
             campaign,
             operation,
+            channel,
             actor,
             reason,
-            existing =>
+            async () =>
             {
-                if (existing is null)
+                if (channel is null)
                 {
-                    return null;
-                }
+                    var existing = await OperationRowAsync(campaign, operation, cancellationToken).ConfigureAwait(false);
+                    if (existing is null)
+                    {
+                        return null;
+                    }
 
-                db.CampaignRoutes.Remove(existing);
-                return (Recorded(existing), null);
+                    db.CampaignRoutes.Remove(existing);
+                    return (Recorded(existing.PluginId, existing.Binding), null);
+                }
+                else
+                {
+                    var existing = await ChannelRowAsync(campaign, operation!, channel, cancellationToken).ConfigureAwait(false);
+                    if (existing is null)
+                    {
+                        return null;
+                    }
+
+                    db.CampaignChannelRoutes.Remove(existing);
+                    return (Recorded(existing.PluginId, existing.Binding), null);
+                }
             },
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>The campaign's default route, or one operation's own route: a row of <c>campaign_routes</c>.</summary>
+    private Task<CampaignRoute?> OperationRowAsync(Campaign campaign, string? operation, CancellationToken cancellationToken) =>
+        db.CampaignRoutes.FirstOrDefaultAsync(row => row.CampaignId == campaign.Id && row.Operation == operation, cancellationToken);
+
+    /// <summary>One channel's route under an operation: a row of <c>campaign_channel_routes</c>.</summary>
+    private Task<CampaignChannelRoute?> ChannelRowAsync(Campaign campaign, string operation, string channel, CancellationToken cancellationToken) =>
+        db.CampaignChannelRoutes.FirstOrDefaultAsync(
+            row => row.CampaignId == campaign.Id && row.Operation == operation && row.Channel == channel,
+            cancellationToken);
+
+    /// <summary>
+    /// The key a <c>routes_updated</c> line is filed under: <c>default</c>, the operation's id for its own route, and
+    /// <c>&lt;operation&gt;/&lt;channel&gt;</c> for a channel's route, so that two routes are never one key to a reader
+    /// that keeps the latest line per key. An operation's id never holds a slash (<see cref="OperationCatalog"/>), so the
+    /// first slash is where the channel starts.
+    /// </summary>
+    internal static string JournalKey(string? operation, string? channel) =>
+        operation is null ? RouteActivator.CampaignDefaultName
+        : channel is null ? operation
+        : $"{operation}/{channel}";
 
     /// <summary>
     /// The shape both writers share: under the reload gate, change the row, write down what changed, and build a
@@ -226,9 +304,10 @@ public sealed class RouteService(
     private async Task<RoutesDto> ActivateAsync(
         Campaign campaign,
         string? operation,
+        string? channel,
         ActorRef actor,
         string? reason,
-        Func<CampaignRoute?, (JsonNode? Old, JsonNode? New)?> change,
+        Func<Task<(JsonNode? Old, JsonNode? New)?>> change,
         CancellationToken cancellationToken)
     {
         await gate.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -237,11 +316,7 @@ public sealed class RouteService(
             var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             await using (transaction.ConfigureAwait(false))
             {
-                var existing = await db.CampaignRoutes
-                    .FirstOrDefaultAsync(row => row.CampaignId == campaign.Id && row.Operation == operation, cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (change(existing) is not { } changed)
+                if (await change().ConfigureAwait(false) is not { } changed)
                 {
                     return ToDto(registry.Snapshot, only: null);
                 }
@@ -251,7 +326,7 @@ public sealed class RouteService(
                     actor,
                     JournalKinds.RoutesUpdated,
                     campaign,
-                    key: operation ?? RouteActivator.CampaignDefaultName,
+                    key: JournalKey(operation, channel),
                     old: changed.Old,
                     updated: changed.New,
                     reason: reason);
@@ -296,8 +371,9 @@ public sealed class RouteService(
     }
 
     /// <summary>What the journal records a route as, and nothing where there was no route.</summary>
-    private static JsonNode? Recorded(CampaignRoute? route) =>
-        route is null ? null : new JsonObject { ["plugin"] = route.PluginId, ["binding"] = route.Binding?.DeepClone() };
+    /// <remarks>A channel route is recorded exactly as an operation's own route is; which route it is, the key says.</remarks>
+    private static JsonObject? Recorded(string? plugin, JsonObject? binding) =>
+        plugin is null ? null : new JsonObject { ["plugin"] = plugin, ["binding"] = binding?.DeepClone() };
 
     internal static OperationContract RequireContract(string? operation)
     {
@@ -321,6 +397,35 @@ public sealed class RouteService(
     private static string? OperationOrDefault(string? operation) =>
         string.IsNullOrWhiteSpace(operation) ? null : RequireContract(operation).Id;
 
+    /// <summary>
+    /// The channel a request names, or none where it names none — left out or null. A channel that is there and blank is
+    /// refused rather than read as none: that would address the operation's own route, and a set would replace it and an
+    /// unset take it away, when the caller named a channel's route — most likely one an empty variable or field left
+    /// out. A channel is a channel of an operation, so one named without an operation — under the default, which has
+    /// none — is refused as the operation missing. Whether the operation routes by channel, and by this one, is the
+    /// route check's to say.
+    /// </summary>
+    private static string? ChannelOrNone(string? channel, string? operation, ValidationErrors errors)
+    {
+        if (channel is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(channel))
+        {
+            errors.Add("channel", "blank", "channel is blank. Leave it out to name the operation's own route, or name the channel whose route this is.");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(operation))
+        {
+            errors.Add("operation", "required", "operation is required with a channel; a channel route is a route of one operation, and the default names none.");
+        }
+
+        return channel.Trim();
+    }
+
     private static string? Reason(string? reason, ValidationErrors errors)
     {
         if (reason is not null && reason.Trim().Length > MaxReasonLength)
@@ -339,30 +444,41 @@ public sealed class RouteService(
     {
         return refused is null
             ? []
-            : [new ErrorDetail(Field(campaignId, operation, scope), refused.Code!, refused.Message!), .. refused.Details ?? []];
+            : [new ErrorDetail(Field(campaignId, operation, channel: null, scope), refused.Code!, refused.Message!), .. refused.Details ?? []];
     }
 
-    /// <summary>The route that won, named the way the operator wrote it.</summary>
-    private static string Field(string campaignId, string operation, RouteScope scope) => scope switch
+    /// <summary>
+    /// The route that won, named the way the operator wrote it: each of the six scopes by its own name, a channel route
+    /// under its operation and channel. A scope this does not name is a scope added without its name, so it throws
+    /// rather than answer with another route's name.
+    /// </summary>
+    internal static string Field(string campaignId, string operation, string? channel, RouteScope scope) => scope switch
     {
+        RouteScope.CampaignChannel => RouteActivator.CampaignField(campaignId, operation, Named(channel, scope)),
         RouteScope.CampaignOperation => RouteActivator.CampaignField(campaignId, operation),
         RouteScope.CampaignDefault => RouteActivator.CampaignField(campaignId, null),
+        RouteScope.GlobalChannel => RouteActivator.GlobalChannelField(operation, Named(channel, scope)),
         RouteScope.GlobalOperation => RouteActivator.GlobalOperationField(operation),
-        _ => RouteActivator.GlobalDefaultField,
+        RouteScope.GlobalDefault => RouteActivator.GlobalDefaultField,
+        _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "a route scope with no name in a problem."),
     };
+
+    /// <summary>The channel a channel scope won by: such a scope is reached only by a call that named one.</summary>
+    private static string Named(string? channel, RouteScope scope) =>
+        channel ?? throw new ArgumentNullException(nameof(channel), $"a route that won at {scope} won by a channel the call named.");
 
     private static RoutesDto ToDto(RouteSnapshot snapshot, string? only)
     {
         var campaigns = snapshot.Campaigns
             .Where(entry => only is null || string.Equals(entry.Key, only, StringComparison.Ordinal))
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
-            .Select(entry => new CampaignRoutesDto(entry.Key, ToDto(entry.Value.Default), Overrides(entry.Value)))
+            .Select(entry => new CampaignRoutesDto(entry.Key, ToDto(entry.Value.Default), Overrides(entry.Value), Channels(entry.Value)))
             .ToList();
 
         return new RoutesDto(
             snapshot.Id,
             snapshot.PluginSnapshotId,
-            new RouteSetDto(ToDto(snapshot.Global.Default), Overrides(snapshot.Global)),
+            new RouteSetDto(ToDto(snapshot.Global.Default), Overrides(snapshot.Global), Channels(snapshot.Global)),
             campaigns);
     }
 
@@ -370,6 +486,15 @@ public sealed class RouteService(
         set.Operations
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
             .ToDictionary(entry => entry.Key, entry => ToDto(entry.Value)!, StringComparer.Ordinal);
+
+    /// <summary>A set's channel routes, operation then channel, each ordinally; empty, never absent, where it has none.</summary>
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, RouteDto>> Channels(RouteSet set) =>
+        set.ChannelRoutes
+            .GroupBy(entry => entry.Operation, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyDictionary<string, RouteDto>)group.ToDictionary(entry => entry.Channel, entry => ToDto(entry.Route)!, StringComparer.Ordinal),
+                StringComparer.Ordinal);
 
     private static RouteDto? ToDto(Route? route) =>
         route is null ? null : new RouteDto(route.PluginId, route.Binding, route.BindingIdentity);

@@ -194,7 +194,16 @@ public sealed class RouteActivator(
 
     /// <summary>The same check, with the binding's patterns matched under <paramref name="timing"/>.</summary>
     public static RouteProblem? Check(PluginSnapshot plugins, string? operation, string? pluginId, JsonObject? binding, PatternTiming timing) =>
-        Check(plugins, operation, pluginId, binding, timing, out _);
+        Check(plugins, operation, channel: null, pluginId, binding, timing, out _);
+
+    /// <summary>
+    /// The same check of a route that names <paramref name="channel"/> under <paramref name="operation"/>: the same
+    /// questions in the same order, and the two about the channel asked as soon as the operation is found in the catalog
+    /// (<see cref="ChannelProblem"/>). Null is the operation's own route, or the default, exactly as above. The campaign
+    /// half and the settings half of a reload, and <c>route.set</c>, all ask this one.
+    /// </summary>
+    public static RouteProblem? Check(PluginSnapshot plugins, string? operation, string? channel, string? pluginId, JsonObject? binding, PatternTiming timing) =>
+        Check(plugins, operation, channel, pluginId, binding, timing, out _);
 
     /// <summary>
     /// The same check, also answering what the binding is called — the identity the route will be frozen with.
@@ -204,6 +213,7 @@ public sealed class RouteActivator(
     private static RouteProblem? Check(
         PluginSnapshot plugins,
         string? operation,
+        string? channel,
         string? pluginId,
         JsonObject? binding,
         PatternTiming timing,
@@ -227,7 +237,9 @@ public sealed class RouteActivator(
                 $"'{plugin.Manifest.Id}' is a notification plugin, and a notification plugin performs no canonical operation.");
         }
 
-        var incompatible = operation is null ? AnyOperationIncompatible(plugin) : OperationProblem(plugin, operation);
+        var incompatible = operation is null
+            ? channel is null ? AnyOperationIncompatible(plugin) : DefaultChannelProblem(channel)
+            : OperationProblem(plugin, operation, channel);
         if (incompatible is not null)
         {
             return incompatible;
@@ -292,8 +304,15 @@ public sealed class RouteActivator(
     public static string CampaignField(string campaignId, string? operation) =>
         $"campaign:{campaignId}/routes/{operation ?? CampaignDefaultName}";
 
+    /// <summary>How a campaign's route is named in a problem when it may name a channel: the channel after its operation.</summary>
+    public static string CampaignField(string campaignId, string? operation, string? channel) =>
+        channel is null ? CampaignField(campaignId, operation) : $"{CampaignField(campaignId, operation)}/{channel}";
+
     /// <summary>How a global operation override is named in a problem: the setting, exactly as it is spelled.</summary>
     public static string GlobalOperationField(string operation) => $"{RoutesOptions.Section}:Operations:{operation}";
+
+    /// <summary>How a global channel route is named in a problem: the setting under its operation, exactly as it is spelled.</summary>
+    public static string GlobalChannelField(string operation, string channel) => $"{GlobalOperationField(operation)}:Channels:{channel}";
 
     /// <summary>How a search a change would leave without a route is named in a problem: its campaign and its work item.</summary>
     public static string SearchField(string campaignId, string searchWorkItem) => $"campaign:{campaignId}/searches/{searchWorkItem}";
@@ -321,7 +340,7 @@ public sealed class RouteActivator(
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
         foreach (var (operation, entry) in settings.Operations)
         {
-            var route = Accept(plugins, GlobalOperationField(operation), operation, entry?.Plugin, entry?.Binding as JsonObject, _timing, problems);
+            var route = Accept(plugins, GlobalOperationField(operation), operation, channel: null, entry?.Plugin, entry?.Binding as JsonObject, _timing, problems);
             if (route is not null)
             {
                 operations[operation] = route;
@@ -330,7 +349,7 @@ public sealed class RouteActivator(
 
         var fallback = settings.Default is null
             ? null
-            : Accept(plugins, GlobalDefaultField, null, settings.Default.Plugin, settings.Default.Binding as JsonObject, _timing, problems);
+            : Accept(plugins, GlobalDefaultField, null, channel: null, settings.Default.Plugin, settings.Default.Binding as JsonObject, _timing, problems);
 
         return new RouteSet(fallback, operations);
     }
@@ -345,7 +364,7 @@ public sealed class RouteActivator(
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
         foreach (var (operation, route) in active.Operations)
         {
-            var rechecked = Accept(plugins, GlobalOperationField(operation), operation, route.PluginId, route.Binding, timing, problems);
+            var rechecked = Accept(plugins, GlobalOperationField(operation), operation, channel: null, route.PluginId, route.Binding, timing, problems);
             if (rechecked is not null)
             {
                 operations[operation] = rechecked;
@@ -354,7 +373,7 @@ public sealed class RouteActivator(
 
         var fallback = active.Default is null
             ? null
-            : Accept(plugins, GlobalDefaultField, null, active.Default.PluginId, active.Default.Binding, timing, problems);
+            : Accept(plugins, GlobalDefaultField, null, channel: null, active.Default.PluginId, active.Default.Binding, timing, problems);
 
         return new RouteSet(fallback, operations);
     }
@@ -367,28 +386,54 @@ public sealed class RouteActivator(
         // An archived campaign's routes are history, and history must never stand between an operator and an
         // uninstall: the campaign will never dispatch again, so what its route named no longer has to exist. Until a search
         // of it ends, though, its stop still runs and goes where the search ran, so its routes stay in the set while one is
-        // followed — each one that no longer holds left out, and refusing nothing.
-        var rows = await db.CampaignRoutes
+        // followed — each one that no longer holds left out, and refusing nothing. Channel routes are a table of their own
+        // and are read by the same rule into the same set.
+        var operationRows = await db.CampaignRoutes
             .AsNoTracking()
             .Where(route => route.Campaign!.ArchivedAt == null
                 || db.AudienceSearches.Any(search => search.CampaignId == route.CampaignId && search.EndedAs == null && search.Reference != null))
-            .OrderBy(route => route.CampaignId)
-            .ThenBy(route => route.Operation)
-            .Select(route => new
-            {
-                Campaign = route.Campaign!.PublicId,
-                Archived = route.Campaign.ArchivedAt != null,
+            .Select(route => new StoredRoute(
+                route.CampaignId,
+                route.Campaign!.PublicId,
+                route.Campaign.ArchivedAt != null,
                 route.Operation,
+                null,
                 route.PluginId,
-                route.Binding,
-            })
+                route.Binding))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        var channelRows = await db.CampaignChannelRoutes
+            .AsNoTracking()
+            .Where(route => route.Campaign!.ArchivedAt == null
+                || db.AudienceSearches.Any(search => search.CampaignId == route.CampaignId && search.EndedAs == null && search.Reference != null))
+            .Select(route => new StoredRoute(
+                route.CampaignId,
+                route.Campaign!.PublicId,
+                route.Campaign.ArchivedAt != null,
+                route.Operation,
+                route.Channel,
+                route.PluginId,
+                route.Binding))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var rows = operationRows
+            .Concat(channelRows)
+            .OrderBy(route => route.CampaignId)
+            .ThenBy(route => route.Operation, StringComparer.Ordinal)
+            .ThenBy(route => route.Channel, StringComparer.Ordinal);
 
         var campaigns = new Dictionary<string, CampaignRoutes>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
-            var route = Accept(plugins, CampaignField(row.Campaign, row.Operation), row.Operation, row.PluginId, row.Binding, _timing, row.Archived ? [] : problems);
+            var route = Accept(
+                plugins,
+                CampaignField(row.Campaign, row.Operation, row.Channel),
+                row.Operation,
+                row.Channel,
+                row.PluginId,
+                row.Binding,
+                _timing,
+                row.Archived ? [] : problems);
             if (route is null)
             {
                 continue;
@@ -403,23 +448,49 @@ public sealed class RouteActivator(
             {
                 set.Default = route;
             }
-            else
+            else if (row.Channel is null)
             {
                 set.Operations[row.Operation] = route;
+            }
+            else
+            {
+                if (!set.Channels.TryGetValue(row.Operation, out var channels))
+                {
+                    set.Channels[row.Operation] = channels = new Dictionary<string, Route>(StringComparer.Ordinal);
+                }
+
+                channels[row.Channel] = route;
             }
         }
 
         return campaigns.ToDictionary(entry => entry.Key, entry => entry.Value.Frozen(), StringComparer.Ordinal);
     }
 
-    /// <summary>One campaign's routes while the rows are still being read: a default, and the overrides of it.</summary>
+    /// <summary>One stored campaign route as the reload reads it, from either table: a channel only from the channel table.</summary>
+    private sealed record StoredRoute(int CampaignId, string Campaign, bool Archived, string? Operation, string? Channel, string PluginId, JsonObject? Binding);
+
+    /// <summary>
+    /// One campaign's routes while the rows are still being read: a default, the overrides of it, and the channel routes
+    /// that override an operation's own route for one channel. A campaign without channel routes freezes into a set that
+    /// holds none, the set it froze into before channel routes existed.
+    /// </summary>
     private sealed class CampaignRoutes
     {
         public Route? Default { get; set; }
 
         public Dictionary<string, Route> Operations { get; } = new(StringComparer.Ordinal);
 
-        public RouteSet Frozen() => new(Default, Operations);
+        public Dictionary<string, Dictionary<string, Route>> Channels { get; } = new(StringComparer.Ordinal);
+
+        public RouteSet Frozen() => new(
+            Default,
+            Operations,
+            Channels.Count == 0
+                ? null
+                : Channels.ToDictionary(
+                    entry => entry.Key,
+                    entry => (IReadOnlyDictionary<string, Route>)entry.Value,
+                    StringComparer.Ordinal));
     }
 
     /// <summary>The route as the snapshot will hold it, or nothing — with the problem recorded against its name.</summary>
@@ -427,12 +498,13 @@ public sealed class RouteActivator(
         PluginSnapshot plugins,
         string field,
         string? operation,
+        string? channel,
         string? pluginId,
         JsonObject? binding,
         PatternTiming timing,
         List<ErrorDetail> problems)
     {
-        if (Check(plugins, operation, pluginId, binding, timing, out var identity) is { } problem)
+        if (Check(plugins, operation, channel, pluginId, binding, timing, out var identity) is { } problem)
         {
             problems.Add(new ErrorDetail(field, problem.Code, problem.Message));
             return null;
@@ -445,13 +517,18 @@ public sealed class RouteActivator(
         return new Route(pluginId!, owned, identity);
     }
 
-    private static RouteProblem? OperationProblem(LoadedPlugin plugin, string operation)
+    private static RouteProblem? OperationProblem(LoadedPlugin plugin, string operation, string? channel)
     {
         if (OperationCatalog.Find(operation) is not { } contract)
         {
             return new RouteProblem(
                 RouteProblemCodes.OperationUnknown,
                 $"'{operation}' is not an operation this build publishes.");
+        }
+
+        if (channel is not null && ChannelProblem(contract, channel) is { } unroutable)
+        {
+            return unroutable;
         }
 
         if (RouteChecks.OperationUnsupported(plugin, operation))
@@ -463,6 +540,44 @@ public sealed class RouteActivator(
 
         return Incompatible(plugin, contract);
     }
+
+    /// <summary>
+    /// What is wrong with naming <paramref name="channel"/> under the operation <paramref name="contract"/> publishes, or
+    /// null when nothing is: the operation's document must name an argument a route reads its channel from, and the
+    /// channel must be one that argument allows. Both are questions about the document alone, the same for every plugin,
+    /// so they are asked before anything about the plugin the route names.
+    /// </summary>
+    private static RouteProblem? ChannelProblem(OperationContract contract, string channel)
+    {
+        if (contract.RouteChannels is not { } channels)
+        {
+            return new RouteProblem(
+                RouteProblemCodes.ChannelNotRoutable,
+                $"'{contract.Id}' takes no channel routes: its document names no argument a route reads its channel from, so every call of it goes by the operation's own route.");
+        }
+
+        return channels.Contains(channel, StringComparer.Ordinal)
+            ? null
+            : new RouteProblem(
+                RouteProblemCodes.ChannelUnknown,
+                $"'{channel}' is not a channel '{contract.Id}' routes by; its argument '{contract.RouteChannelArgument}' allows {string.Join(", ", channels.Select(allowed => $"'{allowed}'"))}.");
+    }
+
+    /// <summary>
+    /// The same two questions about the document, for a caller that names a route without a plugin — <c>route.unset</c> —
+    /// so it refuses a channel no route could name exactly as <c>route.set</c> does. An operation the catalog does not
+    /// publish is the caller's to have refused first; here it is answered as such.
+    /// </summary>
+    internal static RouteProblem? ChannelProblem(string operation, string channel) =>
+        OperationCatalog.Find(operation) is { } contract
+            ? ChannelProblem(contract, channel)
+            : new RouteProblem(RouteProblemCodes.OperationUnknown, $"'{operation}' is not an operation this build publishes.");
+
+    /// <summary>A default route that names a channel: the default names no operation, so there is no argument to read one from.</summary>
+    private static RouteProblem DefaultChannelProblem(string channel) =>
+        new(
+            RouteProblemCodes.ChannelNotRoutable,
+            $"a default route names no operation, so it cannot name the channel '{channel}': a channel route is a route of one operation.");
 
     /// <summary>
     /// A default route carries every operation, so what it must be compatible with is everything the plugin

@@ -36,6 +36,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<CampaignRoute> CampaignRoutes => Set<CampaignRoute>();
 
+    public DbSet<CampaignChannelRoute> CampaignChannelRoutes => Set<CampaignChannelRoute>();
+
     public DbSet<Approval> Approvals => Set<Approval>();
 
     public DbSet<Decision> Decisions => Set<Decision>();
@@ -669,6 +671,18 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             // The default route is the row with no operation, and nulls are distinct in the index above: only a
             // filtered index can say "at most one of those per campaign".
             route.HasIndex(r => r.CampaignId).IsUnique().HasFilter("operation IS NULL").HasDatabaseName("ix_campaign_routes_one_default_per_campaign");
+            route.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CampaignChannelRoute>(route =>
+        {
+            route.HasKey(r => r.Id);
+            route.Property(r => r.Operation).HasMaxLength(200);
+            route.Property(r => r.Channel).HasMaxLength(32);
+            route.Property(r => r.PluginId).HasMaxLength(64);
+            route.Property(r => r.Binding).HasColumnName("binding_json");
+            route.ToTable(t => t.HasCheckConstraint("ck_campaign_channel_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)"));
+            route.HasIndex(r => new { r.CampaignId, r.Operation, r.Channel }).IsUnique();
             route.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Cascade);
         });
 
