@@ -122,11 +122,14 @@ is a drop rather than a routine read.
    With Jason, the same reads are:
 
    ```
-   jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --human
+   jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel email --human
    jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed --status expired --order finished --limit 20
    jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --kind provider_op --order finished --limit 20
    jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-10-01T00:00:00Z --until now
    ```
+
+   A campaign can send email through one plugin and LinkedIn messages through another, so the route is asked per
+   channel: name the channel the figures are about, `email` here, and ask again with `--channel linkedin` for the other.
 
    A plain `workitem list` is oldest first and stops at a hundred, so a long campaign would
    show only its oldest items; `--order finished` puts the newest first, twenty from each list.

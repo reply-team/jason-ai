@@ -12,22 +12,35 @@ This document is for whoever operates an installation. What a plugin is and how 
 **Routing** answers *which plugin performs this operation for this campaign*. **Binding** answers
 *which account, workspace or mailbox at that provider the plugin works in*. They are separate on
 purpose: one installation routinely sends every campaign to one provider and works several of its
-accounts, and one campaign occasionally needs a different provider for a single operation.
+accounts, and one campaign occasionally needs a different provider for a single operation, or for one channel of
+it: email through one plugin, LinkedIn messages through another.
 
 Nothing is routed anywhere by default. A fresh runtime routes no operation to any plugin, so every
 `provider_op` work item fails at the claim with `no_route` until somebody writes a route — and a
 product that shipped a default route would make its vendor-neutrality a claim its own configuration
 contradicted.
 
-## 2. Two scopes, four levels
+## 2. Two scopes, six levels
 
 Routes live at two scopes — **global**, in `settings.json`, and **campaign**, in the database — and
-each scope has a **default** route and per-**operation** overrides. That is four levels, and the most
-specific one wins:
+each scope has a **default** route, per-**operation** overrides and, for the few operations that take them,
+per-**channel** routes under an operation. That is six levels, and the most specific one wins:
 
 ```text
-campaign operation override  →  campaign default  →  global operation override  →  global default
+campaign operation and channel  →  campaign operation override  →  campaign default
+  →  global operation and channel  →  global operation override  →  global default
 ```
+
+The answer names the level it came from as its scope: `campaign_channel`, `campaign_operation`,
+`campaign_default`, `global_channel`, `global_operation` or `global_default`.
+
+**A channel level answers only a call that names a channel.** Which operations take channel routes is data in the
+operation's own document (`route_channel_argument`, [docs/contracts/](contracts/README.md)): `message.send` and
+`conversation.reply` read the channel from `channel`, and `sender.list` from its optional `sender_channel` filter,
+so a `sender.list` without the filter is routed by the operation alone, as it always was. An operation whose
+`channel` is the address a person is found by takes none, and none is declared for an operation with one channel only, whose own route is already that. A
+call that names a channel no route is set for falls through to the operation's own route and the levels under it;
+nothing is routed by a channel that was not named.
 
 **Masking is exact, and it is the one rule people get wrong.** A campaign default hides *every* global
 operation override for that campaign. Given these four routes:
@@ -52,6 +65,9 @@ Keeping the global exception inside `cmp_A` takes an explicit campaign override:
 ```sh
 jason route set --campaign cmp_A --operation campaign.get --plugin provider-c --actor human:you@example.com
 ```
+
+The same holds for channels: a campaign default or a campaign operation override hides a global channel route, and
+keeping one inside the campaign takes a campaign route that names the channel.
 
 The alternative — merging the levels — would mean a campaign that named its provider could still have
 one operation quietly sent somewhere else, which is exactly the surprise routing exists to prevent.
@@ -115,15 +131,29 @@ runtime whose global default is one plugin and which also holds one campaign rou
 Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY | default fake-provider | 0 overrides | 1 campaign route
 ```
 
+The override and campaign counts include channel routes; a runtime that holds any adds `| N of them by channel`.
+
 ## 4. A campaign's own routes
 
 ```sh
 jason route set   --campaign cmp_… --plugin acme-provider --binding '{"workspace":"latam"}' --actor human:you@example.com
 jason route set   --campaign cmp_… --operation campaign.get --plugin other-provider --actor human:you@example.com
+jason route set   --campaign cmp_… --operation message.send --channel linkedin --plugin social-provider --actor human:you@example.com
 jason route unset --campaign cmp_… --operation campaign.get --actor human:you@example.com
+jason route unset --campaign cmp_… --operation message.send --channel linkedin --actor human:you@example.com
 jason route list  --campaign cmp_…
 jason route resolve --campaign cmp_… --operation list_membership.add --human
+jason route resolve --campaign cmp_… --operation message.send --channel linkedin --human
 ```
+
+`--channel` needs `--operation`, and an operation whose document lets a route name a channel. `route list` shows a
+channel route beside the operation's own and reads it `<operation> on <channel>`; `route resolve` answers for the
+channel when it is given one, and for a call that names none when it is not. With `--channel`, the CLI first asks
+the running runtime whether it counts channel routes, and refuses the command before it sends anything where it does
+not, or where its answer does not say that it does: `runtime_too_old`, exit 1; a runtime that cannot be reached at all
+is exit 3, as for every verb. Such a runtime would ignore the channel and answer for, or change, the operation's own
+route instead. Restart the runtime if it was updated without a restart, or
+update Jason, and run the command again.
 
 `route set` and `route unset` take no default actor: the CLI will not put this account's name on a change of route
 by itself, so a command typed outside a run names who makes it with `--actor human:<Name>`, and one an executor runs
@@ -147,7 +177,7 @@ written under "Routes" in settings.json and activated with 'jason plugin reload'
 The reason is worth stating rather than accepting: a reload freezes plugins and routes together, so a
 global route becomes active by the same explicit act as the packages it names.
 
-Four smaller rules, each of which somebody will meet:
+Five smaller rules, each of which somebody will meet:
 
 - **A route is checked before its row is written.** A `route set` that could never activate is refused
   as a 400 naming the route, rather than written and then refusing its own activation.
@@ -160,6 +190,11 @@ Four smaller rules, each of which somebody will meet:
   re-routed in either direction — including the direction that only takes something away.
 - **`route unset` of a route that is not there succeeds and changes nothing** — it is the state the
   caller asked for, and nothing is activated because nothing changed.
+- **An operation's own route and its channel routes are separate routes.** Removing the operation's own route leaves
+  its channel routes, and removing a channel route leaves the operation's own route. A channel route with no route of
+  the operation beside it is a normal state, not a half-removed one: that channel is routed, and the operation's other
+  calls fall to the levels below. An older executable on the same database can change or remove an operation's own
+  route while channel rows stay, because it never reads them as its own; the newer one reads the state as it stands.
 
 **The read verbs still answer for an archived campaign**, because it can still be named — and what they
 answer about is a campaign whose own routes have left the snapshot: `route resolve` falls back to the
@@ -518,7 +553,7 @@ message names the pinned value.
 | `route_channel_unknown` | the route names a channel the argument the operation's document names for routes does not allow |
 | `route_operation_unsupported` | the plugin does not list the operation the route sends it |
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
-| `route_channel_plugin_reads_no_events` | the route names a channel, and the plugin it names reads no events: its manifest declares no `contracts.events`. Every operation that takes channel routes is about what is sent on the channel — `message.send` and `conversation.reply` send it, `sender.list` names the accounts that will — and a reply to what is sent on a channel route reaches the campaign only through the events of the account it went from, so it would go unseen. Asked of a channel route only, at `route.set` and at every reload, so a reload whose new package stops reading events while a channel route names it is refused whole |
+| `route_channel_plugin_reads_no_events` | the route names a channel, and the plugin it names reads no events: its manifest declares no `contracts.events`. Every operation that takes channel routes is about what is sent on the channel — `message.send` and `conversation.reply` send it, `sender.list` names the accounts that will — and a reply to what is sent on a channel route reaches the campaign only through the events of the account it went from, so it would go unseen. Asked of a channel route only, at `route.set` and at every reload, so a reload whose new package stops reading events while a channel route names it is refused whole, and the previous snapshot stays active. A restart in that state starts with no plugins and no routes (§6), since the package is checked against the route at the start as at any reload |
 | `route_binding_secret_like` | the binding carries a field named like a credential, at any depth |
 | `route_binding_too_large` | the binding's canonical JSON is larger than the 64 KiB the protocol carries |
 | `route_binding_invalid` | the binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin whose schema refuses `{}` |
@@ -772,8 +807,8 @@ hold it to. It invokes nothing.
 
 ## 12. Known limitations of this version
 
-- **No operation-family wildcards.** A route names one operation or is the default; there is no
-  `list_membership.*` (DEF-ROUTE-001).
+- **No operation-family wildcards.** A route names one operation, or one channel of an operation that takes channel
+  routes, or is the default; there is no `list_membership.*` (DEF-ROUTE-001).
 - **No named, reusable bindings.** Every route carries its own binding object, so two campaigns working the
   same account repeat it (DEF-ROUTE-001).
 - **No repair path for a pin.** A pin cannot be corrected, moved or deleted through the API, and a
