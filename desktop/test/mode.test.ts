@@ -198,6 +198,24 @@ test('a demo directory that refuses its use falls back the same way, and a recor
     assert.deepEqual(startOn(person, 'demo', false, { open: refuse, keep: refuse }), { person, data: person, mode: 'live', unopened: demoUnopened });
 });
 
+test('the unopened sentence is the desktop’s own words, never the error’s text nor a path the person gave', () => {
+    const person = join(folder(), 'Chosen By The Person', '.jason');
+    const leaky = () => {
+        throw new Error(`EACCES: permission denied, mkdir '${person}-demo'`);
+    };
+    const run = startOn(person, 'demo', false, { open: leaky, keep: leaky });
+    assert.equal(run.unopened, demoUnopened);
+    assert.equal(run.unopened.includes(person), false);
+    assert.equal(run.unopened.includes('Chosen By The Person'), false);
+    assert.equal(run.unopened.includes('EACCES'), false);
+    // The sentence is one constant: no part of it is made from what the start was given.
+    assert.equal(demoUnopened, 'The demo could not be opened, so Jason opened your own installation.');
+    const source = readFileSync(new URL('../src/mode.ts', import.meta.url), 'utf8');
+    const given = [...source.matchAll(/unopened: ([^,;}\n]+)/g)].map((each) => each[1]!.trim());
+    assert.ok(given.length > 0);
+    for (const value of given) assert.ok(['null', 'demoUnopened', 'string | null'].includes(value), `unopened is only ever null or the constant, not ${value}`);
+});
+
 test('a live start and an installer start look at no demo directory', () => {
     const person = join(folder(), '.jason');
     const opened: string[] = [];
