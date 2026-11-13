@@ -128,7 +128,9 @@ public static class FolderSessionOpener
                 return Refuse(env, CliErrors.HostNotFound, SessionOpener.NotFound(hostWord, AgentHosts.Of(host.Value).CommandWord, lookup));
             }
 
-            program = request.Resume is { } id ? [.. found, .. AgentHosts.ResumeArguments(host.Value, id)!] : found;
+            program = request.Resume is { } id
+                ? [.. found, .. AgentHosts.ResumeArguments(host.Value, id) ?? throw new InvalidOperationException("A host with no words to resume by reached the launch; it is refused before its program is looked for.")]
+                : found;
         }
 
         if (!Directory.Exists(path))

@@ -830,12 +830,16 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(Message(), _run.Error.ToString().TrimEnd());
     }
 
-    /// <summary>A host the preference names that cannot resume is refused after the preference is read, and before any lookup.</summary>
+    /// <summary>
+    /// A host the preference names that cannot resume is refused after the preference is read, and before any lookup: with
+    /// no program and no terminal on this machine the refusal is still this one.
+    /// </summary>
     [Theory]
     [MemberData(nameof(HostsThatCannotResume))]
     public async Task A_preferred_host_that_cannot_resume_is_refused_after_the_preference(string word, string command)
     {
-        _run.Programs.AddProgram(command);
+        _ = command;
+        File.Delete(_run.ConsoleHost);
         _run.Preference = "{\"host\":\"" + word + "\"}";
 
         var exit = await _run.Cli("session", "open", "--resume", Conversation);

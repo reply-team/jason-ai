@@ -267,10 +267,10 @@ public partial class PageClaimsTests
     [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "With no item it opens the same terminal at a folder, with no first input")]
     [InlineData("docs/ui.md", "### At a folder, with no item")]
     [InlineData("docs/handbook.md", "With no item, the same verb opens a new terminal at a folder and gives it no first input")]
-    [InlineData("docs/architecture.md", "or, with no item, at a campaign's folder, a project's or the harness root, never the home folder, running a host or the system's plain shell with no first input")]
+    [InlineData("docs/architecture.md", "or, with no item, at a campaign's folder, a project's, the harness root or, with `--here`, the folder it runs in; never by falling back to the home folder, running a host or the system's plain shell with no first input")]
     [InlineData("docs/projects.md", "| `session open` at a folder | `--project`, the folder it opens at, or `--campaign` | yes, when neither is given; elsewhere it opens at the harness root |")]
     [InlineData("docs/execution-profiles.md", "opened at a folder with no item, with no first message")]
-    [InlineData("docs/contracts/preferences/agent.interactive_host.md", "or at a folder, a campaign's, a project's or the harness root, with no first input")]
+    [InlineData("docs/contracts/preferences/agent.interactive_host.md", "or at a folder, a campaign's, a project's or the harness root, or the folder it runs in with `--here`, with no first input")]
     [InlineData("skills/runtime/operating-the-installation/SKILL.md", "With no item, `jason session open` opens a new terminal at a folder with no first input")]
     public void Every_page_that_says_what_session_open_does_says_its_folder_form(string page, string said)
     {
