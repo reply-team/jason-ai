@@ -151,8 +151,8 @@ channel route beside the operation's own and reads it `<operation> on <channel>`
 channel when it is given one, and for a call that names none when it is not. With `--channel`, the CLI first asks
 the running runtime whether it counts channel routes, and refuses the command before it sends anything where it does
 not, or where its answer does not say that it does: `runtime_too_old`, exit 1; a runtime that cannot be reached at all
-is exit 3, as for every verb. Such a runtime would ignore the channel and answer for, or change, the operation's own
-route instead. Restart the runtime if it was updated without a restart, or
+is exit 3, as for every verb. A runtime that does not count them would ignore the channel and answer for, or change,
+the operation's own route instead. Restart the runtime if it was updated without a restart, or
 update Jason, and run the command again.
 
 `route set` and `route unset` take no default actor: the CLI will not put this account's name on a change of route

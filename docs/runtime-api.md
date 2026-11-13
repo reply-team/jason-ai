@@ -285,8 +285,8 @@ or an agent asks, outside any work item: nothing is recorded, journaled or pinne
 - `workitem.list`
 - `workitem.count`
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
-  profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval withdraws
-  the question, and the work goes back to the queue, where the claim asks again about what it now says.
+  profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval
+  withdraws the question, and the work goes back to the queue, where the claim asks again about what it now says.
 - `workitem.cancel`: stops the work for good.
 - `workitem.heartbeat`: the attempt's "I am still here".
 - `workitem.set_result`: progress worth keeping before the work is done; the whole result is replaced.
