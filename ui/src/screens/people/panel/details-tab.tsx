@@ -275,7 +275,7 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
                     {offered.length > 1 && (
                         <select
                             className="select"
-                            aria-label="The campaign the change is queued in"
+                            aria-label="The agent the change is queued in"
                             value={chosen}
                             onChange={(event) => setCampaign(event.target.value)}
                         >

@@ -368,8 +368,8 @@ test('a set-up turn that made no campaign offers nothing, and one that made two 
     assert.deepEqual(handed, [[0, false], [2, false]]);
     assert.deepEqual(r.chat.open(two.id).entries.at(-1), { kind: 'pick', campaignIds: ['cmp_ONE', 'cmp_TWO'] }, 'the pick is kept as the page drew it');
     assert.deepEqual(r.again().open(two.id).entries.at(-1), { kind: 'pick', campaignIds: ['cmp_ONE', 'cmp_TWO'] }, 'and read back after a restart');
-    await assert.rejects(r.chat.attach(two.id, 'cmp_THREE'), { message: 'That campaign is not one this chat made. Open it from the campaign.' });
-    await assert.rejects(r.chat.attach(none.id, 'cmp_ONE'), { message: 'That campaign is not one this chat made. Open it from the campaign.' });
+    await assert.rejects(r.chat.attach(two.id, 'cmp_THREE'), { message: 'That agent is not one this chat made. Open it from the agent.' });
+    await assert.rejects(r.chat.attach(none.id, 'cmp_ONE'), { message: 'That agent is not one this chat made. Open it from the agent.' });
     assert.equal((await r.chat.attach(two.id, 'cmp_TWO')).campaignId, 'cmp_TWO');
 });
 
@@ -424,8 +424,8 @@ test('two set-up turns that ran at the same time hand over neither, and both off
     const picked = await r.chat.attach(first.id, made);
     assert.deepEqual([picked.campaignId, picked.title], [made, 'Spring']);
     assert.deepEqual(r.events.get(first.id)?.at(-1), { kind: 'attached', campaignId: made, title: 'Spring' });
-    await assert.rejects(r.chat.attach(second.id, made), { message: 'That campaign has its conversation already. Open it from the campaign.' });
-    await assert.rejects(r.chat.attach(first.id, 'cmp_OTHER'), /already about a campaign/);
+    await assert.rejects(r.chat.attach(second.id, made), { message: 'That agent has its conversation already. Open it from the agent.' });
+    await assert.rejects(r.chat.attach(first.id, 'cmp_OTHER'), /already about an agent/);
 });
 
 test('a conversation whose turn runs is neither removed nor started afresh, and says so; once it ends, both are done', async (t) => {
@@ -458,7 +458,7 @@ test('a conversation whose turn runs is neither removed nor started afresh, and 
     assert.deepEqual(readdirSync(r.b.paths.conversations), []);
     assert.throws(() => r.chat.open(chat.id), { message: 'That conversation is not one this desktop keeps.' });
     for (const bad of ['', 'conv_../x', 42, null]) assert.throws(() => r.chat.open(bad), { message: 'That conversation is not one this desktop keeps.' });
-    await assert.rejects(r.chat.create('../cmp'), { message: 'That is not a campaign id.' });
+    await assert.rejects(r.chat.create('../cmp'), { message: "That is not an agent's id." });
 });
 
 test('a conversation that never had a turn is not listed and leaves no record, and Start afresh on it writes nothing', async (t) => {

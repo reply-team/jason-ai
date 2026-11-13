@@ -141,10 +141,10 @@ describe('the console', () => {
     it('lists the campaigns with the runtime counts, and opens a chat about one', async () => {
         const fake = pending(new FakeApi());
         renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
-        show('Campaigns');
-        await waitFor(() => within(panel('Campaigns')).getByText('Summer referrals'));
-        const spring = within(panel('Campaigns')).getByText('Spring').closest('tr')!;
+        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
+        show('Agents');
+        await waitFor(() => within(panel('Agents')).getByText('Summer referrals'));
+        const spring = within(panel('Agents')).getByText('Spring').closest('tr')!;
         expect(within(spring).getByText('Active')).toBeTruthy();
         expect(within(spring).getByText('22')).toBeTruthy();
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
@@ -157,17 +157,17 @@ describe('the console', () => {
             .answer('decision.list', 'decision.list/pending')
             .answer('campaign.list', 'campaign.list/screen-empty');
         const { desktop } = renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
-        show('Campaigns');
+        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
+        show('Agents');
         await waitFor(() =>
-            expect(words(panel('Campaigns'))).toContain(
-                'No campaigns yet. A campaign is set up in a chat with Jason: say who you want to reach, and the agent sets it up with you.',
+            expect(words(panel('Agents'))).toContain(
+                'No agents yet. An agent is set up in a chat with Jason: say who you want to reach, and the AI sets it up with you.',
             ),
         );
         expect(asked(fake, 'campaign.summary')).toBe(0);
         const made = () => desktop.calls.filter((each) => each.name === 'chat.create');
         await waitFor(() => expect(made()).toHaveLength(1), { timeout: 2000 });
-        fireEvent.click(within(panel('Campaigns')).getByRole('button', { name: 'New chat' }));
+        fireEvent.click(within(panel('Agents')).getByRole('button', { name: 'New chat' }));
         await waitFor(() => expect(made()).toHaveLength(2));
         expect(made()[1]!.args).toEqual([]);
     });
@@ -175,9 +175,9 @@ describe('the console', () => {
     it('draws a hostile campaign name as text, in the list and in a chat about it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Campaigns' }));
-        show('Campaigns');
-        await waitFor(() => within(panel('Campaigns')).getByText('Spring'));
+        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
+        show('Agents');
+        await waitFor(() => within(panel('Agents')).getByText('Spring'));
         // A person may name a campaign anything; the next read brings that name back, to the desktop as well.
         desktop.names.set('cmp_1', hostile);
         flush(() => {
@@ -185,7 +185,7 @@ describe('the console', () => {
                 each.id === 'cmp_1' ? { ...each, name: hostile } : each,
             );
         });
-        const row = within(panel('Campaigns')).getByText(hostile).closest('tr')!;
+        const row = within(panel('Agents')).getByText(hostile).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         await waitFor(() => screen.getByRole('heading', { name: `What should Jason do in ${hostile}?` }));
         // The only images of the page are the brand's own, at the head of the sidebar.
@@ -210,6 +210,14 @@ describe('the console', () => {
         await waitFor(() => expect(within(activity).getAllByText(hostile)).toHaveLength(2));
         expect(activity.querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    it('describes the Activity panel by the roles, not by agents', async () => {
+        renderConsole(pending(new FakeApi()));
+        await waitFor(() => screen.getByRole('button', { name: 'Activity' }));
+        show('Activity');
+        const activity = await waitFor(() => panel('Activity'));
+        expect(words(activity)).toContain('What Jason and its roles do, as the journal records it.');
     });
 
     it('picks a model and, where the model takes one, an effort beside the host, and sends both with the turn', async () => {
@@ -285,9 +293,7 @@ describe('the console', () => {
             ),
         });
         renderConsole(fake, desktop);
-        await waitFor(() =>
-            expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
-        );
+        await waitFor(() => expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'codex'));
         expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
         expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
@@ -335,9 +341,9 @@ describe('the console', () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
         await waitFor(() =>
-            expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'claude'),
+            expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'claude'),
         );
-        const host = screen.getByRole('combobox', { name: 'Agent host' });
+        const host = screen.getByRole('combobox', { name: 'AI host' });
         expect(
             within(host).getByRole('option', { name: 'Gemini CLI: runs campaign work, not the chat yet' }),
         ).toHaveProperty('disabled', true);
@@ -383,7 +389,7 @@ describe('the console', () => {
             ),
         });
         renderConsole(fake, desktop);
-        const host = await waitFor(() => screen.getByRole('combobox', { name: 'Agent host' }));
+        const host = await waitFor(() => screen.getByRole('combobox', { name: 'AI host' }));
         fireEvent.change(host, { target: { value: 'codex' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'What waits?' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -555,7 +561,7 @@ describe('the console', () => {
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
             await waitFor(() =>
                 expect(document.querySelector('.chat-error')?.textContent).toContain(
-                    'No agent host that drives the chat was found on this machine.',
+                    'No AI host that drives the chat was found on this machine.',
                 ),
             );
             expect(sends(desktop)).toHaveLength(1);
@@ -582,7 +588,7 @@ describe('the console', () => {
             };
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
             await waitFor(() => expect(document.querySelector('.chat-error')?.textContent).toContain(unreadable));
-            expect(document.querySelector('.chat-error')?.textContent).not.toContain('No agent host');
+            expect(document.querySelector('.chat-error')?.textContent).not.toContain('No AI host');
             expect(document.querySelector('.chat-error img')).toBeNull();
             expect(sends(desktop)).toHaveLength(1);
             expect(box().value).toBe('Later');
@@ -697,9 +703,9 @@ describe('the console', () => {
             const desktop = chatDesktop(withClaude(old(), true));
             renderConsole(fake, desktop);
             await waitFor(() =>
-                expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'codex'),
+                expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'codex'),
             );
-            const host = screen.getByRole('combobox', { name: 'Agent host' });
+            const host = screen.getByRole('combobox', { name: 'AI host' });
             const option = within(host).getByRole('option', {
                 name: 'Claude Code: Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
             });
@@ -730,7 +736,7 @@ describe('the console', () => {
             expect(note.textContent).toContain(hostile);
             expect(note.querySelector('img')).toBeNull();
             expect(document.querySelector('.composer')?.textContent).not.toContain(
-                'No agent host that drives the chat was found',
+                'No AI host that drives the chat was found',
             );
             expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
 
@@ -741,14 +747,14 @@ describe('the console', () => {
                 expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1),
             );
             await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false));
-            expect(screen.getByRole('combobox', { name: 'Agent host' })).toHaveProperty('value', 'claude');
+            expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'claude');
             expect(document.querySelector('.composer .host-held')).toBeNull();
         });
 
         describe('held under a chat whose host it is, while another host drives the chat', () => {
             const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.send');
             const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
-            const hostMenu = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'Agent host' });
+            const hostMenu = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'AI host' });
             const unreadable =
                 'The version of Claude Code could not be read, so the chat does not run on it. Run `claude --version` in a terminal to see it; the chat needs 2.1.257 or newer, and `claude update` updates it. Then check again.';
 

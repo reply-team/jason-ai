@@ -447,7 +447,7 @@ test('a grant of a command never allows one longer than the card shows, nor one 
     assert.deepEqual(decided.at(-1), { outcome: 'refused', by: 'model', mode: 'ask_first' });
     void broker.ask('turn_1', 'Bash', { command: 'cp notes.md GEMINI.md' });
     await settle();
-    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions an agent reads', detail: 'cp notes.md GEMINI.md', remember: null });
+    assert.deepEqual(sent.at(-1)?.event, { kind: 'permission', request: 'req_2', title: 'Change instructions the AI reads', detail: 'cp notes.md GEMINI.md', remember: null });
 });
 
 test('a grant of a command never covers one whose word names a guarded file outside the working folders', async () => {

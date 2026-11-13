@@ -4,6 +4,6 @@ export function routeCounts(routes: {
     campaign_route_count: number;
     channel_route_count?: number;
 }): string {
-    const line = `${routes.global_override_count} global · ${routes.campaign_route_count} per campaign`;
+    const line = `${routes.global_override_count} global · ${routes.campaign_route_count} per agent`;
     return routes.channel_route_count ? `${line} · ${routes.channel_route_count} of them by channel` : line;
 }

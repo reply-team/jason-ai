@@ -42,7 +42,7 @@ export function WorkItemsScreen() {
             if (known) return;
             const rest = { ...view.filters };
             delete rest.campaign;
-            store.notice.value = 'The campaign in this address no longer exists; its filter was dropped.';
+            store.notice.value = 'The agent in this address no longer exists; its filter was dropped.';
             replace({ screen: 'workitems', tab: view.tab, filters: rest });
         });
     }, [api, view.filters.campaign]);

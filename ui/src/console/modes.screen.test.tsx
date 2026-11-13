@@ -79,7 +79,7 @@ describe('a chat’s access mode', () => {
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
         expect(line()!.textContent).toContain(
-            'Full access: the agent runs commands without asking, except those Jason cannot read.',
+            'Full access: the AI runs commands without asking, except those Jason cannot read.',
         );
         expect(menu().value).toBe('full_access');
     });
@@ -113,7 +113,7 @@ describe('a chat’s access mode', () => {
         await waitFor(() => menu());
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'codex' } });
         await waitFor(() => expect(line()).toBeNull());
         expect(calls(desktop, 'chat.setMode').at(-1)!.args[1]).toBe('ask_first');
         const full = [...menu().options].find((each) => each.value === 'full_access')!;
@@ -128,12 +128,12 @@ describe('a chat’s access mode', () => {
         await waitFor(() => menu());
         const note = () => screen.queryByRole('note', { name: 'What Codex reads' });
         expect(note()).toBeNull();
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'codex' } });
         await waitFor(() => expect(note()).not.toBeNull());
         expect(note()!.textContent).toBe(
             'The chat does not read your Codex config.toml, so a provider or profile set there is not used; connect a key on the Connect card.',
         );
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'claude' } });
         await waitFor(() => expect(note()).toBeNull());
     });
 
@@ -178,12 +178,12 @@ describe('a chat’s access mode', () => {
             const note = () => screen.queryByRole('note', { name: 'What a Codex command can reach' });
             expect(note()).toBeNull();
             for (const id of ['codex', 'codex-api-key']) {
-                fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: id } });
+                fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: id } });
                 await waitFor(() => expect(note()).not.toBeNull());
                 expect(note()!.textContent).toBe(line);
                 expect(note()!.textContent).not.toMatch(/act for you|acts through nothing|network/);
             }
-            fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+            fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'claude' } });
             await waitFor(() => expect(note()).toBeNull());
         },
     );
@@ -222,7 +222,7 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
         status.hosts.find((each) => each.id === 'codex')!.found = true;
         renderConsole(chatDesktop(status));
         await waitFor(() => menu());
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'codex' } });
         choose('full_access');
         await waitFor(() => expect(screen.getByText('Full access runs on Claude Code only.')).toBeTruthy());
         expect(line()).toBeNull();
@@ -294,7 +294,7 @@ describe('Auto-edit', () => {
         await waitFor(() => menu());
         choose('auto_edit');
         await waitFor(() => expect(editing()).not.toBeNull());
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'codex' } });
         await waitFor(() => expect(editing()).toBeNull());
         expect(calls(desktop, 'chat.setMode').at(-1)!.args[1]).toBe('ask_first');
         const edit = [...menu().options].find((each) => each.value === 'auto_edit')!;
@@ -515,7 +515,7 @@ describe('Plan only’s plan card', () => {
     async function planned(desktop: StubDesktop, words = hostile, mark = true, host?: string): Promise<string> {
         await waitFor(() => menu());
         if (host !== undefined)
-            fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: host } });
+            fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: host } });
         choose('plan_only');
         await waitFor(() => expect(menu().value).toBe('plan_only'));
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Plan it' } });
@@ -662,13 +662,13 @@ describe('Plan only’s plan card', () => {
         await planned(desktop);
         await waitFor(() => expect(approve()).not.toBeNull());
         const before = calls(desktop, 'chat.setMode').length;
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'codex' } });
         await waitFor(() => expect(card()!.textContent).toContain(otherHost));
         expect(approve()).toBeNull();
         expect(screen.queryByRole('button', { name: 'Keep planning' })).toBeNull();
         expect(card()!.textContent).not.toContain(codexWords);
         expect(card()!.querySelector('.plan-text')!.textContent).toBe(hostile);
-        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'claude' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'AI host' }), { target: { value: 'claude' } });
         await waitFor(() => expect(approve()).not.toBeNull());
         expect(card()!.textContent).not.toContain(otherHost);
         expect(calls(desktop, 'chat.setMode').length).toBe(before);

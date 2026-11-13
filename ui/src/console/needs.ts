@@ -244,7 +244,7 @@ export function needsView(): Html {
                   ? html`<div class="card needs-empty">
                         <div class="bd">You're all caught up</div>
                         <div class="ask-a">
-                            <button class="btn sm" type="button" ${act('needs.campaigns')}>Open your campaigns</button>
+                            <button class="btn sm" type="button" ${act('needs.campaigns')}>Open your agents</button>
                         </div>
                     </div>`
                   : html`${filterRow()} ${waiting(now, busy)}`

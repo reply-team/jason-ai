@@ -4,7 +4,7 @@ import { t } from './i18n';
 
 describe('words', () => {
     it('are the English table', () => {
-        expect(t('nav.campaigns')).toBe('Campaigns');
+        expect(t('nav.campaigns')).toBe('Agents');
         expect(t('settings.title')).toBe(en['settings.title']);
     });
     it('take parameters, and leave a parameter nobody gave as it is written', () => {

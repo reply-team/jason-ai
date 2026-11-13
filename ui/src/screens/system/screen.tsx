@@ -79,7 +79,7 @@ export function SystemScreen() {
                             </>
                         ) : (
                             <>
-                                Update from a terminal with <code>jason update apply</code>, or ask your agent.
+                                Update from a terminal with <code>jason update apply</code>, or ask your AI.
                             </>
                         )}
                         {info.update.release_notes_url && (

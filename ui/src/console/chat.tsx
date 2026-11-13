@@ -76,7 +76,12 @@ import {
 // The menu beside the composer asks the desktop for the conversation's access mode; the desktop confirms Full access
 // with the person itself, and the page shows the mode the desktop answers with.
 
-const suggestions = ['What is waiting for me?', 'How are my campaigns doing?', 'Help me start a new campaign.'];
+// A chip shows the page's word for a campaign, "agent", and sends the runtime's, "campaign": the AI's own rules say campaign.
+const suggestions: readonly { shown: string; sent: string }[] = [
+    { shown: 'What is waiting for me?', sent: 'What is waiting for me?' },
+    { shown: 'How are my agents doing?', sent: 'How are my campaigns doing?' },
+    { shown: 'Help me start a new agent.', sent: 'Help me start a new campaign.' },
+];
 
 /** The effort levels as the box names them. */
 const effortWords: Readonly<Record<DesktopEffort, string>> = {
@@ -349,10 +354,7 @@ export function sendTurn(id: string, text: string, resent = false, mode?: Deskto
         const held = (heldHostOf(chat) ?? chatHosts(setup.value?.hosts ?? []).held[0])?.belowFloor;
         if (resent)
             changeChat(id, (each) =>
-                failed(
-                    said(each, words, true),
-                    held ?? 'No agent host that drives the chat was found on this machine.',
-                ),
+                failed(said(each, words, true), held ?? 'No AI host that drives the chat was found on this machine.'),
             );
         return;
     }
@@ -533,7 +535,7 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
     const open = last && chat.campaignId === null && !chat.running;
     return html`<div class="ask chat-pick">
         <div class="ask-h">
-            ${svg('camp', 14)}<b>${open ? 'Make this the conversation of' : 'Campaigns this chat made'}</b>
+            ${svg('camp', 14)}<b>${open ? 'Make this the conversation of' : 'Agents this chat made'}</b>
         </div>
         ${
             open
@@ -571,8 +573,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             <div class="glyph">${svg('pulse', 22)}</div>
             <h2>The Feed</h2>
             <p>
-                What happens in your campaigns comes here: a reply, an approval or a question waiting, a campaign
-                created, started or paused, work that stopped, a provider block holding work. Ask about any of it below.
+                What happens in your agents comes here: a reply, an approval or a question waiting, an agent created,
+                started or paused, work that stopped, a provider block holding work. Ask about any of it below.
             </p>
         </div>`;
     if (chat.entries.length === 0)
@@ -582,7 +584,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 <p>Anything that reaches a person waits for your approval.</p>
             </div>
             <div class="sugs">
-                ${suggestions.map((text) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, text)}>${text}</button>`)}
+                ${suggestions.map((chip) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`)}
             </div>`;
     const sentence = host && signInSentence(host);
     const lastPick = [...chat.entries].reverse().find((entry) => entry.kind === 'pick');
@@ -623,8 +625,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             case 'fresh':
                 return noteLine(
                     entry.reason === 'host_changed'
-                        ? `${host?.label ?? 'This agent host'} has not seen this conversation; it was given the last messages.`
-                        : "The agent's memory of this conversation was gone; it starts from the last messages.",
+                        ? `${host?.label ?? 'This AI host'} has not seen this conversation; it was given the last messages.`
+                        : "The AI's memory of this conversation was gone; it starts from the last messages.",
                 );
             case 'notice':
                 return entry.folder === null
@@ -636,14 +638,12 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                           </button>
                       </div>`;
             case 'afresh':
-                return noteLine(
-                    "Started afresh: the agent's next turn begins without its memory of this conversation.",
-                );
+                return noteLine("Started afresh: the AI's next turn begins without its memory of this conversation.");
             case 'line':
                 return feedLine(entry);
             case 'gap':
                 return noteLine(
-                    'More happened while Jason was closed than is shown here; Needs you and Campaigns hold all of it.',
+                    'More happened while Jason was closed than is shown here; Needs you and Agents hold all of it.',
                 );
         }
     });
@@ -832,7 +832,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     className="btn sm"
                     type="button"
                     disabled={chat.running || chat.removing}
-                    title="The agent's next turn begins without its memory of this conversation; what is shown here stays"
+                    title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
                     onClick={() => restartChat(chatId)}
                 >
                     Start afresh
@@ -860,7 +860,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     }}
                 >
                     <div id={`remove-said-${chatId}`}>
-                        Remove this conversation? Its record goes from this computer; the agent host keeps its own
+                        Remove this conversation? Its record goes from this computer; the AI host keeps its own
                         transcript of it.
                     </div>
                     <div className="crow">
@@ -910,8 +910,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 )}
                 {setup.value && !host && held.length === 0 && (
                     <div className="note am">
-                        No agent host that drives the chat was found on this machine. Connect lists the hosts and
-                        installs one.{' '}
+                        No AI host that drives the chat was found on this machine. Connect lists the hosts and installs
+                        one.{' '}
                         <button className="btn sm" type="button" onClick={() => here().dock.show('connect')}>
                             Connect
                         </button>
@@ -956,7 +956,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 />
                 <div className="crow">
                     <select
-                        aria-label="Agent host"
+                        aria-label="AI host"
                         disabled={chat.removing}
                         value={host?.id ?? ownHeld?.id ?? ''}
                         onChange={(event) => {

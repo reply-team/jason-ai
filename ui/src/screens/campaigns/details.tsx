@@ -39,7 +39,7 @@ export function Details({ campaign, now, zone }: Props) {
             <div className="section">
                 <h3>Context</h3>
                 {context.length === 0 ? (
-                    <p className="hint">Nothing yet: the roles read this campaign from its context.</p>
+                    <p className="hint">Nothing yet: the roles read this agent's context.</p>
                 ) : (
                     <dl className="facts">
                         {context.map(([k, v]) => (
@@ -80,7 +80,7 @@ export function Details({ campaign, now, zone }: Props) {
                 </div>
             )}
             <details className="fold">
-                <summary>Raw campaign record</summary>
+                <summary>Raw agent record</summary>
                 <pre>{JSON.stringify(campaign, null, 2)}</pre>
             </details>
         </div>

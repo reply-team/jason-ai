@@ -30,7 +30,7 @@ export function CampaignTable({ campaigns, view, period, filters, summary, activ
             <table className="grid">
                 <thead>
                     <tr>
-                        <th>Campaign</th>
+                        <th>Agent</th>
                         {columns.map((column) => (
                             <th
                                 key={column.key}

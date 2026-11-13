@@ -184,6 +184,6 @@ export async function resolveCampaigns(api: Api, ids: string[], stillAsked: () =
     if (!stillAsked()) return null;
     const kept = read.filter((campaign): campaign is Chosen => campaign !== null);
     campaigns.value = kept;
-    if (kept.length < ids.length) notice.value = 'A campaign in this address no longer exists; it was left out.';
+    if (kept.length < ids.length) notice.value = 'An agent in this address no longer exists; it was left out.';
     return kept.map((campaign) => campaign.id);
 }

@@ -36,7 +36,7 @@ export function CampaignResults({ period, shown, failed }: Props) {
     if (failed) return null;
     return (
         <div className="campaign-tabs-results">
-            <div className="tiles" role="group" aria-label="The campaign’s results" aria-busy={shown === null}>
+            <div className="tiles" role="group" aria-label="The agent’s results" aria-busy={shown === null}>
                 {figures.map(({ column, inPeriod, of }) => {
                     const value = shown ? of(shown) : null;
                     const measure = inPeriod ? over(period) : 'now';

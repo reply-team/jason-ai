@@ -99,7 +99,11 @@ listed, so whatever arrives next is shown. After a decision, the next item opene
 shows. Approving, rejecting and answering are the person's, here as on the command line, and so are the two buttons that
 brief an agent on one item, [Copy prompt](#copy-prompt) and [Open an AI session](#open-an-ai-session).
 
-## Campaigns
+## Agents
+
+The page calls a campaign with its chat an agent: **Agents** in the sidebar, **Add to agent**, "Find an agent". It is the
+harness's campaign and nothing else. Only the words on the screen change; the commands, the API fields, the addresses
+and the ids keep `campaign`, and so does the rest of this page, which describes them.
 
 Every campaign, its people counted two ways: **Summary** is where they stand now (`jason campaign summary`), and
 **Activity** what happened to them today, in the last 7 days or in the last 30 days, the days of this browser's time
@@ -132,24 +136,24 @@ campaign's work while what is running finishes; the provider's own sequence keep
 `jason campaign start`, which resumes a paused one, with your reason). An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
-nowhere; the Campaigns list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
+nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
 to reach; what you send there starts a set-up chat, about no campaign yet, and no chat is made before you send. The
 sidebar's first item is the **Feed**, the desktop's main chat; below **New chat** it lists the other conversations it
 keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
 conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. What happens in
-the campaigns arrives in the Feed as one line each (a reply, an approval or a question waiting, a campaign created,
+the agents arrives in the Feed as one line each (a reply, an approval or a question waiting, an agent created,
 started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
-conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the agent hears the lines that came with your
+conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the AI hears the lines that came with your
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
-another, offers what its last turn made to pick from. **Start afresh** begins the agent's next turn without its memory
+another, offers what its last turn made to pick from. **Start afresh** begins the AI's next turn without its memory
 of the conversation and keeps what is shown; **Remove** asks first, then takes the conversation off this computer, and
-the agent host keeps its own transcript of it. What the desktop refuses is said in its own words. The browser has no chat, and no Chat
+the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. The browser has no chat, and no Chat
 tab.
 
 ## Performance
 
-The whole operation over time, from the same counts as Campaigns' Activity: what happened to people today, in the last
+The whole operation over time, from the same counts as the Agents page's Activity: what happened to people today, in the last
 7, 30 or 90 days, across every campaign not archived or the ones chosen, each person counted once however many campaigns
 count them (`jason campaign activity` and its `total`). Two charts show contacted and replied people by the hour today,
 by the day over 7 or 30 days and by the week over 90, in this browser's time zone (`jason campaign activity-by-period`):
@@ -189,7 +193,7 @@ campaigns shows the one the list is narrowed to, else the one their latest activ
 excluded, with "+N" naming the others; under a chip, the first of those that holds the count; a person on no campaign
 shows dashes. While a new list is on its way the rows stay as they were fetched. Last activity is the newest journal
 line about the person, of any kind. Opening a person
-shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to campaign**
+shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to agent**
 (`jason campaign add-contacts`). The **Timeline** puts their open work above the now line and what happened to them
 below it: the journal's lines about them (`jason journal list --contact`), narrowed by chips to replies, work, decisions
 or changes, with their additions to and exclusions from campaigns in place. **Details** is their record: channels,
@@ -255,10 +259,10 @@ system's, in the order Light, Dark, System. A new installation meets Light; a br
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
 follows it.
 
-**Chat** says that the chat with an agent is part of Jason Desktop and links to the releases page where it is
-downloaded, and says that everything here also works from a session with your agent in a terminal, with the skills Jason
-deployed. The browser has no chat and starts no agent: the runtime starts no process for a screen, and a browser tab cannot ask you
-before the agent acts.
+**Chat** says that the chat with the AI is part of Jason Desktop and links to the releases page where it is
+downloaded, and says that everything here also works from a session with your AI in a terminal, with the skills Jason
+deployed. The browser has no chat and starts no AI: the runtime starts no process for a screen, and a browser tab cannot ask you
+before the AI acts.
 
 ## Accounts
 
@@ -276,9 +280,9 @@ asking your AI, whose `operating-the-installation` skill covers it. The page wri
 
 [Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
 object the desktop puts on the page, `window.jasonDesktop`. In it the chat is home, in a dock with panels beside it:
-**Needs you** (this page's Attention), **Campaigns** and **Activity**, which follow the journal as it is written, and
+**Needs you** (this page's Attention), **Agents** and **Activity**, which follow the journal as it is written, and
 **Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
-channels are set up. An empty Needs you card says you are caught up and offers **Open your campaigns**. The browser's
+channels are set up. An empty Needs you card says you are caught up and offers **Open your agents**. The browser's
 other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same dock, and every
 screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream

@@ -260,7 +260,7 @@ export type DesktopChatEvent =
     | { kind: 'gap' }
     /**
      * A sentence the desktop says once, in its own words: a campaign's or project's folder left out of the chat because its
-     * `.claude` holds skills, agents or commands, or, with `folder`, the name of the folder a Full access grant worked in,
+     * `.claude` holds skills, subagents or commands, or, with `folder`, the name of the folder a Full access grant worked in,
      * kept for seven days after Full access ended, which `chat.openFolder` opens. A notice is not kept with the
      * conversation.
      */

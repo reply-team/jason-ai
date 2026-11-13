@@ -82,12 +82,12 @@ interface GuardedName {
     chatsOwn?: 'instructions' | 'configuration' | 'servers';
 }
 
-const instructionsTitle = 'Change instructions an agent reads';
+const instructionsTitle = 'Change instructions the AI reads';
 /** The card's title for a tool of an MCP server of the person's own: one title, whatever the server or the tool. */
 export const personsToolTitle = 'Use one of your own tools';
 /** The card's title for a command that changes the MCP servers an agent host loads (`claude mcp`, `codex mcp`). */
-export const serversTitle = 'Change the MCP servers an agent loads';
-const loadsTitle = 'Change the skills or settings an agent loads';
+export const serversTitle = 'Change the MCP servers the AI loads';
+const loadsTitle = 'Change the skills or settings the AI loads';
 
 /**
  * The names whose files act on what runs next, as any component of a path, or a run of components: `.claude` configures
@@ -103,7 +103,7 @@ const loadsTitle = 'Change the skills or settings an agent loads';
  * the names the runtime and the hosts' table use.
  */
 export const guardedNames: readonly GuardedName[] = [
-    { name: '.claude', title: 'Change the agent\'s own settings', chatsOwn: 'configuration' },
+    { name: '.claude', title: 'Change the AI\'s own settings', chatsOwn: 'configuration' },
     { name: '.git', title: 'Change a repository\'s own files' },
     { name: '.jason', title: 'Change a folder\'s Jason marker' },
     { name: '.agents', title: loadsTitle, chatsOwn: 'configuration' },
@@ -162,8 +162,8 @@ const commandRefusal = 'That command is a person\'s own act or changes the insta
 const confinedRefusal = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
 const lookupRefusal = 'That command changes where the shell finds a program, so the jason it would start may not be the desktop\'s: the chat never runs it. Nothing was run.';
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
-const configurationRefusal = 'That folder is the chat\'s own agent settings and skills, which the desktop keeps: the chat never changes it. Nothing was done.';
-const serversRefusal = 'That file would name MCP servers for the chat\'s own agent, which only the person chooses: the chat never changes it. Nothing was done.';
+const configurationRefusal = 'That folder is the chat\'s own AI settings and skills, which the desktop keeps: the chat never changes it. Nothing was done.';
+const serversRefusal = 'That file would name MCP servers for the chat\'s own AI, which only the person chooses: the chat never changes it. Nothing was done.';
 
 /** The refusal of a write of, or under, one of the chat's own names directly in the chat folder. */
 function ownRefusal(kind: NonNullable<GuardedName['chatsOwn']>): string {
@@ -1019,7 +1019,7 @@ function chatsOwnPlace(places: readonly string[], scope: ChatScope): string | nu
  * what an agent loads: the reason the turn's hook gives with its `ask`. One sentence for every such act; the card itself
  * is the one Ask first shows.
  */
-export const heldSentence = 'Jason cannot read plainly what this would do, or it would change what an agent loads, so Full access asks you about it first.';
+export const heldSentence = 'Jason cannot read plainly what this would do, or it would change what the AI loads, so Full access asks you about it first.';
 
 /**
  * A Full access judgement: refused, runs with no question, or held: the person is asked (`heldSentence`). A held shell
