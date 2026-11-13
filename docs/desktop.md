@@ -583,17 +583,19 @@ seen. The x64 Mac executable is built and signed and not covered by the suite.
 
 Take off what Jason placed first, then the application. What stays in every case is your data: the data directory
 (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one `Harness:Root` names) and the
-updater's cache named above.
+updater's cache named above. The demo's two folders are not your data: the removal takes them off too.
 
 - **Windows.** Remove Jason from Installed apps in Settings. The uninstaller stops the runtime the application carries and
   removes nothing when it does not stop, then takes off the PATH command's files that are its own, Open Jason at Login,
   the `jason-desktop://` link registration when it names this application, and the runtime's logon start when that start
-  names this application's `jason`, and names what it leaves.
+  names this application's `jason`, then the demo's two folders, and names what it leaves.
 - **macOS and Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   Windows uninstall's steps: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
   Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
   files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
-  them. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
+  them. It last takes off the demo's two folders, its data directory and its harness root, which are yours with `-demo`
+  after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
+  one that does not stop keeps both folders; a link in place of either is left and named. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
   the application: move Jason.app to the Trash, or `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
 - **On macOS and Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
   Jason.app on macOS, `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason`

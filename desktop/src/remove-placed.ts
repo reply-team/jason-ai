@@ -5,7 +5,8 @@
  * The steps are the uninstall's own, in `uninstall.ts`: stop the runtime this desktop's jason runs as (on an AppImage,
  * any copy of its jason), going no further when it does not stop; turn off Open Jason at Login; turn off the runtime's
  * start at logon when it starts this application's jason; remove the PATH command's files that are its own; on an
- * AppImage, remove the copies of its jason when nothing runs from them. This module holds the dialogs and the wiring.
+ * AppImage, remove the copies of its jason when nothing runs from them; and the demo's two folders, its data directory and
+ * its harness root, once the demo's own runtime is stopped. This module holds the dialogs and the wiring.
  *
  * A confirmation comes first, naming what will be taken off and what stays, with Cancel the default button; Cancel
  * changes nothing. The closing dialog says each step's outcome, names a step that failed with what the person can do by
@@ -19,6 +20,7 @@ import { bundleEntries, copiesBundle } from './bundle-copy.ts';
 import { inert } from './inert.ts';
 import type { LinuxPackage } from './linux-package.ts';
 import type { Logger } from './log.ts';
+import { demoDirectory } from './mode.ts';
 import type { StopOutcome } from './own-runtime.ts';
 import { commandFolder, type CommandStatus } from './path-command.ts';
 import type { DesktopPaths } from './paths.ts';
@@ -59,6 +61,8 @@ export interface RemovalScope {
     dataDirectory: string;
     harnessRoot: string;
     updaterCache: string;
+    /** The demo's data directory and harness root, the person's with `-demo` after each; absent where the start knows no demo. */
+    demo?: { data: string; harnessRoot: string };
     /** `removeApplication`'s words. */
     next: string;
 }
@@ -85,6 +89,7 @@ export function removalQuestion(scope: RemovalScope): Question {
         'The runtime’s start at logon, if it starts this application’s jason',
         command,
         ...(scope.bundles === null ? [] : [`The copies of jason in ${inert(scope.bundles)}, if nothing runs from them`]),
+        ...(scope.demo === undefined ? [] : [`The demo, if it was ever opened: its data directory, ${inert(scope.demo.data)}, and its harness root, ${inert(scope.demo.harnessRoot)}, with the sample campaigns and folders in them, once its runtime is stopped`]),
     ];
     const stays = [
         `The data directory, ${inert(scope.dataDirectory)}, with the campaigns, the journal, the settings and the logs`,
@@ -249,6 +254,8 @@ export interface PlacedInput {
     login: UninstallDeps['login'];
     /** `stopOwnRuntime` asked as if `executable` were the carried jason. */
     stopAs(executable: string): Promise<StopOutcome>;
+    /** Stops the demo's runtime by the demo's own run file (`stopDemoRuntime`); the person's is never looked at. */
+    stopDemo(): Promise<StopOutcome>;
     /** `processesRunFrom`. */
     runsFrom(folder: string): RunsFrom;
     log: Logger;
@@ -265,6 +272,7 @@ export function placedRemoval(input: PlacedInput): Pick<RemovalDeps, 'scope' | '
     const autostart = input.autostart ?? (input.version === null ? null : input.makeAutostart());
     const root = () => harnessRoot(input.env, input.home, input.paths.installationSettings);
     const cache = () => updaterCache(input.env, input.home, input.platform);
+    const demo = () => ({ data: demoDirectory(input.paths.data), harnessRoot: demoDirectory(root()) });
     const candidates = (): string[] => {
         const entries = bundles === null ? null : bundleEntries(bundles);
         const copies = entries?.kind === 'folder' ? entries.copies.map((name) => join(bundles ?? '', name, 'jason')) : [];
@@ -277,6 +285,7 @@ export function placedRemoval(input: PlacedInput): Pick<RemovalDeps, 'scope' | '
             dataDirectory: input.paths.data,
             harnessRoot: root(),
             updaterCache: cache(),
+            demo: demo(),
             next: removeApplication(input.platform, input.form, input.execPath),
         }),
         remove: () =>
@@ -293,6 +302,7 @@ export function placedRemoval(input: PlacedInput): Pick<RemovalDeps, 'scope' | '
                 dataDirectory: input.paths.data,
                 harnessRoot: root(),
                 updaterCache: cache(),
+                demo: { ...demo(), stop: () => input.stopDemo() },
                 log: input.log,
             }),
     };

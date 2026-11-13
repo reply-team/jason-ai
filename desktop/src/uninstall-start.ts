@@ -21,6 +21,8 @@ import { LoginItem, RuntimeAutostart } from './login-item.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { fileLogger, limitsFrom } from './log.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
+import { stopDemoRuntime } from './demo-runtime.ts';
+import { demoDirectory } from './mode.ts';
 import { dataDirectory, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
@@ -90,6 +92,12 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         dataDirectory: paths.data,
         harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
         updaterCache: updaterCache(process.env, home, process.platform),
+        // The demo's two folders, beside the person's: the uninstaller's start acts on the person's installation alone.
+        demo: {
+            data: demoDirectory(paths.data),
+            harnessRoot: demoDirectory(harnessRoot(process.env, home, paths.installationSettings)),
+            stop: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) }),
+        },
         log,
         ...linkStep(),
     });

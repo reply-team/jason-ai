@@ -17,6 +17,7 @@ that a person needs.
 | Start one when none is up | `jason runtime start` (never `jason runtime run` as a child of its own) |
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
 | Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries |
+| Carry the demo provider | every build carries `plugins/demo` as `resources/bundle/plugins/demo`, the package's files exactly as the tree holds them (`scripts/prepare.mjs`; a pack refuses a bundle without it), and the demo's seed places a copy of it as `<demo data>/plugins/demo/` (`src/demo-plugin.ts`); the person's installation never receives it |
 | Load the window | the link `jason ui open --no-open` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
@@ -595,7 +596,8 @@ with another data directory. Where PowerShell is not available nothing is looked
 runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
 stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason at Login, the runtime's
 start at logon when it starts this application's `jason`, and the `jason-desktop` link registration when it names this
-application, and names what it leaves: the data directory, the harness root
+application, and the demo's two folders, its data directory and its harness root (the person's with `-demo` after
+each), once the demo's own runtime is stopped, and names what it leaves: the data directory, the harness root
 and the updater's cache.
 
 On macOS there is no installer, so nothing looks when Jason.app is moved to the Trash, and the desktop's own look before
@@ -616,7 +618,9 @@ Jason.app (`/Applications/Jason.app/Contents/Resources/bundle/jason` where it wa
 4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
 
 What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
-`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`.
+`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`. The demo's two folders are not
+among them: the menu act takes them off, and by hand they are `~/.jason-demo` and `~/Jason-demo` (the data directory's and
+the harness root's own names with `-demo` after them), deleted once the demo's runtime is stopped.
 
 ## On Linux
 
@@ -653,7 +657,8 @@ What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), 
 - Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which takes the same steps
   as on macOS. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
   the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
-  once that leaves it empty; a link or anything else there stays, and is named. It then says what removes the
+  once that leaves it empty; a link or anything else there stays, and is named. It also takes off the demo's two folders
+  (see macOS above). It then says what removes the
   application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
   that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
   `Harness:Root` names) and the updater's cache, `~/.cache/jason-desktop-updater`. When Jason will not start, take

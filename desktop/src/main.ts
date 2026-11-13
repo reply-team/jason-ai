@@ -387,6 +387,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               makeAutostart: () => new RuntimeAutostart({ cli, log }),
               login,
               stopAs: (carried) => stopOwnRuntime(ownRuntimeDeps(process.platform, carried, paths.runFile, cli)),
+              stopDemo: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }),
               runsFrom: (folder) => processesRunFrom(folder),
               log,
           })

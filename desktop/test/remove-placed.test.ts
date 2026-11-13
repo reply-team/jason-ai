@@ -361,6 +361,7 @@ test('on an AppImage a runtime started from any copy of its jason is this applic
         login: { isOn: () => false, set: async () => undefined },
         // The runtime runs from 0.34.0's copy: asked as this start's copy it is another's; asked as 0.34.0's, it is stopped.
         stopAs: async (executable) => (asked.push(executable), executable.includes('0.34.0') ? { kind: 'stopped' } : { kind: 'another' }),
+        stopDemo: async () => ({ kind: 'none' }),
         runsFrom: () => 'none',
         log: memoryLog(),
     });
@@ -693,6 +694,7 @@ test('a start that offers neither the PATH command nor the start at logon still 
         makeAutostart: () => (made.push('autostart'), { registration: async () => ({ registered: true, executable: `${paths.bundle}/0.34.0/jason` }), set: async (on: boolean) => (made.push(`autostart ${on}`), false) }),
         login: { isOn: () => false, set: async () => undefined },
         stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
+        stopDemo: async (): Promise<StopOutcome> => ({ kind: 'none' }),
         runsFrom: (): RunsFrom => 'none',
         log: memoryLog(),
     };
@@ -765,4 +767,67 @@ test('the tray’s count starts nothing between the act’s first step and its l
             assert.equal(pending.length, 1);
         }
     }
+});
+
+// The demo's two folders in the menu act: named in the confirmation, taken off by the same steps as the uninstall's,
+// and worked out from the person's own data directory and harness root.
+
+test('the act names the demo’s two folders in what it takes off, and the person’s own in what it leaves', async (t) => {
+    const b = bench(t, 'deb');
+    await placeAll(b);
+    const question = removalQuestion({ ...scope(b), demo: { data: `${b.home}/.jason-demo`, harnessRoot: `${b.home}/Jason-demo` } });
+    const [off, stays] = question.detail.split('\n\n');
+    assert.ok(off?.includes(`its data directory, ${b.home}/.jason-demo, and its harness root, ${b.home}/Jason-demo,`));
+    assert.ok(!stays?.includes('-demo'), 'the demo is never among what stays');
+    assert.ok(stays?.includes(`The data directory, ${b.home}/.jason`));
+    // A start that knows no demo says nothing of one.
+    assert.ok(!removalQuestion(scope(b)).detail.includes('demo'));
+});
+
+test('the act takes off the demo beside the person’s installation, worked out from the person’s own folders', async (t) => {
+    const root = scratch(t);
+    const paths = desktopPaths(`${root}/data`);
+    const person = `${root}/people/Jason`;
+    for (const folder of [paths.data, `${root}/data-demo`, person, `${person}-demo`]) mkdirSync(folder, { recursive: true });
+    writeFileSync(`${paths.data}/kept.txt`, 'x');
+    writeFileSync(`${person}/kept.txt`, 'x');
+    writeFileSync(`${root}/data-demo/file.txt`, 'x');
+    writeFileSync(`${person}-demo/file.txt`, 'x');
+    const stopped: string[] = [];
+    const removal = placedRemoval({
+        platform: 'linux',
+        home: `${root}/home`,
+        env: { JASON_Harness__Root: person },
+        form: { form: 'deb' },
+        execPath: '/opt/Jason/jason-desktop-app',
+        executable: '/opt/Jason/resources/bundle/jason',
+        version: '0.39.0',
+        paths,
+        command: null,
+        autostart: null,
+        makeCommand: () => ({ status: () => ({ state: 'unsupported' as const, executable: '' }), remove: () => ({ state: 'unsupported' as const, executable: '' }) }),
+        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), set: async () => false }),
+        login: { isOn: () => false, set: async () => undefined },
+        stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
+        stopDemo: async (): Promise<StopOutcome> => (stopped.push('demo'), { kind: 'stopped' }),
+        runsFrom: (): RunsFrom => 'none',
+        log: memoryLog(),
+    });
+    assert.deepEqual(removal.scope().demo, { data: `${paths.data}-demo`, harnessRoot: `${person}-demo` });
+    const report = await removal.remove();
+    assert.deepEqual(stopped, ['demo']);
+    assert.equal(existsSync(`${root}/data-demo`), false);
+    assert.equal(existsSync(`${person}-demo`), false);
+    assert.equal(existsSync(`${paths.data}/kept.txt`), true);
+    assert.equal(existsSync(`${person}/kept.txt`), true);
+    assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'removed' });
+});
+
+test('the desktop gives both removals the demo’s stop, from the person’s directory', () => {
+    const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes('stopDemo: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }),'));
+    const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
+    assert.ok(start.includes('data: demoDirectory(paths.data),'));
+    assert.ok(start.includes('harnessRoot: demoDirectory(harnessRoot(process.env, home, paths.installationSettings)),'));
+    assert.ok(start.includes('stop: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data,'));
 });
