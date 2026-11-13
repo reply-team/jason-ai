@@ -58,6 +58,10 @@ test('the places are the hosts the desktop finds, a terminal, the editors instal
     assert.deepEqual(ids(placesFound(mac, { claude: true, codex: false })), ['claude', 'terminal', 'vscode', 'cursor', 'windsurf', 'files', 'copy']);
     assert.deepEqual(ids(placesFound(probes('linux', []), { claude: false, codex: false })), ['terminal', 'copy']);
     assert.deepEqual(placesFound(linux, { claude: true, codex: false }).find((place) => place.id === 'claude'), { id: 'claude', label: 'Claude Code' });
+    // The file manager goes by the system's own name.
+    assert.equal(placesFound(windows, { claude: false, codex: false }).find((place) => place.id === 'files')?.label, 'File Explorer');
+    assert.equal(placesFound(mac, { claude: false, codex: false }).find((place) => place.id === 'files')?.label, 'Finder');
+    assert.equal(placesFound(linux, { claude: false, codex: false }).find((place) => place.id === 'files')?.label, 'File manager');
 });
 
 test('the default is the place used last while it is here, else Claude Code, else the first place that opens something; never Copy path', () => {

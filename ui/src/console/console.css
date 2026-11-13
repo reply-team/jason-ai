@@ -1212,10 +1212,20 @@ body,
     border-radius: 8px;
     box-shadow: 0 6px 18px rgb(15 23 42 / 14%);
 }
-.jc-console .open-in-folder {
-    padding: 4px 10px;
+.jc-console .open-in-header {
+    padding: 6px 10px 2px;
     color: var(--mute);
     font-size: 12px;
+    font-weight: 600;
+}
+.jc-console .open-in-menu small {
+    display: block;
+    color: var(--mute);
+    font-size: 12px;
+}
+.jc-console .open-in-toast {
+    color: var(--mute);
+    font-size: 13px;
 }
 .jc-console .open-in-menu button {
     padding: 5px 10px;

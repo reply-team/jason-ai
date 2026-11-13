@@ -123,6 +123,11 @@ export function findEditor(id: EditorId, probes: Probes): Found | null {
     return null;
 }
 
+/** What the system calls its file manager. */
+export function fileManagerName(platform: NodeJS.Platform): string {
+    return platform === 'darwin' ? 'Finder' : platform === 'win32' ? 'File Explorer' : 'File manager';
+}
+
 /** The file manager's program, or null where there is none to find. */
 export function fileManager(probes: Probes): string | null {
     if (probes.platform === 'win32') return win32.join(probes.env.SystemRoot ?? probes.env.windir ?? 'C:\\Windows', 'explorer.exe');
@@ -150,7 +155,7 @@ export function placesFound(probes: Probes, hosts: { claude: boolean; codex: boo
     for (const id of editorIds) if (findEditor(id, probes) !== null) found.push(id);
     if (fileManager(probes) !== null) found.push('files');
     found.push('copy');
-    return found.map((id) => ({ id, label: labels[id] }));
+    return found.map((id) => ({ id, label: id === 'files' ? fileManagerName(probes.platform) : labels[id] }));
 }
 
 /**

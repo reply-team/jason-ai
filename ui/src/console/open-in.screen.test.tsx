@@ -53,12 +53,12 @@ const opens = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name
 const targets = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'openIn.targets');
 const split = () => screen.getByRole('group', { name: 'Open in' });
 const mainPart = () => within(split()).getAllByRole('button')[0]!;
-const arrow = () => screen.getByRole('button', { name: 'Choose where to open' });
+const arrow = () => screen.getByRole('button', { name: 'More places to open' });
 const menu = () => screen.getByRole('menu');
 const items = () =>
     within(menu())
         .getAllByRole('menuitem')
-        .map((each) => each.textContent);
+        .map((each) => each.querySelector('span')?.textContent);
 
 beforeEach(() => {
     chats.value = {};
@@ -100,13 +100,37 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(opens(desktop)[0]!.args).toEqual(['claude', undefined]);
     });
 
-    it('lists the places of this computer in the arrow’s menu, names the folder and marks the default', async () => {
+    it('lists the places under his headers, with his subtitles, and marks the default', async () => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         fireEvent.click(arrow());
-        expect(items()).toEqual(['Claude Code', 'Codex', 'Terminal', 'VS Code', 'Zed', 'File manager', 'Copy path']);
-        expect(within(menu()).getByText('Folder: Jason')).not.toBeNull();
-        expect(within(menu()).getByRole('menuitem', { name: 'Claude Code' }).className).toBe('on');
+        expect(items()).toEqual([
+            'Claude Code',
+            'Codex',
+            'VS Code',
+            'Zed',
+            'New terminal',
+            'File manager',
+            'Copy path',
+        ]);
+        expect([...menu().children].map((each) => each.className)).toEqual([
+            'open-in-header',
+            'on',
+            '',
+            'open-in-header',
+            '',
+            '',
+            '',
+            '',
+            '',
+        ]);
+        expect(within(menu()).getByText('Agents')).not.toBeNull();
+        expect(within(menu()).getByText('Editors')).not.toBeNull();
+        expect(within(menu()).getAllByText('A new session in a terminal')).toHaveLength(2);
+        // Copy path carries the folder as its subtitle; the arrow carries his title.
+        expect(within(within(menu()).getByRole('menuitem', { name: /^Copy path/ })).getByText('Jason')).not.toBeNull();
+        expect(arrow().getAttribute('title')).toBe('Open in…');
+        expect(menu().getAttribute('aria-label')).toBe('Open in…');
         expect(arrow().getAttribute('aria-expanded')).toBe('true');
         expect(opens(desktop)).toEqual([]);
         fireEvent.keyDown(document, { key: 'Escape' });
@@ -127,14 +151,15 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         await renderConsole(kept, desktop);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Terminal'));
         fireEvent.click(arrow());
-        expect(items()).toEqual(['Terminal', 'Cursor', 'Copy path']);
+        expect(items()).toEqual(['Cursor', 'New terminal', 'Copy path']);
+        expect(within(menu()).queryByText('Agents')).toBeNull();
     });
 
     it('opens a place chosen from the menu, closes the menu, and the place used last becomes the main part', async () => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         fireEvent.click(arrow());
-        fireEvent.click(within(menu()).getByRole('menuitem', { name: 'VS Code' }));
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
         expect(screen.queryByRole('menu')).toBeNull();
         await waitFor(() => expect(mainPart().textContent).toBe('Open in VS Code'));
         expect(opens(desktop).map((each) => each.args)).toEqual([['vscode', undefined]]);
@@ -147,11 +172,37 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         fireEvent.click(arrow());
-        fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Copy path' }));
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^Copy path/ }));
         await waitFor(() => expect(opens(desktop)).toHaveLength(1));
         expect(opens(desktop)[0]!.args).toEqual(['copy', undefined]);
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(1));
         expect(mainPart().textContent).toBe('Open in Claude Code');
+    });
+
+    it('says what was opened after it opens, and that Jason there works with the same data where that is true', async () => {
+        await renderConsole(kept);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(mainPart());
+        await waitFor(() => expect(document.querySelector('.open-in-toast')).not.toBeNull());
+        const toast = document.querySelector<HTMLElement>('.open-in-toast')!;
+        expect(toast.textContent).toBe(
+            'Opened Jason in Claude Code. Jason there works with the same data as this window.',
+        );
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
+        // An editor already running keeps its own environment, so in the demo the second sentence is left off.
+        await waitFor(() =>
+            expect(document.querySelector('.open-in-toast')?.textContent).toBe(
+                kept === 'demo'
+                    ? 'Opened Jason in VS Code.'
+                    : 'Opened Jason in VS Code. Jason there works with the same data as this window.',
+            ),
+        );
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^Copy path/ }));
+        await waitFor(() =>
+            expect(document.querySelector('.open-in-toast')?.textContent).toBe('Copied the path of Jason.'),
+        );
     });
 
     it('says the desktop’s refusal beside the button and keeps it there', async () => {
@@ -159,7 +210,7 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         desktop.refuse.set('openIn.open', 'Cursor could not be started.');
         fireEvent.click(arrow());
-        fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Terminal' }));
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^New terminal/ }));
         const alert = await waitFor(() => within(split().parentElement!).getByRole('alert'));
         expect(alert.textContent).toBe('Cursor could not be started.');
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(1));

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DesktopOpenInAnswer, DesktopOpenInPlace, DesktopRefusal, JasonDesktop } from '../platform/desktop';
 import { t } from '../platform/i18n';
+import { mode } from '../platform/mode';
 import { chats, currentChat } from './state';
 
 // "Open in": the split button of the console's top bar, in Live and in Demo alike. The main part opens the folder in the
 // default place, the arrow lists every place this computer has. The page names a place and, where a campaign's chat is
 // in front, that campaign; it never holds or sends a path, and the folder's name it shows comes from the desktop.
+
+const editorIds = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
 
 const refused = (answer: unknown): answer is DesktopRefusal =>
     typeof answer === 'object' && answer !== null && 'refused' in answer;
@@ -22,6 +25,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     const [answer, setAnswer] = useState<DesktopOpenInAnswer | null>(null);
     const [problem, setProblem] = useState<string | null>(null);
     const [menu, setMenu] = useState(false);
+    const [toast, setToast] = useState<string | null>(null);
     const root = useRef<HTMLDivElement>(null);
 
     const read = useCallback(async () => {
@@ -68,11 +72,47 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         );
         // The place used last is the next default; a refusal stays on screen after the read.
         await read();
-        if (said !== null) setProblem(said);
+        if (said !== null) {
+            setProblem(said);
+            return;
+        }
+        const chosen = answer?.places.find((each) => each.id === place);
+        const folder = answer?.folder ?? '';
+        if (place === 'copy') setToast(t('openIn.copied', { folder }));
+        else {
+            // Jason in a terminal works with this window's data. An editor already running keeps the environment it started
+            // with, so in the demo that sentence is said of the terminals alone.
+            const terminal = place === 'claude' || place === 'codex' || place === 'terminal';
+            const same = terminal || mode.value !== 'demo';
+            setToast(
+                t('openIn.opened', { folder, place: chosen?.label ?? '' }) + (same ? ' ' + t('openIn.sameData') : ''),
+            );
+        }
     };
+
+    useEffect(() => {
+        if (toast === null) return;
+        const gone = setTimeout(() => setToast(null), 6000);
+        return () => clearTimeout(gone);
+    }, [toast]);
 
     const places = answer?.places ?? [];
     const main = places.find((each) => each.id === answer?.default);
+    const agents = places.filter((each) => each.id === 'claude' || each.id === 'codex');
+    const editors = places.filter((each) => (editorIds as readonly string[]).includes(each.id));
+    const rest = places.filter((each) => !agents.includes(each) && !editors.includes(each));
+    const item = (place: { id: DesktopOpenInPlace; label: string }, subtitle?: string, text?: string) => (
+        <button
+            key={place.id}
+            type="button"
+            role="menuitem"
+            className={place.id === answer?.default ? 'on' : undefined}
+            onClick={() => void open(place.id)}
+        >
+            <span>{text ?? place.label}</span>
+            {subtitle !== undefined && <small>{subtitle}</small>}
+        </button>
+    );
     return (
         <div className="open-in" ref={root}>
             {problem !== null && (
@@ -93,6 +133,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     type="button"
                     className="open-in-arrow"
                     aria-label={t('openIn.choose')}
+                    title={t('openIn.title')}
                     aria-haspopup="menu"
                     aria-expanded={menu}
                     disabled={answer === null}
@@ -104,20 +145,24 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     ▾
                 </button>
             </div>
+            {toast !== null && (
+                <span className="open-in-toast" role="status">
+                    {toast}
+                </span>
+            )}
             {menu && answer !== null && (
-                <div className="open-in-menu" role="menu" aria-label={t('openIn.menu', { folder: answer.folder })}>
-                    <div className="open-in-folder">{t('openIn.folder', { folder: answer.folder })}</div>
-                    {places.map((place) => (
-                        <button
-                            key={place.id}
-                            type="button"
-                            role="menuitem"
-                            className={place.id === answer.default ? 'on' : undefined}
-                            onClick={() => void open(place.id)}
-                        >
-                            {place.label}
-                        </button>
-                    ))}
+                <div className="open-in-menu" role="menu" aria-label={t('openIn.title')}>
+                    {agents.length > 0 && <div className="open-in-header">{t('openIn.agents')}</div>}
+                    {agents.map((place) => item(place, t('openIn.session')))}
+                    {editors.length > 0 && <div className="open-in-header">{t('openIn.editors')}</div>}
+                    {editors.map((place) => item(place))}
+                    {rest.map((place) =>
+                        item(
+                            place,
+                            place.id === 'copy' ? answer.folder : undefined,
+                            place.id === 'terminal' ? t('openIn.terminal') : undefined,
+                        ),
+                    )}
                 </div>
             )}
         </div>
