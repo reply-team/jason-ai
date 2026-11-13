@@ -33,6 +33,7 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
+import { demoPlaces, preparingPage, readyTheSample, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
 import { applyMode, demoMenu, enterRun, offersOf, openDirectory, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 import { holdDemoQuit, stopDemoRuntime } from './demo-runtime.ts';
 import { writeDemoSettings } from './demo-settings.ts';
@@ -417,7 +418,33 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const refusal = applyMode('live', modeDeps);
         if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
     };
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back });
+    // Start the Demo Over: the demo's runtime is stopped, its two folders are removed, and the desktop starts again on the
+    // demo, whose start finds no marker and makes the sample behind the preparing page. Refused in Live; the person's own
+    // installation is never touched.
+    const startOver = async (): Promise<{ refused: string } | null> => {
+        if (runOn.mode !== 'demo') return { refused: 'Start the Demo Over is only in the demo.' };
+        const outcome = await startDemoOver({
+            seed: { places: demoWhere, removeTree: (path) => rmSync(path, { recursive: true, force: true }) },
+            stopRuntime: async () => {
+                const stopped = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
+                log.info('demo_runtime_stopped', { Outcome: stopped.kind });
+                return stopped.kind === 'stopped' || stopped.kind === 'none';
+            },
+            relaunch: () => modeDeps.relaunch(),
+        });
+        if (outcome.kind === 'refused') {
+            log.warn('demo_start_over_refused', {});
+            return { refused: outcome.why };
+        }
+        log.info('demo_start_over', {});
+        return null;
+    };
+    const startOverFromMenu = () => {
+        void startOver().then((refusal) => {
+            if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
+        });
+    };
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back, startOver: startOverFromMenu });
     desk.open();
     showWindow = () => desk.show();
     const repointed = (async () => {
@@ -458,6 +485,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     handle(ipcMain, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
     handle(ipcMain, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened }), refused);
     handle(ipcMain, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
+    handle(ipcMain, 'mode.startOver', origin, () => startOver(), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
@@ -572,6 +600,15 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             },
         });
         runtimeVersion = started.runtimeVersion;
+        // A demo's runtime is up: a demo with no sample gets it made, behind the preparing page, and every start cancels the
+        // open AI-role reviews, because no AI role runs in the demo.
+        if (runOn.mode === 'demo') {
+            const ready = await readyTheSample(
+                seedDepsOnDisk({ cli, places: demoWhere, scratch: join(paths.data, 'seed-scratch'), progress: (step) => log.info('demo_seed_step', { Step: step }) }),
+                () => window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(preparingPage())}`),
+            );
+            if (ready.kind === 'failed') throw new Error(ready.why);
+        }
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
@@ -656,6 +693,7 @@ const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), proc
 // else of a start resolves a path, and read only by what runs after it.
 let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
+let demoWhere!: DemoPlaces;
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
 if (unsandboxed !== null) {
@@ -681,9 +719,11 @@ if (unsandboxed !== null) {
  */
 function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
+    const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
+    demoWhere = demoPlaces(personDirectory, personHarness);
     runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
         open: openDirectory,
-        prepare: (demo) => writeDemoSettings(demo, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+        prepare: (demo) => writeDemoSettings(demo, personHarness),
         keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
     });
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).

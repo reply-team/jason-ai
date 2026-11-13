@@ -22,6 +22,7 @@ import {
     preparingPage,
     preparingSentence,
     readMarker,
+    readyTheSample,
     seedVersion,
     startDemoOver,
     storyModule,
@@ -336,17 +337,15 @@ test('the seed and the provider package work from one set: the desktop holds no 
     assert.doesNotMatch(sources, /Dana Whitfield|Tillerwave|Last-Mile/);
 });
 
-test('"Start the demo over" removes the demo\'s two folders and nothing else, then seeds again and relaunches', async () => {
+test('"Start the demo over" removes the demo\'s two folders and nothing else, then relaunches, and the start after it seeds', async () => {
     const run = await seeded();
     const removed: string[] = [];
     let relaunched = 0;
-    let prepared = 0;
     const seed = { ...run.deps, removeTree: (path: string) => void removed.push(path), readText: (file: string) => (file === run.deps.markerFile ? null : run.deps.readText(file)) };
-    const outcome = await startDemoOver({ seed, stopRuntime: async () => true, prepare: async () => { prepared += 1; return true; }, relaunch: () => void (relaunched += 1) });
+    const outcome = await startDemoOver({ seed, stopRuntime: async () => true, relaunch: () => void (relaunched += 1) });
     assert.deepEqual(outcome, { kind: 'started-over' });
     assert.deepEqual(removed.slice(0, 2).sort(), [places.data, places.harnessRoot].sort());
     assert.ok(!removed.includes(own.data) && !removed.includes(own.harness));
-    assert.equal(prepared, 1, 'the demo is made ready before it is seeded');
     assert.equal(relaunched, 1);
 });
 
@@ -354,10 +353,37 @@ test('"Start the demo over" leaves everything as it is when the demo\'s runtime 
     const run = await seeded();
     const removed: string[] = [];
     let relaunched = 0;
-    const outcome = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) }, stopRuntime: async () => false, prepare: async () => true, relaunch: () => void (relaunched += 1) });
+    const outcome = await startDemoOver({ seed: { ...run.deps, removeTree: (path: string) => void removed.push(path) }, stopRuntime: async () => false, relaunch: () => void (relaunched += 1) });
     assert.equal(outcome.kind, 'refused');
     assert.deepEqual(removed, []);
     assert.equal(relaunched, 0);
+});
+
+test('a start of a demo with no marker shows the preparing page, seeds, and cancels the open reviews; the next start only cancels', async () => {
+    const run = await seeded();
+    // The marker is read as absent: a fresh demo.
+    const fresh = { ...run.deps, readText: (file: string) => (file === run.deps.markerFile ? null : run.deps.readText(file)) };
+    let shown = 0;
+    const before = run.calls.length;
+    const first = await readyTheSample(fresh, async () => void (shown += 1));
+    assert.deepEqual(first, { kind: 'ready', seeded: true });
+    assert.equal(shown, 1, 'the preparing page is shown once, before the seed');
+    assert.ok(run.calls.length > before);
+    // The seeded demo started again: no page, no seed, the reviews cancelled.
+    const again: string[] = [];
+    const spy = { ...run.deps, cli: { async run(args: readonly string[]) { again.push(args.join(' ')); return run.deps.cli.run(args); } } as Cli };
+    assert.deepEqual(await readyTheSample(spy, async () => void (shown += 1)), { kind: 'ready', seeded: false });
+    assert.equal(shown, 1);
+    assert.ok(again.every((line) => line.startsWith('workitem ')), again.join(' | '));
+    assert.ok(again.some((line) => line.startsWith('workitem list --kind ai_role')));
+});
+
+test('a demo whose seed was not finished is not built on: the start says so and points to the menu', async () => {
+    const run = await seeded();
+    const unfinished = { ...run.deps, readText: (file: string) => (file === run.deps.markerFile ? '{"version":1,"complete":false}' : run.deps.readText(file)) };
+    const outcome = await readyTheSample(unfinished, async () => undefined);
+    assert.equal(outcome.kind, 'failed');
+    assert.match(outcome.kind === 'failed' ? outcome.why : '', /Start the Demo Over/);
 });
 
 test('while the seed runs the window says the sample is being prepared, in a page with no script and no outside file', async () => {

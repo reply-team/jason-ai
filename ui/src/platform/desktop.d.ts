@@ -524,6 +524,12 @@ export interface JasonDesktop {
          * started, when the record could not be written. Any other word is rejected.
          */
         set(mode: 'live' | 'demo'): Promise<DesktopRefusal | null>;
+        /**
+         * In the demo only: stops the demo installation's runtime, removes its two folders, makes the sample again and loads
+         * the window again on it: null once begun; the desktop's refusal, with the demo left as it was, when the runtime
+         * could not be stopped or the sample could not be made. Refused in Live, where there is no demo to start over.
+         */
+        startOver(): Promise<DesktopRefusal | null>;
     };
     pairing: {
         /**

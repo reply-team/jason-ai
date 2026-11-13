@@ -453,34 +453,58 @@ function capture(how: Capture | undefined, answer: Record<string, unknown> | nul
 // ---------------------------------------------------------------------------------------------------------------------
 
 export interface StartOverDeps {
-    seed: SeedDeps;
+    /** The places to remove, and the file removal; the seed's own dependencies, nothing of it is run here. */
+    seed: Pick<SeedDeps, 'places' | 'removeTree'>;
     /** Stops the demo installation's runtime; resolves false when it could not be stopped. */
     stopRuntime(): Promise<boolean>;
-    /**
-     * Makes the demo installation ready to be seeded: its directory, its fixed settings, the provider package placed and
-     * its route written, and its runtime started, in that order (the desktop's own start of the demo). False when it cannot.
-     */
-    prepare(): Promise<boolean>;
-    /** Loads the window again, in the demo, once the sample is back. */
+    /** Starts the desktop again on the demo: its start finds no marker, makes the demo ready, starts its runtime and seeds. */
     relaunch(): void;
 }
 
 export type StartOverOutcome = { kind: 'started-over' } | { kind: 'refused'; why: string };
 
 /**
- * "Start the demo over": the demo's runtime is stopped, its two folders are removed, the sample is made again and the
- * window loads again. Nothing of the person's own installation is touched: only the two folders `places` names are
- * removed, and only once the runtime that ran on them has stopped.
+ * "Start the demo over": the demo's runtime is stopped, its two folders are removed and the desktop starts again on the
+ * demo. The seed needs a running runtime, which only a start brings up, so the sample is made by that start (the folder
+ * has no marker, so it is seeded, behind the preparing page). Nothing of the person's own installation is touched: only
+ * the two folders `places` names are removed, and only once the runtime that ran on them has stopped.
  */
 export async function startDemoOver(deps: StartOverDeps): Promise<StartOverOutcome> {
     if (!(await deps.stopRuntime())) return { kind: 'refused', why: 'The sample could not be stopped, so it was left as it is.' };
     deps.seed.removeTree(deps.seed.places.data);
     deps.seed.removeTree(deps.seed.places.harnessRoot);
-    if (!(await deps.prepare())) return { kind: 'refused', why: 'The demo could not be made ready to be filled.' };
-    const outcome = await ensureSeeded(deps.seed);
-    if (outcome.kind !== 'seeded') return { kind: 'refused', why: outcome.kind === 'failed' ? `The sample could not be prepared (${outcome.step}).` : 'The sample could not be prepared.' };
     deps.relaunch();
     return { kind: 'started-over' };
+}
+
+export type ReadyOutcome = { kind: 'ready'; seeded: boolean } | { kind: 'failed'; why: string };
+
+/**
+ * What every start of the demo does once its runtime is up: a demo with no marker is seeded (behind `showPreparing`),
+ * one whose seed was not finished is left alone and said so, and in every case the open AI-role work items are
+ * cancelled in the operator's name, because no AI role runs in the demo's runtime.
+ */
+export async function readyTheSample(deps: SeedDeps, showPreparing: () => Promise<void>, version = seedVersion): Promise<ReadyOutcome> {
+    const marker = readMarker(deps);
+    let seeded = false;
+    if (marker === null) {
+        await showPreparing();
+        const outcome = await ensureSeeded(deps, version);
+        if (outcome.kind === 'failed') return { kind: 'failed', why: `The sample could not be prepared (${outcome.step}). Choose Start the Demo Over in the menu to try again.` };
+        if (outcome.kind !== 'seeded') return { kind: 'failed', why: 'The sample could not be prepared. Choose Start the Demo Over in the menu to try again.' };
+        seeded = true;
+    } else if (!marker.complete || marker.version !== version) {
+        return { kind: 'failed', why: 'The sample was not finished. Choose Start the Demo Over in the menu to make it again.' };
+    }
+    let actor: string;
+    try {
+        actor = operatorActor(parseStory(deps.readStory(deps.places.data)));
+    } catch {
+        return { kind: 'failed', why: 'The sample could not be read. Choose Start the Demo Over in the menu to make it again.' };
+    }
+    const failed = await cancelOpenReviews(deps.cli, actor);
+    if (failed) return { kind: 'failed', why: `The sample could not be made ready (${failed.step}).` };
+    return { kind: 'ready', seeded };
 }
 
 /** The sentence the window shows while the sample is made. */

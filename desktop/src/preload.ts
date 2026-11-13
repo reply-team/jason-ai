@@ -47,6 +47,7 @@ const desktop = {
     mode: {
         get: () => ipcRenderer.invoke('jason:mode.get'),
         set: (mode: 'live' | 'demo') => ipcRenderer.invoke('jason:mode.set', mode),
+        startOver: () => ipcRenderer.invoke('jason:mode.startOver'),
     },
     pairing: {
         paired: (tokenId: string) => ipcRenderer.invoke('jason:pairing.paired', tokenId),

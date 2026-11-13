@@ -50,6 +50,8 @@ export interface DeskDeps {
     demo: DemoMenu | null;
     /** Back to Your Own Installation: switches to Live and starts the desktop again. */
     back(): void;
+    /** Start the Demo Over (a demo run only): the demo's runtime stopped, its folders made again, the window loaded again. */
+    startOver(): void;
 }
 
 /** The Command Line submenu's one line where this start carries no jason that outlasts it. */
@@ -252,7 +254,11 @@ export class Desk {
     private backItems(): MenuItemConstructorOptions[] {
         const demo = this.deps.demo;
         if (demo === null) return [];
-        return [{ type: 'separator' }, { label: demo.back.label, enabled: demo.back.enabled, click: () => this.deps.back() }];
+        return [
+            { type: 'separator' },
+            { label: demo.startOver.label, enabled: demo.startOver.enabled, click: () => this.deps.startOver() },
+            { label: demo.back.label, enabled: demo.back.enabled, click: () => this.deps.back() },
+        ];
     }
 
     private removalItems(): MenuItemConstructorOptions[] {

@@ -106,6 +106,9 @@ export const templates = {
     demo_unopened: 'The demo data directory could not be made or used; this run is on the person’s own installation and the mode is Live again',
     demo_runtime_stopped: 'The demo runtime was asked to stop as the demo run quit: {Outcome}',
     demo_runtime_stop_timed_out: 'The demo runtime did not answer the stop within the cap as the demo run quit; the quit went on',
+    demo_start_over: 'The demo was stopped and its two folders removed; the desktop starts again on the demo, which makes the sample again',
+    demo_start_over_refused: 'Start the Demo Over was refused; the demo was left as it was or as far as it had got',
+    demo_seed_step: 'The demo sample: {Step}',
 } as const;
 
 export type TemplateName = keyof typeof templates;

@@ -213,6 +213,9 @@ export function offersOf(mode: Mode): Offers {
 /** The label of the way back, in the tray and the application's menu of a demo run. */
 export const backLabel = 'Back to Your Own Installation';
 
+/** The label of starting the demo over, beside the way back in the tray and the application's menu of a demo run. */
+export const startOverLabel = 'Start the Demo Over';
+
 /** A menu line as the desk draws it: a label, and whether it can be chosen. */
 export interface MenuLine {
     label: string;
@@ -229,12 +232,13 @@ export interface DemoMenu {
     command: MenuLine;
     removal: MenuLine | null;
     back: MenuLine;
+    startOver: MenuLine;
 }
 
 export function demoMenu(mode: Mode, removalOnPlatform: boolean): DemoMenu | null {
     if (mode !== 'demo') return null;
     const off = (item: 'updates' | 'autostart' | 'command' | 'removal'): MenuLine => ({ label: demoMenuLine(item), enabled: false });
-    return { updates: off('updates'), autostart: off('autostart'), command: off('command'), removal: removalOnPlatform ? off('removal') : null, back: { label: backLabel, enabled: true } };
+    return { updates: off('updates'), autostart: off('autostart'), command: off('command'), removal: removalOnPlatform ? off('removal') : null, back: { label: backLabel, enabled: true }, startOver: { label: startOverLabel, enabled: true } };
 }
 
 /**
