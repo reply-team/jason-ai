@@ -189,6 +189,10 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
 /** What the line under the composer says while the desktop holds the chat in Full access. */
 export const fullAccessLine = 'Full access: the agent runs commands without asking, except those Jason cannot read.';
 
+/** What the line under the composer says while the desktop holds the chat in Auto-edit. */
+export const autoEditLine =
+    "Auto-edit: the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first.";
+
 /**
  * What the line under the composer says while the chat's host is Codex on the person's sign-in: every Codex turn leaves
  * the person's `config.toml` unread, so none of its MCP servers reach the chat, and neither does a provider or a profile
@@ -200,10 +204,14 @@ export const codexConfigLine =
 /** Why Full access cannot be chosen on a host a desktop of an earlier version listed, which offers no modes. */
 export const olderDesktop = 'This version of Jason Desktop does not offer Full access.';
 
+/** Why Auto-edit cannot be chosen on a host a desktop of an earlier version listed. */
+export const olderDesktopAutoEdit = 'This version of Jason Desktop does not offer Auto-edit.';
+
 /** The modes as the menu beside the composer names them, in its order. */
 const modeWords: Readonly<Record<DesktopChatMode, string>> = {
     ask_first: 'Ask first',
     plan_only: 'Plan only',
+    auto_edit: 'Auto-edit',
     full_access: 'Full access',
 };
 
@@ -211,10 +219,19 @@ const modeWords: Readonly<Record<DesktopChatMode, string>> = {
 const feedFullAccess =
     'Full access is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
 
+/** Why the desktop refuses Auto-edit on Codex, in its words; with no host the menu says it too. */
+const codexAutoEdit =
+    'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
+
+/** Why the desktop refuses Auto-edit for the Feed, in its words. */
+const feedAutoEdit =
+    'Auto-edit is not offered for the Feed: its turns are handed lines that others and providers wrote without you asking for them.';
+
 /**
- * The menu's choices on the host the next turn runs on: each mode, and why it cannot be chosen there, or null. Full
- * access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for it; with no host, as on Codex;
- * and for the Feed, in the order the desktop refuses it.
+ * The menu's choices on the host the next turn runs on, narrow to wide after Ask first: each mode, and why it cannot be
+ * chosen there, or null. Full access is disabled with the desktop's own reason: on Codex, or a Claude Code too old for
+ * it; with no host, as on Codex; and for the Feed, in the order the desktop refuses it. Auto-edit is disabled the same
+ * way, on Codex and for the Feed; it has no version floor.
  */
 export function modeChoices(
     host: DesktopHost | null,
@@ -222,10 +239,11 @@ export function modeChoices(
 ): { mode: DesktopChatMode; label: string; disabled: string | null }[] {
     const full =
         host === null ? 'Full access runs on Claude Code only.' : (host.fullAccess ?? (feed ? feedFullAccess : null));
+    const edit = host === null ? codexAutoEdit : (host.autoEdit ?? (feed ? feedAutoEdit : null));
     return (Object.keys(modeWords) as DesktopChatMode[]).map((mode) => ({
         mode,
         label: modeWords[mode],
-        disabled: mode === 'full_access' ? full : null,
+        disabled: mode === 'full_access' ? full : mode === 'auto_edit' ? edit : null,
     }));
 }
 
@@ -235,11 +253,14 @@ export function modeChoices(
  */
 export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
     return hosts.map((host) => {
-        const given = host as Partial<Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess'>>;
+        const given = host as Partial<
+            Pick<DesktopHost, 'models' | 'typedModel' | 'modelsUnread' | 'fullAccess' | 'autoEdit'>
+        >;
         return Array.isArray(given.models) &&
             typeof given.typedModel === 'boolean' &&
             given.modelsUnread !== undefined &&
-            given.fullAccess !== undefined
+            given.fullAccess !== undefined &&
+            given.autoEdit !== undefined
             ? host
             : {
                   ...host,
@@ -250,6 +271,10 @@ export function withModels(hosts: readonly DesktopHost[]): DesktopHost[] {
                       typeof given.fullAccess === 'string' || given.fullAccess === null
                           ? given.fullAccess
                           : olderDesktop,
+                  autoEdit:
+                      typeof given.autoEdit === 'string' || given.autoEdit === null
+                          ? given.autoEdit
+                          : olderDesktopAutoEdit,
               };
     });
 }

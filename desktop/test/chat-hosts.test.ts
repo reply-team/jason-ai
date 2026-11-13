@@ -588,3 +588,18 @@ test('a Claude turn is denied, by the host itself, any command that assigns PATH
     assert.deepEqual(disallowed.slice(at, at + 5), ['Bash(*JASON_CONFINED*)', 'Bash(*PATH=*)', 'Bash(*PATH+=*)', 'Bash(*PATHEXT=*)', 'Bash(*PATHEXT+=*)']);
     assert.ok(!valuesOf(claudeArguments(turn), '--allowedTools').some((rule) => rule.includes('PATH')));
 });
+
+test('an Auto-edit turn starts Claude Code exactly as an Ask first turn does: the default mode, the prompt tool, never accept-edits', () => {
+    const asked = claudeArguments({ ...turn, mode: 'ask_first' });
+    const edited = claudeArguments({ ...turn, mode: 'auto_edit' });
+    assert.deepEqual(edited, asked);
+    assert.deepEqual(claudeArguments({ ...turn, mode: 'auto_edit', resume: 'ses-1', addDirs: ['/c'] }), claudeArguments({ ...turn, resume: 'ses-1', addDirs: ['/c'] }));
+    assert.equal(edited.includes('--permission-mode'), false);
+    assert.ok(edited.includes('--permission-prompt-tool'));
+    // No argument and no setting names the host's own accept-edits mode or a default mode of any kind.
+    for (const arg of edited) {
+        assert.doesNotMatch(arg, /acceptEdits|defaultMode|bypassPermissions/i, arg);
+    }
+    const settings = JSON.parse(valueOf(edited, '--settings') ?? '{}') as Record<string, unknown>;
+    assert.equal(JSON.stringify(settings).includes('hooks'), false);
+});

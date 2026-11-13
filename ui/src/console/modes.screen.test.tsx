@@ -50,13 +50,14 @@ beforeEach(() => {
 });
 
 describe('a chat’s access mode', () => {
-    it('starts in Ask first, offers Plan only and Full access beside the composer, and no fourth mode', async () => {
+    it('starts in Ask first, and offers Plan only, Auto-edit and Full access beside the composer, narrow to wide', async () => {
         renderConsole();
         await waitFor(() => menu());
         expect(menu().value).toBe('ask_first');
         expect([...menu().options].map((each) => [each.value, each.text, each.disabled])).toEqual([
             ['ask_first', 'Ask first', false],
             ['plan_only', 'Plan only', false],
+            ['auto_edit', 'Auto-edit', false],
             ['full_access', 'Full access', false],
         ]);
         expect(line()).toBeNull();
@@ -206,6 +207,126 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
     });
 });
 
+const editing = () => screen.queryByRole('status', { name: 'Auto-edit is on' });
+const codexAutoEdit =
+    'Auto-edit runs on Claude Code only: Codex cannot ask before it acts, so on Codex the chat only reads and proposes.';
+
+describe('Auto-edit', () => {
+    it('enters with no box, draws its own line under the composer with Change, and takes it away on leaving', async () => {
+        const desktop = chatDesktop();
+        // A box would say no: Auto-edit asks nothing.
+        desktop.confirmFullAccess = false;
+        renderConsole(desktop);
+        await waitFor(() => menu());
+        expect(editing()).toBeNull();
+        choose('auto_edit');
+        await waitFor(() => expect(editing()).not.toBeNull());
+        expect(calls(desktop, 'chat.setMode')[0]!.args.slice(1)).toEqual(['auto_edit', 'claude']);
+        expect(editing()!.textContent).toContain(
+            "Auto-edit: the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first.",
+        );
+        expect(line()).toBeNull();
+        expect(menu().value).toBe('auto_edit');
+        fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+        expect(document.activeElement).toBe(menu());
+        choose('ask_first');
+        await waitFor(() => expect(editing()).toBeNull());
+        // Drawn from the desktop's word alone.
+        flush(() => desktop.emit(chatId(), { kind: 'mode', mode: 'auto_edit' }));
+        expect(editing()).not.toBeNull();
+    });
+
+    it('is disabled with the desktop’s reason on Codex, and choosing Codex takes the chat back to Ask first', async () => {
+        const status = structuredClone(setupFound);
+        status.hosts.find((each) => each.id === 'codex')!.found = true;
+        const desktop = renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        choose('auto_edit');
+        await waitFor(() => expect(editing()).not.toBeNull());
+        fireEvent.change(screen.getByRole('combobox', { name: 'Agent host' }), { target: { value: 'codex' } });
+        await waitFor(() => expect(editing()).toBeNull());
+        expect(calls(desktop, 'chat.setMode').at(-1)!.args[1]).toBe('ask_first');
+        const edit = [...menu().options].find((each) => each.value === 'auto_edit')!;
+        expect(edit.disabled).toBe(true);
+        expect(edit.text).toBe('Auto-edit: ' + codexAutoEdit);
+        // Asked all the same, the desktop refuses it in its words.
+        choose('auto_edit');
+        await waitFor(() => expect(screen.getByText(codexAutoEdit)).toBeTruthy());
+        expect(menu().value).toBe('ask_first');
+    });
+
+    it('is offered by a desktop that lists it, and disabled by one that does not, saying so', async () => {
+        const status = structuredClone(setupFound);
+        for (const host of status.hosts) delete (host as Partial<typeof host>).autoEdit;
+        renderConsole(chatDesktop(status));
+        await waitFor(() => menu());
+        const edit = [...menu().options].find((each) => each.value === 'auto_edit')!;
+        expect(edit.disabled).toBe(true);
+        expect(edit.text).toBe('Auto-edit: This version of Jason Desktop does not offer Auto-edit.');
+        expect([...menu().options].find((each) => each.value === 'full_access')!.disabled).toBe(false);
+    });
+});
+
+describe('a change of mode around a running turn, narrow to wide', () => {
+    async function running(desktop: StubDesktop): Promise<void> {
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
+            target: { value: 'Tidy the notes' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
+            target: { value: 'And then the next' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
+        await waitFor(() => expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy());
+    }
+
+    const givenBack = async (desktop: StubDesktop): Promise<void> => {
+        flush(() => desktop.emit(chatId(), { kind: 'done', error: null }));
+        await waitFor(() =>
+            expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' }).value).toBe(
+                'And then the next',
+            ),
+        );
+        expect(calls(desktop, 'chat.send')).toHaveLength(1);
+    };
+
+    it('leaving Auto-edit for Ask first gives the waiting message back, as Stop does', async () => {
+        const desktop = renderConsole();
+        await waitFor(() => menu());
+        choose('auto_edit');
+        await waitFor(() => expect(editing()).not.toBeNull());
+        await running(desktop);
+        choose('ask_first');
+        await waitFor(() => expect(editing()).toBeNull());
+        await givenBack(desktop);
+    });
+
+    it('a change from Full access to Auto-edit is narrower, and gives the waiting message back', async () => {
+        const desktop = renderConsole();
+        await waitFor(() => menu());
+        choose('full_access');
+        await waitFor(() => expect(line()).not.toBeNull());
+        await running(desktop);
+        choose('auto_edit');
+        await waitFor(() => expect(editing()).not.toBeNull());
+        await givenBack(desktop);
+    });
+
+    it('a change from Auto-edit to Full access is wider: the turn goes on and its waiting message follows it', async () => {
+        const desktop = renderConsole();
+        await waitFor(() => menu());
+        choose('auto_edit');
+        await waitFor(() => expect(editing()).not.toBeNull());
+        await running(desktop);
+        choose('full_access');
+        await waitFor(() => expect(line()).not.toBeNull());
+        expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy();
+        flush(() => desktop.emit(chatId(), { kind: 'done', error: null }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
+    });
+});
+
 describe('a change to Plan only around a running turn', () => {
     it('gives the waiting message back, as Stop does: no turn follows by itself', async () => {
         const desktop = renderConsole();
@@ -241,10 +362,11 @@ describe('Full access answered once for good', () => {
         // A box would say no: the menu enters all the same, since the desktop asks nothing while the choice stands.
         desktop.confirmFullAccess = false;
         renderConsole(desktop);
-        await waitFor(() => expect(menu().options).toHaveLength(4));
+        await waitFor(() => expect(menu().options).toHaveLength(5));
         expect([...menu().options].map((each) => [each.value, each.text, each.disabled])).toEqual([
             ['ask_first', 'Ask first', false],
             ['plan_only', 'Plan only', false],
+            ['auto_edit', 'Auto-edit', false],
             ['full_access', 'Full access', false],
             ['take_back', 'Full access: ask each time again', false],
         ]);
@@ -257,13 +379,13 @@ describe('Full access answered once for good', () => {
         const desktop = chatDesktop();
         desktop.standing = always;
         renderConsole(desktop);
-        await waitFor(() => expect(menu().options).toHaveLength(4));
+        await waitFor(() => expect(menu().options).toHaveLength(5));
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
         choose('take_back');
         await waitFor(() => expect(calls(desktop, 'fullAccess.takeBack')).toHaveLength(1));
         expect(calls(desktop, 'fullAccess.takeBack')[0]!.args).toEqual([]);
-        await waitFor(() => expect(menu().options).toHaveLength(3));
+        await waitFor(() => expect(menu().options).toHaveLength(4));
         expect(menu().value).toBe('full_access');
         expect(line()).not.toBeNull();
         expect(calls(desktop, 'chat.setMode')).toHaveLength(1);
@@ -272,21 +394,21 @@ describe('Full access answered once for good', () => {
     it('reads the choice again as the menu opens: one the desktop never said is offered its take-back', async () => {
         const desktop = chatDesktop();
         renderConsole(desktop);
-        await waitFor(() => expect(menu().options).toHaveLength(3));
+        await waitFor(() => expect(menu().options).toHaveLength(4));
         // The file changed behind the desktop's back: no change is said to the page.
         desktop.standing = always;
         fireEvent.focus(menu());
-        await waitFor(() => expect(menu().options).toHaveLength(4));
-        expect(menu().options[3]!.value).toBe('take_back');
+        await waitFor(() => expect(menu().options).toHaveLength(5));
+        expect(menu().options[4]!.value).toBe('take_back');
     });
 
     it('follows a take-back made elsewhere: the option goes', async () => {
         const desktop = chatDesktop();
         desktop.standing = always;
         renderConsole(desktop);
-        await waitFor(() => expect(menu().options).toHaveLength(4));
+        await waitFor(() => expect(menu().options).toHaveLength(5));
         flush(() => desktop.stand(null));
-        expect(menu().options).toHaveLength(3);
+        expect(menu().options).toHaveLength(4);
     });
 
     it('a new chat that starts in Full access by the standing choice shows the line from its first moment, before anything is sent', async () => {

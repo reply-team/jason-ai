@@ -64,13 +64,15 @@ import { PermissionBroker, type BrokerEvent, type Decided } from './chat-permiss
 import { openEndpoint, type Endpoint } from './chat-permission-endpoint.ts';
 import type { ChatScope, Platform } from './chat-permission-model.ts';
 import { startHost, type HostExit, type HostProcess } from './chat-process.ts';
-import { realPathOf } from './chat-real-path.ts';
+import { entryOf, realPathOf } from './chat-real-path.ts';
 import type { SkillsGate } from './skills-gate.ts';
 import { namingFolderPath, newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, writeTurnConfig, writeTurnSettings } from './chat-turn-files.ts';
 import type { ChatFence } from './chat-deny.ts';
 import { InstructionsUnwritten, placeInstructions } from './chat-instructions.ts';
 import {
+    codexAutoEdit,
     codexFullAccess,
+    feedAutoEdit,
     feedFullAccess,
     fullAccessConsent,
     fullAccessNotYet,
@@ -424,6 +426,9 @@ function programOf(host: unknown): string | undefined {
     return keyProvider(host)?.program ?? hosts.find((each) => each.id === host && each.drivesChat)?.program;
 }
 
+/** How much each mode lets a turn do without asking: a change to a narrower mode stops the turn running in a wider one. */
+const breadth: Readonly<Record<ChatMode, number>> = { plan_only: 0, ask_first: 1, auto_edit: 2, full_access: 3 };
+
 /** The confirmation's answer as the chat reads it: true is "This time" alone; false, null or nothing is no. */
 function answerOf(answer: boolean | FullAccessAnswer | null | undefined): FullAccessAnswer | null {
     if (answer === true) return { always: false, newChats: false };
@@ -510,6 +515,8 @@ export class Chat {
     #namingNow: { stop: AbortController; folder: string } | null = null;
     /** The conversations in Full access, by id. In memory only: never on a record, gone with the window. */
     #fullAccess = new Set<string>();
+    /** The conversations in Auto-edit, by id. In memory only, as Full access: never on a record, gone with the window. */
+    #autoEdit = new Set<string>();
     /** The folder of each conversation's Full access grant, by conversation id: the grant's id. In memory only. */
     #grants = new Map<string, string>();
     /**
@@ -803,7 +810,8 @@ export class Chat {
     }
 
     #modeOf(conversation: Conversation): ChatMode {
-        return this.#fullAccess.has(conversation.id) ? 'full_access' : (conversation.mode ?? 'ask_first');
+        if (this.#fullAccess.has(conversation.id)) return 'full_access';
+        return this.#autoEdit.has(conversation.id) ? 'auto_edit' : (conversation.mode ?? 'ask_first');
     }
 
     /**
@@ -813,12 +821,20 @@ export class Chat {
      * the Feed.
      * Otherwise it is given once the person said yes to the confirmation, asked again each time it is chosen unless they
      * answered it with Always, which this then keeps (`full-access-standing.ts`); a no leaves the mode as it was. Leaving
-     * Full access stops a turn that runs in it. Plan only is kept on the record; Full access never is.
+     * Full access stops a turn that runs in it. Auto-edit is refused on Codex, on a host that does not drive the chat and
+     * for the Feed, and otherwise given with no box: it has no confirmation and no standing choice. Plan only is kept on
+     * the record; Auto-edit and Full access never are.
      */
     async setMode(id: unknown, mode: unknown, host?: unknown): Promise<ConversationSummary> {
         const conversation = this.#own(id);
         if (!isChatMode(mode)) throw new ChatRefused('That is not a mode of the chat.');
         if (mode === this.#modeOf(conversation)) return this.#summaryOf(conversation);
+        if (mode === 'auto_edit') {
+            const program = programOf(host);
+            if (program === 'codex') throw new ChatRefused(codexAutoEdit);
+            if (program !== 'claude') throw new ChatRefused(notAHost);
+            if (conversation.main === true) throw new ChatRefused(feedAutoEdit);
+        }
         // Always answered and its file not written: Full access is given this time, and the chat says so once it is.
         let unkept = false;
         if (mode === 'full_access') {
@@ -852,14 +868,20 @@ export class Chat {
     }
 
     /**
-     * Puts a conversation in a mode, says so to its page and to the log, and keeps Plan only on its record. Leaving Full
-     * access stops the turn that runs in it, unless the caller stops it in its own words (`stopTurn` false).
+     * Puts a conversation in a mode, says so to its page and to the log, and keeps Plan only on its record. A change to a
+     * mode narrower than the running turn's stops that turn, unless the caller stops it in its own words (`stopTurn`
+     * false). Nothing enters Auto-edit here but the person's choice from the menu (`setMode`): Plan only's approval of a
+     * plan goes to Ask first, and the standing choice of Full access never names Auto-edit.
      */
     #changeMode(conversation: Conversation, to: ChatMode, stopTurn: boolean): void {
         const from = this.#modeOf(conversation);
         if (from === to) return;
         if (to === 'full_access') this.#fullAccess.add(conversation.id);
         else this.#fullAccess.delete(conversation.id);
+        if (to === 'auto_edit') this.#autoEdit.add(conversation.id);
+        else this.#autoEdit.delete(conversation.id);
+        // The record keeps Plan only alone: entering Auto-edit leaves Plan only, so its record says Ask first, and a
+        // restart opens the chat there.
         if (to !== 'full_access') {
             const before = conversation.mode;
             if (to === 'plan_only') conversation.mode = 'plan_only';
@@ -869,9 +891,10 @@ export class Chat {
         this.#options.modeChanged?.(from, to);
         this.#options.emit(conversation.id, { kind: 'mode', mode: to });
         const running = this.#running.get(conversation.id);
-        // Leaving Full access stops the turn that runs in it, and so does a change to Plan only: the menu never says Plan
-        // only while the running turn could still ask to change something.
-        const stops = (from === 'full_access' && running?.mode === 'full_access') || (to === 'plan_only' && running !== undefined && running.mode !== 'plan_only');
+        // A change to a narrower mode than the running turn's stops it: leaving Full access, or leaving Auto-edit for Ask
+        // first or Plan only, stops the turn that runs in it, while Auto-edit to Full access lets it finish; a change to
+        // Plan only stops any other, so the menu never says a mode while the running turn could still do more than it lets.
+        const stops = running !== undefined && breadth[to] < breadth[running.mode];
         if (stopTurn && stops && running !== undefined) {
             running.stopped = true;
             running.process?.stop();
@@ -946,7 +969,8 @@ export class Chat {
 
     /**
      * The standing choice that lets a mode be entered without its box on a host program: Full access on Claude Code
-     * alone, and null for every other mode and host. A mode added later has none unless it is named here.
+     * alone, and null for every other mode and host, Auto-edit among them. A mode added later has none unless it is named
+     * here.
      */
     #standingFor(mode: ChatMode, program: string | undefined): Standing | null {
         if (mode !== 'full_access' || program !== 'claude') return null;
@@ -1044,6 +1068,7 @@ export class Chat {
         this.#conversations.delete(conversation.id);
         this.#kept.delete(conversation.id);
         this.#fullAccess.delete(conversation.id);
+        this.#autoEdit.delete(conversation.id);
         this.#endGrant(conversation.id, false);
     }
 
@@ -1052,7 +1077,8 @@ export class Chat {
         const conversation = this.#own(id);
         if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it afresh'));
         conversation.sessions = {};
-        // A chat in Full access started afresh goes back to Ask first; Plan only stays, as on its record.
+        // A chat in Full access started afresh goes back to Ask first; Plan only stays, as on its record, and so does
+        // Auto-edit, which has no grant and no box.
         if (this.#fullAccess.has(conversation.id)) this.#changeMode(conversation, 'ask_first', true);
         // One never sent to has no session to drop, and no record to write.
         if (this.#kept.has(conversation.id)) this.#keep(conversation);
@@ -1267,8 +1293,9 @@ export class Chat {
         const launch = programLaunch(this.#options.env, resolved.program);
         if ('refused' in launch) return refuse(`${resolved.label} cannot be started: ${launch.refused}`);
         // Codex has no Full access, nor does a version that does not offer it: a chat in it goes back to Ask first, and its
-        // turn runs there.
+        // turn runs there. Codex has no Auto-edit either.
         if ((resolved.program === 'codex' || !this.#fullAccessOffered()) && this.#modeOf(conversation) === 'full_access') this.#changeMode(conversation, 'ask_first', true);
+        if (resolved.program === 'codex' && this.#modeOf(conversation) === 'auto_edit') this.#changeMode(conversation, 'ask_first', true);
         const mode = this.#modeOf(conversation);
 
         const running: Running = { stopped: false, process: null, turnId: null, replyTo: chatId, cards: new Map(), mode };
@@ -1352,6 +1379,7 @@ export class Chat {
         // Full access is gone with the window, as every "always" is. The turns are stopped first; each grant's folder moves
         // to the ended place once the host in it has exited, and one the quit leaves behind is the next start's to move.
         this.#fullAccess.clear();
+        this.#autoEdit.clear();
         for (const id of [...this.#grants.keys()]) this.#endGrant(id, false);
         const naming = this.#namingNow;
         if (naming !== null) {
@@ -1681,6 +1709,7 @@ export class Chat {
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     real: realPathOf,
+                    entry: entryOf,
                 };
                 this.#broker.openTurn(replyTo, id, scope, running.mode);
                 const secret = newSecret();

@@ -291,7 +291,25 @@ chat is in. A mode applies to the turns you start by sending, from the next one 
 chat and the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
 passes only the allowed verbs that read, Claude Code starts in its plan mode with the exit from it removed, and every
 other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
-refusal of the next section stays. A Codex turn runs in its read-only sandbox in either mode.
+refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
+
+**Auto-edit** is Ask first, except that six file commands run without a card when every path they name is inside the
+chat's own folder: `mkdir`, `touch`, `mv`, `cp`, `rm` and `rmdir`, read word by word by Jason, never by the host's own
+accept-edits mode. Such a command runs only when every part of it is one of the six with only the options Jason lists
+for it, with no pipe, redirection, pattern, variable, `~` or `..`, and every path strictly inside the chat folder once
+links are followed and outside the names an agent loads. The path a copy or a move writes into a folder counts as a
+path it names. A recursive or forced removal (`rm -r`, `rm -f`), a copy of a folder, a link that leads nowhere, a move
+to `.github`, a file in the chat folder named like one of the six (which the shell might run in place of the system's),
+and anything in a campaign's or a project's folder, in the data directory or elsewhere is Ask first's card, and
+whatever Ask first refuses stays refused. Auto-edit runs on Claude Code only and is not offered for the Feed; it has no
+confirmation and no Always, is never a default, and is gone when you close Jason. Leaving it for Ask first or Plan only
+while a turn runs stops that turn; a change to Full access lets the turn finish in the mode it started in.
+
+Three limits come with it. The chat folder is shared by the chats that are not in Full access, so a chat in Auto-edit
+can remove a file another chat left there. A hard link already in the folder is not told by its path, so a command that
+writes through it, a `cp` onto it say, reaches the file it shares wherever that file is. And the judgement is made
+before the command runs, so a link put into the folder by something else between the two is the same limit Ask first's
+Write has.
 
 Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh**
 leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
