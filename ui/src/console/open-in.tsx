@@ -81,11 +81,17 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         if (place === 'copy') setToast(t('openIn.copied', { folder }));
         else {
             // Jason in a terminal works with this window's data. An editor already running keeps the environment it started
-            // with, so in the demo that sentence is said of the terminals alone.
+            // with, so in the demo an editor is said to be the other way about, and the file manager says nothing of data.
             const terminal = place === 'claude' || place === 'codex' || place === 'terminal';
+            const editor = place !== 'files';
             const same = terminal || mode.value !== 'demo';
             setToast(
-                t('openIn.opened', { folder, place: chosen?.label ?? '' }) + (same ? ' ' + t('openIn.sameData') : ''),
+                t('openIn.opened', { folder, place: chosen?.label ?? '' }) +
+                    (same
+                        ? ' ' + t('openIn.sameData')
+                        : editor && mode.value === 'demo'
+                          ? ' ' + t('openIn.editorDemo')
+                          : ''),
             );
         }
     };

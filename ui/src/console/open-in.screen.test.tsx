@@ -173,6 +173,16 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
     it('copies the path from the menu without making Copy path the default', async () => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        // The file manager says nothing of data in the demo, and the same sentence as ever in Live.
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^File manager/ }));
+        await waitFor(() =>
+            expect(document.querySelector('.open-in-toast')?.textContent).toBe(
+                kept === 'demo'
+                    ? 'Opened Jason in File manager.'
+                    : 'Opened Jason in File manager. Jason there works with the same data as this window.',
+            ),
+        );
         fireEvent.click(arrow());
         fireEvent.click(within(menu()).getByRole('menuitem', { name: /^Copy path/ }));
         await waitFor(() => expect(opens(desktop)).toHaveLength(1));
@@ -206,7 +216,7 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         await waitFor(() =>
             expect(document.querySelector('.open-in-toast')?.textContent).toBe(
                 kept === 'demo'
-                    ? 'Opened Jason in VS Code.'
+                    ? "Opened Jason in VS Code. An editor's own terminal may work with your own installation, not the demo."
                     : 'Opened Jason in VS Code. Jason there works with the same data as this window.',
             ),
         );

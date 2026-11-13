@@ -54,6 +54,7 @@ export const en = {
     'openIn.demoNote': "Opens the demo's own folder. A terminal there works with the demo's data.",
     'openIn.opened': 'Opened {folder} in {place}.',
     'openIn.sameData': 'Jason there works with the same data as this window.',
+    'openIn.editorDemo': "An editor's own terminal may work with your own installation, not the demo.",
     'openIn.copied': 'Copied the path of {folder}.',
     'mode.unsupported': 'This version of the desktop cannot switch to the demo.',
     'shell.version':
