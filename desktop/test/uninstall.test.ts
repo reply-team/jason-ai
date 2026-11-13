@@ -124,7 +124,7 @@ test('the start that stops the carried runtime exits 0 when none of its own runs
     assert.ok(branch.includes('void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));'));
     const from = start.indexOf('export async function runStopRuntime(');
     const run = start.slice(from, start.indexOf('\n}\n', from));
-    assert.ok(run.includes('return stopRuntimeCode(() => stopOwnRuntime(carried().own));'));
+    assert.ok(run.includes('return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime('));
     assert.doesNotMatch(run, /dialog|BrowserWindow|requestSingleInstanceLock/);
 });
 

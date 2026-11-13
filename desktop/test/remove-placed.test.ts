@@ -815,7 +815,7 @@ test('the act takes off the demo beside the person’s installation, worked out 
     });
     assert.deepEqual(removal.scope().demo, { data: `${paths.data}-demo`, harnessRoot: `${person}-demo` });
     const report = await removal.remove();
-    assert.deepEqual(stopped, ['demo']);
+    assert.deepEqual(stopped, ['demo', 'demo'], 'the demo’s runtime is stopped with the person’s, and again before its folders go');
     assert.equal(existsSync(`${root}/data-demo`), false);
     assert.equal(existsSync(`${person}-demo`), false);
     assert.equal(existsSync(`${paths.data}/kept.txt`), true);
@@ -829,5 +829,36 @@ test('the desktop gives both removals the demo’s stop, from the person’s dir
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     assert.ok(start.includes('data: demoDirectory(paths.data),'));
     assert.ok(start.includes('harnessRoot: demoDirectory(harnessRoot(process.env, home, paths.installationSettings)),'));
-    assert.ok(start.includes('stop: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data,'));
+    assert.ok(start.includes('const stopDemo = () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data,'));
+});
+
+test('a demo runtime that does not stop refuses the whole removal before anything is taken off, as the person’s own does', async (t) => {
+    const root = scratch(t);
+    const paths = desktopPaths(`${root}/data`);
+    mkdirSync(`${root}/data-demo`, { recursive: true });
+    writeFileSync(`${root}/data-demo/file.txt`, 'x');
+    const acts: string[] = [];
+    const removal = placedRemoval({
+        platform: 'linux',
+        home: `${root}/home`,
+        env: {},
+        form: { form: 'deb' },
+        execPath: '/opt/Jason/jason-desktop-app',
+        executable: '/opt/Jason/resources/bundle/jason',
+        version: '0.39.0',
+        paths,
+        command: null,
+        autostart: null,
+        makeCommand: () => ({ status: () => ({ state: 'unsupported' as const, executable: '' }), remove: () => (acts.push('command'), { state: 'unsupported' as const, executable: '' }) }),
+        makeAutostart: () => ({ registration: async () => ({ registered: false, executable: null }), set: async () => false }),
+        login: { isOn: () => false, set: async () => (acts.push('login'), undefined) },
+        stopAs: async (): Promise<StopOutcome> => ({ kind: 'none' }),
+        stopDemo: async (): Promise<StopOutcome> => ({ kind: 'failed', exit: 1 }),
+        runsFrom: (): RunsFrom => 'none',
+        log: memoryLog(),
+    });
+    const report = await removal.remove();
+    assert.notEqual(report.refused, null);
+    assert.deepEqual(acts, []);
+    assert.equal(existsSync(`${root}/data-demo/file.txt`), true);
 });

@@ -34,7 +34,9 @@ import { eventChannels, handle, type InvokeMember } from './ipc.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
 import { applyMode, openDirectory, readMode, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type StartRun } from './mode.ts';
-import { DemoQuit, stopDemoRuntime } from './demo-runtime.ts';
+import { DemoQuit, stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
+import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
+import { prepareDemo, writeDemoRoute } from './demo-start.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
@@ -331,7 +333,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               application: aside,
               rollback,
               log,
-              stopRuntime: () => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)),
+              // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
+              stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),
               refused: (why) => dialog.showErrorBox('Jason', why),
               async beforeInstall() {
                   quitting = true;
@@ -656,7 +659,9 @@ const personDirectory = dataDirectory(process.env, homedir());
 // A demo directory that cannot be made or used makes this run the person's own: the record goes back to Live, and the
 // first screen says the demo could not be opened.
 const runOn: StartRun = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
-    open: openDirectory,
+    // The demo's start-up order in one place (`demo-start.ts`): the directory, then the provider and its route, then the
+    // fixed settings; a step that fails makes this run the person's own, so no runtime starts on a half-made demo.
+    open: (directory) => prepareDemo(directory, { open: openDirectory, place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute }),
     keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
 });
 if (runOn.mode === 'demo') process.env.JASON_DATA_DIR = runOn.data;

@@ -20,6 +20,7 @@ import { bundleEntries, copiesBundle } from './bundle-copy.ts';
 import { inert } from './inert.ts';
 import type { LinuxPackage } from './linux-package.ts';
 import type { Logger } from './log.ts';
+import { stopWithDemo } from './demo-runtime.ts';
 import { demoDirectory } from './mode.ts';
 import type { StopOutcome } from './own-runtime.ts';
 import { commandFolder, type CommandStatus } from './path-command.ts';
@@ -294,7 +295,7 @@ export function placedRemoval(input: PlacedInput): Pick<RemovalDeps, 'scope' | '
                 folder: commandFolder(input.platform, input.env, input.home),
                 command,
                 login: input.login,
-                runtime: input.version === null ? null : { stop: () => stopFromAny(candidates(), (executable) => input.stopAs(executable)) },
+                runtime: input.version === null ? null : { stop: () => stopWithDemo(() => stopFromAny(candidates(), (executable) => input.stopAs(executable)), () => input.stopDemo()) },
                 autostart: autostart === null ? null : { status: () => autostart.registration(), disable: () => autostart.set(false) },
                 application: applicationFolder(input.platform, input.execPath),
                 bundles: bundles === null ? null : { folder: bundles, runsFrom: () => input.runsFrom(bundles) },

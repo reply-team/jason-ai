@@ -104,9 +104,12 @@ them on.
   says anything else is Live. For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
   `~/.jason-demo`), and this file stays in `<data>`. The window's Demo and Live buttons write it and start the desktop
   again. Quitting a demo run, the switch to Live included, stops the demo's runtime first; your own runtime is never
-  stopped by either. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What
-  Jason Placed: each says to go back to your own installation. When the demo's directory cannot be made or used, the desktop opens your own
-  installation instead, sets this file back to `live` and says so at the top of the window.
+  stopped by either. An update, the installer and the uninstaller, run from your own installation, stop a demo runtime
+  that a crash left running too. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What
+  Jason Placed: each says to go back to your own installation. The demo is made ready in one order before its runtime starts: the
+  directory, then the demo provider (placed in `<data>-demo/plugins/demo/` from the copy the application carries) with
+  `Routes:Default` naming it, then the demo's fixed settings. When any of that cannot be done, or the directory cannot be
+  made or used, the desktop opens your own installation instead, sets this file back to `live` and says so at the top of the window.
 - `<data>/desktop/chat/`: the chat's working folder. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.
