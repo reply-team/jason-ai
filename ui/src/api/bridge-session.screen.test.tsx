@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { route } from '../router';
 import { standInBridge, standInCode, standInSecret } from '../test/bridge';
 import { stubDesktop } from '../test/desktop';
 import { Session, splitFragment } from './session';
@@ -79,6 +80,23 @@ describe('the tab opened by the desktop', () => {
         expect(session.token.value).toBe(door.token);
         expect(session.bridge.value).not.toBeNull();
         expect(bridge.asked.filter((each) => each.path === '/pair')).toHaveLength(1);
+    });
+
+    it('lands on the Chat screen when the link carries d=, whatever route it named', async () => {
+        world();
+        history.replaceState(null, '', `/ui/#/attention?t=ticket-1&d=${code}`);
+        await new Session().bootstrap();
+        expect(location.hash).toBe('#/chat');
+        expect(route.value).toEqual({ screen: 'chat' });
+    });
+
+    it('stays where the link named when the bridge refused the code', async () => {
+        world();
+        history.replaceState(null, '', `/ui/#/attention?t=ticket-1&d=43210.wrong-code-Ab1_Cd2`);
+        route.value = { screen: 'attention' };
+        await new Session().bootstrap();
+        expect(location.hash).toBe('#/attention');
+        expect(route.value).toEqual({ screen: 'attention' });
     });
 
     it('keeps the port and the secret in sessionStorage, and nothing of them in localStorage', async () => {

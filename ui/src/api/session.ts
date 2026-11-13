@@ -1,5 +1,6 @@
 import { computed, signal } from '@preact/signals-react';
 import { Bridge, type BridgePair } from '../platform/bridge';
+import { replace } from '../router';
 import type { UiSession } from './types';
 
 const key = 'jason.ui.session';
@@ -27,6 +28,8 @@ export class Session {
         if (ticket || bridge) history.replaceState(null, '', location.pathname + location.search + hash);
         if (ticket) await this.pair(ticket);
         await this.openBridge(bridge);
+        // A link that carries the desktop's code was made to show its chat: the tab lands on the Chat screen.
+        if (bridge && this.bridge.value) replace({ screen: 'chat' });
     }
 
     /**
