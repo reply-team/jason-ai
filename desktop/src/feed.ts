@@ -1,9 +1,8 @@
 // Pure: the Feed's lines. The Feed is the person's main chat, a conversation of its own kind, into which the desktop puts
-// a line for each journal line of a closed table of kinds: a reply observed, an approval or a question waiting, a
-// campaign created, started, paused or archived, an approval given or declined, a question answered, and work that
-// stopped. A line keeps identifiers, the kind, the moment and a count,
-// and never a person's text: no reason, no old or new value, no campaign or contact name. Lines of the same kind and
-// campaign that follow one another fold into one, at most `feedLimit` are kept, and a turn of the Feed is given the
+// a line for each journal line of a closed table of kinds: a reply observed, an approval or a question waiting, an
+// approval approved or rejected, a question answered, a campaign created, started, paused or archived, and work that
+// stopped. A line keeps identifiers, the kind, the moment and a count, and never a person's text: no reason, no old or
+// new value, no campaign or contact name. Lines of the same kind and campaign that follow one another fold into one, at most `feedLimit` are kept, and a turn of the Feed is given the
 // lines no turn was given yet, set apart as records (`feedBlock` in `chat-header.ts`): each kept line is marked once
 // it was given, on the record, so the order the runtime commits lines in decides nothing. A line never starts a turn.
 

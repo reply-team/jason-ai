@@ -193,9 +193,9 @@ desktop does not narrow, so it may read the records.
   in its record, made and written the first time the page asks for it (`chat.feed`) and drawn first in the sidebar. The
   page hands it each line of the journal's stream whose kind it takes: `inbound_reply_observed`, `approval_requested`,
   `decision_raised`, `campaign_created`, `campaign_started`, `campaign_paused`, `workitem_failed`, `workitem_expired`,
-  `provider_blocked`, `approval_approved`, `approval_rejected`, `decision_answered` and `campaign_archived`, each a kind the runtime writes itself (a test reads them from the runtime's source). The
-  desktop checks each line again and keeps its id, moment, kind, campaign and work item, each held to its shape, and
-  nothing else of it: no reason, no old or new value, no name. A line it has taken is not taken twice; lines of the same
+  `provider_blocked`, `approval_approved`, `approval_rejected`, `decision_answered` and `campaign_archived`, each a kind
+  the runtime writes itself (a test reads them from the runtime's source). The desktop checks each line again and keeps its id, moment, kind, campaign and work
+  item, each held to its shape, and nothing else of it: no reason, no old or new value, no name. A line it has taken is not taken twice; lines of the same
   kind and campaign that follow one another fold into one with a count; at most 500 are kept, the oldest dropped and
   counted; the ids it took, the last 1,000, are kept on its record. Each load of the page, and a stream the runtime
   refused to resume, has the desktop read back one page of 100 of the lines written since five seconds before the
