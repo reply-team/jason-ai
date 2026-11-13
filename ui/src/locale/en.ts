@@ -52,6 +52,8 @@ export const en = {
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',
+    'mode.preparing': 'Preparing the demo…',
+    'mode.preparing.reason': 'Available once the demo is ready.',
     'openIn.group': 'Open in',
     'openIn.main': 'Open in {place}',
     'openIn.choose': 'More places to open',

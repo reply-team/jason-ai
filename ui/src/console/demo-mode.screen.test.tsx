@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
-import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
+import { loadMode, mode, modePreparing, modeRefusal, modeUnopened } from '../platform/mode';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
@@ -15,10 +15,15 @@ import { startDraft, startMaking, startWaiting } from './start';
 // The desktop's console: the top bar above every panel in both modes, its switch asking the desktop through the seam;
 // in Demo one short sentence says the data is sample, in Live a mark.
 
-async function renderConsole(kept: 'live' | 'demo', unopened: string | null = null): Promise<StubDesktop> {
+async function renderConsole(
+    kept: 'live' | 'demo',
+    unopened: string | null = null,
+    preparing = false,
+): Promise<StubDesktop> {
     const desktop = stubDesktop();
     desktop.modeKept = kept;
     desktop.modeUnopened = unopened;
+    desktop.modePreparing = preparing;
     // The page reads the mode once as it loads, before the console is drawn (`mount.tsx`).
     await loadMode(desktop);
     const fake = new FakeApi()
@@ -62,6 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
     mode.value = 'live';
+    modePreparing.value = false;
     modeRefusal.value = null;
     modeUnopened.value = null;
 });
@@ -135,6 +141,43 @@ describe('Demo in the desktop', () => {
         await renderConsole('demo');
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
         expect(offer()).toBeNull();
+    });
+});
+
+describe('A demo whose sample is being made', () => {
+    const mark = () => within(strip()!).queryByRole('status', { name: 'Preparing the demo…' });
+    const switches = () => within(within(strip()!).getByRole('group', { name: 'Data' })).getAllByRole('button');
+
+    it('shows the page at once with a quiet mark, the switch off with its reason, and asks nothing when clicked', async () => {
+        const desktop = await renderConsole('demo', null, true);
+        await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
+        expect(mark()?.textContent).toBe('Preparing the demo…');
+        for (const button of switches()) {
+            expect(button.hasAttribute('disabled')).toBe(true);
+            expect(button.getAttribute('title')).toBe('Available once the demo is ready.');
+        }
+        fireEvent.click(within(strip()!).getByRole('button', { name: 'Live' }));
+        expect(modeSets(desktop)).toEqual([]);
+    });
+
+    it('takes the mark away and turns the switch on when the desktop says the sample is ready', async () => {
+        const desktop = await renderConsole('demo', null, true);
+        await waitFor(() => expect(mark()).not.toBeNull());
+        desktop.preparing(false);
+        await waitFor(() => expect(mark()).toBeNull());
+        for (const button of switches()) {
+            expect(button.hasAttribute('disabled')).toBe(false);
+            expect(button.getAttribute('title')).toBeNull();
+        }
+        fireEvent.click(within(strip()!).getByRole('button', { name: 'Live' }));
+        await waitFor(() => expect(modeSets(desktop)).toEqual([{ name: 'mode.set', args: ['live'] }]));
+    });
+
+    it('shows no mark in a demo whose sample is made, nor in Live', async () => {
+        await renderConsole('demo');
+        await waitFor(() => strip()!);
+        expect(mark()).toBeNull();
+        expect(switches().every((button) => !button.hasAttribute('disabled'))).toBe(true);
     });
 });
 

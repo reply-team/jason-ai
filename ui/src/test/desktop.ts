@@ -194,6 +194,10 @@ export interface StubDesktop extends JasonDesktop {
     modeKept: 'live' | 'demo';
     /** The sentence `mode.get` answers when a test says the demo could not be opened; null otherwise. */
     modeUnopened: string | null;
+    /** Whether `mode.get` says the demo's sample is being made; false unless a test says it is. */
+    modePreparing: boolean;
+    /** Says the sample is being made, or is ready, as the main process does through `mode.onPreparing`. */
+    preparing(on: boolean): void;
     /**
      * What `openIn.targets` answers: the places this computer has, the default and the folder's name. `openIn.open` of a
      * place keeps it as the default (Copy path excepted), as the desktop does, and answers null or the refusal a test set.
@@ -241,6 +245,7 @@ export type ReplyAnswer =
 export function stubDesktop(status: DesktopSetup = setupFound, options: { newChat?: boolean } = {}): StubDesktop {
     const chatHandlers = new Set<(chatId: string, event: DesktopChatEvent) => void>();
     const changeHandlers = new Set<() => void>();
+    const preparingHandlers = new Set<(on: boolean) => void>();
     const standingHandlers = new Set<(standing: DesktopFullAccessStanding | null) => void>();
     const commandHandlers = new Set<(command: DesktopCommand) => void>();
     const linkHandlers = new Set<(link: DesktopLink) => void>();
@@ -349,7 +354,8 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
         mode: {
-            get: () => Promise.resolve({ mode: stub.modeKept, unopened: stub.modeUnopened }),
+            get: () =>
+                Promise.resolve({ mode: stub.modeKept, unopened: stub.modeUnopened, preparing: stub.modePreparing }),
             // A word that is neither mode is rejected, as the desktop rejects it, before anything is kept.
             set: (mode: unknown) =>
                 mode === 'live' || mode === 'demo'
@@ -359,6 +365,10 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                       })(mode)
                     : Promise.reject(new Error('That is not a mode.')),
             startOver: answering('mode.startOver', () => null),
+            onPreparing(handler) {
+                preparingHandlers.add(handler);
+                return () => preparingHandlers.delete(handler);
+            },
         },
         openIn: {
             targets: answering('openIn.targets', () => structuredClone(stub.openInKept)),
@@ -375,6 +385,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         themeKept: null,
         modeKept: 'live',
         modeUnopened: null,
+        modePreparing: false,
         openInKept: {
             places: [
                 { id: 'claude', label: 'Claude Code' },
@@ -617,6 +628,10 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             chatHandlers.forEach((handler) => handler(chatId, event));
         },
         changed: () => changeHandlers.forEach((handler) => handler()),
+        preparing: (on) => {
+            stub.modePreparing = on;
+            preparingHandlers.forEach((handler) => handler(on));
+        },
         command: (name) => commandHandlers.forEach((handler) => handler(name)),
     };
     return stub;
