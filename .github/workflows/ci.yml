@@ -41,10 +41,10 @@ name: CI
 # (`<rid> tests: <part>`, the whole suite in eight parts or the critical tier in one), and its check under the platform's
 # own name, which the rulesets require and which is green only when the package and every part of that platform this run
 # made succeeded. The parts' and the package's checks are reported too, and no ruleset requires them.
-# Where the whole suite runs, each part counts the tests it ran, each package job lists the whole suite on its platform
-# without running any of it, and the platform's check sums the parts, compares the sum with the listing, and says both
-# numbers and each part's on the run's summary; where they differ it raises a warning naming the platform and both
-# numbers, and stays green.
+# Where the whole suite runs, each part writes the test methods it ran, each package job lists the whole suite's test
+# methods on its platform without running any of it, and the platform's check compares the two by method and says on the
+# run's summary both numbers, each part's, and every method listed and run by no part, run and not listed, or run in
+# more than one part; where there is any, it raises a warning naming the platform and both numbers, and stays green.
 # Wherever the suite runs, a test that fails is run again, alone, at most twice, by the test platform's own repeat
 # (.github/scripts/Invoke-Tests.ps1): one that passes on a repeat keeps its job green and is named on the run's summary
 # and among its annotations, and one that fails every attempt fails its job. On Windows, a job that builds leaves its
@@ -737,19 +737,23 @@ jobs:
           }
           exit 0
 
-      # On a run of the whole suite: the number of tests each part of this platform ran, and the number its package job
-      # listed, each artifact in a folder of its own name.
+      # On a run of the whole suite: what each part of this platform ran, and what its package job listed, each artifact in
+      # a folder of its own name. A fetch that fails never turns the check red: what it did not fetch reads as a difference
+      # below.
       - name: Fetch this platform's counts
         if: needs.version.outputs.tier != 'true'
+        continue-on-error: true
         uses: actions/download-artifact@v7
         with:
           pattern: tests-*-${{ matrix.rid }}*
           path: ${{ runner.temp }}/tests-counted
 
-      # The parts together ran every test the whole suite lists, each once: the sum of what they ran against the listing,
-      # said on the run's summary with each part's number. A difference - a sum above or below the listing, a part with no
-      # count, a platform with no listing - is raised as a warning naming the platform and both numbers, and the check
-      # stays green; the one line that names the warning makes it an error that fails the check.
+      # The parts together ran every test method the whole suite lists, each in one part, compared by method: a theory is
+      # listed once however its rows are, and its rows are known only when it runs. Said on the run's summary with each
+      # part's methods and rows, and every method listed and run by no part, run and not listed, or run in more than one
+      # part, up to twenty of each by name. A difference - any of those, a part with no count, a platform with no listing -
+      # is raised as a warning naming the platform and both numbers, and the check stays green; the one line that names
+      # the warning makes it an error that fails the check.
       - name: The parts ran the tests the whole suite lists
         if: needs.version.outputs.tier != 'true'
         shell: pwsh
@@ -762,31 +766,57 @@ jobs:
           # What a difference is raised as: a warning, which leaves the check green, or an error, which fails it.
           $difference = 'warning'
 
-          function Counted([string] $file) {
+          function Read-Counted([string] $file) {
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $null }
-            $text = "$(Get-Content -Raw -LiteralPath $file)".Trim()
-            if ($text -cnotmatch '^[0-9]+$') { return $null }
-            [long] $text
+            try { $read = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json } catch { return $null }
+            if ($null -eq $read -or $null -eq $read.PSObject.Properties['methods']) { return $null }
+            $read
+          }
+          function Sorted([string[]] $names) { $sorted = [string[]] @($names); [Array]::Sort($sorted, [StringComparer]::Ordinal); , $sorted }
+          function Named([string] $title, [string[]] $lines) {
+            @("${title}: $($lines.Count)", '') + @($lines | Select-Object -First 20 | ForEach-Object { "- $_" }) +
+              @(if ($lines.Count -gt 20) { "- and $($lines.Count - 20) more" }) + @('')
           }
 
           $parts = @(@(($env:TESTS | ConvertFrom-Json).include) | Where-Object { $_ -and $_.rid -ceq $env:RID } | ForEach-Object { $_.part })
-          $ran = [long] 0
+          $ranIn = [Collections.Generic.Dictionary[string, Collections.Generic.List[string]]]::new([StringComparer]::Ordinal)
+          $rows = [long] 0
           $uncounted = @()
-          $rows = @()
+          $table = @()
           foreach ($part in $parts) {
-            $count = Counted (Join-Path $env:COUNTS "tests-ran-$env:RID-$part" 'ran.txt')
-            if ($null -eq $count) { $uncounted += $part; $rows += "| $part | not counted |" }
-            else { $ran += $count; $rows += "| $part | $count |" }
+            $read = Read-Counted (Join-Path $env:COUNTS "tests-ran-$env:RID-$part" 'ran.json')
+            if ($null -eq $read) { $uncounted += $part; $table += "| $part | not counted | not counted |"; continue }
+            $methods = [Collections.Generic.HashSet[string]]::new([string[]] @($read.methods), [StringComparer]::Ordinal)
+            foreach ($method in $methods) {
+              if (-not $ranIn.ContainsKey($method)) { $ranIn[$method] = [Collections.Generic.List[string]]::new() }
+              $ranIn[$method].Add($part)
+            }
+            $rows += [long] $read.rows
+            $table += "| $part | $($methods.Count) | $($read.rows) |"
           }
-          $listed = Counted (Join-Path $env:COUNTS "tests-listed-$env:RID" 'listed.txt')
+          $read = Read-Counted (Join-Path $env:COUNTS "tests-listed-$env:RID" 'listed.json')
+          $listed = if ($null -ne $read) { [Collections.Generic.HashSet[string]]::new([string[]] @($read.methods), [StringComparer]::Ordinal) }
 
-          $line = "${env:RID}: the parts ran $ran, the whole suite lists $(if ($null -eq $listed) { 'no number: it was not listed' } else { $listed })"
+          $line = "${env:RID}: the parts ran $($ranIn.Count) test methods, the whole suite lists $(if ($null -eq $listed) { 'no number: it was not listed' } else { $listed.Count })"
           if ($uncounted.Count -gt 0) { $line += "; not counted: $($uncounted -join ', ')" }
-          $differs = $uncounted.Count -gt 0 -or $null -eq $listed -or $ran -ne $listed
+          $twice = Sorted @($ranIn.Keys | Where-Object { $ranIn[$_].Count -gt 1 })
+          $sections = @()
+          $differs = $uncounted.Count -gt 0 -or $null -eq $listed -or $twice.Count -gt 0
+          if ($null -ne $listed) {
+            $unrun = Sorted @($listed | Where-Object { -not $ranIn.ContainsKey($_) })
+            $unlisted = Sorted @($ranIn.Keys | Where-Object { -not $listed.Contains($_) })
+            $differs = $differs -or $unrun.Count -gt 0 -or $unlisted.Count -gt 0
+            $line += $(if ($differs) { "; listed and run by no part: $($unrun.Count), run and not listed: $($unlisted.Count), run in more than one part: $($twice.Count)" })
+            $sections += Named 'Listed, and run by no part' @($unrun | ForEach-Object { "``$_``" })
+            $sections += Named 'Run, and not listed' @($unlisted | ForEach-Object { "``$_``" })
+          }
+          $sections += Named 'Run in more than one part' @($twice | ForEach-Object { "``$_`` ($($ranIn[$_] -join ', '))" })
 
-          $summary = @("### ${env:RID}: the tests counted", '', $line, '', '| Part | Tests it ran |', '| --- | --- |') + $rows
+          $summary = @("### ${env:RID}: the tests counted", '', $line, '', '| Part | Test methods it ran | Tests it ran |', '| --- | --- | --- |') + $table + @('') +
+            @("The parts ran $rows tests in all, a theory's every row. This is compared with nothing: a theory's rows are counted when it runs, not when it is listed.", '') +
+            $sections
           $summary | ForEach-Object { Write-Host $_ }
-          if ($env:GITHUB_STEP_SUMMARY) { $summary + @('') | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+          if ($env:GITHUB_STEP_SUMMARY) { $summary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
           if ($differs) {
             Write-Host "::$difference title=$env:RID tests counted::$line"
             if ($difference -ceq 'error') { exit 1 }
@@ -844,11 +874,11 @@ jobs:
       - name: Build (warnings are errors)
         run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
-      # The whole suite the platform's parts are measured against, on a run of the whole suite: every test each test
-      # project's built assembly holds, as the test framework's own runner discovers it on this platform, each row of a
-      # theory as a test, which is how the parts run them, and none of it run. A test that runs only when asked by name is
-      # not counted, since no part asks for it. A listing that cannot be read leaves the suite unlisted, with a warning,
-      # and the platform's check says so: the count is a report, and never fails this job.
+      # The whole suite the platform's parts are measured against, on a run of the whole suite: the full name of every test
+      # method each test project's built assembly holds, as the test framework's own runner discovers it on this platform,
+      # each once, and none of it run. A theory is one method however many rows it runs. A test that runs only when asked
+      # by name is left out, since no part asks for it. A listing that cannot be read leaves the suite unlisted, with a
+      # warning, and the platform's check says so: the count is a report, and never fails this job.
       - name: List the whole suite
         if: needs.version.outputs.tier != 'true'
         shell: pwsh
@@ -856,17 +886,17 @@ jobs:
           RID: ${{ matrix.rid }}
         run: |
           $projects = @(Get-ChildItem -LiteralPath dotnet/tests -Directory | Where-Object { $_.Name -cmatch '^Jason\.[A-Za-z]+\.Tests$' } | Sort-Object Name)
-          $listed = [long] 0
+          $methods = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
           $failed = @()
           if ($projects.Count -eq 0) { $failed += 'no test project was found' }
           foreach ($project in $projects) {
             $assembly = Join-Path 'dotnet/tests' $project.Name 'bin' 'Release' 'net10.0' "$($project.Name).dll"
-            $output = @(& dotnet $assembly -list full/json -preEnumerateTheories)
+            $output = @(& dotnet $assembly -list full/json)
             if ($LASTEXITCODE -ne 0) { $failed += "$($project.Name) exited $LASTEXITCODE"; continue }
             try { $tests = @(($output -join "`n") | ConvertFrom-Json) } catch { $failed += "$($project.Name) listed no JSON"; continue }
-            $count = @($tests | Where-Object { -not $_.Explicit }).Count
-            Write-Host "$($project.Name) lists $count"
-            $listed += $count
+            $before = $methods.Count
+            foreach ($test in @($tests | Where-Object { -not $_.Explicit })) { [void] $methods.Add("$($test.Class).$($test.Method)") }
+            Write-Host "$($project.Name) lists $($methods.Count - $before) test methods"
           }
           if ($failed.Count -gt 0) {
             Write-Host "::warning title=$env:RID whole suite::the whole suite was not listed: $($failed -join '; ')"
@@ -874,12 +904,12 @@ jobs:
           }
           $into = Join-Path $env:RUNNER_TEMP 'tests-listed'
           New-Item -ItemType Directory -Force -Path $into | Out-Null
-          Set-Content -LiteralPath (Join-Path $into 'listed.txt') -Value $listed
-          Write-Host "the whole suite lists $listed"
+          [ordered] @{ methods = @($methods) } | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $into 'listed.json')
+          Write-Host "the whole suite lists $($methods.Count) test methods"
           exit 0
 
       # For the platform's check, which compares the parts with it.
-      - name: Keep the number of tests the whole suite lists
+      - name: Keep the test methods the whole suite lists
         if: needs.version.outputs.tier != 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -1107,7 +1137,7 @@ jobs:
           NOT_NAMESPACES: ${{ matrix.not_namespaces }}
           CLASSES: ${{ matrix.classes }}
           NOT_CLASSES: ${{ matrix.not_classes }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Count (Join-Path $env:RUNNER_TEMP 'tests-ran' 'ran.txt') -Title $env:TITLE
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Ran (Join-Path $env:RUNNER_TEMP 'tests-ran' 'ran.json') -Title $env:TITLE
 
       - name: Test the critical tier (offline)
         if: needs.version.outputs.tier == 'true'
@@ -1120,10 +1150,11 @@ jobs:
           NOT_NAMESPACES: ${{ matrix.not_namespaces }}
           CLASSES: ${{ matrix.classes }}
           NOT_CLASSES: ${{ matrix.not_classes }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Count (Join-Path $env:RUNNER_TEMP 'tests-ran' 'ran.txt') -Title $env:TITLE -Critical
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
 
-      # The number of tests this part ran, for the platform's check, which sums the parts of a run of the whole suite.
-      - name: Keep the number of tests this part ran
+      # The test methods and the tests this part ran, for the platform's check, which compares the parts of a run of the
+      # whole suite with the listing.
+      - name: Keep what this part ran
         if: needs.version.outputs.tier != 'true'
         uses: actions/upload-artifact@v7
         with:
