@@ -51,6 +51,7 @@ public class ChannelRoutesEndToEndTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.W11, "the one row that proves channel routes whole: sends, replies, cancels and a held route across two plugins")]
     public async Task Email_and_LinkedIn_go_through_two_plugins_with_their_replies_cancels_and_held_routes()
     {
         using var mailbox = new TestWorkspace();
@@ -108,6 +109,8 @@ public class ChannelRoutesEndToEndTests
         Assert.Null(refusal.Launch);
         Assert.Equal((Social, socialAccount), (refusal.Provenance!.PluginId, refusal.Provenance.BindingIdentity));
         Assert.DoesNotContain(await ApprovalsAsync(host), approval => approval.WorkItemId == crossed);
+        Assert.DoesNotContain(crossed, ActsAt(mailbox));
+        Assert.DoesNotContain(crossed, ActsAt(profile));
 
         await ApprovedAndSucceededAsync(host, mailReply, socialReply);
         await AssertRanAtAsync(host, mailReply, Mailer, mailerAccount);
@@ -130,6 +133,9 @@ public class ChannelRoutesEndToEndTests
             Assert.Equal(("accepted", true), ((string?)outcome["status"], (bool?)outcome["cancelable"]));
         }
 
+        Assert.Equal([email, mailReply, heldEmail], ActsAt(mailbox));
+        Assert.Equal([linkedin, socialReply, heldLinkedin], ActsAt(profile));
+
         // The replies are answered, so their routes go; each send route is now the last one naming its account.
         await UnrouteOkAsync(host, campaign, "conversation.reply", "email");
         await UnrouteOkAsync(host, campaign, "conversation.reply", "linkedin");
@@ -148,6 +154,8 @@ public class ChannelRoutesEndToEndTests
 
         Assert.Equal(before, await RoutesAsync(host, campaign));
         Assert.Equal(lines, await LineCountAsync(host, JournalKinds.RoutesUpdated));
+        Assert.Equal([email, mailReply, heldEmail], ActsAt(mailbox));
+        Assert.Equal([linkedin, socialReply, heldLinkedin], ActsAt(profile));
 
         // 6. A cancel of each goes to the plugin and account its send ran under, with no route of its own.
         var cancelEmail = await CancelAsync(host, campaign, heldEmail);
