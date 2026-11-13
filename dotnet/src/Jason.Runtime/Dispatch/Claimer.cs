@@ -756,12 +756,18 @@ public sealed class Claimer(
                     made.Operation is { } sent ? OperationCatalog.Find(sent)?.RouteChannel(made.Context[WorkItemService.InputKey]) : null),
                 ct).ConfigureAwait(false)
             : null;
+        // And so is where the thread the work names was seen: a read or a filing of it goes there, and every operation that
+        // names one is held to it. A thread no line of the campaign names is one the runtime knows nothing about.
+        var thread = contract is not null && CanonicalInput.NamesAThread(contract) && CanonicalInput.NamedThread(item) is { } named
+            && await ThreadSightings.InCampaignAsync(db, item.CampaignId, named, ct).ConfigureAwait(false) is { Count: > 0 } seen
+            ? seen
+            : null;
         var resolution = contract is null
             ? null
-            : ProviderOpPreflight.Resolve(contract, new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Send: send, Search: search), routing);
+            : ProviderOpPreflight.Resolve(contract, new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Send: send, Search: search, Thread: thread), routing);
         if (contract is null || resolution is null)
         {
-            return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Unsettled: unsettled);
+            return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false, Unsettled: unsettled, Thread: thread);
         }
 
         var pluginId = resolution.Route.PluginId;
@@ -797,7 +803,7 @@ public sealed class Claimer(
 
         if (item.Contact is not { } contact)
         {
-            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search, audience, inTheWay);
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false, blocks, unsettled, send, Learned([], campaign.ExternalIds, pluginId, item, unsettled), search, audience, inTheWay, thread);
         }
 
         if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
@@ -820,7 +826,8 @@ public sealed class Claimer(
             Learned(contact.ExternalIds, campaign.ExternalIds, pluginId, item, unsettled),
             search,
             audience,
-            inTheWay);
+            inTheWay,
+            thread);
     }
 
     /// <summary>

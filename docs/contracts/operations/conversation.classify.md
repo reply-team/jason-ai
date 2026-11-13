@@ -44,6 +44,13 @@ and is refused as `category_opts_out`: stopping a person is `optout.record`'s pa
   `category_opts_out`, however it was named, after the lookup and before anything is filed. Stopping a person is
   `optout.record`'s path, and a filing the provider reads as a stop is not undone by taking the thread out again.
 
+The claim routes it where the campaign saw the thread. Where the campaign's own `inbound_reply_observed` lines
+name the thread under `args.thread`, the item goes to a route naming the plugin they say it was seen at — the
+account they say where a route names it, the newest first — and where no route names that plugin any more it is
+refused before anything is run: `thread_route_mismatch`, permanent ([routing](../../routing.md), the claim's row
+27). An id seen at more than one plugin goes where the operation's own route says, and is refused where that route
+names none of them. A thread no line names is routed as any item is.
+
 ## What to return
 
 ```json

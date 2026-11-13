@@ -6,6 +6,7 @@ namespace Jason.Runtime.Tests.Documentation;
 /// <summary>
 /// The claim's checks are published twice, as routing's numbered table and as work execution's chain, and both are held
 /// to the order the code asks them in, so a check added or moved in one place cannot leave a page stating the old order.
+/// The table's numbers are held to the numbers the code publishes, which never move: a check's number is its name.
 /// </summary>
 public sealed partial class ClaimOrderDocTests
 {
@@ -20,7 +21,30 @@ public sealed partial class ClaimOrderDocTests
             .Select(row => $"{row.Groups["n"].Value} {row.Groups["code"].Value}")
             .ToList();
 
-        Assert.Equal(ProviderOpPreflight.Codes.Select((code, index) => $"{index + 1} {code}"), rows);
+        Assert.Equal(ProviderOpPreflight.Codes.Select(code => $"{ProviderOpPreflight.Numbers[code]} {code}"), rows);
+    }
+
+    /// <summary>
+    /// The numbers every release has published stay those checks' names, and a check added later takes the next one: the
+    /// twenty-six numbered together keep 1 to 26, and the thread's check is 27, wherever each is asked.
+    /// </summary>
+    [Fact]
+    public void No_check_s_number_moves()
+    {
+        string[] numbered =
+        [
+            "operation_unknown", "no_route", "plugin_not_loaded", "plugin_unavailable", "plugin_operation_unsupported",
+            "contract_incompatible", "binding_invalid", "contact_required", "no_channel_value", "suppressed",
+            "contact_not_linked", "send_unknown", "send_reference_absent", "send_route_mismatch", "search_unknown",
+            "search_reference_absent", "search_route_mismatch", "audience_unknown", "input_invalid", "definition_invalid",
+            "argument_unsupported", "template_not_offered", "provider_answer_lost", "search_unfinished",
+            "approval_required", "provider_blocked", "thread_route_mismatch",
+        ];
+
+        Assert.Equal(
+            numbered.Select((code, index) => $"{index + 1} {code}"),
+            ProviderOpPreflight.Numbers.OrderBy(pair => pair.Value).Select(pair => $"{pair.Value} {pair.Key}"));
+        Assert.Equal(ProviderOpPreflight.Codes.Order(StringComparer.Ordinal), ProviderOpPreflight.Numbers.Keys.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -56,6 +80,8 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/routing.md", "The (?<n>[\\w-]+) is not a refusal at all", "row of approval_required")]
     [InlineData("docs/routing.md", "The (?<n>[\\w-]+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
     [InlineData("docs/routing.md", "every refusal from check 2 to check (?<n>[\\w-]+) keeps its code", "row of template_not_offered")]
+    [InlineData("docs/routing.md", "keeps its code, and so does check (?<n>[\\w-]+), and is recorded", "row of thread_route_mismatch")]
+    [InlineData("docs/routing.md", "so row (?<n>[\\w-]+) stands between rows", "row of thread_route_mismatch")]
     [InlineData("docs/work-execution.md", "whichever of the (?<n>[\\w-]+) pre-flight reasons applies", "all")]
     [InlineData("docs/work-execution.md", "the same rule the (?<n>[\\w-]+) provider checks follow", "all")]
     [InlineData("docs/work-execution.md", "\\| the (?<n>[\\w-]+) pre-flight codes \\|", "all")]
@@ -66,6 +92,8 @@ public sealed partial class ClaimOrderDocTests
     [InlineData("docs/work-execution.md", "(?<n>[\\w-]+) is not a refusal either: `approval_required`", "row of approval_required")]
     [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+), `provider_blocked`, is not a refusal either", "row of provider_blocked")]
     [InlineData("docs/work-execution.md", "every refusal of the claim from check 2 to check (?<n>[\\w-]+) keeps its code", "row of template_not_offered")]
+    [InlineData("docs/work-execution.md", "keeps its code, and so does check (?<n>[\\w-]+), and is recorded", "row of thread_route_mismatch")]
+    [InlineData("docs/work-execution.md", "The (?<n>[\\w-]+), `thread_route_mismatch`, is the last of those refusals", "row of thread_route_mismatch")]
     [InlineData("docs/work-execution.md", "the claim's (?<n>[\\w-]+) check parks held work an open block already holds", "row of provider_blocked")]
     [InlineData("CLAUDE.md", "The claim is fail-closed: (?<n>[\\w-]+) checks in one published order", "all")]
     public void Each_count_of_the_claim_s_checks_is_the_number_the_code_asks(string relative, string sentence, string counted)
@@ -74,18 +102,19 @@ public sealed partial class ClaimOrderDocTests
         var expected = counted switch
         {
             "all" => codes.Count,
-            // The checks before the first that parks rather than refuses: a search behind another, an approval, a block.
+            // The checks asked before the first that parks rather than refuses: a search behind another, an approval, a block.
             "refusals" => IndexOf(codes, "search_unfinished"),
             // Every refusal but three: input_invalid and definition_invalid are validation, provider_answer_lost is ambiguous.
             "permanent" => IndexOf(codes, "search_unfinished") - 3,
             "after binding_invalid" => codes.Count - (IndexOf(codes, "binding_invalid") + 1),
-            "row of input_invalid" => IndexOf(codes, "input_invalid") + 1,
-            "row of definition_invalid" => IndexOf(codes, "definition_invalid") + 1,
-            // The last refusal an unsettled send turns ambiguous: the row just before provider_answer_lost's own.
-            "row of template_not_offered" => IndexOf(codes, "template_not_offered") + 1,
-            "row of search_unfinished" => IndexOf(codes, "search_unfinished") + 1,
-            "row of approval_required" => IndexOf(codes, "approval_required") + 1,
-            "row of provider_blocked" => IndexOf(codes, "provider_blocked") + 1,
+            "row of input_invalid" => Row("input_invalid"),
+            "row of definition_invalid" => Row("definition_invalid"),
+            // The last refusal by place an unsettled send turns ambiguous: the row just before provider_answer_lost's own.
+            "row of template_not_offered" => Row("template_not_offered"),
+            "row of thread_route_mismatch" => Row("thread_route_mismatch"),
+            "row of search_unfinished" => Row("search_unfinished"),
+            "row of approval_required" => Row("approval_required"),
+            "row of provider_blocked" => Row("provider_blocked"),
             _ => throw new ArgumentOutOfRangeException(nameof(counted), counted, "No such count."),
         };
         var matches = Regex.Matches(Whitespace().Replace(Source(relative), " "), sentence);
@@ -103,6 +132,12 @@ public sealed partial class ClaimOrderDocTests
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
+
+    private static int Row(string code)
+    {
+        IndexOf(ProviderOpPreflight.Codes, code);
+        return ProviderOpPreflight.Numbers[code];
+    }
 
     private static int IndexOf(IReadOnlyList<string> codes, string code)
     {

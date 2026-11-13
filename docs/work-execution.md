@@ -245,7 +245,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twenty-six pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the twenty-seven pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -607,7 +607,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twenty-six provider checks follow.
+existed. It is the same rule the twenty-seven provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -936,7 +936,7 @@ settings at all and are never refused for this reason.
 | `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the twenty-six pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the twenty-seven pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -959,19 +959,18 @@ declares for one. A plugin never sees a work item's context. A search the claim 
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
 ([campaign manager](campaign-manager.md) §10).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-six checks,
-in this order, and the first that answers is the one that decides:
+**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-seven checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
 contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
 contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
 search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
-argument_unsupported → template_not_offered → provider_answer_lost → search_unfinished →
-approval_required → provider_blocked
+argument_unsupported → template_not_offered → provider_answer_lost → thread_route_mismatch →
+search_unfinished → approval_required → provider_blocked
 ```
 
-The first twenty-three are refusals and all of them are final: twenty are `permanent`, `input_invalid` and
+The first twenty-four are refusals and all of them are final: twenty-one are `permanent`, `input_invalid` and
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
@@ -979,7 +978,9 @@ the routed package — by its id and digest for a send, by its id alone for a me
 the unsettled attempt ran under, or the input
 composed now is not the one it was composed with, and so keeps what that attempt left unknown. The attempt is kept with its
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
-nothing ever falls back to another plugin. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
+nothing ever falls back to another plugin. The twenty-seventh, `thread_route_mismatch`, is the last of those refusals
+to be asked: work on a thread the campaign saw at another plugin than the item is routed to, refused before
+the three that wait or park, so nobody is asked to approve, and no block holds, work that could only be refused. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
 twenty-fifth is not a refusal either: `approval_required` parks the
@@ -1016,7 +1017,7 @@ holding it answers a repeat with the earlier send. A metered act settled by a re
 `campaign.enroll`, `campaign.activate` — is held the same way but for the package's digest: its recovery read finds
 the earlier act at the account whichever version of the package made it, so an update of the package in between lets
 the repeat through.
-While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code and is recorded
+While the item carries one, every refusal of the claim from check 2 to check 22 keeps its code, and so does check 27, and is recorded
 `ambiguous` and final, its message saying that an earlier attempt of the item may have reached the person
 (`docs/routing.md`). An answer that arrived and does not satisfy the
 operation's output schema is `result_invalid`: ambiguous, and never repeated; so is a failure whose code

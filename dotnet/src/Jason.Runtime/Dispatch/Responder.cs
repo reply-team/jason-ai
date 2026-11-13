@@ -7,7 +7,9 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Logging;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.Data.Sqlite;
@@ -42,6 +44,7 @@ public sealed class Responder(
     LiveSettings<ResponderOptions> settings,
     LiveSettings<RolesOptions> roles,
     RouteRegistry routes,
+    PluginRegistry plugins,
     ResponderSkips skips,
     ILogger<Responder> logger)
 {
@@ -50,6 +53,8 @@ public sealed class Responder(
 
     /// <summary>The operation that reads the thread for it.</summary>
     public const string ReadOperation = "conversation.get";
+
+    private static readonly OperationContract ReadContract = OperationCatalog.Find(ReadOperation)!;
 
     /// <summary>
     /// The reserved context key the runtime writes the inbound reply that woke the responder into, and reads an open
@@ -310,7 +315,7 @@ public sealed class Responder(
         }
 
         var contact = await MemberAsync(db, campaign.Id, reply.ContactId, ct).ConfigureAwait(false);
-        var read = await ReadAsync(campaign, reply, contact, options, ct).ConfigureAwait(false);
+        var read = await ReadAsync(db, campaign, line, reply, contact, options, ct).ConfigureAwait(false);
 
         var responder = await items.CreateCoreAsync(
             new WorkItemCreateRequest(
@@ -361,14 +366,26 @@ public sealed class Responder(
     }
 
     /// <summary>
-    /// The read of the thread, when the campaign's route for it names the plugin the reply was read at; none when it names
-    /// another or nothing, or when the thread's identifier is one the operation's input refuses — validation refuses before
-    /// anything is added, so nothing is left behind.
+    /// The read of the thread, where the thread was seen: the plugin the line names, and by preference the account its read
+    /// ran under, taken from the line itself, when a route active now names that plugin (<see cref="RouteResolver.ForThread"/>)
+    /// and it performs the read; none when no route names it, or when the thread's identifier is one the operation's
+    /// input refuses — validation refuses before anything is added, so nothing is left behind. The route is resolved as
+    /// the claim will resolve the read, over every line of the campaign naming the thread, and must name the line's plugin:
+    /// an id the campaign saw at more than one plugin is read where the read's own route says, and where that is another
+    /// plugin the read would fetch another conversation than the one this line answers, so none is made.
     /// </summary>
-    private async Task<WorkItem?> ReadAsync(Active campaign, Reply reply, string? contact, ResponderOptions options, CancellationToken ct)
+    private async Task<WorkItem?> ReadAsync(JasonDbContext db, Active campaign, Line line, Reply reply, string? contact, ResponderOptions options, CancellationToken ct)
     {
-        if (RouteResolver.Resolve(routes.Snapshot, campaign.PublicId, ReadOperation, channel: null) is not { } resolution
-            || !string.Equals(resolution.Route.PluginId, reply.Plugin, StringComparison.Ordinal))
+        var seen = await ThreadSightings.OfLineAsync(db, line.Id, ct).ConfigureAwait(false);
+        if (seen is null || !string.Equals(seen.PluginId, reply.Plugin, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var all = await ThreadSightings.InCampaignAsync(db, campaign.Id, reply.Thread, ct).ConfigureAwait(false);
+        if (RouteResolver.ForThread(routes.Snapshot, campaign.PublicId, ReadOperation, ThreadSightings.ListOperation, all.Count > 0 ? all : [seen]) is not { } resolution
+            || !seen.NamesThePlugin(resolution.Route)
+            || ProviderOpPreflight.Routable(plugins.Snapshot, ReadContract, resolution.Route) is not null)
         {
             return null;
         }

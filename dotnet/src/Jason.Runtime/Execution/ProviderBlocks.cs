@@ -318,7 +318,7 @@ public static class ProviderBlocks
         }
     }
 
-    /// <summary>What the twenty-fifth check says of work an open block holds: the operation, the plugin and the block's reason.</summary>
+    /// <summary>What the twenty-sixth check says of work an open block holds: the operation, the plugin and the block's reason.</summary>
     public static string HeldMessage(string operation, ProviderBlock block)
     {
         ArgumentNullException.ThrowIfNull(block);
