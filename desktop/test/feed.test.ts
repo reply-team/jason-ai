@@ -99,6 +99,13 @@ test('a decided line (an approval given or declined, a question answered, a camp
         const made = lineOf(journal({ kind, work_item_id: wi(4), new: { decision_id: 'dec_1', chosen_option: 'Send the discount offer' } }));
         assert.deepEqual(made, { kind: 'line', journal_kind: kind, journal_id: jrn(1), at: '2026-11-11T10:00:00.000Z', campaign_id: cmp(1), work_item_id: wi(4), count: 1 });
         assert.ok(!JSON.stringify(made).includes('discount'), kind);
+        // The decision's actor and reason (a person's words) are on the journal line and in neither the kept line nor the block.
+        const decided = lineOf(journal({ kind, reason: 'Reason only the decider wrote', actor: { type: 'human', id: 'grace' }, new: { decision_id: 'dec_1', chosen_option: 'Send the discount offer' } }));
+        assert.ok(decided !== null);
+        const block = feedBlock([decided], 0) ?? '';
+        for (const text of [JSON.stringify(decided), block]) {
+            for (const said of ['actor', 'reason', 'Reason only', 'grace', 'human', 'chosen_option', 'discount']) assert.ok(!text.includes(said), `${kind}: ${said}`);
+        }
     }
 });
 

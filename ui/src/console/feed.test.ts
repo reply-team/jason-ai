@@ -86,8 +86,8 @@ describe('the Feed as the page hands it lines and draws them', () => {
             'Work stopped',
             'Work stopped',
             'A provider block holds work',
-            'An approval was given',
-            'An approval was declined',
+            'Approved',
+            'Rejected',
             'A question was answered',
             'Agent archived',
         ]);
