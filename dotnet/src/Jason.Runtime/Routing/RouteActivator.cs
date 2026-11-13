@@ -544,6 +544,16 @@ public sealed class RouteActivator(
                 $"'{channel}' is not a channel '{contract.Id}' routes by; its argument '{contract.RouteChannelArgument}' allows {string.Join(", ", channels.Select(allowed => $"'{allowed}'"))}.");
     }
 
+    /// <summary>
+    /// The same two questions about the document, for a caller that names a route without a plugin — <c>route.unset</c> —
+    /// so it refuses a channel no route could name exactly as <c>route.set</c> does. An operation the catalog does not
+    /// publish is the caller's to have refused first; here it is answered as such.
+    /// </summary>
+    internal static RouteProblem? ChannelProblem(string operation, string channel) =>
+        OperationCatalog.Find(operation) is { } contract
+            ? ChannelProblem(contract, channel)
+            : new RouteProblem(RouteProblemCodes.OperationUnknown, $"'{operation}' is not an operation this build publishes.");
+
     /// <summary>A default route that names a channel: the default names no operation, so there is no argument to read one from.</summary>
     private static RouteProblem DefaultChannelProblem(string channel) =>
         new(

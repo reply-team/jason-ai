@@ -282,6 +282,7 @@ the operator wrote it:
 | the global default | `Routes:Default` |
 | a global operation override | `Routes:Operations:<operation>` |
 | a campaign route | `campaign:<cmp_…>/routes/<operation>`, or `campaign:<cmp_…>/routes/default` |
+| a campaign channel route | `campaign:<cmp_…>/routes/<operation>/<channel>` |
 
 The load at startup takes the same path: a runtime started with a bad route reports it in the startup report and
 leaves **both** registries empty, rather than running with plugins and no routes. A pattern that could not finish

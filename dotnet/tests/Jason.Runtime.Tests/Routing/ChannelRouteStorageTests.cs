@@ -148,6 +148,93 @@ public class ChannelRouteStorageTests
         Assert.Equal(0, await CountAsync(api, campaign));
     }
 
+    /// <summary>
+    /// A channel that is there and blank — what an empty variable or field sends — is refused at both doors rather than
+    /// read as no channel, which would replace the operation's own route at a set and take it away at an unset.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task A_blank_channel_is_refused_at_set_and_at_unset_and_the_operations_own_route_stays(string blank)
+    {
+        await using var api = await StartAsync();
+        var campaign = await CampaignAsync(api);
+        await SetAsync(api, campaign, Send, channel: null, Mailer);
+        var before = api.Resolve<RouteRegistry>().Snapshot.Id;
+
+        var set = await api.PostErrorAsync(
+            Operations.RouteSet,
+            new { campaign_id = campaign, operation = Send, channel = blank, plugin = Social },
+            HttpStatusCode.BadRequest,
+            Ct);
+        var unset = await api.PostErrorAsync(
+            Operations.RouteUnset,
+            new { campaign_id = campaign, operation = Send, channel = blank },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        foreach (var error in new[] { set, unset })
+        {
+            Assert.Equal("validation_failed", error.Code);
+            var detail = Assert.Single(error.Details!);
+            Assert.Equal(("channel", "blank"), (detail.Field, detail.Code));
+        }
+
+        var routes = api.Resolve<RouteRegistry>().Snapshot;
+        Assert.Equal(before, routes.Id);
+        Assert.Equal((Mailer, RouteScope.CampaignOperation), Won(routes, campaign, channel: null));
+        Assert.Equal(1, await CountAsync(api, campaign));
+        Assert.Single(await LinesAsync(api, campaign));
+    }
+
+    /// <summary>A channel written with spaces around it names the channel inside them, at a set and at an unset alike.</summary>
+    [Fact]
+    public async Task A_padded_channel_names_the_channel_inside_its_spaces()
+    {
+        await using var api = await StartAsync();
+        var campaign = await CampaignAsync(api);
+
+        await SetAsync(api, campaign, Send, " linkedin ", Social);
+
+        Assert.Equal((Social, RouteScope.CampaignChannel), Won(api.Resolve<RouteRegistry>().Snapshot, campaign, "linkedin"));
+        Assert.Equal("linkedin", (string?)(await LinesAsync(api, campaign)).Single().New!["channel"]);
+
+        await UnsetAsync(api, campaign, Send, " linkedin ");
+
+        Assert.Equal(0, await CountAsync(api, campaign));
+    }
+
+    /// <summary>
+    /// An unset asks of the channel what a set asks, before "not there" is considered: a channel the operation's document
+    /// would never let a route name is refused, named as a set names it, rather than answered "nothing to take away" while
+    /// the route the caller meant stays.
+    /// </summary>
+    [Theory]
+    [InlineData(Send, "LinkedIn", RouteProblemCodes.ChannelUnknown)]
+    [InlineData(Send, "sms", RouteProblemCodes.ChannelUnknown)]
+    [InlineData("campaign.get", "email", RouteProblemCodes.ChannelNotRoutable)]
+    public async Task An_unset_of_a_channel_no_route_could_name_is_refused_and_the_route_meant_stays(string operation, string channel, string code)
+    {
+        await using var api = await StartAsync();
+        var campaign = await CampaignAsync(api);
+        await SetAsync(api, campaign, Send, "linkedin", Social);
+        var before = api.Resolve<RouteRegistry>().Snapshot.Id;
+
+        var error = await api.PostErrorAsync(
+            Operations.RouteUnset,
+            new { campaign_id = campaign, operation, channel },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal("validation_failed", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal((RouteActivator.CampaignField(campaign, operation, channel), code), (detail.Field, detail.Code));
+        var routes = api.Resolve<RouteRegistry>().Snapshot;
+        Assert.Equal(before, routes.Id);
+        Assert.Equal((Social, RouteScope.CampaignChannel), Won(routes, campaign, "linkedin"));
+        Assert.Equal(1, await CountAsync(api, campaign));
+    }
+
     /// <summary>The same checks as an operation's own route, in the same order: a plugin that does not perform the operation.</summary>
     [Fact]
     public async Task A_channel_route_to_a_plugin_that_does_not_perform_the_operation_is_refused_as_an_operation_route_is()
@@ -230,13 +317,14 @@ public class ChannelRouteStorageTests
         await using var api = await StartAsync();
         var campaign = await CampaignAsync(api);
         await WriteRowAsync(api, campaign, operation, channel, Mailer);
+        var before = api.Resolve<RouteRegistry>().Snapshot.Id;
 
         var error = await api.PostErrorAsync(Operations.PluginReload, new { }, HttpStatusCode.Conflict, Ct);
 
         Assert.Equal("plugin_reload_rejected", error.Code);
         var detail = Assert.Single(error.Details!);
         Assert.Equal(($"campaign:{campaign}/routes/{operation}/{channel}", code), (detail.Field, detail.Code));
-        Assert.Empty(api.Resolve<RouteRegistry>().Snapshot.Campaigns);
+        Assert.Equal(before, api.Resolve<RouteRegistry>().Snapshot.Id);
     }
 
     /// <summary>

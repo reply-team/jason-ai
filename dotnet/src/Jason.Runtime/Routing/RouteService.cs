@@ -187,7 +187,9 @@ public sealed class RouteService(
     /// <summary>
     /// Takes one campaign route away, and with it whatever it was overriding. Removing a route that is not there
     /// is not an error — it is the state the caller asked for — and it activates nothing, because nothing changed.
-    /// A channel route and its operation's own route are taken away each on its own: the one not named stays.
+    /// A channel route and its operation's own route are taken away each on its own: the one not named stays. A channel
+    /// the operation's document would never let a route name is refused as <c>route.set</c> refuses it, before "not
+    /// there" is considered: answering "nothing to take away" for it would leave the route the caller meant in place.
     /// </summary>
     public async Task<RoutesDto> UnsetAsync(RouteUnsetRequest request, CancellationToken cancellationToken)
     {
@@ -201,6 +203,10 @@ public sealed class RouteService(
 
         var operation = OperationOrDefault(request.Operation);
         var campaign = await LiveCampaignAsync(request.CampaignId, cancellationToken).ConfigureAwait(false);
+        if (operation is not null && channel is not null && RouteActivator.ChannelProblem(operation, channel) is { } problem)
+        {
+            throw new ValidationException([new ErrorDetail(RouteActivator.CampaignField(campaign.PublicId, operation, channel), problem.Code, problem.Message)]);
+        }
 
         return await ActivateAsync(
             campaign,
@@ -346,14 +352,23 @@ public sealed class RouteService(
         string.IsNullOrWhiteSpace(operation) ? null : RequireContract(operation).Id;
 
     /// <summary>
-    /// The channel a request names, or none: a blank one is that same absence, typed out. A channel is a channel of an
-    /// operation, so one named without an operation — under the default, which has none — is refused as the operation
-    /// missing. Whether the operation routes by channel, and by this one, is the route check's to say.
+    /// The channel a request names, or none where it names none — left out or null. A channel that is there and blank is
+    /// refused rather than read as none: that would address the operation's own route, and a set would replace it and an
+    /// unset take it away, when the caller named a channel's route — most likely one an empty variable or field left
+    /// out. A channel is a channel of an operation, so one named without an operation — under the default, which has
+    /// none — is refused as the operation missing. Whether the operation routes by channel, and by this one, is the
+    /// route check's to say.
     /// </summary>
     private static string? ChannelOrNone(string? channel, string? operation, ValidationErrors errors)
     {
+        if (channel is null)
+        {
+            return null;
+        }
+
         if (string.IsNullOrWhiteSpace(channel))
         {
+            errors.Add("channel", "blank", "channel is blank. Leave it out to name the operation's own route, or name the channel whose route this is.");
             return null;
         }
 
