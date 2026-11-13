@@ -53,6 +53,7 @@ export const eventChannels = {
     'setup.changed': 'jason:setup.changed',
     'links.open': 'jason:links.open',
     'fullAccess.changed': 'jason:fullAccess.changed',
+    'mode.preparing': 'jason:mode.preparing',
 } as const;
 
 export type InvokeMember = keyof typeof invokeChannels;

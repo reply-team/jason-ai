@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from '../src/theme.ts';
 import { parseSettings, settingsAtStart, writeSettings, type DesktopSettings } from '../src/settings.ts';
+import { demoDirectory, keepFirstStart, readMode, writeMode } from '../src/mode.ts';
+import { desktopPaths } from '../src/paths.ts';
+import { requestStartOver } from '../src/demo-over.ts';
 
 const base: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: '0.35.0', theme: null };
 
@@ -61,6 +64,49 @@ test('an installation is new when its data directory is absent or empty, and not
     assert.equal(isNewInstallation('d', () => ['jason.db']), false);
 });
 
+test('a data directory that holds only the desktop’s own mode record, or that and a request to start the demo over, is new', () => {
+    const person = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
+    writeMode(desktopPaths(person).mode, 'demo');
+    assert.equal(isNewInstallation(person), true, 'the record alone');
+    requestStartOver(desktopPaths(person).demoStartOver, 4242);
+    assert.equal(isNewInstallation(person), true, 'the record and the request');
+    // Anything else of an installation in the desktop's folder, or beside it, makes it one that has been used.
+    writeFileSync(desktopPaths(person).settings, '{}');
+    assert.equal(isNewInstallation(person), false, 'the desktop’s settings');
+    const other = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
+    writeMode(desktopPaths(other).mode, 'live');
+    mkdirSync(join(other, 'logs'));
+    assert.equal(isNewInstallation(other), false, 'a folder beside the record');
+    // A desktop entry that is a file, not the desktop's folder, is no record of the desktop's.
+    const odd = mkdtempSync(join(tmpdir(), 'theme-new-'));
+    writeFileSync(join(odd, 'desktop'), '');
+    assert.equal(isNewInstallation(odd), false);
+});
+
+test('a new person meets Light in the demo they see first, and again in their own installation when they first choose Live', () => {
+    const person = join(mkdtempSync(join(tmpdir(), 'theme-first-')), '.jason');
+    // The first start: newness is read of the person's directory before anything is written, then the record is kept.
+    const isNew = isNewInstallation(person);
+    assert.equal(isNew, true);
+    assert.equal(keepFirstStart(desktopPaths(person).mode, isNew, false), true);
+    assert.equal(readMode(desktopPaths(person).mode), 'demo');
+    // The demo run's own settings meet Light, by the person's newness, though the demo's directory is not empty by then.
+    const demo = demoDirectory(person);
+    mkdirSync(join(demo, 'plugins', 'demo'), { recursive: true });
+    assert.equal(isNewInstallation(demo), false, 'what makes the demo run read the person’s newness, not its own');
+    assert.equal(startingTheme(null, isNew), 'light');
+    assert.equal(settingsAtStart(desktopPaths(demo).settings, isNew).theme, 'light');
+    // Live: the record says so, and the person's directory, holding only it, is still new: their own first start is Light.
+    writeMode(desktopPaths(person).mode, 'live');
+    assert.deepEqual(readdirSync(person), ['desktop']);
+    const atLive = isNewInstallation(person);
+    assert.equal(atLive, true);
+    assert.equal(startingTheme(null, atLive), 'light');
+    assert.equal(settingsAtStart(desktopPaths(person).settings, atLive).theme, 'light');
+    // From then on the installation has been used.
+    assert.equal(isNewInstallation(person), false);
+});
+
 test('the two backgrounds are the starting page’s own', () => {
     const css = readFileSync(new URL('../shell/shell.css', import.meta.url), 'utf8');
     assert.ok(css.includes(`--bg: ${lightBackground}`));
@@ -69,9 +115,14 @@ test('the two backgrounds are the starting page’s own', () => {
 
 test('whether the installation is new is decided in the main module before Electron makes its profile, on either start', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    // Decided where the installation is chosen, which a start runs before it places Electron's profile.
+    // Decided where the installation is chosen, which a start runs before it places Electron's profile: of the PERSON's
+    // directory, before the first start's record is written and before the run is entered.
     const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
-    assert.ok(choose.includes('installationWasNew = isNewInstallation('));
+    const read = choose.indexOf('installationWasNew = isNewInstallation(personDirectory);');
+    assert.ok(read > 0);
+    assert.ok(choose.indexOf('keepFirstStart(') > read, 'the record is written after newness is read');
+    assert.ok(choose.indexOf('runOn = startOn(') > read && choose.indexOf('enterRun(process.env, runOn)') > read);
+    assert.equal(choose.split('isNewInstallation(').length - 1, 1, 'read once');
     const start = main.slice(main.indexOf('function startDesktop('));
     const chosen = start.indexOf('chooseInstallation(uninstalling');
     const firstKeep = start.indexOf('\n    keepElectronUnderData();');

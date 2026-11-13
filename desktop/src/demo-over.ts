@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, r
 import { basename, dirname, join } from 'node:path';
 import { demoMarkerName } from './demo-folders.ts';
 import type { DemoPlaces } from './demo-seed.ts';
+import type { Logger } from './log.ts';
 
 /** The request file's text: the asking run's process id, so a start that is not that run waits for it to end. */
 export const startOverRequestText = (pid: number): string => `pid=${pid}\n`;
@@ -41,6 +42,18 @@ export class CarryOutRefused extends Error {
 export function requestStartOver(file: string, pid: number = process.pid): void {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, startOverRequestText(pid));
+}
+
+/**
+ * Takes the request away once a making of the sample is whole; one that cannot be removed is logged and kept, and the
+ * next start then makes the sample again, which costs time and never shows a half.
+ */
+export function dropStartOver(file: string, log: Pick<Logger, 'warn'>): void {
+    try {
+        rmSync(file, { force: true });
+    } catch (error) {
+        log.warn('demo_start_over_request_unremoved', { Code: (error as NodeJS.ErrnoException).code ?? 'unknown' });
+    }
 }
 
 /** The process that asked, or null when the text does not say. */

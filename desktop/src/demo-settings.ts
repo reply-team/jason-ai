@@ -8,7 +8,9 @@
  * The harness root is the person's with `-demo` after it, a folder of its own beside theirs, so the demo's projects and
  * campaigns are never made in the person's tree. The responder is off, and the manager, which has no switch of its own,
  * keeps only the trigger it cannot do without at its slowest cadence, so no AI role is woken by sample data. The
- * provider's events are read at the shortest cadence and the dispatcher ticks often, so the sample moves within minutes.
+ * provider's events are read at the shortest cadence and the dispatcher ticks each second, the shortest tick it takes,
+ * because it claims one item of a campaign per scan and the sample is made by waiting on those items, so the sample is
+ * made and moves within minutes; the runtime's own default and the person's settings are never given it.
  * No route is written here: a route to a plugin not yet placed fails the start, so the route is written beside the
  * plugin's placing, after this.
  */
@@ -27,7 +29,7 @@ export function demoSettingsValues(harnessRoot: string): Record<string, Record<s
         Harness: { Root: harnessRoot },
         Responder: { OnReply: false },
         Manager: { Triggers: ['decision_answered'], ReviewSeconds: demoReviewSeconds },
-        Dispatcher: { EventsCadenceSeconds: 60, TickSeconds: 2 },
+        Dispatcher: { EventsCadenceSeconds: 60, TickSeconds: 1 },
     };
 }
 

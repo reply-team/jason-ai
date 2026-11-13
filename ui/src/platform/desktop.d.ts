@@ -536,7 +536,7 @@ export interface JasonDesktop {
          * again; null otherwise. `preparing` is true while the demo's sample is still being made behind the page, which
          * `onPreparing` then says false of once it is ready.
          */
-        get(): Promise<{ mode: 'live' | 'demo'; unopened: string | null; preparing?: boolean }>;
+        get(): Promise<{ mode: 'live' | 'demo'; unopened: string | null; preparing: boolean }>;
         /**
          * Writes the mode to the record in the person's installation and then starts the desktop again, which runs on
          * the installation it names: null once written and the new start asked for; the desktop's refusal, with nothing
