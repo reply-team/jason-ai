@@ -357,6 +357,7 @@ test('a tab sends only to a chat in Ask first or Plan only: Auto-edit, Full acce
         assert.deepEqual(refusals(r).at(-1), { Why: why, Member: 'chat.send' }, chatId);
     }
     assert.equal(autoEditElsewhere, 'This chat is in Auto-edit. Send messages to it from Jason Desktop.');
+    assert.equal(fullAccessElsewhere, 'This chat is in Full access. Send messages to it from Jason Desktop.');
     assert.equal(otherModeElsewhere, 'This chat is in a mode a tab cannot send to. Send messages to it from Jason Desktop.');
     assert.ok(!r.calls.some((call) => call.member === 'chat.send'), 'no refused send was handled');
     await r.call(secret, 'chat.send', ['cht_ask', 'hello', { host: 'claude', model: 'm' }]);

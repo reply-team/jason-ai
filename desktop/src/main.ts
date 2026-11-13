@@ -35,7 +35,7 @@ import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { eventChannels, handle, withMembers, type InvokeMember } from './ipc.ts';
+import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
@@ -167,13 +167,7 @@ function lockNavigation(contents: WebContents, origin: () => string | null, log:
     return { leave, ownPage };
 }
 
-/**
- * Every member the page may ask for is registered here, through `ipc.ts`, which checks the window's sender and keeps each
- * handler in one registry: the browser bridge reaches the same handlers through it (`browser-bridge.ts`).
- */
-const seam = withMembers(ipcMain);
-
-function registerSetup(setup: Setup, origin: () => string | null, log: Logger, changed: () => void): void {
+function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | null, log: Logger, changed: () => void): void {
     const refused = (channel: string) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' });
     const members: [InvokeMember, (...args: unknown[]) => unknown][] = [
         ['setup.status', () => setup.status()],
@@ -233,6 +227,9 @@ function linkOf(data: unknown): unknown {
 
 /** The window's run; `links` is where a link waits for the page, made by the start before Electron was ready. */
 async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
+    // Every member the page may ask for is registered through `seam`, which checks the window's sender and keeps each
+    // handler in one registry: the browser bridge reaches the same handlers through it (`browser-bridge.ts`).
+    const seam = withMembers(ipcMain);
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
@@ -547,6 +544,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
     registerSetup(
+        seam,
         new Setup({
             paths,
             cli,

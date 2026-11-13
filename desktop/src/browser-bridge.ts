@@ -30,7 +30,7 @@ import type { Logger } from './log.ts';
 /** What a tab is told when it asks for a member outside the table. */
 export const elsewhere = "That is done in Jason Desktop's own window.";
 /** What a tab is told when it sends to a chat in Full access. */
-export const fullAccessElsewhere = "This chat is in Full access, so it takes messages only in Jason Desktop's own window.";
+export const fullAccessElsewhere = 'This chat is in Full access. Send messages to it from Jason Desktop.';
 /** What a tab is told when it sends to a chat in Auto-edit. */
 export const autoEditElsewhere = 'This chat is in Auto-edit. Send messages to it from Jason Desktop.';
 /** What a tab is told when it sends to a chat in any other mode a tab does not send in. */
