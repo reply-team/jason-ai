@@ -32,8 +32,10 @@ The index so far:
 | [`journal-forwarder/`](journal-forwarder/README.md) | the subscription contract `subscription.handle`: each journal line of a kind you grant it, POSTed as JSON to one URL you name, added to a file in a directory you grant, or both, with the envelope answered unchanged. Its README says how it is installed from the release, the settings that grant it, what the receiver gets and that delivery is at least once, a receiver on another host, and every outcome it reports. |
 | [`slack/`](slack/README.md) | the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — posted to a Slack channel. Its README says how it is installed from the release, how to make the bot, the settings that name the channel, the token, and every outcome it reports. |
 | [`telegram/`](telegram/README.md) | the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — sent to a Telegram chat by a bot you make. Its README says how it is installed from the release, how to make the bot, the settings that name the chat, the token, and every outcome it reports. |
+| [`demo/`](demo/README.md) | `message.send`, `social_invitation.send`, `conversation.reply`, `sender.list`, `conversation.list`, `conversation.get` and the events contract `events.read`, against nobody: it requests no capability, so it can reach nothing outside its process, and it answers the written threads and replies of an invented sample story kept in the package as data. |
 
-Each of these five is published with every release, Reply's from 0.11.0, the journal forwarder's from 0.30.0, and ntfy's,
+The demo provider is the one no release publishes: the desktop carries it and places it in its demo installation.
+Each of the other five is published with every release, Reply's from 0.11.0, the journal forwarder's from 0.30.0, and ntfy's,
 Slack's and Telegram's from 0.32.0, as `jason-plugin-<id>.zip`, and `jason plugin install <id>` places it.
 
 [`reply.digests`](reply.digests) lists the digest of each version the Reply package has had from 0.9.0 on, and of the
@@ -42,7 +44,8 @@ answer; `--human` shows the first twelve hexadecimal characters after `sha256:` 
 package against its version's line, and a copy whose digest is not its version's line is not that version.
 [`journal-forwarder.digests`](journal-forwarder.digests) does the same for the journal forwarder's package, from 1.0.0,
 the package 0.29.0 shipped in its tree; [`ntfy.digests`](ntfy.digests) for ntfy's, from the 1.0.0 that 0.2.0 shipped in
-its tree; and [`slack.digests`](slack.digests) and [`telegram.digests`](telegram.digests) for Slack's and Telegram's.
+its tree; [`slack.digests`](slack.digests) and [`telegram.digests`](telegram.digests) for Slack's and Telegram's; and
+[`demo.digests`](demo.digests) for the demo provider's, from 1.0.0, the package the desktop carries.
 
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the
