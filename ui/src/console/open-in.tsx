@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { can } from '../platform/places';
 import type {
     DesktopOpenInAnswer,
     DesktopOpenInContinue,
@@ -66,6 +67,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     const reads = useRef(0);
 
     const read = useCallback(async () => {
+        if (!can('openIn.targets')) return;
         const asked = ++reads.current;
         try {
             const kept = await desktop.openIn.targets(campaignId, chatId);
@@ -118,6 +120,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     const open = async (place: DesktopOpenInPlace) => {
         setMenu(false);
+        if (!can('openIn.open')) return;
         const said = await desktop.openIn.open(place, campaignId).then(
             (result) => (result === null ? null : result.refused),
             (error: unknown) => (error instanceof Error ? error.message : String(error)),
@@ -154,7 +157,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     const continueChat = async (offered: DesktopOpenInContinue) => {
         setMenu(false);
-        if (chatId === undefined) return;
+        if (chatId === undefined || !can('openIn.continueChat')) return;
         const said = await desktop.openIn.continueChat(chatId).then(
             (result) => (result === null ? null : result.refused),
             (error: unknown) => (error instanceof Error ? error.message : String(error)),

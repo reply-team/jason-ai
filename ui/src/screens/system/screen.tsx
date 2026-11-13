@@ -4,7 +4,8 @@ import { Toolbar } from '../../layout/toolbar';
 import { session } from '../../api/session';
 import type { UiToken } from '../../api/types';
 import { clock, relative, when } from '../../time/format';
-import { followStanding, fullAccessStanding, takeBackStanding } from '../../platform/full-access';
+import { earlier, followStanding, fullAccessStanding, takeBackStanding } from '../../platform/full-access';
+import { can, cannotHere, currentDesktop, placeKind } from '../../platform/places';
 import * as store from './store';
 import { routeCounts } from './route-counts';
 import { Notice } from '../../layout/notice';
@@ -17,8 +18,8 @@ const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
  * browser, and a desktop of an earlier version, show no card.
  */
 function FullAccessCard() {
-    const desktop = window.jasonDesktop;
-    const offered = desktop !== undefined && (desktop as Partial<typeof desktop>).fullAccess !== undefined;
+    const desktop = currentDesktop();
+    const offered = desktop !== undefined && can('fullAccess.standing') && earlier(desktop).fullAccess !== undefined;
     const [refused, setRefused] = useState<string | null>(null);
     useEffect(() => (desktop !== undefined && offered ? followStanding(desktop) : undefined), [desktop, offered]);
     if (desktop === undefined || !offered) return null;
@@ -42,7 +43,13 @@ function FullAccessCard() {
                     </p>
                     {standing.newChats && <p>New chats start in Full access.</p>}
                     <div className="btn-row">
-                        <button className="btn" type="button" onClick={takeBack}>
+                        <button
+                            className="btn"
+                            type="button"
+                            onClick={takeBack}
+                            disabled={!can('fullAccess.takeBack')}
+                            title={can('fullAccess.takeBack') ? undefined : cannotHere()}
+                        >
                             Ask each time again
                         </button>
                     </div>
@@ -72,7 +79,7 @@ export function SystemScreen() {
                 {info?.update?.available && (
                     <Notice>
                         Jason {info.update.version} is available.{' '}
-                        {window.jasonDesktop ? (
+                        {placeKind() === 'window' && currentDesktop() ? (
                             <>
                                 The desktop updates itself and the jason it carries. Choose Check for Updates… in the
                                 desktop&apos;s Jason menu, or in the menu of its icon in the tray.

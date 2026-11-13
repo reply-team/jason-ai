@@ -1,4 +1,5 @@
 import { effect, signal } from '@preact/signals-react';
+import { can } from '../platform/places';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
@@ -113,7 +114,7 @@ async function begin(text: string): Promise<void> {
         effort: pick.effort,
         typing: pick.typing,
     }));
-    if (chats.value[id]?.mode !== wanted) {
+    if (chats.value[id]?.mode !== wanted && can('chat.setMode')) {
         try {
             const answer = await here().desktop.chat.setMode(id, wanted, hostOf(chats.value[id]!)?.id ?? '');
             if (isRefusal(answer)) changeChat(id, (each) => told(each, answer.refused));

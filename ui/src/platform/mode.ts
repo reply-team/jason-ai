@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals-react';
 import { t } from './i18n';
+import { can, cannotHere } from './places';
 
 // The mode is which installation the desktop runs on: Live, the person's own, or Demo, a second installation of sample
 // data beside it. The page learns it from the desktop alone, once, as it loads, here and nowhere else; a browser shows
@@ -55,7 +56,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
     let heard: boolean | null = null;
     try {
         unfollow =
-            seam?.onPreparing?.((on) => {
+            (can('mode.onPreparing') ? seam : null)?.onPreparing?.((on) => {
                 heard = on === true;
                 if (mode.value === 'demo') modePreparing.value = heard;
             }) ?? null;
@@ -64,7 +65,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
     }
     let kept: unknown;
     try {
-        kept = await seam?.get?.();
+        kept = can('mode.get') ? await seam?.get?.() : null;
     } catch {
         kept = null;
     }
@@ -90,6 +91,10 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
 export async function switchMode(to: Mode): Promise<void> {
     if (to === mode.value || seam === null || modePreparing.value) return;
     modeRefusal.value = null;
+    if (!can('mode.set')) {
+        modeRefusal.value = cannotHere();
+        return;
+    }
     if (seam.set === undefined) {
         modeRefusal.value = t('mode.unsupported');
         return;

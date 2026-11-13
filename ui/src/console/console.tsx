@@ -11,6 +11,7 @@ import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
+import { can } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { registry } from '../platform/slots';
@@ -238,7 +239,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const stops = [
             // The standing choice of Full access, for the mode menu's take-back and the System screen.
             followStanding(desktop),
-            desktop.links.onOpen(opened),
+            can('links.onOpen') ? desktop.links.onOpen(opened) : () => undefined,
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
                 // A line the Feed took while it is not in front marks it in the sidebar; nothing else happens.
@@ -251,12 +252,14 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 if (event.kind === 'attached') void campaigns.reload();
             }),
             desktop.setup.onChanged(() => void connect.reload()),
-            desktop.onCommand((command) => {
-                if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
-                const to = commandTarget(command);
-                if (typeof to === 'string') dock.show(to);
-                else if (to) dock.page(to);
-            }),
+            can('onCommand')
+                ? desktop.onCommand((command) => {
+                      if (command === 'chat.new' || command === 'navigate.chat') return dock.chat();
+                      const to = commandTarget(command);
+                      if (typeof to === 'string') dock.show(to);
+                      else if (to) dock.page(to);
+                  })
+                : () => undefined,
             journal.onState((state) => {
                 // A resume the runtime refused starts the stream afresh: what was written meanwhile is read back for the
                 // Feed.
@@ -277,12 +280,13 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             }),
         ];
         journal.start();
-        void desktop.links
-            .take()
-            .then((link) => {
-                if (link !== null) opened(link);
-            })
-            .catch(() => undefined);
+        if (can('links.take'))
+            void desktop.links
+                .take()
+                .then((link) => {
+                    if (link !== null) opened(link);
+                })
+                .catch(() => undefined);
         const tick = setInterval(() => {
             clock.value = Date.now();
         }, 30_000);
@@ -341,7 +345,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
 
     return (
         <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
-            <ModeStrip openIn={desktop.openIn === undefined ? undefined : <OpenIn desktop={desktop} />} />
+            <ModeStrip openIn={can('openIn.targets') ? <OpenIn desktop={desktop} /> : undefined} />
             <div className="shell">
                 <aside className="side">
                     <Painted className="side-body" view={sideView} />
@@ -375,12 +379,23 @@ function SideFailure() {
 }
 
 /** The console, paired first like the browser shell; `stream` stands in for the page's own stream in tests. */
-export function Console({ api, desktop, stream }: { api?: Api; desktop: JasonDesktop; stream?: JournalStream }) {
+export function Console({
+    api,
+    desktop,
+    stream,
+    bootstrapped = false,
+}: {
+    api?: Api;
+    desktop: JasonDesktop;
+    stream?: JournalStream;
+    /** The page read the pairing before it started the console, as a tab's start does to learn its bridge. */
+    bootstrapped?: boolean;
+}) {
     const client = useMemo(() => api ?? new HttpApi(session), [api]);
-    const [ready, setReady] = useState(false);
+    const [ready, setReady] = useState(bootstrapped);
     useEffect(() => {
-        void session.bootstrap().finally(() => setReady(true));
-    }, []);
+        if (!bootstrapped) void session.bootstrap().finally(() => setReady(true));
+    }, [bootstrapped]);
     if (!ready) return null;
     if (!session.paired.value) return <PairAgain />;
     return (

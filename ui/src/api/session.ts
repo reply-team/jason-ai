@@ -1,5 +1,6 @@
 import { computed, signal } from '@preact/signals-react';
 import { Bridge, type BridgePair } from '../platform/bridge';
+import { can, currentDesktop } from '../platform/places';
 import { replace } from '../router';
 import type { UiSession } from './types';
 
@@ -167,7 +168,8 @@ export class Session {
  */
 function tellDesktop(tokenId: string): void {
     // A desktop older than this page offers no such member.
-    const desktop = window.jasonDesktop as { pairing?: { paired?: (id: string) => Promise<void> } } | undefined;
+    if (!can('pairing.paired')) return;
+    const desktop = currentDesktop();
     try {
         void desktop?.pairing?.paired?.(tokenId)?.catch(() => undefined);
     } catch {

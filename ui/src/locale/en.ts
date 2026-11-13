@@ -58,6 +58,8 @@ export const en = {
     'mode.switch': 'Data',
     'mode.switch.demo': 'Demo',
     'mode.switch.live': 'Live',
+    'place.elsewhere': "Done in Jason Desktop's own window.",
+    'place.needs': 'This needs Jason Desktop.',
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',
