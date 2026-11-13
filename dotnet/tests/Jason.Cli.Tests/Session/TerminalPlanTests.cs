@@ -198,7 +198,7 @@ public sealed class TerminalPlanTests : IDisposable
     [InlineData("", "''")]
     [InlineData("'", "''\\'''")]
     [InlineData("a b", "'a b'")]
-    [InlineData("$(rm -rf ~)", "'$(rm -rf ~)'")]
+    [InlineData("$(exit 7)", "'$(exit 7)'")]
     public void A_word_is_single_quoted_with_each_apostrophe_closed_and_reopened(string word, string quoted)
     {
         Assert.Equal(quoted, TerminalPlan.ShellQuote(word));

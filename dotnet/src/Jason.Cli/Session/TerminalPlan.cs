@@ -63,9 +63,11 @@ public static class TerminalPlan
     /// </summary>
     /// <param name="dataDirectory">
     /// The data directory the CLI runs with when <c>JASON_DATA_DIR</c> names one, else null (empty and blank are none, as
-    /// they are to the CLI). On Windows and Linux the terminal is the CLI's own child and inherits the variable, so the
-    /// launch there does not change; on macOS Terminal is started by the system and its shell carries nothing of the CLI's
-    /// environment, so the script exports this one variable before the <c>exec</c>, and nothing else.
+    /// they are to the CLI). On Windows and Linux the terminal process is the CLI's own child and inherits the variable,
+    /// so the launch there does not change, though a Linux emulator that hands the command to a server process already
+    /// running may run the host in that server's environment instead; on macOS Terminal is started by the system and its
+    /// shell carries nothing of the CLI's environment, so the script exports this one variable before the <c>exec</c>, and
+    /// nothing else.
     /// </param>
     public static TerminalLaunch Compose(TerminalPlatform os, TerminalFound terminal, string folder, IReadOnlyList<string> host, string itemId, string? dataDirectory = null)
     {
