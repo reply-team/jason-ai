@@ -11,6 +11,7 @@ const top = {
     platform: true,
     onCommand: true,
     theme: true,
+    pairing: true,
     chat: true,
     links: true,
     setup: true,
@@ -34,6 +35,8 @@ const chat = {
     feed: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
+// The window's pairing: the page reports its token's id, never the token.
+const pairing = { paired: true } as const satisfies Record<keyof JasonDesktop['pairing'], true>;
 // The standing choice of Full access: read and taken back by the page, never given by it.
 const fullAccess = { standing: true, takeBack: true, onChanged: true } as const satisfies Record<
     keyof JasonDesktop['fullAccess'],
@@ -75,21 +78,24 @@ const held: [
     Exactly<keyof typeof status, keyof DesktopSetup>,
     Exactly<keyof typeof links, keyof JasonDesktop['links']>,
     Exactly<keyof typeof fullAccess, keyof JasonDesktop['fullAccess']>,
-] = [true, true, true, true, true, true, true];
+    Exactly<keyof typeof pairing, keyof JasonDesktop['pairing']>,
+] = [true, true, true, true, true, true, true, true];
 
 describe('the desktop seam', () => {
     it('is exactly the members the desktop implements', () => {
-        expect(held).toEqual([true, true, true, true, true, true, true]);
+        expect(held).toEqual([true, true, true, true, true, true, true, true]);
         expect([
             ...Object.keys(top).filter(
                 (name) =>
                     name !== 'theme' &&
+                    name !== 'pairing' &&
                     name !== 'chat' &&
                     name !== 'links' &&
                     name !== 'setup' &&
                     name !== 'fullAccess',
             ),
             ...Object.keys(theme).map((name) => `theme.${name}`),
+            ...Object.keys(pairing).map((name) => `pairing.${name}`),
             ...Object.keys(chat).map((name) => `chat.${name}`),
             ...Object.keys(links).map((name) => `links.${name}`),
             ...Object.keys(setup).map((name) => `setup.${name}`),
@@ -99,6 +105,7 @@ describe('the desktop seam', () => {
             'onCommand',
             'theme.get',
             'theme.set',
+            'pairing.paired',
             'chat.send',
             'chat.stop',
             'chat.answer',

@@ -51,6 +51,11 @@ export interface DesktopPaths {
     electron: string;
     /** `<data>/desktop/electron/logs/`: what Electron itself logs (its app logs path), never the desktop's own log. */
     electronLogs: string;
+    /**
+     * `<data>/desktop/window-pairing.json`: whether what an earlier version's page kept on disk was unpaired, and the id
+     * of the UI token the window's page holds now, never the token (`window-pairing.ts`).
+     */
+    windowPairing: string;
     /** `<data>/logs/`, shared with the runtime; the desktop writes only `desktop-*.jsonl` there. */
     logs: string;
     /** `<data>/config/settings.json`, the installation's settings, which a Connect card edits as a person would. */
@@ -87,6 +92,7 @@ export function desktopPaths(data: string): DesktopPaths {
         bundle: join(desktop, 'bundle'),
         electron: join(desktop, 'electron'),
         electronLogs: join(desktop, 'electron', 'logs'),
+        windowPairing: join(desktop, 'window-pairing.json'),
         logs: join(data, 'logs'),
         installationSettings: join(data, 'config', 'settings.json'),
         runFile: join(data, 'run', 'runtime.json'),

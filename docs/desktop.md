@@ -106,8 +106,8 @@ them on.
 - `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a turn on a provider's key
   runs its host with. They keep the host's transcripts of those turns, never the key, and are readable by your account
   alone where the system has modes.
-- `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone, naming the
-  desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
+- `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone where the
+  system has modes, naming the desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
 - `<data>/desktop/models.json`: the models Codex offered when it was last asked.
 - `<data>/desktop/full-access.json`: the standing choice of Full access (below), kept for each host program that can take
@@ -124,8 +124,17 @@ them on.
   that lasts only while it runs, so each start copies its `jason` here; that copy is the `jason` it runs, starts the
   runtime from, puts on the PATH and gives the chat. A copy is used only when every file matches the package's, and one
   that differs, or a link where the folder should be, stops the start and is named, to be removed by hand.
-- `<data>/desktop/electron/`: Electron's own profile, the page's storage and its logs, so a second data directory is a
-  second desktop and nothing of it lands outside `<data>`.
+- `<data>/desktop/electron/`: Electron's own profile and its logs, so a second data directory is a second desktop and
+  nothing of it lands outside `<data>`. The window's page keeps its storage in memory only, so its pairing with the
+  runtime, a key with the run token's rights, never reaches this folder, whatever build of the page the runtime serves.
+  An earlier version kept it here: at the first start after the update the desktop revokes every UI token before the
+  window loads, then removes what that page stored, so a browser you paired with `jason ui open` must be paired again
+  once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
+  does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
+  its tokens still valid, until a start that starts the runtime.
+- `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
+  holds now, never the token. The page reports the id once it has paired, and the desktop revokes the token the window
+  held before, so the paired list keeps one row for the window.
 - `<data>/logs/desktop-YYYYMMDD[_NNN].jsonl`: its log, in the runtime log's shape and under its limits, and never any
   text a person gave Jason. `jason logs --source desktop` reads it, and `jason doctor` carries a bounded slice.
 
@@ -227,15 +236,26 @@ Claude Code.
   servers it names loaded, since Codex asks no one before such a tool runs, nor your ChatGPT apps (connectors), which
   every Codex turn turns off; its sign-in is still used.
 - **On Windows, Codex needs its elevated sandbox.** Every Windows Codex turn names it (`windows.sandbox="elevated"`),
-  since a command in Codex's other Windows sandbox can read Jason's data directory. Naming it does not prove it is set
-  up, so at the first send to Codex in each run of the desktop the chat checks first ("Checking Codex's sandbox…"): a
-  command tries to open two files of the data directory and says only whether it could, never what is in them. One is
-  the runtime's run file, which has an access list of its own; the other is the desktop's settings file, which keeps
-  the access list the rest of the data directory, the database and the logs among them, inherits. It also opens
-  Windows' own hosts file, which every account may read, to show that it can open a file at all. The same command
-  runs first outside any sandbox, where it must open all three, then in Codex's sandbox, where it must open the hosts
-  file and neither of the two, then outside again, where it must open all three once more. The chat runs on Codex only on exactly that; otherwise the turn is
-  refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
+  since a command in Codex's other Windows sandbox can read the runtime's run file, and with it the token that lets a
+  program act as you through Jason's API. Naming it does not prove it is set up, so at the first send to Codex in each
+  run of the desktop the chat checks first, saying so: **Checking Codex's sandbox… Windows may ask once for an
+  administrator; answering No means chatting on Claude Code instead.** That line is Windows' alone. A command tries to open two
+  files of the data directory and says only whether it could, never what is in them. One is the runtime's run file,
+  which has an access list of its own; the other is the desktop's settings file, which keeps the access list the rest
+  of the data directory, the database and the logs among them, inherits. It also opens Windows' own hosts file, which
+  every account may read, to show that it can open a file at all. The same command runs first outside any sandbox,
+  where it must open all three, then in Codex's sandbox, where it must open the hosts file and not the run file, then
+  outside again, where it must open all three once more. The verdict rests on the run file alone: the elevated sandbox
+  opens the settings file, as a Codex command can read the rest of the data directory on macOS and Linux too, and
+  whether it did is a fact the check reports and the desktop's log records (`chat_sandbox_checked`, a word for the
+  answer and one for the settings file, never a path), not a reason to refuse. What the verdict stands for, credential
+  by credential: the run token is checked; the window's own pairing is absent, kept in memory only; the AI providers'
+  keys are sealed by the operating system for your account, which Codex's sandbox on Windows does not run as, since it
+  runs as an account of its own; a plugin's secret kept in the installation's settings,
+  the live Claude turns' endpoint secrets, which open no API, and Jason's data, conversations and transcripts are
+  readable, and the line under the composer says so; a browser's own pairing and the agent hosts' own sign-ins are
+  outside Jason's folder and not checked. The chat runs on Codex only on exactly
+  that; otherwise the turn is refused with one sentence: **Codex on Windows needs its elevated sandbox, set up once by an administrator with
   `codex sandbox setup --elevated` (https://learn.chatgpt.com/docs/windows/windows-sandbox), or chat on Claude Code.**
   A turn on the OpenAI key is refused instead with **Codex on a key cannot be checked on Windows yet: sign in to Codex,
   or chat on Claude Code.** The answer is kept for that Codex until the desktop quits. With no runtime running there is
@@ -246,8 +266,18 @@ Claude Code.
   is not run at the Connect card, since naming the elevated sandbox may ask for an administrator.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
-  skills in `.agents/skills`, and answers; it acts through nothing. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
+  skills in `.agents/skills`, and answers. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
   loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder.
+  While Codex is the chat's host, on your sign-in or on the OpenAI key, the line under the composer says what a command
+  can read, system by system as it was seen. On Windows, where the desktop's check has seen the elevated sandbox keep
+  the run file from a command: **A Codex command can read your files, Jason's data and settings among them, a plugin's
+  secret kept in settings.json too, but not the key Jason's own commands use, its run token. Codex runs it
+  read-only.** On macOS and Linux, where nobody has looked, and on a desktop that does not say its system: **A Codex
+  command can read your files, Jason's data and settings among them, a plugin's secret kept in settings.json too, and
+  the key Jason's own commands use, its run token. Codex runs it read-only.** Neither says anything of the network or
+  of acting for you, which nobody has seen. Keep a plugin's secret out of `settings.json`
+  ([plugins.md](plugins.md#hostconfig)). A browser you paired keeps its token in its own profile, which a command of a
+  Codex chat may read; revoke a browser you no longer use ([ui.md](ui.md#paired-browsers)).
 
 ### Conversations
 
@@ -258,7 +288,8 @@ conversation is kept from its first turn, one never sent to leaves nothing, and 
 turn without its memory of the conversation and keeps what is shown. **Remove** deletes the conversation's record from
 this computer after one question; the host keeps its own transcript.
 
-A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone: the campaign, a title,
+A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
+modes: the campaign, a title,
 the session each host named for it, and what the page drew, as text, within 2 MB. Every turn begins with a paragraph the
 desktop writes, naming the conversation's campaign and its folder, and a turn that cannot resume its host's session
 starts a fresh one with a recap of the last words. The conversation is no boundary: the agent is asked to keep to its
