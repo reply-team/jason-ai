@@ -2,16 +2,17 @@
 // runtime knows of, and nothing here is markup: the panels escape what they draw.
 import type { ApprovalSummary, CampaignSummary, CampaignSummaryRow, DecisionSummary, JournalEntry } from '../api/types';
 import type { DesktopHost } from '../platform/desktop';
+import { t } from '../platform/i18n';
 
 export type Tone = 'green' | 'amber' | 'gray' | 'blue' | 'red' | 'violet' | 'teal';
 
 export function ageOf(moment: string | null | undefined, now: number): string {
     if (!moment) return '';
     const minutes = Math.floor((now - Date.parse(moment)) / 60_000);
-    if (!Number.isFinite(minutes) || minutes < 1) return 'now';
-    if (minutes < 60) return `${minutes} min`;
-    if (minutes < 60 * 24) return `${Math.floor(minutes / 60)} h`;
-    return `${Math.floor(minutes / (60 * 24))} d`;
+    if (!Number.isFinite(minutes) || minutes < 1) return t('age.now');
+    if (minutes < 60) return t('age.min', { count: String(minutes) });
+    if (minutes < 60 * 24) return t('age.hour', { count: String(Math.floor(minutes / 60)) });
+    return t('age.day', { count: String(Math.floor(minutes / (60 * 24))) });
 }
 
 const states: Readonly<Record<string, [string, Tone]>> = {

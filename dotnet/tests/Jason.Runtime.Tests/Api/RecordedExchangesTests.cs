@@ -654,6 +654,10 @@ public class RecordedExchangesTests
         Assert.Equal(
             new CampaignActivityTotal(0, 0, 0, 0, 0, 0, Removed: 0),
             (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-today", new { since = Today, until = Now, exclude_archived_contacts = true }, Ct)).Total);
+        // The Dashboard's tiles: thirty days, from the midnight twenty-nine days back, across the agents not archived.
+        var month = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-30-days", new { since = "2026-09-17T00:00:00.000Z", until = Now, exclude_archived_contacts = true }, Ct);
+        Assert.True(month.Total.Contacted > 0 && month.Total.Replied > 0);
+        Assert.Contains(month.Campaigns, row => row.CampaignId == seed.Spring && row.Contacted > 0);
         Assert.Equal(
             new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1),
             (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "two", new { campaign_ids = two, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Total);
