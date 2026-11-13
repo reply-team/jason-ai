@@ -14,7 +14,7 @@
 import { posix, win32 } from 'node:path';
 
 /** Every place the menu can offer, in the order it offers them. */
-export const placeIds = ['claude', 'codex', 'terminal', 'vscode', 'cursor', 'antigravity', 'windsurf', 'zed', 'files', 'copy'] as const;
+export const placeIds = ['claude', 'codex', 'terminal', 'vscode', 'cursor', 'antigravity', 'windsurf', 'zed', 'files', 'browser', 'copy'] as const;
 export type PlaceId = (typeof placeIds)[number];
 
 export const isPlace = (value: unknown): value is PlaceId => typeof value === 'string' && (placeIds as readonly string[]).includes(value);
@@ -35,6 +35,7 @@ const labels: Readonly<Record<PlaceId, string>> = {
     windsurf: 'Windsurf',
     zed: 'Zed',
     files: 'File manager',
+    browser: 'Browser',
     copy: 'Copy path',
 };
 
@@ -170,29 +171,37 @@ export function editorLine(found: Found, folder: string): Line {
     return found.kind === 'app' ? { file: '/usr/bin/open', args: ['-a', found.path, folder] } : { file: found.path, args: [folder] };
 }
 
-/** The places this computer has, in the menu's order; the three terminal entries need no program of the desktop's. */
-export function placesFound(probes: Probes, hosts: { claude: boolean; codex: boolean }): Place[] {
+/**
+ * The places this computer has, in the menu's order; the three terminal entries need no program of the desktop's. A
+ * browser is offered where the desktop can open the chat in one (`browser`): it opens the chat, not the folder.
+ */
+export function placesFound(probes: Probes, hosts: { claude: boolean; codex: boolean }, browser = false): Place[] {
     const found: PlaceId[] = [];
     if (hosts.claude) found.push('claude');
     if (hosts.codex) found.push('codex');
     found.push('terminal');
     for (const id of editorIds) if (findEditor(id, probes) !== null) found.push(id);
     if (fileManager(probes) !== null) found.push('files');
+    if (browser) found.push('browser');
     found.push('copy');
-    // The generic places (Terminal, Copy path, and the file manager where the system has no name for it) carry no label: the
-    // page has its own words for them. A product's name (VS Code, Finder, File Explorer, Claude Code) is the desktop's.
-    return found.map((id) => ({ id, label: id === 'files' ? fileManagerName(probes.platform) : id === 'terminal' || id === 'copy' ? '' : labels[id] }));
+    // The generic places (Terminal, a browser, Copy path, and the file manager where the system has no name for it) carry no
+    // label: the page has its own words for them. A product's name (VS Code, Finder, File Explorer, Claude Code) is the
+    // desktop's.
+    return found.map((id) => ({ id, label: id === 'files' ? fileManagerName(probes.platform) : id === 'terminal' || id === 'browser' || id === 'copy' ? '' : labels[id] }));
 }
+
+/** The places that do not open the folder, so are never the main part's: Copy path, and a browser, which opens the chat. */
+export const notFolderPlaces: readonly PlaceId[] = ['copy', 'browser'];
 
 /**
  * The place the main part opens: the one used last while it is still here, else Claude Code, else the first place that
- * opens something. Copy path is never the default; a terminal is always there.
+ * opens something. Copy path and a browser are never the default; a terminal is always there.
  */
 export function defaultPlace(places: readonly Place[], remembered: PlaceId | null): PlaceId {
     const here = (id: PlaceId) => places.some((place) => place.id === id);
-    if (remembered !== null && remembered !== 'copy' && here(remembered)) return remembered;
+    if (remembered !== null && !notFolderPlaces.includes(remembered) && here(remembered)) return remembered;
     if (here('claude')) return 'claude';
-    return places.find((place) => place.id !== 'copy')?.id ?? 'terminal';
+    return places.find((place) => !notFolderPlaces.includes(place.id))?.id ?? 'terminal';
 }
 
 /** The arguments `jason session open` is given for a terminal; one function holds the form the CLI takes. */
@@ -217,6 +226,11 @@ export interface OpenInDeps {
     /** Writes to the clipboard, from the main process. */
     copy(text: string): void;
     terminalFlags: TerminalFlags;
+    /**
+     * Opens the chat in a tab of the system's browser (`browser-bridge.ts`): the sentence why it could not, or null.
+     * Absent, a browser is not offered.
+     */
+    browser?(): Promise<string | null>;
     log?(event: 'open_in' | 'open_in_refused', fields: { Place: PlaceId }): void;
     /**
      * The session a terminal may continue the chat by, read from the desktop's own record, with whether a turn of it runs
@@ -292,7 +306,7 @@ export class OpenIn {
     async targets(campaignId?: unknown, chatId?: unknown): Promise<OpenInAnswer | OpenInRefusal> {
         const folder = await this.#folder(campaignId);
         if (typeof folder !== 'string') return folder;
-        const places = placesFound(this.#deps.probes, this.#deps.hosts());
+        const places = placesFound(this.#deps.probes, this.#deps.hosts(), this.#deps.browser !== undefined);
         const name = (this.#deps.probes.platform === 'win32' ? win32 : posix).basename(folder);
         const answer: OpenInAnswer = { places, default: defaultPlace(places, this.#deps.remembered()), folder: name };
         const found = chatId === undefined || chatId === null ? null : this.#deps.continuable(chatId);
@@ -325,8 +339,14 @@ export class OpenIn {
 
     /** Opens the folder in the place the name says; a name not on this computer's list, or a path, is refused. */
     async open(target: unknown, campaignId?: unknown): Promise<OpenInRefusal | null> {
-        const places = placesFound(this.#deps.probes, this.#deps.hosts());
+        const places = placesFound(this.#deps.probes, this.#deps.hosts(), this.#deps.browser !== undefined);
         if (!isPlace(target) || !places.some((place) => place.id === target)) return { refused: 'That is not a place this computer can open the folder in.' };
+        // A browser opens the chat, not a folder: none is read, and it is never kept as the place used last.
+        if (target === 'browser') {
+            const failed = this.#deps.browser === undefined ? 'That is not a place this computer can open the folder in.' : await this.#deps.browser();
+            this.#deps.log?.(failed === null ? 'open_in' : 'open_in_refused', { Place: target });
+            return failed === null ? null : { refused: failed };
+        }
         const folder = await this.#folder(campaignId);
         if (typeof folder !== 'string') return folder;
         const deps = this.#deps;
@@ -362,7 +382,7 @@ export class OpenIn {
             deps.log?.('open_in_refused', { Place: target });
             return refusal;
         }
-        if (target !== 'copy') deps.remember(target);
+        if (!notFolderPlaces.includes(target)) deps.remember(target);
         deps.log?.('open_in', { Place: target });
         return null;
     }
