@@ -69,7 +69,12 @@ next free one above it and `jason runtime status --human` says so; `Runtime:Port
 
 What waits for you: approvals and questions, **Pending** or **Decided** (`jason approval list`, `jason decision list`).
 Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
-which account and on which channel, and through which provider. A row above the list narrows it to **All**, **Approvals**
+which account and on which channel, and through which provider. An approval to send a message shows it under "The message as
+written", before the raw request, which stays folded: an email's sender, recipient, subject and body in that order, with the
+body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
+labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it
+is made of. One sentence under it says what is not shown: the provider adds its signature and its tracking when it sends.
+A row above the list narrows it to **All**, **Approvals**
 or **Questions**, each option with how many of its kind are listed, the chosen one ticked so that it is told apart by
 more than its colour, and "Shown: N" saying how many the list shows. The filter belongs to the screen alone: it is never
 stored, never part of the page's address and never sent to the runtime, and it goes back to All when nothing at all is
@@ -238,6 +243,18 @@ downloaded, and says that everything here also works from a session with your ag
 deployed. The browser has no chat and starts no agent: the runtime starts no process for a screen, and a browser tab cannot ask you
 before the agent acts.
 
+## Accounts
+
+One screen for what you have connected. **Provider** is the Reply connection of the desktop's Connect panel, drawn by
+the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
+the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
+box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
+acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
+notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
+with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
+The page says in one sentence where they are changed: under `Notifications:*` in the installation's settings file, or by
+asking your AI, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
+
 ## Inside Jason Desktop
 
 [Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
@@ -245,7 +262,7 @@ object the desktop puts on the page, `window.jasonDesktop`. In it the chat is ho
 **Needs you** (this page's Attention), **Campaigns** and **Activity**, which follow the journal as it is written, and
 **Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
 channels are set up. An empty Needs you card says you are caught up and offers **Open your campaigns**. The browser's
-other screens, People, Performance, Work items, System and Settings, open in a page panel of the same dock, and every
+other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same dock, and every
 screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
 (`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on

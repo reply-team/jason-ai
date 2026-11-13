@@ -47,6 +47,19 @@ test("Claude Code offers the vendor's four aliases; haiku takes effort only from
     assert.deepEqual(at('2.1.257').opus, all);
 });
 
+test("Claude Code's entries read as the vendor names them, and the ids passed to the host stay the aliases", () => {
+    // The alias follows the provider and moves over time (Anthropic: "Uses the latest Opus model"), so no version is named.
+    assert.deepEqual(
+        claudeCodeModels('2.1.293').map((model) => [model.id, model.label]),
+        [
+            ['opus', 'Opus (latest)'],
+            ['sonnet', 'Sonnet (latest)'],
+            ['haiku', 'Haiku (latest)'],
+            ['fable', 'Fable (latest)'],
+        ],
+    );
+});
+
 test('the hosts offer their models: Claude Code and the Anthropic key the aliases and a typed name, Codex and the OpenAI key the list kept, the other keys their table', () => {
     const kept = lists([
         ['codex', codexList],

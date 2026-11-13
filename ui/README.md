@@ -12,6 +12,9 @@ bundle carries. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.h
 that has no licence file, and the package step refuses notices that leave out a package `package.json` names as a
 dependency.
 
+The brand files are the mark, the two wordmarks and the app icons under `desktop/`; the small `Alpha` label beside the wordmark
+is text in the page, in the browser and in the desktop alike, and the first screen of the desktop says the interface is optional and that a terminal with your AI, through the CLI and API, does the same.
+
 ## Where it lands
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else

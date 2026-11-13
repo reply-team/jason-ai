@@ -878,7 +878,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                                 value={picked.typing ? anotherModel : (picked.offer?.id ?? picked.kept ?? '')}
                                 onChange={(event) => onThisHost((each) => modelChosen(each, host, event.target.value))}
                             >
-                                <option value="">Default model</option>
+                                <option value="">Default (recommended)</option>
                                 {host.models.map((each) => (
                                     <option key={each.id} value={each.id}>
                                         {each.label}

@@ -78,7 +78,7 @@ describe('Attention', () => {
         renderApp(fake);
         await waitFor(() => screen.getByText('message.send Ines Duarte'));
         fireEvent.click(screen.getByText('message.send Ines Duarte'));
-        await waitFor(() => screen.getByText('owner@example.test'));
+        await waitFor(() => screen.getAllByText('owner@example.test'));
         expect(fact('From')).toBe('owner@example.test');
         expect(fact('Channel')).toBe('Email');
     });

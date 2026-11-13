@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Channels;
 using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Operations;
@@ -38,6 +39,7 @@ public sealed record OperationContract(
     Preflight Preflight,
     IReadOnlyList<string>? ChannelArguments,
     IReadOnlyList<string>? ChannelTemplates,
+    string? RouteChannelArgument,
     DispatchRule Dispatch,
     ContactProjection? ContactProjection,
     string Precondition,
@@ -51,6 +53,9 @@ public sealed record OperationContract(
     int TimeoutMs,
     IReadOnlyList<string> Conformance)
 {
+    /// <summary>The argument an operation whose <c>preflight.channel</c> is <c>from_args</c> names the channel it consumes in.</summary>
+    private const string ConsumedChannelArgument = "channel";
+
     /// <summary>The value a person is reached at, in the composed input of an operation about one person.</summary>
     private const string ReachedValue = "/contacts/0/channels/0/value";
 
@@ -102,6 +107,45 @@ public sealed record OperationContract(
 
     /// <summary>All the runtime asks of the slot: that it is an object, whatever the object holds.</summary>
     private static readonly JsonObject AnObject = new() { ["type"] = "object" };
+
+    /// <summary>
+    /// The channels a route may name under this operation, in the order the document lists them: the enum of the argument
+    /// <see cref="RouteChannelArgument"/> names, or null where the document names none and a route names no channel here.
+    /// </summary>
+    public IReadOnlyList<string>? RouteChannels =>
+        RouteChannelArgument is { } name && ArgumentSchema["properties"]?[name]?["enum"] is JsonArray offered
+            ? [.. offered.Select(channel => channel!.GetValue<string>())]
+            : null;
+
+    /// <summary>
+    /// The channel a call's arguments name for its route: the value of the argument <see cref="RouteChannelArgument"/>
+    /// names, when it is one of <see cref="RouteChannels"/>. Null where the document names no argument, and where the
+    /// arguments leave it out — a filter a caller may omit — or carry something no route could name: a call without a
+    /// channel resolves by the operation's own route.
+    /// </summary>
+    /// <remarks>The name is matched as written, by walking the pairs, as the slot is.</remarks>
+    public string? RouteChannel(JsonNode? arguments)
+    {
+        if (RouteChannels is not { } channels || arguments is not JsonObject map || !Readable(map))
+        {
+            return null;
+        }
+
+        foreach (var (name, value) in map)
+        {
+            if (string.Equals(name, RouteChannelArgument, StringComparison.Ordinal))
+            {
+                return value is JsonValue text
+                    && text.GetValueKind() == JsonValueKind.String
+                    && text.TryGetValue(out string? channel)
+                    && channels.Contains(channel, StringComparer.Ordinal)
+                    ? channel
+                    : null;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// A caller's arguments checked against <see cref="ArgumentSchema"/>, with the provider's slot set aside: the slot is
@@ -247,6 +291,7 @@ public sealed record OperationContract(
             ReadPreflight(reader.Object("preflight"), reader),
             reader.OptionalTextList("channel_arguments"),
             reader.OptionalTextList("channel_templates"),
+            reader.OptionalText("route_channel_argument"),
             ReadDispatch(reader.Object("dispatch"), reader),
             ReadProjection(reader.OptionalObject("contact_projection"), reader),
             reader.Text("precondition"),
@@ -266,6 +311,7 @@ public sealed record OperationContract(
         RefuseUnpairedChannels(source, contract);
         RefuseUncheckableChannelArguments(source, contract);
         RefuseUncheckableChannelTemplates(source, contract);
+        RefuseUnroutableChannelArgument(source, contract);
         RefuseKeyedReadWithoutRepeat(source, contract);
         RefuseUncheckedReach(source, contract);
         RefuseUnpausableWork(source, contract);
@@ -515,6 +561,63 @@ public sealed record OperationContract(
             }
         }
     }
+
+    /// <summary>
+    /// A route may name a channel under an operation only where the document names the argument the channel is read from,
+    /// and a route is held to the channels that argument may take. So the argument is one the arguments declare, written
+    /// as a string whose <c>enum</c> lists those channels — an open pattern offers no list to hold a route to, which is
+    /// what the address a person is found by is — and every value is a channel: a name <see cref="ChannelRules"/> knows,
+    /// spelled as it keeps one. The argument may be one a caller leaves out; such a call carries no channel
+    /// (<see cref="RouteChannel"/>). Where the arguments name the channel the operation consumes, the route reads that
+    /// same argument, so a call is never routed by one channel and sent on another. A document that names none writes null.
+    /// </summary>
+    private static void RefuseUnroutableChannelArgument(string source, OperationContract contract)
+    {
+        if (contract.RouteChannelArgument is not { } name)
+        {
+            return;
+        }
+
+        if (contract.ArgumentSchema["properties"] is not JsonObject declared || !declared.TryGetPropertyValue(name, out var argument))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `route_channel_argument` names `{name}`, which `input_schema.properties.args` does not declare, so no call could carry a channel there.");
+        }
+
+        if (argument is not JsonObject written
+            || written["type"] is not JsonValue type
+            || type.GetValueKind() != JsonValueKind.String
+            || !string.Equals(type.GetValue<string>(), "string", StringComparison.Ordinal)
+            || written["enum"] is not JsonArray offered
+            || offered.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `route_channel_argument` names `{name}`, which is not written as a string with an `enum` of the channels it may take, so a route could not be held to them.");
+        }
+
+        foreach (var value in offered)
+        {
+            if (value is not JsonValue text
+                || text.GetValueKind() != JsonValueKind.String
+                || !text.TryGetValue(out string? channel)
+                || !string.Equals(ChannelRules.NormalizeChannelName(channel, out _), channel, StringComparison.Ordinal)
+                || !ChannelRules.IsKnown(channel))
+            {
+                throw new InvalidOperationException(
+                    $"{source}: `route_channel_argument` names `{name}`, whose `enum` offers `{Shown(value)}`, which is not a channel: a channel a route names is one the channel rules know, spelled as they keep it.");
+            }
+        }
+
+        if (contract.Preflight.Channel == ChannelRequirement.FromArgs && !string.Equals(name, ConsumedChannelArgument, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `route_channel_argument` names `{name}`, but `preflight.channel` is `from_args`, so the operation consumes the channel its arguments name in `{ConsumedChannelArgument}`, and a route reads that same argument.");
+        }
+    }
+
+    /// <summary>An enum's value as a refusal names it: a string as written, anything else as its JSON.</summary>
+    private static string Shown(JsonNode? value) =>
+        value is JsonValue text && text.GetValueKind() == JsonValueKind.String ? text.GetValue<string>() : value?.ToJsonString() ?? "null";
 
     /// <summary>
     /// The protective floor is the catalogue's one lowering of an approval, and a checked one: the operation runs
