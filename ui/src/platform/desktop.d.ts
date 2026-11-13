@@ -7,10 +7,10 @@
 export {};
 
 /**
- * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, an approval given or declined,
- * a question answered, a campaign created, started, paused or archived, work that stopped, and work that succeeded where
- * it was a send or the work of one of five roles (`DesktopFeedOperation`, `DesktopFeedRole`). Each is a kind the runtime
- * writes itself.
+ * The journal kinds the Feed takes: a reply observed, an approval or a question waiting, an approval approved or
+ * rejected, a question answered, a campaign created, started, paused or archived, work that stopped, and work that
+ * succeeded where it was a send or the work of one of five roles (`DesktopFeedOperation`, `DesktopFeedRole`). Each is a
+ * kind the runtime writes itself.
  */
 export type DesktopFeedKind =
     | 'inbound_reply_observed'

@@ -237,7 +237,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
-  folder, readable by your account alone, which removes itself and its folder when it runs. This is composed and checked
+  folder, readable by your account alone, which removes itself and its folder when it runs. Terminal's shell starts
+  without the CLI's environment, so where `jason` runs with `JASON_DATA_DIR` set the script exports that variable, and
+  nothing else, for the host's own `jason` commands to reach the same installation. This is composed and checked
   by tests here; it has not been watched on a Mac.
 - **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, and gives it the host in the
   form that program documents, decided by its file name: `kitty` and `foot` take the host's words after the program,

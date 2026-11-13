@@ -304,7 +304,7 @@ model's to decide.
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
 **New chat**. It shows what happens in the campaigns as the runtime writes it, one line each: a reply observed, an
-approval or a question waiting, an approval given or declined, a question answered, a campaign created, started,
+approval or a question waiting, an approval approved or rejected, a question answered, a campaign created, started,
 paused or archived, work that stopped or expired, a provider block holding work, a message, a reply or an invitation that
 went out, and the finished work of a planner, a researcher, a copywriter, an analyst or a deliverability specialist.
 Consecutive lines of the same kind and campaign fold into one with a count; a message that went out and an invitation
