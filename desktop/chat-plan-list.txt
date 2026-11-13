@@ -34,6 +34,7 @@ plugin list
 preference list
 project get
 project list
+reply count
 report get
 report list
 role list

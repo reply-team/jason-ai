@@ -46,6 +46,7 @@ export class FakeApi implements Api {
     private readonly answers = new Map<string, FixtureName[]>();
     private readonly held = new Map<string, { when: (body: object) => boolean; until: Promise<void> }>();
     private readonly gone = new Map<string, (body: object) => boolean>();
+    private readonly recorded = new Map<string, FixtureName>();
 
     /** The paired person the client puts on every write, as the recordings were made with. */
     constructor(private readonly actorId = 'ada') {}
@@ -56,6 +57,15 @@ export class FakeApi implements Api {
      */
     answer(operation: string, ...cases: FixtureName[]): this {
         this.answers.set(operation, cases);
+        return this;
+    }
+
+    /**
+     * Answers every request to an operation with one recorded exchange's response, whatever the request: for a screen
+     * that asks a window of its own, which no recording was made for. The request the screen sent is read with `sent`.
+     */
+    answerAnyRequest(operation: string, name: FixtureName): this {
+        this.recorded.set(operation, name);
         return this;
     }
 
@@ -95,7 +105,7 @@ export class FakeApi implements Api {
         const held = this.held.get(operation);
         if (held?.when(given)) await held.until;
         const queue = this.answers.get(operation) ?? [];
-        const name = this.take(queue, body);
+        const name = this.recorded.get(operation) ?? this.take(queue, body);
         if (!name) {
             this.unanswered.push(call);
             throw new Error(

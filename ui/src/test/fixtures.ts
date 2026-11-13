@@ -27,6 +27,8 @@ import type {
     CampaignSummaryResponse,
     CampaignActivityRequest,
     CampaignActivityResponse,
+    ReplyCountRequest,
+    ReplyCountResponse,
     ListContactsRequest,
     MembershipItem,
     Contact,
@@ -236,6 +238,9 @@ import journalListByWorkItem from '../../../docs/api/fixtures/journal.list/by-wo
 import journalListOli from '../../../docs/api/fixtures/journal.list/oli.json';
 import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
+import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
+import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
+import replyCountUntilBeforeSince from '../../../docs/api/fixtures/reply.count/until-before-since.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
 import routeListChannelRoutes from '../../../docs/api/fixtures/route.list/channel-routes.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
@@ -822,6 +827,9 @@ export const fixtures = {
     'journal.list/oli': journalListOli satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/summer': journalListSummer satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
+    'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
+    'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
+    'reply.count/until-before-since': replyCountUntilBeforeSince satisfies Exchange<ReplyCountRequest, ErrorEnvelope>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
     'route.list/channel-routes': routeListChannelRoutes satisfies Exchange<object, Routes>,
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,

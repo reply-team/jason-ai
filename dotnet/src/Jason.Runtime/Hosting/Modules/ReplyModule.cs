@@ -8,14 +8,14 @@ namespace Jason.Runtime.Hosting.Modules;
 
 /// <summary>
 /// A role's verdict on one reply: recorded as the reserved line <c>reply_classified</c>, read back through the
-/// chronicle like any other line.
+/// chronicle like any other line, and counted by its category over a window.
 /// </summary>
 public static class ReplyModule
 {
     public static IServiceCollection AddReplyModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        return services.AddScoped<ReplyService>();
+        return services.AddScoped<ReplyService>().AddScoped<ReplyCounts>();
     }
 
     public static void MapReplyOperations(this IEndpointRouteBuilder app)
@@ -24,5 +24,7 @@ public static class ReplyModule
 
         app.MapOperation<ReplyService, ReplyRecordRequest, JournalEntryDto>(
             Operations.ReplyRecord, (service, request, cancellationToken) => service.RecordAsync(request, cancellationToken));
+        app.MapOperation<ReplyCounts, ReplyCountRequest, ReplyCountResponse>(
+            Operations.ReplyCount, (counts, request, cancellationToken) => counts.CountAsync(request, cancellationToken));
     }
 }
