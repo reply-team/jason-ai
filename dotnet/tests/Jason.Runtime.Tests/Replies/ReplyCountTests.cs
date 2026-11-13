@@ -68,6 +68,67 @@ public class ReplyCountTests
         Assert.Equal([new("not_now", 1, 1)], row.Categories);
     }
 
+    /// <summary>
+    /// The latest verdict is the latest in its campaign: one reply judged in one campaign and later in another is one reply
+    /// of each, under each campaign's own word, and the later verdict in the second never hides the first's.
+    /// </summary>
+    [Fact]
+    public async Task One_reply_judged_in_two_campaigns_is_one_reply_of_each()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var spring = await CampaignAsync(db, "Spring");
+        var summer = await CampaignAsync(db, "Summer");
+        await JudgeAsync(db, spring, "thr-1", "msg-1", At(9), "interested");
+        await JudgeAsync(db, summer, "thr-1", "msg-1", At(9), "not_now");
+
+        var counts = await Counts(db).CountAsync(new ReplyCountRequest([spring.PublicId, summer.PublicId], DayStart, DayEnd), Ct);
+
+        Assert.Equal([new("interested", 1, 1)], counts.Campaigns.Single(row => row.CampaignId == spring.PublicId).Categories);
+        Assert.Equal([new("not_now", 1, 1)], counts.Campaigns.Single(row => row.CampaignId == summer.PublicId).Categories);
+        Assert.Equal(2, counts.Total.Replies);
+    }
+
+    /// <summary>
+    /// The verdict that stands is chosen before the window is applied: a reply judged again with a moment outside the window
+    /// is not counted in the window its earlier verdict named, since that verdict no longer stands.
+    /// </summary>
+    [Fact]
+    public async Task The_latest_verdict_is_chosen_before_the_window()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var spring = await CampaignAsync(db, "Spring");
+        await JudgeAsync(db, spring, "thr-1", "msg-1", At(9), "interested");
+        await JudgeAsync(db, spring, "thr-1", "msg-1", DayEnd.AddHours(1), "interested");
+
+        var row = Assert.Single((await Counts(db).CountAsync(new ReplyCountRequest([spring.PublicId], DayStart, DayEnd), Ct)).Campaigns);
+
+        Assert.Equal((0, 0), (row.Replies, row.Threads));
+        Assert.Empty(row.Categories);
+    }
+
+    /// <summary>
+    /// The total adds the campaigns' rows up: one conversation with verdicts in two campaigns is a thread of each, and two
+    /// threads of the total, in the total's own count and in its category's.
+    /// </summary>
+    [Fact]
+    public async Task The_total_s_threads_are_the_sum_of_the_campaigns()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var spring = await CampaignAsync(db, "Spring");
+        var summer = await CampaignAsync(db, "Summer");
+        await JudgeAsync(db, spring, "thr-1", "msg-1", At(9), "interested");
+        await JudgeAsync(db, summer, "thr-1", "msg-2", At(10), "interested");
+
+        var counts = await Counts(db).CountAsync(new ReplyCountRequest([spring.PublicId, summer.PublicId], DayStart, DayEnd), Ct);
+
+        Assert.All(counts.Campaigns, row => Assert.Equal(1, row.Threads));
+        Assert.Equal((2, 2), (counts.Total.Replies, counts.Total.Threads));
+        Assert.Equal([new("interested", 2, 2)], counts.Total.Categories);
+    }
+
     /// <summary>Two replies in one conversation are two replies and one thread: a thread is a conversation, not a message.</summary>
     [Fact]
     public async Task A_thread_with_two_interested_replies_is_two_replies_and_one_thread()

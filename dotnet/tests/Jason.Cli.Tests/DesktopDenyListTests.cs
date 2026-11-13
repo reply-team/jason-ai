@@ -85,10 +85,10 @@ public class DesktopDenyListTests
     private static readonly string[] ReadsOfThePlan =
     [
         "approval get", "approval list", "approval list-standing", "audience availability", "audience filter-values",
-        "audience preview", "block get", "block list", "campaign activity", "reply count", "campaign activity-by-period", "campaign audience",
+        "audience preview", "block get", "block list", "campaign activity", "campaign activity-by-period", "campaign audience",
         "campaign get", "campaign list", "campaign list-contacts", "campaign summary", "contact get", "contact list",
         "contact thread", "contact threads", "decision get", "decision list", "events sources", "journal kinds", "journal list",
-        "logs", "operation describe", "plugin list", "preference list", "project get", "project list", "report get",
+        "logs", "operation describe", "plugin list", "preference list", "project get", "project list", "reply count", "report get",
         "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "status",
         "subscription list", "subscription runs", "suppression list", "workitem count", "workitem get", "workitem list",
         "workitem wait",
