@@ -216,20 +216,29 @@ describe('the event stream that cannot be opened', () => {
     });
 
     it('waits longer after each failure, up to a limit, and does not read the chats anew while it fails', async () => {
-        const stamps: number[] = [];
-        const fetched = vi.fn(async () => {
-            stamps.push(Date.now());
-            return new Response('', { status: 500 });
-        });
-        const { bridge } = subscribed(fetched);
-        const reread = vi.fn();
-        bridge.onReopen(reread);
-        await vi.waitFor(() => expect(stamps.length).toBeGreaterThanOrEqual(4), { timeout: 2000 });
-        bridge.close();
-        const gaps = stamps.slice(1).map((stamp, at) => stamp - stamps[at]!);
-        expect(gaps[1]!).toBeGreaterThan(gaps[0]! * 1.5);
-        expect(gaps[2]!).toBeGreaterThan(gaps[1]! * 1.5);
-        expect(reread).not.toHaveBeenCalled();
+        vi.useFakeTimers();
+        try {
+            const fetched = vi.fn(async () => new Response('', { status: 500 }));
+            const { bridge } = subscribed(fetched);
+            const reread = vi.fn();
+            bridge.onReopen(reread);
+            await vi.advanceTimersByTimeAsync(0);
+            expect(fetched).toHaveBeenCalledTimes(1);
+            // The first wait is the base (10 ms here); each failure doubles it, and thirty seconds is the most.
+            const waits = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240, 20480, 30000, 30000];
+            let calls = 1;
+            for (const wait of waits) {
+                await vi.advanceTimersByTimeAsync(wait - 1);
+                expect(fetched).toHaveBeenCalledTimes(calls);
+                await vi.advanceTimersByTimeAsync(1);
+                calls += 1;
+                expect(fetched).toHaveBeenCalledTimes(calls);
+            }
+            bridge.close();
+            expect(reread).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('starts the waits over after a stream that worked, and reads the chats anew once it is open again', async () => {
