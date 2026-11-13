@@ -91,6 +91,7 @@ public static class Operations
     public const string ReportList = "report.list";
 
     public const string ReplyRecord = "reply.record";
+    public const string ReplyCount = "reply.count";
 
     public const string RoleList = "role.list";
     public const string RoleAdd = "role.add";
