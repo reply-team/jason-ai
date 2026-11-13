@@ -236,6 +236,44 @@ public sealed class SessionOpenerTests : IDisposable
         var script = printed["script"]!.GetValue<string>();
         Assert.StartsWith("#!/bin/sh\nrm -f -- \"$0\"\n", script, StringComparison.Ordinal);
         Assert.Contains("cd -- '" + _run.CampaignFolder + "' || exit 1", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("JASON_DATA_DIR", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A CLI that runs with <c>JASON_DATA_DIR</c> has the macOS script export the data directory it uses, so the host's own
+    /// <c>jason</c> commands reach this installation and not the default one; a blank value is no data directory, as it
+    /// is to the CLI itself. What is exported is the directory the CLI resolved, never the variable's own spelling: a
+    /// value with a trailing separator, or one with a <c>.</c> segment, still exports the resolved root.
+    /// </summary>
+    [Theory]
+    [InlineData("root")]
+    [InlineData("trailing separator")]
+    [InlineData("dot segment")]
+    [InlineData("blank")]
+    public async Task On_macos_the_script_carries_the_resolved_data_directory_only_when_the_cli_runs_with_one(string spelling)
+    {
+        _run.Terminals.Platform = TerminalPlatform.MacOs;
+        _run.Programs.AddProgram("claude");
+        _run.Variables[JasonPaths.DataDirectoryVariable] = spelling switch
+        {
+            "root" => _run.DataDirectory,
+            "trailing separator" => _run.DataDirectory + Path.DirectorySeparatorChar,
+            "dot segment" => Path.Combine(_run.DataDirectory, ".") + Path.DirectorySeparatorChar,
+            _ => "  ",
+        };
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1", "--dry-run");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var script = JsonNode.Parse(_run.Output.ToString())!["script"]!.GetValue<string>();
+        var exports = script.Split('\n').Where(line => line.StartsWith("export ", StringComparison.Ordinal)).ToArray();
+        string[] expected = spelling == "blank" ? [] : ["export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory)];
+        Assert.Equal(expected, exports);
+        if (spelling is "trailing separator" or "dot segment")
+        {
+            // The row means something only while the variable's spelling is not the root's own.
+            Assert.NotEqual(_run.DataDirectory, _run.Variables[JasonPaths.DataDirectoryVariable]);
+        }
     }
 
     /// <summary>
@@ -635,6 +673,9 @@ public sealed class SessionOpenerTests : IDisposable
             Directory.CreateDirectory(CampaignFolder);
             Campaign = CopyPromptTests.Fixture("campaign.get", "in-project-with-folder").Replace(RecordedFolder, CampaignFolder, StringComparison.Ordinal);
         }
+
+        /// <summary>The data directory the CLI under test runs on.</summary>
+        public string DataDirectory => _dir.Paths.Root;
 
         /// <summary>The campaign's folder as the recorded exchange names it.</summary>
         public const string RecordedFolder = "~/Jason/projects/acme-corp/campaigns/q3-leads";
