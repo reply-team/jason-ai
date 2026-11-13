@@ -33,6 +33,12 @@ public sealed record RouteCandidate(RouteSnapshot? Snapshot, IReadOnlyList<Error
     /// next activation once the real problem is repaired.
     /// </summary>
     public IReadOnlyList<ErrorDetail> Refusals => [.. Problems.Where(problem => problem.Code != SchemaValidator.PatternTimedOut)];
+
+    /// <summary>
+    /// How many sends the refusals hold back, across every campaign and account they name: a refusal names the sends of one
+    /// campaign at one account as one problem, so the count of problems is not the count of sends.
+    /// </summary>
+    public int StrandedSends { get; init; }
 }
 
 /// <summary>
@@ -69,6 +75,11 @@ public sealed class RouteActivator(
         new EventId(1, nameof(SearchUnrouted)),
         "Search {WorkItemId} of campaign {CampaignId} ran at {PluginId} under an account no route names: its reads and its stop are refused until a route names that account again. Put such a route back, then stop the search or let it end");
 
+    private static readonly Action<ILogger, string, string, string, Exception?> SendUnrouted = LoggerMessage.Define<string, string, string>(
+        LogLevel.Warning,
+        new EventId(2, nameof(SendUnrouted)),
+        "Send {WorkItemId} of campaign {CampaignId} ran at {PluginId} under an account no route names, and the provider still holds it for a later moment: its cancel and its status read are refused until a route names that account again. Put such a route back, then cancel it or let it go");
+
     /// <summary>How a binding is matched against its plugin's patterns: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
@@ -100,8 +111,8 @@ public sealed class RouteActivator(
 
         var built = new RouteSnapshot(PublicId.New(RouteSnapshot.IdPrefix), clock.GetUtcNow(), snapshot.Id, global, campaigns);
         await KeepSearchesAsync(built, problems, cancellationToken).ConfigureAwait(false);
-        await KeepSendsAsync(built, problems, cancellationToken).ConfigureAwait(false);
-        return problems.Count > 0 ? new RouteCandidate(null, problems) : new RouteCandidate(built, []);
+        var stranded = await KeepSendsAsync(built, problems, cancellationToken).ConfigureAwait(false);
+        return problems.Count > 0 ? new RouteCandidate(null, problems) { StrandedSends = stranded } : new RouteCandidate(built, []);
     }
 
     /// <summary>
@@ -172,24 +183,59 @@ public sealed class RouteActivator(
     /// The same rule for a send (<see cref="RouteResolver.ForSend"/>): a cancel and a status read of a send go only to the
     /// plugin and account it ran under. So a send the provider still holds for a moment to come, with no succeeded cancel
     /// (<see cref="HeldSends"/>), that the routes active now reach and <paramref name="candidate"/> would not is a problem
-    /// of the set: it would go out at its moment with nowhere to cancel it. A send the active routes do not reach either
-    /// is not this change's doing, and refuses nothing. The sends of one campaign held at one plugin and account are one
-    /// problem, named by the latest of them, saying how many there are, the latest moment among them and the two ways
-    /// out; it names them by their work items and says nothing a send says to a person.
+    /// of the set: it would go out at its moment with nowhere to cancel it. The sends of one campaign held at one plugin
+    /// and account are one problem, named by the latest of them, saying how many there are, the latest moment among them
+    /// and the two ways out; it names them by their work items and says nothing a send says to a person. A send held for
+    /// the provider's own schedule has no moment to name and no moment after which the route is free: its ways out are a
+    /// cancel, or a status read once it has gone; where a problem holds both kinds, it says both. Answers how many sends
+    /// the problems hold back.
+    /// <para>
+    /// A send the active routes do not reach either is not this change's doing, and refuses nothing. After the start it
+    /// cannot be new either: every door a change comes through afterwards refuses one that would strand a send, so a send
+    /// no route reaches was left so by the start, which has no routes in force to keep, or by settings edited while the
+    /// runtime was stopped. So the start is where it is said, once, in the log, by its ids alone. The read is made under
+    /// the writer's lock at <c>route.set</c> and <c>route.unset</c>, so it is skipped where it can find nothing to refuse
+    /// or to say: after the start, while the routes in force name nothing.
+    /// </para>
     /// </summary>
-    private async Task KeepSendsAsync(RouteSnapshot candidate, List<ErrorDetail> problems, CancellationToken cancellationToken)
+    private async Task<int> KeepSendsAsync(RouteSnapshot candidate, List<ErrorDetail> problems, CancellationToken cancellationToken)
     {
         var active = registry.Snapshot;
+        var atStart = !registry.Activated;
+        if (!atStart && !HoldsAnyRoute(active))
+        {
+            return 0;
+        }
+
         var sends = await HeldSends.ReadAsync(db, clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        var stranded = sends
-            .Where(send => !Reaches(candidate, send) && Reaches(active, send))
-            .GroupBy(send => (send.Campaign, send.PluginId, send.BindingIdentity));
+        var unreached = sends.Where(send => !Reaches(candidate, send)).ToList();
+        if (atStart)
+        {
+            if (logger is not null)
+            {
+                foreach (var send in unreached)
+                {
+                    SendUnrouted(logger, send.WorkItem, send.Campaign, send.PluginId, null);
+                }
+            }
+
+            return 0;
+        }
+
+        var stranded = unreached
+            .Where(send => Reaches(active, send))
+            .GroupBy(send => (send.Campaign, send.PluginId, send.BindingIdentity))
+            .ToList();
 
         foreach (var held in stranded)
         {
-            var ordered = held.OrderBy(send => send.Moment).ThenBy(send => send.WorkItem, StringComparer.Ordinal).ToList();
+            // A send with no moment known goes last: the provider holds it for a schedule of its own, after every dated one.
+            var ordered = held
+                .OrderBy(send => send.Moment is null)
+                .ThenBy(send => send.Moment)
+                .ThenBy(send => send.WorkItem, StringComparer.Ordinal)
+                .ToList();
             var latest = ordered[^1];
-            var until = latest.Moment.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
             var named = ordered.Count <= ListedSends
                 ? string.Join(", ", ordered.Select(send => send.WorkItem))
                 : string.Join(", ", ordered.TakeLast(ListedSends).Select(send => send.WorkItem)) + string.Create(CultureInfo.InvariantCulture, $" and {ordered.Count - ListedSends} more");
@@ -198,9 +244,54 @@ public sealed class RouteActivator(
                 RouteProblemCodes.OrphansSend,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"campaign '{held.Key.Campaign}' holds {ordered.Count} send(s) ({named}) that ran at '{held.Key.PluginId}' under an account neither the campaign's other routes nor the global ones would name, and the provider holds the latest of them until {until}, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}, or change the route after {until}.")));
+                    $"campaign '{held.Key.Campaign}' holds {ordered.Count} send(s) ({named}) that ran at '{held.Key.PluginId}' under an account neither the campaign's other routes nor the global ones would name, {WaysOut(ordered)}")));
         }
+
+        return stranded.Sum(held => held.Count());
     }
+
+    /// <summary>
+    /// What a problem says of how long the provider holds its sends, and the ways out that exist for them: a dated send
+    /// is free once its moment passes, so the route may change after the latest; a send held for the provider's own
+    /// schedule has no such moment, so it is cancelled, or read once it has gone.
+    /// </summary>
+    private static string WaysOut(IReadOnlyList<HeldSend> sends)
+    {
+        var dated = sends.Where(send => send.Moment is not null).ToList();
+        var undated = sends.Count - dated.Count;
+        var until = dated.Count > 0
+            ? SecondAfter(dated.Max(send => send.Moment!.Value)).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
+            : null;
+        return (until, undated) switch
+        {
+            (not null, 0) => string.Create(
+                CultureInfo.InvariantCulture,
+                $"and the provider holds the latest of them until {until}, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}, or change the route after {until}."),
+            (null, _) => string.Create(
+                CultureInfo.InvariantCulture,
+                $"and the provider holds them for its own sending schedule with no moment known, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}, or read their status with {HeldSends.Status} once they have gone; then change the route."),
+            _ => string.Create(
+                CultureInfo.InvariantCulture,
+                $"and the provider holds {dated.Count} of them until {until} at the latest and {undated} for its own sending schedule with no moment known, so their cancels and status reads would have nowhere to go before they go out. Cancel them with {HeldSends.Cancel}; or change the route after {until}, once the {undated} with no moment known have been read as gone with {HeldSends.Status}."),
+        };
+    }
+
+    /// <summary>
+    /// The moment rounded up to its second, in UTC: what a refusal names as the time after which the change goes through,
+    /// so a person who asks again at that second is not refused again by the fraction the second did not show.
+    /// </summary>
+    private static DateTime SecondAfter(DateTimeOffset moment)
+    {
+        var utc = moment.UtcDateTime;
+        var fraction = utc.Ticks % TimeSpan.TicksPerSecond;
+        return fraction == 0 ? utc : utc.AddTicks(TimeSpan.TicksPerSecond - fraction);
+    }
+
+    /// <summary>Whether <paramref name="routes"/> names any plugin at all, globally or for a campaign.</summary>
+    private static bool HoldsAnyRoute(RouteSnapshot routes) =>
+        Holds(routes.Global) || routes.Campaigns.Values.Any(Holds);
+
+    private static bool Holds(RouteSet set) => set.Default is not null || set.Operations.Count > 0 || set.ChannelRoutes.Any();
 
     /// <summary>How many of the stranded sends a problem names by their work items: the latest ones, the rest counted.</summary>
     private const int ListedSends = 5;

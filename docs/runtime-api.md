@@ -411,9 +411,12 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 
   Either is refused `409` with the code `route_orphans_send`, the same way, when it would take the last of the send's
   campaign's routes and the global ones naming the plugin and account a send ran under away from it while the provider
-  still holds it for a `send_after` to come, no cancel of it has succeeded and its result says it can be cancelled: its cancel and its status read would have nowhere to go. Each detail covers one campaign's sends at one
-  account and says how many there are, their work items, the latest moment among them and what to do: cancel them, or
-  change the route after that moment ([docs/routing.md](routing.md), §6).
+  still holds it, for a moment to come or for a sending schedule of its own, and its result says it can be cancelled,
+  until a cancel or a status read of it says the provider holds it no longer: its cancel and its status read would have
+  nowhere to go. The message counts the sends; each detail covers one campaign's sends at one account and says how many
+  there are, their work items, the latest moment among them and what to do: cancel them, or change the route after that
+  moment, or, for a send with no moment known, read it as gone with `message.status` first
+  ([docs/routing.md](routing.md), §6).
 
 ### `operation`
 
