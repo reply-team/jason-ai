@@ -1168,6 +1168,10 @@ body,
     background: var(--amber-2);
     color: var(--amber);
 }
+.jc-console .mode-strip.mode-live {
+    background: var(--green-2);
+    color: var(--green);
+}
 .jc-console .mode-strip.mode-live .mode-dot {
     background: var(--green);
 }

@@ -20,11 +20,15 @@ export function ModeStrip() {
             <span className="mode-dot" aria-hidden="true" />
             {demo ? (
                 <>
-                    <span className="mode-mark mode-strip-long">{t('mode.strip.long')}</span>
+                    <span className="mode-mark mode-strip-long">
+                        <strong>{t('mode.strip.name')}</strong> {t('mode.strip.long')}
+                    </span>
                     <span className="mode-strip-short">{t('mode.strip.short')}</span>
                 </>
             ) : (
-                <span className="mode-mark">{t('mode.switch.live')}</span>
+                <span className="mode-mark">
+                    <strong>{t('mode.switch.live')}</strong>
+                </span>
             )}
             {!demo && unopened !== null && (
                 <span className="mode-unopened" role="status" aria-label={t('mode.unopened')}>

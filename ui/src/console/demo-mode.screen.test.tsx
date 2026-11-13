@@ -77,7 +77,8 @@ describe('Demo in the desktop', () => {
         const console = document.querySelector('.jc-console')!;
         expect(shown.parentElement).toBe(console);
         expect(shown.nextElementSibling?.classList.contains('shell')).toBe(true);
-        expect(shown.querySelector('.mode-mark')?.textContent).toBe('Demo data. Nothing here is real or sent.');
+        expect(shown.querySelector('.mode-mark')?.textContent).toBe('Demo data Nothing here is real or sent.');
+        expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Demo data');
         expect(shown.textContent).not.toMatch(/fresh/i);
         expect(shown.classList.contains('mode-demo')).toBe(true);
     });
@@ -99,7 +100,7 @@ describe('Demo in the desktop', () => {
         const shown = await waitFor(() => strip()!);
         const long = shown.querySelector('.mode-strip-long')?.textContent ?? '';
         const short = shown.querySelector('.mode-strip-short')?.textContent ?? '';
-        expect(short).toBe('Demo data, nothing sent');
+        expect(short).toBe('Sample data. Nothing is sent.');
         expect(short.length).toBeLessThan(long.length);
     });
 
@@ -108,12 +109,12 @@ describe('Demo in the desktop', () => {
         const shown = await waitFor(() => strip()!);
         const slot = shown.querySelector('[data-slot="open-in"]');
         expect(slot).not.toBeNull();
-        expect(slot!.nextElementSibling).toBe(within(shown).getByRole('group', { name: 'Mode' }));
+        expect(slot!.nextElementSibling).toBe(within(shown).getByRole('group', { name: 'Data' }));
     });
 
     it('switches to Live through the seam, and Demo, the one marked, asks nothing', async () => {
         const desktop = await renderConsole('demo');
-        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Mode' }));
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
         const demo = within(group).getByRole('button', { name: 'Demo' });
         expect(demo.getAttribute('aria-pressed')).toBe('true');
         fireEvent.click(demo);
@@ -124,7 +125,7 @@ describe('Demo in the desktop', () => {
     it('says the desktop’s refusal in the strip when the mode could not be kept', async () => {
         const desktop = await renderConsole('demo');
         desktop.refuse.set('mode.set', 'The mode could not be saved, so Jason stays as it is.');
-        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Mode' }));
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
         fireEvent.click(within(group).getByRole('button', { name: 'Live' }));
         const alert = await waitFor(() => within(strip()!).getByRole('alert'));
         expect(alert.textContent).toBe('The mode could not be saved, so Jason stays as it is.');
@@ -141,18 +142,18 @@ describe('Live in the desktop', () => {
     it('draws the bar with a Live mark and no demo sentence, the Live button marked', async () => {
         await renderConsole('live');
         const shown = await waitFor(() => strip()!);
-        expect(shown.querySelector('.mode-mark')?.textContent).toBe('Live');
+        expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Live');
         expect(shown.classList.contains('mode-live')).toBe(true);
         expect(shown.textContent).not.toMatch(/Nothing here is real/);
         expect(shown.querySelector('[data-slot="open-in"]')).not.toBeNull();
-        const group = within(shown).getByRole('group', { name: 'Mode' });
+        const group = within(shown).getByRole('group', { name: 'Data' });
         expect(within(group).getByRole('button', { name: 'Live' }).getAttribute('aria-pressed')).toBe('true');
         expect(within(group).getByRole('button', { name: 'Demo' }).getAttribute('aria-pressed')).toBe('false');
     });
 
     it('switches to Demo through the seam from the bar', async () => {
         const desktop = await renderConsole('live');
-        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Mode' }));
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
         fireEvent.click(within(group).getByRole('button', { name: 'Live' }));
         fireEvent.click(within(group).getByRole('button', { name: 'Demo' }));
         await waitFor(() => expect(modeSets(desktop)).toEqual([{ name: 'mode.set', args: ['demo'] }]));
@@ -190,7 +191,7 @@ describe('A demo the desktop could not open', () => {
         expect(said.textContent).toMatch(/^The demo could not be opened, so Jason opened your own installation\./);
         expect(strip()!.contains(said)).toBe(true);
         expect(strip()!.nextElementSibling?.classList.contains('shell')).toBe(true);
-        expect(strip()!.querySelector('.mode-mark')?.textContent).toBe('Live');
+        expect(strip()!.querySelector('.mode-mark strong')?.textContent).toBe('Live');
         expect(offer()).not.toBeNull();
     });
 
