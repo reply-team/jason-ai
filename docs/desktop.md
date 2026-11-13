@@ -67,20 +67,26 @@ The window calls a campaign with its chat an **agent** (**Agents** in the sideba
 campaign and nothing else: the commands, the API and the ids keep `campaign`, and so do the rest of these pages. The AI that
 runs commands is called the AI.
 
-The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, which
-asks "Who do you want to reach?" and says under it that this interface is optional, since everything there can also be done
-from a terminal with your AI, through Jason's CLI and API. What you type there starts a set-up chat on the AI you connected, about no campaign
+The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, headed
+"Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
+link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
+without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
-**New chat** still makes a chat directly.
+**New GTM agent** brings it forward; that button's caret offers **New chat**, which still makes a chat directly, and
+**Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
   **Open your agents**.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab.
-- The **Feed**, the sidebar's first item, is the desktop's main chat (below).
+- The sidebar lists, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds
+  pages, agents, chats and people; the **Feed**, the desktop's main chat (below); **Dashboard**, numbers the page computes
+  from what it already reads; **Needs you**, with the number of approvals and questions waiting; **People**; **Agents**;
+  **Accounts**; and **More**, which holds Performance, Activity, Work items, Connect and System. The other conversations
+  follow under **Recent**, and **Settings** stands alone at the foot.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
 - The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
@@ -180,9 +186,11 @@ opens a folder in the place you used last, and its arrow lists every place avail
 - **The file manager**: File Explorer on Windows, Finder on macOS, and on Linux whatever `xdg-open` shows a folder with; the
   entry is absent where `xdg-open` is not found. And **Copy path**, which puts the folder's path on the
   clipboard.
+- **Browser**, which opens no folder: it opens the desktop's chat in a tab of your browser
+  ([below](#the-chat-in-a-browser-tab)).
 
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
-otherwise the first place of the list. Copy path is never the default, and a terminal is always there. The desktop keeps the choice
+otherwise the first place of the list. Copy path and Browser are never the default, and a terminal is always there. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
 your folders.
 
@@ -226,6 +234,26 @@ the entry is shown but cannot be chosen, and says to stop the turn or wait for i
 continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and
 this window does not show what happens there." It is never the default. A refusal of the command line is said in its own
 words, and in the demo the terminal works with the demo's data, as the other terminals do.
+
+### The chat in a browser tab
+
+**Browser** opens the desktop's chat in a tab of your system's browser, one more view onto the same chats the window
+shows, for as long as the desktop runs: the browser page's **Chat** screen shows the list of conversations, a
+conversation and the box. A tab sends only to a chat in Ask first or Plan only; for a chat in any other mode its box is
+locked, with a sentence naming the mode. A tab never answers a permission card or a plan card, which say they are
+answered in Jason Desktop, never changes a chat's mode and never chooses Full access, and a chat started from a tab starts
+in Ask first. The desktop's window stays the only place that approves. A tab draws no Start afresh, Remove, Open folder,
+attach buttons, Reply card or Connect button, and Open in is not offered inside it.
+
+The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
+on its first use or expires within sixty seconds, whichever comes first, and a spent or expired code opens nothing, so only
+a tab the desktop opened shows the chat; any other tab's Chat screen says how to open it from the desktop
+([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
+not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
+`127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
+which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is
+still answered in this window." The runtime gains no route for it and knows nothing of it; its page may connect to any port on
+`127.0.0.1`, which is how the tab reaches the desktop. Browser is offered in your own installation and in the demo alike.
 
 ## The demo
 

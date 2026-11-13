@@ -140,9 +140,9 @@ campaign's work while what is running finishes; the provider's own sequence keep
 any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
-to reach; what you send there starts a set-up chat, about no campaign yet, and no chat is made before you send. The
-sidebar's first item is the **Feed**, the desktop's main chat; below **New chat** it lists the other conversations it
-keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
+to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
+no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and under **Recent** the sidebar lists
+the other conversations the desktop keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
 conversation is kept, and listed, from its first turn, so a chat never sent to leaves nothing behind. What happens in
 the agents arrives in the Feed as one line each (a reply, an approval or a question waiting, an agent created,
 started or paused, work that stopped, a provider block holding work), with the campaign's name opening that campaign's
@@ -151,8 +151,9 @@ next message there, as records. One whose turn still runs opens running, with St
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. **Start afresh** begins the AI's next turn without its memory
 of the conversation and keeps what is shown; **Remove** asks first, then takes the conversation off this computer, and
-the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. The browser has no chat, and no Chat
-tab.
+the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. In the browser a campaign has no Chat
+tab; the browser's own Chat screen shows the desktop's chat only in a tab the desktop opened
+([below](#settings-and-chat-in-the-browser)).
 
 ## Performance
 
@@ -324,10 +325,15 @@ system's, in the order Light, Dark, System. A new installation meets Light; a br
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
 follows it.
 
-**Chat** says that the chat with the AI is part of Jason Desktop and links to the releases page where it is
-downloaded, and says that everything here also works from a session with your AI in a terminal, with the skills Jason
-deployed. The browser has no chat and starts no AI: the runtime starts no process for a screen, and a browser tab cannot ask you
-before the AI acts.
+**Chat**, in a tab Jason Desktop opened (its **Open in** menu, then **Browser**), shows the desktop's chat: the list of
+conversations, a conversation and the box, while the desktop runs. The tab is a view onto the desktop's chats and sends
+through the desktop: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it is
+answered in Jason Desktop, shows the chat's mode as a label, and draws no Start afresh, Remove, Open folder, attach
+buttons, Reply card or Connect button; the desktop's window stays the only place that approves
+([desktop.md](desktop.md#the-chat-in-a-browser-tab)). In any other tab, **Chat** says that the chat with the AI is part
+of Jason Desktop, that it can be opened in this tab from Jason Desktop through Open in, then the browser, and links to the
+releases page where the desktop is downloaded, and says that everything here also works from a session with your AI in a
+terminal, with the skills Jason deployed. The runtime starts no AI and no process for a screen, in either case.
 
 ## Accounts
 
