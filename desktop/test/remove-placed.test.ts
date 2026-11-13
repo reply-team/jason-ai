@@ -15,6 +15,7 @@ import { autostartEntry, autostartEntryFile, launchAgent, launchAgentFile, Login
 import type { StopOutcome } from '../src/own-runtime.ts';
 import { AttentionWatcher } from '../src/attention.ts';
 import { PathCommand } from '../src/path-command.ts';
+import { claimDemoFolder } from '../src/demo-folders.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { debPackage, placedRemoval, quietWatcher, RemovalAct, removalOffered, removalQuestion, removalText, removeApplication, removeLabel, removePlaced, type RemovalScope } from '../src/remove-placed.ts';
 import { processesRunFrom, stopFromAny, uninstall, type RunsFrom, type UninstallDeps } from '../src/uninstall.ts';
@@ -788,7 +789,8 @@ test('the act takes off the demo beside the person’s installation, worked out 
     const root = scratch(t);
     const paths = desktopPaths(`${root}/data`);
     const person = `${root}/people/Jason`;
-    for (const folder of [paths.data, `${root}/data-demo`, person, `${person}-demo`]) mkdirSync(folder, { recursive: true });
+    for (const folder of [paths.data, person]) mkdirSync(folder, { recursive: true });
+    for (const folder of [`${root}/data-demo`, `${person}-demo`]) claimDemoFolder(folder);
     writeFileSync(`${paths.data}/kept.txt`, 'x');
     writeFileSync(`${person}/kept.txt`, 'x');
     writeFileSync(`${root}/data-demo/file.txt`, 'x');

@@ -42,6 +42,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, rmdirSync, rmSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
 import { bundleEntries } from './bundle-copy.ts';
+import { hasDemoMarker } from './demo-folders.ts';
 import { inert } from './inert.ts';
 import type { Logger } from './log.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
@@ -480,14 +481,17 @@ async function demoStep(
     const person = [deps.dataDirectory, deps.harnessRoot, deps.application];
     const mine = folders.map((one) => ({ ...one, own: person.some((other) => overlaps(deps.platform, other, one.path)) || overlaps(deps.platform, demo.data, demo.harnessRoot) }));
     // The outcome logged is the first of these that any folder came to.
-    const order = ['unsafe', 'not_folder', 'unread', 'failed', 'removed'];
+    const order = ['unsafe', 'unmarked', 'not_folder', 'unread', 'failed', 'removed'];
     const came = new Set<string>(['removed']);
-    const takeable = mine.filter((one) => one.kind === 'folder' && !one.own);
+    const takeable = mine.filter((one) => one.kind === 'folder' && !one.own && hasDemoMarker(one.path));
     for (const one of mine) {
         if (one.kind === 'absent') into.untouched.push(`${one.what} was not there`);
         else if (one.own) {
             into.left.push(`${one.what}, ${one.shown}, which is, holds or lies inside a folder of your own installation: it was left`);
             came.add('unsafe');
+        } else if (one.kind === 'folder' && !hasDemoMarker(one.path)) {
+            into.left.push(`${one.shown}, which is not a folder this application made (it carries no mark of the demo’s): it was left`);
+            came.add('unmarked');
         } else if (one.kind === 'other') {
             into.left.push(`${one.shown}, which is not a folder this application made (a link or a file): it was left`);
             came.add('not_folder');

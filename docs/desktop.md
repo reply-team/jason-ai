@@ -110,7 +110,7 @@ them on.
   Live included, stops the demo's runtime first, waiting at most fifteen seconds; your own runtime is never stopped by
   either. An update, the installer and the uninstaller, run from your own installation, stop a demo runtime that a crash left running too. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What Jason
   Placed: each says to go back to your own installation, and the tray and the Jason menu offer Back to Your Own
-  Installation. When the demo's directory cannot be made or used, the desktop opens your own installation instead, sets
+  Installation. The desktop writes a mark file, `.jason-demo-folder`, into the demo's data directory and into its harness root when it makes them, because a folder of the same name can already be yours: a folder of either name without the mark is never used, written into or removed, and the desktop opens your own installation instead. When the demo's directory cannot be made or used, the desktop opens your own installation instead, sets
   this file back to `live` and says so at the top of the window. A Live and a Demo desktop are separate instances, each
   with its own profile, so while a demo run is still stopping its runtime after a switch, a click on Jason's icon may
   open Live first; the start the switch asked for then only brings that window forward.
@@ -602,7 +602,7 @@ updater's cache named above. The demo's two folders are not your data: the remov
   files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
   them. It last takes off the demo's two folders, its data directory and its harness root, which are yours with `-demo`
   after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
-  one that does not stop keeps both folders; a link in place of either is left and named. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
+  one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
   the application: move Jason.app to the Trash, or `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
 - **On macOS and Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
   Jason.app on macOS, `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason`

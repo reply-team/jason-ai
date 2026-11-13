@@ -3,7 +3,7 @@
 // stop of a demo runtime left running, asked wherever the person's own is stopped by a start of the person's.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -12,7 +12,8 @@ import { stopWithDemo } from '../src/demo-runtime.ts';
 import { runtimeRefusal as updateRefusal } from '../src/updates.ts';
 import { runtimeRefusal as uninstallRefusal } from '../src/uninstall.ts';
 import { carriedDemoPlugin, placeDemoPlugin } from '../src/demo-plugin.ts';
-import { prepareDemo, settingsFileOf, writeDemoRoute } from '../src/demo-start.ts';
+import { claimDemoFolder, demoMarkerName, hasDemoMarker } from '../src/demo-folders.ts';
+import { openDemoDirectory, prepareDemo, settingsFileOf, writeDemoRoute } from '../src/demo-start.ts';
 import { demoDirectory, openDirectory, startOn, type Mode } from '../src/mode.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
 
@@ -32,6 +33,7 @@ function realDeps(t: { after(fn: () => void): void }, person: string, calls?: st
     writeFileSync(join(carried, 'main.js'), 'export default {};\n');
     const note = (name: string) => calls?.push(name);
     return {
+        harnessRoot: () => (note('harness'), claimDemoFolder(demoDirectory(join(dirname(person), 'Jason')))),
         place: (data: string) => (note('place'), placeDemoPlugin(carried, data, person)),
         route: (data: string) => (note('route'), writeDemoRoute(data)),
         fixedSettings: (data: string) => {
@@ -48,7 +50,7 @@ test('the demo is prepared in one order: the provider with its route, then the f
     const data = demoDirectory(person);
     const calls: string[] = [];
     prepareDemo(data, realDeps(t, person, calls));
-    assert.deepEqual(calls, ['place', 'route', 'settings']);
+    assert.deepEqual(calls, ['harness', 'place', 'route', 'settings']);
     assert.ok(existsSync(join(data, 'plugins', 'demo', 'plugin.yaml')));
     const settings = JSON.parse(readFileSync(settingsFileOf(data), 'utf8'));
     assert.deepEqual(settings.Routes, { Default: { Plugin: 'demo' } });
@@ -98,7 +100,7 @@ test('a route is never written where the provider is absent', (t) => {
 test('a step that fails stops the rest, writes no route, and makes the run the person’s own with the record set back', (t) => {
     const person = join(scratch(t), '.jason');
     mkdirSync(person);
-    const order = ['open', 'place', 'route', 'settings'];
+    const order = ['open', 'harness', 'place', 'route', 'settings'];
     for (const failing of order) {
         const calls: string[] = [];
         const kept: Mode[] = [];
@@ -108,6 +110,7 @@ test('a step that fails stops the rest, writes no route, and makes the run the p
             throw new Error(`planted ${name}`);
         };
         const wired = { ...real };
+        if (failing === 'harness') wired.harnessRoot = broken('harness');
         if (failing === 'place') wired.place = broken('place');
         if (failing === 'route') wired.route = broken('route');
         if (failing === 'settings') wired.fixedSettings = broken('settings');
@@ -121,7 +124,7 @@ test('a step that fails stops the rest, writes no route, and makes the run the p
         assert.deepEqual(kept, ['live'], failing);
         assert.deepEqual(calls.slice(-1), [failing], `${failing}: nothing runs after it`);
         assert.ok(calls.every((name, at) => name === order[at]), failing);
-        if (failing === 'place' || failing === 'open') assert.equal(existsSync(settingsFileOf(demoDirectory(person))), false, `${failing}: no route written`);
+        if (failing === 'harness' || failing === 'place' || failing === 'open') assert.equal(existsSync(settingsFileOf(demoDirectory(person))), false, `${failing}: no route written`);
     }
 });
 
@@ -171,7 +174,8 @@ test('the update, the installer’s stop and the uninstall stop the demo’s run
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),'));
     const flat = main.split(/\s+/).join(' ');
-    assert.ok(flat.includes('prepare: (demo) => prepareDemo(demo, { place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
+    assert.ok(flat.includes('prepare: (demo) => prepareDemo(demo, { harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))), place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
+    assert.ok(flat.includes('open: openDemoDirectory,'));
     assert.ok(main.includes('fixedSettings: (data) => writeDemoSettings(data, harnessRoot('));
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     assert.ok(start.includes('stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime('));
@@ -179,4 +183,61 @@ test('the update, the installer’s stop and the uninstall stop the demo’s run
     const placed = readFileSync(join(desktop, 'src', 'remove-placed.ts'), 'utf8');
     assert.ok(placed.includes('stopWithDemo(() => stopFromAny(candidates(), (executable) => input.stopAs(executable)), () => input.stopDemo())'));
     assert.equal(carriedDemoPlugin('b'), join('b', 'plugins', 'demo'));
+});
+
+// The marker: the demo's two folders are known by a file the desktop writes into each when it makes it, because their
+// names alone can already belong to the person.
+
+/** A start of the demo over the real steps, with the person's harness root named `Jason` beside their data directory. */
+function startReal(t: { after(fn: () => void): void }, person: string) {
+    const root = join(dirname(person), 'Jason');
+    const deps = realDeps(t, person);
+    const kept: Mode[] = [];
+    const run = startOn(person, 'demo', false, {
+        open: openDemoDirectory,
+        prepare: (demo) => prepareDemo(demo, { ...deps, harnessRoot: () => claimDemoFolder(demoDirectory(root)) }),
+        keep: (mode) => kept.push(mode),
+    });
+    return { run, kept, root: demoDirectory(root) };
+}
+
+test('a start that makes the demo’s folders marks both, and a later start uses them', (t) => {
+    const person = join(scratch(t), '.jason');
+    mkdirSync(person);
+    const first = startReal(t, person);
+    assert.equal(first.run.mode, 'demo');
+    assert.equal(hasDemoMarker(demoDirectory(person)), true);
+    assert.equal(hasDemoMarker(first.root), true);
+    const second = startReal(t, person);
+    assert.equal(second.run.mode, 'demo', 'marked folders are used');
+    assert.deepEqual(second.kept, []);
+});
+
+test('a folder of either name that is not ours is neither used nor written into: the start falls back to the person’s own', (t) => {
+    for (const foreign of ['data', 'root'] as const) {
+        const person = join(scratch(t), '.jason');
+        mkdirSync(person);
+        const folder = foreign === 'data' ? demoDirectory(person) : demoDirectory(join(dirname(person), 'Jason'));
+        mkdirSync(folder);
+        writeFileSync(join(folder, 'mine.txt'), 'the person’s own');
+        const { run, kept } = startReal(t, person);
+        assert.deepEqual([run.mode, run.data, run.unopened === null], ['live', person, false], foreign);
+        assert.deepEqual(kept, ['live'], foreign);
+        assert.deepEqual(readdirSync(folder), ['mine.txt'], `${foreign}: nothing was written into it, no marker among it`);
+        assert.equal(existsSync(join(folder, demoMarkerName)), false, foreign);
+        if (foreign === 'root') assert.equal(existsSync(join(demoDirectory(person), 'plugins')), false, 'no plugin was placed once the root was refused');
+    }
+});
+
+test('a folder that is a file or a link, or whose marker is not the desktop’s, is not ours either', (t) => {
+    const home = scratch(t);
+    const file = join(home, 'a-demo');
+    writeFileSync(file, 'x');
+    assert.throws(() => claimDemoFolder(file));
+    const wrong = join(home, 'b-demo');
+    mkdirSync(wrong);
+    writeFileSync(join(wrong, demoMarkerName), 'somebody else wrote this');
+    assert.throws(() => claimDemoFolder(wrong));
+    assert.equal(hasDemoMarker(wrong), false);
+    assert.equal(readFileSync(join(wrong, demoMarkerName), 'utf8'), 'somebody else wrote this');
 });

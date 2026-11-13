@@ -14,6 +14,7 @@ import { gitBashWrapper, windowsShim } from '../src/command-line.ts';
 import { RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
+import { claimDemoFolder, demoMarkerName } from '../src/demo-folders.ts';
 import { harnessRoot, inside, runtimeRefusal, stopRuntimeCode, stopRuntimeFlag, stopRuntimeStart, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
 import { memoryLog } from './harness.ts';
 
@@ -507,6 +508,7 @@ function demoBench(t: { after(fn: () => void): void }, options: { stop?: StopOut
     }
     if (options.make !== false) {
         for (const folder of [demo.data, demo.root]) {
+            claimDemoFolder(folder);
             mkdirSync(join(folder, 'inner'), { recursive: true });
             writeFileSync(join(folder, 'inner', 'file.txt'), 'sample');
         }
@@ -627,4 +629,22 @@ test('the step’s log names the step and its outcome and never a path', async (
     await uninstall(d.b.deps);
     const line = log.lines.find((one) => one.name === 'removal_step' && one.fields['Step'] === 'demo');
     assert.deepEqual(line?.fields, { Step: 'demo', Outcome: 'removed' });
+});
+
+test('a demo folder without the desktop’s marker is never removed, and is named as not made by this application', async (t) => {
+    const d = demoBench(t, { stop: { kind: 'stopped' } });
+    rmSync(join(d.demo.root, demoMarkerName));
+    const report = await uninstall(d.b.deps);
+    assert.equal(existsSync(join(d.demo.root, 'inner', 'file.txt')), true, 'the unmarked folder is untouched');
+    assert.equal(existsSync(d.demo.data), false, 'the marked one is removed');
+    assert.ok(report.left.some((line) => line.includes(d.demo.root) && line.includes('not a folder this application made')));
+    assert.deepEqual(report.steps.at(-1), { step: 'demo', outcome: 'unmarked' });
+    // Neither folder marked: nothing is stopped for them and nothing is removed.
+    const e = demoBench(t, { stop: { kind: 'stopped' } });
+    rmSync(join(e.demo.root, demoMarkerName));
+    rmSync(join(e.demo.data, demoMarkerName));
+    const none = await uninstall(e.b.deps);
+    assert.deepEqual(e.stops, []);
+    assert.equal(existsSync(join(e.demo.data, 'inner', 'file.txt')), true);
+    assert.equal(none.left.filter((line) => line.includes('not a folder this application made')).length, 2);
 });

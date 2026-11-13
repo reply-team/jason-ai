@@ -3,6 +3,8 @@
  * is not placed fails the runtime's start, so once the demo's directory is made (`openDirectory`) the demo installation
  * is made ready in this order, and the runtime is started only after all of it:
  *
+ * 0. the demo's harness root is made and marked, or used when it carries the marker (`claimDemoFolder`); one without the
+ *    marker is refused with nothing written into it. The data directory was claimed the same way by the open step before;
  * 1. the demo provider is placed in `<data>/plugins/demo/` (`placeDemoPlugin`) and, together with it and only once it is
  *    there, `Routes:Default` is written as the demo provider (`writeDemoRoute`);
  * 2. the demo's fixed settings are written (`writeDemoSettings`, passed as `fixedSettings`).
@@ -13,10 +15,14 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { claimDemoFolder } from './demo-folders.ts';
 import { mergeSettings } from './demo-settings.ts';
+import { openDirectory } from './mode.ts';
 import { desktopPaths } from './paths.ts';
 
 export interface DemoStartDeps {
+    /** Makes and marks the demo's harness root, or uses it when marked; throws on a folder of that name that is not ours. */
+    harnessRoot(): void;
     /** Places the demo provider in `<data>/plugins/demo/` (`placeDemoPlugin`); throws when it cannot. */
     place(data: string): void;
     /** Writes `Routes:Default` as the demo provider into the demo's settings file (`writeDemoRoute`). */
@@ -28,8 +34,18 @@ export interface DemoStartDeps {
 /** The installation's settings file under a data directory: `<data>/config/settings.json`. */
 export const settingsFileOf = (data: string): string => desktopPaths(data).installationSettings;
 
+/**
+ * `startOn`'s open step for the demo: the data directory is claimed (made and marked, or used when marked; a folder of that
+ * name that is not ours is refused with nothing written into it) and then proved usable (`openDirectory`).
+ */
+export function openDemoDirectory(directory: string): void {
+    claimDemoFolder(directory);
+    openDirectory(directory);
+}
+
 /** Prepares the demo installation in the order above; throws at the first step that fails, having done none after it. */
 export function prepareDemo(data: string, deps: DemoStartDeps): void {
+    deps.harnessRoot();
     deps.place(data);
     deps.route(data);
     deps.fixedSettings(data);

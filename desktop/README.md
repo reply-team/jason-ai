@@ -618,7 +618,7 @@ Jason.app (`/Applications/Jason.app/Contents/Resources/bundle/jason` where it wa
 4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
 
 What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
-`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`. The demo's two folders are not
+`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`. The demo's two folders (removed only when they carry the mark the desktop wrote into each when it made them, `.jason-demo-folder`) are not
 among them: the menu act takes them off, and by hand they are `~/.jason-demo` and `~/Jason-demo` (the data directory's and
 the harness root's own names with `-demo` after them), deleted once the demo's runtime is stopped.
 
