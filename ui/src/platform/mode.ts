@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals-react';
+import { t } from './i18n';
 
 // The mode is which installation the desktop runs on: Live, the person's own, or Demo, a second installation of sample
 // data beside it. The page learns it from the desktop alone, once, as it loads, here and nowhere else; a browser shows
@@ -59,7 +60,7 @@ export async function switchMode(to: Mode): Promise<void> {
     if (to === mode.value || seam === null) return;
     modeRefusal.value = null;
     if (seam.set === undefined) {
-        modeRefusal.value = 'This version of the desktop cannot switch to the demo.';
+        modeRefusal.value = t('mode.unsupported');
         return;
     }
     try {

@@ -343,10 +343,14 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
         mode: {
             get: () => Promise.resolve({ mode: stub.modeKept, unopened: stub.modeUnopened }),
-            set: answering('mode.set', (mode) => {
-                stub.modeKept = mode === 'demo' ? 'demo' : 'live';
-                return null;
-            }),
+            // A word that is neither mode is rejected, as the desktop rejects it, before anything is kept.
+            set: (mode: unknown) =>
+                mode === 'live' || mode === 'demo'
+                    ? answering('mode.set', () => {
+                          stub.modeKept = mode;
+                          return null;
+                      })(mode)
+                    : Promise.reject(new Error('That is not a mode.')),
         },
         pairing: { paired: call('pairing.paired') },
         calls,
