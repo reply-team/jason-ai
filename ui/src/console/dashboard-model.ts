@@ -1,6 +1,7 @@
 // Pure: the Dashboard's arithmetic. Every number is one the page computes from reads it already makes; a tile whose
 // number no read gives holds no value, which the panel draws as a dash.
 import { t } from '../platform/i18n';
+import type { ReplyCountCategory, ReplyCountResponse } from '../api/types';
 import { dayOf, monthsBefore, periodWindow, windowBetweenDays, windowFromDay } from '../time/periods';
 
 /** What the Dashboard's one period can be: the whole page counts over it. */
@@ -105,15 +106,9 @@ export interface ActivityRead {
 }
 
 /** What `reply.count` says over the window: replies a role judged, by the word of the verdict. */
-export interface ReplyCountRead {
-    total: { replies: number; threads: number; categories: CategoryCount[] };
-}
+export type ReplyCountRead = Pick<ReplyCountResponse, 'total'>;
 
-export interface CategoryCount {
-    category: string;
-    replies: number;
-    threads: number;
-}
+export type CategoryCount = ReplyCountCategory;
 
 /** The words of the verdicts the two tiles read; compared exactly, as the skills write them. */
 export const interestedWord = 'interested';

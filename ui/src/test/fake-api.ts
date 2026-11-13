@@ -46,7 +46,7 @@ export class FakeApi implements Api {
     private readonly answers = new Map<string, FixtureName[]>();
     private readonly held = new Map<string, { when: (body: object) => boolean; until: Promise<void> }>();
     private readonly gone = new Map<string, (body: object) => boolean>();
-    private readonly standIns = new Map<string, (body: object) => unknown>();
+    private readonly recorded = new Map<string, FixtureName>();
 
     /** The paired person the client puts on every write, as the recordings were made with. */
     constructor(private readonly actorId = 'ada') {}
@@ -61,11 +61,11 @@ export class FakeApi implements Api {
     }
 
     /**
-     * A hand-written answer for an operation that has no recorded exchange yet: it answers any request, and is to be
-     * replaced by `answer` with the recording. Nothing recorded stands behind it.
+     * Answers every request to an operation with one recorded exchange's response, whatever the request: for a screen
+     * that asks a window of its own, which no recording was made for. The request the screen sent is read with `sent`.
      */
-    standIn(operation: string, respond: (body: object) => unknown): this {
-        this.standIns.set(operation, respond);
+    answerAnyRequest(operation: string, name: FixtureName): this {
+        this.recorded.set(operation, name);
         return this;
     }
 
@@ -101,13 +101,11 @@ export class FakeApi implements Api {
         const call = { operation, body: given, kind };
         this.calls.push(call);
         if (this.gone.get(operation)?.(given)) throw new TypeError('Failed to fetch');
-        const standIn = this.standIns.get(operation);
-        if (standIn) return standIn(given) as T;
         const body = kind === 'write' ? { ...given, actor: { type: 'human', id: this.actorId } } : given;
         const held = this.held.get(operation);
         if (held?.when(given)) await held.until;
         const queue = this.answers.get(operation) ?? [];
-        const name = this.take(queue, body);
+        const name = this.recorded.get(operation) ?? this.take(queue, body);
         if (!name) {
             this.unanswered.push(call);
             throw new Error(

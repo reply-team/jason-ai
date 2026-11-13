@@ -18,31 +18,13 @@ import { chats, lines } from './state';
 // reads of its own over one period: the counts and the replies a role judged, by category. The counts are recorded for
 // the window that ends at the moment these rows fix.
 
-// STAND-IN, to be replaced by the recorded exchange of reply.count once it is on the release branch: a hand-written
-// answer shaped as the operation's contract states it. Nothing recorded stands behind it.
-const standInCount = {
-    campaigns: [],
-    total: {
-        replies: 7,
-        threads: 5,
-        categories: [
-            { category: 'interested', replies: 3, threads: 2 },
-            { category: 'meeting_booked', replies: 1, threads: 1 },
-            { category: 'question', replies: 2, threads: 2 },
-            { category: 'not_now', replies: 1, threads: 1 },
-        ],
-    },
-};
-
 type Options = {
     approvals?: 'approval.list/pending' | 'approval.list/empty';
     none?: boolean;
     /** The counts' read does not answer. */
     unread?: boolean;
-    /** What reply.count answers; the stand-in's categories by default. */
-    replies?: unknown;
-    /** The reply read does not answer. */
-    repliesUnread?: boolean;
+    /** The recording reply.count answers with, whatever window the page asks; every campaign's by default. */
+    replies?: 'reply.count/every-campaign' | 'reply.count/archived-named' | 'reply.count/until-before-since';
     /** campaign.activity answers any window with the recorded 30 days' answer: for rows that choose another period. */
     anyWindow?: boolean;
 };
@@ -58,9 +40,8 @@ function renderConsole(options: Options = {}) {
         .answer('campaign.summary', 'campaign.summary/all');
     if (options.unread) fake.unreachable('campaign.activity');
     else fake.answer('campaign.activity', 'campaign.activity/all-30-days');
-    fake.standIn('reply.count', () => options.replies ?? standInCount);
-    if (options.anyWindow) fake.standIn('campaign.activity', () => fixtures['campaign.activity/all-30-days'].response);
-    if (options.repliesUnread) fake.unreachable('reply.count');
+    fake.answerAnyRequest('reply.count', options.replies ?? 'reply.count/every-campaign');
+    if (options.anyWindow) fake.answerAnyRequest('campaign.activity', 'campaign.activity/all-30-days');
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -208,11 +189,10 @@ describe('the Dashboard', () => {
         expect(words(dash().querySelector('.dash-agents .hd .dash-period')!)).toBe('the last 30 days');
     });
 
-    it('reads Interested and Meetings booked as the conversations judged so, each saying what it counts on hover', async () => {
+    it('reads Interested as the conversations judged so, and says on hover what Interested and Meetings booked count', async () => {
         const { fake } = renderConsole();
         await open();
-        await waitFor(() => expect(part('Interested', 'b')).toBe('2'));
-        expect(part('Meetings booked', 'b')).toBe('1');
+        await waitFor(() => expect(part('Interested', 'b')).toBe('1'));
         expect(tile(dash(), 'Interested').getAttribute('title')).toBe(
             'Conversations the reply-reading role judged interested.',
         );
@@ -225,25 +205,31 @@ describe('the Dashboard', () => {
         });
     });
 
-    it('holds a dash on Interested and Meetings booked where the answer has no entry of their words', async () => {
-        renderConsole({
-            replies: {
-                campaigns: [],
-                total: {
-                    replies: 1,
-                    threads: 1,
-                    categories: [{ category: 'meeting_requested', replies: 1, threads: 1 }],
-                },
+    it('holds a dash on Meetings booked where the answer has no entry of its word, and fills it where it has', async () => {
+        renderConsole();
+        await open();
+        await waitFor(() => expect(part('Interested', 'b')).toBe('1'));
+        expect(part('Meetings booked', 'b')).toBe('–');
+        const total = fixtures['reply.count/every-campaign'].response.total;
+        dashboard.replies.value = {
+            total: {
+                ...total,
+                categories: [...total.categories, { category: 'meeting_booked', replies: 4, threads: 3 }],
             },
-        });
+        };
+        await waitFor(() => expect(part('Meetings booked', 'b')).toBe('3'));
+    });
+
+    it('holds a dash on Interested and Meetings booked where the answer has no entry of their words', async () => {
+        renderConsole({ replies: 'reply.count/archived-named' });
         await open();
         await waitFor(() => expect(dash().querySelector('.dash-categories tbody tr')).toBeTruthy());
         expect(part('Interested', 'b')).toBe('–');
         expect(part('Meetings booked', 'b')).toBe('–');
     });
 
-    it('holds a dash on both and says the replies could not be read when reply.count does not answer', async () => {
-        renderConsole({ repliesUnread: true });
+    it('holds a dash on both and says the replies could not be read when reply.count is refused', async () => {
+        renderConsole({ replies: 'reply.count/until-before-since' });
         await open();
         await settled();
         expect(part('Interested', 'b')).toBe('–');
@@ -274,17 +260,17 @@ describe('the categories card', () => {
         expect(
             [...card.querySelectorAll('tbody tr')].map((each) => [...each.querySelectorAll('td')].map(words)),
         ).toEqual([
-            ['Interested', '2', '3'],
-            ['Meeting booked', '1', '1'],
-            ['Question', '2', '2'],
-            ['Not now', '1', '1'],
+            ['Interested', '1', '2'],
+            ['Wrong person', '1', '1'],
         ]);
         expect(words(card.querySelector('.hd .dash-period')!)).toBe('the last 30 days');
     });
 
     it('says no reply was judged when the answer has no category', async () => {
-        renderConsole({ replies: { campaigns: [], total: { replies: 0, threads: 0, categories: [] } } });
+        renderConsole();
         await open();
+        await waitFor(() => expect(dash().querySelector('.dash-categories tbody tr')).toBeTruthy());
+        dashboard.replies.value = { total: { replies: 0, threads: 0, categories: [] } };
         await waitFor(() => expect(dash().querySelector('.dash-cats-none')).toBeTruthy());
         expect(words(dash().querySelector('.dash-cats-none')!)).toBe('No reply has been judged in this period.');
     });
@@ -438,7 +424,7 @@ describe('the period', () => {
 
 describe('the Dashboard header', () => {
     it('greets by the hour with no name and no comma, and says its live line', async () => {
-        renderConsole({ anyWindow: true });
+        renderConsole();
         const panel = await open();
         const heading = panel.querySelector('h1')!;
         expect(['Good morning', 'Good afternoon', 'Good evening']).toContain(words(heading));
@@ -447,7 +433,7 @@ describe('the Dashboard header', () => {
 
     it('says in the demo that the numbers are the sample’s', async () => {
         mode.value = 'demo';
-        renderConsole({ anyWindow: true });
+        renderConsole();
         const panel = await open();
         const head = words(panel.querySelector('.ph')!);
         expect(head).toContain('The numbers here are the sample’s.');
@@ -455,7 +441,7 @@ describe('the Dashboard header', () => {
     });
 
     it('offers Review N waiting only while something waits, and it opens Needs you', async () => {
-        renderConsole({ anyWindow: true });
+        renderConsole();
         const panel = await open();
         const total = () => attention.approvals.value.length + attention.questions.value.length;
         await waitFor(() => expect(total()).toBeGreaterThan(0));
@@ -476,7 +462,7 @@ describe('the Dashboard header', () => {
 
 describe('the cards', () => {
     it('lists the first waiting approvals and questions, with All N linking to Needs you', async () => {
-        renderConsole({ anyWindow: true });
+        renderConsole();
         await open();
         const card = () => dash().querySelector<HTMLElement>('.dash-decide')!;
         await waitFor(() => expect(card().querySelectorAll('.dash-row').length).toBeGreaterThan(0));
@@ -490,7 +476,7 @@ describe('the cards', () => {
     });
 
     it('cuts a question at ninety characters and names its agent', async () => {
-        renderConsole({ anyWindow: true });
+        renderConsole();
         await open();
         await waitFor(() => expect(attention.questions.value.length).toBeGreaterThan(0));
         attention.questions.value = attention.questions.value.map((each) => ({ ...each, question: 'q'.repeat(120) }));
@@ -510,7 +496,7 @@ describe('the cards', () => {
     });
 
     it('lists only the agents that are running, with a dash for meetings, and All agents opens Agents', async () => {
-        renderConsole({ anyWindow: true });
+        renderConsole();
         await open();
         const card = dash().querySelector<HTMLElement>('.dash-agents')!;
         const rows = [...card.querySelectorAll('tbody tr')];
@@ -529,7 +515,7 @@ describe('the cards', () => {
     });
 
     it('says none is running when no agent is', async () => {
-        renderConsole({ anyWindow: true });
+        renderConsole();
         await open();
         consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.filter((each) => each.status !== 'active');
         await waitFor(() => expect(dash().querySelector('.dash-no-agents')).toBeTruthy());
@@ -539,7 +525,7 @@ describe('the cards', () => {
     });
 
     it('draws the latest lines of the Feed, six at most, the one naming an agent opening it', async () => {
-        const { journal } = renderConsole({ anyWindow: true });
+        const { journal } = renderConsole();
         await open();
         const { act } = await import('@testing-library/react');
         act(() => {
@@ -565,7 +551,7 @@ describe('the cards', () => {
     });
 
     it('shows exactly four approvals and two questions of a longer queue', async () => {
-        renderConsole({ anyWindow: true });
+        renderConsole();
         await open();
         await waitFor(() => expect(attention.loaded.value).toBe(true));
         const approval = attention.approvals.value[0]!;
@@ -580,7 +566,7 @@ describe('the cards', () => {
     });
 
     it('draws an agent name, a question and an actor that hold markup as text', async () => {
-        const { journal } = renderConsole({ anyWindow: true });
+        const { journal } = renderConsole();
         await open();
         await waitFor(() => expect(attention.loaded.value).toBe(true));
         const hostile = '<b>x</b> "q"';
