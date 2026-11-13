@@ -298,8 +298,9 @@ tries again.
 
 **What the sample holds.** An invented seller and one project with four campaigns in different states (two running,
 one paused, one a draft), fifty-four invented people at `.example` addresses, twenty-eight messages already approved and
-sent, and ten waiting for your approval. A few of the people who were written to answer within minutes of the story's start, because
-the demo provider reports their written replies through events as any provider that reads events does. The sample's
+sent, and ten waiting for your approval. A few of the people who were written to answer, and the demo provider reports their written
+replies through events as any provider that reads events does: where the sample is placed, the replies of its story are
+there when the demo opens; where it is made at the start, they arrive within minutes. The sample's
 story began when the release was built, or, where the sample is made at the start, that day, with no past before it, so
 the Dashboard's thirty days hold it for thirty days after; it is email only; it raises no question, and a person whose
 message is waiting for your approval never answers it.
