@@ -1678,3 +1678,78 @@ body,
 .jc-console .rdot.running {
     animation: pulse 1.2s ease-in-out infinite;
 }
+
+/* The search palette: the sidebar's Search row and its key, and the box over the console. */
+.jc-console .item .kbd {
+    margin-left: auto;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--faint);
+    font-size: 11.5px;
+    line-height: 18px;
+}
+.jc-console .palette-away {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 14vh;
+    background: rgba(15, 23, 42, 0.32);
+}
+.jc-console .palette {
+    width: min(560px, calc(100vw - 32px));
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(15, 23, 42, 0.28);
+    overflow: hidden;
+}
+.jc-console .palette-input {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: none;
+    padding: 14px 16px;
+    font-size: 15px;
+    outline: none;
+}
+.jc-console .palette-input::placeholder {
+    color: var(--faint);
+}
+.jc-console .palette-list {
+    list-style: none;
+    margin: 0;
+    padding: 6px;
+    overflow-y: auto;
+}
+.jc-console .palette-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    cursor: pointer;
+}
+.jc-console .palette-list li.on {
+    background: var(--hover);
+}
+.jc-console .palette-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jc-console .palette-kind {
+    color: var(--faint);
+    font-size: 12px;
+}
+.jc-console .palette-none {
+    padding: 18px 16px;
+    color: var(--mute);
+}

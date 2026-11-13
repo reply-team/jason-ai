@@ -80,7 +80,8 @@ describe('the Feed', () => {
         // The first ask of the page's load also has the desktop read back what was written while no page followed.
         expect(calls(desktop, 'chat.feed').map((each) => each.args)).toEqual([[[], { catchUp: true }]]);
         const order = Array.from(side().querySelectorAll('button')).map((each) => each.textContent?.trim());
-        expect(order.indexOf('Feed')).toBe(order.indexOf('New GTM agent') + 2);
+        // The button, its caret and the Search row come before it.
+        expect(order.indexOf('Feed')).toBe(order.indexOf('New GTM agent') + 3);
         expect(order.indexOf('Feed')).toBeLessThan(order.findIndex((each) => each?.startsWith('Needs you')));
         // The window opens on Start, and no chat is made before the person sends one.
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
