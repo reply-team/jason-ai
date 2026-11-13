@@ -45,6 +45,21 @@ export interface DemoQuitDeps {
 }
 
 /**
+ * What a start of the person's installation that stops the person's runtime (an update, the installer's and the
+ * uninstaller's starts) asks as well: a demo runtime left running by a kill or a crash holds the carried executable too.
+ * The person's runtime is stopped first; a stop that failed or did not answer, the person's or the demo's, is the
+ * answer, and otherwise it is the person's, or the demo's where the person's had no runtime of this application's.
+ */
+export async function stopWithDemo(person: () => Promise<StopOutcome>, demo: () => Promise<StopOutcome>): Promise<StopOutcome> {
+    const refused = (outcome: StopOutcome): outcome is Extract<StopOutcome, { kind: 'failed' | 'unanswered' }> => outcome.kind === 'failed' || outcome.kind === 'unanswered';
+    const own = await person();
+    if (refused(own)) return own;
+    const other = await demo().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
+    if (refused(other)) return { ...other, demo: true };
+    return own.kind === 'none' ? other : own;
+}
+
+/**
  * A demo run's quit: the first is held (`beforeQuit` answers true, and Electron's `before-quit` is prevented) while the
  * demo's runtime is stopped; once the stop has answered, whatever it answered, or the cap has passed without an answer,
  * the quit is asked again and goes on.

@@ -27,18 +27,25 @@
  *    carried jason; and the folder itself only once that leaves it empty. A link or anything else there stays, and is
  *    named.
  *
+ * 6. The demo's two folders, run from the person's installation: the demo's data directory (the person's with `-demo` after
+ *    it) and the demo's harness root (the person's with `-demo` after it). The demo's runtime is stopped first, through the
+ *    demo's own run file (`demo-runtime.ts`), never the person's; one that does not stop keeps both folders. A folder that is
+ *    a link or a file, or that is, holds or lies inside the person's own data directory, harness root or application, is
+ *    left and named. A demo run offers no removal at all (`mode.ts`).
+ *
  * What stays is said by name: the data directory with everything Jason keeps there, the harness root with the person's
  * folders, and the updater's cache under the profile. A removal that fails is named with what takes it off by hand,
  * naming the carried jason by its full path, and the others are still made, since what is left outside the application
  * is the person's to finish. Every value a person or another program wrote is made inert before it is shown (`inert`).
  */
 
-import { existsSync, readdirSync, readFileSync, readlinkSync, rmdirSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, rmdirSync, rmSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
 import { bundleEntries } from './bundle-copy.ts';
+import { hasDemoMarker } from './demo-folders.ts';
 import { inert } from './inert.ts';
 import type { Logger } from './log.ts';
-import { unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
+import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
 import type { CommandStatus } from './path-command.ts';
 import { containedIn, lexicallyInside, resolveReal, type Resolve } from './resolved-path.ts';
 
@@ -206,6 +213,11 @@ export interface UninstallDeps {
     dataDirectory: string;
     harnessRoot: string;
     updaterCache: string;
+    /**
+     * The demo's two folders and the stop of the demo's runtime (`stopDemoRuntime`), which step 6 takes off; absent where
+     * the start knows no demo. Never the person's own: the demo's data directory is the person's with `-demo` after it.
+     */
+    demo?: { data: string; harnessRoot: string; stop(): Promise<StopOutcome> };
     log: Logger;
     /** Resolves a path (`resolved-path.ts`); the system's own unless a test says otherwise. */
     resolve?: Resolve;
@@ -218,7 +230,7 @@ export interface UninstallDeps {
 }
 
 /** The steps, in the order they are taken, as the log names them. */
-export type RemovalStep = 'runtime' | 'login' | 'autostart' | 'command' | 'link' | 'bundle';
+export type RemovalStep = 'runtime' | 'login' | 'autostart' | 'command' | 'link' | 'bundle' | 'demo';
 
 export interface UninstallReport {
     /** Files and registrations taken off, each as the person would recognise it. */
@@ -250,7 +262,8 @@ export function handJason(jason: string | null): string {
  * What the person is told when the runtime this application carries did not stop, or did not answer, so nothing was
  * removed; `again` is the act to repeat once it has, and `jason` the carried jason the hand acts name.
  */
-export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | Unanswered, again = 'uninstall Jason again', jason: string | null = null): string {
+export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: true } | Unanswered, again = 'uninstall Jason again', jason: string | null = null): string {
+    if (outcome.demo) return `Nothing was removed, because ${demoRuntimeWords}. ${demoRuntimeNext} Then ${again}.`;
     const hand = handJason(jason);
     if (outcome.kind === 'unanswered') {
         const { why, next } = unansweredWords({ ...outcome, runFile: inert(outcome.runFile) }, hand);
@@ -425,10 +438,87 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
     // 5. An AppImage's copies of its jason: the real folders named as versions, when nothing runs from them.
     if (deps.bundles !== null) bundleStep(deps.bundles, { removed, failed, left, ended, handNeedsJason, jasonInCopies: containedIn(deps.platform, deps.bundles.folder, deps.jason, resolve) === 'inside', hand });
 
+    if (deps.demo !== undefined) await demoStep(deps, deps.demo, { removed, untouched, failed, left, ended });
+
     left.push(`The data directory, ${data}, with the campaigns, the journal, the settings and the logs`);
     left.push(`The harness root, ${inert(deps.harnessRoot)}, with your folders and memory files`);
     left.push(`The updater’s cache, ${inert(deps.updaterCache)}`);
     return { removed, untouched, failed, left, refused: null, runtime: running, steps, jason: deps.jason };
+}
+
+type DemoKind = 'absent' | 'folder' | 'other' | 'unread';
+
+/** What a demo folder is on the disk, a link looked at and never followed. */
+function demoKind(path: string): DemoKind {
+    try {
+        const found = lstatSync(path);
+        return found.isDirectory() && !found.isSymbolicLink() ? 'folder' : 'other';
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : 'unread';
+    }
+}
+
+/** Whether two paths are one, or either holds the other, as written. */
+function overlaps(platform: NodeJS.Platform, a: string, b: string): boolean {
+    const paths = platform === 'win32' ? win32 : posix;
+    return paths.relative(a, b) === '' || inside(platform, a, b) || inside(platform, b, a);
+}
+
+/** Step 6: the demo's data directory and harness root, when the demo's runtime is not running from them. */
+async function demoStep(
+    deps: UninstallDeps,
+    demo: NonNullable<UninstallDeps['demo']>,
+    into: { removed: string[]; untouched: string[]; failed: string[]; left: string[]; ended(step: RemovalStep, outcome: string): void },
+): Promise<void> {
+    const folders = [
+        { what: 'The demo’s data directory', has: 'with the sample campaigns in it', path: demo.data },
+        { what: 'The demo’s harness root', has: 'with the sample folders in it', path: demo.harnessRoot },
+    ].map((one) => ({ ...one, kind: demoKind(one.path), shown: inert(one.path) }));
+    if (folders.every((one) => one.kind === 'absent')) {
+        into.untouched.push('No demo was set up: the demo’s data directory and harness root were not there');
+        return into.ended('demo', 'absent');
+    }
+    const person = [deps.dataDirectory, deps.harnessRoot, deps.application];
+    const mine = folders.map((one) => ({ ...one, own: person.some((other) => overlaps(deps.platform, other, one.path)) || overlaps(deps.platform, demo.data, demo.harnessRoot) }));
+    // The outcome logged is the first of these that any folder came to.
+    const order = ['unsafe', 'unmarked', 'not_folder', 'unread', 'failed', 'removed'];
+    const came = new Set<string>(['removed']);
+    const takeable = mine.filter((one) => one.kind === 'folder' && !one.own && hasDemoMarker(one.path));
+    for (const one of mine) {
+        if (one.kind === 'absent') into.untouched.push(`${one.what} was not there`);
+        else if (one.own) {
+            into.left.push(`${one.what}, ${one.shown}, which is, holds or lies inside a folder of your own installation: it was left`);
+            came.add('unsafe');
+        } else if (one.kind === 'folder' && !hasDemoMarker(one.path)) {
+            into.left.push(`${one.shown}, which is not a folder this application made (it carries no mark of the demo’s): it was left`);
+            came.add('unmarked');
+        } else if (one.kind === 'other') {
+            into.left.push(`${one.shown}, which is not a folder this application made (a link or a file): it was left`);
+            came.add('not_folder');
+        } else if (one.kind === 'unread') {
+            into.failed.push(`${one.what}, ${one.shown}, which could not be read: deleting the folder takes it off`);
+            came.add('unread');
+        }
+    }
+    if (takeable.length > 0) {
+        const stopped: StopOutcome = await demo.stop().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
+        if (stopped.kind !== 'none' && stopped.kind !== 'stopped') {
+            for (const one of takeable) {
+                into.failed.push(`${one.what}, ${one.shown}, which was kept because the demo’s runtime did not stop: once it has stopped, deleting the folder takes it off`);
+            }
+            return into.ended('demo', 'runtime_running');
+        }
+        for (const one of takeable) {
+            try {
+                rmSync(one.path, { recursive: true, force: true });
+                into.removed.push(`${one.what}, ${one.shown}, ${one.has}`);
+            } catch {
+                into.failed.push(`${one.what}, ${one.shown}, which could not be taken off: deleting the folder takes it off`);
+                came.add('failed');
+            }
+        }
+    }
+    into.ended('demo', order.find((name) => came.has(name)) ?? 'removed');
 }
 
 /** Step 5: what of the bundles folder is this application's copies, and only then, and only those, removed. */

@@ -1,6 +1,6 @@
 // Prepares a bundle folder, desktop/bundle/ by default: the jason executable, with the repository's LICENSE and
 // THIRD-PARTY-NOTICES beside it as every release's zip and tarball carry them, the skills package `jason skills install --source`
-// deploys from, and version.json naming the version all of it was prepared as.
+// deploys from, the demo provider's package (plugins/demo), and version.json naming the version all of it was prepared as.
 //
 //   node scripts/prepare.mjs [--pre rc.1] [--rid win-x64] [--output bundles/x64] [--version 0.34.0] [--executable <file>]
 //
@@ -67,13 +67,15 @@ export function plan(argv, prefix = versionPrefix()) {
 
 /**
  * Completes a folder that holds the executable: the debug symbols a publish leaves are removed, and the licence, the
- * notices, the skills and version.json are put beside it.
+ * notices, the skills, the demo provider's package and version.json are put beside it.
  */
 export function complete(folder, version, repository = root) {
     for (const name of readdirSync(folder)) if (/\.(pdb|dbg)$/i.test(name)) rmSync(join(folder, name), { force: true });
     copyFileSync(join(repository, 'LICENSE'), join(folder, 'LICENSE'));
     copyFileSync(join(repository, 'THIRD-PARTY-NOTICES'), join(folder, 'THIRD-PARTY-NOTICES'));
     cpSync(join(repository, 'skills'), join(folder, 'skills'), { recursive: true });
+    // The demo provider's package exactly as the tree holds it: the desktop places a copy of it in the demo installation.
+    cpSync(join(repository, 'plugins', 'demo'), join(folder, 'plugins', 'demo'), { recursive: true });
     writeFileSync(join(folder, 'version.json'), `${JSON.stringify({ version }, null, 2)}\n`);
 }
 

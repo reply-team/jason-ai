@@ -25,7 +25,7 @@
 import { nextCheckDelay } from './backoff.ts';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
-import { unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
+import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
 import { isRejected, keepPrevious, readRollback } from './rollback.ts';
 
 /** The deb a release publishes, as its packages are named. */
@@ -100,8 +100,9 @@ export function menuItemOf(state: UpdateState, installed: boolean, active: boole
 }
 
 /** What the person is told when the runtime this application carries did not stop, or did not answer, so the update was not installed. */
-export function runtimeRefusal(outcome: { kind: 'failed'; exit: number } | Unanswered): string {
+export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: true } | Unanswered): string {
     const again = 'Then choose Restart Jason and Its Runtime to Install again.';
+    if (outcome.demo) return `The update was not installed, because ${demoRuntimeWords}. Jason was left as it was. ${demoRuntimeNext} ${again}`;
     if (outcome.kind === 'unanswered') {
         const { why, next } = unansweredWords(outcome);
         return `The update was not installed, because ${why}. Jason was left as it was. ${next} ${again}`;
