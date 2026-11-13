@@ -93,9 +93,9 @@ describe('a link the desktop hands the console', () => {
         // A panel's link brings that panel forward.
         desktop.link({ page: 'campaigns' });
         await waitFor(() => expect(inFront()).toContain('Agents'));
-        fireEvent.click(
-            within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Activity' }),
-        );
+        const side = within(document.querySelector<HTMLElement>('.side')!);
+        fireEvent.click(side.getByRole('button', { name: 'More' }));
+        fireEvent.click(side.getByRole('menuitem', { name: /^Activity/ }));
         desktop.link({ page: 'needs' });
         await waitFor(() => expect(inFront()).toContain('Needs you'));
     });
@@ -136,9 +136,9 @@ describe('a link the desktop hands the console', () => {
             .answer('decision.get', 'decision.get/pending-with-options');
         renderConsole(desktop, fake);
         await waitFor(() => expect(calls(desktop, 'links.take')).toHaveLength(1));
-        fireEvent.click(
-            within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'New chat' }),
-        );
+        const side = within(document.querySelector<HTMLElement>('.side')!);
+        fireEvent.click(side.getByRole('button', { name: 'More to create' }));
+        fireEvent.click(side.getByRole('menuitem', { name: /^New chat/ }));
         const box = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         fireEvent.change(box, { target: { value: 'Half a thought' } });
         const [id] = Object.keys(chats.value);

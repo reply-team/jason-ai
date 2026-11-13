@@ -94,9 +94,8 @@ describe('the Dashboard', () => {
     it('is a sidebar row right after the Feed, and the row opens the panel', async () => {
         renderConsole();
         await waitFor(() => expect(dashboardRow()).toBeTruthy());
-        const feed = within(side()).getByRole('navigation', { name: 'Feed' });
-        const here = within(side()).getByRole('navigation', { name: 'Dashboard' });
-        expect(feed.nextElementSibling).toBe(here);
+        const feed = within(side()).getByRole('button', { name: /^Feed/ });
+        expect(feed.nextElementSibling).toBe(dashboardRow());
         expect(document.querySelector('.dash')).toBeNull();
         await open();
         expect(document.querySelector('.dash')).toBeTruthy();
