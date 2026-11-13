@@ -81,6 +81,11 @@ export const en = {
     'openIn.sameData': 'Jason there works with the same data as this window.',
     'openIn.editorDemo': "An editor's own terminal may work with your own installation, not the demo.",
     'openIn.copied': 'Copied the path of {folder}.',
+    'openIn.continue': 'Continue this chat in {place}',
+    'openIn.continueNote':
+        "It continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and this window does not show what happens there.",
+    'openIn.continueRunning': 'A turn of this chat is running. Stop it or wait for it to end.',
+    'openIn.continued': 'Continued this chat in {place}, in a new terminal.',
     'palette.search': 'Search',
     'palette.placeholder': 'Search agents, people, pages and settings',
     'palette.none': 'Nothing found',

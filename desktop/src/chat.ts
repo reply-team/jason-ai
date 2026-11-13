@@ -38,9 +38,12 @@ import { chatRules, claudeArguments, claudeLine, codexArguments, codexLine, data
 import {
     bounded,
     conversationIdShape,
+    continuableOf,
     takenLimit,
     ConversationUnwritten,
     type Chosen,
+    type ContinuableHost,
+    nameSession,
     newConversationId,
     readConversations,
     removeConversation,
@@ -817,6 +820,16 @@ export class Chat {
         return kept;
     }
 
+    /**
+     * The session a terminal may continue this chat by (`continuableOf`), with whether a turn of it runs now; null for a
+     * chat the desktop does not keep, an id of no shape, or a chat with no such session.
+     */
+    continuable(chatId: unknown): { host: ContinuableHost; session: string; running: boolean } | null {
+        const conversation = typeof chatId === 'string' && conversationIdShape.test(chatId) ? this.#conversations.get(chatId) : undefined;
+        const found = conversation === undefined ? null : continuableOf(conversation);
+        return conversation === undefined || found === null ? null : { ...found, running: this.#running.has(conversation.id) };
+    }
+
     /** Whether a turn of this chat is running. */
     isRunning(chatId: string): boolean {
         const conversation = this.#conversationOf(chatId);
@@ -1133,6 +1146,7 @@ export class Chat {
         const conversation = this.#own(id);
         if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it afresh'));
         conversation.sessions = {};
+        delete conversation.plain_sessions;
         // A plan the host no longer remembers is no card to approve.
         unmarkPlans(conversation.entries);
         // A chat in Full access started afresh goes back to Ask first; Plan only stays, as on its record, and so does
@@ -1918,10 +1932,10 @@ export class Chat {
             // The tools this start used, by the id Claude Code gave each use.
             const uses = new Map<string, string>();
             let host: HostProcess | null = null;
+            // Beside the session the record keeps whether this turn was plain: the person's own login, outside Full access.
+            // Only such a session is one a terminal may continue (`continuableOf`).
             const name = (session: string) => {
-                if (conversation.sessions[resolved.host] === session) return;
-                conversation.sessions[resolved.host] = session;
-                this.#keep(conversation);
+                if (nameSession(conversation, resolved.host, session, !resolved.keyed && running.mode !== 'full_access')) this.#keep(conversation);
             };
             const stopFor = (sentence: string) => {
                 stoppedFor = sentence;

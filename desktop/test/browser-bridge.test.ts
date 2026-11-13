@@ -247,7 +247,7 @@ test('the table is exactly the six reads and the four acts', () => {
 const outside = (Object.keys(invokeChannels) as InvokeMember[]).filter((member) => !table.includes(member));
 
 test('every member the design names as outside the table is outside it', () => {
-    for (const member of ['chat.answer', 'chat.setMode', 'chat.feed', 'chat.remove', 'chat.restart', 'chat.attach', 'chat.openFolder', 'mode.set', 'mode.startOver', 'theme.set', 'fullAccess.takeBack', 'openIn.targets', 'openIn.open', 'links.take', 'pairing.paired'] as const) {
+    for (const member of ['chat.answer', 'chat.setMode', 'chat.feed', 'chat.remove', 'chat.restart', 'chat.attach', 'chat.openFolder', 'mode.set', 'mode.startOver', 'theme.set', 'fullAccess.takeBack', 'openIn.targets', 'openIn.open', 'openIn.continueChat', 'links.take', 'pairing.paired'] as const) {
         assert.ok(outside.includes(member), member);
     }
     for (const member of outside.filter((each) => each.startsWith('setup.') && each !== 'setup.status')) assert.ok(!bridgeMembers.includes(member), member);

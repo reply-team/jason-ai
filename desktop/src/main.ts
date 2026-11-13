@@ -21,7 +21,7 @@ import { OpenIn, type PlaceId } from './open-in.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
 import { editorEnvironment, openInHarnessRoot } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
-import { terminalFlags } from './open-in-terminal.ts';
+import { continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
@@ -618,7 +618,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     registerChat(seam, chat, origin, (channel) => log.warn('ipc_refused', { Channel: channel, Origin: origin() ?? 'none' }));
     // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
-    // place used last is kept in this run's own settings.
+    // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
+    // in this run's chat folder, by this run's CLI: in a demo run, the demo's.
     const openIn = new OpenIn({
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
@@ -643,9 +644,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // printed for the runtime's own page, with the bridge's code in its fragment (`browser-bridge.ts`).
         browser: () => openTab({ origin, cli, bridge: () => bridges.ensure(), open: ownPage, log }),
         log: (event, fields) => log.info(event, fields),
+        continuable: (chatId) => chat.continuable(chatId),
+        chatFolder: () => paths.chat,
+        continueFlags,
+        logContinue: (event, fields) => log.info(event, fields),
     });
-    handle(seam, 'openIn.targets', origin, (campaignId) => openIn.targets(campaignId), refused);
+    handle(seam, 'openIn.targets', origin, (campaignId, chatId) => openIn.targets(campaignId, chatId), refused);
     handle(seam, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
+    handle(seam, 'openIn.continueChat', origin, (chatId) => openIn.continueChat(chatId), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".
     // Nor does a listing of Codex's models: it is ended the way a turn's host is, and the asks that wait are dropped.
     // Nor does a browser tab's bridge: its sessions end with it.

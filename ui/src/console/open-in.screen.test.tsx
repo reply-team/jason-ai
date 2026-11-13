@@ -10,7 +10,7 @@ import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { chats, conversations, lines, setup, setupError } from './state';
+import { activePanel, changeChat, chats, conversations, currentChat, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting } from './start';
 
 // "Open in", the split button of the console's top bar: in Live and in Demo, the main part opens the default place, the
@@ -351,5 +351,213 @@ describe('Open in with a campaign’s chat in front', () => {
         fireEvent.click(mainPart());
         await waitFor(() => expect(opens(desktop)).toHaveLength(1));
         expect(opens(desktop)[0]!.args).toEqual(['claude', undefined]);
+    });
+});
+
+describe('Continue this chat in a terminal', () => {
+    /** The chat the console opened as it started, once it is the panel in front. */
+    async function chatInFront(): Promise<string> {
+        return waitFor(() => {
+            const id = currentChat.value;
+            expect(id).not.toBeNull();
+            expect(activePanel.value).toBe('chat:' + id);
+            return id!;
+        });
+    }
+    const continues = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'openIn.continueChat');
+    const entry = () => within(menu()).getByRole('menuitem', { name: /^Continue this chat in/ });
+    const note =
+        "It continues in your terminal under Claude Code's own permission settings. This window's permission cards do not follow it, and this window does not show what happens there.";
+
+    it('names the chat in front when it reads the places, and draws no entry where the desktop offers none', async () => {
+        const desktop = await renderConsole('live');
+        const id = await chatInFront();
+        await waitFor(() => expect(targets(desktop).some((each) => each.args[1] === id)).toBe(true));
+        fireEvent.click(arrow());
+        await waitFor(() => expect(within(menu()).getAllByRole('menuitem').length).toBeGreaterThan(1));
+        expect(within(menu()).queryByRole('menuitem', { name: /^Continue this chat/ })).toBeNull();
+        expect(menu().querySelector('.open-in-continue')).toBeNull();
+    });
+
+    it.each(['live', 'demo'] as const)(
+        'draws the entry last, with its sentence, and continues the chat by its id alone, in %s',
+        async (kept) => {
+            const desktop = await renderConsole(kept);
+            const id = await chatInFront();
+            desktop.openInContinue.set(id, { host: 'claude', label: 'Claude Code', running: false });
+            fireEvent.click(arrow());
+            await waitFor(() => expect(entry()).not.toBeNull());
+            const all = within(menu()).getAllByRole('menuitem');
+            expect(all.at(-1)).toBe(entry());
+            expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Claude Code');
+            expect(entry().querySelector('small')?.textContent).toBe(note);
+            expect((entry() as HTMLButtonElement).disabled).toBe(false);
+            expect(entry().className).not.toBe('on');
+            // Its group comes after every place, the demo's note included.
+            expect(menu().lastElementChild?.classList.contains('open-in-continue')).toBe(true);
+            fireEvent.click(entry());
+            expect(screen.queryByRole('menu')).toBeNull();
+            await waitFor(() => expect(continues(desktop)).toHaveLength(1));
+            expect(continues(desktop)[0]!.args).toEqual([id]);
+            expect(opens(desktop)).toEqual([]);
+            await waitFor(() =>
+                expect(document.querySelector('.open-in-toast')?.textContent).toBe(
+                    'Continued this chat in Claude Code, in a new terminal. Jason there works with the same data as this window.',
+                ),
+            );
+        },
+    );
+
+    it('is never the default: after it, the main part opens the place it opened before', async () => {
+        const desktop = await renderConsole('live');
+        const id = await chatInFront();
+        desktop.openInContinue.set(id, { host: 'codex', label: 'Codex', running: false });
+        fireEvent.click(arrow());
+        await waitFor(() => expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex'));
+        fireEvent.click(entry());
+        await waitFor(() => expect(continues(desktop)).toHaveLength(1));
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(2));
+        expect(mainPart().textContent).toBe('Open in Claude Code');
+        fireEvent.click(mainPart());
+        await waitFor(() => expect(opens(desktop)).toHaveLength(1));
+        expect(opens(desktop)[0]!.args).toEqual(['claude', undefined]);
+        expect(continues(desktop)).toHaveLength(1);
+    });
+
+    it('is drawn disabled, with one sentence, while the desktop says a turn of the chat runs or the page sees one run', async () => {
+        const desktop = await renderConsole('live');
+        const id = await chatInFront();
+        desktop.openInContinue.set(id, { host: 'claude', label: 'Claude Code', running: true });
+        fireEvent.click(arrow());
+        await waitFor(() => expect((entry() as HTMLButtonElement).disabled).toBe(true));
+        expect(entry().querySelector('small')?.textContent).toBe(
+            'A turn of this chat is running. Stop it or wait for it to end.',
+        );
+        fireEvent.click(entry());
+        expect(continues(desktop)).toEqual([]);
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('menu')).toBeNull();
+        // The desktop says it does not run, the page's chat does: still disabled.
+        desktop.openInContinue.set(id, { host: 'claude', label: 'Claude Code', running: false });
+        changeChat(id, (chat) => ({ ...chat, running: true }));
+        fireEvent.click(arrow());
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(2));
+        await waitFor(() => expect((entry() as HTMLButtonElement).disabled).toBe(true));
+        // The turn ends: the places are read again, and the entry can be used.
+        const before = targets(desktop).length;
+        changeChat(id, (chat) => ({ ...chat, running: false }));
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(before));
+        await waitFor(() => expect((entry() as HTMLButtonElement).disabled).toBe(false));
+        expect(entry().querySelector('small')?.textContent).toBe(note);
+    });
+
+    it('says the desktop’s refusal beside the button, in its own sentence, and draws no toast', async () => {
+        const desktop = await renderConsole('live');
+        const id = await chatInFront();
+        desktop.openInContinue.set(id, { host: 'claude', label: 'Claude Code', running: false });
+        desktop.refuse.set('openIn.continueChat', 'No terminal was found on this computer, so nothing was started.');
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        const alert = await waitFor(() => within(split().parentElement!).getByRole('alert'));
+        expect(alert.textContent).toBe('No terminal was found on this computer, so nothing was started.');
+        expect(document.querySelector('.open-in-toast')).toBeNull();
+    });
+
+    it('names no chat once another panel is in front, and draws no entry then, whatever an answer carries', async () => {
+        const desktop = await renderConsole('live');
+        await chatInFront();
+        // An answer that carries an entry whatever it was asked: with no chat in front the page still draws none.
+        const answered = desktop.openIn.targets;
+        desktop.openIn.targets = async (campaignId, chatId) => {
+            const answer = await answered(campaignId, chatId);
+            return 'refused' in answer
+                ? answer
+                : { ...answer, continue: { host: 'claude', label: 'Claude Code', running: false } };
+        };
+        fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Agents' }));
+        await waitFor(() => expect(targets(desktop).at(-1)!.args).toEqual([undefined, undefined]));
+        fireEvent.click(arrow());
+        await waitFor(() => expect(within(menu()).getAllByRole('menuitem').length).toBeGreaterThan(1));
+        expect(within(menu()).queryByRole('menuitem', { name: /^Continue this chat/ })).toBeNull();
+        expect(menu().querySelector('.open-in-continue')).toBeNull();
+    });
+
+    it('keeps the entry to the chat it was read for: a slow read for one chat never shows, or overwrites, the next chat’s', async () => {
+        const desktop = await renderConsole('live');
+        const first = await chatInFront();
+        const second = 'conv_01JD0000000000000000000099';
+        desktop.openInContinue.set(first, { host: 'claude', label: 'Claude Code', running: false });
+        desktop.openInContinue.set(second, { host: 'codex', label: 'Codex', running: false });
+        // The first chat's next read waits until the test lets it land.
+        const answered = desktop.openIn.targets;
+        let land: () => void = () => undefined;
+        desktop.openIn.targets = async (campaignId, chatId) => {
+            const answer = await answered(campaignId, chatId);
+            if (chatId === first) await new Promise<void>((resolve) => (land = resolve));
+            return answer;
+        };
+        const before = targets(desktop).length;
+        fireEvent.focus(window);
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(before));
+        // The second chat comes to the front while the first chat's read is still out.
+        activePanel.value = 'chat:' + second;
+        currentChat.value = second;
+        await waitFor(() => expect(targets(desktop).some((each) => each.args[1] === second)).toBe(true));
+        fireEvent.click(arrow());
+        await waitFor(() => expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex'));
+        // The first chat's answer lands late, after the second chat's: it is dropped, and the entry stays the second's.
+        land();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(within(menu()).getAllByRole('menuitem', { name: /^Continue this chat/ })).toHaveLength(1);
+        expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex');
+        fireEvent.click(entry());
+        await waitFor(() => expect(continues(desktop)).toHaveLength(1));
+        expect(continues(desktop)[0]!.args).toEqual([second]);
+    });
+
+    it('draws no entry of the chat that was in front while the next chat’s read is out', async () => {
+        const desktop = await renderConsole('live');
+        const first = await chatInFront();
+        desktop.openInContinue.set(first, { host: 'claude', label: 'Claude Code', running: false });
+        fireEvent.click(arrow());
+        await waitFor(() => expect(entry()).not.toBeNull());
+        // The next chat's read never lands: the first chat's entry is not drawn for it meanwhile.
+        const answered = desktop.openIn.targets;
+        desktop.openIn.targets = (campaignId, chatId) =>
+            chatId === first ? answered(campaignId, chatId) : new Promise(() => undefined);
+        activePanel.value = 'chat:conv_01JD0000000000000000000099';
+        currentChat.value = 'conv_01JD0000000000000000000099';
+        await waitFor(() => expect(within(menu()).queryByRole('menuitem', { name: /^Continue this chat/ })).toBeNull());
+    });
+
+    it('says a rejected act beside the button, in the rejection’s words, and draws no toast', async () => {
+        const desktop = await renderConsole('live');
+        const id = await chatInFront();
+        desktop.openInContinue.set(id, { host: 'claude', label: 'Claude Code', running: false });
+        desktop.openIn.continueChat = () => Promise.reject(new Error('This window may not ask that.'));
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        const alert = await waitFor(() => within(split().parentElement!).getByRole('alert'));
+        expect(alert.textContent).toBe('This window may not ask that.');
+        expect(document.querySelector('.open-in-toast')).toBeNull();
+    });
+
+    it('reads the places again when a turn of the chat in front starts', async () => {
+        const desktop = await renderConsole('live');
+        const id = await chatInFront();
+        await waitFor(() => expect(targets(desktop).some((each) => each.args[1] === id)).toBe(true));
+        const before = targets(desktop).length;
+        changeChat(id, (chat) => ({ ...chat, running: true }));
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(before));
+        expect(targets(desktop).at(-1)!.args[1]).toBe(id);
+    });
+
+    it('names its group by the entry', async () => {
+        const desktop = await renderConsole('live');
+        const id = await chatInFront();
+        desktop.openInContinue.set(id, { host: 'codex', label: 'Codex', running: false });
+        fireEvent.click(arrow());
+        await waitFor(() => expect(entry()).not.toBeNull());
+        expect(within(menu()).getByRole('group', { name: 'Continue this chat in Codex' })).not.toBeNull();
     });
 });

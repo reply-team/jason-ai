@@ -58,6 +58,12 @@ export interface Conversation {
     updated_at: string;
     /** By host id, the session or thread that host named for this conversation. */
     sessions: Record<string, string>;
+    /**
+     * The host ids of `sessions` whose session the last turn to name it, or to answer with it, was a plain one: on the
+     * person's own login of Claude Code or Codex, outside Full access (`nameSession`). Absent when there is none, and in a
+     * record an earlier desktop wrote, so a session no mark covers is never one to continue in a terminal.
+     */
+    plain_sessions?: string[];
     entries: KeptEntry[];
     /** How many of the oldest entries were dropped to keep the record within its bound. */
     dropped: number;
@@ -178,6 +184,8 @@ export function parseConversation(text: string, id: string): Conversation | null
         // A session out of shape is no session for that host: its next turn starts a fresh one, given the recap.
         if (sessionShape.test(session)) sessions[host] = session;
     }
+    // The mark is read only for a host whose session is kept; anything else there is no mark, never a reason to refuse.
+    const plain = Array.isArray(raw.plain_sessions) ? Object.keys(sessions).filter((host) => (raw.plain_sessions as unknown[]).includes(host)).sort() : [];
     if (!Array.isArray(raw.entries)) return null;
     const main = raw.main === true && raw.campaign_id === null;
     const entries: KeptEntry[] = [];
@@ -210,6 +218,7 @@ export function parseConversation(text: string, id: string): Conversation | null
         created_at: raw.created_at,
         updated_at: raw.updated_at,
         sessions,
+        ...(plain.length === 0 ? {} : { plain_sessions: plain }),
         entries,
         dropped,
     };
@@ -223,11 +232,43 @@ export function parseConversation(text: string, id: string): Conversation | null
  * the mode only when it is Plan only.
  */
 export function serialize(conversation: Conversation): string {
-    const { id, campaign_id, title, created_at, updated_at, sessions, entries, dropped, chosen } = conversation;
+    const { id, campaign_id, title, created_at, updated_at, sessions, plain_sessions, entries, dropped, chosen } = conversation;
     const main = conversation.main === true ? { main: true, ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
     const planned = conversation.mode === 'plan_only' ? { mode: 'plan_only' } : {};
-    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
+    const plain = plain_sessions === undefined || plain_sessions.length === 0 ? {} : { plain_sessions };
+    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, ...plain, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
+}
+
+/**
+ * Keeps the session a host named, or answered a resume with, and whether that turn was plain: on the person's own login
+ * of Claude Code or Codex, outside Full access. A turn that is not plain takes the mark away even from the same id, since
+ * it continued that session where a terminal would not. Answers whether the record changed.
+ */
+export function nameSession(conversation: Conversation, host: string, session: string, plain: boolean): boolean {
+    const marked = conversation.plain_sessions?.includes(host) === true;
+    if (conversation.sessions[host] === session && marked === plain) return false;
+    conversation.sessions[host] = session;
+    const others = (conversation.plain_sessions ?? []).filter((each) => each !== host);
+    const next = plain ? [...others, host].sort() : others;
+    if (next.length === 0) delete conversation.plain_sessions;
+    else conversation.plain_sessions = next;
+    return true;
+}
+
+/** The hosts whose own conversation a terminal can continue, by the id the chat keeps for each. */
+export type ContinuableHost = 'claude' | 'codex';
+
+/**
+ * The session a terminal may continue this conversation by, or null: the session of the host its last turn ran on, when
+ * that host is Claude Code or Codex (a key provider's host id is neither) and a plain turn named it.
+ */
+export function continuableOf(conversation: Conversation): { host: ContinuableHost; session: string } | null {
+    const host = conversation.chosen?.host;
+    if (host !== 'claude' && host !== 'codex') return null;
+    const session = conversation.sessions[host];
+    if (session === undefined || conversation.plain_sessions?.includes(host) !== true) return null;
+    return { host, session };
 }
 
 const bytes = (value: string) => Buffer.byteLength(value, 'utf8');
