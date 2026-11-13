@@ -409,6 +409,12 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   from it: its reads and its stop would have nowhere to go. Each detail names one such search and says what to do: stop the search, or let it end, then change the route
   ([docs/routing.md](routing.md), §6).
 
+  Either is refused `409` with the code `route_orphans_send`, the same way, when it would take the last of the send's
+  campaign's routes and the global ones naming the plugin and account a send ran under away from it while the provider
+  still holds it for a `send_after` to come and no cancel of it has succeeded: its cancel and its status read would have
+  nowhere to go. Each detail names one such send and says what to do: cancel it, or let its moment pass, then change the
+  route ([docs/routing.md](routing.md), §6).
+
 ### `operation`
 
 - `operation.describe`: what a canonical operation takes for a campaign — its argument schema and, for one that carries
