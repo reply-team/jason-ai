@@ -335,7 +335,8 @@ Jason does not install, license, authenticate, or require a particular interacti
 Any compatible agent can participate if it can read the relevant skills and invoke the Jason
 CLI or Runtime API contract available to it. When the person asks, `jason session open` starts the agent host they
 named in the preference `agent.interactive_host` (Claude Code where none is named) in a terminal of their own, on one
-item that waits, or at a campaign's folder, a project's or the harness root with no first input. The interactive agent
+item that waits, or at a campaign's folder, a project's, the harness root or the folder it runs in with no first input,
+where Claude Code or Codex may continue one of its own conversations by its id. The interactive agent
 may also use external
 CLI, MCP, API, web, or research tools directly; the rules for side effects performed outside
 Runtime are defined in section 11.
