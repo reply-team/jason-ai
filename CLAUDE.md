@@ -106,7 +106,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   own under `docs/contracts/notifications/`, embedded the same way and never in the operation catalog.
 - Routing: which plugin performs an operation for a campaign is a route, resolved by a pure function
   over an immutable snapshot — campaign operation and channel, campaign operation override, campaign
-  default, global operation and channel, global operation override, global default, with exact masking and no fallback to another plugin. Routes are frozen
+  default, global operation and channel, global operation override, global default, with exact
+  masking and no fallback to another plugin. Routes are frozen
   by the same reload that freezes plugins: the `Routes` section of `settings.json` is read only
   there and at startup, `route.set`/`route.unset` copy the global half from the active snapshot, and
   a bad route rejects the whole reload. The claim is fail-closed: twenty-seven checks in one published

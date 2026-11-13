@@ -148,10 +148,10 @@ jason route resolve --campaign cmp_… --operation message.send --channel linked
 
 `--channel` needs `--operation`, and an operation whose document lets a route name a channel. `route list` shows a
 channel route beside the operation's own and reads it `<operation> on <channel>`; `route resolve` answers for the
-channel when it is given one, and for a call that names none when it is not. With `--channel`, the CLI first asks the running runtime whether it counts channel routes, and refuses the command before
-it sends anything where it does not: a runtime that does not know channel routes would ignore the channel and answer for,
-or change, the operation's own route instead. Nothing was changed; restart the runtime if it was updated without a
-restart, or update Jason, and run the command again.
+channel when it is given one, and for a call that names none when it is not. With `--channel`, the CLI first asks the running runtime whether it counts channel routes, and refuses the command
+before it sends anything where it does not, or where that cannot be read: `runtime_too_old`, exit 1. Such a runtime would
+ignore the channel and answer for, or change, the operation's own route instead. Restart the runtime if it was updated
+without a restart, or update Jason, and run the command again.
 
 `route set` and `route unset` take no default actor: the CLI will not put this account's name on a change of route
 by itself, so a command typed outside a run names who makes it with `--actor human:<Name>`, and one an executor runs
