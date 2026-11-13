@@ -4,7 +4,10 @@
 # newest SDK the 10.0 channel has released, the latest-sdk of the release metadata on the same CDN. Either way it says
 # which SDK it installed, as its sdk-version output. Given nothing it installs nothing: an empty sdk-version stops the
 # job before anything is fetched. The scripts are fetched when the job runs, from the addresses Microsoft publishes for
-# them, rather than kept in this repository.
+# them, rather than kept in this repository. The two downloads and the install script's run are retried: curl does not
+# count a dropped or refused TLS connection as retryable without --retry-all-errors, and the CDN has reset connections
+# mid-install. A failed install is run again up to four times with a growing pause, from an emptied install directory so
+# that nothing half-installed reaches the next attempt, and the step fails with the last attempt's error.
 #
 # No SDK is pinned here. Each workflow's version job calls this action with latest, so the channel's newest SDK is
 # resolved once per run, and hands the exact SDK it installed to every other job that builds, which passes it back in:
@@ -55,13 +58,29 @@ runs:
         [[ -n "${SDK_VERSION:-}" ]] || { echo "The sdk-version input is empty: a workflow's version job resolves the SDK with latest, and every other job passes that job's sdk output." >&2; exit 1; }
         feed=https://builds.dotnet.microsoft.com/dotnet
         if [[ "$SDK_VERSION" == latest ]]; then
-          SDK_VERSION=$(curl --fail --silent --show-error --location --retry 3 "$feed/release-metadata/10.0/releases.json" | jq --raw-output '."latest-sdk"')
+          SDK_VERSION=$(curl --fail --silent --show-error --location --retry 3 --retry-all-errors --retry-delay 5 "$feed/release-metadata/10.0/releases.json" | jq --raw-output '."latest-sdk"')
         fi
         [[ "$SDK_VERSION" =~ ^10\.0\.[0-9]+$ ]] || { echo "The SDK to install reads '$SDK_VERSION', not a 10.0 release." >&2; exit 1; }
         install="$RUNNER_TEMP/dotnet"
         script="$RUNNER_TEMP/dotnet-install.sh"
-        curl --fail --silent --show-error --location --retry 3 --output "$script" https://dot.net/v1/dotnet-install.sh
-        bash "$script" --version "$SDK_VERSION" --azure-feed "$feed" --install-dir "$install"
+        curl --fail --silent --show-error --location --retry 3 --retry-all-errors --retry-delay 5 --output "$script" https://dot.net/v1/dotnet-install.sh
+        status=0
+        for attempt in 1 2 3 4; do
+          rm -rf "$install"
+          status=0
+          bash "$script" --version "$SDK_VERSION" --azure-feed "$feed" --install-dir "$install" || status=$?
+          if [[ "$status" -eq 0 ]]; then
+            break
+          fi
+          echo "The install script failed on attempt $attempt of 4 with exit code $status." >&2
+          if [[ "$attempt" -lt 4 ]]; then
+            sleep $((attempt * 10))
+          fi
+        done
+        if [[ "$status" -ne 0 ]]; then
+          echo "The SDK $SDK_VERSION was not installed: the install script failed on every attempt, the last with exit code $status." >&2
+          exit "$status"
+        fi
         echo "DOTNET_ROOT=$install" >> "$GITHUB_ENV"
         echo "DOTNET_CLI_TELEMETRY_OPTOUT=1" >> "$GITHUB_ENV"
         echo "$install" >> "$GITHUB_PATH"
@@ -84,10 +103,32 @@ runs:
         if ($env:SDK_VERSION -cnotmatch '^10\.0\.[0-9]+\z') { throw "The SDK to install reads '$env:SDK_VERSION', not a 10.0 release." }
         $install = Join-Path $env:RUNNER_TEMP dotnet
         $script = Join-Path $env:RUNNER_TEMP dotnet-install.ps1
-        Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile $script -MaximumRetryCount 3
-        & $script -Version $env:SDK_VERSION -AzureFeed $feed -InstallDir $install
-        if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "dotnet-install.ps1 exited with $LASTEXITCODE" }
-        if (-not (Test-Path (Join-Path $install dotnet.exe))) { throw "dotnet-install.ps1 left no dotnet.exe in $install" }
+        for ($attempt = 1; $attempt -le 4; $attempt++) {
+          try {
+            Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile $script -MaximumRetryCount 3 -RetryIntervalSec 5
+            break
+          } catch {
+            if ($attempt -eq 4) { throw }
+            Write-Host "::warning::The install script download failed on attempt $attempt of 4: $($_.Exception.Message)"
+            Start-Sleep -Seconds (5 * $attempt)
+          }
+        }
+        for ($attempt = 1; $attempt -le 4; $attempt++) {
+          if (Test-Path $install) { Remove-Item $install -Recurse -Force }
+          $failure = $null
+          $global:LASTEXITCODE = 0
+          try {
+            & $script -Version $env:SDK_VERSION -AzureFeed $feed -InstallDir $install
+            if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "dotnet-install.ps1 exited with $LASTEXITCODE" }
+            if (-not (Test-Path (Join-Path $install dotnet.exe))) { throw "dotnet-install.ps1 left no dotnet.exe in $install" }
+          } catch {
+            $failure = $_
+          }
+          if ($null -eq $failure) { break }
+          if ($attempt -eq 4) { throw $failure }
+          Write-Host "::warning::The install failed on attempt $attempt of 4: $($failure.Exception.Message)"
+          Start-Sleep -Seconds (10 * $attempt)
+        }
         "DOTNET_ROOT=$install" >> $env:GITHUB_ENV
         "DOTNET_CLI_TELEMETRY_OPTOUT=1" >> $env:GITHUB_ENV
         $install >> $env:GITHUB_PATH
