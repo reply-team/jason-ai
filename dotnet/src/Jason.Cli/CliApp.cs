@@ -68,7 +68,13 @@ namespace Jason.Cli;
 /// campaign's folder, with the brief <c>approval get --prompt</c> or <c>decision get --prompt</c> prints as its first
 /// input. A terminal on this machine is not the runtime's to start or to know about, so the runtime is asked nothing new:
 /// only what those two renderings ask, and <c>preference.list</c>. Jason's brief asks the agent to propose only and not
-/// to approve, reject or answer; what it may run is the host's own permission settings' to decide.
+/// to approve, reject or answer; what it may run is the host's own permission settings' to decide. With no item it opens
+/// the same terminal at a folder, with no first input: a campaign's (<c>--campaign</c>), else its project's, else the
+/// harness root; a project's (<c>--project</c>, its id or slug), else the harness root; with neither, the project the
+/// folder the command runs in names, as every verb that takes a project finds it, else the harness root; never the home
+/// folder, which only an item's session falls back to; running the host <c>--host</c>
+/// names, else the preference's, or with <c>--shell</c> the system's plain shell. Of the runtime that form asks only
+/// <c>campaign.get</c>, <c>project.get</c>, <c>system.info</c> and, when no program is named, <c>preference.list</c>.
 /// </para>
 /// <para>
 /// <c>export</c> is the tenth, a verb like <c>doctor</c>. It writes this installation's files — the database, the
