@@ -164,7 +164,8 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     await expect(page.locator('.dv-tabs-and-actions-container').first()).toHaveCSS('display', 'flex');
 
     const side = page.locator('.side');
-    await side.getByRole('button', { name: 'Activity' }).click();
+    await side.getByRole('button', { name: 'More', exact: true }).click();
+    await side.getByRole('menuitem', { name: /^Activity/ }).click();
     await expect(page.getByText('Following the journal')).toBeVisible();
     expect(streams).toEqual([`ws://127.0.0.1:${jason.port}/v1/journal.stream`]);
 
@@ -176,9 +177,10 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     expect(toFeed).toContainEqual(expect.objectContaining({ kind: 'campaign_created' }));
     for (const line of toFeed)
         expect(Object.keys(line as object).sort()).toEqual(['campaign_id', 'id', 'kind', 'ts', 'work_item_id']);
-    await side.getByRole('navigation', { name: 'Feed' }).getByRole('button', { name: 'Feed' }).click();
+    await side.getByRole('navigation', { name: 'Menu' }).getByRole('button', { name: /^Feed/ }).click();
     await expect(page.getByRole('heading', { name: 'The Feed' })).toBeVisible();
-    await side.getByRole('button', { name: 'Connect' }).click();
+    await side.getByRole('button', { name: 'More', exact: true }).click();
+    await side.getByRole('menuitem', { name: /^Connect/ }).click();
     await expect(page.getByText('Drives the chat')).toBeVisible();
 
     expect(violations).toEqual([]);

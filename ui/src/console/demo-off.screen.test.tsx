@@ -54,8 +54,12 @@ async function renderAt(
     );
     render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
     const side = () => within(document.querySelector<HTMLElement>('.side')!);
-    await waitFor(() => side().getByRole('button', { name: panel }));
-    fireEvent.click(side().getByRole('button', { name: panel }));
+    // Connect is under More; Accounts has a row of its own.
+    await waitFor(() => side().getByRole('button', { name: panel === 'Connect' ? 'More' : panel }));
+    if (panel === 'Connect') {
+        fireEvent.click(side().getByRole('button', { name: 'More' }));
+        fireEvent.click(side().getByRole('menuitem', { name: /^Connect/ }));
+    } else fireEvent.click(side().getByRole('button', { name: panel }));
     await waitFor(() => {
         if (panel === 'Connect') expect(document.querySelector('.plugin')).not.toBeNull();
         else expect(document.querySelector('.acct')).not.toBeNull();
