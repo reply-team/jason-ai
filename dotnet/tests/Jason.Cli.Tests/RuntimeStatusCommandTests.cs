@@ -520,6 +520,29 @@ public class RuntimeStatusCommandTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The counts above include the channel routes; a runtime that has some says how many, beside them, so a route that
+    /// names a channel is not read as one more override.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_how_many_of_the_routes_name_a_channel()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0);
+        var plugins = new PluginsInfo(2, "snp_01J4", DateTimeOffset.UnixEpoch, true);
+        var routes = new RoutesInfo("rts_01J4", DateTimeOffset.UnixEpoch, "fake-provider", 2, 3, ChannelRouteCount: 4);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher, plugins, routes))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(
+            "Routes:     snapshot rts_01J4 | default fake-provider | 2 overrides | 3 campaign routes | 4 routes by channel",
+            output.ToString(),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_says_when_nothing_is_routed_anywhere()
     {

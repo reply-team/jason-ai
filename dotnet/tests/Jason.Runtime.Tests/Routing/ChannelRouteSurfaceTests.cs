@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
@@ -62,8 +63,8 @@ public class ChannelRouteSurfaceTests
     /// the operation's own route in its place: a client that mistyped a channel would read that route as the channel's.
     /// </summary>
     [Theory]
-    [InlineData(Send, "sms", "channel_unknown")]
-    [InlineData("campaign.get", "email", "channel_not_routable")]
+    [InlineData(Send, "sms", RouteProblemCodes.ChannelUnknown)]
+    [InlineData("campaign.get", "email", RouteProblemCodes.ChannelNotRoutable)]
     [InlineData(Send, " ", "blank")]
     public async Task Resolve_refuses_a_channel_the_operation_does_not_route_by(string operation, string channel, string code)
     {
@@ -125,7 +126,7 @@ public class ChannelRouteSurfaceTests
             HttpStatusCode.BadRequest,
             Ct);
 
-        Assert.Equal(("channel", "channel_not_routable"), (Assert.Single(error.Details!).Field, error.Details![0].Code));
+        Assert.Equal(("channel", RouteProblemCodes.ChannelNotRoutable), (Assert.Single(error.Details!).Field, error.Details![0].Code));
     }
 
     [Fact]
