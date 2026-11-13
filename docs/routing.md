@@ -38,7 +38,7 @@ The answer names the level it came from as its scope: `campaign_channel`, `campa
 operation's own document (`route_channel_argument`, [docs/contracts/](contracts/README.md)): `message.send` and
 `conversation.reply` read the channel from `channel`, and `sender.list` from its optional `sender_channel` filter,
 so a `sender.list` without the filter is routed by the operation alone, as it always was. An operation whose
-`channel` is the address a person is found by takes none, and neither does an operation with one channel only. A
+`channel` is the address a person is found by takes none, and none is declared for an operation with one channel only, whose own route is already that. A
 call that names a channel no route is set for falls through to the operation's own route and the levels under it;
 nothing is routed by a channel that was not named.
 
@@ -150,8 +150,9 @@ jason route resolve --campaign cmp_… --operation message.send --channel linked
 channel route beside the operation's own and reads it `<operation> on <channel>`; `route resolve` answers for the
 channel when it is given one, and for a call that names none when it is not. With `--channel`, the CLI first asks
 the running runtime whether it counts channel routes, and refuses the command before it sends anything where it does
-not, or where that cannot be read: `runtime_too_old`, exit 1. Such a runtime would ignore the channel and answer
-for, or change, the operation's own route instead. Restart the runtime if it was updated without a restart, or
+not, or where its answer does not say that it does: `runtime_too_old`, exit 1; a runtime that cannot be reached at all
+is exit 3, as for every verb. Such a runtime would ignore the channel and answer for, or change, the operation's own
+route instead. Restart the runtime if it was updated without a restart, or
 update Jason, and run the command again.
 
 `route set` and `route unset` take no default actor: the CLI will not put this account's name on a change of route

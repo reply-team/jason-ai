@@ -90,7 +90,7 @@ describe('People', () => {
             .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
         open(api);
         await screen.findByText(
-            'Nobody yet. People come in when a campaign finds or imports them: start with a campaign, set up in a chat with Jason.',
+            'Nobody yet. People come in when an agent finds or imports them: start with an agent, set up in a chat with Jason.',
         );
         expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
         expect(sentLists(api)).toEqual([fixtures['contact.list/by-activity-empty'].request]);
@@ -123,7 +123,7 @@ describe('People', () => {
             'Company',
             'Channels',
             'Stage',
-            'Campaign',
+            'Agent',
             'Last activity',
         ]);
         const names = Array.from(document.querySelectorAll('.ptable td.name')).map((td) => td.textContent);
@@ -210,7 +210,7 @@ describe('People', () => {
         expect(sentLists(api)[1]).toEqual({ order: 'activity', limit: 200, query: 'mat' });
         expect(route.value).toMatchObject({ screen: 'people', filters: { q: 'mat' } });
 
-        fireEvent.click(screen.getByRole('button', { name: /All campaigns/ }));
+        fireEvent.click(screen.getByRole('button', { name: /All agents/ }));
         const latAm = await screen.findByRole('option', { name: /LatAm pilot/ });
         // A campaign that is not active says so beside its name, as in every campaign picker.
         expect(screen.getByRole('option', { name: /Re-engage Q2 no-replies/ }).textContent).toContain('paused');
@@ -277,7 +277,7 @@ describe('People', () => {
         ]);
         await waitFor(() => expect(api.sent('contact.get')).toEqual({ contact_id: mateo.id }));
         const actions = document.querySelector('.panel > .panel-actions') as HTMLElement;
-        expect(within(actions).getByRole('button', { name: 'Add to campaign' })).toBeTruthy();
+        expect(within(actions).getByRole('button', { name: 'Add to agent' })).toBeTruthy();
 
         fireEvent.click(within(header).getByRole('button', { name: 'Close' }));
         expect(route.value).toEqual({ screen: 'people', tab: 'timeline', filters: {} });
@@ -317,9 +317,9 @@ describe('People', () => {
         open(api, {}, mateo.id);
         await screen.findByRole('heading', { level: 2, name: 'Mateo Ruiz' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }));
-        const dialog = await screen.findByRole('dialog', { name: 'Add to campaign' });
-        fireEvent.click(within(dialog).getByRole('button', { name: /Choose a campaign/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add to agent' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Add to agent' });
+        fireEvent.click(within(dialog).getByRole('button', { name: /Choose an agent/ }));
         fireEvent.click(await within(dialog).findByRole('option', { name: /Re-engage Q2 no-replies/ }));
         expect(within(dialog).getByText(/adding re-enrols them/)).toBeTruthy();
         fireEvent.input(within(dialog).getByRole('textbox', { name: 'Reason' }), {
@@ -333,13 +333,13 @@ describe('People', () => {
             contacts: [{ contact_id: mateo.id }],
             reason: 'Back in scope.',
         });
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add to campaign' })).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add to agent' })).toBeNull());
         expect(document.querySelector('.panel .notice')).toBeNull();
         expect(api.calls.filter((c) => c.operation === 'contact.get')).toHaveLength(2);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }));
-        const again = await screen.findByRole('dialog', { name: 'Add to campaign' });
-        fireEvent.click(within(again).getByRole('button', { name: /Choose a campaign/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add to agent' }));
+        const again = await screen.findByRole('dialog', { name: 'Add to agent' });
+        fireEvent.click(within(again).getByRole('button', { name: /Choose an agent/ }));
         fireEvent.click(await within(again).findByRole('option', { name: /LatAm pilot/ }));
         fireEvent.click(within(again).getByRole('button', { name: 'Add' }));
         expect(await within(again).findByText('LatAm pilot already has them.')).toBeTruthy();
@@ -353,7 +353,7 @@ describe('People', () => {
         location.hash = href(back);
         route.value = back;
         await screen.findByRole('heading', { level: 2, name: 'Mateo Ruiz' });
-        expect(screen.queryByRole('dialog', { name: 'Add to campaign' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Add to agent' })).toBeNull();
     });
     it('Escape in the campaign list closes only the list, and a second Escape closes the dialog', async () => {
         const api = timeline(
@@ -365,19 +365,19 @@ describe('People', () => {
         open(api, {}, mateo.id);
         // As the tests above: the page's own reads have gone out, so its first effects have run.
         await waitFor(() => expect(api.sent('journal.list')).toBeTruthy());
-        fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }));
-        const dialog = await screen.findByRole('dialog', { name: 'Add to campaign' });
-        const choose = within(dialog).getByRole('button', { name: /Choose a campaign/ });
+        fireEvent.click(screen.getByRole('button', { name: 'Add to agent' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Add to agent' });
+        const choose = within(dialog).getByRole('button', { name: /Choose an agent/ });
         fireEvent.click(choose);
         await within(dialog).findByRole('option', { name: /LatAm pilot/ });
 
-        fireEvent.keyDown(within(dialog).getByPlaceholderText('Find a campaign'), { key: 'Escape' });
+        fireEvent.keyDown(within(dialog).getByPlaceholderText('Find an agent'), { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
-        expect(screen.getByRole('dialog', { name: 'Add to campaign' })).toBe(dialog);
+        expect(screen.getByRole('dialog', { name: 'Add to agent' })).toBe(dialog);
         expect(document.activeElement).toBe(choose);
 
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
-        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add to campaign' })).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add to agent' })).toBeNull());
     });
 
     it('open work sits above the now line, farthest first', async () => {

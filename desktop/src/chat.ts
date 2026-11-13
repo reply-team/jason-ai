@@ -432,7 +432,7 @@ export const grantEndWaitMs = 5_000;
 /** How often the ended place is swept while the desktop runs, beside the sweep at each start: once a day. */
 export const sweepEveryMs = 24 * 60 * 60 * 1000;
 
-const notAHost = 'That is not an agent host this desktop knows. Choose Claude Code or Codex for the chat.';
+const notAHost = 'That is not an AI host this desktop knows. Choose Claude Code or Codex for the chat.';
 
 /** Why the standing choice of Full access could not be taken back. */
 const standingKept = 'Always could not be taken back: its file could not be changed. Close anything that has it open, then try again.';
@@ -754,7 +754,7 @@ export class Chat {
         const path = join(this.#options.paths.chatFullEnded, name);
         this.#options.emit(ending.conversation, {
             kind: 'notice',
-            text: `Full access has ended. The folder the agent worked in is kept for seven days and then removed: ${path}`,
+            text: `Full access has ended. The folder the AI worked in is kept for seven days and then removed: ${path}`,
             folder: name,
         });
     }
@@ -798,7 +798,7 @@ export class Chat {
             const name = folder.split(/[\\/]/).filter(Boolean).at(-1) ?? folder;
             this.#options.emit(replyTo, {
                 kind: 'notice',
-                text: `Left out of this chat: the folder “${name}” has skills, agents or commands of its own in its .claude folder, and a chat does not load those.`,
+                text: `Left out of this chat: the folder “${name}” has skills, subagents or commands of its own in its .claude folder, and a chat does not load those.`,
             });
         }
         return kept;
@@ -950,7 +950,7 @@ export class Chat {
             queueMicrotask(() =>
                 this.#options.emit(conversation.id, {
                     kind: 'notice',
-                    text: `Full access has ended. The folder the agent worked in is kept for seven days and then removed: ${path}`,
+                    text: `Full access has ended. The folder the AI worked in is kept for seven days and then removed: ${path}`,
                     folder: moved,
                 }),
             );
@@ -964,7 +964,7 @@ export class Chat {
      */
     async create(campaignId?: unknown, host?: unknown): Promise<ConversationSummary> {
         if (campaignId === undefined || campaignId === null) return this.#summaryOf(await this.#startsNew(this.#made(null, 'New chat'), host));
-        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
+        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused("That is not an agent's id.");
         const existing = this.#ofCampaign(campaignId);
         if (existing !== undefined) return this.#summaryOf(existing);
         const read = await this.#readCampaign(campaignId, false);
@@ -1275,20 +1275,20 @@ export class Chat {
      */
     async attach(id: unknown, campaignId: unknown): Promise<ConversationSummary> {
         const conversation = this.#own(id);
-        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused('That is not a campaign id.');
+        if (typeof campaignId !== 'string' || !campaignIdShape.test(campaignId)) throw new ChatRefused("That is not an agent's id.");
         const refusal = () => {
-            if (conversation.main === true) return "The Feed is about no campaign. Open the campaign's own conversation from the campaign.";
-            if (this.#running.has(conversation.id)) return stillAnswering('choose its campaign');
-            if (conversation.campaign_id !== null) return 'This conversation is already about a campaign.';
-            if (this.#ofCampaign(campaignId) !== undefined) return 'That campaign has its conversation already. Open it from the campaign.';
-            if (!candidatesOf(conversation).includes(campaignId)) return 'That campaign is not one this chat made. Open it from the campaign.';
+            if (conversation.main === true) return "The Feed is about no agent. Open the agent's own conversation from the agent.";
+            if (this.#running.has(conversation.id)) return stillAnswering('choose its agent');
+            if (conversation.campaign_id !== null) return 'This conversation is already about an agent.';
+            if (this.#ofCampaign(campaignId) !== undefined) return 'That agent has its conversation already. Open it from the agent.';
+            if (!candidatesOf(conversation).includes(campaignId)) return 'That agent is not one this chat made. Open it from the agent.';
             return null;
         };
         const before = refusal();
         if (before !== null) throw new ChatRefused(before);
         const read = await this.#readCampaign(campaignId, false);
         const name = read.about.campaign?.name;
-        if (name === null || name === undefined) throw new ChatRefused('That campaign could not be read. Check that Jason is running, then try again.');
+        if (name === null || name === undefined) throw new ChatRefused('That agent could not be read. Check that Jason is running, then try again.');
         const after = refusal();
         if (after !== null) throw new ChatRefused(after);
         conversation.campaign_id = campaignId;

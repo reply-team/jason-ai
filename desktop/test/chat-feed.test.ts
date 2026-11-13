@@ -396,7 +396,7 @@ test('the Feed is never handed over, renamed or removed: a campaign its turn mak
     const made = (JSON.parse(readFileSync(r.campaigns, 'utf8')) as { id: string }[])[0]!.id;
     assert.deepEqual(r.chat.open(feed.id).campaignId, null);
     assert.equal(r.chat.open(feed.id).title, 'Feed', 'not named by its first words');
-    await assert.rejects(r.chat.attach(feed.id, made), { message: "The Feed is about no campaign. Open the campaign's own conversation from the campaign." });
+    await assert.rejects(r.chat.attach(feed.id, made), { message: "The Feed is about no agent. Open the agent's own conversation from the agent." });
     assert.throws(() => r.chat.rename(feed.id, 'Mine'), { message: 'The Feed is always kept; it cannot be removed or renamed.' });
     assert.throws(() => r.chat.remove(feed.id), { message: 'The Feed is always kept; it cannot be removed or renamed.' });
     r.chat.restart(feed.id);

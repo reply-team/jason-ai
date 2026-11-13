@@ -1115,15 +1115,15 @@ campaign operation override
 
 A campaign default intentionally masks global operation-specific routes; preserving a global
 exception inside that campaign requires an explicit campaign operation override. This
-precedence is part of the accepted composition model.
-
-An operation whose contract names the argument a route reads its channel from (`message.send`, `conversation.reply`
-and `sender.list`) may also be routed per channel, so that one campaign sends email through one plugin and LinkedIn
-messages through another. A channel route sits above its operation's own route at its scope, a plugin that reads no
-events may not take one, and the rest of routing keeps its rule unchanged: masking is exact and nothing falls back to
-another plugin. The levels, the scopes and the checks are in [`docs/routing.md`](routing.md). The exact configuration format is
+precedence is part of the accepted composition model. The exact configuration format is
 deferred; whether operation-family wildcard patterns are part of the first schema is
 unresolved.
+
+An operation whose contract names the argument a route reads its channel from may also be routed per channel, so that
+one campaign sends email through one plugin and LinkedIn messages through another. A channel route sits above its
+operation's own route at its scope, a plugin that reads no events may not take one, and the rest of routing keeps its
+rule unchanged: masking is exact and nothing falls back to another plugin. The operations, the levels and the checks
+are in [`docs/routing.md`](routing.md).
 
 ### 13.3 Reply as configured default
 

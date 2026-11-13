@@ -20,7 +20,7 @@ export function CampaignPicker({
         <SearchPicker
             label={label}
             clearLabel={none}
-            placeholder="Find a campaign"
+            placeholder="Find an agent"
             search={async (query) =>
                 (await searchCampaigns(api, query)).map((c) => ({
                     value: c.id,

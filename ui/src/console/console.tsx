@@ -55,7 +55,7 @@ import {
 const titles: Readonly<Record<PanelName, string>> = {
     start: 'Start',
     needs: 'Needs you',
-    campaigns: 'Campaigns',
+    campaigns: 'Agents',
     activity: 'Activity',
     connect: 'Connect',
     page: 'Page',

@@ -92,7 +92,7 @@ describe('a link the desktop hands the console', () => {
         expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toEqual([]);
         // A panel's link brings that panel forward.
         desktop.link({ page: 'campaigns' });
-        await waitFor(() => expect(inFront()).toContain('Campaigns'));
+        await waitFor(() => expect(inFront()).toContain('Agents'));
         fireEvent.click(
             within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Activity' }),
         );

@@ -296,7 +296,7 @@ applies to the turns a person starts by sending, from the next one on.
   the chat in Ask first with no notice. No channel of the page gives it: `fullAccess.standing` reads it and
   `fullAccess.takeBack` removes it, leaving the chats in Full access as they are. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
   2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
-  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the agent runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the agent can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the agent's commands that approve, reject, answer or clear for you while a program the agent writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the agent works. Full access is
+  page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the AI runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the AI can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the AI's commands that approve, reject, answer or clear for you while a program the AI writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the AI works. Full access is
   held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
   never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart; the standing choice only skips the box.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
@@ -318,7 +318,7 @@ applies to the turns a person starts by sending, from the next one on.
   - **runs** with no question for what the model allows, the tools that run nothing (skills, web search, subagents, the
     task list) and the plain cards: a command it read, a write in or outside the working folders, a page, a read outside
     the folders.
-- **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what an agent loads, is
+- **Full access asks about some acts.** A command Jason cannot read plainly, or one that changes what the AI loads, is
   a card titled "Full access asks about this one"; it waits thirty minutes, then is not run and the turn goes on. A
   deletion on a critical path, and a tool the hook never saw, are cards too. A held card offers no "Always", and an
   earlier "Always" grant from Ask first never lets a held command through: each hold is the person's to answer every time.
@@ -329,8 +329,8 @@ applies to the turns a person starts by sending, from the next one on.
 - **What the reader does not see.** A program the agent writes to a file and runs is not read, and neither is the
   person's own shell configuration (aliases, shell options). Neither is an MCP server or connector of the person's own:
   none reaches a turn.
-- **The agent's folder.** In Full access the agent works in a folder of its own. When Full access ends the desktop says
-  "Full access has ended. The folder the agent worked in is kept for seven days and then removed: <path>", with an Open
+- **The AI's folder.** In Full access the AI works in a folder of its own. When Full access ends the desktop says
+  "Full access has ended. The folder the AI worked in is kept for seven days and then removed: <path>", with an Open
   folder button, and removes it after seven days. Added campaign or project folders whose `.claude` holds skills,
   agents or commands are left out of a turn, and the chat says so once.
 - **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands, the operations by
@@ -515,7 +515,7 @@ otherwise. The addresses are a closed table:
 | --- | --- |
 | `jason-desktop://feed` | the Feed |
 | `jason-desktop://needs` | Needs you |
-| `jason-desktop://campaigns` | Campaigns |
+| `jason-desktop://campaigns` | Agents |
 | `jason-desktop://campaign/cmp_…` | that campaign's page |
 | `jason-desktop://approval/apr_…` | Needs you, with that approval open; deciding it stays a person's click |
 | `jason-desktop://question/dec_…` | Needs you, with that question open |

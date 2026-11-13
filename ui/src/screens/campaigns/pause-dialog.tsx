@@ -34,11 +34,11 @@ function provider(campaign: Campaign): string | null {
 
 /** What pausing or starting does, said before it is done: Jason's own release of work, and nothing at the provider. */
 function says(campaign: Campaign, kind: Transition): string {
-    if (kind === 'resume') return "Jason releases this campaign's work again.";
-    if (kind === 'start') return "Jason starts releasing this campaign's work.";
+    if (kind === 'resume') return "Jason releases this agent's work again.";
+    if (kind === 'start') return "Jason starts releasing this agent's work.";
     const name = provider(campaign);
     const sequence = name ? ` ${name}'s sequence keeps sending until a role pauses it there.` : '';
-    return `Jason stops releasing this campaign's work. Work already running finishes.${sequence} Your reason is recorded.`;
+    return `Jason stops releasing this agent's work. Work already running finishes.${sequence} Your reason is recorded.`;
 }
 
 /** Pause, Resume or Start, with an optional reason the journal keeps. */

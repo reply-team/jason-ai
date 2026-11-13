@@ -3,8 +3,9 @@ import type { RouteResolution } from '../api/types';
 import { here } from './state';
 
 // The Reply card in a campaign's chat is an offer, so it is hidden only on a positive answer that the campaign's work
-// goes to another plugin. The runtime already answers where: `route.resolve` walks the four levels (the campaign's own
-// operation route, its default, the global operation override, the global default) over the snapshot the claim reads.
+// goes to another plugin. The runtime already answers where: `route.resolve` walks the levels that apply to an
+// operation that takes no channel route, as this one does (the campaign's own operation route, its default, the global
+// operation override, the global default) over the snapshot the claim reads.
 // No route is not such an answer: on a fresh installation the sign-in the card offers is what writes the first route.
 
 /** The provider operation whose route decides it: enrolment is the act a draft campaign cannot be started without. */

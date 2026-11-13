@@ -1,7 +1,7 @@
 // A Full access grant's own folder through whole turns against stub hosts: each confirmation makes a folder, only that
 // conversation's Full access turns run in it, leaving Full access (or closing the window) sends the next turn back to the
 // chat folder with the session resuming, the ended folder is kept seven days and said once, and the sweep removes it after.
-// Also the added-folder rule: a folder whose `.claude` holds skills, agents or commands is left out and said once.
+// Also the added-folder rule: a folder whose `.claude` holds skills, subagents or commands is left out and said once.
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -334,7 +334,7 @@ test('a Full access turn is refused the chat folder and the other grants\' folde
     assert.ok(rules.some((rule) => rule.endsWith('chat)') || rule.endsWith('chat/**)')), 'the shared chat folder is refused to it');
 });
 
-test('a campaign folder whose .claude holds skills, agents or commands is left out and said once with its name and the reason; one that holds none is added', async (t) => {
+test('a campaign folder whose .claude holds skills, subagents or commands is left out and said once with its name and the reason; one that holds none is added', async (t) => {
     const r = rig(t);
     const plain = join(r.b.root, 'harness-copy', 'plain');
     mkdirSync(join(plain, '.claude'), { recursive: true });
@@ -352,7 +352,7 @@ test('a campaign folder whose .claude holds skills, agents or commands is left o
         const left = notices(said);
         assert.equal(left.length, 1);
         assert.ok(left[0]?.text.includes(`“${folder}”`) || left[0]?.text.includes(`"${folder}"`), left[0]?.text);
-        assert.match(left[0]?.text ?? '', /skills, agents or commands/);
+        assert.match(left[0]?.text ?? '', /skills, subagents or commands/);
         assert.equal(left[0]?.folder, undefined, 'a notice that is no ended folder carries no button');
         await r.turn(id, 'again', claude);
         assert.equal(notices(r.events.get(id)).length, 1, 'said once for the folder, not at each turn');

@@ -495,8 +495,8 @@ test('Full access is refused when it is chosen, before any confirmation, where i
     await assert.rejects(r.chat.setMode(id, 'full_access', 'codex'), { message: 'Full access runs on Claude Code only.' });
     await assert.rejects(r.chat.setMode(id, 'full_access', 'codex-api-key'), { message: 'Full access runs on Claude Code only.' });
     await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: fullAccessSentence('2.1.290') ?? '' });
-    await assert.rejects(r.chat.setMode(id, 'full_access', 'gemini'), /not an agent host/);
-    await assert.rejects(r.chat.setMode(id, 'full_access'), /not an agent host/);
+    await assert.rejects(r.chat.setMode(id, 'full_access', 'gemini'), /not an AI host/);
+    await assert.rejects(r.chat.setMode(id, 'full_access'), /not an AI host/);
     assert.equal(r.confirms, 0, 'no confirmation is shown for a mode that cannot apply');
     assert.equal(r.chat.open(id).mode, 'ask_first');
     assert.equal((await r.chat.setMode(id, 'plan_only', 'codex')).mode, 'plan_only', 'the other modes apply on any host');

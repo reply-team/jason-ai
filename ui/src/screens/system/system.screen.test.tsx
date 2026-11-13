@@ -24,10 +24,10 @@ function systemFake(ui: 'with-ui' | 'without-ui' = 'with-ui', tokens: 'two' | 'a
 describe('route counts', () => {
     it('says how many go by channel only when some do', () => {
         const counts = { global_override_count: 1, campaign_route_count: 3 };
-        expect(routeCounts(counts)).toBe('1 global · 3 per campaign');
-        expect(routeCounts({ ...counts, channel_route_count: 0 })).toBe('1 global · 3 per campaign');
+        expect(routeCounts(counts)).toBe('1 global · 3 per agent');
+        expect(routeCounts({ ...counts, channel_route_count: 0 })).toBe('1 global · 3 per agent');
         expect(routeCounts({ ...counts, channel_route_count: 2 })).toBe(
-            '1 global · 3 per campaign · 2 of them by channel',
+            '1 global · 3 per agent · 2 of them by channel',
         );
     });
 });
@@ -38,7 +38,7 @@ describe('System', () => {
         const routes = fixtures['system.info/with-ui'].response.routes;
         await waitFor(() => expect(screen.getByText('This UI')).toBeTruthy());
         expect(routes.channel_route_count).toBe(0);
-        expect(screen.getByText('0 global · 0 per campaign')).toBeTruthy();
+        expect(screen.getByText('0 global · 0 per agent')).toBeTruthy();
         expect(screen.queryByText(/by channel/)).toBeNull();
     });
 

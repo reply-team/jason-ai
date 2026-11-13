@@ -58,8 +58,7 @@ function standInDesktop(): void {
             },
             remove: (id: unknown) => Promise.resolve(kept(id) && made.delete(id as string) ? null : notKept),
             restart: (id: unknown) => Promise.resolve(kept(id) ? null : notKept),
-            attach: () =>
-                Promise.resolve({ refused: 'That campaign is not one this chat made. Open it from the campaign.' }),
+            attach: () => Promise.resolve({ refused: 'That agent is not one this chat made. Open it from the agent.' }),
             // As the desktop renames: refused before the first send, one line, cut at sixty characters.
             rename: (id: unknown, title: unknown) => {
                 const found = kept(id);

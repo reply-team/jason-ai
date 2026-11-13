@@ -36,7 +36,7 @@ export const bindings: readonly Binding[] = [
     { label: 'New Chat', accelerator: 'CmdOrCtrl+N', does: { command: 'chat.new' } },
     { label: 'What Needs You', accelerator: 'CmdOrCtrl+1', does: { command: 'navigate.attention' } },
     { label: 'Performance', accelerator: 'CmdOrCtrl+2', does: { command: 'navigate.performance' } },
-    { label: 'Campaigns', accelerator: 'CmdOrCtrl+3', does: { command: 'navigate.campaigns' } },
+    { label: 'Agents', accelerator: 'CmdOrCtrl+3', does: { command: 'navigate.campaigns' } },
     { label: 'Work Items', accelerator: 'CmdOrCtrl+4', does: { command: 'navigate.workitems' } },
     { label: 'People', accelerator: 'CmdOrCtrl+5', does: { command: 'navigate.people' } },
     { label: 'System', accelerator: 'CmdOrCtrl+6', does: { command: 'navigate.system' } },
