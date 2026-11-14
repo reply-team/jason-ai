@@ -284,7 +284,7 @@ public static class PluginCommands
             revoke ? "revoke" : "grant",
             (revoke
                 ? "Take a grant back. Written and in force at once; work already running keeps what it was started with. "
-                : "Grant a plugin something its manifest asks for: a host, a program, a variable, an operation, a folder or a subscription. Written to the settings file and in force at once; a grant the manifest does not ask for is refused. ")
+                : "Grant a plugin something its manifest asks for: a host, a program, a variable, an API family, a folder or a subscription. Written to the settings file and in force at once; a grant the manifest does not ask for is refused. ")
             + ActorOption.NoDefaultForAnAct + " " + ActorOption.RefusedInsideARun);
         var id = new Argument<string>("id") { Description = "The plugin's id." };
         var flags = Grants.Select(grant => new Option<string?>(grant.Flag)

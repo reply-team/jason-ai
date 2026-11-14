@@ -434,8 +434,8 @@ public class PluginCommandsTests
     }
 
     /// <summary>
-    /// Both helps say the verb is refused from inside a run, as the verbs of a person's own word say it, and the help of
-    /// --files says every place the load refuses.
+    /// Both helps say the verb is refused from inside a run, as the verbs of a person's own word say it; the grant's help
+    /// names what --api grants as a family, and the help of --files says every place the load refuses.
     /// </summary>
     [Theory]
     [InlineData("grant")]
@@ -450,6 +450,7 @@ public class PluginCommandsTests
         Assert.Contains(ActorOption.NoDefaultForAnAct + " " + ActorOption.RefusedInsideARun, text, StringComparison.Ordinal);
         if (verb == "grant")
         {
+            Assert.Contains("Grant a plugin something its manifest asks for: a host, a program, a variable, an API family, a folder or a subscription.", text, StringComparison.Ordinal);
             Assert.Contains(
                 "Never the home directory, the data directory or the harness root, a folder inside or holding one of them, or the top of a drive.",
                 text,
