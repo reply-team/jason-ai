@@ -17,7 +17,7 @@ namespace Jason.Runtime.Replies;
 /// A role's verdict on one reply, written as the reserved line <c>reply_classified</c> and by nothing else. The runtime
 /// keeps the verdict and reads none of it here: the category is held to being a word, never to a list, and the reaction
 /// and goal are the decision a reader of the line acts on, not something this service does. The nature is a word of a
-/// closed list that the read of warmth uses later; it is never checked against the category or the reaction.
+/// closed list that <see cref="Warmth"/> reads later; it is never checked against the category or the reaction.
 /// </summary>
 /// <remarks>
 /// What is checked against the database: the campaign (archived ones included, as the chronicle takes lines on an
