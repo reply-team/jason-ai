@@ -20,11 +20,11 @@ public partial class InteractiveSkillTests
         Assert.Contains("no_route", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("out of the box", skill, StringComparison.OrdinalIgnoreCase);
 
-        // The wiring check proves a provider is reached, and it is not campaign work: it is a walk the person takes or
-        // skips, asked once by the operating skill, and the real work begins with the person's brief and a plan, which
+        // The wiring check proves a provider is reached, and it is not campaign work: it is a walk the person takes only
+        // when they say so, mentioned by `quick-start`, and the real work begins with the person's brief and a plan, which
         // this skill turns into work. A session that took the check for the job would stop there.
         Assert.Contains(
-            "The wiring check, `docs/golden-path.md`, connects a provider and proves it with the person's own address; it is not campaign work. It is a synthetic walk the person takes or skips when the installation becomes ready, and asking them once is `operating-the-installation`'s. The real work begins with the person's brief — what they tell you about their first campaign, in their own words — and a campaign planned with the business pack's `campaign-planning` skill, and this skill is how the brief and that plan become work the runtime and Jason's roles perform.",
+            "The wiring check, `docs/golden-path.md`, connects a provider and proves it with the person's own address; it is not campaign work. It is a synthetic walk the person takes only when they say so, and `quick-start` is what mentions it. The real work begins with the person's brief — what they tell you about their first campaign, in their own words — and a campaign planned with the business pack's `campaign-planning` skill, and this skill is how the brief and that plan become work the runtime and Jason's roles perform.",
             skill,
             StringComparison.Ordinal);
 
