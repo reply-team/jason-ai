@@ -11,8 +11,8 @@ reply means, and what to do about it, is the responder's first and the manager's
 
 ## 1. Where it runs
 
-Each scan runs in twelve short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **reserve**,
-**summon**, **resume**, **claim**, **notify**, **subscribe** ([work execution](work-execution.md)). Sync comes before the respond step and the
+Each scan runs in thirteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**,
+**bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe** ([work execution](work-execution.md)). Sync comes before the respond step and the
 summon, so a reply it says wakes the responder and the manager in the same scan, and before the claim, so a read it
 starts can be claimed in the same scan. Events, before it, hands a read of an account's events to a reader that runs off the scan
 ([events](events.md) §5).
@@ -65,6 +65,30 @@ code, and passed over alone; any other failure — a write that failed for anoth
 for this scan, and the next scan tries again. A paused campaign is not read, so its lines wait for it; a campaign with
 no new line has its watermark moved to its own last line, and a line said in another campaign or by the installation
 writes nothing for it.
+
+**Bounce**, right after it, reads each active campaign's `provider_event_observed` lines above a watermark of its own,
+at most 100 a campaign a scan, each in one short transaction with the watermark's guarded move, and acts on those whose
+kind is `bounce`. For each such line it queues a read of each of the campaign's own sends the bounce could be of: the
+campaign's emails to the contact the line names, sent through the plugin the bounce was read at, that succeeded with a
+reference, finished in the 45 days before the bounce and not yet said to have bounced, newest first, at most 3 of them.
+A read is a `message.status` `provider_op` whose input names the send and nothing else, created by the dispatcher as
+root work at `Responder:Priority`, beside the respond step's reads, and never a second one for a send that already has
+an open read the runtime made. Each read decides alone, when it ends: a read that finds the send bounced says
+`message_bounce_observed`, and for a hard bounce, or one the provider named no kind for, puts the contact's email on the
+do-not-contact register as `system:bounce` ([`message.status`](contracts/operations/message.status.md)). The step
+itself writes no line and no register entry, and a bounce of a send Jason did not make — a sequence's own email at the
+provider, a mail written by hand, a send older than the window — asks for no read and stops nothing; a campaign with no
+send the bounce could be of is no skip. The step queues no read for a line, or for one send, for these reasons, each
+logged once per campaign by id and code:
+
+| Code | Why |
+|---|---|
+| `bounce_names_no_contact` | The line names no contact the installation holds, so no send of the campaign can be found for it. |
+| `bounce_read_not_routed` | No route active now takes a read of the send where it ran, its plugin and its account, so the claim would refuse one. |
+
+A line the database or a domain rule refuses is passed over alone, and any other failure stops that campaign for the
+scan, as in the respond step. A paused campaign's bounces wait, and so do the reads they ask for: the step does not
+read a paused campaign, and its watermark holds until the campaign is live again.
 
 It runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.

@@ -326,6 +326,14 @@ internal sealed class DispatchHarness : IDisposable
         return await scope.ServiceProvider.GetRequiredService<Responder>().RespondAsync(db, ct);
     }
 
+    /// <summary>Runs one bounce step, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<int> BounceAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<BounceStep>().BounceAsync(db, ct);
+    }
+
     /// <summary>Runs one reserve count, in a scope of its own, the way the scan runs it.</summary>
     public async Task<int> ReserveAsync(CancellationToken ct)
     {
