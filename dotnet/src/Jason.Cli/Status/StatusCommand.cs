@@ -106,8 +106,8 @@ public static class StatusCommand
         The grants check names each plugin that asks for a capability and is granted nothing of it, by
         its id and the capability's key under Plugins:Grants, and never what the manifest asks for. Such a
         plugin runs without what it is not granted, and nothing else stops, so the check never decides
-        readiness. 'jason plugin list --human' says what each asks for, the key that grants it and the settings
-        file, and 'jason plugin reload' reads the grant.
+        readiness. 'jason plugin list --human' says what each asks for and the 'jason plugin grant' command
+        that grants it, in force at once.
 
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. The name is found the way Jason finds every

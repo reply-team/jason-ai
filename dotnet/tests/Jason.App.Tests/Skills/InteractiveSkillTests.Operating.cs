@@ -512,7 +512,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("On a running installation `jason route set --global --plugin <id> --binding '<account>' --actor human:<Name>` writes the same route there and puts it in force at once", skill, StringComparison.Ordinal);
         Assert.Contains("4. Reload: `jason plugin reload`", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "name each capability a plugin asks for and is granted nothing of, with the key that grants it and the settings file: that sentence is what to ask the person to allow.",
+            "name each capability a plugin asks for and is granted nothing of, with the `jason plugin grant` command that grants it: that sentence is what to ask the person to allow.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(

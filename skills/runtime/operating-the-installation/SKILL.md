@@ -264,7 +264,7 @@ A provider on a fresh installation is connected by four acts, in this order, and
 4. Reload: `jason plugin reload`, which reads the grant and the route together.
 
 `jason plugin install --human` and `jason plugin list --human` name each capability a plugin asks for and is granted
-nothing of, with the key that grants it and the settings file: that sentence is what to ask the person to allow. The
+nothing of, with the `jason plugin grant` command that grants it: that sentence is what to ask the person to allow. The
 program a package runs comes first, the Reply CLI section of `docs/golden-path.md`. Where `npm install -g` is refused
 with `EACCES`, npm's global prefix is a directory this account does not own: install it under a prefix of the
 account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime

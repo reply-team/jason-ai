@@ -52,7 +52,7 @@ public static class PluginCommands
             + "reload leaves the package placed, and the verb exits 1 with load: rejected in its body and the runtime's refusal "
             + "under error. After a reload that answered, the body also carries the plugin's status, problems and capabilities "
             + "as the runtime answered them, and the settings file this CLI uses; with --human, each problem is named with the "
-            + "runtime's words and each capability granted nothing of with the key that grants it.");
+            + "runtime's words and each capability granted nothing of with the jason plugin grant command that grants it.");
         var id = new Argument<string>("id") { Description = "The plugin's id, as the release's manifest names it." };
         var feed = new Option<string?>("--feed")
         {
@@ -127,7 +127,7 @@ public static class PluginCommands
                 {
                     $"{Said(placed)} {Said(load)}",
                     loaded is null ? null : PluginRenderers.Problems(loaded),
-                    loaded is null ? null : PluginRenderers.Ungranted(loaded.Id, loaded.Capabilities, settingsFile),
+                    loaded is null ? null : PluginRenderers.Ungranted(loaded.Id, loaded.Capabilities),
                 }.OfType<string>())
             : JsonSerializer.Serialize(
                 new PluginInstallResponse(placed.Id, placed.Version.ToString(), placed.Directory, placed.Digest, placed.FileCount, placed.Placement, load, refusal)
@@ -208,7 +208,7 @@ public static class PluginCommands
     /// <summary>What <c>--human</c> says under what <c>list</c> and <c>reload</c> always said: what each plugin still needs.</summary>
     private const string HumanNeeds =
         "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a plugin "
-        + "asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.";
+        + "asks for and is granted nothing of is named with the jason plugin grant command that grants it, in force at once.";
 
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
@@ -226,7 +226,7 @@ public static class PluginCommands
                 env,
                 Operations.PluginList,
                 RequestBody.Empty(),
-                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Registry(json, env.Paths.UserSettingsFile)),
+                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Registry(json)),
                 cancellationToken);
         });
 
@@ -253,7 +253,7 @@ public static class PluginCommands
                 env,
                 Operations.PluginReload,
                 body,
-                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Reload(json, env.Paths.UserSettingsFile)),
+                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Reload(json)),
                 cancellationToken);
         });
 
@@ -336,7 +336,7 @@ public static class PluginCommands
                 env,
                 revoke ? Operations.PluginRevoke : Operations.PluginGrant,
                 body,
-                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Granted(json, named, grant.Noun, entry!, revoke, env.Paths.UserSettingsFile)),
+                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Granted(json, named, grant.Noun, entry!, revoke)),
                 cancellationToken);
         });
 

@@ -505,7 +505,7 @@ installation. `jason plugin list` says which kinds each plugin declares and whic
 it, with the keys under `Plugins:Grants:<id>` that would grant it — `reply is granted nothing it asks for under Exec.`
 It quotes a plugin's id and those keys and never what the manifest asks for, and it never decides `ready`: such a
 plugin runs without what it is not granted, and nothing else stops. `jason plugin list --human` says what each asks
-for, the key that grants it and the settings file, and `jason plugin reload` reads the grant.
+for and the `jason plugin grant` command that grants it, in force at once.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 

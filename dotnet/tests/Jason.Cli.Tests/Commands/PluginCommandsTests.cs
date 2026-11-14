@@ -71,7 +71,7 @@ public class PluginCommandsTests
             fake-provider  1.0.0    provider      valid        echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2 | subscriptions 1/2  3f2a9c1b4d5e
             notifier       0.2.0    notification  unavailable  -                       exec 1/1 | http - | env - | subscriptions -        9a8b7c6d5e4f
 
-            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them under Plugins:Grants:fake-provider:Http in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.
+            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them with `jason plugin grant fake-provider --http <host> --actor human:<Name>`, in force at once.
             notifier unavailable: executable_missing — No 'notify' was found.
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
@@ -228,7 +228,7 @@ public class PluginCommandsTests
         Assert.Equal(
             $"""
             activated snapshot snp_01J4 with 2 plugins
-            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them under Plugins:Grants:fake-provider:Http in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.
+            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them with `jason plugin grant fake-provider --http <host> --actor human:<Name>`, in force at once.
             notifier unavailable: executable_missing — No 'notify' was found.
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
@@ -286,7 +286,7 @@ public class PluginCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(
-            $"reply is loaded and granted nothing. It asks to run: reply. Grant it under Plugins:Grants:reply:Exec in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            "reply is loaded and granted nothing. It asks to run: reply. Grant it with `jason plugin grant reply --exec <program> --actor human:<Name>`, in force at once.",
             Lines(cli.Text)[^1]);
         if (verb == "list")
         {
@@ -317,14 +317,12 @@ public class PluginCommandsTests
 
         await cli.RunAsync("plugin", verb, "--human");
 
-        var file = cli.Environment.Paths.UserSettingsFile;
         Assert.Equal(
             "reply is loaded and granted only part of what it asks for."
-            + $" It asks to reach: api.example.com. Grant it under Plugins:Grants:reply:Http in {file}."
-            + $" It asks to call: read, journal.append. Grant them under Plugins:Grants:reply:Api in {file}."
-            + $" It asks to be told of: workitem_failed. Grant it under Plugins:Grants:reply:Subscriptions in {file}."
-            + $" It asks for directories to write to; grant them under Plugins:Grants:reply:Files in {file}, each an absolute path."
-            + " Then run `jason plugin reload`.",
+            + " It asks to reach: api.example.com. Grant it with `jason plugin grant reply --http <host> --actor human:<Name>`, in force at once."
+            + " It asks to call: read, journal.append. Grant them with `jason plugin grant reply --api <family> --actor human:<Name>`, in force at once."
+            + " It asks to be told of: workitem_failed. Grant it with `jason plugin grant reply --subscription <kind> --actor human:<Name>`, in force at once."
+            + " It asks for directories to write to; grant one with `jason plugin grant reply --files <absolute path> --actor human:<Name>`.",
             Lines(cli.Text)[^1]);
     }
 
@@ -338,7 +336,7 @@ public class PluginCommandsTests
         await cli.RunAsync("plugin", "list", "--human");
 
         Assert.Equal(
-            $"reply is loaded and granted nothing. It asks to read: FAKE_TOKEN. Grant it under Plugins:Grants:reply:Env in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            "reply is loaded and granted nothing. It asks to read: FAKE_TOKEN. Grant it with `jason plugin grant reply --env <name> --actor human:<Name>`, in force at once.",
             Lines(cli.Text)[^1]);
     }
 
@@ -390,7 +388,7 @@ public class PluginCommandsTests
             new[]
             {
                 "reply unavailable: executable_missing — 'reply' was not found. executable_incompatible — 'other' is 0.1.0, older than 0.4.0.",
-                $"reply is loaded and granted nothing. It asks to run: reply. Grant it under Plugins:Grants:reply:Exec in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+                "reply is loaded and granted nothing. It asks to run: reply. Grant it with `jason plugin grant reply --exec <program> --actor human:<Name>`, in force at once.",
             },
             Lines(cli.Text)[^2..]);
     }
@@ -430,7 +428,7 @@ public class PluginCommandsTests
         await cli.RunAsync("plugin", verb, "--help");
 
         Assert.Contains(
-            "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a plugin asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.",
+            "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a plugin asks for and is granted nothing of is named with the jason plugin grant command that grants it, in force at once.",
             System.Text.RegularExpressions.Regex.Replace(cli.Text, @"\s+", " "),
             StringComparison.Ordinal);
     }

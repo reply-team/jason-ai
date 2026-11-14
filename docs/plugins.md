@@ -331,7 +331,7 @@ body and the runtime's refusal under `error`. After a reload that answered, the 
 its `problems` with the runtime's messages, its `capabilities` as the reload answered them — requested and granted, per
 capability — and `settings_file`, the settings file this CLI uses; with `--human` the verb prints each problem's code
 with its message and, for each capability the plugin asks for and is granted nothing of, one sentence naming what it
-asks for, the key under `Plugins:Grants:<id>` that grants it, that file and `jason plugin reload`. A
+asks for and the `jason plugin grant` command that grants it, in force at once. A
 `.staging-<id>-…` or `.old-<id>-…` directory beside the
 packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
 the install replaced. Every other package is installed by copying its directory in.

@@ -21,8 +21,7 @@ public static class PluginRenderers
     /// is it not there" is answered here too.
     /// </summary>
     /// <param name="json">The body <c>plugin.list</c> answered.</param>
-    /// <param name="settingsFile">The settings file this CLI uses, which is where a grant is written.</param>
-    public static string? Registry(string json, string settingsFile)
+    public static string? Registry(string json)
     {
         var registry = RenderText.Read<PluginRegistryDto>(json);
         if (registry?.Snapshot is null || registry.Plugins is null)
@@ -44,7 +43,7 @@ public static class PluginRenderers
         }
 
         var lines = new List<string> { table.Render() };
-        var needs = Needs(registry.Plugins, settingsFile).ToList();
+        var needs = Needs(registry.Plugins).ToList();
         if (needs.Count > 0)
         {
             lines.Add(string.Empty);
@@ -83,7 +82,7 @@ public static class PluginRenderers
     /// What <c>plugin grant</c> or <c>plugin revoke</c> left in force, said from the body the runtime answered, then what
     /// the reload activated as <see cref="Reload"/> says it, where one ran.
     /// </summary>
-    public static string? Granted(string json, string id, string noun, string entry, bool revoke, string settingsFile)
+    public static string? Granted(string json, string id, string noun, string entry, bool revoke)
     {
         var registry = RenderText.Read<PluginRegistryDto>(json);
         if (registry?.Plugins is null)
@@ -97,7 +96,7 @@ public static class PluginRenderers
                 ? $"{id} is not granted the {noun} {entry} now; work already running keeps what it was started with."
                 : $"{id} is granted the {noun} {entry}, in force now.",
         };
-        if (Reload(json, settingsFile) is { } reloaded)
+        if (Reload(json) is { } reloaded)
         {
             lines.Add(reloaded);
         }
@@ -110,8 +109,7 @@ public static class PluginRenderers
     /// here: it is an API error, printed verbatim with exit code 1.
     /// </summary>
     /// <param name="json">The body <c>plugin.reload</c> answered.</param>
-    /// <param name="settingsFile">The settings file this CLI uses, which is where a grant is written.</param>
-    public static string? Reload(string json, string settingsFile)
+    public static string? Reload(string json)
     {
         var registry = RenderText.Read<PluginRegistryDto>(json);
         if (registry?.Snapshot?.Id is null || registry.Plugins is null || !registry.Activated)
@@ -125,7 +123,7 @@ public static class PluginRenderers
             string.Create(CultureInfo.InvariantCulture, $"activated snapshot {registry.Snapshot.Id} with {count} {(count == 1 ? "plugin" : "plugins")}"),
         };
 
-        lines.AddRange(Needs(registry.Plugins, settingsFile));
+        lines.AddRange(Needs(registry.Plugins));
         return RenderText.Lines(lines);
     }
 
@@ -136,12 +134,12 @@ public static class PluginRenderers
     /// resolves a plugin's grants before its status, so they are as true of a plugin it holds back. A plugin granted what
     /// it asks for, and able to run, has no line.
     /// </summary>
-    private static IEnumerable<string> Needs(IEnumerable<PluginDto> plugins, string settingsFile) =>
+    private static IEnumerable<string> Needs(IEnumerable<PluginDto> plugins) =>
         plugins
             .SelectMany(plugin => plugin.Status switch
             {
-                PluginStatus.Unavailable => new[] { Problems(plugin), Ungranted(plugin.Id, plugin.Capabilities, settingsFile) },
-                PluginStatus.Valid => new[] { Ungranted(plugin.Id, plugin.Capabilities, settingsFile) },
+                PluginStatus.Unavailable => new[] { Problems(plugin), Ungranted(plugin.Id, plugin.Capabilities) },
+                PluginStatus.Valid => new[] { Ungranted(plugin.Id, plugin.Capabilities) },
                 _ => Array.Empty<string?>(),
             })
             .OfType<string>();
@@ -164,15 +162,14 @@ public static class PluginRenderers
 
     /// <summary>
     /// What a loaded plugin asks for and is granted nothing of, as one sentence a person or an agent can act on: what it
-    /// asks for, the key that grants it, the settings file, and the reload that reads it, in that order and per capability
-    /// in the manifest's order. A capability granted part of what it asks has no sentence: it is granted something, and the
+    /// asks for and the <c>jason plugin grant</c> command that grants it, in force at once, per capability in the
+    /// manifest's order. A capability granted part of what it asks has no sentence: it is granted something, and the
     /// table counts the rest. The CLI compares granted with requested, as the table's counts do, and reads no manifest.
     /// Null when there is nothing to say. What the manifest asks for is its author's text, so the sentence is shown inert.
     /// </summary>
     /// <param name="id">The plugin's id.</param>
     /// <param name="capabilities">Its capabilities, as the runtime answered them.</param>
-    /// <param name="settingsFile">The settings file this CLI uses.</param>
-    public static string? Ungranted(string id, PluginCapabilitiesDto? capabilities, string settingsFile)
+    public static string? Ungranted(string id, PluginCapabilitiesDto? capabilities)
     {
         if (capabilities is null)
         {
@@ -194,17 +191,25 @@ public static class PluginRenderers
         var sentence = new System.Text.StringBuilder(grantedAnything
             ? $"{id} is loaded and granted only part of what it asks for."
             : $"{id} is loaded and granted nothing.");
-        for (var at = 0; at < asked.Count; at++)
+        foreach (var (key, verb, names) in asked)
         {
-            var (key, verb, names) = asked[at];
-            var last = at == asked.Count - 1;
             sentence.Append(verb is null
-                ? $" It asks for directories to write to; grant them under Plugins:Grants:{id}:{key} in {settingsFile}, each an absolute path.{(last ? " Then run `jason plugin reload`." : string.Empty)}"
-                : $" It asks to {verb}: {string.Join(", ", names)}. Grant {(names.Count == 1 ? "it" : "them")} under Plugins:Grants:{id}:{key} in {settingsFile}{(last ? ", then run `jason plugin reload`." : ".")}");
+                ? $" It asks for directories to write to; grant one with `jason plugin grant {id} --files <absolute path> --actor human:<Name>`."
+                : $" It asks to {verb}: {string.Join(", ", names)}. Grant {(names.Count == 1 ? "it" : "them")} with `jason plugin grant {id} {GrantFlags[key]} --actor human:<Name>`, in force at once.");
         }
 
         return RenderText.Shown(sentence.ToString());
     }
+
+    /// <summary>The flag of <c>jason plugin grant</c> that grants each capability, with its placeholder.</summary>
+    private static readonly Dictionary<string, string> GrantFlags = new(StringComparer.Ordinal)
+    {
+        ["Exec"] = "--exec <program>",
+        ["Http"] = "--http <host>",
+        ["Env"] = "--env <name>",
+        ["Api"] = "--api <family>",
+        ["Subscriptions"] = "--subscription <kind>",
+    };
 
     /// <summary>
     /// Each capability a plugin asks for and is granted nothing of, in the manifest's order: its key under

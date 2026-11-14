@@ -14,8 +14,8 @@ public class PluginGrantsCheckTests
 
     private const string Tail =
         " Such a plugin runs without what it is not granted, and nothing else stops, so this check never decides readiness."
-        + " `jason plugin list --human` says what each asks for, the key that grants it and the settings file, and"
-        + " `jason plugin reload` reads the grant.";
+        + " `jason plugin list --human` says what each asks for and the `jason plugin grant` command that grants it,"
+        + " in force at once.";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
