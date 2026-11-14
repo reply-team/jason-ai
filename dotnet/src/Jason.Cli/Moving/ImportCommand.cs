@@ -1266,7 +1266,7 @@ public static class ImportCommand
         lines.AddRange(answer.Next.Select(next => "  " + next));
         if (answer.LinkRefused.Count > 0)
         {
-            lines.Add("The import is incomplete: a project folder was not linked, and the exit code is 1. Link each one with the 'jason project link' line under 'Left to you'.");
+            lines.Add("The import is incomplete: a project folder was not linked. Link each one with the 'jason project link' line under 'Left to you'.");
         }
         return string.Join(Environment.NewLine, lines);
     }

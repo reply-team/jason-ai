@@ -1102,7 +1102,7 @@ public sealed class ImportCommandTests
         Assert.Equal(ExitCodes.ApiError, exit);
         var lines = to.Out.ToString().ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Contains("was not linked (harness_folder_present)", string.Join('\n', lines), StringComparison.Ordinal);
-        Assert.Equal("The import is incomplete: a project folder was not linked, and the exit code is 1. Link each one with the 'jason project link' line under 'Left to you'.", lines[^1].Trim());
+        Assert.Equal("The import is incomplete: a project folder was not linked. Link each one with the 'jason project link' line under 'Left to you'.", lines[^1].Trim());
     }
 
     [Fact]
@@ -1203,6 +1203,7 @@ public sealed class ImportCommandTests
         Assert.Contains("Imported the installation Jason 0.33.0 exported at 2026-11-08 09:30:00Z", said, StringComparison.Ordinal);
         Assert.Contains("Left to you:", said, StringComparison.Ordinal);
         Assert.Contains("jason status", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("The import is incomplete", said, StringComparison.Ordinal);
     }
 
     [Theory]
