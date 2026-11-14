@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Cli.Commands;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
@@ -96,38 +97,99 @@ public class RouteCommandsTests
     }
 
     /// <summary>
-    /// The one place an operator will reach for the wrong thing, so the error is the documentation: there is no
-    /// such thing as a global <c>route set</c>, and the message says where a global route is written instead of
-    /// merely naming a missing option.
+    /// A write names its scope, and a write that names none is refused before anything is sent, with both scopes said:
+    /// one that forgot its campaign never re-routes every campaign.
     /// </summary>
-    [Fact]
-    public async Task Setting_a_route_without_a_campaign_says_where_global_routes_live()
+    [Theory]
+    [InlineData("set", "--plugin", "fake-provider", "--operation", "campaign.get")]
+    [InlineData("unset", "--operation", "campaign.get")]
+    public async Task A_write_that_names_no_scope_is_refused_with_both_said(params string[] rest)
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("--actor", "human:ada", "route", "set", "--plugin", "fake-provider", "--operation", "campaign.get");
+        var exit = await cli.RunAsync(["--actor", "human:ada", "route", .. rest]);
 
-        AssertSaidWhereGlobalRoutesLive(cli, exit);
-    }
-
-    [Fact]
-    public async Task Unsetting_a_route_without_a_campaign_says_where_global_routes_live()
-    {
-        using var cli = new CliRun();
-
-        var exit = await cli.RunAsync("--actor", "human:ada", "route", "unset", "--operation", "campaign.get");
-
-        AssertSaidWhereGlobalRoutesLive(cli, exit);
-    }
-
-    private static void AssertSaidWhereGlobalRoutesLive(CliRun cli, int exit)
-    {
         Assert.Equal(ExitCodes.Usage, exit);
-        var message = cli.Error.ToString();
-        Assert.Contains("--campaign", message, StringComparison.Ordinal);
-        Assert.Contains("settings.json", message, StringComparison.Ordinal);
-        Assert.Contains("jason plugin reload", message, StringComparison.Ordinal);
+        Assert.Contains(RouteCommands.NoScope, cli.Error.ToString(), StringComparison.Ordinal);
         Assert.Null(cli.Url);
+    }
+
+    [Theory]
+    [InlineData("set", "--plugin", "fake-provider")]
+    [InlineData("unset")]
+    public async Task A_write_that_names_both_scopes_is_refused(params string[] rest)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["--actor", "human:ada", "route", rest[0], "--campaign", "cmp_A", "--global", .. rest[1..]]);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains(RouteCommands.BothScopes, cli.Error.ToString(), StringComparison.Ordinal);
+        Assert.Null(cli.Url);
+    }
+
+    [Fact]
+    public async Task Set_with_global_sends_the_scope_and_no_campaign()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "--actor", "human:ada", "route", "set", "--global", "--operation", "campaign.get", "--plugin", "fake-provider", "--binding", "{\"workspace\":\"west\"}");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.RouteSet,
+            "{\"scope\":\"global\",\"operation\":\"campaign.get\",\"plugin\":\"fake-provider\",\"binding\":{\"workspace\":\"west\"},\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    [Fact]
+    public async Task Unset_with_global_sends_the_scope_and_no_campaign()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("--actor", "human:ada", "route", "unset", "--global", "--operation", "campaign.get");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.RouteUnset, "{\"scope\":\"global\",\"operation\":\"campaign.get\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    /// <summary>A global write names who does it, as a campaign's does: the CLI never puts this account's name on it by itself.</summary>
+    [Fact]
+    public async Task A_global_write_still_needs_an_actor()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("route", "set", "--global", "--plugin", "fake-provider");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    /// <summary>
+    /// A runtime older than the scope ignores it and asks for the campaign; its answer and the exit code stay its own, and
+    /// one line on stderr says why, so that the campaign is not added as the fix. A campaign's write asked the same says
+    /// nothing more.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_older_runtime_asking_for_a_campaign_of_a_global_write_is_named_on_stderr(bool global)
+    {
+        const string refusal = "{\"error\":{\"code\":\"validation_failed\",\"message\":\"The request is not valid.\",\"retryable\":false,\"details\":[{\"field\":\"campaign_id\",\"code\":\"required\",\"message\":\"campaign_id is required.\"}]}}";
+        using var cli = new CliRun(refusal, status: System.Net.HttpStatusCode.BadRequest);
+
+        var exit = await cli.RunAsync(["--actor", "human:ada", "route", "set", global ? "--global" : "--campaign", .. global ? Array.Empty<string>() : ["cmp_A"], "--plugin", "fake-provider"]);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(refusal, cli.Text.Trim());
+        if (global)
+        {
+            Assert.Contains(RouteCommands.OlderThanGlobal, cli.Error.ToString(), StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain(RouteCommands.OlderThanGlobal, cli.Error.ToString(), StringComparison.Ordinal);
+        }
     }
 
     [Fact]

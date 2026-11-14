@@ -9,22 +9,32 @@ namespace Jason.Cli.Commands;
 
 /// <summary>
 /// The <c>route</c> verb group: where a campaign's provider work goes. Reading asks the active snapshot what a
-/// claim would decide; writing changes one campaign's mind and activates a new route snapshot on the spot.
+/// claim would decide; writing changes one campaign's mind, or with <c>--global</c> every campaign's that has no route
+/// of its own, and activates a new route snapshot on the spot.
 /// <para>
-/// There is deliberately no global <c>route set</c>. A global route is a setting, frozen by the same explicit
-/// act that freezes the plugins it names — so the only way to write one is to edit the settings file and
-/// reload, and asking for one here says exactly that rather than failing obscurely.
+/// A write names its scope: <c>--campaign</c> or <c>--global</c>, exactly one, and never a scope guessed from what was
+/// left out, so a write that forgot its campaign is refused rather than re-routing every campaign. A global route is a
+/// setting: the runtime writes it to the settings file and freezes it by the same reload that freezes the plugins it
+/// names, in one act.
 /// </para>
 /// </summary>
 public static class RouteCommands
 {
+    /// <summary>A write that names no scope: both are said, so the one meant is chosen rather than guessed.</summary>
+    internal const string NoScope =
+        "--campaign or --global is required: --campaign routes one campaign's work, --global every campaign's that has no route of its own.";
+
+    /// <summary>A write that names both scopes.</summary>
+    internal const string BothScopes =
+        "--campaign and --global cannot be used together: a route is one campaign's or every campaign's.";
+
     /// <summary>
-    /// What an operator reaching for a global route is told. It is the documentation for the one place they
-    /// will reach for the wrong thing, so it says where a global route lives and what activates it.
+    /// Said on stderr where the runtime answers a global write that its campaign is required: a runtime older than the
+    /// scope ignores it and reads the request as a campaign's route with no campaign. The answer and the exit code stay
+    /// the runtime's; the line is there so that the campaign is not added as the fix.
     /// </summary>
-    private const string NoGlobalWrite =
-        "--campaign is required: only a campaign's routes are written through the API. "
-            + "A global route is written under \"Routes\" in settings.json and activated with 'jason plugin reload'.";
+    internal const string OlderThanGlobal =
+        "The runtime that is running is older than global routes from the command line: it read --global as a campaign's route with no campaign, and adding --campaign would route one campaign instead. Restart the runtime if Jason was updated without a restart, or update Jason.";
 
     public static Command Build(CliEnvironment env, Option<string?> actor)
     {
@@ -91,8 +101,11 @@ public static class RouteCommands
 
     private static Command Set(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("set", "Send one campaign's work — or one of its operations — to a plugin. " + ActorOption.NoDefaultForAnAct);
+        var command = new Command("set", "Send one campaign's work — or one of its operations — to a plugin, or with --global every campaign's that has no route of its own. " + ActorOption.NoDefaultForAnAct);
         var campaign = Campaign("The campaign whose work is being routed.", required: false);
+        var global = Global(
+            "Send one operation's work, or all provider work, to a plugin for every campaign that has no route of its own. "
+                + "Written to the settings file and in force at once: the plugins are loaded again, and a load that refuses puts the file back.");
         var operation = Operation("The operation to override; leave it out for the campaign's default route.", required: false);
         var channel = Channel(
             "Route one channel of the operation alone, such as linkedin for message.send, beside the operation's own route and never in its place. "
@@ -111,6 +124,7 @@ public static class RouteCommands
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Options.Add(campaign);
+        command.Options.Add(global);
         command.Options.Add(operation);
         command.Options.Add(channel);
         command.Options.Add(plugin);
@@ -120,7 +134,8 @@ public static class RouteCommands
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            var body = RequireCampaign(parseResult.GetValue(campaign))
+            var scoped = parseResult.GetValue(global);
+            var body = Scope(parseResult.GetValue(campaign), scoped)
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("plugin", parseResult.GetValue(plugin))
@@ -134,7 +149,7 @@ public static class RouteCommands
                 return refused;
             }
 
-            return await OperationRunner.RunAsync(env, Operations.RouteSet, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken).ConfigureAwait(false);
+            return await OperationRunner.RunAsync(env, Operations.RouteSet, body, Written(env, parseResult.GetValue(human), scoped), cancellationToken).ConfigureAwait(false);
         });
 
         return command;
@@ -144,11 +159,13 @@ public static class RouteCommands
     {
         var command = new Command("unset", "Take one campaign route away, and with it whatever it was hiding. " + ActorOption.NoDefaultForAnAct);
         var campaign = Campaign("The campaign whose route is being removed.", required: false);
+        var global = Global("Take one global route away. Written and in force at once, as `route set --global`.");
         var operation = Operation("The operation override to remove; leave it out for the campaign's default route.", required: false);
         var channel = Channel("Remove the route of this channel of the operation alone, leaving the operation's own route; needs --operation.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Options.Add(campaign);
+        command.Options.Add(global);
         command.Options.Add(operation);
         command.Options.Add(channel);
         command.Options.Add(reason);
@@ -156,7 +173,8 @@ public static class RouteCommands
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            var body = RequireCampaign(parseResult.GetValue(campaign))
+            var scoped = parseResult.GetValue(global);
+            var body = Scope(parseResult.GetValue(campaign), scoped)
                 .Set("operation", parseResult.GetValue(operation))
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("reason", parseResult.GetValue(reason))
@@ -168,7 +186,7 @@ public static class RouteCommands
                 return refused;
             }
 
-            return await OperationRunner.RunAsync(env, Operations.RouteUnset, body, new RunOptions(parseResult.GetValue(human), RouteRenderers.Routes), cancellationToken).ConfigureAwait(false);
+            return await OperationRunner.RunAsync(env, Operations.RouteUnset, body, Written(env, parseResult.GetValue(human), scoped), cancellationToken).ConfigureAwait(false);
         });
 
         return command;
@@ -224,13 +242,58 @@ public static class RouteCommands
     }
 
     /// <summary>
-    /// The body a writer starts from. <c>--campaign</c> is a checked option rather than a required one, because
-    /// "you left out an option" is not the answer somebody reaching for a global route needs to read.
+    /// The body a writer starts from: one campaign's, or with <c>--global</c> the scope and no campaign. The two are
+    /// checked options rather than required ones, because "you left out an option" is not the answer somebody choosing
+    /// between them needs to read.
     /// </summary>
-    private static JsonObject RequireCampaign(string? campaign) =>
-        string.IsNullOrWhiteSpace(campaign)
-            ? throw new UsageException(NoGlobalWrite)
-            : RequestBody.Empty().Set("campaign_id", campaign);
+    private static JsonObject Scope(string? campaign, bool global)
+    {
+        var named = !string.IsNullOrWhiteSpace(campaign);
+        return (named, global) switch
+        {
+            (true, true) => throw new UsageException(BothScopes),
+            (false, false) => throw new UsageException(NoScope),
+            (true, false) => RequestBody.Empty().Set("campaign_id", campaign),
+            _ => RequestBody.Empty().Set("scope", "global"),
+        };
+    }
+
+    /// <summary>How a write's answer is printed, with the line for an older runtime after a global write's refusal.</summary>
+    private static RunOptions Written(CliEnvironment env, bool human, bool global) =>
+        new(human, RouteRenderers.Routes)
+        {
+            AfterError = global
+                ? response =>
+                {
+                    if (AsksForACampaign(response.Body))
+                    {
+                        env.Error.WriteLine(OlderThanGlobal);
+                    }
+                }
+                : null,
+        };
+
+    /// <summary>Whether a refusal names the campaign as required, which a runtime that knows the global scope never answers.</summary>
+    private static bool AsksForACampaign(string body)
+    {
+        try
+        {
+            return JsonNode.Parse(body)?["error"]?["details"] is JsonArray details
+                && details.Any(detail =>
+                    detail is JsonObject
+                    && (string?)detail["field"] == "campaign_id"
+                    && (string?)detail["code"] == "required");
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static Option<bool> Global(string description) => new("--global")
+    {
+        Description = description,
+    };
 
     private static Option<string?> Campaign(string description, bool required) => new("--campaign")
     {

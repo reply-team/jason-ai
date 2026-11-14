@@ -158,6 +158,22 @@ public class ConfinedVerbsTests
         Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
     }
 
+    /// <summary>
+    /// A global route is refused as a campaign's is: the entry is the verb, so every scope of it is covered, and the
+    /// desktop's chat, which sets the variable on every turn in every mode, never re-routes every campaign.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "route", "set", "--global", "--plugin", "fake-provider")]
+    [InlineData("--actor", "human:x", "route", "unset", "--global", "--operation", "campaign.get")]
+    public async Task Confined_a_global_route_write_is_refused_and_nothing_is_sent(params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Empty(run.Requests);
+        Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+    }
+
     /// <summary>The verbs a role attempt and a chat's agent keep are untouched with the variable set.</summary>
     [Theory]
     [InlineData("workitem", "get", "wi_A")]
