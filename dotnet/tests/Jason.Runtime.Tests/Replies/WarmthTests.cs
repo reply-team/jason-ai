@@ -606,8 +606,8 @@ public class WarmthTests
     /// <summary>
     /// Inbound sync writes a line for every thread of the account that moved, most naming nobody. The read of a contact's
     /// wait visits none of them on a thread the contact's verdicts do not name: forty more such lines on other threads leave
-    /// the number of steps the read takes, and of steps of a full scan, exactly as they were, while the one unnamed line on
-    /// the contact's own thread still makes them wait. The steps are counted, not timed. A seek reads the key just past its
+    /// the number of steps the read takes, and of steps of a full scan, exactly as they were, and no step is a full scan's,
+    /// while the one unnamed line on the contact's own thread still makes them wait. The steps are counted, not timed. A seek reads the key just past its
     /// range to know the range has ended, so a line of a thread on either side of the contact's is there in both counts.
     /// </summary>
     [Fact]
@@ -632,6 +632,7 @@ public class WarmthTests
         var after = await QueryPlans.StepsAsync(db, Warmth.Awaiting(db, seed.Campaign.Id, seed.Contact.Id).ToQueryString(), Ct);
 
         Assert.Equal(before, after);
+        Assert.Equal(0, after.FullScanSteps);
         Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
