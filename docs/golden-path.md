@@ -169,9 +169,9 @@ work goes through. Both live in `~/.jason/config/settings.json`:
 `Grants` is the answer to what the manifest asked for: declaration is not permission. `Binding` names the account
 by the CLI profile that holds its credential — never a credential itself.
 
-**A global route is written here rather than through the CLI**, because an installer has to be able to write one
-before a runtime has ever run. `jason route set` writes a *campaign's* route and refuses a global one with a
-usage error that says so. A campaign override, when you want one, is written with the CLI:
+**A global route is written here by an installer**, because it has to be able to write one before a runtime has
+ever run. On a running installation, `jason route set --global` writes the same section and puts it in force at
+once ([routing.md](routing.md), §3). A campaign override, when you want one, is written with the CLI:
 
 ```
 jason route set --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin reply --actor human:ada

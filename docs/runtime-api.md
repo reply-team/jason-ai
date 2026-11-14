@@ -447,6 +447,18 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   latest moment among them and what to do: cancel them, or change the route after that moment
   ([docs/routing.md](routing.md), §6).
 
+  Either takes `scope`, `campaign` when it is left out, or `global`: with `global` and no `campaign_id`, which is then
+  refused `validation_failed` as `not_allowed`, the route is every campaign's that has no route of its own. The runtime
+  writes it into `settings.json`, keeping every byte of the file it does not own, and runs the plugin reload in the same
+  act, so the answer is the routes the reload froze; a reload that refuses is answered as `plugin.reload` answers it,
+  with the file put back and one more detail under the field `settings.json`, `settings_file_put_back` or
+  `settings_file_not_put_back`. A binding the file would read back as something else is refused `validation_failed` on
+  `binding` as `not_representable_globally`. Nothing is written, and the answer is `409`, where the file does not parse
+  (`settings_file_unreadable`, by line and byte), says the setting in a way the writer cannot change alone
+  (`settings_file_not_editable`), kept changing while it was written (`settings_file_changed`, retryable), is held open
+  by another program (`settings_file_busy`, retryable), or where a `JASON_` environment variable sets the setting
+  (`setting_shadowed`) ([docs/routing.md](routing.md), §3).
+
 ### `operation`
 
 - `operation.describe`: what a canonical operation takes for a campaign — its argument schema and, for one that carries
