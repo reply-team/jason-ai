@@ -125,6 +125,11 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
     /// </summary>
     private (byte[]? Before, byte[]? After) Commit(IReadOnlyList<SettingsEdit> edits, string section)
     {
+        if (new FileInfo(paths.UserSettingsFile).LinkTarget is not null)
+        {
+            throw Refuse(section, DomainErrors.SettingsFileNotEditable(Shown(edits[0].Path), SettingsRefusal.Link));
+        }
+
         for (var attempt = 1; ; attempt++)
         {
             byte[]? before;

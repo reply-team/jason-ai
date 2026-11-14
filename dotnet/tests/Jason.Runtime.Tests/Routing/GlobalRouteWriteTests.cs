@@ -580,6 +580,42 @@ public class GlobalRouteWriteTests
         Assert.Empty(TemporaryFiles(api.Paths));
     }
 
+    /// <summary>
+    /// A settings file that is a link to another file is not written: the rename would replace the link with a file of the
+    /// writer's own and leave the file it points to as it was. Unix only, where a link is made without a privilege.
+    /// </summary>
+    [Fact]
+    public async Task A_settings_file_that_is_a_link_is_refused_and_left_a_link()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A link is made without a privilege only on Unix.");
+        await using var api = await StartAsync();
+        var path = api.Paths.UserSettingsFile;
+        var target = Path.Combine(api.Paths.ConfigDirectory, "kept-elsewhere.json");
+        File.Move(path, target);
+        File.CreateSymbolicLink(path, target);
+
+        var error = await api.PostErrorAsync(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("settings_file_not_editable", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Contains("(through a link to another file, which a write would replace with a file of its own)", error.Message, StringComparison.Ordinal);
+        Assert.Equal(target, new FileInfo(path).LinkTarget);
+        Assert.Equal(Original, File.ReadAllText(target));
+        Assert.Empty(TemporaryFiles(api.Paths));
+    }
+
+    [Theory]
+    [InlineData(SettingsRefusal.Twice, "twice")]
+    [InlineData(SettingsRefusal.Link, "through a link to another file, which a write would replace with a file of its own")]
+    public void A_setting_the_writer_cannot_change_says_why_in_its_parentheses(SettingsRefusal refusal, string why)
+    {
+        var refused = DomainErrors.SettingsFileNotEditable("Routes:Default", refusal);
+
+        Assert.Equal(
+            $"The settings file says Routes:Default in a way this writer cannot change without touching what it does not own ({why}), so nothing was written; change it by hand, then run jason plugin reload.",
+            refused.Message);
+    }
+
     private static object Global(string operation, JsonObject binding) =>
         new { scope = "global", operation, plugin = TestPlugins.FakeProviderId, binding, reason = "routed for the test" };
 

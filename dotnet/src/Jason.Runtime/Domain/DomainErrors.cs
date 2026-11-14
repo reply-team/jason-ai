@@ -227,11 +227,12 @@ public static class DomainErrors
 
     private static string Why(Configuration.SettingsRefusal refusal) => refusal switch
     {
-        Configuration.SettingsRefusal.Twice => "twice, in different cases",
+        Configuration.SettingsRefusal.Twice => "twice",
         Configuration.SettingsRefusal.NotAnObject => "through a value that is not an object",
         Configuration.SettingsRefusal.NotUtf8 => "not in UTF-8",
         Configuration.SettingsRefusal.ColonKey => "with a key that holds a colon, which is the same setting written a second way",
         Configuration.SettingsRefusal.CheckRefused => "in a form this writer's own check refused",
+        Configuration.SettingsRefusal.Link => "through a link to another file, which a write would replace with a file of its own",
         _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "a refusal with no words."),
     };
 

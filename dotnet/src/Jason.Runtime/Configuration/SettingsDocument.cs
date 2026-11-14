@@ -55,6 +55,12 @@ public enum SettingsRefusal
 
     /// <summary>The writer's check of its own edit refused it: the edit would have changed a setting it does not own.</summary>
     CheckRefused,
+
+    /// <summary>
+    /// The settings file is a link to another file. The rename that writes it would replace the link with a file of the
+    /// writer's own and leave the file it pointed to as it was, so it is not written.
+    /// </summary>
+    Link,
 }
 
 /// <summary>
