@@ -218,10 +218,10 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the twenty-seven answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the twenty-eight answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last twenty are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last twenty-one are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
 value is suppressed, whether the routed plugin has pinned the person an operation that works by the pin
 alone acts on, whether the send a read or a take-back names is this campaign's, whether it kept the provider's reference, whether it was
@@ -459,7 +459,7 @@ Nothing falls back. An operation the routed plugin cannot perform ends the work 
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the twenty-seven, in the order they are checked
+### At the claim — the twenty-eight, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
@@ -512,6 +512,7 @@ reply that could only be refused.
 | 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
 | 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out, or takes back a send to them, declares `preflight.suppression: not_applicable` — today `optout.record`, `enrollment.stop` and `message.cancel`, and `audience.search_cancel`, which stops a search and reaches nobody — and meets neither the check nor the read: a suppressed person is exactly who it is for |
+| 28 | `opted_out` | permanent | a verdict that stands says the person asked not to be written to: a `reply_classified` line of any campaign whose nature is `opt_out` and whose body names this contact, with no later verdict on that reply that lifts it. The register is by value and this lock is by the person: it is asked right after row 10, under the same gate and over the same operations, and refuses what row 10 would for a value the register never held — an address or a profile the contact gained after the verdict, or any value of a contact who had none when they asked. It is asked only where row 10 found no entry, so a person who lists the register finds the entry wherever one is. Like the register, it holds in every campaign: a person's request to be left alone is not one campaign's. Only a person's later verdict on the same reply lifts it — one recorded by a person outside a run, or one that carries the answer a named person gave to the campaign's question about that reply (`decision_id`), which the runtime checks; a role's or a run's own verdict never lifts it, and neither does a person named from inside a run. `suppression.remove` takes one entry off the register and leaves this lock where it is ([runtime API](runtime-api.md), `reply.record`) |
 | 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act) |
 | 12 | `send_unknown` | permanent | the operation reads or takes back one send — its input schema names `send`, today `message.status` and `message.cancel` — and the work item `args.send` names is not one of this campaign's, or is not an operation that makes a send: `message.send` or `social_invitation.send`. Name the work item that made the send, in this campaign; then create a new item. An operation that names no send never meets this check, nor the two after it |
 | 13 | `send_reference_absent` | permanent | the send named has no reference to act by: it has not succeeded, or the provider gave it none. The runtime composes `send.reference` from the send's own attempt and from nothing a caller writes, so there is nothing to read or take back yet. Wait for the send to succeed, or create a new item for another one |

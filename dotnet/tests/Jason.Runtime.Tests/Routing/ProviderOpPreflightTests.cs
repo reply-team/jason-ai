@@ -38,7 +38,7 @@ public partial class ProviderOpPreflightTests
     /// of them wins when several are true at once, which is what a person reading the item actually gets.
     /// </summary>
     [Fact]
-    [Critical(Family.W3, "the twenty-seven checks' order")]
+    [Critical(Family.W3, "the twenty-eight checks' order")]
     public void The_first_failing_check_is_the_one_that_names_the_failure()
     {
         var met = new List<string>();
@@ -81,7 +81,13 @@ public partial class ProviderOpPreflightTests
         scenario.Suppressed = true;
         met.Add(Refused(scenario, FailureClass.Permanent));
 
+        // Right after the register and under its gate: a person a standing verdict says asked not to be written to, whatever
+        // value the work would reach them at.
         scenario.Suppressed = false;
+        scenario.OptedOut = OptOutVerdict;
+        met.Add(Refused(scenario, FailureClass.Permanent));
+
+        scenario.OptedOut = null;
         met.Add(Refused(scenario, FailureClass.Permanent));
 
         // Twelfth to fourteenth: a read of a send acts by the reference the send's own attempt returned, so it is asked before the input
@@ -275,7 +281,7 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// None of the twenty-seven is worth another attempt: nothing about the work changed between two scans, so an item
+    /// None of the twenty-eight is worth another attempt: nothing about the work changed between two scans, so an item
     /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
     /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
     /// code later added to both places cannot come to mean two different things.
@@ -305,13 +311,13 @@ public partial class ProviderOpPreflightTests
     }
 
     /// <summary>
-    /// The one answer three of the checks give that is not a refusal is named beside the twenty-seven rather than among
+    /// The one answer three of the checks give that is not a refusal is named beside the twenty-eight rather than among
     /// them: the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
     /// What the binding's, the input's and the definition's checks answer when their pattern does not finish is that named
     /// outcome, and nothing else.
     /// </summary>
     [Fact]
-    public void The_claim_s_transient_outcome_is_what_checks_7_19_and_20_answer_and_is_not_among_the_twenty_five()
+    public void The_claim_s_transient_outcome_is_what_checks_7_19_and_20_answer_and_is_not_among_the_twenty_eight()
     {
         var schema = Scenario.BindingSchema;
         schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
@@ -645,6 +651,7 @@ public partial class ProviderOpPreflightTests
     [InlineData("no contact", AttemptErrors.ContactRequired, FailureClass.Permanent)]
     [InlineData("no email", AttemptErrors.NoChannelValue, FailureClass.Permanent)]
     [InlineData("a suppressed address", AttemptErrors.Suppressed, FailureClass.Permanent)]
+    [InlineData("an opted-out person", AttemptErrors.OptedOut, FailureClass.Permanent)]
     [InlineData("no sender", AttemptErrors.InputInvalid, FailureClass.Validation)]
     [InlineData("a moment the plugin does not take", AttemptErrors.ArgumentUnsupported, FailureClass.Permanent)]
     [InlineData("a template the plugin does not write", AttemptErrors.TemplateNotOffered, FailureClass.Permanent)]
@@ -727,6 +734,9 @@ public partial class ProviderOpPreflightTests
                 break;
             case "a suppressed address":
                 scenario.Suppressed = true;
+                break;
+            case "an opted-out person":
+                scenario.OptedOut = OptOutVerdict;
                 break;
             case "no sender":
                 scenario.Arguments!.Remove("sender");
@@ -1109,6 +1119,61 @@ public partial class ProviderOpPreflightTests
         Assert.Equal(AttemptErrors.Suppressed, enrolled.Code);
     }
 
+    /// <summary>The verdict the opt-out rows stand on: a <c>reply_classified</c> line that said the person asked to be left alone.</summary>
+    private const string OptOutVerdict = "jrn_01K52JR0000000000000000042";
+
+    /// <summary>
+    /// The second lock covers what the register covers and nothing else: a person who opted out is refused the add, the
+    /// enrolment and the send, as a suppressed address is, and not the record that they said stop nor the stop of their
+    /// enrolment, which are for them. Where both hold the register answers, so a person who lists the register finds the
+    /// entry; the refusal names the verdict and says what lifts it.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S1, "the opt-out lock at the pre-flight")]
+    public void An_opted_out_person_is_refused_what_the_register_refuses_and_the_register_answers_first()
+    {
+        Scenario OptedOut(string operation, JsonObject arguments, bool suppressed = false) => new()
+        {
+            Operation = operation,
+            Plugin = Scenario.Package(operations: [Add, Enroll, Optout, Stop]),
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = arguments,
+            OptedOut = OptOutVerdict,
+            Suppressed = suppressed,
+        };
+
+        var recorded = OptedOut(Optout, new JsonObject
+        {
+            ["channel"] = "email",
+            ["statement"] = "please take me off your list",
+            ["arrived_via"] = "reply",
+            ["said_at"] = "2026-10-03T08:14:00Z",
+            ["learned_at"] = "2026-10-03T08:20:00Z",
+        }).Check();
+        var stopped = OptedOut(Stop, new JsonObject
+        {
+            ["campaign"] = new JsonObject { ["external_id"] = "7" },
+            ["channel"] = "email",
+            ["reason"] = new JsonObject { ["code"] = "opted_out" },
+        }).Check();
+        var added = OptedOut(Add, Scenario.CompleteArguments).Check();
+        var enrolled = OptedOut(Enroll, Scenario.CompleteEnrollment).Check();
+        var both = OptedOut(Add, Scenario.CompleteArguments, suppressed: true).Check();
+        var sending = Scenario.Sending("snd-1");
+        sending.OptedOut = OptOutVerdict;
+        var sent = sending.Check();
+
+        Assert.True(recorded.Passed, recorded.Code);
+        Assert.True(stopped.Parks, stopped.Code);
+        Assert.Equal(
+            [AttemptErrors.OptedOut, AttemptErrors.OptedOut, AttemptErrors.OptedOut, AttemptErrors.Suppressed],
+            [added.Code, enrolled.Code, sent.Code, both.Code]);
+        Assert.Equal(FailureClass.Permanent, added.Class);
+        Assert.Contains(OptOutVerdict, added.Message, StringComparison.Ordinal);
+        Assert.Contains("on any channel, in any campaign", added.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>What the claim hands on: the plan carries what the run needs, and every id it was decided by.</summary>
     [Fact]
     public void A_passing_pre_flight_hands_on_what_was_resolved()
@@ -1401,6 +1466,8 @@ public partial class ProviderOpPreflightTests
 
         public bool Suppressed { get; set; }
 
+        public string? OptedOut { get; set; }
+
         public JsonObject? Arguments { get; set; }
 
         public IReadOnlyDictionary<string, string> ContactPins { get; set; } = PreflightFacts.NoPins;
@@ -1556,7 +1623,7 @@ public partial class ProviderOpPreflightTests
                 item.Context = new JsonObject { [WorkItemService.InputKey] = Arguments.DeepClone() };
             }
 
-            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay, Thread: Thread);
+            var facts = new PreflightFacts(item, campaign, Contact, ContactPins, CampaignPins, Suppressed, Blocks, Unsettled: null, Named, Search: Searched, SearchInTheWay: SearchInTheWay, Thread: Thread, OptedOut: OptedOut);
             var plugins = new PluginSnapshot(PluginSnapshotId, DateTime.UnixEpoch, SnapshotSource.Startup, [Plugin, .. Others]);
 
             var campaigns = new Dictionary<string, RouteSet>(StringComparer.Ordinal);
