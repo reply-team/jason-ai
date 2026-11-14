@@ -231,7 +231,7 @@ public static class DomainErrors
         Configuration.SettingsRefusal.NotAnObject => "through a value that is not an object",
         Configuration.SettingsRefusal.NotUtf8 => "not in UTF-8",
         Configuration.SettingsRefusal.ColonKey => "with a key that holds a colon, which is the same setting written a second way",
-        Configuration.SettingsRefusal.CheckRefused => "in a form the writer's check of its own edit refused",
+        Configuration.SettingsRefusal.CheckRefused => "in a form this writer's own check refused",
         _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "a refusal with no words."),
     };
 

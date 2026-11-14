@@ -150,7 +150,9 @@ plugins before anything is written, as a campaign's is. A route the file holds a
 too writes and activates nothing; one the file holds and no reload froze is put in force. A reload that refuses, over
 the packages as they are now, puts the file back as it was, and the answer's last detail, under the field
 `settings.json`, says whether it did: `settings_file_put_back`, or `settings_file_not_put_back` where another writer
-changed the file in between, which is left as that writer left it.
+changed the file in between, which is left as that writer left it, or where another program held the file open, which
+is left holding what the write left, out of force. No command mends that while loads refuse, so the detail says the hand
+edit that does, or the reload that makes the file true.
 
 Five refusals write nothing, each naming the setting by its path and never a value the file holds:
 `settings_file_unreadable`, a file the runtime's own parser does not read, named by the line and the byte where it

@@ -426,7 +426,7 @@ public sealed class RouteService(
                         token).ConfigureAwait(false);
                     return ToDto(routes, only: null);
                 },
-                PutBackSaid,
+                (refused, putBack) => PutBackSaid(refused, putBack, takenAway: wanted is null),
                 cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -447,7 +447,13 @@ public sealed class RouteService(
     /// The refusal of a write the reload refused after it, with what became of the file said in one more detail, under the
     /// settings file's own field, and for a rejected reload in its first sentence too.
     /// </summary>
-    private static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack)
+    /// <remarks>
+    /// A file that could not be put back holds what the write left, out of force, and no command mends it while loads
+    /// refuse: the same command again finds the file as it asks and writes nothing, so its reload refuses with nothing to
+    /// put back, and the opposite command is put back as this one was meant to be. So the sentence says which hand edit
+    /// mends it — a set's route taken out, an unset's route put back — or the reload that makes the file true.
+    /// </remarks>
+    internal static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack, bool takenAway)
     {
         var (detail, clause) = putBack switch
         {
@@ -457,9 +463,12 @@ public sealed class RouteService(
             SettingsPutBack.ChangedSince => (
                 "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.",
                 "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it."),
+            _ when takenAway => (
+                "Another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.",
+                "another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload."),
             _ => (
-                "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged.",
-                "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force."),
+                "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.",
+                "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload."),
         };
         var details = refused.Details ?? [];
         var message = refused.Code == "plugin_reload_rejected"
