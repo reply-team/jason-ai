@@ -533,4 +533,26 @@ public partial class InteractiveSkillTests
         Assert.Contains("`managed-campaign-work` prints how, including how a change of mind on an existing campaign replaces the list whole.", skill, StringComparison.Ordinal);
         Assert.Contains("is made with the brief as its context before anyone is added to it", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The quick start is what a person meets first, so the words the person sees are held exactly: the one question and
+    /// its invitation, the plan message's last line, the line of fact about connected channels, the firm line when none is
+    /// connected, and the wiring line in the message after "go". A paraphrase would change what the first minutes say.
+    /// </summary>
+    [Fact]
+    public void The_quick_start_says_its_words_exactly()
+    {
+        var skill = Flattened("quick-start");
+
+        Assert.Contains("What do you sell, and who should buy it? One sentence is enough, and a link to your site works too.", skill, StringComparison.Ordinal);
+        Assert.Contains("If you like, add a line about yourself and how you write. You can also do that later.", skill, StringComparison.Ordinal);
+        Assert.Contains("End it with exactly: \"Say what to change, or say go.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"You have N mailboxes and M LinkedIn accounts connected; you can add more at any time.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("no channel is connected, connecting one now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
+        Assert.Contains("`reply auth login`", skill, StringComparison.Ordinal);
+        Assert.Contains("\"It can be done later.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("Never put the offer in the plan message.", skill, StringComparison.Ordinal);
+        Assert.Contains("The message after \"go\" that hands over to the planning ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--idempotency-key first-campaign ", skill, StringComparison.Ordinal);
+    }
 }

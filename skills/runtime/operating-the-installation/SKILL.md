@@ -479,15 +479,16 @@ administrator rights.
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
 stands, and that there is nothing to build instead. Do not paste a line again in the hope of a different answer.
 
-When `jason status` says `ready` after an install you made, say in two lines that Jason is installed and where it keeps the
-person's files, then start the `quick-start` skill at once; do not ask what comes next. A host that does not see a skill
-installed a minute ago reads its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one the install's
-`Target:` line printed. The wiring check, `docs/golden-path.md`, is a synthetic walk to meet the system, which connects
-their provider and proves it with their own address, and is not the real work; `quick-start` ends by saying it exists,
-and you take it only when the person says so. A person who skips it has no provider connected: when the work first
-needs one, the Reply CLI section and steps 3 to 5 of `docs/golden-path.md` connect it, without the walk's enrolment.
-What the person tells you about their first campaign becomes the campaign's context when the campaign is created
-(`managed-campaign-work`), and the work is planned with the `campaign-planning` skill and worked by Jason's roles.
+When `jason status` says `ready` after an install you made, tell the person where Jason keeps their files and what you ran, in the
+lines the install guide's section for agents gives, then start the `quick-start` skill at once; do not ask what comes
+next. A host that does not see a skill installed a minute ago reads its file at `<root>/quick-start/SKILL.md`, where
+`<root>` is the one on the `Target:` line of `jason skills install` that names the `jason-runtime-skills` pack and the
+host. The wiring check, `docs/golden-path.md`, is a synthetic walk to meet the system, which connects their provider
+and proves it with their own address, and is not the real work; `quick-start` ends by saying it exists, and you take it
+only when the person says so. A person who skips it has no provider connected: when the work first needs one, the Reply
+CLI section and steps 3 to 5 of `docs/golden-path.md` connect it, without the walk's enrolment. What the person tells
+you about their first campaign becomes the campaign's context when the campaign is created (`managed-campaign-work`),
+and the work is planned with the `campaign-planning` skill and worked by Jason's roles.
 
 The provider's own web app is no step of any Jason flow. A person opens it by a link for four things only —
 connecting a LinkedIn account, connecting a mailbox by single sign-on, signing in, and creating the first API key —

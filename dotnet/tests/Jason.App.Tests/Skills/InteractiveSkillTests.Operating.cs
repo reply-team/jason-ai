@@ -281,13 +281,15 @@ public partial class InteractiveSkillTests
         var skill = Flattened("operating-the-installation");
 
         Assert.Contains(
-            "When `jason status` says `ready` after an install you made, say in two lines that Jason is installed and where it keeps the person's files, then start the `quick-start` skill at once; do not ask what comes next.",
+            "When `jason status` says `ready` after an install you made, tell the person where Jason keeps their files and what you ran, in the lines the install guide's section for agents gives, then start the `quick-start` skill at once; do not ask what comes next.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "A host that does not see a skill installed a minute ago reads its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one the install's `Target:` line printed.",
+            "A host that does not see a skill installed a minute ago reads its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one on the `Target:` line of `jason skills install` that names the `jason-runtime-skills` pack and the host.",
             skill,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("ask the person once what comes next", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("ask them once what comes next", skill, StringComparison.Ordinal);
         Assert.Contains(
             "The wiring check, `docs/golden-path.md`, is a synthetic walk to meet the system, which connects their provider and proves it with their own address, and is not the real work;",
             skill,

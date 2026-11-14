@@ -1043,36 +1043,47 @@ public partial class PageClaimsTests
         var agent = Flat(Agent());
 
         Assert.Contains(
-            "The install prompt's \"Ready\" is `jason status` answering with `ready` true in its body. When it is, say in two lines that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force — then start the `quick-start` skill at once, with no question about what comes next.",
+            "The install prompt's \"Ready\" is `jason status` answering with `ready` true in its body. When it is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying exactly what you ran and what it changed, never as a question; and one line saying that starting the runtime at logon is not done now (§6) and which command does it. Then start the `quick-start` skill at once, with no question about what comes next: its question goes in a message of its own.",
             agent,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Where your host does not see a skill installed a minute ago, read its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one the `Target:` line of `jason skills install` printed.",
+            "Where your host does not see a skill installed a minute ago, read its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one on the `Target:` line of `jason skills install` that names the `jason-runtime-skills` pack and your host.",
             agent,
             StringComparison.Ordinal);
-        Assert.Contains("Starting the runtime at logon is not done now (§6); say at the end that it can be.", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("ask them once what comes next", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("asks you once", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.Contains("The install is done when `ready` is true. If a required check still fails after its repair, stop and report which checks failed.", agent, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The install prompt is the person's yes, so an agent given it stops for nothing but an act marked Ask first or a
-    /// check of its own, and the skills install is one of the steps it takes without asking. What it ran is said at the
-    /// end, never as a question.
+    /// The three lines of the install prompt are the person's yes, so an agent given them stops for nothing but an act
+    /// marked Ask first or a check of its own, and the skills install for its own host is one of the steps it takes
+    /// without asking. An agent given only the link has no such yes.
     /// </summary>
     [Fact]
-    public void The_agent_section_takes_the_install_prompt_as_the_person_s_yes()
+    public void The_agent_section_takes_the_three_lines_as_the_person_s_yes_and_the_link_alone_as_none()
     {
         var agent = Flat(Agent());
 
+        Assert.Contains("If the person gave you these three lines: ```text Install Jason by following https://get.jasonharness.ai/install. When it reports Ready, start its quick-start skill and take me to my first campaign. If anything stops you, ask me directly and tell me why. ``` they have asked for the install, so do it without stopping to confirm a step.", agent, StringComparison.Ordinal);
+        Assert.Contains("Given only the link, you do not have that yes: ask before the install and before each act this page marks **Ask first.**", agent, StringComparison.Ordinal);
         Assert.Contains(
-            "The person who gave you the install prompt has asked for the install, so do it without stopping to confirm a step. Ask only for an act this page marks **Ask first.**, or where your own checks stop you, and then ask the person directly and say why.",
+            "If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own agent reads them: run `jason skills install --host <your host>` (§4) as a step of the install, without asking again. That yes covers your own host and nothing else this page marks **Ask first.** Skills for any other host on this machine stay §4's question. Given only the link, the mark in §4 stands.",
             agent,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "The install prompt tells you to start the `quick-start` skill, and that is the person's yes to putting Jason's skills where your agent reads them: run `jason skills install` (§4) as a step of the install, without asking again. That yes covers the skills and no other act this page marks **Ask first.** Where you were not given that prompt, the mark in §4 stands.",
-            agent,
-            StringComparison.Ordinal);
-        Assert.Contains("**At the end,** in two lines and never as a question, say exactly what you ran and what it changed.", agent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Starting the runtime at logon is not asked at install: the guide marks it as not done, so an agent says it at the
+    /// end with the command and an unmarked paragraph cannot be read as an act to run.
+    /// </summary>
+    [Fact]
+    public void The_logon_start_is_marked_not_done_at_install()
+    {
+        var section = Flat(Section(Page("docs", "INSTALL.md"), "## 6. "));
+
+        Assert.Contains("**Not done at install.** An agent that installs Jason does not register this", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("**Ask first.** To have the runtime start", section, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1499,27 +1510,28 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The install page ends with the choice of what comes next: §6's last paragraph says an agent asks once, links the
-    /// wiring check as a synthetic walk that is not the real work, says a skipped walk is not offered again, and says the
-    /// real work begins with the person telling about their first campaign in their own words. A person who followed the
-    /// install to its end — or an agent that did it for them — knows both ways on, and that the walk is not the work.
+    /// The install page ends by handing on, not by asking: §6's last paragraph says an agent that installed Jason starts
+    /// the quick start, links the wiring check as a synthetic walk that is not the real work and taken only on the
+    /// person's word, and says the first campaign is the real work, told in the person's own words. No sentence there
+    /// says the agent asks what comes next.
     /// </summary>
     [Fact]
-    public void The_install_page_ends_with_a_choice_asked_once_and_the_real_work_after_it()
+    public void The_install_page_ends_by_starting_the_quick_start_and_never_by_asking_what_comes_next()
     {
         var start = Section(Page("docs", "INSTALL.md"), "## 6. ").TrimEnd().TrimEnd('-').TrimEnd();
         var last = Flat(start[(start.LastIndexOf("\n\n", StringComparison.Ordinal) + 2)..]);
 
         Assert.Contains(
-            "What comes next is yours to choose, and an agent that installed Jason asks you once: [the wiring check](golden-path.md) — a page of its own, a synthetic walk to meet the system, your provider connected and proven with your own address, and not the real work — or the real work at once.",
+            "An agent that installed Jason tells you where it keeps your files and what it ran, then starts the [`quick-start`](../skills/runtime/quick-start/SKILL.md) skill, which asks you one question and takes you to your first campaign.",
             last,
             StringComparison.Ordinal);
-        Assert.Contains("Skip the walk and it is not offered again.", last, StringComparison.Ordinal);
+        Assert.Contains("[The wiring check](golden-path.md) — a page of its own, a synthetic walk to meet the system, your provider connected and proven with your own address, and not the real work — is mentioned in the skill's last line and taken only if you say so.", last, StringComparison.Ordinal);
         Assert.Contains(
-            "The real work, at once or after the walk, begins with you telling your agent about your first campaign in your own words — typed, a link, a file or a voice note, or an example to start from — and becomes a campaign planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.",
+            "The first campaign is the real work: you tell your agent about it in your own words — typed, a link, a file or a voice note — and it becomes a campaign planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.",
             last,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("one word from you", last, StringComparison.Ordinal);
+        Assert.DoesNotContain("asks you once", last, StringComparison.Ordinal);
+        Assert.DoesNotContain("What comes next is yours to choose", last, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2421,7 +2433,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:dfe911f97419b9e6fbf54ffbf641ad338de6ef6b797b905e9059fa5dfd33167c";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:1d7ce2da1fd4648a90ad6c7857570a1180ef2abb788c0181433a61fe66e6b6ad";
+    private const string AgentSectionDigest = "sha256:6fd7e32fd18b2e952cefe55b84c85a6a0bcaff28909ddfb1161445f2c0bf4c20";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";
