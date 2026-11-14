@@ -185,6 +185,37 @@ public class WorkItemTransitionsTests
         Assert.Null(expired.RetryAfter);
     }
 
+    /// <summary>
+    /// A doubt's two sentences leave the row when the send can never be asked about again — cancelled, failed or gone — and
+    /// stay on an expired one, which may be reopened and then parks with them.
+    /// </summary>
+    [Theory]
+    [InlineData(WorkItemStatus.Cancelled, true)]
+    [InlineData(WorkItemStatus.Failed, true)]
+    [InlineData(WorkItemStatus.Succeeded, true)]
+    [InlineData(WorkItemStatus.Expired, false)]
+    public void A_send_that_can_never_be_asked_about_again_keeps_no_doubt_s_sentence(WorkItemStatus to, bool cleared)
+    {
+        var send = WorkItemFactory.NewProviderOp(WorkItemFactory.NewCampaign(), "message.send", Noon);
+        send.AskPersonNote = "the brief never mentions pricing.";
+        send.ReviewNote = "the subject promises a discount.";
+        if (to is WorkItemStatus.Failed or WorkItemStatus.Succeeded)
+        {
+            // A send fails from the claim, as one the pre-flight refuses does; it goes once its run has started.
+            WorkItemTransitions.Apply(send, WorkItemStatus.Scheduled, Noon);
+        }
+
+        if (to == WorkItemStatus.Succeeded)
+        {
+            WorkItemTransitions.Apply(send, WorkItemStatus.Processing, Noon);
+        }
+
+        WorkItemTransitions.Apply(send, to, Noon);
+
+        Assert.Equal(cleared, send.AskPersonNote is null);
+        Assert.Equal(cleared, send.ReviewNote is null);
+    }
+
     [Fact]
     [Critical(Family.W1, "illegal moves throw")]
     public void An_illegal_pair_is_a_bug_rather_than_a_bad_request()

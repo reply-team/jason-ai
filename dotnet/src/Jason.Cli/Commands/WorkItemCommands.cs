@@ -8,7 +8,8 @@ namespace Jason.Cli.Commands;
 
 /// <summary>
 /// The <c>workitem</c> verb group: the six verbs a planner or a person uses to put work on the queue, read it
-/// back and release it from a wait, and the four an executor uses to report on the attempt it was launched for.
+/// back and release it from a wait, the one that reviews a send before it goes, and the four an executor uses to report
+/// on the attempt it was launched for.
 /// The work-item id is positional, the request body may come from a file or standard input, and the scalar
 /// options are laid over it.
 /// </summary>
@@ -19,6 +20,9 @@ public static class WorkItemCommands
     /// field name is: the CLI composes the body the API documents and reads nothing into it.
     /// </summary>
     private const string InputKey = "input";
+
+    /// <summary>The context key the API reserves for a creator's own doubt about a send, named here for the same reason.</summary>
+    private const string AskPersonKey = "ask_person";
 
     /// <summary>The fields <c>--clear</c> may set back to nothing; every one of them is nullable on the API.</summary>
     private static readonly string[] Clearable =
@@ -37,6 +41,7 @@ public static class WorkItemCommands
         workItem.Subcommands.Add(Update(env, actor));
         workItem.Subcommands.Add(Cancel(env, actor));
         workItem.Subcommands.Add(Resume(env, actor));
+        workItem.Subcommands.Add(Review(env, actor));
         workItem.Subcommands.Add(Heartbeat(env, actor));
         workItem.Subcommands.Add(SetResult(env, actor));
         workItem.Subcommands.Add(Complete(env, actor));
@@ -65,10 +70,28 @@ public static class WorkItemCommands
             Description = "The arguments of a provider operation, as a JSON object. Written into the context under input, the one key an operation's arguments travel in.",
         };
         var resultFormat = new Option<string?>("--result-format") { Description = "What the result should look like, as any JSON value." };
+        var waitOn = VerbOptions.Repeatable(
+            "--wait-on",
+            "A work item of the same campaign, as wi_..., that this one waits on from its creation: it is not claimed until every one named "
+            + "has ended, whichever way, or the wait's ceiling has come. Repeat the option for more than one.");
+        var askPerson = Choices.Hold(
+            new Option<string?>("--ask-person")
+            {
+                Description = "Send this to the person whatever the send mode, saying why with one code: "
+                    + Choices.Spoken(DoubtCodes.All) + ". Written into the context as ask_person; only on a send to a person, "
+                    + "and never changed or taken back once the item exists.",
+            },
+            DoubtCodes.All,
+            DoubtCodes.Knows);
+        var askPersonNote = new Option<string?>("--ask-person-note")
+        {
+            Description = "One line, at most 280 characters, saying in words why the person should look: kept beside the item, never in a "
+                + "journal line, and shown to the person on the approval. Only with --ask-person.",
+        };
         var idempotencyKey = VerbOptions.IdempotencyKey();
         var file = VerbOptions.File(
             "The object holds campaign_id, kind, role or operation, contact_id, execution_profile, priority, not_before, due_at, "
-            + "timeout_seconds, heartbeat_seconds, max_attempts, context, result_format and idempotency_key.");
+            + "timeout_seconds, heartbeat_seconds, max_attempts, context, result_format, wait_on, ask_person_note and idempotency_key.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -86,6 +109,9 @@ public static class WorkItemCommands
         command.Options.Add(context);
         command.Options.Add(input);
         command.Options.Add(resultFormat);
+        command.Options.Add(waitOn);
+        command.Options.Add(askPerson);
+        command.Options.Add(askPersonNote);
         command.Options.Add(idempotencyKey);
         command.Options.Add(file);
         command.Options.Add(reason);
@@ -106,8 +132,10 @@ public static class WorkItemCommands
                 .Set("timeout_seconds", parseResult.GetValue(timeout))
                 .Set("heartbeat_seconds", parseResult.GetValue(heartbeat))
                 .Set("max_attempts", parseResult.GetValue(maxAttempts))
-                .Set("context", Context(body, parseResult.GetValue(context), parseResult.GetValue(input)))
+                .Set("context", AskPerson(body, Context(body, parseResult.GetValue(context), parseResult.GetValue(input)), parseResult.GetValue(askPerson)))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
+                .Set("wait_on", VerbOptions.Strings(parseResult.GetValue(waitOn)))
+                .Set("ask_person_note", parseResult.GetValue(askPersonNote))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
@@ -358,6 +386,62 @@ public static class WorkItemCommands
         return command;
     }
 
+    private static Command Review(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "review",
+            "Review a send before it goes: pass the text you read, or doubt it with a code, which sends it to the person. "
+            + "Give the review_hash workitem get answered; a send edited since is refused, and read again. "
+            + "Nobody reviews a send they made. Inside a run the review is the run's own; outside one, the person who reviews "
+            + "names themselves. There is no --reason: a reason is journaled, and the doubt's sentence never is, so it goes as --note. "
+            + ActorOption.NoDefault);
+        var id = WorkItemId();
+        var reviewHash = new Option<string>("--review-hash")
+        {
+            Description = "The send's review_hash as workitem get answered it: the review is bound to that text.",
+            Required = true,
+        };
+        var result = Choice<ReviewResult>.Only(new Option<string>("--result")
+        {
+            Description = "passed, or doubts, which sends the send to the person.",
+            Required = true,
+        });
+        var code = Choices.Hold(
+            new Option<string?>("--code") { Description = "Why the review doubts, with --result doubts: " + Choices.Spoken(DoubtCodes.All) + "." },
+            DoubtCodes.All,
+            DoubtCodes.Knows);
+        var note = new Option<string?>("--note")
+        {
+            Description = "With --result doubts, one line, at most 280 characters, saying in words what is wrong: shown to the person on "
+                + "the approval, and never in a journal line.",
+        };
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(reviewHash);
+        command.Options.Add(result);
+        command.Options.Add(code);
+        command.Options.Add(note);
+        command.Options.Add(human);
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var body = RequestBody.Empty()
+                .Set("work_item_id", parseResult.GetValue(id))
+                .Set("review_hash", parseResult.GetValue(reviewHash))
+                .Set("result", parseResult.GetValue(result))
+                .Set("code", parseResult.GetValue(code))
+                .Set("note", parseResult.GetValue(note))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "workitem review", "a review is a run's own or a named person's");
+
+            return await OperationRunner
+                .RunAsync(env, Operations.WorkItemReview, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.Entry), cancellationToken)
+                .ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
     private static Command Heartbeat(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("heartbeat", "Prove the attempt you were launched for is still alive.");
@@ -542,6 +626,33 @@ public static class WorkItemCommands
         }
 
         carrier[InputKey] = arguments;
+        return carrier;
+    }
+
+    /// <summary>
+    /// Lays <c>--ask-person</c> into the context as the reserved key, over the context the other options made or the body
+    /// carried; a context that already carries the key is told to say it once.
+    /// </summary>
+    private static JsonObject? AskPerson(JsonObject body, JsonObject? context, string? code)
+    {
+        if (code is null)
+        {
+            return context;
+        }
+
+        var carrier = context ?? body["context"] switch
+        {
+            null => [],
+            JsonObject existing => existing,
+            _ => throw new UsageException("--ask-person writes into the context, and the body carries a context that is not a JSON object."),
+        };
+
+        if (carrier.ContainsKey(AskPersonKey))
+        {
+            throw new UsageException($"--ask-person and the context both carry '{AskPersonKey}'; give the doubt once.");
+        }
+
+        carrier[AskPersonKey] = new JsonObject { ["code"] = code };
         return carrier;
     }
 

@@ -45,7 +45,7 @@ public sealed class Claimer(
     LiveSettings<LaunchesOptions> launches,
     JasonPaths paths,
     ILogger<Claimer> logger,
-    PatternTiming? timing = null)
+    PatternTiming? timing = null) : IClaimReading
 {
     /// <summary>How the claim matches a schema's patterns: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
@@ -102,12 +102,7 @@ public sealed class Claimer(
         var ended = new List<AttemptEnd>();
         var unreadable = new List<UnreadableFile>();
 
-        // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
-        // and an activation that happens mid-scan belongs to the next one.
-        var packages = plugins.Snapshot;
-        var routing = routes.Snapshot;
-
-        // And the one setting an agent claim reads, for the same reason and in the same place: a default edited
+        // The one setting an agent claim reads is read once too, as the snapshots are below: a default edited
         // halfway through a scan belongs to the next scan, not to half of this one.
         var globalDefault = roles.Current.DefaultExecutionProfile;
 
@@ -117,6 +112,14 @@ public sealed class Claimer(
         var today = now.Date;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
+        // and an activation that happens mid-scan belongs to the next one. They are read once the scan holds the
+        // database, so a writer that asked the claim's question while it held it first (a review) asked it against
+        // these snapshots or older ones, never newer ones than the claim then decides by.
+        var packages = plugins.Snapshot;
+        var routing = routes.Snapshot;
+
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
             var item = await db.WorkItems.WithNavigation().Include(w => w.Attempts)
@@ -553,6 +556,48 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// Whether the claim would read <paramref name="item"/>'s reviews if it claimed it now: not where it would run it under
+    /// a live approval that stands for it as it would now go, and not known where the pre-flight refuses it while such a row is
+    /// live, since no subject can be composed to hold the row to; read everywhere else. The same facts, the same pre-flight
+    /// against the same two snapshots, and the same test (<see cref="ApprovalGate.Authorizes"/>) as the claim's own
+    /// decision, so a review asks the claim's question rather than a description of it. Reads only.
+    /// </summary>
+    public async Task<ClaimReading> RunsUnderAsync(JasonDbContext db, WorkItem item, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.Kind != WorkItemKind.ProviderOp)
+        {
+            return ClaimReading.Reads;
+        }
+
+        // Read as the claim reads it, on a context that has loaded nothing, as the claim's own scan context has not: the item,
+        // its campaign, its person, their channels and pins, its attempts and the live row are the database's as they stand
+        // now, inside the caller's transaction where it has one, never the entities the caller's context loaded first, which
+        // it would hand back as they were then whatever another writer has changed since.
+        await using var beside = await db.BesideAsync(ct).ConfigureAwait(false);
+        var current = await beside.WorkItems.WithNavigation().Include(w => w.Attempts)
+            .FirstAsync(w => w.Id == item.Id, ct)
+            .ConfigureAwait(false);
+        var routing = routes.Snapshot;
+        var facts = await FactsAsync(beside, current, routing, ct).ConfigureAwait(false);
+        var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
+        var live = await ApprovalGate.LiveAsync(beside, current.CampaignId, current.Id, ct).ConfigureAwait(false);
+        if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
+        {
+            return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Unjudged, live) : ClaimReading.Reads;
+        }
+
+        if (ApprovalGate.Authorizes(live, ApprovalSubject.Of(plan, current)))
+        {
+            return new ClaimReading(ReviewHearing.NotRead, live);
+        }
+
+        // Decided anew, so the reviews are read; a live approved row that no longer stands is named, for a doubt to end it.
+        return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Read, live) : ClaimReading.Reads;
+    }
+
+    /// <summary>
     /// Whether this work may run now: the decision a person has already made about exactly this subject, or
     /// nothing — in which case the item has been parked for one by the time this returns.
     /// </summary>
@@ -573,8 +618,7 @@ public sealed class Claimer(
         var subject = ApprovalSubject.Of(plan, item);
         var live = await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, ct).ConfigureAwait(false);
 
-        if (live is { Status: ApprovalStatus.Approved }
-            && string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal))
+        if (ApprovalGate.Authorizes(live, subject))
         {
             return live;
         }
@@ -600,14 +644,23 @@ public sealed class Claimer(
             item.Contact,
             CanonicalInput.ConsumedChannel(plan.Contract, item));
 
+        // Who doubted and why, where the person deciding reads it; the park clears the sentences from the row.
+        var doubts = await Doubts.PreviewAsync(db, item, ct).ConfigureAwait(false);
+        if (doubts is not null)
+        {
+            preview[Doubts.PreviewKey] = doubts;
+        }
+
         // Only about work nobody was ever asked about: a decision a person made, or a question already put to them, is
         // theirs, and a later standing approval never answers it — not even once the question is gone, cancelled by an
         // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
-        // retry of the same subject as a person's would.
+        // retry of the same subject as a person's would. A doubt that stands parks the send for the person ahead of it: a
+        // role asked a person to look, and no standing word answers that.
         if (live is null
             && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false)
-            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } answer)
+            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } covered)
         {
+            var answer = doubts is not null && covered.Cover is { } doubted ? StandingApprovals.Doubted(doubted) : covered;
             if (answer.Cover is { } cover)
             {
                 return ApprovalGate.ReleaseUnderStanding(db, journal, item, plan, subject, preview, cover, now);

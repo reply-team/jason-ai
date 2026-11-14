@@ -47,6 +47,7 @@ public static class ConfinedVerbs
         (Kind.PersonsWord, "campaign set-send-mode"),
         (Kind.PersonsWord, "block clear"),
         (Kind.PersonsWord, "workitem resume"),
+        (Kind.PersonsWord, "workitem review"),
         (Kind.PersonsWord, "report submit"),
         (Kind.PersonsWord, "subscription rewind"),
         (Kind.Installation, "runtime"),

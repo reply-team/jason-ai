@@ -2499,6 +2499,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
+                    b.Property<string>("AskPersonNote")
+                        .HasMaxLength(280)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ask_person_note");
+
                     b.Property<int>("AttemptCount")
                         .HasColumnType("INTEGER")
                         .HasColumnName("attempt_count");
@@ -2624,6 +2629,11 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Property<DateTime?>("RetryAfter")
                         .HasColumnType("TEXT")
                         .HasColumnName("retry_after");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(280)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("review_note");
 
                     b.Property<string>("Role")
                         .HasMaxLength(64)

@@ -66,7 +66,8 @@ public static class OperationFamilies
     /// Moving a subscribed kind's cursor back is the installation's, beside asking for an account's events again. A
     /// subscription run's record carries the envelopes other plugins' handlers made: a handler in the chain already holds
     /// the envelope handed to it, and a person reads the final one through the run token, so no plugin reads another
-    /// chain's envelopes.
+    /// chain's envelopes. A review of a send is the look of a role's run or of a person before the send goes, never a
+    /// plugin's.
     /// </summary>
     public static IReadOnlySet<string> Never { get; } = new[]
     {
@@ -78,7 +79,7 @@ public static class OperationFamilies
         Operations.AudiencePreview, Operations.AudienceFilterValues, Operations.AudienceAvailability,
         Operations.SenderList,
         Operations.WorkItemHeartbeat, Operations.WorkItemSetResult, Operations.WorkItemComplete, Operations.WorkItemWait,
-        Operations.WorkItemResume,
+        Operations.WorkItemResume, Operations.WorkItemReview,
         Operations.ApprovalApprove, Operations.ApprovalReject, Operations.ApprovalSetStanding, Operations.ApprovalUnsetStanding,
         Operations.BlockClear,
         Operations.DecisionRaise, Operations.DecisionAnswer,

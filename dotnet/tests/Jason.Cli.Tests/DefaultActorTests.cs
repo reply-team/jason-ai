@@ -309,6 +309,7 @@ public class DefaultActorTests
         ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
         ["block", "clear", "blk_A"],
         ["workitem", "resume", "wi_A"],
+        ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
         ["suppression", "remove", "--channel", "email", "--value", "someone@example.com", "--reason", "asked again"],

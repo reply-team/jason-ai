@@ -235,7 +235,13 @@ public sealed record WorkItemDto(
     string? ContactName = null,
 
     /// <summary>What a waiting item waits for; absent unless the item is waiting.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WaitDto? Wait = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WaitDto? Wait = null,
+
+    /// <summary>
+    /// The hash a review of this send is bound to (<c>workitem.review</c>): the operation, the item and its context's
+    /// input, canonically. Present only on a send a person decides each one of; an edit of the input changes it.
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReviewHash = null);
 
 /// <summary>A listing stays small: no context, no result, no attempts.</summary>
 public sealed record WorkItemSummaryDto(
@@ -290,7 +296,22 @@ public sealed record WorkItemCreateRequest(
     /// A key the caller chose, so that sending the same request again answers with the item it made rather than making
     /// another. Scoped to the campaign; null means no key, and nothing ever makes one up.
     /// </summary>
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+
+    /// <summary>
+    /// The one sentence beside the context's <c>ask_person</c> code: why the creator doubts this send, for the person to
+    /// read on the approval. Kept on the item outside its context, never journaled, and moved onto the approval's preview
+    /// when the item is parked; refused without <c>ask_person</c>.
+    /// </summary>
+    string? AskPersonNote = null,
+
+    /// <summary>
+    /// The work items this one waits on from its creation: it is not claimed until every one of them has ended, in any
+    /// final state, or the wait's ceiling has come. Each an item of the same campaign, named once; at most
+    /// <see cref="WorkItemWaitRequest.MaxWaitItems"/>. The wait only orders: when it is over the item is ordinary queued
+    /// work, and the claim decides about it as about any other.
+    /// </summary>
+    IReadOnlyList<string>? WaitOn = null);
 
 public sealed record WorkItemGetRequest(string? WorkItemId, bool? IncludeSnapshots);
 
@@ -363,6 +384,27 @@ public sealed record WorkItemUpdateRequest(
     string? Reason);
 
 public sealed record WorkItemCancelRequest(string? WorkItemId, ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// A review of a send before it goes, written as the reserved line <c>workitem_reviewed</c>: by a running attempt of the
+/// campaign's role work other than the work that created the send, or by a named person who did not create it.
+/// </summary>
+/// <param name="ReviewHash">The item's <c>review_hash</c> as the reviewer read it on <c>workitem.get</c>; refused when the input has moved since.</param>
+/// <param name="Result">Whether the review passes the send or doubts it.</param>
+/// <param name="Code">Why it doubts, one of <see cref="DoubtCodes.All"/>; required with a doubt and refused with a pass.</param>
+/// <param name="Note">The doubt's one sentence, for the person to read on the approval; never on the line. Refused with a pass.</param>
+/// <param name="Reason">
+/// Refused on this verb, a declared exception to the convention that every mutating request may carry one: a reason is
+/// journaled, and the line must not carry the doubt's sentence. The note is where the why goes.
+/// </param>
+public sealed record WorkItemReviewRequest(
+    string? WorkItemId,
+    string? ReviewHash,
+    ReviewResult? Result,
+    string? Code,
+    string? Note,
+    ActorRef? Actor,
+    string? Reason = null);
 
 public sealed record WorkItemHeartbeatRequest(string? WorkItemId, string? AttemptId);
 

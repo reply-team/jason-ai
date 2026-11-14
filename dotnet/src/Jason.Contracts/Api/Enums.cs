@@ -386,6 +386,16 @@ public enum ReplyReaction
 }
 
 /// <summary>
+/// What a review of a send found: it passes the text it read, or it doubts it, with a code from the closed list
+/// <see cref="DoubtCodes"/>. A doubt stands over every pass of the same text; only the person's decision answers it.
+/// </summary>
+public enum ReviewResult
+{
+    Passed,
+    Doubts,
+}
+
+/// <summary>
 /// What a reply is, in the runtime's own closed words: a person's answer, an automatic reply, a failed delivery, or a
 /// person asking not to be written to. Unlike a verdict's category, which the skills own and the runtime never reads,
 /// this is the runtime's to read: <c>person</c> is what makes a contact warm in the campaign.

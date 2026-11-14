@@ -6,12 +6,14 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Api;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Reports;
@@ -35,13 +37,23 @@ namespace Jason.Runtime.WorkItems;
 /// How a provider operation's arguments are matched against its patterns: the runtime's one default, which a test
 /// replaces to make a match time out without making anything slow.
 /// </param>
+/// <param name="outcomes">
+/// Writes the wait of an item created waiting on others (<c>wait_on</c>). Optional only for the tests that build this
+/// service by hand and create nothing waiting; the runtime always supplies it.
+/// </param>
+/// <param name="run">
+/// The attempt the request says it comes from: inside a run, a send a review covers is created under that attempt's own
+/// name. Null outside a request and for a request that names none.
+/// </param>
 public sealed class WorkItemService(
     JasonDbContext db,
     JournalWriter journal,
     TimeProvider clock,
     WorkItemCanceller canceller,
     LiveSettings<PluginsOptions> plugins,
-    PatternTiming? timing = null)
+    PatternTiming? timing = null,
+    AttemptOutcomes? outcomes = null,
+    RequestRun? run = null)
 {
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
@@ -73,10 +85,21 @@ public sealed class WorkItemService(
     {
         ArgumentNullException.ThrowIfNull(request);
         var actor = Actors.Resolve(request.Actor);
+
+        // Inside a run, a send a review covers is the run's own: made under another name, a run could pass its own text
+        // as a reviewer who did not write it. Asked before anything else, a keyed repeat included.
+        if (run?.AttemptId is { } header
+            && request.Kind == WorkItemKind.ProviderOp
+            && ReviewSubject.IsReviewable(Trimmed(request.Operation))
+            && !(actor.Type == ActorType.Attempt && string.Equals(actor.Id?.Trim(), header, StringComparison.Ordinal)))
+        {
+            throw DomainErrors.CreatedAsAnotherInsideARun(header);
+        }
+
         if (request.IdempotencyKey is null)
         {
             var item = await CreateCoreAsync(request, actor, lineage: null, cancellationToken).ConfigureAwait(false);
-            return WorkItemMapper.ToDto(item, item.CreatedAt, [], includeSnapshots: false);
+            return await CreatedAsync(item, cancellationToken).ConfigureAwait(false);
         }
 
         // A key is looked for after the request's own shape is checked — everything it says that no state can change —
@@ -102,7 +125,7 @@ public sealed class WorkItemService(
         try
         {
             var item = await CreateCoreAsync(request with { IdempotencyKey = key }, actor, lineage: null, cancellationToken).ConfigureAwait(false);
-            return WorkItemMapper.ToDto(item, item.CreatedAt, [], includeSnapshots: false);
+            return await CreatedAsync(item, cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException)
         {
@@ -117,6 +140,19 @@ public sealed class WorkItemService(
 
             throw;
         }
+    }
+
+    /// <summary>The create's answer: the item as written, with what it waits on where it was created waiting.</summary>
+    private async Task<WorkItemDto> CreatedAsync(WorkItem item, CancellationToken cancellationToken)
+    {
+        var dto = WorkItemMapper.ToDto(item, item.CreatedAt, [], includeSnapshots: false);
+        if (item.Status != WorkItemStatus.Waiting)
+        {
+            return dto;
+        }
+
+        var waits = await WaitBlocks.ForAsync(db, [item.Id], cancellationToken).ConfigureAwait(false);
+        return dto with { Wait = waits.GetValueOrDefault(item.Id) };
     }
 
     /// <summary>
@@ -184,6 +220,7 @@ public sealed class WorkItemService(
         }
 
         var contact = await LoadMemberAsync(campaign, request.ContactId, cancellationToken).ConfigureAwait(false);
+        var awaited = await AwaitedAsync(campaign, request.WaitOn, cancellationToken).ConfigureAwait(false);
         var context = request.Context?.DeepClone().AsObject() ?? new JsonObject();
         ContextRules.EnsureWithinLimits(context);
         await StandingApprovals.ValidateReferenceAsync(
@@ -225,6 +262,10 @@ public sealed class WorkItemService(
             // Only a caller's create carries a key, already read; the runtime's own work never does.
             IdempotencyKey = request.IdempotencyKey,
             IdempotencyDigest = request.IdempotencyKey is null ? null : CreationKey.Digest(request),
+
+            // The creator's sentence beside its ask_person, already read as one line; outside the context, so no line and
+            // no attempt's snapshot ever carries it.
+            AskPersonNote = string.IsNullOrWhiteSpace(request.AskPersonNote) ? null : request.AskPersonNote.Trim(),
         };
 
         db.WorkItems.Add(item);
@@ -237,8 +278,50 @@ public sealed class WorkItemService(
             updated: CreationSummary(item, contact),
             reason: NormalizeReason(request.Reason),
             workItem: item);
+
+        // Written waiting, in the create's own save: the item is never claimable before what it waits on has ended. The
+        // wait only orders — once it is over the item is ordinary queued work, and the claim decides about it as ever.
+        if (awaited.Count > 0)
+        {
+            var writer = outcomes ?? throw new InvalidOperationException("This service was built without the outcomes that write a wait, and a create names work to wait on.");
+            writer.WaitFromCreation(db, item, awaited, actor);
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return item;
+    }
+
+    /// <summary>
+    /// The items a create waits on, each an item of the same campaign, in the order named; none where it names none. The
+    /// shape — how many, each once, none blank — was read with the request.
+    /// </summary>
+    private async Task<List<WorkItem>> AwaitedAsync(Campaign campaign, IReadOnlyList<string>? waitOn, CancellationToken cancellationToken)
+    {
+        if (waitOn is not { Count: > 0 })
+        {
+            return [];
+        }
+
+        var ids = waitOn.Select(id => id.Trim()).ToList();
+        var found = await db.WorkItems
+            .Where(w => ids.Contains(w.PublicId) && w.CampaignId == campaign.Id)
+            .ToDictionaryAsync(w => w.PublicId, StringComparer.Ordinal, cancellationToken)
+            .ConfigureAwait(false);
+
+        var errors = new ValidationErrors();
+        for (var index = 0; index < ids.Count; index++)
+        {
+            if (!found.ContainsKey(ids[index]))
+            {
+                errors.Add(
+                    string.Create(CultureInfo.InvariantCulture, $"wait_on[{index}]"),
+                    "unknown",
+                    "wait_on names a work item of the same campaign by its id, as wi_....");
+            }
+        }
+
+        errors.ThrowIfAny();
+        return [.. ids.Select(id => found[id])];
     }
 
     public async Task<WorkItemDto> GetAsync(WorkItemGetRequest request, CancellationToken cancellationToken)
@@ -356,6 +439,17 @@ public sealed class WorkItemService(
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
         var item = await LoadAsync(db, request.WorkItemId, cancellationToken).ConfigureAwait(false);
+
+        // The same door as at create: inside a run, whoever writes a send's text is the run, since a review is told apart
+        // from every author of the text by the name each wrote it under.
+        if (run?.AttemptId is { } header
+            && ReviewSubject.IsReviewable(item)
+            && (request.Set?.ContainsKey(InputKey) == true || request.Unset?.Contains(InputKey, StringComparer.Ordinal) == true)
+            && !(actor.Type == ActorType.Attempt && string.Equals(actor.Id?.Trim(), header, StringComparison.Ordinal)))
+        {
+            throw DomainErrors.UpdatedAsAnotherInsideARun(header);
+        }
+
         if (WorkItemTransitions.Final.Contains(item.Status))
         {
             throw DomainErrors.WorkItemTerminal(item.PublicId, item.Status);
@@ -410,6 +504,7 @@ public sealed class WorkItemService(
         }
 
         ValidateContextKeys(request.Set, request.Unset, errors);
+        Doubts.RefuseInPatch(request.Set, request.Unset, errors);
         ValidateProviderInput(item, request.Set, request.Unset, _timing, errors);
         CampaignAudiences.RefuseWritten(
             item.Operation,
@@ -492,6 +587,12 @@ public sealed class WorkItemService(
         if (item.Status == WorkItemStatus.AwaitingApproval && inputChanged)
         {
             await WithdrawAskAsync(item, actor, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        // A doubting review was about the text it read; once the input moves, that review no longer stands, nor its sentence.
+        if (inputChanged)
+        {
+            item.ReviewNote = null;
         }
 
         if (item.Status == WorkItemStatus.Expired && request.DueAt.IsSet)

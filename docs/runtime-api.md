@@ -151,14 +151,16 @@ inside an attempt sends no `Jason-Attempt`, and is not affected. A value that is
   records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
-  no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
-  such default: given no actor, the CLI refuses all eleven itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
+  no name, absent as before. The operations above that need a person, `workitem.resume`, `workitem.review` and
+  `report.submit` take no such default: given no actor, the CLI refuses all twelve itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
   `reason` is free text recorded beside the change, at most 2000 characters; `contact.create`, `contact.update`,
   `contact.archive`, `campaign.add_contacts`, `campaign.remove_contacts`, `suppression.add` and `suppression.remove`
-  set it no limit of their own.
+  set it no limit of their own. One operation is a declared exception and refuses a `reason` at that field:
+  `workitem.review`, because a reason is journaled and the line it writes must not carry the doubt's sentence, which
+  goes as its `note` instead.
 - **A partial update tells absent from `null`**: a field left out stays as it is, and a field sent as `null` is
   cleared where the field can be empty. A context is the exception: in `campaign.update_context` and
   `workitem.update`, its `set` stores `null` as a value, and its `unset` removes a key.
@@ -304,19 +306,46 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 
 ### `workitem`
 
-- `workitem.create`: takes a caller's `idempotency_key`.
+- `workitem.create`: takes a caller's `idempotency_key`, and `wait_on`, the items of the same campaign the new item
+  waits on from its creation: it is written `waiting` and is not claimed until every one of them has ended, in any
+  final state. A send a person decides each one of may carry the creator's own doubt as the reserved context key
+  `ask_person`, `{"code": …}`, with its one sentence in `ask_person_note`, which no line and no read of the item carries
+  ([`docs/work-execution.md`](work-execution.md), "Doubts about a send"). Inside a run such a send is created under the
+  run's own name: one that names a person, another attempt or nobody is refused `created_as_another_inside_a_run`
+  (403), so a review can tell its author apart.
 - `workitem.get`
 - `workitem.list`
 - `workitem.count`
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
   profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval
   withdraws the question, and the work goes back to the queue, where the claim asks again about what it now says.
+  Inside a run a patch that names the `input` of a send a person decides each one of is made under the run's own name:
+  one that names a person, another attempt or nobody is refused `updated_as_another_inside_a_run` (403).
 - `workitem.cancel`: stops the work for good.
 - `workitem.heartbeat`: the attempt's "I am still here".
 - `workitem.set_result`: progress worth keeping before the work is done; the whole result is replaced.
 - `workitem.complete`: the attempt says how it ended.
 - `workitem.wait`: the attempt ends by waiting, and its item waits until what it names has happened.
 - `workitem.resume`: ends a wait before what it waited for has happened, on somebody's word.
+- `workitem.review`: a review of a send before it goes, written as the journal line `workitem_reviewed` and answered
+  with that line. It names the send by `work_item_id` and the text it read by `review_hash`, the hash `workitem.get`
+  answers on a send a person decides each one of; a send whose input moved since is refused `review_stale`, and only a
+  send still `created` or `waiting` is reviewed (`not_reviewable`); a review is also refused `not_reviewable` where an
+  approval stands for the send as it would now go, since the claim would run it under that approval without reading a
+  review. Where the runtime cannot yet tell whether the claim would read the review, because an approval is live and the
+  pre-flight stops the send at a check before the approval's (its plugin unavailable, say), so no subject can be
+  composed to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send
+  reach the approval. A doubt accepted then leaves the send with no approval to run under, whatever changes after; a
+  pass leaves a person's approval as it stood, and the claim may run the send under that approval without reading the
+  pass. `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document
+  publishes, and may carry one `note`, a line of at most 280 characters that the line never carries and the person reads
+  on the approval. The `actor` is a running attempt of the same campaign's role work or a person by name, and never the
+  send's creator: no attempt of the work that made it, and not the person who made it, whose own send is theirs to
+  approve (`review_by_creator`, 403); and never one who wrote its `input` since, a person by name or any attempt of a
+  work that did (`review_by_editor`, 403). Once its `input` was written by an actor the runtime cannot hold to anybody,
+  under no name or as a role outside a run, only a person by name reviews it, and a run is refused `review_by_editor`
+  too. Inside a run the actor is the attempt the request comes from. It takes no `reason`.
+  [`docs/work-execution.md`](work-execution.md), "Doubts about a send".
 
 `workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait` and `decision.raise` belong to the
 attempt the runtime started for a work item: each takes that attempt's id and is refused for any other, so a program

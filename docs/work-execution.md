@@ -136,6 +136,8 @@ created | processing ──► waiting ──► created           (a provider b
 
 created ──► waiting ──► created                        (a limit held it at the claim, with no attempt of its own: its moment came, or somebody resumed it)
 
+(new) ──► waiting ──► created                          (created waiting on other work with wait_on: that work ended, the ceiling came, or somebody resumed it)
+
 created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
 created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
 ```
@@ -165,7 +167,15 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   wait: the claim parks it before any attempt exists, or the attempt that met the block ends `blocked`. Its wait
   names the block rather than items or a moment, is bounded by the item's `due_at` alone, and is released with
   `block_cleared` or `block_trial` (§Provider blocks). A responder its campaign's daily limit holds waits here as well,
-  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule).
+  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule). An item created with
+  `wait_on` is written waiting from its first moment, on the items of its campaign the create names (at most 100, each
+  once; another campaign's item or one that does not exist is refused at `wait_on[i]`): it is never claimed before
+  every one of them has ended, in any final state, or `Dispatcher:AiRole:MaxWaitSeconds` has passed, and spends no
+  launch waiting. The wait only orders: once it is over the item is ordinary queued work, and the claim decides about it
+  as about any other. A send created waiting on the work that reviews it is how a review lands before the send is
+  claimed (§Doubts about a send); when the wait's ceiling releases such a send while its review still runs, the claim
+  does not wait for it: the person is asked without the review, and a review that comes after the park is refused
+  `not_reviewable`.
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
 - **`expired`** — the due date passed before anyone claimed it, before anyone answered the
@@ -391,7 +401,9 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `standing_approval`: the verdict, its category, and the first condition that failed — `not_coverable`,
 `verdict_unknown`, `verdict_superseded`, `reaction_not_draft`, `verdict_not_authentic`, `not_the_verdicts_work`,
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
-`ceiling_reached`. A reply or a message that names no verdict is not asked about.
+`ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
+and a doubt is the person's to answer, so no standing approval releases it. A reply or a message that names no verdict
+is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
@@ -439,6 +451,69 @@ released under it), each null where there is none — the search's `count`, and 
 by construction, since no allowance names an audience before the claim of its first search made it.
 `approval.list_standing` answers the allowance beside the categories, with `released` (the searches it let go) and
 `people` (the people they asked for), and shows it not in force once `people` reaches `max_people`.
+
+### Doubts about a send
+
+A send a person decides each one of — provider work whose operation's `approval` is `confirm_each` — may carry a doubt,
+which goes to the person on the send's approval. A doubt is a code from one closed list, published as data under
+`$defs/code` of the [`workitem_reviewed` kind's document](contracts/journal/workitem_reviewed.json) and read from there
+(`jason journal kinds` shows it), and may carry one sentence: one line, at most 280 characters.
+
+**The creator's own doubt** is the reserved context key `ask_person`, exactly `{"code": "<code>"}`, given at
+`workitem.create` and only on such a send, answers included (`not_applicable` at `context.ask_person` otherwise). It is
+set when the work is created and never moved: a `workitem.update` whose `set` or `unset` names the key is refused at that
+field, whoever sends it. Its sentence is the request field `ask_person_note`, beside the context and refused without the
+key; a `note` member inside the key is refused and pointed there. The sentence is part of a keyed create's digest.
+
+**A review of the send** is `workitem.review`, written as the reserved line
+[`workitem_reviewed`](contracts/journal/workitem_reviewed.json): `passed`, or `doubts` with a code and an optional
+sentence (`note`). It is bound to the text it read by the **review hash**, the canonical hash of the operation, the work
+item and its context's `input` as stored, which `workitem.get` answers as `review_hash` on such a send. Nothing but an
+edit of the input moves the hash — a pin, a rename, the campaign's status or a route leave it as it is — and an edit
+voids every review made before it: the line under the old hash no longer stands, the doubt's sentence is cleared in the
+edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or `waiting`
+is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is refused
+`not_reviewable` exactly where the claim would not read it: where an approval stands for the send as it would now go,
+since the claim would run it under the decision already made and read no review. The one exception fails closed: where
+the runtime cannot yet tell whether the claim would read the review, because an approval is live and the pre-flight
+stops the send at a check that comes before the approval's (its plugin unavailable, say), so no subject can be composed
+to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send reach the
+approval; a provider block, the one check after the approval's, does not stop a review from being judged. A doubt
+accepted then leaves the send with no approval to run under, whatever changes after; a pass leaves a person's approval
+as it stood, and the claim may run the send under that approval without reading the pass. The doubt does so by
+superseding, in the review's own save, the approved row still live, which no longer stands for the send as it would now
+go (`approval_superseded`, under the reviewer's name). Who reviews: a running attempt of the same campaign's role work,
+other than every attempt of the work that created the send (a retry of the composer is the same author), or a person by
+name who did not create it (`review_by_creator`); a person's own send goes to them as an approval, their own explicit
+yes. Whoever wrote the send's input since it was made is one of its authors and does not review it either, read from the
+send's own `workitem_context_updated` lines for `input`: a person by name, or any attempt of a work that did
+(`review_by_editor`). An edit by an actor the runtime cannot hold to anybody, under no name or as a role outside a run,
+has an author no run can be told apart from, so from then on only a person by name reviews the send, and a run is
+refused `review_by_editor`. Inside a run a review speaks as its run: an actor other than the attempt the request's
+header names is refused; and a send created inside a run is created under that run's name, since its creator is who a
+review is told apart from: a create naming a person, another attempt or nobody is refused
+`created_as_another_inside_a_run`. A patch of such a send's input inside a run is the same door: one naming anybody but
+the run is refused `updated_as_another_inside_a_run`. The verb takes no `reason`, since a reason is journaled and the
+line never carries the doubt's sentence. Which review stands for the send is read from the send's own lines under its
+current hash: the newest doubt, over any pass of the same text, or else the newest pass, or none. A doubt is answered
+only by the person's decision on the approval, never by a later pass. The order between a send and its review is the
+runtime's: the send is created waiting on the review's work (`wait_on`, §Lifecycle), so it is not claimed before that
+work has ended; whatever way it ended, the claim then decides as ever. A doubt parks the send for the person ahead of
+any standing approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying
+`doubted`, and no row is born approved; a pass is no doubt and leaves the standing approval to decide.
+
+**The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
+item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the
+context: no journal line, no attempt's snapshot, no read of
+the item (`workitem.get`, `workitem.list`) and no log line carries it, and a diagnostic bundle, which reads the item
+pages for their metadata, never sees it. When the claim parks the send, both are moved onto the approval's preview and
+cleared from the row in the park's own save; from then on `approval.get` and `approval.list` are the reads that return
+them. A send that ends for good before a park — cancelled, failed or succeeded — takes both off the row as it ends; an
+expired one keeps them, since a reopen leads to a park. The preview's `doubts` is a list, one entry per doubt that
+stands: `source` (`ask_person` or `review`), `by` (the actor that doubted), `role` (the reviewing run's role, or null),
+`code`, `note` (the sentence, or null) and `line` (the `workitem_reviewed` line, or null for `ask_person`). A send
+parked again after an edit or an expiry carries the creator's `ask_person` sentence over from its earlier approval's
+preview, since the key is never taken back; a review's is not carried, because the text it was about no longer stands.
 
 ## Leases and heartbeats
 

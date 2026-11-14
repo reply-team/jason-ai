@@ -85,6 +85,11 @@ public static class OperationEndpoints
             {
                 // A request through a handler's door speaks as that plugin for its whole flow, and only that one.
                 using var scope = caller is null ? null : ActorScope.ForPlugin(caller.Grant.PluginId);
+                if (context.RequestServices.GetService<RequestRun>() is { } requestRun)
+                {
+                    requestRun.AttemptId = InsideARun.AttemptOf(context.Request);
+                }
+
                 var service = context.RequestServices.GetRequiredService<TService>();
                 var response = await handler(service, request, context.RequestAborted).ConfigureAwait(false);
                 await context.Response.WriteAsJsonAsync(response, JasonJson.Options, context.RequestAborted).ConfigureAwait(false);

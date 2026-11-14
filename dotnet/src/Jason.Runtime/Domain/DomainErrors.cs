@@ -134,6 +134,38 @@ public static class DomainErrors
     public static InvalidRequestException WaitNotAllowed(string id, string why) =>
         new("wait_not_allowed", $"Work item '{id}' cannot wait: {why}");
 
+    /// <summary>
+    /// A review is for a send before it goes: provider work a person decides each one of, still queued or waiting. Work of
+    /// another kind is never reviewed, and a send already parked, claimed or finished has gone past the point a review is for.
+    /// </summary>
+    public static ConflictException NotReviewable(string id, string why) =>
+        new("not_reviewable", $"Work item '{id}' cannot be reviewed: {why}.");
+
+    /// <summary>The send's input moved after the reviewer read it, so the review would be about a text it never read.</summary>
+    public static ConflictException ReviewStale(string id) =>
+        new("review_stale", $"Work item '{id}' has changed since its review_hash was read; read it again with workitem.get and review what it says now.");
+
+    /// <summary>
+    /// The reviewer made the send: an attempt of the work that created it, or the person who created it. A person's own
+    /// send goes to them as an approval, which is their own explicit yes and a different act from a review.
+    /// </summary>
+    public static ForbiddenException ReviewByCreator(string id) =>
+        new("review_by_creator", $"Work item '{id}' was made by the work or the person reviewing it, and nobody reviews their own send; a person's own send is theirs to approve (jason approval list).");
+
+    /// <summary>
+    /// The reviewer wrote the send's input after it was made: a person by their name, or an attempt of the work that did.
+    /// Whoever writes the text is one of its authors, and nobody reviews their own send.
+    /// </summary>
+    public static ForbiddenException ReviewByEditor(string id) =>
+        new("review_by_editor", $"Work item '{id}' had its input written by the work or the person reviewing it, and nobody reviews a send they wrote; a person's own text is theirs to approve (jason approval list).");
+
+    /// <summary>
+    /// A run reviews a send whose input was written under a name that holds nobody: no name at all, or a role's, the
+    /// runtime's or a plugin's. That author may be the reviewing run, so only a person by name reviews the send from then on.
+    /// </summary>
+    public static ForbiddenException ReviewAfterAnUnnamedEdit(string id) =>
+        new("review_by_editor", $"Work item '{id}' had its input written by the work or the person reviewing it, or by an actor the runtime cannot hold to anybody, which may be this run, so only a person by name reviews it, and nobody reviews a send they wrote; a person's own text is theirs to approve (jason approval list).");
+
     /// <summary>A resume of an item that holds no wait to end.</summary>
     public static ConflictException WorkItemNotWaiting(string id, WorkItemStatus status) =>
         new("workitem_not_waiting", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; only a waiting item can be resumed.");
@@ -276,6 +308,25 @@ public static class DomainErrors
         new(
             "decided_inside_a_run",
             $"This request comes from inside attempt `{attempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
+
+    /// <summary>
+    /// Inside a run, a patch of a send's input that names anybody but the run: whoever writes the text is one of its
+    /// authors, and a review is told apart from them by the name the edit was made under.
+    /// </summary>
+    public static ForbiddenException UpdatedAsAnotherInsideARun(string attempt) =>
+        new(
+            "updated_as_another_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. A send to a person has its input written there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
+
+    /// <summary>
+    /// A send a person decides each one of, created from inside a run under a name other than that run's: a person, another
+    /// attempt, or nobody. The run's own name is what tells a review of the send apart from its author, so the CLI's
+    /// default, the attempt itself, is the only actor such a create takes there.
+    /// </summary>
+    public static ForbiddenException CreatedAsAnotherInsideARun(string attempt) =>
+        new(
+            "created_as_another_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. A send to a person is created there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
 
     /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody

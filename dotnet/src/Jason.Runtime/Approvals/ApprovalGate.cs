@@ -38,6 +38,18 @@ public static class ApprovalGate
     public const string StandingApproval = "standing_approval";
 
     /// <summary>
+    /// Whether <paramref name="live"/> lets the work run as it now stands without asking anybody: approved, and about
+    /// exactly <paramref name="subject"/>. The claim runs work under such a row and reads nothing else about it, its
+    /// reviews included, so a review asks this same question of the same row to know whether the claim would hear it.
+    /// </summary>
+    public static bool Authorizes(Approval? live, ApprovalSubject subject)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+        return live is { Status: ApprovalStatus.Approved }
+            && string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The decision that is still about this item: the one pending, or the one approved and not yet outgrown.
     /// At most one exists — a park supersedes whatever it replaces, and the database holds the pending half of
     /// that to one row per item. The caller names the item's campaign, which every approval of the item carries.
@@ -112,6 +124,9 @@ public static class ApprovalGate
         };
 
         db.Approvals.Add(approval);
+
+        // A doubt's sentences were moved onto the preview by the caller; none is kept on the row past the park.
+        Doubts.ClearAtPark(item);
         Wait(db, journal, item, now);
         journal.Append(
             db,
@@ -175,6 +190,9 @@ public static class ApprovalGate
         };
 
         db.Approvals.Add(approval);
+
+        // As at a park: whatever the preview carries of a doubt's sentences, none is kept on the row past this write.
+        Doubts.ClearAtPark(item);
         var names = Names(approval);
         names["standing"] = cover.Standing.PublicId;
         foreach (var (name, value) in cover.Names)
