@@ -3,16 +3,20 @@ using System.Text.Json.Nodes;
 using Jint;
 using Jint.Runtime;
 
-namespace Jason.Runtime.Tests.Plugins.Reply;
+namespace Jason.PluginHost.Tests.Packages;
 
 /// <summary>
-/// The moment the mailbox's daily limit clears, on a clock that does not move. The plugin host reads the machine's clock and
-/// offers no other, so the package's own error table is run here, in an engine of its own whose clock is pinned, with a
-/// stand-in for the one host function it calls, <c>host.fail</c>, that hands back what it is given. The instants are in
-/// the middle of a month that changes nothing at its end, and UTC keeps no daylight saving time.
+/// The moment the Reply package says a mailbox's daily limit clears, on a clock that does not move. The plugin host reads the
+/// machine's clock and offers no other, so the package's own error table is run here, beside the engine it runs in, in an
+/// engine of its own whose clock is pinned, with a stand-in for the one host function it calls, <c>host.fail</c>, that hands
+/// back what it is given. The instants are in the middle of a month that changes nothing at its end, and UTC keeps no
+/// daylight saving time.
 /// </summary>
 public class ReplyEmailLimitClockTests
 {
+    /// <summary>The official Reply package as MSBuild links it next to these tests, the same files the release publishes.</summary>
+    private static string PackageSource => Path.Combine(AppContext.BaseDirectory, "Fixtures", "packages", "reply");
+
     /// <summary>
     /// Reply counts a mailbox's day in UTC, so the daily limit's block clears at the next midnight UTC: the same moment from
     /// any instant of the day, the midnight that starts it included, and no later than the day's last millisecond allows.
@@ -63,7 +67,7 @@ public class ReplyEmailLimitClockTests
         using var engine = new Engine(options =>
         {
             options.Strict(true);
-            options.EnableModules(ReplyPlugins.PackageSource);
+            options.EnableModules(PackageSource);
             options.TimeSystem = new PinnedClock(at);
         });
         engine.Execute("var host = { fail: function (failure) { return failure; } };");

@@ -51,7 +51,7 @@ public partial class ReplyMessageSendTests
     /// <summary>
     /// Reply counts a mailbox's day in UTC, so the daily limit's block says it clears at the next midnight UTC after the
     /// answer: the trial then is the first send of Reply's new day. Read here around the call; the moment itself is pinned
-    /// by <see cref="ReplyEmailLimitClockTests"/>.
+    /// by <c>ReplyEmailLimitClockTests</c> in the plugin host's tests, beside the engine.
     /// </summary>
     [Fact]
     public async Task The_daily_limit_s_block_clears_at_the_next_midnight_utc()
