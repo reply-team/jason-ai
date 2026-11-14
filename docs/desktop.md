@@ -779,7 +779,8 @@ update keeps nothing, and the page names the previous release's deb and `sudo ap
 On Windows the system's list of installed programs keeps showing the newer version's number after a folder is put back.
 A data directory that a newer Jason laid out in a way this one does not know, or whose layout stamp `layout.json` cannot
 be read, is refused instead: the starting page says so in `jason runtime start`'s own words, offers no going back, and no
-runtime is started. The Connect cards that write refuse in the same words and write nothing.
+runtime is started. The Connect cards that write refuse before they sign in, place or write anything, in the sentence
+the CLI gives, without the line and byte it names for a file that is not JSON.
 
 **Not covered.** An update of the desktop from one build to the next through the updater is checked by nothing: a
 candidate is installed by hand and the stable channel offers it nothing. The first run of the macOS login agent and of the
