@@ -100,7 +100,7 @@ Jason-Attempt: att_...
 ```
 
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
-operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
+operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the ones that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
 the code `decided_inside_a_run` before the body is read, and record nothing. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
@@ -567,11 +567,13 @@ interrupted.
   or through another tool and Jason should know. The report is kept as the claim it is; what it carries is in
   [the reporting skill](../skills/runtime/reporting-outside-effects/SKILL.md).
 - **A decision in a person's name**: `approval.approve`, `approval.reject`, `approval.set_standing`,
-  `approval.unset_standing` and `decision.answer`. Each needs an `actor` of type `human` that names the person, and each is refused for any other type. The runtime cannot tell a
+  `approval.unset_standing`, `decision.answer`, `preference.set` and `preference.unset`. Each needs an `actor` of type
+  `human` that names the person, and each is refused for any other type. The runtime cannot tell a
   person from a program that holds the token, so a program records only what a person decided
-  ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)). A request to any of the five that
+  ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)). A request to any of them that
   carries `Jason-Attempt`, as `jason` sends from inside a run, is answered `403` `decided_inside_a_run` whatever person
-  it names, and changes nothing: a person's word is given outside the run that asked. That is a higher bar, not a
+  it names, and changes nothing: a person's word is given outside any run. A preference is refused there for every key,
+  since no person is in a run to state one. That is a higher bar, not a
   boundary: a run that dropped the header and named a person would not be told apart.
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract

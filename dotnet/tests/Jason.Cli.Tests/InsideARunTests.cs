@@ -11,7 +11,7 @@ namespace Jason.Cli.Tests;
 
 /// <summary>
 /// A CLI launched inside an attempt says so on every request it sends, reads included, whatever actor it names: the
-/// attempt's id goes in the <c>Jason-Attempt</c> header as the environment names it, trimmed and not checked. The five
+/// attempt's id goes in the <c>Jason-Attempt</c> header as the environment names it, trimmed and not checked. The
 /// verbs that are a person's own word are refused by the runtime for it; the CLI sends them anyway, prints the refusal as
 /// it came and exits 1.
 /// </summary>
@@ -244,9 +244,9 @@ public class InsideARunTests
         Assert.Equal(envelope + Environment.NewLine, run.Output.ToString());
     }
 
-    /// <summary>Exactly the five verbs that are a person's own word say in their help, word for word, that a run is refused them.</summary>
+    /// <summary>Exactly the verbs that are a person's own word say in their help, word for word, that a run is refused them.</summary>
     [Fact]
-    public void Exactly_the_five_say_in_their_help_that_a_run_is_refused_them()
+    public void Exactly_the_persons_verbs_say_in_their_help_that_a_run_is_refused_them()
     {
         const string sentence = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
         using var paths = new TempPaths();
@@ -254,7 +254,7 @@ public class InsideARunTests
         Walk(CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)), string.Empty);
 
         Assert.Equal(
-            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "decision answer" },
+            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "decision answer", "preference set", "preference unset" },
             saying.Order(StringComparer.Ordinal));
 
         void Walk(Command command, string path)

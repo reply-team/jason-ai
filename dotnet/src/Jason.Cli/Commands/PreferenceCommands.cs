@@ -30,7 +30,7 @@ public static class PreferenceCommands
     {
         var command = new Command(
             "set",
-            "Set a preference's value whole, as the person said it. The value is checked against the key's published schema. " + ActorOption.NoDefault);
+            "Set a preference's value whole, as the person said it. The value is checked against the key's published schema. " + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var key = KeyArgument();
         var value = new Option<string?>("--value") { Description = "The whole value, as a JSON object." };
         var valueFile = new RequestFileOption("--value-file")
@@ -67,7 +67,7 @@ public static class PreferenceCommands
     {
         var command = new Command(
             "unset",
-            "Take a preference's value back: it is deleted, and the record of the change keeps only its size and hash. " + ActorOption.NoDefault);
+            "Take a preference's value back: it is deleted, and the record of the change keeps only its size and hash. " + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var key = KeyArgument();
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();

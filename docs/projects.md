@@ -214,7 +214,8 @@ schema.
   approval does: an actor that is not a person is refused as `preference_not_human`, and one that names nobody as
   `actor_required`. In the planner's session, on the person's answer, the session skill runs
   `jason preference set <key> …` with the person's name as the actor, as approvals are given in a session. A role Jason
-  launches reads the preferences and never writes one.
+  launches reads the preferences and never writes one: a request to set or unset any key from inside a run is refused as
+  `decided_inside_a_run` before its actor is read, whatever person it names.
 
 | Operation | Request | Answer and refusals |
 |---|---|---|
