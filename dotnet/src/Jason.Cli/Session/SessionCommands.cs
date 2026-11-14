@@ -28,7 +28,8 @@ public static class SessionCommands
         + "--resume <id>, codex by resume <id>; another host is refused). Of the runtime this asks only the folder's reads and, "
         + "when no program is named, the preference. "
         + "With --setup: at this installation's role skills folder, with its plugins folder beside it where the host can take "
-        + "one, running the host --host names, else the one the preference names, with the setup brief as its first message. "
+        + "one, running the host --host names, else the one the preference agent.interactive_host names (default claude_code), with "
+        + "the setup brief as its first message. "
         + "Opening it changes nothing. Not with an item, --campaign, --project, --here, --shell or --resume. "
         + "Every form starts no runtime, writes no file of Jason's, and on macOS writes one script to the temporary folder that "
         + "removes itself when Terminal runs it.";
@@ -38,7 +39,7 @@ public static class SessionCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var session = new Command("session", "Your own agent host, started on one item that waits for you or at a folder. No operation stands behind it: the runtime never starts a terminal.");
+        var session = new Command("session", "Your own agent host, started on one item that waits for you, at a folder, or on Jason itself with --setup. No operation stands behind it: the runtime never starts a terminal.");
         session.Subcommands.Add(Open(env, actor));
         return session;
     }

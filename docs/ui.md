@@ -354,7 +354,9 @@ jason session open --setup --host codex
   it, and on macOS `script`. With `--human`, where the skill is not deployed, a second line names
   `jason skills install --host <host>`. A refusal of its own is the API's error envelope on stdout, said again on
   stderr, with exit 1: `folder_missing` (the role skills folder is not there), `preference_unreadable`, `host_unknown`,
-  `host_not_found`, `terminal_not_found` and `terminal_start_failed`. No runtime to ask for the preference is exit 3;
+  `host_not_found`, `terminal_not_found` and `terminal_start_failed`. The role skills folder is checked before the host
+  is chosen, so with no role skills folder and no runtime the answer is `folder_missing`, exit 1. Otherwise, no runtime
+  to ask for the preference is exit 3;
   `--setup` with `--approval`, `--question`, `--campaign`, `--project`, `--here`, `--shell` or `--resume` is a usage
   error, exit 2.
 

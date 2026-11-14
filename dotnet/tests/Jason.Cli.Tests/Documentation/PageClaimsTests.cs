@@ -304,7 +304,7 @@ public partial class PageClaimsTests
     public void The_session_help_says_its_setup_form()
     {
         Assert.Contains(
-            "With --setup: at this installation's role skills folder, with its plugins folder beside it where the host can take one, running the host --host names, else the one the preference names, with the setup brief as its first message. Opening it changes nothing. Not with an item, --campaign, --project, --here, --shell or --resume.",
+            "With --setup: at this installation's role skills folder, with its plugins folder beside it where the host can take one, running the host --host names, else the one the preference agent.interactive_host names (default claude_code), with the setup brief as its first message. Opening it changes nothing. Not with an item, --campaign, --project, --here, --shell or --resume.",
             Jason.Cli.Session.SessionCommands.OpenDescription,
             StringComparison.Ordinal);
     }
