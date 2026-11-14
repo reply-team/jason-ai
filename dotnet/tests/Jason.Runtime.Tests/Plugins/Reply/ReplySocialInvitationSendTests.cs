@@ -682,7 +682,7 @@ public partial class ReplySocialInvitationSendTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
 
         Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
-        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"channel"}""", ReplyOperations.Blocked(error));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","channel":"linkedin","reason":"channel"}""", ReplyOperations.Blocked(error));
         Assert.Equal(status, (string?)error.Details!["provider_code"]);
         Assert.Equal(["account list"], Lines(account));
     }
@@ -703,7 +703,7 @@ public partial class ReplySocialInvitationSendTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
 
         Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
-        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"channel"}""", ReplyOperations.Blocked(error));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","channel":"linkedin","reason":"channel"}""", ReplyOperations.Blocked(error));
         Assert.Equal(replyCode, (string?)error.Details!["provider_code"]);
         Assert.Empty(account.Sent);
     }
@@ -724,7 +724,7 @@ public partial class ReplySocialInvitationSendTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
 
         Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
-        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"limit"}""", ReplyOperations.Blocked(error));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","channel":"linkedin","reason":"limit"}""", ReplyOperations.Blocked(error));
         Assert.Equal(limit, (string?)error.Details!["limit"]);
         Assert.Empty(account.Sent);
     }
@@ -748,7 +748,7 @@ public partial class ReplySocialInvitationSendTests
 
         Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
         ReplyOperations.Blocked(error);
-        Assert.Equal(("sender", "34", "limit"), ((string?)error.Block!["scope"], (string?)error.Block["sender_external_id"], (string?)error.Block["reason"]));
+        Assert.Equal(("sender", "34", "linkedin", "limit"), ((string?)error.Block!["scope"], (string?)error.Block["sender_external_id"], (string?)error.Block["channel"], (string?)error.Block["reason"]));
         ReplyOperations.ClearsAfter(error, before, after, Wait);
         Assert.Empty(account.Sent);
     }
