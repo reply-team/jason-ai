@@ -631,8 +631,9 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
   subscription), everything that changes the installation, follows it without end or carries it off the machine
   (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `ui`, `session`,
-  `journal watch`, `export`, `import`), and four more that decide who is reached or what runs (`suppression remove`,
-  `route set`, `route unset`, `role set-profile`). **`role add` and `project link` are typed in a terminal**: a role's
+  `journal watch`, `export`, `import`), and six more that decide who is reached or what runs (`suppression remove`,
+  `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`). **`role add` and `project link` are
+  typed in a terminal**: a role's
   entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
   its campaigns. A command that names an operation these verbs call is refused too. Also refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
