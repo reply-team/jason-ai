@@ -63,6 +63,7 @@ async function renderTab({ panel = 'Connect', keep = [], standing = false }: Opt
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
+        .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
         .answer('plugin.list', 'plugin.list/none')

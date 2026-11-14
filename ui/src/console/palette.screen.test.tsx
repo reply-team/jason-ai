@@ -24,6 +24,7 @@ function renderConsole(options: { platform?: 'darwin' | 'win32'; desktop?: StubD
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
         .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
+        .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer(
             'campaign.summary',
