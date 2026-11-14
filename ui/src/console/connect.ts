@@ -13,6 +13,7 @@ import type {
 } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
+import { can, cannotHere } from '../platform/places';
 import { act, argsOf, define, type Action } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
@@ -32,19 +33,30 @@ const typed = new Map<string, string>();
 /** Whether this window is the demo. */
 const inDemo = (): boolean => mode.value === 'demo';
 
+/** Whether this place cannot do the acts of a card: a browser tab, which only reads what the desktop found. */
+const actsOff = (): boolean => !can('setup.connectReply');
+
 /** Defines an act that connects or changes a real account: in the demo it does nothing. */
 function defineReal(name: string, action: Action): void {
     define(name, (args, element, event) => {
-        if (!inDemo()) action(args, element, event);
+        if (!inDemo() && !actsOff()) action(args, element, event);
     });
 }
 
 /** The one sentence a card says in the demo about its acts being off. */
 const notInDemo = (): Html | null =>
-    inDemo() ? html`<div class="setrow meta demo-off" role="note">${t('mode.notDemo')}</div>` : null;
+    inDemo()
+        ? html`<div class="setrow meta demo-off" role="note">${t('mode.notDemo')}</div>`
+        : actsOff()
+          ? html`<div class="setrow meta demo-off" role="note">${cannotHere()}</div>`
+          : null;
+
+/** The one sentence a card whose acts this place cannot do says; nothing where it can. */
+const elsewhere = (): Html | null =>
+    actsOff() ? html`<div class="setrow meta demo-off" role="note">${cannotHere()}</div>` : null;
 
 /** `busy`, or disabled in the demo, for a control that connects or changes a real account. */
-const realBusy = (busy: Html | null): Html | null => (inDemo() ? html`disabled` : busy);
+const realBusy = (busy: Html | null): Html | null => (inDemo() || actsOff() ? html`disabled` : busy);
 
 /** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
 const confirming = signal<string | null>(null);
@@ -341,6 +353,7 @@ define('connect.addCancel', () => {
 });
 
 defineReal('connect.addMailbox', ([place, provider]) => {
+    if (!can('setup.replyConnect')) return;
     if (typeof place !== 'string' || !isProvider(provider)) return;
     const name = mailboxProviders.find(([each]) => each === provider)![1];
     void askLink(place, `Connect a ${name} mailbox`, null, (how) =>
@@ -353,6 +366,7 @@ defineReal('connect.addLinkedIn', ([place]) => {
 });
 
 defineReal('connect.makeLinkedIn', ([place]) => {
+    if (!can('setup.replyConnect')) return;
     const name = typedOf('linkedin-name');
     if (typeof place !== 'string' || !name) return;
     const copy = copying.value;
@@ -364,6 +378,7 @@ defineReal('connect.makeLinkedIn', ([place]) => {
 });
 
 defineReal('connect.reconnect', ([place, channel, id]) => {
+    if (!can('setup.replyReconnect')) return;
     const account = listedAccount(channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     signedOut.value = signedOut.value.filter((each) => each !== account.id);
@@ -373,6 +388,7 @@ defineReal('connect.reconnect', ([place, channel, id]) => {
 });
 
 defineReal('connect.pause', ([place, id]) => {
+    if (!can('setup.replyPause')) return;
     const account = listedAccount('linkedin', id);
     if (typeof place === 'string' && account)
         void ask(place, `Pause ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
@@ -381,6 +397,7 @@ defineReal('connect.pause', ([place, id]) => {
 });
 
 defineReal('connect.resume', ([place, id]) => {
+    if (!can('setup.replyResume')) return;
     const account = listedAccount('linkedin', id);
     if (typeof place === 'string' && account)
         void ask(place, `Resume ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
@@ -389,6 +406,7 @@ defineReal('connect.resume', ([place, id]) => {
 });
 
 defineReal('connect.unblock', ([place, id]) => {
+    if (!can('setup.replyUnblock')) return;
     const account = listedAccount('email', id);
     if (typeof place === 'string' && account)
         void ask(place, `Unblock ${accountTitle(account)}`, { channel: 'email', id: account.id }, () =>
@@ -397,6 +415,7 @@ defineReal('connect.unblock', ([place, id]) => {
 });
 
 defineReal('connect.delete', ([place, channel, id]) => {
+    if (!can('setup.replyDelete')) return;
     const account = listedAccount(channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     void ask(
@@ -412,6 +431,7 @@ defineReal('connect.delete', ([place, channel, id]) => {
 });
 
 defineReal('connect.limits', ([place, id]) => {
+    if (!can('setup.replyLimits')) return;
     const account = listedAccount('email', id);
     if (typeof place !== 'string' || !account) return;
     if (limiting.value?.place === place && limiting.value.id === account.id) {
@@ -424,6 +444,7 @@ defineReal('connect.limits', ([place, id]) => {
 });
 
 defineReal('connect.setLimit', ([place, id]) => {
+    if (!can('setup.replyLimits')) return;
     const account = listedAccount('email', id);
     const text = typedOf(`limit:${typeof id === 'string' ? id : ''}`);
     if (typeof place !== 'string' || !account || !/^\d{1,10}$/.test(text)) return;
@@ -669,15 +690,20 @@ define('connect.type', (args, element) => {
 });
 
 define('connect.install', ([program]) => {
+    if (!can('setup.installProgram')) return;
     // The Reply CLI is the Reply account's program: placing or updating it is off in the demo, an AI's program is not.
     if (inDemo() && program === setup.value?.reply.cli.install) return;
     if (typeof program === 'string')
         void doing(`Installing ${program}…`, () => here().desktop.setup.installProgram(program));
 });
 
-defineReal('connect.reply', () => void doing('Signing in to Reply…', () => here().desktop.setup.connectReply()));
+defineReal('connect.reply', () => {
+    if (!can('setup.connectReply')) return;
+    void doing('Signing in to Reply…', () => here().desktop.setup.connectReply());
+});
 
 defineReal('connect.replyKey', () => {
+    if (!can('setup.connectReplyWithKey')) return;
     const key = typedOf('reply');
     if (key)
         void doing('Connecting Reply with the key…', async () => {
@@ -687,6 +713,7 @@ defineReal('connect.replyKey', () => {
 });
 
 define('connect.providerKey', ([provider, remove]) => {
+    if (!can('setup.setProviderKey')) return;
     if (typeof provider !== 'string') return;
     const key = remove === true ? '' : typedOf(`provider:${provider}`);
     if (key || remove === true)
@@ -697,6 +724,7 @@ define('connect.providerKey', ([provider, remove]) => {
 });
 
 defineReal('connect.plugin', ([id]) => {
+    if (!can('setup.configurePlugin')) return;
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     if (!plugin) return;
     const keys = ['token', 'target', 'server'].map((name) => `plugin:${plugin.id}:${name}`);
@@ -712,6 +740,7 @@ defineReal('connect.plugin', ([id]) => {
 });
 
 defineReal('connect.pluginServerClear', ([id]) => {
+    if (!can('setup.configurePlugin')) return;
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     if (plugin?.serverLabel)
         void doing(`Configuring ${plugin.label}…`, () =>
@@ -728,6 +757,7 @@ define('connect.disconnectCancel', () => {
 });
 
 defineReal('connect.disconnectConfirm', ([id]) => {
+    if (!can('setup.disconnectPlugin')) return;
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     confirming.value = null;
     if (plugin) void doing(`Disconnecting ${plugin.label}…`, () => here().desktop.setup.disconnectPlugin(plugin.id));
@@ -736,6 +766,7 @@ defineReal('connect.disconnectConfirm', ([id]) => {
 // Reload is the configure call with no values: it writes nothing, has the runtime read its plugins again, and reads
 // them back. The reload is the installation's, so any of the plugins names it.
 define('connect.reload', () => {
+    if (!can('setup.configurePlugin')) return;
     const first = setup.value?.plugins[0];
     if (first) void doing('Reading the settings again…', () => here().desktop.setup.configurePlugin(first.id, {}));
 });
@@ -1012,12 +1043,12 @@ export function aiCardView(): Html {
     const state = setup.value;
     const busy = setupBusy.value;
     const failure = setupError.value;
-    const disabled = busy === null ? null : html`disabled`;
+    const disabled = busy === null && !actsOff() ? null : html`disabled`;
     return html`<div class="card" role="region" aria-label="Connect an AI">
         <div class="hd"><b>AI</b></div>
         <div class="bd">
             ${busy ? html`<div class="note" role="status"><span class="spin"></span>${busy}</div>` : null}
-            ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+            ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null} ${elsewhere()}
             ${
                 state
                     ? state.hosts.filter((each) => each.kind === 'program').map((each) => program(each, disabled))
@@ -1081,7 +1112,7 @@ export function connectView(): Html {
     const state = setup.value;
     const busy = setupBusy.value;
     const failure = setupError.value;
-    const disabled = busy === null ? null : html`disabled`;
+    const disabled = busy === null && !actsOff() ? null : html`disabled`;
     const header = html`<div class="ph">
         <div>
             <h1>Connect</h1>
@@ -1099,7 +1130,7 @@ export function connectView(): Html {
         ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
         <div class="card">
             <div class="hd"><b>AI</b></div>
-            <div class="bd">${programs.map((each) => program(each, disabled))}</div>
+            <div class="bd">${elsewhere()}${programs.map((each) => program(each, disabled))}</div>
         </div>
         ${
             providers.length

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { t } from '../platform/i18n';
+import { can, cannotHere } from '../platform/places';
 import { mode, modePreparing, modeRefusal, modeUnopened, switchMode, type Mode } from '../platform/mode';
 
 const modes: readonly Mode[] = ['demo', 'live'];
@@ -19,6 +20,8 @@ export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
     const refusal = modeRefusal.value;
     const demo = mode.value === 'demo';
     const preparing = demo && modePreparing.value;
+    // A place that cannot ask the desktop to switch shows the switch, off, with its sentence.
+    const switchable = can('mode.set');
     return (
         <div className={`mode-strip ${demo ? 'mode-demo' : 'mode-live'}`} role="region" aria-label={t('mode.strip')}>
             <span className="mode-dot" aria-hidden="true" />
@@ -63,8 +66,8 @@ export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
                         type="button"
                         className={each === mode.value ? 'on' : undefined}
                         aria-pressed={each === mode.value}
-                        disabled={preparing}
-                        title={preparing ? t('mode.preparing.reason') : undefined}
+                        disabled={preparing || !switchable}
+                        title={!switchable ? cannotHere() : preparing ? t('mode.preparing.reason') : undefined}
                         onClick={() => void switchMode(each)}
                     >
                         {t(each === 'demo' ? 'mode.switch.demo' : 'mode.switch.live')}

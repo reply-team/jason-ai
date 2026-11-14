@@ -1,16 +1,17 @@
 import { effect, signal } from '@preact/signals-react';
+import { can } from '../platform/places';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { mode, type Mode } from '../platform/mode';
-import { ChatNotes, hostOf, isRefusal, sendTurn, startChat } from './chat';
+import { ChatNotes, hostOf, isRefusal, sendTurn, startChat, tabLockedSentence, tabMaySend } from './chat';
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
 import { AccessButton, ModelButton } from './start-menus';
-import { changeChat, chats, here, messageOf, setup, setupError } from './state';
+import { changeChat, chats, here, inTab, messageOf, setup, setupError } from './state';
 
 // The start screen: the window opens on the question who the person wants to reach. What is sent there starts a set-up
 // chat. With no AI that drives the chat the AI card comes first and the message waits there, to go once one is
@@ -42,7 +43,8 @@ export const startMode = signal<DesktopChatMode | null>(null);
  * chats start in it and the host that chat would run on can take it, Ask first otherwise.
  */
 function defaultMode(): DesktopChatMode {
-    if (fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
+    // A tab never makes a chat in Full access: it could send nothing to it, so the standing choice is not its default.
+    if (inTab() || fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
     return hostOf(startPick.value)?.fullAccess === null ? 'full_access' : 'ask_first';
 }
 
@@ -105,6 +107,13 @@ async function begin(text: string): Promise<void> {
     }
     startPick.value = newChat('', null);
     startMode.value = null;
+    // A tab sends to a chat only in Ask first or Plan only: a chat made in another mode keeps the words in the box.
+    if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) {
+        startDraft.value = text;
+        changeChat(id, (each) => told(each, tabLockedSentence(chats.value[id]?.mode ?? '')));
+        here().dock.showChat(id);
+        return;
+    }
     // The chat's first turn names what the controls chose; a mode the desktop did not start the chat in is asked of it.
     changeChat(id, (each) => ({
         ...each,
@@ -113,7 +122,7 @@ async function begin(text: string): Promise<void> {
         effort: pick.effort,
         typing: pick.typing,
     }));
-    if (chats.value[id]?.mode !== wanted) {
+    if (chats.value[id]?.mode !== wanted && can('chat.setMode')) {
         try {
             const answer = await here().desktop.chat.setMode(id, wanted, hostOf(chats.value[id]!)?.id ?? '');
             if (isRefusal(answer)) changeChat(id, (each) => told(each, answer.refused));
