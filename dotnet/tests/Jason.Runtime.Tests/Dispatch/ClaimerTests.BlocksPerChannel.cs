@@ -142,6 +142,51 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// An email send parked on its sender's email block, whose input a patch moves onto LinkedIn while it waits: the email
+    /// block's trial still draws it, as one of its own waits, and the claim finds nothing holding a LinkedIn send of that
+    /// sender, so it runs. Its getting past on LinkedIn says nothing of the mailbox: the email block is not cleared, and it
+    /// has its next trial a cadence off, as a trial that decided nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_trial_whose_input_moved_to_another_channel_does_not_clear_the_channel_block_it_was_drawn_by()
+    {
+        using var harness = SendingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var item = Sending(db, NewCampaign(db), "email");
+        item.Contact!.Channels.Add(new ContactChannel { Channel = "linkedin", Value = "https://www.linkedin.com/in/ada-example" });
+        await ApproveAllAsync(harness, db);
+        var mailbox = SendersBlock(db, item.Campaign!, channel: "email", nextTrialAt: Noon);
+        await db.SaveChangesAsync(Ct);
+        ParkOn(db, item, mailbox);
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = "linkedin",
+                ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "https://www.linkedin.com/in/marta-owner" },
+                ["message"] = new JsonObject { ["format"] = "linkedin_message", ["body"] = "Hello, Ada." },
+            },
+        };
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(1, await Resumer().ResumeAsync(db, Ct));
+        Assert.Equal(item.Id, (await Blocks(database))[mailbox.Id].TrialWorkItemId);
+        // The patched input is another send than the one the person approved, so the claim asks them again, and the
+        // trial holds the block's one trial until they decide.
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await db.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).Status);
+        await Decide(db, ApprovalStatus.Approved);
+        Assert.Equal(item.PublicId, Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct)).WorkItemPublicId);
+        await GotPastAsync(db, item.Id, "linkedin");
+
+        var row = (await Blocks(database))[mailbox.Id];
+        Assert.True(
+            row is { Status: ProviderBlockStatus.Open, ClearedByAttemptId: null, TrialWorkItemId: null } && row.NextTrialAt == Noon.AddSeconds(900),
+            $"The email block is {row.Status}, cleared by {row.ClearedByAttemptId}, trial {row.TrialWorkItemId}, next {row.NextTrialAt:O}.");
+    }
+
+    /// <summary>
     /// Sender <c>snd-1</c>'s block on every channel and its email block, both due at noon; an approved email send parked on
     /// the block on every channel, and one parked on the email block in a campaign paused since, which no trial may draw.
     /// </summary>

@@ -456,7 +456,9 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     /// <summary>
     /// What an attempt of an operation a provider block holds says about the blocks of its plugin and binding, after its
     /// verdict. <see cref="BlockAnswer.GotPast"/> — it succeeded, or the provider judged the work itself — clears every
-    /// open block that covers it and every block it was the trial of. <see cref="BlockAnswer.Blocked"/> opens the block <paramref name="said"/> names or sees
+    /// open block that covers it and every block it was the trial of, a block on one channel only while the call is still
+    /// on that channel: an item whose input moved to another channel while it waited got past nothing of the channel it
+    /// left, so that block's next trial is a cadence off. <see cref="BlockAnswer.Blocked"/> opens the block <paramref name="said"/> names or sees
     /// it again, and parks the item on it: a trial of the account that met a sender's block has got past the account,
     /// so the account clears and the item parks on the sender. A trial of a sender's block on every channel that met the
     /// same sender's block on one channel has got past nothing (<see cref="ProviderBlocks.OneChannelOf"/>): the item moves
@@ -505,7 +507,7 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
                 var sender = ProviderBlocks.Sender(input);
                 var channel = ProviderBlocks.Channel(input);
                 foreach (var block in open.Where(block => block.Scope == ProviderBlockScope.Account
-                    || block.TrialWorkItemId == item.Id
+                    || (block.TrialWorkItemId == item.Id && ProviderBlocks.OnChannel(block, channel))
                     || (sender is not null && string.Equals(block.SenderExternalId, sender, StringComparison.Ordinal) && ProviderBlocks.OnChannel(block, channel))))
                 {
                     ProviderBlocks.Clear(block, attempt, now);
