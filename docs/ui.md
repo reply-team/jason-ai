@@ -349,10 +349,13 @@ jason session open --setup --host codex
   Jason's.
 - **What it prints.** One object: `kind` (`setup`), `folder` (`level` `role_skills`, and `path`), `plugins_folder`
   (`path`, `added`, and where it was not added `reason`: `host_takes_no_folder` or `folder_missing`), `host`, `skill`
-  (`name`, `customising-jason`; `deployed`, true, false, or null where the record could not be read; and `root`, the
-  host's skills folder that was read), `program`, `terminal` and `started`; with `--dry-run` also `argv`, the brief among
-  it, and on macOS `script`. With `--human`, where the skill is not deployed, a second line names
-  `jason skills install --host <host>`. A refusal of its own is the API's error envelope on stdout, said again on
+  (`name`, `customising-jason`; `deployed`, decided by Jason's receipt, the record `jason skills install` keeps in the
+  host's skills folder: true, false, or null where that record could not be read; and `root`, the host's skills folder
+  that was read), `program`, `terminal` and `started`; with `--dry-run` also `argv`, the brief among it, and on macOS
+  `script`. A skill placed there some other way, without the receipt, counts as not deployed. With `--human`, where the
+  skill is not deployed, a second line says "jason skills install has not deployed the skill customising-jason for
+  <host>: `jason skills install --host <host>` deploys it."; where the receipt could not be read, it says that whether
+  the skill is deployed could not be read, and names the same command. A refusal of its own is the API's error envelope on stdout, said again on
   stderr, with exit 1: `folder_missing` (the role skills folder is not there), `preference_unreadable`, `host_unknown`,
   `host_not_found`, `terminal_not_found` and `terminal_start_failed`. The role skills folder is checked before the host
   is chosen, so with no role skills folder and no runtime the answer is `folder_missing`, exit 1. Otherwise, no runtime

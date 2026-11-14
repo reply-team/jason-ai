@@ -36,19 +36,19 @@ public sealed class SetupBriefTests
             "You are in a session for changing this Jason installation itself: its roles, its plugins and its settings.\n"
             + "Follow the instructions below; ask the person what they want changed if they have not said.\n"
             + "\n"
-            + "Where the parts are: run `jason status` and read the `setup` section of what it prints. It names the role skills folder, the plugins folder, the custom UI folder and the settings file. Take every path from there; never assume one.\n"
+            + "Where the parts are: run jason status and read the setup section of what it prints. It names the role skills folder, the plugins folder, the custom UI folder and the settings file. Take every path from there; never assume one.\n"
             + "\n"
             + "What you never touch:\n"
-            + "- The settings file, while `settings_file_holds_secrets` is true in that section: plugins' secrets are kept in it. Never open it.\n"
+            + "- The settings file, while settings_file_holds_secrets is true in that section: plugins' secrets are kept in it. Never open it.\n"
             + "- Any file of Jason's outside the role skills folder and the plugins folder: routes and grants are changed with jason's own commands, which the skill names.\n"
             + "- A secret: it is the person's own to type. Never ask them to give one to you.\n"
             + "\n";
 
         Assert.Equal(
-            Before + "The skill `customising-jason` teaches the rest of this job; use it.",
+            Before + "The skill customising-jason teaches the rest of this job; use it.",
             SetupBrief.For("claude_code", deployed: true));
         Assert.Equal(
-            Before + "The skill `customising-jason` teaches the rest of this job, and it may not be installed for this host. If you do not have it, ask the person, and on their yes run `jason skills install --host codex`; do not change anything of Jason's before you have it.",
+            Before + "The skill customising-jason teaches the rest of this job, and it may not be installed for this host. If you do not have it, ask the person, and on their yes run jason skills install --host codex; do not change anything of Jason's before you have it.",
             SetupBrief.For("codex", deployed: false));
     }
 
@@ -83,7 +83,7 @@ public sealed class SetupBriefTests
     [Fact]
     public void The_brief_names_a_skill_the_runtime_pack_holds()
     {
-        Assert.Contains($"The skill `{SetupBrief.SkillName}` teaches the rest of this job", SetupBrief.Core("claude_code", deployed: true), StringComparison.Ordinal);
+        Assert.Contains($"The skill {SetupBrief.SkillName} teaches the rest of this job", SetupBrief.Core("claude_code", deployed: true), StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "skills", "runtime", SetupBrief.SkillName, "SKILL.md")));
     }
 
@@ -109,6 +109,14 @@ public sealed class SetupBriefTests
         Assert.DoesNotContain('\\', brief);
         Assert.DoesNotContain('~', brief);
         Assert.DoesNotContain(".json", brief, StringComparison.Ordinal);
+    }
+
+    /// <summary>The brief carries no backtick in either form: commands and names are written plain.</summary>
+    [Theory]
+    [MemberData(nameof(Forms))]
+    public void The_brief_carries_no_backtick(string host, bool deployed)
+    {
+        Assert.DoesNotContain('`', SetupBrief.For(host, deployed));
     }
 
     private static string RepositoryRoot()

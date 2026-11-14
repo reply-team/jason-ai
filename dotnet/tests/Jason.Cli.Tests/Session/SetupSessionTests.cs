@@ -320,7 +320,7 @@ public sealed class SetupSessionTests : IDisposable
         Assert.Equal(
             [
                 $"Started claude_code in conhost at the role skills folder {_setup.RoleSkillsDirectory}, with the plugins folder {_setup.PluginsDirectory} beside it.",
-                "The skill customising-jason, which teaches this session the job, is not deployed for claude_code: `jason skills install --host claude_code` deploys it.",
+                "jason skills install has not deployed the skill customising-jason for claude_code: `jason skills install --host claude_code` deploys it.",
             ],
             _run.Output.ToString().TrimEnd().Split('\n').Select(line => line.TrimEnd('\r')));
     }

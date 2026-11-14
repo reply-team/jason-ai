@@ -30,7 +30,8 @@ public static class SessionCommands
         + "With --setup: at this installation's role skills folder, with its plugins folder beside it where the host can take "
         + "one, running the host --host names, else the one the preference agent.interactive_host names (default claude_code), with "
         + "the setup brief as its first message. "
-        + "Opening it changes nothing. Not with an item, --campaign, --project, --here, --shell or --resume. "
+        + "Opening it changes nothing. Its answer says whether the skill customising-jason is deployed for that host, by Jason's "
+        + "receipt. Not with an item, --campaign, --project, --here, --shell or --resume. "
         + "Every form starts no runtime, writes no file of Jason's, and on macOS writes one script to the temporary folder that "
         + "removes itself when Terminal runs it.";
 

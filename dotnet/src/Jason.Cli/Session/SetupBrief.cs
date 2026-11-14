@@ -10,7 +10,7 @@ namespace Jason.Cli.Session;
 /// <remarks>
 /// It spells no path and no part of the layout: the session reads every folder from <c>jason status</c>, so a layout that
 /// moves a folder changes nothing here. It carries no secret, token or id, since a command line is readable by every
-/// process of the account.
+/// process of the account. It carries no backtick either: commands and names are written plain.
 /// </remarks>
 public static class SetupBrief
 {
@@ -37,16 +37,16 @@ public static class SetupBrief
 
         return string.Join(
             "\n",
-            "Where the parts are: run `jason status` and read the `setup` section of what it prints. It names the role skills folder, the plugins folder, the custom UI folder and the settings file. Take every path from there; never assume one.",
+            "Where the parts are: run jason status and read the setup section of what it prints. It names the role skills folder, the plugins folder, the custom UI folder and the settings file. Take every path from there; never assume one.",
             string.Empty,
             "What you never touch:",
-            "- The settings file, while `settings_file_holds_secrets` is true in that section: plugins' secrets are kept in it. Never open it.",
+            "- The settings file, while settings_file_holds_secrets is true in that section: plugins' secrets are kept in it. Never open it.",
             "- Any file of Jason's outside the role skills folder and the plugins folder: routes and grants are changed with jason's own commands, which the skill names.",
             "- A secret: it is the person's own to type. Never ask them to give one to you.",
             string.Empty,
             deployed
-                ? $"The skill `{SkillName}` teaches the rest of this job; use it."
-                : $"The skill `{SkillName}` teaches the rest of this job, and it may not be installed for this host. If you do not have it, ask the person, and on their yes run `jason skills install --host {host}`; do not change anything of Jason's before you have it.");
+                ? $"The skill {SkillName} teaches the rest of this job; use it."
+                : $"The skill {SkillName} teaches the rest of this job, and it may not be installed for this host. If you do not have it, ask the person, and on their yes run jason skills install --host {host}; do not change anything of Jason's before you have it.");
     }
 
     /// <summary>The whole brief for <paramref name="host"/>: the two lines, a blank line, the core.</summary>

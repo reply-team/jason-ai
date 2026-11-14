@@ -106,7 +106,7 @@ public static class SetupSessionOpener
             switch (skill.Deployed)
             {
                 case false:
-                    env.Out.WriteLine($"The skill {SetupBrief.SkillName}, which teaches this session the job, is not deployed for {hostWord}: `jason skills install --host {hostWord}` deploys it.");
+                    env.Out.WriteLine($"jason skills install has not deployed the skill {SetupBrief.SkillName} for {hostWord}: `jason skills install --host {hostWord}` deploys it.");
                     break;
                 case null:
                     env.Out.WriteLine($"Whether the skill {SetupBrief.SkillName} is deployed for {hostWord} could not be read; `jason skills install --host {hostWord}` deploys it.");
