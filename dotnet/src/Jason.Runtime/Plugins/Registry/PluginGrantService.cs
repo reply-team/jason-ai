@@ -156,7 +156,7 @@ public sealed class PluginGrantService(
                         actor,
                         reason,
                         wrote ? null : settingsFile.Read(),
-                        recordRefusal: false,
+                        recordRefusal: !wrote,
                         routeRefusal: null,
                         besides: (now, _) =>
                         {

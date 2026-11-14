@@ -190,6 +190,30 @@ public class PluginGrantWriteTests
         Assert.Single((await LinesAsync(api)).Items);
     }
 
+    /// <summary>
+    /// A grant written by hand beside a route the reload refuses: the request wrote nothing, so nothing was put back, and
+    /// the refusal is kept for <c>plugin.list</c> to say, since it describes the file that is there.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_reload_of_a_file_the_grant_left_as_it_was_is_kept_for_plugin_list()
+    {
+        await using var api = await StartAsync();
+        var monitor = api.Resolve<IOptionsMonitor<PluginsOptions>>();
+        var broken = WithHost.Replace(
+            "\"Dispatcher\": { \"Enabled\": false },",
+            "\"Dispatcher\": { \"Enabled\": false },\n    \"Routes\": { \"Operations\": { \"contact.find\": { \"Plugin\": \"no-such-plugin\" } } },",
+            StringComparison.Ordinal);
+        File.WriteAllText(api.Paths.UserSettingsFile, broken);
+        await UntilAsync(() => monitor.CurrentValue.Grants.ContainsKey(TestPlugins.FakeProviderId));
+        Assert.True(api.Resolve<PluginRegistry>().LastReload?.Activated ?? true);
+
+        var error = await api.PostErrorAsync(Operations.PluginGrant, Body(TestPlugins.FakeProviderId, "http", "localhost:5555"), HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        Assert.Equal(broken, File.ReadAllText(api.Paths.UserSettingsFile));
+        Assert.False(api.Resolve<PluginRegistry>().LastReload?.Activated ?? true);
+    }
+
     /// <summary>Taking the last entry back takes the list away, and the objects it leaves empty, giving back the bytes it started from.</summary>
     [Fact]
     public async Task Revoking_takes_the_entry_out_and_the_objects_it_leaves_empty_go_with_it()
