@@ -6,6 +6,7 @@ import {
     mergeSender,
     mergeTone,
     noneStated,
+    readable,
     senderCount,
     senderForm,
     toneForm,
@@ -166,6 +167,24 @@ describe('a stored word this build does not know', () => {
             formality: 'ceremonial',
         });
         expect(mergeTone(stored, { ...shown, formality: '' }, shown)).toEqual({ summary: 'Plain' });
+    });
+});
+
+describe('a stored value of the wrong shape', () => {
+    const at = (key: string, value: unknown) => [
+        { key, value, value_hash: null, value_bytes: null, created_at: null, updated_at: null, updated_by: null },
+    ];
+
+    it('is not readable, so the form is not painted over it', () => {
+        expect(readable(at('sender.identity', { senders: 'x' }))).toBe(false);
+        expect(readable(at('sender.identity', { senders: [1] }))).toBe(false);
+        expect(readable(at('tone_of_voice', ['x']))).toBe(false);
+    });
+
+    it('is readable when it is of the shape, or not set', () => {
+        expect(readable(at('sender.identity', kept))).toBe(true);
+        expect(readable(at('tone_of_voice', { summary: 'x' }))).toBe(true);
+        expect(readable([])).toBe(true);
     });
 });
 

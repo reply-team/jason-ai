@@ -9,6 +9,7 @@ import {
     formalities,
     genderForms,
     readPreferences,
+    readable,
     saveSender,
     saveTone,
     senderCount,
@@ -48,6 +49,8 @@ export function VoiceSection() {
     const [paintedSender, setPaintedSender] = useState<SenderForm>(emptySender);
     const [paintedTone, setPaintedTone] = useState<ToneForm>(emptyTone);
     const [senders, setSenders] = useState(0);
+    // The part being saved: its fields wait, so what is typed meanwhile is never wiped by the repaint.
+    const [saving, setSaving] = useState<{ sender: boolean; tone: boolean }>({ sender: false, tone: false });
     const [said, setSaid] = useState<{ sender: Said; tone: Said }>({ sender: null, tone: null });
 
     useEffect(() => {
@@ -56,6 +59,10 @@ export function VoiceSection() {
         readPreferences(api).then(
             (items) => {
                 if (!current) return;
+                if (!readable(items)) {
+                    setRead('unreadable');
+                    return;
+                }
                 const who = senderForm(valueOf(items, senderKey));
                 const how = toneForm(valueOf(items, toneKey));
                 setSender(who);
@@ -72,11 +79,13 @@ export function VoiceSection() {
         };
     }, [api, demo]);
 
+    const busy = (part: 'sender' | 'tone', on: boolean) => setSaving((now) => ({ ...now, [part]: on }));
     const tell = (part: 'sender' | 'tone', what: Said) => setSaid((now) => ({ ...now, [part]: what }));
 
     const saveWho = async (event: FormEvent) => {
         event.preventDefault();
         tell('sender', null);
+        busy('sender', true);
         try {
             const wrote = await saveSender(api, sender, paintedSender);
             if (wrote) {
@@ -92,11 +101,14 @@ export function VoiceSection() {
             );
         } catch (error) {
             tell('sender', { kind: 'refused', text: messageOf(error) });
+        } finally {
+            busy('sender', false);
         }
     };
     const saveHow = async (event: FormEvent) => {
         event.preventDefault();
         tell('tone', null);
+        busy('tone', true);
         try {
             const wrote = await saveTone(api, tone, paintedTone);
             if (wrote) {
@@ -111,6 +123,8 @@ export function VoiceSection() {
             );
         } catch (error) {
             tell('tone', { kind: 'refused', text: messageOf(error) });
+        } finally {
+            busy('tone', false);
         }
     };
 
@@ -138,6 +152,7 @@ export function VoiceSection() {
                         <label>
                             <span>{t('voice.sender.name')}</span>
                             <input
+                                disabled={saving.sender}
                                 value={sender.name}
                                 onChange={(event) => setSender({ ...sender, name: event.target.value })}
                             />
@@ -145,6 +160,7 @@ export function VoiceSection() {
                         <label>
                             <span>{t('voice.sender.title')}</span>
                             <input
+                                disabled={saving.sender}
                                 value={sender.title}
                                 onChange={(event) => setSender({ ...sender, title: event.target.value })}
                             />
@@ -152,6 +168,7 @@ export function VoiceSection() {
                         <label>
                             <span>{t('voice.sender.company')}</span>
                             <input
+                                disabled={saving.sender}
                                 value={sender.company}
                                 onChange={(event) => setSender({ ...sender, company: event.target.value })}
                             />
@@ -159,6 +176,7 @@ export function VoiceSection() {
                         <label className="voice-small">
                             <span>{t('voice.sender.gender')}</span>
                             <select
+                                disabled={saving.sender}
                                 value={sender.gender}
                                 onChange={(event) => setSender({ ...sender, gender: event.target.value })}
                             >
@@ -173,7 +191,7 @@ export function VoiceSection() {
                             </select>
                         </label>
                         <p className="muted voice-small">{t('voice.sender.gender.note')}</p>
-                        <button className="btn" type="submit">
+                        <button className="btn" type="submit" disabled={saving.sender}>
                             {t('voice.save')}
                         </button>
                         {line(said.sender)}
@@ -183,6 +201,7 @@ export function VoiceSection() {
                         <label>
                             <span>{t('voice.tone.summary')}</span>
                             <textarea
+                                disabled={saving.tone}
                                 rows={3}
                                 value={tone.summary}
                                 onChange={(event) => setTone({ ...tone, summary: event.target.value })}
@@ -191,6 +210,7 @@ export function VoiceSection() {
                         <label>
                             <span>{t('voice.tone.formality')}</span>
                             <select
+                                disabled={saving.tone}
                                 value={tone.formality}
                                 onChange={(event) => setTone({ ...tone, formality: event.target.value })}
                             >
@@ -205,7 +225,7 @@ export function VoiceSection() {
                                 ))}
                             </select>
                         </label>
-                        <button className="btn" type="submit">
+                        <button className="btn" type="submit" disabled={saving.tone}>
                             {t('voice.save')}
                         </button>
                         {line(said.tone)}

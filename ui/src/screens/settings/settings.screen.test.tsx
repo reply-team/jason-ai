@@ -138,6 +138,28 @@ describe('Your name and tone', () => {
         ]);
     });
 
+    it('holds the part still while it saves, so what is typed meanwhile is not wiped by the repaint', async () => {
+        const fake = new FakeApi('Marta')
+            .answer('preference.list', 'preference.list/set')
+            .answerAnyRequest('preference.set', 'preference.set/sender');
+        const release = fake.hold('preference.set');
+        await voice(fake);
+        await waitFor(() =>
+            expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Marta Lind'),
+        );
+        const who = screen.getByRole('form', { name: 'Who writes' });
+        fireEvent.click(within(who).getByRole('button', { name: 'Save' }));
+        await waitFor(() =>
+            expect((within(who).getByRole('textbox', { name: 'Name' }) as HTMLInputElement).disabled).toBe(true),
+        );
+        expect((within(who).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+        // The other part is not held.
+        expect((screen.getByRole('textbox', { name: 'In a few words' }) as HTMLTextAreaElement).disabled).toBe(false);
+        release();
+        await waitFor(() => within(who).getByText('Saved.'));
+        expect((within(who).getByRole('textbox', { name: 'Name' }) as HTMLInputElement).disabled).toBe(false);
+    });
+
     it('saves nothing for an empty summary or an empty name, and says why', async () => {
         const fake = new FakeApi().answer('preference.list', 'preference.list/none');
         await voice(fake);

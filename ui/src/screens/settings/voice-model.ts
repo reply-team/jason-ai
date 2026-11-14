@@ -154,6 +154,17 @@ export async function readPreferences(api: Api): Promise<PreferenceItem[]> {
 export const valueOf = (items: readonly PreferenceItem[], key: string): unknown =>
     items.find((each) => each.key === key)?.value ?? null;
 
+/** Whether both stored values are of a shape the form can show and write back whole; an unset one is. */
+export function readable(items: readonly PreferenceItem[]): boolean {
+    try {
+        sendersOf(valueOf(items, senderKey));
+    } catch {
+        return false;
+    }
+    const tone = valueOf(items, toneKey);
+    return tone === null || isObject(tone);
+}
+
 /** Whether a read holds neither of the two preferences. */
 export const noneStated = (items: readonly PreferenceItem[]): boolean =>
     valueOf(items, senderKey) === null && valueOf(items, toneKey) === null;
