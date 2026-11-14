@@ -76,6 +76,26 @@ public sealed class LayoutStampTests : IDisposable
             refusal);
     }
 
+    /// <summary>
+    /// The version a stamp names reaches a screen only as the version: what the parse reads past — space around it, build
+    /// metadata after a <c>+</c>, a terminal's escape hidden there — is never carried, so a stamp cannot write text of its
+    /// own into a refusal or a report.
+    /// </summary>
+    [Theory]
+    [InlineData("0.43.0+x")]
+    [InlineData(" 0.43.0")]
+    [InlineData("\\n0.43.0\\n")]
+    [InlineData("0.43.0+\\u001b[2J\\u001b[31mupdate now")]
+    public void A_version_is_carried_as_the_version_alone(string written)
+    {
+        Write("{\"layout\":2,\"written_by\":\"" + written + "\"}");
+
+        var paths = new JasonPaths(_root);
+
+        Assert.Equal("0.43.0", paths.Stamp!.WrittenBy);
+        Assert.Equal((LayoutStamp.NewerCode, LayoutStamp.NewerSentence("0.43.0", "0.42.0")), LayoutStamp.Refusal(paths, "0.42.0"));
+    }
+
     [Theory]
     [InlineData("{", "it is not JSON at line 1, byte 2")]
     [InlineData("""{"layout":2,"written_by":"0.43.0",}""", "it is not JSON at line 1, byte 35")]

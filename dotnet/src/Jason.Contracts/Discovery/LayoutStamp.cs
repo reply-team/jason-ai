@@ -39,7 +39,7 @@ public enum LayoutStampState
 /// <param name="State">What was found.</param>
 /// <param name="Path">The stamp's path.</param>
 /// <param name="Layout">The layout a readable stamp names; null otherwise.</param>
-/// <param name="WrittenBy">The version of the Jason that wrote a readable stamp; null otherwise.</param>
+/// <param name="WrittenBy">The version of the Jason that wrote a readable stamp, as the version alone (no build metadata, no space around it); null otherwise.</param>
 /// <param name="At">The moment a readable stamp says it was written, as written and never parsed; null when it says none.</param>
 /// <param name="Problem">Why an unreadable stamp cannot be read, one of a fixed set of phrases; null otherwise.</param>
 public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layout, string? WrittenBy, string? At, string? Problem)
@@ -190,10 +190,14 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
             }
 
             if (!root.TryGetProperty("written_by", out var writtenElement) || writtenElement.ValueKind != JsonValueKind.String
-                || writtenElement.GetString() is not { } writtenBy || !SemanticVersion.TryParse(writtenBy, out _))
+                || !SemanticVersion.TryParse(writtenElement.GetString(), out var version))
             {
                 return Unreadable(path, "it names no version that wrote it");
             }
+
+            // The version alone, as it would be written: what the parse reads past, space or build metadata, never reaches a
+            // refusal or a report, so a stamp cannot put text of its own on a screen.
+            var writtenBy = version.ToString();
 
             string? at = null;
             if (root.TryGetProperty("at", out var atElement))
