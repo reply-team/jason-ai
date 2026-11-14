@@ -90,12 +90,13 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
     {
         ArgumentNullException.ThrowIfNull(edits);
         AssertGate();
-        if (Shadowing(edits, section) is { } shadowed)
+        var owned = Written(edits);
+        if (Shadowing(owned, section) is { } shadowed)
         {
             throw shadowed;
         }
 
-        return CommitAndPutInForceAsync(_ => edits, edits.Count > 0 ? edits[0].Path : section, section, inForce, refused, cancellationToken);
+        return CommitAndPutInForceAsync(_ => edits, owned, edits.Count > 0 ? edits[0].Path : section, section, inForce, refused, cancellationToken);
     }
 
     /// <summary>
@@ -105,18 +106,27 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
     /// read made again after another writer changed the file is edited from what that writer left. A
     /// <see cref="DomainException"/> it throws is the refusal, with nothing written.
     /// </summary>
+    /// <param name="owned">
+    /// The paths the caller owns, whatever the edits of one read turn out to be: one a <c>JASON_</c> variable sets, or sets
+    /// an element of, is refused as <c>setting_shadowed</c> on every read, before the edits are asked for, so an act whose
+    /// edits come out empty (the file already says what was asked) is refused too, rather than answered as done while the
+    /// variable decides what is in force.
+    /// </param>
     /// <exception cref="InvalidOperationException">Nobody holds the reload gate: a caller that forgot it.</exception>
     public async Task<T> WriteAsync<T>(
         Func<IReadOnlyDictionary<string, string?>, IReadOnlyList<SettingsEdit>> edits,
+        IReadOnlyList<string> owned,
         string section,
         Func<bool, CancellationToken, Task<T>> inForce,
         Func<DomainException, SettingsPutBack, IReadOnlyDictionary<string, string?>, DomainException> refused,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(edits);
+        ArgumentNullException.ThrowIfNull(owned);
         AssertGate();
         return await CommitAndPutInForceAsync(
             bytes => edits(bytes is null ? Empty : SettingsDocument.Flatten(bytes)),
+            owned,
             section,
             section,
             inForce,
@@ -126,6 +136,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
 
     private async Task<T> CommitAndPutInForceAsync<T>(
         Func<byte[]?, IReadOnlyList<SettingsEdit>> editsOf,
+        IReadOnlyList<string> owned,
         string linkSetting,
         string section,
         Func<bool, CancellationToken, Task<T>> inForce,
@@ -134,7 +145,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
     {
         ArgumentNullException.ThrowIfNull(inForce);
         ArgumentNullException.ThrowIfNull(refused);
-        var (before, after) = Commit(editsOf, linkSetting, section);
+        var (before, after) = Commit(editsOf, owned, linkSetting, section);
         try
         {
             return await inForce(after is not null, cancellationToken).ConfigureAwait(false);
@@ -166,8 +177,9 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
     /// <summary>
     /// Reads, edits and commits, again from a fresh read while another writer changes the file in between, up to
     /// <see cref="Attempts"/> times. Answers the bytes before and after, with null after where nothing needed writing.
+    /// Every read checks the owned paths for a shadowing variable before it asks for the edits, and the edits after.
     /// </summary>
-    private (byte[]? Before, byte[]? After) Commit(Func<byte[]?, IReadOnlyList<SettingsEdit>> editsOf, string linkSetting, string section)
+    private (byte[]? Before, byte[]? After) Commit(Func<byte[]?, IReadOnlyList<SettingsEdit>> editsOf, IReadOnlyList<string> owned, string linkSetting, string section)
     {
         if (new FileInfo(paths.UserSettingsFile).LinkTarget is not null)
         {
@@ -188,6 +200,11 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
                     : DomainErrors.SettingsFileNotWritable());
             }
 
+            if (Shadowing(owned, section) is { } shadowedOwned)
+            {
+                throw shadowedOwned;
+            }
+
             IReadOnlyList<SettingsEdit> edits = [];
             SettingsEditResult edited;
             try
@@ -201,7 +218,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
                     throw Refuse(section, refusal);
                 }
 
-                if (Shadowing(edits, section) is { } shadowed)
+                if (Shadowing(Written(edits), section) is { } shadowed)
                 {
                     throw shadowed;
                 }
@@ -244,17 +261,18 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
         }
     }
 
-    /// <summary>
-    /// The refusal for the first edit that writes a path a JASON_ variable sets, logged; taking an emptied object away
-    /// writes nothing anybody reads.
-    /// </summary>
-    private DomainException? Shadowing(IReadOnlyList<SettingsEdit> edits, string section)
+    /// <summary>The paths edits write, in order; taking an emptied object away writes nothing anybody reads.</summary>
+    private static string[] Written(IReadOnlyList<SettingsEdit> edits) =>
+        [.. edits.Where(edit => edit is not RemoveIfEmptyEdit).Select(edit => edit.Path)];
+
+    /// <summary>The refusal for the first path a JASON_ variable sets, or sets an element of, logged.</summary>
+    private DomainException? Shadowing(IReadOnlyList<string> written, string section)
     {
-        foreach (var edit in edits.Where(edit => edit is not RemoveIfEmptyEdit))
+        foreach (var path in written)
         {
-            if (file.Shadowing(edit.Path) is { } variable)
+            if (file.Shadowing(path) is { } variable)
             {
-                return Refuse(section, DomainErrors.SettingShadowed(Shown(edit.Path), variable));
+                return Refuse(section, DomainErrors.SettingShadowed(Shown(path), variable));
             }
         }
 

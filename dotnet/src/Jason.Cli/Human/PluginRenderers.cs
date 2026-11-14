@@ -79,10 +79,12 @@ public static class PluginRenderers
     }
 
     /// <summary>
-    /// What <c>plugin grant</c> or <c>plugin revoke</c> left in force, said from the body the runtime answered, then what
-    /// the reload activated as <see cref="Reload"/> says it, where one ran.
+    /// What <c>plugin grant</c> or <c>plugin revoke</c> left in force, said from the body the runtime answered (the
+    /// plugin's granted list, compared as the runtime compares entries), then what the reload activated as
+    /// <see cref="Reload"/> says it, where one ran. Where the body does not hold what was asked, it says so rather than
+    /// what was asked; a revoke of <c>*</c> says what a star stands for, since what is granted by name stays.
     /// </summary>
-    public static string? Granted(string json, string id, string noun, string entry, bool revoke)
+    public static string? Granted(string json, string id, PluginGrantCapability capability, string noun, string entry, bool revoke)
     {
         var registry = RenderText.Read<PluginRegistryDto>(json);
         if (registry?.Plugins is null)
@@ -90,11 +92,19 @@ public static class PluginRenderers
             return null;
         }
 
+        var granted = GrantedOf(registry.Plugins.FirstOrDefault(plugin => string.Equals(plugin.Id, id, StringComparison.Ordinal)), capability);
+        var star = entry == "*";
+        var held = star ? granted.Count > 0 : granted.Contains(entry, PluginGrantEntries.Comparer(capability));
         var lines = new List<string>
         {
-            revoke
-                ? $"{id} is not granted the {noun} {entry} now; work already running keeps what it was started with."
-                : $"{id} is granted the {noun} {entry}, in force now.",
+            (revoke, star, held) switch
+            {
+                (true, true, _) => $"{id}'s grant of every {noun} its manifest names is taken back; what is granted by name stays. Work already running keeps what it was started with.",
+                (true, false, false) => $"{id} is not granted the {noun} {entry} now; work already running keeps what it was started with.",
+                (true, false, true) => $"{id} is still granted the {noun} {entry}: nothing in the file matched it.",
+                (false, _, true) => $"{id} is granted the {noun} {entry}, in force now.",
+                (false, _, false) => $"{id} is still not granted the {noun} {entry}: the grants in force do not hold it.",
+            },
         };
         if (Reload(json) is { } reloaded)
         {
@@ -102,6 +112,22 @@ public static class PluginRenderers
         }
 
         return RenderText.Lines(lines);
+    }
+
+    /// <summary>What one plugin of the body is granted of a capability: nothing where the body does not hold it.</summary>
+    private static IReadOnlyList<string> GrantedOf(PluginDto? plugin, PluginGrantCapability capability)
+    {
+        var capabilities = plugin?.Capabilities;
+        return (capability switch
+        {
+            PluginGrantCapability.Exec => capabilities?.Exec?.Granted,
+            PluginGrantCapability.Http => capabilities?.Http?.Granted,
+            PluginGrantCapability.Env => capabilities?.Env?.Granted,
+            PluginGrantCapability.Api => capabilities?.Api?.Granted,
+            PluginGrantCapability.Files => capabilities?.Files?.Granted,
+            PluginGrantCapability.Subscriptions => capabilities?.Subscriptions?.Granted,
+            _ => null,
+        }) ?? [];
     }
 
     /// <summary>

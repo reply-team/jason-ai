@@ -341,24 +341,33 @@ public static class DomainErrors
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot answer a decision; a question raised for a person is a person's to answer.");
 
     /// <summary>
-    /// A person's own word — an approval, a rejection, a standing approval set or taken back, an answer, a plugin's grant
-    /// given or taken back — sent by a CLI that
+    /// A person's own word — an approval, a rejection, a standing approval set or taken back, an answer — sent by a CLI that
     /// says it runs inside an attempt, whatever actor the body claims. The attempt is quoted as the request named it and
     /// never looked up: presence is the fact. The message carries the remedy, for the agent that reads it.
     /// </summary>
     public static ForbiddenException DecidedInsideARun(string attempt) =>
         new(
             "decided_inside_a_run",
-            $"This request comes from inside attempt `{attempt}`. An approval, an answer or a plugin's grant is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
+            $"This request comes from inside attempt `{attempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
+
+    /// <summary>
+    /// A plugin's grant given or taken back from inside a run, refused by the run's header with the code the run gate
+    /// gives, before the body is read. A grant is taken from any actor outside a run; what is refused is a run changing
+    /// Jason itself.
+    /// </summary>
+    public static ForbiddenException ChangesJasonInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and what a plugin may use is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
     /// A route for every campaign asked for from inside a run: the global scope of <c>route.set</c> and <c>route.unset</c>,
-    /// refused by the run's header with the code a person's own word is refused with there.
+    /// refused by the run's header with the code the run gate gives, since nothing inside a run changes Jason itself.
     /// </summary>
     public static ForbiddenException GlobalRouteInsideARun(string attempt) =>
         new(
             "decided_inside_a_run",
-            $"This request comes from inside attempt `{attempt}`. A route for every campaign is a person's own word, given outside any run: leave it to the person, or raise it as a decision.");
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and a route for every campaign is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
