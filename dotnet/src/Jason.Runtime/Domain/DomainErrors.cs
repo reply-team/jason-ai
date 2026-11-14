@@ -302,7 +302,7 @@ public static class DomainErrors
     public static ForbiddenException CreatedAsAnotherInsideARun(string attempt) =>
         new(
             "created_as_another_inside_a_run",
-            $"This request comes from inside attempt `{attempt}`, and a send a person decides each one of is created there under that attempt's own name, so a review can tell who wrote it: leave the actor out, or name attempt:{attempt}.");
+            $"This request comes from inside attempt `{attempt}`. A send to a person is created there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
 
     /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody

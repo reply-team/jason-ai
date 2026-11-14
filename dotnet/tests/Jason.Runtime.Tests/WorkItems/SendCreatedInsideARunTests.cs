@@ -52,7 +52,9 @@ public class SendCreatedInsideARunTests
 
         var refused = await Assert.ThrowsAsync<ForbiddenException>(() => Service(db, seed.Run).CreateAsync(request, Ct));
         Assert.Equal("created_as_another_inside_a_run", refused.Code);
-        Assert.Contains(seed.Run.PublicId, refused.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            $"This request comes from inside attempt `{seed.Run.PublicId}`. A send to a person is created there under that attempt's own name, so that a review can tell who wrote it: name attempt:{seed.Run.PublicId} as the actor, which the CLI does when --actor is left out.",
+            refused.Message);
         Assert.Empty(await db.WorkItems.AsNoTracking().Where(w => w.Kind == WorkItemKind.ProviderOp).ToListAsync(Ct));
     }
 
