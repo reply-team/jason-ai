@@ -98,7 +98,7 @@ public partial class ReplySocialInvitationSendTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
 
         Assert.Equal(("provider_blocked", FailureClass.Blocked), (error.Code, error.Class));
-        Assert.Equal("""{"scope":"sender","sender_external_id":"34","reason":"limit"}""", ReplyOperations.Blocked(error));
+        Assert.Equal("""{"scope":"sender","sender_external_id":"34","channel":"linkedin","reason":"limit"}""", ReplyOperations.Blocked(error));
         Assert.Equal(limit, (string?)error.Details!["limit"]);
         Assert.Equal(named ? """{"contact":"1001","send":"linkedin-1001"}""" : """{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
         Assert.Empty(account.Sent);

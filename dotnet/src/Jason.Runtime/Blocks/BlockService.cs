@@ -151,6 +151,7 @@ public sealed class BlockService(JasonDbContext db, JournalWriter journal, TimeP
             block.BindingIdentity,
             block.Scope,
             block.SenderExternalId,
+            block.Channel,
             block.Reason,
             block.Link,
             WorkItemMapper.Utc(block.ClearsAt),

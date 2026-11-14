@@ -906,6 +906,9 @@ public class WorkItemCommandsTests
         """{"scope":"sender","sender_external_id":"mbx_1042","reason":"limit","link":"https://app.example.com/mailboxes/1042","clears_at":"2026-10-25T00:00:00Z"}""",
         "Blocked:      sender mbx_1042 | limit | https://app.example.com/mailboxes/1042 | clears 2026-10-25 00:00:00 UTC")]
     [InlineData(
+        """{"scope":"sender","sender_external_id":"12","channel":"linkedin","reason":"limit"}""",
+        "Blocked:      sender 12 on linkedin | limit")]
+    [InlineData(
         """{"scope":"account","reason":"other"}""",
         "Blocked:      account | other")]
     public async Task Human_mode_says_what_a_provider_block_holds_under_the_last_error(string block, string expected)

@@ -194,9 +194,11 @@ public sealed class Claimer(
             }
 
             // Held by a provider block, whether the twenty-sixth check said so or a person released work the block still
-            // holds: the item waits on the block, with no attempt, unless it is the block's trial.
+            // holds: the item waits on the block, with no attempt, unless it is the block's trial. An item let through as
+            // the trial of its sender's block on every channel that its channel's block now holds moves onto that block
+            // with no call, and the block on every channel has spent no trial on it.
             if (verdict is { Block: { } block } && (released is not null || verdict.Code == AttemptErrors.ProviderBlocked)
-                && !await TrialAsync(db, block, item, now, ct).ConfigureAwait(false))
+                && (Moved(facts?.Blocks, block, item) || !await TrialAsync(db, block, item, now, ct).ConfigureAwait(false)))
             {
                 outcomes.Park(db, item, attempt: null, block, ProviderBlocks.HeldError(item.Operation!, block), Actors.Dispatcher);
                 await ProviderBlocks.SayBlockedAsync(db, journal, item, block, attempt: null, ct).ConfigureAwait(false);
@@ -733,6 +735,25 @@ public sealed class Claimer(
         }
 
         return preview;
+    }
+
+    /// <summary>
+    /// Whether this item was let through as the trial of its sender's block on every channel, and is now held by that
+    /// sender's block on its own channel, which governs the channel: the block on every channel then names no trial, its
+    /// next one as due as it was, so the resume step draws another of its items, and the item parks on its channel's block.
+    /// </summary>
+    private static bool Moved(IReadOnlyList<ProviderBlock>? open, ProviderBlock covering, WorkItem item)
+    {
+        var everyChannel = open?.FirstOrDefault(candidate => candidate.Status == ProviderBlockStatus.Open
+            && candidate.TrialWorkItemId == item.Id
+            && ProviderBlocks.OneChannelOf(covering, candidate));
+        if (everyChannel is null)
+        {
+            return false;
+        }
+
+        everyChannel.TrialWorkItemId = null;
+        return true;
     }
 
     /// <summary>

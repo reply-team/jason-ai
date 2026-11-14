@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "one LinkedIn account reached its weekly allowance, and the block says the channel, since the provider numbers its mailboxes and its LinkedIn accounts apart",
+  "value": { "scope": "sender", "sender_external_id": "1042", "channel": "linkedin", "reason": "limit" },
+  "expect": "valid"
+}

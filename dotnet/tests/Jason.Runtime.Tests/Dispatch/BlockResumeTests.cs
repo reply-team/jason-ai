@@ -375,6 +375,129 @@ public class BlockResumeTests
     }
 
     /// <summary>
+    /// A sender's block on every channel and its block on one channel each hold trials of their own, neither waiting for
+    /// the other. With both open and only email work parked, the block on every channel draws none, since the email block
+    /// governs the email work it holds, and the email block's trial is drawn from that work and its own alike, as an
+    /// account's is drawn from its senders' blocks: here the oldest, parked on the block on every channel before the email
+    /// block opened. The email block's own item stays parked.
+    /// </summary>
+    [Fact]
+    public async Task A_senders_email_blocks_trial_is_drawn_from_its_own_work_and_the_email_work_its_block_on_every_channel_holds()
+    {
+        using var harness = new DispatchHarness(Noon);
+        int everywhere;
+        int mailbox;
+        string onMailbox;
+        string onEverywhere;
+        await using (var db = harness.Open())
+        {
+            var campaign = WorkItemFactory.NewCampaign(now: Noon);
+            db.Campaigns.Add(campaign);
+            var every = NewBlock(db, campaign, Noon, ProviderBlockScope.Sender, "12");
+            var mail = NewBlock(db, campaign, Noon, ProviderBlockScope.Sender, "12", channel: "email");
+            onEverywhere = OnChannel(BlockRows.Parked(db, campaign, every, Noon), "12", "email").PublicId;
+            onMailbox = OnChannel(BlockRows.Parked(db, campaign, mail, Noon.AddMinutes(1)), "12", "email").PublicId;
+            await db.SaveChangesAsync(Ct);
+            (everywhere, mailbox) = (every.Id, mail.Id);
+        }
+
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+
+        await using var read = harness.Open();
+        var rows = await read.ProviderBlocks.AsNoTracking().Include(b => b.TrialWorkItem)
+            .Where(b => b.Id == everywhere || b.Id == mailbox).ToDictionaryAsync(b => b.Id, Ct);
+        Assert.True(rows[mailbox].TrialWorkItem?.PublicId == onEverywhere, $"The email block's trial is {rows[mailbox].TrialWorkItem?.PublicId}, not {onEverywhere}.");
+        Assert.True(rows[everywhere].TrialWorkItemId is null, $"The block on every channel records trial {rows[everywhere].TrialWorkItemId}.");
+        await AssertWaitingAsync(harness, [onMailbox]);
+    }
+
+    /// <summary>
+    /// The email block draws only the email work the sender's block on every channel holds: with LinkedIn work parked there
+    /// too, older and of a higher priority, the block on every channel draws that, since LinkedIn has no block of its own,
+    /// and the email block draws the email work. Nor does it draw the email work another sender's block on every channel
+    /// holds.
+    /// </summary>
+    [Fact]
+    public async Task A_senders_email_block_draws_only_its_senders_email_work_from_the_block_on_every_channel()
+    {
+        using var harness = new DispatchHarness(Noon);
+        int everywhere;
+        int mailbox;
+        int otherSenders;
+        string linkedin;
+        string email;
+        string otherEmail;
+        await using (var db = harness.Open())
+        {
+            var campaign = WorkItemFactory.NewCampaign(now: Noon);
+            db.Campaigns.Add(campaign);
+            var every = NewBlock(db, campaign, Noon, ProviderBlockScope.Sender, "12");
+            var mail = NewBlock(db, campaign, Noon, ProviderBlockScope.Sender, "12", channel: "email");
+            var other = NewBlock(db, campaign, Noon.AddHours(1), ProviderBlockScope.Sender, "13");
+            otherEmail = OnChannel(BlockRows.Parked(db, campaign, other, Noon.AddMinutes(-1), priority: 9), "13", "email").PublicId;
+            linkedin = OnChannel(BlockRows.Parked(db, campaign, every, Noon, priority: 5), "12", "linkedin").PublicId;
+            email = OnChannel(BlockRows.Parked(db, campaign, every, Noon.AddMinutes(1)), "12", "email").PublicId;
+            await db.SaveChangesAsync(Ct);
+            (everywhere, mailbox, otherSenders) = (every.Id, mail.Id, other.Id);
+        }
+
+        Assert.Equal(2, await harness.ResumeAsync(Ct));
+
+        await using var read = harness.Open();
+        var rows = await read.ProviderBlocks.AsNoTracking().Include(b => b.TrialWorkItem).ToDictionaryAsync(b => b.Id, Ct);
+        Assert.True(rows[everywhere].TrialWorkItem?.PublicId == linkedin, $"The block on every channel's trial is {rows[everywhere].TrialWorkItem?.PublicId}, not {linkedin}.");
+        Assert.True(rows[mailbox].TrialWorkItem?.PublicId == email, $"The email block's trial is {rows[mailbox].TrialWorkItem?.PublicId}, not {email}.");
+        Assert.Null(rows[otherSenders].TrialWorkItemId);
+        await AssertWaitingAsync(harness, [otherEmail]);
+    }
+
+    /// <summary>
+    /// The trial of a sender's block on every channel is drawn among the work it holds whose channel has no open block of
+    /// that sender: with its LinkedIn block open, the LinkedIn work parked on the block on every channel is passed over,
+    /// older though it is, and the email work parked there is the trial.
+    /// </summary>
+    [Fact]
+    public async Task The_trial_of_a_senders_block_on_every_channel_is_drawn_among_work_whose_channel_has_no_block_of_its_own()
+    {
+        using var harness = new DispatchHarness(Noon);
+        int everywhere;
+        string email;
+        string linkedin;
+        await using (var db = harness.Open())
+        {
+            var campaign = WorkItemFactory.NewCampaign(now: Noon);
+            db.Campaigns.Add(campaign);
+            var every = NewBlock(db, campaign, Noon, ProviderBlockScope.Sender, "12");
+            NewBlock(db, campaign, Noon.AddHours(1), ProviderBlockScope.Sender, "12", channel: "linkedin");
+            linkedin = OnChannel(BlockRows.Parked(db, campaign, every, Noon, priority: 5), "12", "linkedin").PublicId;
+            email = OnChannel(BlockRows.Parked(db, campaign, every, Noon.AddMinutes(1)), "12", "email").PublicId;
+            await db.SaveChangesAsync(Ct);
+            everywhere = every.Id;
+        }
+
+        Assert.Equal(1, await harness.ResumeAsync(Ct));
+
+        await using var read = harness.Open();
+        var row = await read.ProviderBlocks.AsNoTracking().Include(b => b.TrialWorkItem).SingleAsync(b => b.Id == everywhere, Ct);
+        Assert.True(row.TrialWorkItem?.PublicId == email, $"The trial of the block on every channel is {row.TrialWorkItem?.PublicId}, not {email}.");
+        await AssertWaitingAsync(harness, [linkedin]);
+    }
+
+    /// <summary>The item's input names <paramref name="sender"/> on <paramref name="channel"/>, as a send's does.</summary>
+    private static WorkItem OnChannel(WorkItem item, string sender, string channel)
+    {
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = channel,
+                ["sender"] = new JsonObject { ["external_id"] = sender },
+            },
+        };
+        return item;
+    }
+
+    /// <summary>
     /// The trial query reads the due blocks by the index of the blocks by status and trial moment, an account's open sender
     /// blocks by the index of one open block per sender, each block's open waits by the index of the waits by block and
     /// status, and every other row by its key: nothing scanned. Pinned by the plan,
@@ -569,8 +692,11 @@ public class BlockResumeTests
     /// The plan the trial query must keep: the due open blocks by the index of the blocks by status and trial moment, each
     /// one's account block by the index of one open block per account, its trial item and that item's campaign by their
     /// keys, the blocks its trial is drawn from by key and, for an account, its senders' open blocks by the index of one
-    /// open block per sender, their open waits by the index of the waits by block and status, and each wait's item and
-    /// campaign by their keys. Nothing scanned but the temporary order of one block's candidates.
+    /// open block per sender and, for a sender's block on one channel, that sender's open block on every channel by the
+    /// same index, all four of its columns, their open waits by the index of the waits by block and status, each wait's
+    /// item and campaign by their keys, and, for a sender's block on every channel, that sender's open block on the item's
+    /// channel by the index of one open block per sender, all four of its columns. Nothing scanned but the temporary order
+    /// of one block's candidates.
     /// </summary>
     internal static void AssertTrialPlan(IReadOnlyList<string> plan)
     {
@@ -582,6 +708,8 @@ public class BlockResumeTests
                 "SEARCH a USING COVERING INDEX ix_provider_blocks_one_open_per_account (plugin_id=? AND binding_identity=?)",
                 "SEARCH b USING INDEX ix_provider_blocks_status_next_trial_at (status=? AND next_trial_at<?)",
                 "SEARCH c USING INTEGER PRIMARY KEY (rowid=?)",
+                "SEARCH e USING COVERING INDEX ix_provider_blocks_one_open_per_sender (plugin_id=? AND binding_identity=? AND sender_external_id=? AND channel=?)",
+                "SEARCH h USING COVERING INDEX ix_provider_blocks_one_open_per_sender (plugin_id=? AND binding_identity=? AND sender_external_id=? AND channel=?)",
                 "SEARCH h USING COVERING INDEX ix_provider_blocks_one_open_per_sender (plugin_id=? AND binding_identity=?)",
                 "SEARCH h USING INTEGER PRIMARY KEY (rowid=?)",
                 "SEARCH t USING INTEGER PRIMARY KEY (rowid=?)",
@@ -645,13 +773,14 @@ public class BlockResumeTests
         DateTime nextTrialAt,
         ProviderBlockScope scope = ProviderBlockScope.Account,
         string? sender = null,
-        string binding = BlockRows.Binding)
+        string binding = BlockRows.Binding,
+        string? channel = null)
     {
         var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
         opener.Status = WorkItemStatus.Failed;
         opener.FinishedAt = Noon;
         db.WorkItems.Add(opener);
-        var block = BlockRows.Block(opener, Noon, nextTrialAt, scope, sender, binding);
+        var block = BlockRows.Block(opener, Noon, nextTrialAt, scope, sender, binding, channel: channel);
         db.ProviderBlocks.Add(block);
         return block;
     }
