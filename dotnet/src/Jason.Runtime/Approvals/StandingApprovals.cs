@@ -594,7 +594,8 @@ public static class StandingApprovals
 
     /// <summary>
     /// The answer for work <paramref name="cover"/> would release but something holds for the person: not covered, saying
-    /// <paramref name="why"/> — <see cref="Why.Doubted"/> or <see cref="Why.SentFromChat"/> — beside the facts the cover
+    /// <paramref name="why"/> — <see cref="Why.Doubted"/>, <see cref="Why.SentFromChat"/> or <see cref="Why.DailyCeiling"/> —
+    /// beside the facts the cover
     /// names, the verdict and its category for a reply.
     /// </summary>
     internal static Answer Held(Cover cover, string why)

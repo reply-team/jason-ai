@@ -2156,10 +2156,11 @@ public partial class ClaimerTests
             ISuppressionCheck? register = null,
             PatternTiming? timing = null,
             Func<string, RouteSnapshot>? routes = null,
-            IReadOnlyList<LoadedPlugin>? others = null)
+            IReadOnlyList<LoadedPlugin>? others = null,
+            DateTime? at = null)
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
-            var clock = new FixedClock(Noon);
+            var clock = new FixedClock(at ?? Noon);
             var settings = TestOptions.Settings(dispatcher);
             var journal = new JournalWriter(clock);
             var plugins = new PluginRegistry(clock);

@@ -7,6 +7,8 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Plugins;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Dispatch;
@@ -258,6 +260,47 @@ public partial class ClaimerTests
         var approval = await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItem!.PublicId == send.Id, Ct);
         Assert.Equal(parks, approval.Reason);
         Assert.False(approval.Preview.ContainsKey("daily_ceiling"));
+    }
+
+    /// <summary>
+    /// A send parked at the ceiling is the person's from then on: the next UTC day, when the campaign's count starts again
+    /// from nothing, a scan leaves it pending, whether it still waits or something let it back into the queue with the
+    /// question open, and nothing is released.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Ceiling_ASendParkedAtIt_StaysThePersonsTheNextDay(bool queuedAgain)
+    {
+        using var harness = ModeHarness();
+        harness.Sending.CurrentValue = new SendingOptions { AutomaticMaxPerDay = 1 };
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, "automatic");
+        await ReleasesAsync(db, reading.Campaign, 1, Noon.AddHours(-1));
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        await CriticPassAsync(db, reading, send.Id, send.ReviewHash);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        if (queuedAgain)
+        {
+            await db.WorkItems.Where(w => w.PublicId == send.Id).ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkItemStatus.Created), Ct);
+        }
+
+        db.ChangeTracker.Clear();
+        using var tomorrow = new Harness(
+            plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "social_invitation.send"]),
+            route: new Route(Provider, null, null),
+            at: Noon.AddDays(1));
+        tomorrow.Sending.CurrentValue = new SendingOptions { AutomaticMaxPerDay = 1 };
+
+        Assert.Empty(await tomorrow.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItem!.PublicId == send.Id, Ct);
+        Assert.Equal((ApprovalStatus.Pending, "daily_ceiling"), (approval.Status, approval.Reason));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == send.Id, Ct)).Status);
+        Assert.Equal(0, await fresh.Journal.CountAsync(e => e.Kind == "approval_automatic_applied", Ct));
     }
 
     /// <summary>The card's sentence for a send parked at the ceiling, as a person reads it.</summary>

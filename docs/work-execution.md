@@ -279,7 +279,7 @@ date and expires by it like any waiting item, and a held manager check-in is sti
 a campaign releases in a UTC day without asking a person. Where the automatic mode would release a send, the claim first
 counts, in the same transaction, the sends the mode released from the item's campaign since 00:00Z: the rows born
 approved with the reason `automatic_mode` and decided since then, whatever became of each. A retry runs under the row it
-was released under and is not counted again, and a person's approval writes another reason and counts for nothing. At
+was released under and is not counted again, and a send a person approves runs under a row of another reason and counts for nothing. At
 the ceiling the send parks for the person instead: its row's reason is `daily_ceiling`, and its preview carries
 `daily_ceiling` with three numbers only, `limit`, `released` and `since`, the moment the count began. The ceiling never
 slips, so a standing approval that covers the send does not let it go either, and the standing approval's answer in the
