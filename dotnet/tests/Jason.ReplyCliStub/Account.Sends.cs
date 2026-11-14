@@ -467,7 +467,8 @@ internal static partial class Account
     /// Reply's refusal of an email from a mailbox a test planted at a limit Reply counts, or null. An email Reply dispatches
     /// now under a key (<paramref name="recorded"/>) has its record made before the limits are counted, so the refusal names
     /// that record, failed under Reply's code, and keeps no key with it: the same request under the same key, once the limit
-    /// has lifted, makes a record of its own. Any other email is refused before any record is made.
+    /// has lifted, makes a record of its own. Any other email is refused before any record is made. A mailbox planted at a
+    /// limit not modelled here is the test's own mistake, refused as usage.
     /// </summary>
     private static Ending? MailboxAtLimit(string root, long accountId, int contactId, bool recorded, JsonObject ids)
     {
@@ -476,7 +477,13 @@ internal static partial class Account
             return null;
         }
 
-        var (code, detail) = MailboxLimits[planted];
+        if (!MailboxLimits.TryGetValue(planted, out var limit))
+        {
+            return Refused(
+                "usage.limit", $"A mailbox is planted at its daily or active_contacts limit, never at '{planted}'.", exit: 2);
+        }
+
+        var (code, detail) = limit;
         JsonObject? details = null;
         if (recorded)
         {

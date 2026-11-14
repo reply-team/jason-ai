@@ -1173,6 +1173,24 @@ public class ReplyStubDirectSendTests
         Assert.Single(account.Sent);
     }
 
+    /// <summary>
+    /// A mailbox planted at a limit the stub does not model, LinkedIn's weekly allowance say, is the test's own mistake: the
+    /// stub says so as a usage refusal naming the limits it models, and nothing is sent.
+    /// </summary>
+    [Fact]
+    public async Task A_mailbox_planted_at_a_limit_the_stub_does_not_model_is_refused_as_usage()
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: "weekly");
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), """{"subject":"Tuesday","body":"Hi"}""", Ct);
+
+        var error = Error(said);
+        Assert.Equal((2, "usage.limit"), (exit, (string?)error["code"]));
+        Assert.Contains("active_contacts", (string?)error["title"], StringComparison.Ordinal);
+        Assert.Empty(account.Sent);
+        Assert.Empty(account.DirectSends);
+    }
+
     /// <summary>A send Reply refused keeps no key: the same request under it, made again once it can go, goes.</summary>
     [Fact]
     public async Task A_refused_send_keeps_no_key()

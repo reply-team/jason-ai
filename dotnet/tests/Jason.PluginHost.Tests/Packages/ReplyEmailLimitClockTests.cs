@@ -9,8 +9,8 @@ namespace Jason.PluginHost.Tests.Packages;
 /// The moment the Reply package says a mailbox's daily limit clears, on a clock that does not move. The plugin host reads the
 /// machine's clock and offers no other, so the package's own error table is run here, beside the engine it runs in, in an
 /// engine of its own whose clock is pinned, with a stand-in for the one host function it calls, <c>host.fail</c>, that hands
-/// back what it is given. The instants are in the middle of a month that changes nothing at its end, and UTC keeps no
-/// daylight saving time.
+/// back what it is given. The instants are in the middle of a month that changes nothing at its end, but for one row put at
+/// the turn of a year on purpose, and UTC keeps no daylight saving time.
 /// </summary>
 public class ReplyEmailLimitClockTests
 {
@@ -25,9 +25,10 @@ public class ReplyEmailLimitClockTests
     [InlineData("2026-11-18T13:45:10.250Z", "2026-11-19T00:00:00.000Z")]
     [InlineData("2026-11-18T00:00:00.000Z", "2026-11-19T00:00:00.000Z")]
     [InlineData("2026-11-18T23:59:59.999Z", "2026-11-19T00:00:00.000Z")]
+    [InlineData("2026-12-31T23:59:59.000Z", "2027-01-01T00:00:00.000Z")]
     public void The_daily_limit_clears_at_the_next_midnight_utc(string now, string clears)
     {
-        var block = BlockAt(now, "rate_limited", 429, "contact.dailyLimitReached", retryAfter: null);
+        var block = BlockAt(now, "rate_limited", 429, "contact.dailyLimitReached", wait: null);
 
         Assert.Equal(
             $$"""{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit","clears_at":"{{clears}}"}""",
@@ -40,10 +41,28 @@ public class ReplyEmailLimitClockTests
     [InlineData("contact.activeContactsLimitReached")]
     public void A_wait_reply_names_comes_before_the_midnight(string replyCode)
     {
-        var block = BlockAt("2026-11-18T13:45:10.250Z", "rate_limited", 429, replyCode, retryAfter: 600);
+        var block = BlockAt("2026-11-18T13:45:10.250Z", "rate_limited", 429, replyCode, wait: "600");
 
         Assert.Equal(
             """{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit","clears_at":"2026-11-18T13:55:10.250Z"}""",
+            block);
+    }
+
+    /// <summary>
+    /// A wait that is not a number of seconds between none and a year is no wait the block can take: the daily limit's block
+    /// clears at the next midnight UTC, as it does when no wait is named at all.
+    /// </summary>
+    [Theory]
+    [InlineData("-5")]
+    [InlineData("'600'")]
+    [InlineData("31536001")]
+    [InlineData("NaN")]
+    public void A_wait_the_block_cannot_take_leaves_the_daily_limit_to_the_midnight(string wait)
+    {
+        var block = BlockAt("2026-11-18T13:45:10.250Z", "rate_limited", 429, "contact.dailyLimitReached", wait);
+
+        Assert.Equal(
+            """{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit","clears_at":"2026-11-19T00:00:00.000Z"}""",
             block);
     }
 
@@ -51,7 +70,7 @@ public class ReplyEmailLimitClockTests
     [Fact]
     public void The_active_contacts_block_names_no_moment_without_a_wait()
     {
-        var block = BlockAt("2026-11-18T13:45:10.250Z", "email.limit_reached", 403, "contact.activeContactsLimitReached", retryAfter: null);
+        var block = BlockAt("2026-11-18T13:45:10.250Z", "email.limit_reached", 403, "contact.activeContactsLimitReached", wait: null);
 
         Assert.Equal("""{"scope":"sender","sender_external_id":"12","channel":"email","reason":"limit"}""", block);
     }
@@ -59,9 +78,10 @@ public class ReplyEmailLimitClockTests
     /// <summary>
     /// The block the package's own table makes of an email send refused under <paramref name="cliCode"/> at
     /// <paramref name="status"/> with Reply's <paramref name="replyCode"/>, from mailbox 12, with the clock at
-    /// <paramref name="now"/>: the row <c>rowOf</c> reads, ended by <c>fail</c>.
+    /// <paramref name="now"/> and the CLI's <c>retry_after</c> the JavaScript value <paramref name="wait"/> spells, or none:
+    /// the row <c>rowOf</c> reads, ended by <c>fail</c>.
     /// </summary>
-    private static string BlockAt(string now, string cliCode, int status, string replyCode, int? retryAfter)
+    private static string BlockAt(string now, string cliCode, int status, string replyCode, string? wait)
     {
         var at = DateTimeOffset.Parse(now, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
         using var engine = new Engine(options =>
@@ -74,12 +94,11 @@ public class ReplyEmailLimitClockTests
         engine.SetValue("errors", engine.Modules.Import("./modules/errors.js"));
 
         var said = new JsonObject { ["code"] = cliCode, ["status"] = status, ["reply_code"] = replyCode };
-        var wait = retryAfter is { } seconds ? seconds.ToString(CultureInfo.InvariantCulture) : "undefined";
         var written = engine.Evaluate(
             $$"""
             (function () {
               var said = {{said.ToJsonString()}};
-              var observed = { row: errors.rowOf("message.send", said), sender: "12", channel: "email", retry_after: {{wait}} };
+              var observed = { row: errors.rowOf("message.send", said), sender: "12", channel: "email", retry_after: {{wait ?? "undefined"}} };
               try {
                 errors.fail("message.send", observed, undefined);
               } catch (failure) {
