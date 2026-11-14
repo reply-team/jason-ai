@@ -302,6 +302,15 @@ public static class DomainErrors
             $"This request comes from inside attempt `{attempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
 
     /// <summary>
+    /// Inside a run, a patch of a send's input that names anybody but the run: whoever writes the text is one of its
+    /// authors, and a review is told apart from them by the name the edit was made under.
+    /// </summary>
+    public static ForbiddenException UpdatedAsAnotherInsideARun(string attempt) =>
+        new(
+            "updated_as_another_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. A send to a person has its input written there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
+
+    /// <summary>
     /// A send a person decides each one of, created from inside a run under a name other than that run's: a person, another
     /// attempt, or nobody. The run's own name is what tells a review of the send apart from its author, so the CLI's
     /// default, the attempt itself, is the only actor such a create takes there.

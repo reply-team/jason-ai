@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Json;
 using Jason.Runtime.Api;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -88,21 +89,95 @@ public class SendCreatedInsideARunTests
         Assert.Equal(new ActorRef(ActorType.Human, "x"), made.CreatedBy);
     }
 
+    /// <summary>
+    /// The same door on an edit: inside a run, a patch that writes a send's <c>input</c> is the run's own, since whoever
+    /// writes the text is one of its authors and a review is told apart from them. Named as anybody else — a person,
+    /// another attempt, nobody — it is refused <c>updated_as_another_inside_a_run</c> and nothing is written; a patch that
+    /// leaves the input alone is not this rule's.
+    /// </summary>
+    [Theory]
+    [InlineData("a person", true, false)]
+    [InlineData("another attempt", true, false)]
+    [InlineData("nobody", true, false)]
+    [InlineData("the run itself", true, true)]
+    [InlineData("a person", false, true)]
+    public async Task Inside_a_run_a_send_s_input_is_written_under_the_run_s_own_name(string named, bool input, bool accepted)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var send = await Service(db, run: null).CreateAsync(Send(seed, Run(seed.Run)), Ct);
+        ActorRef? actor = named switch
+        {
+            "a person" => new ActorRef(ActorType.Human, "x"),
+            "another attempt" => Run(seed.Other),
+            "nobody" => null,
+            _ => Run(seed.Run),
+        };
+        var patch = new WorkItemUpdateRequest(
+            send.Id,
+            input ? new JsonObject { [WorkItemService.InputKey] = Input("Friday at 10 works.") } : null,
+            null,
+            default,
+            default,
+            input ? default : Optional<int>.Of(10),
+            default,
+            default,
+            default,
+            default,
+            default,
+            actor,
+            Reason: null);
+
+        if (accepted)
+        {
+            await Service(db, seed.Run).UpdateAsync(patch, Ct);
+            return;
+        }
+
+        var refused = await Assert.ThrowsAsync<ForbiddenException>(() => Service(db, seed.Run).UpdateAsync(patch, Ct));
+        Assert.Equal("updated_as_another_inside_a_run", refused.Code);
+        Assert.Equal(
+            $"This request comes from inside attempt `{seed.Run.PublicId}`. A send to a person has its input written there under that attempt's own name, so that a review can tell who wrote it: name attempt:{seed.Run.PublicId} as the actor, which the CLI does when --actor is left out.",
+            refused.Message);
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemContextUpdated).ToListAsync(Ct));
+    }
+
+    /// <summary>Outside a run a send's input is written by whoever the patch names, as before.</summary>
+    [Fact]
+    public async Task Outside_a_run_a_send_s_input_is_written_by_whoever_the_patch_names()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var send = await Service(db, run: null).CreateAsync(Send(seed, Run(seed.Run)), Ct);
+
+        await Service(db, run: null).UpdateAsync(
+            new WorkItemUpdateRequest(
+                send.Id, new JsonObject { [WorkItemService.InputKey] = Input("Friday at 10 works.") }, null,
+                default, default, default, default, default, default, default, default,
+                new ActorRef(ActorType.Human, "x"), Reason: null),
+            Ct);
+
+        var line = await db.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.WorkItemContextUpdated, Ct);
+        Assert.Equal((ActorType.Human, "x"), (line.ActorType, line.ActorId));
+    }
+
     private static ActorRef Run(Attempt attempt) => new(ActorType.Attempt, attempt.PublicId);
 
     private static WorkItemCreateRequest Send(Seed seed, ActorRef? actor) =>
         new(
             seed.Campaign.PublicId, WorkItemKind.ProviderOp, null, "message.send", seed.Contact.PublicId, null, null, null, null, null, null, null,
-            new JsonObject
-            {
-                [WorkItemService.InputKey] = new JsonObject
-                {
-                    ["channel"] = "email",
-                    ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
-                    ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Thursday", ["body"] = "Thursday at 10 works." },
-                },
-            },
+            new JsonObject { [WorkItemService.InputKey] = Input("Thursday at 10 works.") },
             null, actor, null);
+
+    private static JsonObject Input(string body) => new()
+    {
+        ["channel"] = "email",
+        ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+        ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Thursday", ["body"] = body },
+    };
 
     private static WorkItemService Service(JasonDbContext db, Attempt? run)
     {

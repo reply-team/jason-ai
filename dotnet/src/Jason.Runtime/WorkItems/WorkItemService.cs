@@ -439,6 +439,17 @@ public sealed class WorkItemService(
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
         var item = await LoadAsync(db, request.WorkItemId, cancellationToken).ConfigureAwait(false);
+
+        // The same door as at create: inside a run, whoever writes a send's text is the run, since a review is told apart
+        // from every author of the text by the name each wrote it under.
+        if (run?.AttemptId is { } header
+            && ReviewSubject.IsReviewable(item)
+            && (request.Set?.ContainsKey(InputKey) == true || request.Unset?.Contains(InputKey, StringComparer.Ordinal) == true)
+            && !(actor.Type == ActorType.Attempt && string.Equals(actor.Id?.Trim(), header, StringComparison.Ordinal)))
+        {
+            throw DomainErrors.UpdatedAsAnotherInsideARun(header);
+        }
+
         if (WorkItemTransitions.Final.Contains(item.Status))
         {
             throw DomainErrors.WorkItemTerminal(item.PublicId, item.Status);
