@@ -39,6 +39,14 @@ Codex's version is read with `codex --version` before each chat turn on it, neve
 (`codexFloor`), the first whose `exec` takes `--ignore-user-config`, or one whose version cannot be read, has the turn
 refused before Codex starts, with a sentence that says to update Codex.
 
+Connect names the person's own MCP servers under Claude Code and Codex found here (`src/own-servers.ts`): the keys of the
+top-level `mcpServers` of Claude Code's `.claude.json` (in `CLAUDE_CONFIG_DIR` where that is set, else in the home), and the
+servers of Codex's `config.toml` (in `CODEX_HOME`, else `~/.codex`) less one set `enabled = false`, read by a narrow reader
+of its own rather than a TOML package. Only the main process reads the files, whole, and only the names leave them, each
+cut at forty characters, on `setup.status()`'s host. A file that is not there lists nothing; one that cannot be read or
+parsed lists nothing either and is logged as `own_servers_unread` with the program and the kind alone. No host command is
+run to list them: `claude mcp list` connects to the servers, and `codex mcp list` can reach the network.
+
 On Windows every Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own choice of
 sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
 Naming it proves nothing (OpenAI's page says a fall to the unelevated sandbox can happen where the elevated one is not
