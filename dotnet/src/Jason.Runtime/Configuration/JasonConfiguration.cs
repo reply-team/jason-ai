@@ -48,6 +48,14 @@ public sealed record SettingsFileFailure(string ExceptionType, long? LineNumber,
         return new SettingsFileFailure(root.GetType().Name, null, null);
     }
 
+    /// <summary>
+    /// Where in the file the parser stopped, for a sentence a person reads: <c>at line 2, byte 3</c>, or null where there
+    /// is no position. The place alone, with no exception's type: the type is said in the log, where it is read.
+    /// </summary>
+    public string? Place() => LineNumber is { } line && BytePositionInLine is { } column
+        ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"at line {line}, byte {column}")
+        : null;
+
     /// <summary>The failure as a clause of a sentence: <c>JsonException at line 2, byte 3</c>, or the type alone.</summary>
     public string Describe() => LineNumber is { } line && BytePositionInLine is { } column
         ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{ExceptionType} at line {line}, byte {column}")
