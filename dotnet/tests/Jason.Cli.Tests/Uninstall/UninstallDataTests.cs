@@ -258,6 +258,58 @@ public class UninstallDataTests
     }
 
     /// <summary>
+    /// <c>setup/</c> is Jason's only where Jason says it made it — a layout stamp, or the record of a move under way. With
+    /// neither, a <c>setup</c> folder in the data directory is a person's: the purge keeps it and names it as kept, and
+    /// neither the question nor the dry run lists it as Jason's.
+    /// </summary>
+    [Fact]
+    public async Task With_no_stamp_and_no_record_of_a_move_a_setup_folder_is_the_person_s_and_is_kept()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var mine = Path.Combine(dir.Paths.Root, "setup", "notes.txt");
+        Write(mine, "a folder of my own, not Jason's");
+
+        var asked = new StringWriter();
+        await UninstallCommand.RunAsync(
+            Machine(dir, asked, new RecordingRemover { ReallyRemoves = true }) with { In = new StringReader("n\n") },
+            new UninstallOptions(Human: true, DryRun: false, PurgeData: true, Yes: false, Force: false),
+            Ct);
+        var dry = new StringWriter();
+        await UninstallCommand.RunAsync(
+            Machine(dir, dry, new RecordingRemover { ReallyRemoves = true }),
+            new UninstallOptions(Human: true, DryRun: true, PurgeData: true, Yes: false, Force: false),
+            Ct);
+        var (exit, report) = await RunAsync(dir, purgeData: true, yes: true);
+
+        var question = asked.ToString();
+        var keeps = question.IndexOf("and to keep what Jason did not put there:", StringComparison.Ordinal);
+        Assert.True(keeps > 0, question);
+        Assert.DoesNotContain("  setup/", question[..keeps], StringComparison.Ordinal);
+        Assert.Contains("  setup/", question[keeps..], StringComparison.Ordinal);
+        Assert.DoesNotContain("setup", dry.ToString(), StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("a folder of my own, not Jason's", File.ReadAllText(mine));
+        Assert.Contains(report.Kept, line => line.Contains("'setup'", StringComparison.Ordinal));
+        Assert.False(File.Exists(dir.Paths.DatabaseFile), "the purge kept Jason's own parts.");
+    }
+
+    /// <summary>The record of a move under way says Jason made <c>setup/</c> as surely as a stamp does: the purge takes it.</summary>
+    [Fact]
+    public async Task A_record_of_a_move_under_way_makes_setup_Jason_s_and_the_purge_removes_it()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        File.WriteAllText(Path.Combine(dir.Paths.Root, "layout-migration.json"), "{}");
+        Write(Path.Combine(dir.Paths.Root, "setup", "plugins", "a.plugin", "plugin.yaml"), "id: a.plugin");
+
+        var (exit, _) = await RunAsync(dir, purgeData: true, yes: true);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.False(Directory.Exists(Path.Combine(dir.Paths.Root, "setup")), "the purge left the setup folder a move made.");
+    }
+
+    /// <summary>
     /// The layout stamp and the folder layout 2 keeps a person's parts in are Jason's in every layout: a purge by a build
     /// that runs layout 1 removes a <c>setup/</c> a later build made, and a stamp that says layout 1.
     /// </summary>
