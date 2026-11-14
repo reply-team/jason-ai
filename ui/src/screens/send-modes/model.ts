@@ -1,7 +1,7 @@
 import type { Api } from '../../api/client';
-import type { ActorRef } from '../../api/types';
+import type { ActorRef, ModeInForce } from '../../api/types';
 import { t } from '../../platform/i18n';
-import type { PreferenceItem } from '../settings/voice-model';
+import { senderKey, toneKey, valueOf, type PreferenceItem } from '../settings/voice-model';
 
 // What the send-mode words and acts of the page share: the two preferences, the two modes, where a mode comes from,
 // and the doubts an approval's preview carries. The words themselves are in the locale table.
@@ -67,3 +67,30 @@ export function doubtsOf(preview: Record<string, unknown>): Doubt[] {
         ];
     });
 }
+
+/** The mode word a stored send-mode preference holds, or null for one unset, which the runtime treats as every message. */
+export function storedMode(items: readonly PreferenceItem[], kind: Kind): string | null {
+    const value = valueOf(items, keyOf(kind));
+    return isObject(value) && typeof value['mode'] === 'string' ? value['mode'] : null;
+}
+
+/**
+ * Whether the reminder about name and tone is due: while sends wait for the person, never. It is due only while a mode
+ * in force goes automatically, the installation's own or that of the agent in front of the person, and the name or the
+ * tone is unset; once both are set it is not.
+ */
+export function remindsOfVoice(
+    items: readonly PreferenceItem[],
+    agent: { cold: ModeInForce; warm: ModeInForce } | undefined,
+): boolean {
+    if (!voiceUnset(items)) return false;
+    return kinds.some((kind) => storedMode(items, kind) === 'automatic' || agent?.[kind].mode === 'automatic');
+}
+
+/** Whether the name or the tone, which messages are written from, is unset. */
+export const voiceUnset = (items: readonly PreferenceItem[]): boolean =>
+    valueOf(items, senderKey) === null || valueOf(items, toneKey) === null;
+
+/** Whether the installation's own answers say enough without the agent: a kind of it goes automatically. */
+export const installationAutomatic = (items: readonly PreferenceItem[]): boolean =>
+    kinds.some((kind) => storedMode(items, kind) === 'automatic');

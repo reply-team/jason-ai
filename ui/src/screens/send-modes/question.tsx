@@ -86,7 +86,8 @@ export function SendModesQuestion({ unset, approvalId }: Props) {
                     {t('modes.question.refused', { why: refused })}
                 </p>
             )}
-            {open.some((kind) => chosen[kind] === 'automatic') && (
+            {/* A recommendation once a kind is on automatically, never a gate: the mode is on, nothing waits on it. */}
+            {asked.some((kind) => kept[kind] === 'automatic') && (
                 <p className="hint">
                     {t('modes.question.voice')}{' '}
                     <button className="btn ghost" type="button" onClick={openSettings}>

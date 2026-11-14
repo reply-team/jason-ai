@@ -259,12 +259,16 @@ import routeResolveGlobalDefault from '../../../docs/api/fixtures/route.resolve/
 import routeResolveNoRoute from '../../../docs/api/fixtures/route.resolve/no-route.json';
 import routeResolveOwnRoute from '../../../docs/api/fixtures/route.resolve/own-route.json';
 import routeResolveUnroutedFirst from '../../../docs/api/fixtures/route.resolve/unrouted-first.json';
+import preferenceListModeAutomaticVoiceUnset from '../../../docs/api/fixtures/preference.list/mode-automatic-voice-unset.json';
+import preferenceListModesEveryMessage from '../../../docs/api/fixtures/preference.list/modes-every-message.json';
 import preferenceListNone from '../../../docs/api/fixtures/preference.list/none.json';
 import preferenceListSet from '../../../docs/api/fixtures/preference.list/set.json';
 import preferenceSetSendModeCold from '../../../docs/api/fixtures/preference.set/send-mode-cold.json';
+import preferenceSetSendModeColdEveryMessage from '../../../docs/api/fixtures/preference.set/send-mode-cold-every-message.json';
 import preferenceSetSendModeWarm from '../../../docs/api/fixtures/preference.set/send-mode-warm.json';
 import preferenceSetSender from '../../../docs/api/fixtures/preference.set/sender.json';
 import preferenceSetTone from '../../../docs/api/fixtures/preference.set/tone.json';
+import preferenceUnsetSendModeCold from '../../../docs/api/fixtures/preference.unset/send-mode-cold.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
 import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
 import systemInfoWithUi from '../../../docs/api/fixtures/system.info/with-ui.json';
@@ -384,7 +388,7 @@ import personWorkitemGetResearcherFindingSecond from '../../../docs/api/fixtures
 import personWorkitemListResearcherFindings from '../../../docs/api/fixtures/workitem.list/researcher-findings.json';
 import personWorkitemListResearcherFindingsTwo from '../../../docs/api/fixtures/workitem.list/researcher-findings-two.json';
 
-import type { PreferenceItem, PreferenceSetRequest } from '../screens/settings/voice-model';
+import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
 export type Exchange<Req, Res> = { operation: string; case: string; request: Req; status: number; response: Res };
 
@@ -882,12 +886,28 @@ export const fixtures = {
     'route.resolve/no-route': routeResolveNoRoute satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
     'route.resolve/own-route': routeResolveOwnRoute satisfies Exchange<RouteResolveRequest, RouteResolution>,
     'route.resolve/unrouted-first': routeResolveUnroutedFirst satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
+    'preference.list/mode-automatic-voice-unset': preferenceListModeAutomaticVoiceUnset satisfies Exchange<
+        object,
+        Page<PreferenceItem>
+    >,
+    'preference.list/modes-every-message': preferenceListModesEveryMessage satisfies Exchange<
+        object,
+        Page<PreferenceItem>
+    >,
     'preference.list/none': preferenceListNone satisfies Exchange<object, Page<PreferenceItem>>,
     'preference.list/set': preferenceListSet satisfies Exchange<object, Page<PreferenceItem>>,
     'preference.set/send-mode-cold': preferenceSetSendModeCold satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
+    'preference.set/send-mode-cold-every-message': preferenceSetSendModeColdEveryMessage satisfies Exchange<
+        PreferenceSetRequest,
+        PreferenceItem
+    >,
     'preference.set/send-mode-warm': preferenceSetSendModeWarm satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.set/sender': preferenceSetSender satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.set/tone': preferenceSetTone satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
+    'preference.unset/send-mode-cold': preferenceUnsetSendModeCold satisfies Exchange<
+        PreferenceUnsetRequest,
+        PreferenceItem
+    >,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
     'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,

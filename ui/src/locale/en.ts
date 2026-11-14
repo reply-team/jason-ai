@@ -260,7 +260,7 @@ export const en = {
     'modes.question.remembered': 'Remembered.',
     'modes.question.refused': 'That did not go through: {why}',
     'modes.question.voice':
-        'Before messages go automatically, say who writes and how in Settings, under "Your name and tone".',
+        'Jason now writes in your name without your look. Saying who writes and how, in Settings under "Your name and tone", makes those messages err less.',
     'modes.settings.open': 'Open Settings',
     'modes.reminder':
         'Your name and tone are not set. Messages are written better with them: Settings, "Your name and tone".',

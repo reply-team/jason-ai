@@ -9,8 +9,15 @@ import { fixtures } from '../../test/fixtures';
 import { AgentSendModes } from './agent-modes';
 import { reminderKey } from './reminder';
 
-// The recordings that carry a person's act were made by Marta.
-const marta = () => new FakeApi('Marta');
+// The recordings that carry a person's act were made by Marta. A card reads the preferences and its agent for the
+// reminder about name and tone; unless a test says otherwise, every mode waits, so there is none.
+const marta = () =>
+    new FakeApi('Marta')
+        .answer('preference.list', 'preference.list/none')
+        .answer('campaign.get', 'campaign.get/details');
+const operations = (api: FakeApi) => api.calls.map((call) => call.operation);
+const voiceLine =
+    'Jason now writes in your name without your look. Saying who writes and how, in Settings under "Your name and tone", makes those messages err less.';
 
 const card = (name: 'approval.get/pending-with-preview' | 'approval.get/modes-chosen' | 'approval.get/with-doubts') =>
     structuredClone(fixtures[name].response) as unknown as Approval;
@@ -59,11 +66,13 @@ describe('the two-modes question on an approval card', () => {
         expect(groupOf('People who have replied')).toBeTruthy();
         // Nothing is chosen for the person and nothing is sent by looking at it.
         expect(remember().every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
-        expect(api.calls).toEqual([]);
+        // What the card reads is the reminder's, which says nothing here: every mode in force waits.
+        await waitFor(() => expect(operations(api)).toEqual(['preference.list', 'campaign.get']));
 
         fireEvent.click(radio('People who have not replied yet', 'Goes automatically'));
-        expect(api.calls).toEqual([]);
-        expect(screen.getByText(/say who writes and how in Settings, under "Your name and tone"/)).toBeTruthy();
+        expect(api.sent('preference.set')).toBeUndefined();
+        // Nothing is on yet, so nothing says it is.
+        expect(screen.queryByText(voiceLine)).toBeNull();
         fireEvent.click(remember()[0]!);
 
         await waitFor(() =>
@@ -74,7 +83,12 @@ describe('the two-modes question on an approval card', () => {
             value: { mode: 'automatic' },
             reason: "the person's answer",
         });
-        expect(screen.queryByText(/say who writes and how in Settings/)).toBeNull();
+        // The mode is on at once; the recommendation beside it asks nothing of the person.
+        const line = screen.getByText(voiceLine).closest('p')!;
+        expect(line.querySelectorAll('input, select, textarea')).toHaveLength(0);
+        expect(Array.from(line.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
+            'Open Settings',
+        ]);
 
         fireEvent.click(radio('People who have replied', 'Every message waits for you'));
         fireEvent.click(remember()[0]!);
@@ -86,24 +100,36 @@ describe('the two-modes question on an approval card', () => {
             value: { mode: 'every_message' },
             reason: "the person's answer",
         });
+        expect(screen.getByText(voiceLine)).toBeTruthy();
 
         // Approving never waited on the question.
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(onApprove).toHaveBeenCalledOnce();
     });
 
-    it('asks only the kind that is still unset', () => {
+    it('says nothing of name and tone when the choice remembered is that every message waits', async () => {
+        const api = marta().answer('preference.set', 'preference.set/send-mode-warm');
+        mount(api, card('approval.get/pending-with-preview'));
+        fireEvent.click(radio('People who have replied', 'Every message waits for you'));
+        fireEvent.click(remember()[1]!);
+        await screen.findByText('Remembered. People who have replied: Every message waits for you.');
+        expect(screen.queryByText(voiceLine)).toBeNull();
+    });
+
+    it('asks only the kind that is still unset', async () => {
         const approval = card('approval.get/pending-with-preview');
         approval.send_modes_unset = fixtures['approval.list/one-mode-unset'].response.items[0]!.send_modes_unset;
         mount(marta(), approval);
 
         expect(screen.getByRole('group', { name: 'People who have replied' })).toBeTruthy();
         expect(screen.queryByRole('group', { name: 'People who have not replied yet' })).toBeNull();
+        await act(async () => {});
     });
 
-    it('is not on a card whose modes are answered, and is not on a card already decided', () => {
+    it('is not on a card whose modes are answered, and is not on a card already decided', async () => {
         mount(marta().answer('preference.list', 'preference.list/set'), card('approval.get/modes-chosen'));
         expect(screen.queryByRole('heading', { name: 'How should messages go?' })).toBeNull();
+        await act(async () => {});
         cleanup();
         const decided = card('approval.get/pending-with-preview');
         decided.status = 'approved';
@@ -113,16 +139,29 @@ describe('the two-modes question on an approval card', () => {
 });
 
 describe('the quiet reminder about name and tone', () => {
-    it('shows once the modes are answered and the name or tone is unset, and hides for seven days', async () => {
+    const reminder = /Your name and tone are not set\./;
+
+    it('is not shown while both kinds were answered that every message waits', async () => {
+        const api = marta().answer('preference.list', 'preference.list/modes-every-message');
+        mount(api, card('approval.get/modes-chosen'));
+        await waitFor(() => expect(operations(api)).toEqual(['preference.list', 'campaign.get']));
+        await act(async () => {});
+        expect(screen.queryByText(reminder)).toBeNull();
+    });
+
+    it('shows while one kind goes automatically and no name is set, and hides for seven days', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-11-14T10:00:00Z'));
-        mount(marta().answer('preference.list', 'preference.list/none'), card('approval.get/modes-chosen'));
+        const api = marta().answer('preference.list', 'preference.list/mode-automatic-voice-unset');
+        mount(api, card('approval.get/modes-chosen'));
 
         const hide = await screen.findByRole('button', { name: 'Hide for 7 days' });
-        expect(screen.getByText(/Your name and tone are not set\./)).toBeTruthy();
+        expect(screen.getByText(reminder)).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Open Settings' })).toBeTruthy();
+        // The installation's own mode said enough: the agent is not read.
+        expect(operations(api)).toEqual(['preference.list']);
         fireEvent.click(hide);
-        expect(screen.queryByText(/Your name and tone are not set\./)).toBeNull();
+        expect(screen.queryByText(reminder)).toBeNull();
         expect(localStorage.getItem(reminderKey)).toBe(String(new Date('2026-11-21T10:00:00Z').getTime()));
 
         // Another card, six days on: still hidden, and the preferences are not even read.
@@ -130,21 +169,32 @@ describe('the quiet reminder about name and tone', () => {
         vi.setSystemTime(new Date('2026-11-20T10:00:00Z'));
         const quiet = marta();
         mount(quiet, card('approval.get/modes-chosen'));
-        expect(screen.queryByText(/Your name and tone are not set\./)).toBeNull();
+        expect(screen.queryByText(reminder)).toBeNull();
         expect(quiet.calls).toEqual([]);
 
         // Eight days on it is shown again.
         cleanup();
         vi.setSystemTime(new Date('2026-11-22T10:00:00Z'));
-        mount(marta().answer('preference.list', 'preference.list/none'), card('approval.get/modes-chosen'));
-        await screen.findByText(/Your name and tone are not set\./);
+        mount(
+            marta().answer('preference.list', 'preference.list/mode-automatic-voice-unset'),
+            card('approval.get/modes-chosen'),
+        );
+        await screen.findByText(reminder);
     });
 
-    it('is not shown when both are set', async () => {
+    it('shows while the agent in front goes automatically, though nothing is chosen for every agent', async () => {
+        const api = marta().answer('campaign.get', 'campaign.get/send-mode-override');
+        mount(api, card('approval.get/pending-with-preview'));
+        await screen.findByText(reminder);
+        expect(api.sent('campaign.get')).toEqual({ campaign_id: 'cmp_1' });
+    });
+
+    it('is not shown when both are set, though a mode goes automatically', async () => {
         const api = marta().answer('preference.list', 'preference.list/set');
         mount(api, card('approval.get/modes-chosen'));
-        await waitFor(() => expect(api.calls.map((call) => call.operation)).toEqual(['preference.list']));
-        expect(screen.queryByText(/Your name and tone are not set\./)).toBeNull();
+        await waitFor(() => expect(operations(api)).toEqual(['preference.list']));
+        await act(async () => {});
+        expect(screen.queryByText(reminder)).toBeNull();
     });
 
     it('is shown, and hides, when this browser keeps nothing', async () => {
@@ -155,9 +205,12 @@ describe('the quiet reminder about name and tone', () => {
             throw new Error('blocked');
         });
         try {
-            mount(marta().answer('preference.list', 'preference.list/none'), card('approval.get/modes-chosen'));
+            mount(
+                marta().answer('preference.list', 'preference.list/mode-automatic-voice-unset'),
+                card('approval.get/modes-chosen'),
+            );
             fireEvent.click(await screen.findByRole('button', { name: 'Hide for 7 days' }));
-            expect(screen.queryByText(/Your name and tone are not set\./)).toBeNull();
+            expect(screen.queryByText(reminder)).toBeNull();
         } finally {
             stored.mockRestore();
             keeping.mockRestore();

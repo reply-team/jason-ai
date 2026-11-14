@@ -227,7 +227,7 @@ export function ApprovalPanel({
                     />
                 )}
                 {pending && <SendModesQuestion unset={approval.send_modes_unset} approvalId={approval.id} />}
-                {pending && approval.send_modes_unset?.length === 0 && <VoiceReminder />}
+                {pending && <VoiceReminder campaignId={approval.campaign_id} />}
                 <details className="fold">
                     <summary>Raw request</summary>
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>

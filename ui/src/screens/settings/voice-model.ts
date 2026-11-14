@@ -16,6 +16,7 @@ export type PreferenceItem = {
 };
 
 export type PreferenceSetRequest = { key: string; value: object; actor?: ActorRef; reason?: string };
+export type PreferenceUnsetRequest = { key: string; actor?: ActorRef; reason?: string };
 
 export const senderKey = 'sender.identity';
 export const toneKey = 'tone_of_voice';
