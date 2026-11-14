@@ -1,5 +1,7 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Dispatch;
@@ -930,6 +932,101 @@ public partial class ClaimerTests
         await using var fresh = database.Open();
         Assert.Equal("sent_from_chat", (await fresh.Approvals.AsNoTracking().SingleAsync(Ct)).Reason);
     }
+
+    /// <summary>
+    /// The send-mode exchanges the page's screen tests read are staged by hand (<c>SendModeApprovalExchangesTests</c>), so
+    /// this row holds them to what the claim itself writes: one send the claim parks <c>not_reviewed</c> and one it
+    /// releases, mapped as <c>approval.get</c> and <c>workitem.get</c> answer them, against the staged
+    /// <c>park-not-reviewed</c>, <c>released-automatically</c> and <c>workitem.get/parked-send</c>. The same members at
+    /// each level that matters, the same kind of value in each, the same reason and status, and the decided-by shape on the
+    /// release; ids and moments by presence and kind, never by value.
+    /// </summary>
+    [Fact]
+    public async Task SendMode_TheStagedExchanges_HaveTheShapeTheClaimWrites()
+    {
+        var (parked, item) = await ClaimedAsync(release: false);
+        var (released, _) = await ClaimedAsync(release: true);
+
+        var stagedPark = Staged("approval.get/park-not-reviewed");
+        var stagedRelease = Staged("approval.get/released-automatically");
+        var stagedItem = Staged("workitem.get/parked-send");
+
+        foreach (var (name, staged, claimed) in new[] { ("park", stagedPark, parked), ("release", stagedRelease, released) })
+        {
+            SameMembers(name, staged, claimed);
+            SameMembers(name + ".preview", staged["preview"]!.AsObject(), claimed["preview"]!.AsObject());
+            SameMembers(name + ".preview.send_mode", staged["preview"]!["send_mode"]!.AsObject(), claimed["preview"]!["send_mode"]!.AsObject());
+            Assert.Equal(["mode", "review", "source", "temperature"], claimed["preview"]!["send_mode"]!.AsObject().Select(member => member.Key).Order());
+            SameMembers(name + ".subject", staged["subject"]!.AsObject(), claimed["subject"]!.AsObject());
+            Assert.Equal(((string?)claimed["reason"], (string?)claimed["status"]), ((string?)staged["reason"], (string?)staged["status"]));
+        }
+
+        Assert.Equal(("not_reviewed", "pending"), ((string?)parked["reason"], (string?)parked["status"]));
+        Assert.Equal(("automatic_mode", "approved"), ((string?)released["reason"], (string?)released["status"]));
+        SameMembers("release.decided_by", stagedRelease["decided_by"]!.AsObject(), released["decided_by"]!.AsObject());
+        Assert.Equal((string?)released["decided_by"]!["type"], (string?)stagedRelease["decided_by"]!["type"]);
+
+        SameMembers("item", stagedItem, item);
+        SameMembers("item.context", stagedItem["context"]!.AsObject(), item["context"]!.AsObject());
+        // The item's input is the operation's arguments alone, never the input the claim composes from them.
+        SameMembers("item.context.input", stagedItem["context"]!["input"]!.AsObject(), item["context"]!["input"]!.AsObject());
+        Assert.Equal(["channel", "message", "sender"], item["context"]!["input"]!.AsObject().Select(member => member.Key).Order());
+        Assert.Equal((string?)item["status"], (string?)stagedItem["status"]);
+    }
+
+    /// <summary>A send the claim parked for want of a review, or released under the critic's pass, as the API maps it.</summary>
+    private static async Task<(JsonObject Approval, JsonObject Item)> ClaimedAsync(bool release)
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, "automatic");
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        if (release)
+        {
+            await CriticPassAsync(db, reading, send.Id, send.ReviewHash);
+        }
+
+        await ClaimSettledAsync(harness, db);
+
+        await using var fresh = database.Open();
+        var clock = new FixedClock(Noon);
+        var row = await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItem!.PublicId == send.Id, Ct);
+        var approval = await new ApprovalService(fresh, new JournalWriter(clock), clock).GetAsync(new ApprovalGetRequest(row.PublicId), Ct);
+        var item = await Items(fresh).GetAsync(new WorkItemGetRequest(send.Id, null), Ct);
+        return (Mapped(approval), Mapped(item));
+    }
+
+    private static JsonObject Mapped<T>(T dto) => JsonSerializer.SerializeToNode(dto, JasonJson.Options)!.AsObject();
+
+    private static JsonObject Staged(string @case) =>
+        JsonNode.Parse(File.ReadAllText(ApiFixtures.PathOf(@case)))!["response"]!.AsObject();
+
+    /// <summary>The same members, each holding the same kind of value: null, text, number, flag, list or object.</summary>
+    private static void SameMembers(string where, JsonObject staged, JsonObject claimed)
+    {
+        Assert.True(
+            staged.Select(member => member.Key).Order().SequenceEqual(claimed.Select(member => member.Key).Order()),
+            $"{where}: staged [{string.Join(", ", staged.Select(m => m.Key).Order())}], claimed [{string.Join(", ", claimed.Select(m => m.Key).Order())}]");
+        foreach (var (key, value) in claimed)
+        {
+            // The account a route binds is the harness's to give: its stand-in plugin binds none, so only its presence counts.
+            if (key == "binding_identity")
+            {
+                continue;
+            }
+
+            Assert.True(Kind(staged[key]) == Kind(value), $"{where}.{key}: staged {Kind(staged[key])}, claimed {Kind(value)}");
+        }
+    }
+
+    private static JsonValueKind Kind(JsonNode? node) => node?.GetValueKind() switch
+    {
+        null => JsonValueKind.Null,
+        JsonValueKind.True or JsonValueKind.False => JsonValueKind.True,
+        var kind => kind!.Value,
+    };
 
     private static Harness ModeHarness() => new(
         plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "social_invitation.send"]),
