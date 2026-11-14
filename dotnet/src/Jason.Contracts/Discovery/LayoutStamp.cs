@@ -97,22 +97,48 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
         var path = System.IO.Path.Combine(root, FileName);
-        if (Directory.Exists(path))
-        {
-            return Unreadable(path, "it is a folder");
-        }
-
-        if (!File.Exists(path))
-        {
-            return new LayoutStamp(LayoutStampState.Missing, path, null, null, null, null);
-        }
-
         byte[] bytes;
         try
         {
+            if (Directory.Exists(path))
+            {
+                return Unreadable(path, "it is a folder");
+            }
+
+            // Asked of the file system so that it throws: "nothing there" is the stamp's absence, and a name it may not
+            // ask about is a stamp that cannot be read, never taken for none, as File.Exists would take it.
+            try
+            {
+                _ = File.GetAttributes(path);
+            }
+            catch (Exception missing) when (missing is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return new LayoutStamp(LayoutStampState.Missing, path, null, null, null, null);
+            }
+
+            // The size the file system keeps, a link followed, asked before anything is opened. A named pipe or a device
+            // has none, and its open would wait for a writer or reach a device: neither is opened. .NET says no more of a
+            // file's type on macOS and Linux — its attributes call both "Normal" — so an empty file is said the same way.
+            var file = new FileInfo(path);
+            var target = file.LinkTarget is null ? file : file.ResolveLinkTarget(returnFinalTarget: true) as FileInfo ?? file;
+            if (target.Length == 0)
+            {
+                return Unreadable(path, "it is empty, or not a file");
+            }
+
+            if (target.Length > MaxBytes)
+            {
+                return Unreadable(path, "it is larger than a stamp");
+            }
+
             // Shared for writing and deleting, so that the rename that puts a new stamp in place is never held up by a read,
             // and the read sees one stamp or the other.
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (!stream.CanSeek)
+            {
+                return Unreadable(path, "it is not a file");
+            }
+
             if (stream.Length > MaxBytes)
             {
                 return Unreadable(path, "it is larger than a stamp");
@@ -121,8 +147,9 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
             bytes = new byte[stream.Length];
             stream.ReadExactly(bytes);
         }
-        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        catch (Exception unreadable) when (unreadable is not OutOfMemoryException)
         {
+            // Whatever else the file system answers, the stamp is there and cannot be read; the type is never said.
             return Unreadable(path, "it could not be read");
         }
 

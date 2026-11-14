@@ -168,6 +168,87 @@ public sealed class LayoutStampTests : IDisposable
     }
 
     [Fact]
+    public void An_empty_file_is_unreadable_and_never_layout_one()
+    {
+        File.WriteAllBytes(StampPath, []);
+
+        Assert.Equal(new LayoutStamp(LayoutStampState.Unreadable, StampPath, null, null, null, "it is empty, or not a file"), new JasonPaths(_root).Stamp);
+    }
+
+    /// <summary>
+    /// A named pipe at the name is never opened: its open would wait for a writer that never comes, and the read that the
+    /// paths make of every command would hang there. It is answered at once, unreadable.
+    /// </summary>
+    [Fact]
+    public async Task A_named_pipe_at_the_name_is_unreadable_without_waiting_for_a_writer()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "a named pipe is no file on Windows.");
+        using (var make = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("mkfifo") { ArgumentList = { StampPath } })!)
+        {
+            await make.WaitForExitAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(0, make.ExitCode);
+        }
+
+        var ct = TestContext.Current.CancellationToken;
+        var stamp = await Task.Run(() => new JasonPaths(_root).Stamp, ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+        Assert.Equal(new LayoutStamp(LayoutStampState.Unreadable, StampPath, null, null, null, "it is empty, or not a file"), stamp);
+    }
+
+    /// <summary>A link to a device is never opened, for the same reason: it is no stamp, and is said so.</summary>
+    [Fact]
+    public async Task A_link_to_a_device_is_unreadable_and_never_opened()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "/dev/null is a device of macOS and Linux.");
+        File.CreateSymbolicLink(StampPath, "/dev/null");
+
+        var ct = TestContext.Current.CancellationToken;
+        var stamp = await Task.Run(() => new JasonPaths(_root).Stamp, ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+        Assert.Equal("it is empty, or not a file", stamp!.Problem);
+    }
+
+    /// <summary>A link to nothing is a stamp that cannot be read, never the absence of one.</summary>
+    [Fact]
+    public void A_link_to_nothing_is_unreadable_and_never_layout_one()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "a symbolic link asks for a privilege on Windows.");
+        File.CreateSymbolicLink(StampPath, Path.Combine(_root, "gone.json"));
+
+        var stamp = new JasonPaths(_root).Stamp!;
+
+        Assert.Equal(LayoutStampState.Unreadable, stamp.State);
+        Assert.Equal("it could not be read", stamp.Problem);
+    }
+
+    /// <summary>
+    /// A data directory this account may not look into answers "cannot be asked", which File.Exists would answer as "not
+    /// there": the stamp is unreadable, never missing.
+    /// </summary>
+    [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void A_name_the_account_may_not_ask_about_is_unreadable_and_never_missing()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the folder's mode is how macOS and Linux refuse the look.");
+        Assert.SkipWhen(Environment.IsPrivilegedProcess, "root is refused no look.");
+        var shut = Path.Combine(_root, "shut");
+        Directory.CreateDirectory(shut);
+        File.WriteAllText(Path.Combine(shut, "layout.json"), """{"layout":1,"written_by":"0.43.0"}""");
+        File.SetUnixFileMode(shut, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        try
+        {
+            var stamp = new JasonPaths(shut).Stamp!;
+
+            Assert.Equal(LayoutStampState.Unreadable, stamp.State);
+            Assert.Equal("it could not be read", stamp.Problem);
+        }
+        finally
+        {
+            File.SetUnixFileMode(shut, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
     public void A_folder_at_the_name_is_unreadable()
     {
         Directory.CreateDirectory(StampPath);
