@@ -1335,7 +1335,7 @@ test('the instruction text holds the eleven rules in plain words, and says nothi
     // Asked to change Jason itself, the chat says it cannot and points to the window's entry, and tries no other way.
     assert.equal(
         rules[10],
-        '11. When the person asks you to change Jason itself - how a role writes or behaves, a plugin, a route, a setting - say that you cannot from this chat: it is kept out of Jason\'s roles, plugins and settings, so that it can never rewrite the instructions Jason\'s own agents work by. Their own AI can: tell them to choose Open in > Change Jason itself in Jason Desktop\'s window and say what they want, for example "make the copywriter write shorter" or "add a plugin for my CRM". Do not try to make the change another way.',
+        `11. When the person asks you to change Jason itself - a role's skill, which teaches that role for every campaign, a plugin, a route, an installation setting - say that you cannot from this chat: it is kept from changing Jason's roles, plugins and settings, so that it can never rewrite the instructions Jason's own agents work by. Their own AI can: tell them to choose Open in > Change Jason itself in Jason Desktop's window, in their own installation, and say what they want, for example "change what the critic reviews in every campaign" or "add a plugin for my CRM". How the messages of a campaign, a project or all their work should read is the person's word, not a change to Jason: keep it as your skills say. Do not try to change Jason itself another way.`,
     );
     assert.doesNotMatch(text, /language|english|russian|ukrainian|translat/i);
     assert.doesNotMatch(text, /[^\x09\x0a\x20-\x7e]/, 'plain text, no character a terminal or a host could take otherwise');

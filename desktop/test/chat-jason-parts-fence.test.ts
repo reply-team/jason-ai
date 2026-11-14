@@ -7,7 +7,7 @@ import { chatModes, type ChatMode } from '../src/chat-modes.ts';
 import { PermissionBroker, type ToolAnswer } from '../src/chat-permission-broker.ts';
 import type { ChatScope, Platform } from '../src/chat-permission-model.ts';
 
-// The chat is kept out of Jason's own parts, so that it can never rewrite the instructions Jason's own agents work by:
+// The chat is kept from changing Jason's own parts, so that it can never rewrite the instructions Jason's own agents work by:
 // the role skills folder, the plugins folder and the settings file are refused to a Claude Code turn in every mode, Full
 // access included, by the desktop's judgement of each request and by the host's own file rules, however the path is
 // spelled; a Codex turn is held by its own read-only sandbox. "Change Jason itself" in Open in is the way to change them.
