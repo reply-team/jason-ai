@@ -1,0 +1,22 @@
+{
+  "operation": "preference.unset",
+  "case": "send-mode-cold",
+  "request": {
+    "key": "send_mode.cold",
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    },
+    "reason": "the person's answer"
+  },
+  "status": 200,
+  "response": {
+    "key": "send_mode.cold",
+    "value": null,
+    "value_hash": null,
+    "value_bytes": null,
+    "created_at": null,
+    "updated_at": null,
+    "updated_by": null
+  }
+}

@@ -467,6 +467,73 @@ public class ApprovalCommandsTests
         Assert.Contains("Contact:       Ada\u200c\u200d\u00adLovelace\uFFFD\uFFFDx (cnt_1) | email ada@example.test", lines);
     }
 
+    /// <summary>
+    /// The installation's open question is said on the approval a person reads, while it is open, naming the keys; once
+    /// both modes are chosen the line is gone.
+    /// </summary>
+    [Theory]
+    [InlineData("[\"send_mode.cold\",\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.cold, send_mode.warm; a send to a contact it covers waits for a person unless the campaign sets a mode of its own")]
+    [InlineData("[\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.warm; a send to a contact it covers waits for a person unless the campaign sets a mode of its own")]
+    [InlineData("[]", null)]
+    public async Task Get_says_which_send_modes_nobody_has_chosen_while_any_is_open(string unset, string? said)
+    {
+        using var cli = new CliRun(OneApproval.Replace("\"preview\": {", $"\"send_modes_unset\": {unset}, \"preview\": {{", StringComparison.Ordinal));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        if (said is null)
+        {
+            Assert.DoesNotContain(lines, line => line.StartsWith("Send modes:", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.Contains(said, lines);
+        }
+    }
+
+    /// <summary>
+    /// A send the automatic mode parked says why in the sentence a person reads, beside its code, and what the mode decided
+    /// on; one parked where no mode had a say prints neither line, as every card did before the modes.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        "not_reviewed",
+        """{"mode": "automatic", "source": "preference", "temperature": "cold", "review": "jrn_01JC0000000000000000000009"}""",
+        "Why:           No critic's or person's review passed this text, so the automatic mode does not send it.",
+        "Send mode:     automatic, from the preference; a cold contact; review jrn_01JC0000000000000000000009")]
+    [InlineData(
+        "awaiting_judgement",
+        """{"mode": null, "source": null, "temperature": null, "review": null}""",
+        "Why:           A reply from this contact has not been judged yet, so nothing goes to them automatically until it is.",
+        "Send mode:     the contact's reply waits on a verdict")]
+    [InlineData("approval_required", null, null, null)]
+    public async Task Get_says_why_the_automatic_mode_parked_a_send(string reason, string? facts, string? why, string? mode)
+    {
+        var approval = OneApproval.Replace("\"reason\": \"approval_required\"", $"\"reason\": \"{reason}\"", StringComparison.Ordinal);
+        if (facts is not null)
+        {
+            approval = approval.Replace("\"preview\": {", $"\"preview\": {{\"send_mode\": {facts},", StringComparison.Ordinal);
+        }
+
+        using var cli = new CliRun(approval);
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Contains($"Parked:        {reason}", lines);
+        if (why is null)
+        {
+            Assert.DoesNotContain(lines, line => line.StartsWith("Why:", StringComparison.Ordinal) || line.StartsWith("Send mode:", StringComparison.Ordinal));
+            return;
+        }
+
+        Assert.Contains(why, lines);
+        Assert.Contains(mode!, lines);
+    }
+
     private static string WithExample(string example) =>
         OneApproval.Replace("\"preview\": {", $"\"preview\": {{\"example\": {example},", StringComparison.Ordinal);
 

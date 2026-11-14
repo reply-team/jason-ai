@@ -12,7 +12,7 @@
     "decision": { "at": "/new/decision_id", "presence": "sometimes" },
     "plugin": { "at": "/new/plugin", "presence": "always" }
   },
-  "field_since": {},
+  "field_since": { "/new/nature": "0.42.0", "/new/confined": "0.42.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -45,7 +45,9 @@
               "type": { "type": "string", "enum": ["human", "role", "system", "attempt"] },
               "id": { "type": ["null", "string"] }
             }
-          }
+          },
+          "nature": { "type": ["null", "string"], "enum": ["person", "automatic", "bounce", "opt_out", null], "description": "What the reply is, in the runtime's closed words: a person's answer, an automatic reply, a failed delivery, or a person asking not to be written to; null where the verdict does not say." },
+          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: the verdict was recorded under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set. A verdict so marked is the chat's, never a person's own word: it lifts no opt-out, and a standing approval takes it for no person's verdict unless it carries a person's answered decision, which is read as the decision records it." }
         }
       }
     },

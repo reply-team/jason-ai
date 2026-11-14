@@ -9,8 +9,8 @@ namespace Jason.Cli;
 /// runtime, and the one rule enforced here is that <c>system</c> belongs to the runtime's own writes and
 /// cannot be claimed from outside. A write that claims nobody is made as the person this account is — except the verbs
 /// that take no default actor, which name who acts or are refused: somebody's own word (an approval or a rejection, a
-/// standing approval set or unset, an answer, a preference set or unset, a block's clear, a resume, a report and a
-/// subscription's rewind), and the acts the runtime takes from any caller but the CLI will not put this account's name on
+/// standing approval set or unset, an answer, a preference set or unset, a block's clear, a resume, a review of a send, a
+/// report and a subscription's rewind), and the acts the runtime takes from any caller but the CLI will not put this account's name on
 /// by itself (a suppression lifted, a route set or unset, a role's execution profile set). Whatever it claims, a CLI
 /// the environment says runs inside an attempt names that attempt on every request beside it, in the Jason-Attempt
 /// header (see <see cref="Http.RuntimeClient"/>).
@@ -39,8 +39,9 @@ public static class ActorOption
     public const string NoDefaultForReport = "The CLI's default actor does not apply here: name who reports it with --actor human:<Name> or --actor role:<id>.";
 
     /// <summary>
-    /// The help of the five verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or
-    /// taking back a standing approval, and answering. The runtime refuses them a request that names an attempt.
+    /// The help of the verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or taking
+    /// back a standing approval, answering, setting or taking back a preference, and setting a campaign's send mode. The
+    /// runtime refuses them a request that names an attempt.
     /// </summary>
     public const string RefusedInsideARun = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
 
@@ -56,11 +57,13 @@ public static class ActorOption
             + "Without it, a running executor is its attempt, and anything else is written as human:<this account's name>, "
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
-            + "clearing a block, resuming a work item, rewinding a subscription, submitting a report, "
+            + "setting a campaign's send mode, "
+            + "clearing a block, resuming a work item, reviewing a send, rewinding a subscription, submitting a report, "
             + "lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, "
             + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
-            + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there, "
+            + "and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference "
+            + "and setting a campaign's send mode are refused there, "
             + "and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, "
             + "since nothing inside a run changes Jason itself.",
         Recursive = true,

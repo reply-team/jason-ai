@@ -29,7 +29,8 @@ describe('Settings', () => {
             expect(screen.getByRole('link', { name: 'Agents' })).toBeTruthy();
             startLocale();
             expect(document.documentElement.lang).toBe('en');
-            expect(fake.calls.map((c) => c.operation)).toEqual(['preference.list', 'system.info']);
+            // Name and tone, and the send modes, each read what is set.
+            expect(fake.calls.map((c) => c.operation)).toEqual(['preference.list', 'preference.list', 'system.info']);
         } finally {
             localStorage.removeItem('jason.ui.locale');
         }
@@ -130,8 +131,9 @@ describe('Your name and tone', () => {
             },
         });
         expect('reason' in sent).toBe(false);
-        // The save read the preferences again before it wrote.
+        // The save read the preferences again before it wrote; the first two reads are the two sections'.
         expect(fake.calls.map((c) => c.operation).filter((o) => o.startsWith('preference'))).toEqual([
+            'preference.list',
             'preference.list',
             'preference.list',
             'preference.set',

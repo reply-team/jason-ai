@@ -1,0 +1,7 @@
+{
+  "key": "send_mode.warm",
+  "version": 1,
+  "case": "a member the key does not hold: a campaign's own mode is the campaign's, never a field here",
+  "value": { "mode": "automatic", "campaign_id": "cmp_01K7QN0000000000000000000A" },
+  "expect": { "invalid": [{ "pointer": "/campaign_id", "reason": "additional_properties" }] }
+}

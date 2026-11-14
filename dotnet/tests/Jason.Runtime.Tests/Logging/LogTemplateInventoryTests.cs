@@ -238,6 +238,16 @@ public sealed class LogTemplateInventoryTests
         Assert.Empty(ReviewedLogProperties.Names.Intersect(ReviewedLogProperties.Refused));
     }
 
+    /// <summary>A doubt's sentence about a send is free text at rest on the work item, read only onto the approval's preview.</summary>
+    [Fact]
+    public void A_doubt_s_sentence_is_not_a_property_any_log_line_may_carry()
+    {
+        string[] sentence = ["Note", "AskPersonNote", "ReviewNote", "Doubt"];
+
+        Assert.All(sentence, name => Assert.Contains(name, ReviewedLogProperties.Refused));
+        Assert.Empty(ReviewedLogProperties.Names.Intersect(sentence));
+    }
+
     /// <summary>
     /// The scan is only worth what its reader is worth. This is the reader held to every shape a template is written
     /// in; the theories after it hold it to the calls it must report rather than skip, and to the calls that are not

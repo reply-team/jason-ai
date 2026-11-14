@@ -42,7 +42,7 @@ never falls back to another host, since the person named one.
 ## Setting it
 
 A preference is the person's word, so only a person sets it, and the request names them as its actor; a role Jason
-launches is refused when it sets or unsets one (`preference_not_human`).
+launches is refused when it sets or unsets one, from inside its run whatever actor it names (`decided_inside_a_run`).
 
 ```sh
 jason preference set agent.interactive_host --value-file host.json --actor human:Marta

@@ -1,0 +1,11 @@
+{
+  "kind": "reply_classified",
+  "version": 1,
+  "case": "a verdict recorded under the desktop's chat marker says so, and is the chat's",
+  "body": {
+    "key": "sha256:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+    "old": null,
+    "new": { "plugin": "example-mail", "thread": "thr-20931", "message_id": "msg-77310", "message_at": "2026-10-28T09:12:44.000Z", "contact_id": "cnt_01JC0000000000000000000003", "category": "interested", "confidence": 0.86, "reaction": "draft", "goal_id": null, "goal_kind": null, "decision_id": null, "answered_by": null, "nature": "person", "confined": true }
+  },
+  "expect": "valid"
+}

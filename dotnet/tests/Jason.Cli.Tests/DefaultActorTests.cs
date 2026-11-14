@@ -195,7 +195,7 @@ public class DefaultActorTests
         Assert.Contains("where that name cannot be read, as a person who gave no name", description, StringComparison.Ordinal);
         Assert.Contains("rewinding a subscription", description, StringComparison.Ordinal);
         Assert.Contains("lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, and setting a role's execution profile take no default.", description, StringComparison.Ordinal);
-        Assert.Contains("and approving, rejecting, setting or unsetting a standing approval and answering are refused there, and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, since nothing inside a run changes Jason itself.", description, StringComparison.Ordinal);
+        Assert.Contains("and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference and setting a campaign's send mode are refused there, and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, since nothing inside a run changes Jason itself.", description, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -307,8 +307,10 @@ public class DefaultActorTests
         ["decision", "answer", "dec_A", "--answer", "Yes, go ahead."],
         ["preference", "set", "outreach.tone", "--value", "{\"tone\":\"plain\"}"],
         ["preference", "unset", "outreach.tone"],
+        ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
         ["block", "clear", "blk_A"],
         ["workitem", "resume", "wi_A"],
+        ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
         ["suppression", "remove", "--channel", "email", "--value", "someone@example.com", "--reason", "asked again"],
@@ -402,6 +404,7 @@ public class DefaultActorTests
         ["audience", "preview", "--campaign", "cmp_A", "--definition", "{\"industries\":[\"Software\"]}"],
         ["audience", "filter-values", "--campaign", "cmp_A", "--filter", "industries"],
         ["audience", "availability", "--campaign", "cmp_A"],
+        ["sender", "list", "--campaign", "cmp_A", "--owners", "own"],
         ["route", "list"],
         ["events", "sources"],
         ["events", "backfill", "--source", "evs_A", "--from", "2026-10-12T00:00:00Z", "--to", "2026-10-13T00:00:00Z"],

@@ -26,7 +26,9 @@ public sealed partial class ClaimOrderDocTests
 
     /// <summary>
     /// The numbers every release has published stay those checks' names, and a check added later takes the next one: the
-    /// twenty-six numbered together keep 1 to 26, and the thread's check is 27, wherever each is asked.
+    /// twenty-six numbered together keep 1 to 26, and the thread's check is 27, wherever each is asked. A check added since
+    /// is held by its place among the published ones, never by a number written here: the numbers after the published ones
+    /// are the next ones free, each taken once.
     /// </summary>
     [Fact]
     public void No_check_s_number_moves()
@@ -41,10 +43,25 @@ public sealed partial class ClaimOrderDocTests
             "approval_required", "provider_blocked", "thread_route_mismatch",
         ];
 
+        var byNumber = ProviderOpPreflight.Numbers.OrderBy(pair => pair.Value).ToList();
         Assert.Equal(
             numbered.Select((code, index) => $"{index + 1} {code}"),
-            ProviderOpPreflight.Numbers.OrderBy(pair => pair.Value).Select(pair => $"{pair.Value} {pair.Key}"));
+            byNumber.Take(numbered.Length).Select(pair => $"{pair.Value} {pair.Key}"));
+        Assert.Equal(Enumerable.Range(1, ProviderOpPreflight.Codes.Count), byNumber.Select(pair => pair.Value));
         Assert.Equal(ProviderOpPreflight.Codes.Order(StringComparer.Ordinal), ProviderOpPreflight.Numbers.Keys.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The lock of an opt-out is asked right after the register, under its gate: its place is its neighbour, and its number
+    /// is whatever the published order gives it, after every number published before it.
+    /// </summary>
+    [Fact]
+    public void The_opt_out_lock_is_asked_right_after_the_register_and_numbered_after_the_published_checks()
+    {
+        var codes = ProviderOpPreflight.Codes.ToList();
+
+        Assert.Equal(codes.IndexOf("suppressed") + 1, codes.IndexOf("opted_out"));
+        Assert.True(ProviderOpPreflight.Numbers["opted_out"] > ProviderOpPreflight.Numbers["thread_route_mismatch"]);
     }
 
     [Fact]

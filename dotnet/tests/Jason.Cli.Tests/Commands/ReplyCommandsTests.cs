@@ -25,12 +25,12 @@ public class ReplyCommandsTests
         using var cli = new CliRun();
 
         var exit = await cli.RunAsync(
-            [.. Required, "--contact", "cnt_A", "--goal", "demo", "--decision", "dec_A", "--reason", "category rule matched; draft for approval", "--actor", "attempt:att_A"]);
+            [.. Required, "--contact", "cnt_A", "--goal", "demo", "--decision", "dec_A", "--nature", "opt_out", "--reason", "category rule matched; draft for approval", "--actor", "attempt:att_A"]);
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(
             Operations.ReplyRecord,
-            "{\"campaign_id\":\"cmp_A\",\"plugin_id\":\"mailbox\",\"thread_id\":\"thr-1042\",\"message_id\":\"msg-77\",\"message_at\":\"2026-09-14T09:30:00Z\",\"category\":\"interested\",\"confidence\":0.9,\"reaction\":\"draft\",\"contact_id\":\"cnt_A\",\"goal_id\":\"demo\",\"decision_id\":\"dec_A\",\"reason\":\"category rule matched; draft for approval\",\"actor\":{\"type\":\"attempt\",\"id\":\"att_A\"}}");
+            "{\"campaign_id\":\"cmp_A\",\"plugin_id\":\"mailbox\",\"thread_id\":\"thr-1042\",\"message_id\":\"msg-77\",\"message_at\":\"2026-09-14T09:30:00Z\",\"category\":\"interested\",\"confidence\":0.9,\"reaction\":\"draft\",\"contact_id\":\"cnt_A\",\"goal_id\":\"demo\",\"decision_id\":\"dec_A\",\"nature\":\"opt_out\",\"reason\":\"category rule matched; draft for approval\",\"actor\":{\"type\":\"attempt\",\"id\":\"att_A\"}}");
     }
 
     [Fact]
@@ -78,6 +78,18 @@ public class ReplyCommandsTests
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Contains("act, draft, escalate or none", cli.Error.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, cli.Requests);
+    }
+
+    [Fact]
+    public async Task A_nature_outside_the_four_is_a_usage_error_naming_them()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync([.. Required, "--nature", "spam"]);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("person, automatic, bounce or opt_out", cli.Error.ToString(), StringComparison.Ordinal);
         Assert.Equal(0, cli.Requests);
     }
 

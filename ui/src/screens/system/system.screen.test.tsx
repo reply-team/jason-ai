@@ -248,3 +248,18 @@ describe('System, the standing choice of Full access', () => {
         expect(screen.queryByRole('heading', { name: 'Full access' })).toBeNull();
     });
 });
+
+describe('System: the send modes in force', () => {
+    it('says the mode each kind of person goes under for the installation, and where it comes from', async () => {
+        systemFake();
+        const modes = fixtures['system.info/with-ui'].response.send_modes;
+        expect(modes.cold).toEqual({ mode: 'every_message', source: 'default' });
+        const card = (await screen.findByRole('heading', { name: 'Send modes' })).closest('section')!;
+        expect(within(card).getByText('To people who have not replied yet').nextElementSibling?.textContent).toBe(
+            'Every message waits for you · the default, since nothing is chosen',
+        );
+        expect(within(card).getByText('To people who have replied').nextElementSibling?.textContent).toBe(
+            'Every message waits for you · the default, since nothing is chosen',
+        );
+    });
+});

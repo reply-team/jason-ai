@@ -142,6 +142,30 @@ An approval can also end without anybody deciding it: cancelling the work ends i
 work item's due date passing. So a question that has left the list was not necessarily answered, and
 must not be reported to anybody as agreed to.
 
+## An opt-out the person says was not one
+
+A reply judged a request to stop locks its contact: in every campaign, the claim refuses every provider operation about
+them that the do-not-contact register gates, on any value they hold now or gain later. No run lifts that lock, whatever
+the person answered: a responder that guessed `opt_out` and asked, and the manager that recorded their answer, both
+leave it standing, and the manager's summary says so. Only the person's own verdict on that reply lifts it, recorded
+under their name, from outside any run, with a nature other than `opt_out`, and you record it only when they have said,
+in their own words, that the reply was not a request to stop and what it was. Take the reply's `plugin`, `thread`,
+`message_id`, `message_at` and `contact_id` from the opt-out's line, the category they name with the reaction its row in
+the responder's `categories.json` gives, and the nature from what they say the reply is: `person` for a person writing
+for themselves, `automatic` for a notice a machine sent, `bounce` for a failed delivery.
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified
+jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 1 --reaction draft --nature person --actor human:ada --reason "not a request to stop, in their own words: they want to hear more"
+```
+
+`--actor human:<their id>` is what makes it theirs: a verdict with no name, a role's, or one typed inside a launched run
+lifts nothing. It lifts the lock and does nothing else: it drafts and sends nothing, and the register's entries stay
+until each is taken off, which is theirs too: `jason suppression remove --channel email --value <the address> --actor
+human:<their id> --reason "<their words>"`. In the chat of Jason Desktop you can do neither: the chat refuses that
+verb, and you cannot lift the lock there either; give the person the `reply record` line, and the `suppression remove`
+line where one is needed, to type in a terminal.
+
 ## A standing approval is a person's decision made in advance
 
 A person may decide ahead of time, for one category of reply in one campaign, that a drafted answer to such a reply
@@ -186,6 +210,17 @@ jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status approved
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied
 ```
 
+**A send the send mode let go, or held.** Where the person set a send mode of `automatic`, a send that went without
+them is an `approved` approval whose reason is `automatic_mode`, decided under the name of the person who set the mode,
+with a line `approval_automatic_applied` in the campaign's chronicle. A send the mode held waits as any approval does,
+and its reason says why: `approval get --human` gives it as a sentence on its `Why:` line, and the facts on its
+`Send mode:` line. Give the person that sentence with the send. A send written in Jason's chat always waits for the
+person, whatever the send mode or a standing approval says.
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_automatic_applied
+```
+
 ### A search, and the allowance for the ones after it
 
 A search spends the provider's money, so the first search under an audience, its probe, always waits for the person.
@@ -224,6 +259,54 @@ jason approval unset-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation audienc
 and approving a search under another audience without `--allow`, a new audience's probe among them, takes the old one
 back in the same act. Say so before they approve such a search, because it stops the top-ups of the audience the
 campaign is working now. No act but the person's moves the allowance: no role, no verdict and no probe that waits.
+
+## The two-modes question, asked until it is answered
+
+Everything that reaches a real person waits for a person, one item at a time, until the person has said otherwise. They
+say it once for each of two kinds of contact: **cold**, someone who has not answered in the campaign, and **warm**,
+someone who has. For each, the choice is **every message waits**, which is what an unset key means, or **goes
+automatically**, which lets sends to that kind of contact run without being asked. Each approval answer carries
+`send_modes_unset`, the keys nobody has answered yet; the installation's status says the modes in force in its `send_modes` check.
+While that list is not empty, put the question where the person is already deciding, once per sitting and after the
+approval in front of them, in these words or near them: "Jason can send to people who have not answered by itself, and
+to people who have, if you say so; until you choose, a message to them waits for you. For people who have not answered,
+should every message wait, or go automatically? And the same for people who have?" Ask only about the kinds
+`send_modes_unset` names. Say what each answer means:
+
+- **Every message waits** changes nothing, and it is a fine answer: they keep seeing each text before it goes.
+- **Goes automatically** lets what Jason would send to that kind of contact go without a question. It never
+  reaches anyone who asked not to be contacted, and it touches no operation that is not a message to a person. A
+  message still waits for the person where its creator or a reviewer doubted it, where neither the critic nor a person
+  passed its text, where the contact has a reply not yet judged, where it answers an automatic reply, a bounce or a
+  request to stop, or a conversation marked for the person, where it was written in Jason's chat, and once the
+  campaign has sent its day's limit automatically. It is read when the send is claimed, so a change applies to the
+  next send and leaves what already waits where it is.
+- **Only for one campaign** is a third answer, and a person's too: `jason campaign set-send-mode <cmp_…> --cold
+  automatic --actor human:<their id>` sets the campaign's own mode, which is the one in force there.
+
+In the chat of Jason Desktop you cannot set a mode: the chat refuses `preference set`, `preference unset` and `campaign
+set-send-mode`. There the approval's card asks the question and the person answers on it. Elsewhere you may set it on
+their word, as below, or give the person the command to type in a terminal instead, as `operating-the-installation`
+does for `jason project link`.
+
+Offer "remember this" with the answer: where they have said how they want it, offer to keep it so they are not asked
+again, which is exactly setting the key. A "goes automatically" they do not want kept changes nothing: only a key that
+is set is a mode, so every message of that kind still waits, and the question comes again at the next sitting. The
+answer is theirs and is set by their own act, under their name:
+
+```
+jason preference set send_mode.cold --value '{"mode":"automatic"}' --actor human:ada
+jason preference set send_mode.warm --value '{"mode":"every_message"}' --actor human:ada
+```
+
+When a person chooses **goes automatically**, say once, as a fact and never as a condition of setting it, that Jason
+then sends messages in their name without them reading each one first, and that their name and tone, set in Settings
+("Your name and tone"), help those messages sound like them. The mode is on at once either way.
+
+**Never set one on your own, and never by a role.** "Handle these", a patient person and a long queue are not an answer;
+a request from inside a run is refused whatever name it carries. A person who does not answer is not asked again in the
+same sitting, and the mode stays what it is. Where they say they changed their mind,
+`jason preference unset send_mode.cold --actor human:ada` puts every message of that kind back to waiting.
 
 ## What an approval covers, and what changes it
 

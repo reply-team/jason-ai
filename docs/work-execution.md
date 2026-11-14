@@ -136,6 +136,8 @@ created | processing ──► waiting ──► created           (a provider b
 
 created ──► waiting ──► created                        (a limit held it at the claim, with no attempt of its own: its moment came, or somebody resumed it)
 
+(new) ──► waiting ──► created                          (created waiting on other work with wait_on: that work ended, the ceiling came, or somebody resumed it)
+
 created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
 created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
 ```
@@ -165,7 +167,16 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   wait: the claim parks it before any attempt exists, or the attempt that met the block ends `blocked`. Its wait
   names the block rather than items or a moment, is bounded by the item's `due_at` alone, and is released with
   `block_cleared` or `block_trial` (§Provider blocks). A responder its campaign's daily limit holds waits here as well,
-  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule).
+  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule). An item created with
+  `wait_on` is written waiting from its first moment, on the items of its campaign the create names (at most 100, each
+  once; another campaign's item or one that does not exist is refused at `wait_on[i]`; under an automatic send mode the
+  critic the runtime creates for a send follows them, and may be the hundred and first): it is never claimed before
+  every one of them has ended, in any final state, or `Dispatcher:AiRole:MaxWaitSeconds` has passed, and spends no
+  launch waiting. The wait only orders: once it is over the item is ordinary queued work, and the claim decides about it
+  as about any other. A send created waiting on the work that reviews it is how a review lands before the send is
+  claimed (§Doubts about a send); when the wait's ceiling releases such a send while its review still runs, the claim
+  does not wait for it: the person is asked without the review, and a review that comes after the park is refused
+  `not_reviewable`.
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
 - **`expired`** — the due date passed before anyone claimed it, before anyone answered the
@@ -245,7 +256,7 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with whichever of the twenty-seven pre-flight reasons applies — `no_route` when nothing
+`provider_op` fails with whichever of the twenty-eight pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
 
@@ -264,6 +275,19 @@ the wait its own run ended in, since the hold's wait has no attempt (§The launc
 applies at the next scan to work not yet held, while an item already held keeps its moment. A held item keeps its due
 date and expires by it like any waiting item, and a held manager check-in is still the campaign's one check-in
 ([docs/campaign-manager.md](campaign-manager.md) §1).
+
+**The daily ceiling of automatic sends.** While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends
+a campaign releases in a UTC day without asking a person. Where the automatic mode would release a send, the claim first
+counts, in the same transaction, the sends the mode released from the item's campaign since 00:00Z: the rows born
+approved with the reason `automatic_mode` and decided since then, whatever became of each. A retry runs under the row it
+was released under and is not counted again, and a send a person approves runs under a row of another reason and counts for nothing. At
+the ceiling the send parks for the person instead: its row's reason is `daily_ceiling`, and its preview carries
+`daily_ceiling` with three numbers only, `limit`, `released` and `since`, the moment the count began. The ceiling never
+slips, so a standing approval that covers the send does not let it go either, and the standing approval's answer in the
+preview says `daily_ceiling`. The ceiling is asked only where the mode would release: a send the mode parks for another
+reason keeps that reason, and where no mode is automatic nothing is counted and nothing changes. A send parked at the
+ceiling is one more approval waiting, notified as any is, and it is the person's from then on: a new day does not
+release it automatically.
 
 ## Approvals
 
@@ -306,9 +330,9 @@ provenance, the coded failure, and one against the budget.
 with a name; a role or an attempt is refused with `approval_not_human`, and an absent actor with
 `actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
-approve anything, and that every decision names who made it. An approval or an answer sent from inside a run is
-refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on every request it sends from
-there: a higher bar against a role deciding its own work, not a boundary.
+approve anything, and that every decision names who made it. An approval, an answer, a preference or a campaign's send
+mode sent from inside a run is refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on
+every request it sends from there: a higher bar against a role deciding its own work, not a boundary.
 
 An approval is about one operation on one work item, and it is not the only thing a person is asked. A
 role that cannot decide *what to do next* raises a question instead — a decision, which outlives the
@@ -328,17 +352,24 @@ attempt that asked it and whose answer wakes the review that carries the work on
   patch; an edit that leaves the input as it was touches nothing of the approval. Nothing is asked at the update: Jason
   asks again when it next takes the work, at once where dispatch runs and when the campaign runs again where it is
   paused, under what the item now says and with the reason `approval_required` that any first question carries. A
-  standing approval or the campaign's allowance never lets such an item go: they answer only work nobody was ever asked
-  about. An approval or a rejection that names the withdrawn question afterwards answers `approval_not_pending` and
+  standing approval, the campaign's allowance or a send mode never lets such an item go: they answer only work nobody
+  was ever asked about. An approval or a rejection that names the withdrawn question afterwards answers `approval_not_pending` and
   approves nothing, whichever request arrived first, by the same guards: an edit that read the item before an approval
   committed writes nothing and answers `concurrent_update`, and sent again it meets work that is approved and has not
   run, whose approval the next claim supersedes as above.
 
 Journal: `workitem_awaiting_approval`, `approval_requested`, `approval_approved`, `approval_rejected`,
-`approval_superseded`, `approval_cancelled`, `approval_standing_applied`. Those lines carry identifiers only — the approval, the
-work item, the campaign, the operation, the subject hash, the actor and the reason. The subject and the
+`approval_superseded`, `approval_cancelled`, `approval_standing_applied`, `approval_automatic_applied`. Those lines
+carry identifiers only — the approval, the work item, the campaign, the operation, the subject hash, the actor and
+the reason. The subject and the
 preview live on the row and in what `approval.get` answers, which is where somebody entitled to read
 them reads them.
+
+Every approval answer — `approval.get`, each item of `approval.list`, and what `approval.approve` and `approval.reject`
+answer — also carries `send_modes_unset`: the keys of the two send-mode preferences, `send_mode.cold` and
+`send_mode.warm`, that nobody has set yet, in key order, and an empty list once both are. It is the installation's open
+question, read when the answer is made, the same on every approval whatever it is about and however it stands: nothing is
+stored about having asked it, and a key unset again is back in the list. While a key is unset, its mode is every message.
 
 ### Standing approvals
 
@@ -366,12 +397,12 @@ approval row of its own is covered when, in this order: its operation is one a s
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
 (its `inbound_reply`; a responder a manager queued by hand carries none, so its verdicts fail `verdict_not_authentic`
-and its drafts are asked), or by a person who gave their name, or carries a person's answer — a verdict whose
+and its drafts are asked), or by a person who gave their name outside the desktop's chat, or carries a person's answer — a verdict whose
 `reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
 covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
 whoever drafted it; the draft's context was not changed after it was created; the
 verdict's plugin is the one the route resolved, and its thread the one the reply answers in (for a message, its person
-the work's person); the newest standing-approval line for the campaign and the verdict's category is a set; it names
+the work's person); the newest standing-approval line for the campaign and the verdict's category is a set, made outside the chat; it names
 the operation; it has not expired; and fewer drafts were let go under it since it was set than its ceiling. A category
 is the verdict's word exactly: `interested` covers neither `very_interested` nor `Interested`. The decision behind
 `answered_by` was checked when the line was written — answered, by a named person, choosing the verdict's category,
@@ -385,7 +416,11 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `standing_approval`: the verdict, its category, and the first condition that failed — `not_coverable`,
 `verdict_unknown`, `verdict_superseded`, `reaction_not_draft`, `verdict_not_authentic`, `not_the_verdicts_work`,
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
-`ceiling_reached`. A reply or a message that names no verdict is not asked about.
+`ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
+and a doubt is the person's to answer, so no standing approval releases it; or `sent_from_chat`: the send was written
+in the desktop's chat, which always waits for the person (§The send mode at the claim); or `daily_ceiling`: the
+automatic mode would have released the send and its campaign has reached `Sending:AutomaticMaxPerDay` for the day,
+which never slips (§The claim rule). A reply or a message that names no verdict is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
@@ -433,6 +468,221 @@ released under it), each null where there is none — the search's `count`, and 
 by construction, since no allowance names an audience before the claim of its first search made it.
 `approval.list_standing` answers the allowance beside the categories, with `released` (the searches it let go) and
 `people` (the people they asked for), and shows it not in force once `people` reaches `max_people`.
+
+### Doubts about a send
+
+A **send to a person** — provider work whose operation's `approval` is `confirm_each`, today `message.send`,
+`conversation.reply` and `social_invitation.send` — may carry a doubt, which goes to the person on the send's
+approval. A doubt is a code from one closed list, published as data under `$defs/code` of the
+[`workitem_reviewed` kind's document](contracts/journal/workitem_reviewed.json) and read from there
+(`jason journal kinds` shows it), and may carry one sentence: one line, at most 280 characters.
+
+**The creator's own doubt** is the reserved context key `ask_person`, exactly `{"code": "<code>"}`, given at
+`workitem.create` and only on such a send, answers included (`not_applicable` at `context.ask_person` otherwise). It is
+set when the work is created and never moved: a `workitem.update` whose `set` or `unset` names the key is refused at that
+field, whoever sends it. Its sentence is the request field `ask_person_note`, beside the context and refused without the
+key; a `note` member inside the key is refused and pointed there. The sentence is part of a keyed create's digest.
+
+**A review of the send** is `workitem.review`, written as the reserved line
+[`workitem_reviewed`](contracts/journal/workitem_reviewed.json): `passed`, or `doubts` with a code and an optional
+sentence (`note`). It is bound to the text it read by the **review hash**, the canonical hash of the operation, the work
+item and its context's `input` as stored, which `workitem.get` answers as `review_hash` on such a send. Nothing but an
+edit of the input moves the hash — a pin, a rename, the campaign's status or a route leave it as it is — and an edit
+voids every review made before it: the line under the old hash no longer stands, the doubt's sentence is cleared in the
+edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or `waiting`
+is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is refused
+`not_reviewable` exactly where the claim would not read it: where an approval stands for the send as it would now go,
+since the claim would run it under the decision already made and read no review. The one exception fails closed: where
+the runtime cannot yet tell whether the claim would read the review, because an approval is live and the pre-flight
+stops the send at a check that comes before the approval's (its plugin unavailable, say), so no subject can be composed
+to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send reach the
+approval; a provider block, the one check after the approval's, does not stop a review from being judged. An
+accepted doubt leaves the send with no approval to run under, whatever changes after; a pass leaves a person's approval
+as it stood, and the claim may run the send under that approval without reading the pass. The doubt does so by
+superseding, in the review's own save, the approved row still live, which no longer stands for the send as it would now
+go (`approval_superseded`, under the reviewer's name). Who reviews: a running attempt of the same campaign's role work,
+other than every attempt of the work that created the send (a retry of the composer is the same author), or a person by
+name who did not create it (`review_by_creator`); a person's own send goes to them as an approval, their own explicit
+yes. Whoever wrote the send's input since it was made is one of its authors and does not review it either, read from the
+send's own `workitem_context_updated` lines for `input`: a person by name, or any attempt of a work that did
+(`review_by_editor`). An edit by an actor the runtime cannot hold to anybody, under no name or as a role outside a run,
+has an author no run can be told apart from, so from then on only a person by name reviews the send, and a run is
+refused `review_by_editor`. Inside a run a review speaks as its run: an actor other than the attempt the request's
+header names is refused; and a send created inside a run is created under that run's name, since its creator is who a
+review is told apart from: a create naming a person, another attempt or nobody is refused
+`created_as_another_inside_a_run`. A patch of such a send's input inside a run is the same door: one naming anybody but
+the run is refused `updated_as_another_inside_a_run`. The verb takes no `reason`, since a reason is journaled and the
+line never carries the doubt's sentence. Which review stands for the send is read from the send's own lines under its
+current hash: the newest doubt, over any pass of the same text, or else the newest pass, or none. A doubt is answered
+only by the person's decision on the approval, never by a later pass. The order between a send and its review is the
+runtime's: the send is created waiting on the review's work (`wait_on`, §Lifecycle), so it is not claimed before that
+work has ended; whatever way it ended, the claim then decides as ever. A doubt parks the send for the person ahead of
+any standing approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying
+`doubted`, and no row is born approved; a pass is no doubt and leaves the standing approval to decide.
+
+**Under an automatic send mode the runtime creates the review itself.** When a send to a person is created about a
+contact while the send mode in force for that contact's kind, cold or warm, is `automatic` and was set by a named person
+(for a contact who waits on a verdict, where either is), as the claim itself reads the mode, the same save creates a
+`critic` work item by `system:runtime`, of the send's campaign, contact, priority, due date and lineage, whose context
+is the reserved key `send_review`, exactly `{"work_item_id": "wi_…", "operation": "…"}` and nothing else, and writes the
+send waiting on it, after any items its `wait_on` named. A keyed repeat answers with what the first create made, and a
+create that loses the race on its key leaves no critic behind. A create or a patch that names `send_review` is refused
+`not_allowed` at that field, on every item, whoever sends it, so an item that carries the key was made by the runtime
+and its brief was never changed. Nothing is created under `every_message`, for a send that carries `ask_person`, for one
+written in the desktop's chat, for one about nobody, or where no critic could be launched (no profile resolves for it
+and no entry command does), and the send is then not held. The modes and the contact's kind are read for this once, when
+the send is created: a later change neither adds nor removes the critic, and the claim reads them again when it decides,
+so a contact cold at the create and warm by the claim has no pass and parks `not_reviewed`. No second critic is created
+when the send's input is edited, and the critic is not cancelled when the send ends first. A critic that fails, is
+cancelled, expires or ends without a review, or a wait whose ceiling comes first, releases the send without a pass, and
+the claim parks it for the person as `not_reviewed` unless a standing approval covers it.
+
+**The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
+item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the
+context: no journal line, no attempt's snapshot, no read of
+the item (`workitem.get`, `workitem.list`) and no log line carries it, and a diagnostic bundle, which reads the item
+pages for their metadata, never sees it. When the claim parks the send, both are moved onto the approval's preview and
+cleared from the row in the park's own save; from then on `approval.get` and `approval.list` are the reads that return
+them. A send that ends for good before a park — cancelled, failed or succeeded — takes both off the row as it ends; an
+expired one keeps them, since a reopen leads to a park. The preview's `doubts` is a list, one entry per doubt that
+stands: `source` (`ask_person` or `review`), `by` (the actor that doubted), `role` (the reviewing run's role, or null),
+`code`, `note` (the sentence, or null) and `line` (the `workitem_reviewed` line, or null for `ask_person`). A send
+parked again after an edit or an expiry carries the creator's `ask_person` sentence over from its earlier approval's
+preview, since the key is never taken back; a review's is not carried, because the text it was about no longer stands.
+
+### The send mode at the claim
+
+A send to a person may go without being asked where a person said so for the kind of contact it
+reaches: the send mode, `automatic` or `every_message`, for a cold contact and for a warm one, set for the installation
+by the named preferences `send_mode.cold` and `send_mode.warm`, and for one campaign by `campaign.set_send_mode`, whose
+own mode is the one in force where it sets one. Unset, a mode is `every_message`, and every such send parks as above. A
+mode releases only in the name of the person who set it: a mode whose line names no person by name releases nothing.
+A contact is **warm** in a campaign once a verdict that stands there judged a reply of theirs a person's answer, and
+**cold** before; while a reply of theirs the campaign's own read saw waits for a verdict, or was judged without saying
+what kind of reply it is, they are neither, and nothing goes to them automatically.
+
+**It is asked at the claim, where nothing has been decided about the work yet**, in the same place and on the same
+guard as a standing approval, and in this order:
+
+1. **Is a mode in force?** The send is a send to a person and names a contact, and a mode of `automatic`
+   set by a named person stands for its campaign, for cold or for warm. Where none does, nothing below is asked, warmth
+   is not read, and the send parks as it always did.
+2. **The contact's warmth**, read from the campaign's chronicle (§Cold, warm or waiting). Where the mode for the contact's warmth is
+   `every_message`, the send parks as it always did.
+3. **Written in the chat?** A send created, or whose input was edited, by a call the desktop's chat made parks for the
+   person: `sent_from_chat`.
+4. **A doubt** stands about the send (§Doubts about a send), whoever raised it: `doubted`.
+5. **The contact waits on a verdict**: `awaiting_judgement` where a reply of theirs has not been judged since it moved,
+   `awaiting_nature` where it was judged without saying what kind of reply it is.
+6. **An answer goes only to a person's reply nobody escalated.** A `conversation.reply`, or any send that names the
+   verdict it answers (`reply_verdict`), is held to the verdict that stands on the reply it answers: the one it names, or
+   else the newest on its thread; none, `answers_no_verdict`; a verdict that does not say what kind of reply it was,
+   `awaiting_nature`; a reply that is not a person's — an automatic reply, a bounce or a request to stop —
+   `reply_not_from_a_person`; a verdict whose reaction is `escalate`, `escalated` — and `escalated` too where a verdict
+   that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
+   or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
+7. **A review that passed the text as it now reads.** A pass under the send's review hash counts where a person by name
+   wrote it, outside a run and outside the desktop's chat, or where the critic the runtime created for this send did:
+   the `critic` work the runtime makes for a send created under an automatic mode, which it creates under its own
+   actor, names the send and its operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`),
+   and whose context was changed since by nobody but the runtime's own actors: a change by a person, a role or the
+   critic's own attempt disqualifies it. Any such pass counts, whatever was reviewed after it, since a doubt was asked
+   before. A counting pass only under an earlier hash is
+   `edited_after_review`; none at all, `not_reviewed`. Another critic's pass does not count: one somebody queued by
+   hand, or the runtime's critic of another send. Nor does a pass by another role, on a line a run wrote in a person's
+   name, or naming an attempt other than its own; each is shown on the preview and releases nothing.
+8. **The daily ceiling.** The campaign has had fewer sends released by the mode since 00:00Z than
+   `Sending:AutomaticMaxPerDay`; at it, `daily_ceiling`, and the preview carries `daily_ceiling` with the limit, the
+   count and since when (§The claim rule).
+9. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
+   `automatic_mode`, requested and decided at the claim's moment, decided by the person who set the mode in force.
+
+A park of steps 3 to 8 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
+above, and its preview carries `send_mode`, the facts and never the code: the `mode`, its `source` (`preference` or
+`campaign`) and the contact's `temperature` (`cold` or `warm`), all three null while the contact waits on a verdict,
+and the `review` line the step read — the pass, the pass under the earlier text, or another role's — or null. Where
+no mode is in force the reason is what it always was. The parks of steps 5 to 7 **fall through to a standing
+approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat,
+a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
+its preview's `standing_approval` says `sent_from_chat`, `doubted` or `daily_ceiling`. A send written in the desktop's chat always waits for the person,
+whatever the send mode, `every_message` included.
+
+**A release decides once, but warmth is read again.** A retry of the same subject runs under the row the mode wrote, and
+reads no review again, so a review sent then is refused `not_reviewable`. It reads the contact's warmth once more: where
+a reply of theirs landed since and waits for a verdict, the row is superseded and the send parks for the person with
+`awaiting_judgement` or `awaiting_nature`. A subject that changed parks with `input_changed`, as under any decision.
+Whatever the pre-flight refuses is refused before the mode is asked, and work released under it is still held by an
+open block of its account.
+
+**The chat's mark.** Every request a confined call of the CLI sends (`JASON_CONFINED`, which the desktop's chat sets on
+every turn) carries the header `Jason-Confined`. The runtime records it on the work it creates under it, as
+`confined: true` on the `workitem_created` line, and on the first edit of its input made under it, as a
+`workitem_updated` line keyed `confined`; the claim reads the mark through the item's own lines, and nothing takes it
+back. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, so a program
+that leaves the header off is not marked.
+
+**A line written under the mark is the chat's, never a person's own word**, as a line that carries an attempt is the
+run's. Besides a send's lines, the mark is recorded, as `confined: true`, on a verdict (`reply_classified`), on a
+review (`workitem_reviewed`) and on a standing approval's set line (`standing_approval_set`) written under the header.
+A verdict so marked lifts no opt-out, and under a standing approval it vouches for no draft as a person's verdict
+(`verdict_not_authentic`) unless it carries a person's answered decision, which is read as the decision records it; a
+review so marked is no person's pass, and a set line so marked sets nothing (`no_standing_approval`).
+
+Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperature (`cold` or `warm`), names the row, the
+operation, the subject hash, the mode's source, the temperature and the review line, and carries no text. Nobody is
+asked, so nothing is notified.
+
+### Cold, warm or waiting
+
+Where a contact stands in a campaign is read from that campaign's own chronicle alone — its
+`inbound_reply_observed` lines and its `reply_classified` verdicts — and from the responders the runtime made for a
+thread. Nothing is stored for it, another campaign's verdicts are never read, and nothing here reads a category, a
+reaction or the words of a reply.
+
+- **Warm** is a verdict that stands in the campaign (no later verdict under its key), whose `nature` is `person`, whose
+  body names this contact, on a thread the campaign's own read saw move. Once warm, always warm: no moment is read.
+- **Waiting** is a reply of the contact's, seen by the campaign's own read, that no standing verdict has judged since it
+  moved. A contact waits for a judgement, or, where the only verdicts that would judge it state no nature, for the
+  nature. A waiting reply outranks warmth: a warm contact's new reply may be a request to stop, so it is judged before
+  anything else is said of the contact. A provider event's `reply_detected` line is not a reply that waits.
+- A verdict **judges** a reply when it stands, states a nature and is about a message at or after the reply's move. A
+  responder's verdict does too, where the responder read the whole thread after the reply moved: the read was a
+  `conversation.get` of the reply's thread that succeeded and whose page was all of it, nothing more to come, and the
+  responder that waited on it ran after it and succeeded. Every order here is the journal's own, never a clock.
+
+**Where the wait fails closed.** What does not prove a reply judged leaves the contact waiting:
+
+- On a thread longer than one page the responder's read proves nothing, since its result says there is more: the contact
+  stays waiting.
+- A read still open when its wait ran out, or one that failed, was cancelled or expired, leaves the contact waiting: the
+  responder saw no transcript and judges nothing. So does a responder with no read, because no route named the plugin
+  that saw the thread, or the read refused its identifier.
+- A reply that reaches the thread while its responder is already waiting or running is added to that responder, which
+  does not judge it, whatever it then does. The contact waits until a verdict about that reply is recorded, or until the
+  next responder the runtime creates on that thread succeeds: it reads the whole thread, so it clears every earlier
+  reply of it at once. In practice this heals at the thread's next move.
+- A responder or a read whose context anyone but the runtime changed judges nothing, since `workitem.update` may rewrite
+  any key of an open item's context.
+- A move on a thread that names no contact makes wait only a contact a standing verdict names on that thread, and only a
+  responder that names that contact judges it: the responder made for the unnamed move is about nobody and clears
+  nothing, so the contact waits for a verdict about a message at or after the move, or for a later responder that names
+  them.
+- A contact whose last reply was judged by a verdict recorded before 0.42.0 waits for its nature, since such a verdict
+  states none, until a verdict with a nature is recorded on that thread.
+- A send of the campaign's own into a thread that has a reply moves the thread, so the contact waits until the
+  responder made for that move has read the whole thread and succeeded: the verdict already standing then judges the
+  move. Where no
+  responder is made for it — `Responder:OnReply` false, or no responder that could be launched
+  ([docs/inbound-sync.md](inbound-sync.md)) — nothing ends the wait but a later verdict, and a send to the contact
+  parks for the person meanwhile.
+
+**Where it holds nothing back.** Two replies make nobody wait, so an automatic send to the person who wrote them may
+still go:
+
+- A reply the provider could not tie to one of the campaign's contacts, on a thread no verdict that stands names
+  anybody on: until a verdict names the person, nothing holds a first message to them.
+- A reply the campaign heard of only through the contact's pin, because another campaign knows the same person; a verdict
+  on its thread warms nobody here either, and the contact stays as they were.
 
 ## Leases and heartbeats
 
@@ -611,7 +861,7 @@ byte of what the host wrote, where the host's row in [execution-profiles.md §12
 names the signal Jason reads. Otherwise the first that fails is the one the attempt records. The attempt is kept either way, with the context it was claimed with and the
 provenance as far as the decision got. None of them is retried: nothing about the work changes
 between two scans, so an item put back would be refused for the same reason for as long as the queue
-existed. It is the same rule the twenty-seven provider checks follow.
+existed. It is the same rule the twenty-eight provider checks follow.
 
 | # | Code | What it means, and what to change |
 |---|---|---|
@@ -678,7 +928,7 @@ Its environment is the runtime's own, less the runtime's configuration, plus the
 - `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so
   that an agent reporting through the CLI is its attempt without having to say so; and the CLI names
   the attempt to the runtime on every request in the `Jason-Attempt` header, whatever actor it claims,
-  so the five verbs that are a person's own word refuse it (`decided_inside_a_run`);
+  so the verbs that are a person's own word refuse it (`decided_inside_a_run`);
 - the directory this build of Jason runs from, at the front of `PATH`, so the bare command word in
   `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
 
@@ -940,7 +1190,7 @@ settings at all and are never refused for this reason.
 | `launches_spent` | wait | the item's campaign has started `Launches:MaxPerDay:<role>` runs of its role since 00:00Z; the claim holds it, with no attempt, until the next 00:00Z (§The claim rule) |
 | `responder_launches_spent` | wait | the same hold as 0.30.0 wrote it, for a responder; nothing writes it now and an item that carries it reads as held |
 | `profile_revision_refused` | attempt | the profile's current revision holds a word this build's rules for its host refuse |
-| the twenty-seven pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+| the twenty-eight pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
 
 ## Provider operations
 
@@ -963,18 +1213,18 @@ declares for one. A plugin never sees a work item's context. A search the claim 
 campaign's audiences, which the claim finds or makes and records on the item under `context.audience`
 ([campaign manager](campaign-manager.md) §10).
 
-**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-seven checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third:
+**Everything that can stop it is decided at the claim, before a child process exists.** Twenty-eight checks, in this order, and the first that answers is the one that decides. A check's number is its name and never moves, so the twenty-seventh, added after the rest, is asked after the twenty-third, and the twenty-eighth, added after it, right after the tenth:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
-contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
+contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed → opted_out →
 contact_not_linked → send_unknown → send_reference_absent → send_route_mismatch → search_unknown →
 search_reference_absent → search_route_mismatch → audience_unknown → input_invalid → definition_invalid →
 argument_unsupported → template_not_offered → provider_answer_lost → thread_route_mismatch →
 search_unfinished → approval_required → provider_blocked
 ```
 
-The first twenty-four are refusals and all of them are final: twenty-one are `permanent`, `input_invalid` and
+The first twenty-five are refusals and all of them are final: twenty-two are `permanent`, `input_invalid` and
 `definition_invalid` are `validation`, because they are the ones a planner can fix by editing the item, and `provider_answer_lost` is
 `ambiguous`, because it refuses to repeat a send, or a metered act settled by a recovery read, whose earlier attempt
 lost its answer, either under a plugin whose manifest does not say it settles the send by the work item's key, or where
@@ -984,7 +1234,17 @@ composed now is not the one it was composed with, and so keeps what that attempt
 context snapshot either way — a silent skip would leave the item looking claimable forever — and
 nothing ever falls back to another plugin. The twenty-seventh, `thread_route_mismatch`, is the last of those refusals
 to be asked: work on a thread the campaign saw at another plugin than the item is routed to, refused before
-the three that wait or park, so nobody is asked to approve, and no block holds, work that could only be refused. The twenty-fourth is not a refusal: `search_unfinished` keeps a search
+the three that wait or park, so nobody is asked to approve, and no block holds, work that could only be refused.
+`opted_out`, added after it, is asked right after `suppressed`, under the register's own gate and over the same
+operations: the register is by value, and this lock is by the person, refusing work about a contact for whom an opt-out
+verdict stands in any campaign, whatever value the work would reach them at — one they gained after the verdict
+included. It is asked only where the register found no entry, so the register answers first wherever it can. The
+verdict itself registers every value the contact had, in the same save, by the runtime's reserved actor
+`system:opt_out`, with the verdict as the reason; the lock is lifted only by a person's own later verdict on the same
+reply in that verdict's campaign, under their name, outside any run, stating a nature other than `opt_out` — never by a
+role's or a run's, never by a person named from inside a run, never by a carried answer alone, and never by
+`suppression.remove` ([runtime API](runtime-api.md), `reply.record`).
+The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The
 twenty-fifth is not a refusal either: `approval_required` parks the
@@ -1232,6 +1492,7 @@ mistyped one.
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 | `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in a UTC day, counted from 00:00Z; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the next 00:00Z (§The claim rule) |
+| `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
 
 `Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds
 it: a start stops and says where the number went, nothing is carried over for you, and a live edit that names it keeps

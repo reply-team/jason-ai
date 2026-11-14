@@ -89,7 +89,7 @@ public class DesktopDenyListTests
         "campaign get", "campaign list", "campaign list-contacts", "campaign summary", "contact get", "contact list",
         "contact thread", "contact threads", "decision get", "decision list", "events sources", "journal kinds", "journal list",
         "logs", "operation describe", "plugin list", "preference list", "project get", "project list", "reply count", "report get",
-        "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "status",
+        "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "sender list", "status",
         "subscription list", "subscription runs", "suppression list", "workitem count", "workitem get", "workitem list",
         "workitem wait",
     ];
@@ -194,8 +194,8 @@ public class DesktopDenyListTests
     {
         [ConfinedVerbs.Kind.PersonsWord] =
             "#\n# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a\n" +
-            "# preference, a block cleared, work resumed, a report and a subscription rewound. The CLI gives them no default actor,\n" +
-            "# and gives none to six verbs further down either.\n",
+            "# preference, a campaign's send mode, a block cleared, work resumed, a send reviewed, a report and a subscription\n" +
+            "# rewound. The CLI gives them no default actor, and gives none to six verbs further down either.\n",
         [ConfinedVerbs.Kind.Installation] =
             "#\n# The verbs that change the installation, follow it without end, or carry it off the machine:\n",
         [ConfinedVerbs.Kind.Acts] =
@@ -304,6 +304,20 @@ public class DesktopDenyListTests
         var declared = Regex.Matches(model, @"^export const confinedVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
 
         Assert.Equal(Confinement.Variable, Assert.Single(declared).Groups["name"].Value);
+    }
+
+    /// <summary>
+    /// The desktop spells the attempt's variable once, in its permission model, and refuses a command that names it by that
+    /// declaration; it is the name the CLI reads the attempt from, so the name the chat may not claim is the one that counts.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_attempt_variable_is_the_cli_s()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+
+        var declared = Regex.Matches(model, @"^export const attemptVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
+
+        Assert.Equal(ExecutionEnvironment.AttemptIdVariable, Assert.Single(declared).Groups["name"].Value);
     }
 
     /// <summary>

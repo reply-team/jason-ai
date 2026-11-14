@@ -1,0 +1,11 @@
+{
+  "kind": "workitem_reviewed",
+  "version": 1,
+  "case": "a code is one of the closed list",
+  "body": {
+    "key": "sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "old": null,
+    "new": { "result": "doubts", "code": "looks_off", "operation": "message.send", "role": "reviewer" }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/code", "reason": "any_of" }] }
+}

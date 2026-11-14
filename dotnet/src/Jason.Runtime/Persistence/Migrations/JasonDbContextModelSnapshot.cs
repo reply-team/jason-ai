@@ -143,6 +143,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_approvals_one_pending_per_item")
                         .HasFilter("status = 'pending'");
 
+                    b.HasIndex("CampaignId", "DecidedAt")
+                        .HasDatabaseName("ix_approvals_automatic_campaign_decided_at")
+                        .HasFilter("reason = 'automatic_mode'");
+
                     b.HasIndex("Status", "RequestedAt")
                         .HasDatabaseName("ix_approvals_status_requested_at");
 
@@ -590,6 +594,26 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(0)
                         .HasColumnName("responder_watermark");
+
+                    b.Property<string>("SendModeCold")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_cold");
+
+                    b.Property<string>("SendModeColdSetBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_cold_set_by");
+
+                    b.Property<string>("SendModeWarm")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_warm");
+
+                    b.Property<string>("SendModeWarmSetBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_warm_set_by");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2479,6 +2503,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
+                    b.Property<string>("AskPersonNote")
+                        .HasMaxLength(280)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ask_person_note");
+
                     b.Property<int>("AttemptCount")
                         .HasColumnType("INTEGER")
                         .HasColumnName("attempt_count");
@@ -2604,6 +2633,11 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Property<DateTime?>("RetryAfter")
                         .HasColumnType("TEXT")
                         .HasColumnName("retry_after");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(280)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("review_note");
 
                     b.Property<string>("Role")
                         .HasMaxLength(64)

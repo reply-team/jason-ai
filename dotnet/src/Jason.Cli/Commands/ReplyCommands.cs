@@ -55,6 +55,10 @@ public static class ReplyCommands
         {
             Description = "The question about this reply a person answered, as dec_...: the verdict then carries their answer, and its category must be the option they chose, and the question must have been raised by the run that recorded a verdict on this reply.",
         };
+        var nature = Choice<ReplyNature>.Only(new Option<string?>("--nature")
+        {
+            Description = $"What the reply is, in the runtime's own words: {Choices.Spoken(Choice<ReplyNature>.Words)}. The runtime reads it, never the category: person makes the contact warm in this campaign, and opt_out needs --contact. Left out, the verdict warms nobody.",
+        });
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -68,6 +72,7 @@ public static class ReplyCommands
         command.Options.Add(contact);
         command.Options.Add(goal);
         command.Options.Add(decision);
+        command.Options.Add(nature);
         command.Options.Add(reason);
         command.Options.Add(human);
 
@@ -85,6 +90,7 @@ public static class ReplyCommands
                 .Set("contact_id", parseResult.GetValue(contact))
                 .Set("goal_id", parseResult.GetValue(goal))
                 .Set("decision_id", parseResult.GetValue(decision))
+                .Set("nature", parseResult.GetValue(nature))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
 

@@ -3,6 +3,8 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Decisions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Jason.Runtime.Persistence;
 
@@ -133,6 +135,28 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         return builder.Options;
     }
 
+    /// <summary>
+    /// A context of its own on this one's connection, inside this one's transaction where it has one, under the same options
+    /// and interceptors: it has loaded nothing, so every entity it reads is the database's as it stands now, this context's
+    /// own writes in the transaction among them, never one this context loaded earlier and still holds as it was. For reads.
+    /// </summary>
+    internal async Task<JasonDbContext> BesideAsync(CancellationToken cancellationToken)
+    {
+        var options = (DbContextOptions<JasonDbContext>)this.GetService<IDbContextOptions>();
+        var connection = RelationalOptionsExtension.Extract(options)
+            .WithConnectionString(null)
+            .WithConnection(Database.GetDbConnection(), owned: false);
+        var builder = new DbContextOptionsBuilder<JasonDbContext>(options);
+        ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(connection);
+        var beside = new JasonDbContext(builder.Options);
+        if (Database.CurrentTransaction is { } transaction)
+        {
+            await beside.Database.UseTransactionAsync(transaction.GetDbTransaction(), cancellationToken).ConfigureAwait(false);
+        }
+
+        return beside;
+    }
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         ArgumentNullException.ThrowIfNull(configurationBuilder);
@@ -155,6 +179,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<ProviderBlockStatus>().HaveConversion<SnakeCaseEnumConverter<ProviderBlockStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<EventBackfillStatus>().HaveConversion<SnakeCaseEnumConverter<EventBackfillStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<SubscriptionRunStatus>().HaveConversion<SnakeCaseEnumConverter<SubscriptionRunStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<SendMode>().HaveConversion<SnakeCaseEnumConverter<SendMode>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
         // A function a query calls on a JSON object column (CustomValues) takes the column as the column stores it.
         configurationBuilder.DefaultTypeMapping<JsonObject>().HasConversion<JsonObjectConverter>();
@@ -207,6 +232,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.HasIndex(c => c.PublicId).IsUnique();
             campaign.Property(c => c.Name).HasMaxLength(200);
             campaign.Property(c => c.ExecutionProfile).HasMaxLength(64);
+            campaign.Property(c => c.SendModeColdSetBy).HasMaxLength(100);
+            campaign.Property(c => c.SendModeWarmSetBy).HasMaxLength(100);
             campaign.Property(c => c.Context).HasColumnName("context_json").IsRequired().HasDefaultValueSql("'{}'");
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);
@@ -308,6 +335,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             // One key names one item in its campaign; the same key in another campaign is another item.
             item.Property(w => w.IdempotencyKey).HasMaxLength(128);
             item.Property(w => w.IdempotencyDigest).HasMaxLength(71);
+
+            // A doubt's sentence, plain text and never JSON, so no converter quotes it into an error.
+            item.Property(w => w.AskPersonNote).HasMaxLength(DoubtCodes.MaxNoteLength);
+            item.Property(w => w.ReviewNote).HasMaxLength(DoubtCodes.MaxNoteLength);
             item.HasIndex(w => new { w.CampaignId, w.IdempotencyKey })
                 .IsUnique()
                 .HasFilter("idempotency_key IS NOT NULL")
@@ -368,6 +399,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             approval.HasIndex(a => a.WorkItemId).IsUnique().HasFilter("status = 'pending'").HasDatabaseName("ix_approvals_one_pending_per_item");
             approval.HasIndex(a => new { a.Status, a.RequestedAt });
             approval.HasIndex(a => a.CampaignId);
+
+            // The daily ceiling of automatic sends counts a campaign's releases of the day at the claim of every send the
+            // mode would release, inside the claim's write transaction. A partial index holds those rows alone, by campaign
+            // and moment, so the count visits one campaign's releases of the day and none of the table's other rows.
+            approval.HasIndex(a => new { a.CampaignId, a.DecidedAt })
+                .HasFilter("reason = 'automatic_mode'")
+                .HasDatabaseName("ix_approvals_automatic_campaign_decided_at");
             approval.HasOne(a => a.WorkItem).WithMany().HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
         });
 

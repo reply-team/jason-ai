@@ -919,6 +919,7 @@ public class AgentPreflightTests
                 new NothingIsSuppressed(),
                 settings,
                 TestOptions.LaunchesSettings(),
+                TestOptions.SendingSettings(),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>());
         }

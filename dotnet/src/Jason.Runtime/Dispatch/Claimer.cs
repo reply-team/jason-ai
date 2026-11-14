@@ -16,6 +16,7 @@ using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Replies;
 using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
@@ -42,9 +43,10 @@ public sealed class Claimer(
     ISuppressionCheck suppression,
     LiveSettings<DispatcherOptions> settings,
     LiveSettings<LaunchesOptions> launches,
+    LiveSettings<SendingOptions> sending,
     JasonPaths paths,
     ILogger<Claimer> logger,
-    PatternTiming? timing = null)
+    PatternTiming? timing = null) : IClaimReading
 {
     /// <summary>How the claim matches a schema's patterns: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
@@ -101,12 +103,7 @@ public sealed class Claimer(
         var ended = new List<AttemptEnd>();
         var unreadable = new List<UnreadableFile>();
 
-        // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
-        // and an activation that happens mid-scan belongs to the next one.
-        var packages = plugins.Snapshot;
-        var routing = routes.Snapshot;
-
-        // And the one setting an agent claim reads, for the same reason and in the same place: a default edited
+        // The one setting an agent claim reads is read once too, as the snapshots are below: a default edited
         // halfway through a scan belongs to the next scan, not to half of this one.
         var globalDefault = roles.Current.DefaultExecutionProfile;
 
@@ -115,7 +112,18 @@ public sealed class Claimer(
         var limits = launches.Current.MaxPerDay;
         var today = now.Date;
 
+        // And the daily ceiling of automatic sends, for the same reason and over the same UTC day.
+        var ceiling = new DailyCeiling.Limit(sending.Current.AutomaticMaxPerDay, today);
+
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
+        // and an activation that happens mid-scan belongs to the next one. They are read once the scan holds the
+        // database, so a writer that asked the claim's question while it held it first (a review) asked it against
+        // these snapshots or older ones, never newer ones than the claim then decides by.
+        var packages = plugins.Snapshot;
+        var routing = routes.Snapshot;
+
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
             var item = await db.WorkItems.WithNavigation().Include(w => w.Attempts)
@@ -175,7 +183,7 @@ public sealed class Claimer(
 
             var asks = verdict is { Parks: true, Code: AttemptErrors.ApprovalRequired };
             var released = asks
-                ? await DecideAsync(db, item, verdict!, now, ct).ConfigureAwait(false)
+                ? await DecideAsync(db, item, verdict!, now, ceiling, ct).ConfigureAwait(false)
                 : null;
             if (asks && released is null)
             {
@@ -552,6 +560,48 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// Whether the claim would read <paramref name="item"/>'s reviews if it claimed it now: not where it would run it under
+    /// a live approval that stands for it as it would now go, and not known where the pre-flight refuses it while such a row is
+    /// live, since no subject can be composed to hold the row to; read everywhere else. The same facts, the same pre-flight
+    /// against the same two snapshots, and the same test (<see cref="ApprovalGate.Authorizes"/>) as the claim's own
+    /// decision, so a review asks the claim's question rather than a description of it. Reads only.
+    /// </summary>
+    public async Task<ClaimReading> RunsUnderAsync(JasonDbContext db, WorkItem item, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.Kind != WorkItemKind.ProviderOp)
+        {
+            return ClaimReading.Reads;
+        }
+
+        // Read as the claim reads it, on a context that has loaded nothing, as the claim's own scan context has not: the item,
+        // its campaign, its person, their channels and pins, its attempts and the live row are the database's as they stand
+        // now, inside the caller's transaction where it has one, never the entities the caller's context loaded first, which
+        // it would hand back as they were then whatever another writer has changed since.
+        await using var beside = await db.BesideAsync(ct).ConfigureAwait(false);
+        var current = await beside.WorkItems.WithNavigation().Include(w => w.Attempts)
+            .FirstAsync(w => w.Id == item.Id, ct)
+            .ConfigureAwait(false);
+        var routing = routes.Snapshot;
+        var facts = await FactsAsync(beside, current, routing, ct).ConfigureAwait(false);
+        var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
+        var live = await ApprovalGate.LiveAsync(beside, current.CampaignId, current.Id, ct).ConfigureAwait(false);
+        if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
+        {
+            return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Unjudged, live) : ClaimReading.Reads;
+        }
+
+        if (ApprovalGate.Authorizes(live, ApprovalSubject.Of(plan, current)))
+        {
+            return new ClaimReading(ReviewHearing.NotRead, live);
+        }
+
+        // Decided anew, so the reviews are read; a live approved row that no longer stands is named, for a doubt to end it.
+        return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Read, live) : ClaimReading.Reads;
+    }
+
+    /// <summary>
     /// Whether this work may run now: the decision a person has already made about exactly this subject, or
     /// nothing — in which case the item has been parked for one by the time this returns.
     /// </summary>
@@ -566,15 +616,26 @@ public sealed class Claimer(
     /// that sent nothing performs the one act the person approved, and an end that may have sent is never repeated
     /// by an operation that says so.
     /// </remarks>
-    private async Task<Approval?> DecideAsync(JasonDbContext db, WorkItem item, PreflightVerdict verdict, DateTime now, CancellationToken ct)
+    private async Task<Approval?> DecideAsync(JasonDbContext db, WorkItem item, PreflightVerdict verdict, DateTime now, DailyCeiling.Limit ceiling, CancellationToken ct)
     {
         var plan = verdict.Plan!;
         var subject = ApprovalSubject.Of(plan, item);
         var live = await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, ct).ConfigureAwait(false);
 
-        if (live is { Status: ApprovalStatus.Approved }
-            && string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal))
+        if (ApprovalGate.Authorizes(live, subject))
         {
+            // A retry under an automatic release goes under the mode's reading of facts, and a reply that landed since the
+            // failure is one of them: where the contact now waits on a verdict, the send parks for the person and the row is
+            // superseded as any park supersedes one. Nothing else about the row is decided again, its reviews included.
+            if (string.Equals(live!.Reason, ApprovalGate.AutomaticMode, StringComparison.Ordinal)
+                && await AutomaticRelease.RetryAsync(db, item, ct).ConfigureAwait(false) is { } waits)
+            {
+                var again = await PreviewAsync(db, item, plan, subject, ct).ConfigureAwait(false);
+                again[AutomaticRelease.PreviewKey] = waits.Facts;
+                ApprovalGate.Park(db, journal, item, plan, subject, again, live, waits.Why, now);
+                return null;
+            }
+
             return live;
         }
 
@@ -592,21 +653,51 @@ public sealed class Claimer(
             return null;
         }
 
-        var preview = ApprovalPreview.Of(
-            plan.Contract,
-            subject,
-            item.Campaign!,
-            item.Contact,
-            CanonicalInput.ConsumedChannel(plan.Contract, item));
+        // Who doubted and why, where the person deciding reads it; the park clears the sentences from the row.
+        var preview = await PreviewAsync(db, item, plan, subject, ct).ConfigureAwait(false);
+        var doubted = preview.ContainsKey(Doubts.PreviewKey);
 
         // Only about work nobody was ever asked about: a decision a person made, or a question already put to them, is
-        // theirs, and a later standing approval never answers it — not even once the question is gone, cancelled by an
-        // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
-        // retry of the same subject as a person's would.
-        if (live is null
-            && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false)
-            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } answer)
+        // theirs, and neither the automatic mode nor a later standing approval ever answers it — not even once the question
+        // is gone, cancelled by an expiry the item was then reopened from. Both decide once, here, and the row either writes
+        // then authorises a retry of the same subject as a person's would. The one answer guards both, so they cannot drift.
+        var neverAsked = live is null
+            && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false);
+
+        // The automatic mode first, in its own published order; where it parks the send, the reason is the row's and the
+        // facts are the preview's. A doubt, a send from the chat and a send at the daily ceiling park for the person ahead of
+        // any standing approval; every other park of the mode leaves the standing approval to decide by its own conditions, as
+        // it did before the modes.
+        var automatic = neverAsked
+            ? await AutomaticRelease.DecideAsync(db, item, plan, doubted, ceiling, ct).ConfigureAwait(false)
+            : null;
+        if (automatic is AutomaticDecision.Release release)
         {
+            return ApprovalGate.ReleaseUnderMode(db, journal, item, plan, subject, preview, release, now);
+        }
+
+        if (automatic is AutomaticDecision.Park parked)
+        {
+            preview[AutomaticRelease.PreviewKey] = parked.Facts;
+            if (parked.Ceiling is { } ceilingSaid)
+            {
+                preview[DailyCeiling.PreviewKey] = ceilingSaid;
+            }
+        }
+
+        var held = automatic switch
+        {
+            AutomaticDecision.Park { FallsThrough: false, Why: var why } => why,
+            AutomaticDecision.NotInForce { Chat: true } => StandingApprovals.Why.SentFromChat,
+            _ when doubted => StandingApprovals.Why.Doubted,
+            _ => null,
+        };
+
+        // A standing approval decides once, here. A doubt that stands parks the send for the person ahead of it — a role
+        // asked a person to look, and no standing word answers that — and so does a send written in the chat.
+        if (neverAsked && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } covered)
+        {
+            var answer = held is not null && covered.Cover is { } holding ? StandingApprovals.Held(holding, held) : covered;
             if (answer.Cover is { } cover)
             {
                 return ApprovalGate.ReleaseUnderStanding(db, journal, item, plan, subject, preview, cover, now);
@@ -617,17 +708,31 @@ public sealed class Claimer(
             preview["standing_approval"] = answer.Uncovered!.ToJson();
         }
 
-        ApprovalGate.Park(
-            db,
-            journal,
-            item,
-            plan,
-            subject,
-            preview,
-            live,
-            live is null ? ApprovalGate.ApprovalRequired : ApprovalGate.InputChanged,
-            now);
+        var reason = automatic is AutomaticDecision.Park { Why: var because } ? because
+            : live is null ? ApprovalGate.ApprovalRequired
+            : ApprovalGate.InputChanged;
+        ApprovalGate.Park(db, journal, item, plan, subject, preview, live, reason, now);
         return null;
+    }
+
+    /// <summary>
+    /// What the person deciding reads about the send, assembled from what the claim holds: the operation's own preview and
+    /// the doubts that stand about it.
+    /// </summary>
+    private static async Task<JsonObject> PreviewAsync(JasonDbContext db, WorkItem item, ProviderOpPlan plan, ApprovalSubject subject, CancellationToken ct)
+    {
+        var preview = ApprovalPreview.Of(
+            plan.Contract,
+            subject,
+            item.Campaign!,
+            item.Contact,
+            CanonicalInput.ConsumedChannel(plan.Contract, item));
+        if (await Doubts.PreviewAsync(db, item, ct).ConfigureAwait(false) is { } doubts)
+        {
+            preview[Doubts.PreviewKey] = doubts;
+        }
+
+        return preview;
     }
 
     /// <summary>
@@ -813,13 +918,15 @@ public sealed class Claimer(
             await db.Entry(contact).Collection(person => person.Channels).LoadAsync(ct).ConfigureAwait(false);
         }
 
+        var pins = await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false);
+        var suppressed = await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false);
         return new PreflightFacts(
             item,
             campaign,
             contact,
-            await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false),
+            pins,
             campaignPins,
-            await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false),
+            suppressed,
             blocks,
             unsettled,
             send,
@@ -827,7 +934,8 @@ public sealed class Claimer(
             search,
             audience,
             inTheWay,
-            thread);
+            thread,
+            suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -929,4 +1037,15 @@ public sealed class Claimer(
         && CanonicalInput.ConsumedChannel(contract, item) is { } channel
         && CanonicalInput.Reachable(contact, channel) is { } reachable
         && await suppression.IsSuppressedAsync(db, channel, reachable.Value, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// The second question, under the register's own gate and asked only where the register answered no: whether an
+    /// opt-out verdict stands for the person, by the contact's own lines, whatever value the work would reach them at.
+    /// </summary>
+    private static async Task<string?> OptedOutAsync(JasonDbContext db, OperationContract contract, WorkItem item, Contact contact, CancellationToken ct) =>
+        contract.Preflight.Suppression == SuppressionCheck.Checked
+        && CanonicalInput.ConsumedChannel(contract, item) is { } channel
+        && CanonicalInput.Reachable(contact, channel) is not null
+            ? await OptOuts.StandingAsync(db, contact.Id, ct).ConfigureAwait(false)
+            : null;
 }

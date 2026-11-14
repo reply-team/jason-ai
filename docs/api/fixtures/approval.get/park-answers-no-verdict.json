@@ -1,0 +1,177 @@
+{
+  "operation": "approval.get",
+  "case": "park-answers-no-verdict",
+  "request": {
+    "approval_id": "apr_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_1",
+    "work_item_id": "wi_1",
+    "campaign_id": "cmp_1",
+    "operation": "message.send",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "answers_no_verdict",
+    "subject_hash": "sha256:recorded-1",
+    "subject": {
+      "binding_identity": "sha256:recorded-2",
+      "input": {
+        "args": {
+          "channel": "email",
+          "sender": {
+            "external_id": "s_12",
+            "address": "owner@example.test"
+          },
+          "message": {
+            "format": "email",
+            "subject": "Notes from the meetup",
+            "body": "Hi Ines, thanks for the talk at the meetup."
+          }
+        },
+        "contacts": [
+          {
+            "id": "cnt_1",
+            "first_name": "Ines",
+            "last_name": "Duarte",
+            "company": "Kavali",
+            "title": null,
+            "time_zone": null,
+            "channels": [
+              {
+                "channel": "email",
+                "value": "ines@example.test",
+                "primary": true
+              }
+            ],
+            "external_ids": {}
+          }
+        ],
+        "campaign": {
+          "id": "cmp_1",
+          "name": "Spring launch",
+          "status": "active",
+          "external_ids": {}
+        },
+        "idempotency_key": "wi_1"
+      },
+      "operation": "message.send",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_1"
+    },
+    "preview": {
+      "summary": "Send ines@example.test a message by email, from the provider's account s_12 (owner@example.test), outside any campaign — subject: Notes from the meetup; text: Hi Ines, thanks for the talk at the meetup.; send after: —",
+      "highlights": {
+        "/contacts/0/channels/0/value": "ines@example.test",
+        "/args/channel": "email",
+        "/args/sender": {
+          "external_id": "s_12",
+          "address": "owner@example.test"
+        },
+        "/args/message": {
+          "format": "email",
+          "subject": "Notes from the meetup",
+          "body": "Hi Ines, thanks for the talk at the meetup."
+        },
+        "/args/message/compose": null,
+        "/args/send_after": null
+      },
+      "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+      "reach": {
+        "value": "act",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Spring launch"
+      },
+      "contact": {
+        "id": "cnt_1",
+        "name": "Ines Duarte",
+        "channel": "email",
+        "value": "ines@example.test"
+      },
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-2",
+      "subject": {
+        "binding_identity": "sha256:recorded-2",
+        "input": {
+          "args": {
+            "channel": "email",
+            "sender": {
+              "external_id": "s_12",
+              "address": "owner@example.test"
+            },
+            "message": {
+              "format": "email",
+              "subject": "Notes from the meetup",
+              "body": "Hi Ines, thanks for the talk at the meetup."
+            }
+          },
+          "contacts": [
+            {
+              "id": "cnt_1",
+              "first_name": "Ines",
+              "last_name": "Duarte",
+              "company": "Kavali",
+              "title": null,
+              "time_zone": null,
+              "channels": [
+                {
+                  "channel": "email",
+                  "value": "ines@example.test",
+                  "primary": true
+                }
+              ],
+              "external_ids": {}
+            }
+          ],
+          "campaign": {
+            "id": "cmp_1",
+            "name": "Spring launch",
+            "status": "active",
+            "external_ids": {}
+          },
+          "idempotency_key": "wi_1"
+        },
+        "operation": "message.send",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_1"
+      },
+      "send_mode": {
+        "mode": "automatic",
+        "source": "preference",
+        "temperature": "warm",
+        "review": null
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-2",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-15T12:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Ines Duarte",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}

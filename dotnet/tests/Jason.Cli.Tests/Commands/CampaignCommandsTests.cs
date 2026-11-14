@@ -161,6 +161,42 @@ public class CampaignCommandsTests
         Assert.Contains("--clear", cli.Error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A campaign's own send mode: a word sets one, <c>--clear</c> sends null for one, which gives it back to the
+    /// installation; a mode not named is not sent at all.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "--cold", "automatic" }, "\"cold\":\"automatic\"")]
+    [InlineData(new[] { "--warm", "every_message" }, "\"warm\":\"every_message\"")]
+    [InlineData(new[] { "--cold", "automatic", "--clear", "warm" }, "\"cold\":\"automatic\",\"warm\":null")]
+    [InlineData(new[] { "--clear", "cold", "--clear", "warm" }, "\"cold\":null,\"warm\":null")]
+    public async Task Set_send_mode_sends_the_modes_named_and_null_for_a_mode_cleared(string[] options, string modes)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["--actor", "human:Marta", "campaign", "set-send-mode", "cmp_A", .. options, "--reason", "her call"]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.CampaignSetSendMode,
+            $"{{\"campaign_id\":\"cmp_A\",{modes},\"reason\":\"her call\",\"actor\":{{\"type\":\"human\",\"id\":\"Marta\"}}}}");
+    }
+
+    [Theory]
+    [InlineData(new[] { "--clear", "both" }, "--clear takes cold or warm; 'both' is not one of them.")]
+    [InlineData(new string[0], "campaign set-send-mode needs --cold, --warm or --clear")]
+    [InlineData(new[] { "--clear", "cold", "--cold", "every_message" }, "--cold and --clear cold both name the cold mode: set it or give it back, not both.")]
+    [InlineData(new[] { "--warm", "automatic", "--clear", "warm" }, "--warm and --clear warm both name the warm mode: set it or give it back, not both.")]
+    public async Task Set_send_mode_refuses_a_request_that_names_no_mode_it_knows(string[] options, string said)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["--actor", "human:Marta", "campaign", "set-send-mode", "cmp_A", .. options]);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains(said, cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("start", Operations.CampaignStart)]
     [InlineData("pause", Operations.CampaignPause)]
@@ -799,7 +835,9 @@ public class CampaignCommandsTests
     public async Task Human_mode_renders_one_campaign()
     {
         var campaign = JsonSerializer.Serialize(
-            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null, AudienceThreshold: 50),
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null, AudienceThreshold: 50,
+                SendModes: new SendModesDto(SendMode.Automatic, null),
+                SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default))),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -818,6 +856,10 @@ public class CampaignCommandsTests
 
         // So is the reserve it keeps, since the dispatcher counts against it.
         Assert.Matches("(?m)^Reserve: +threshold 50 untouched\\r?$", cli.Text);
+
+        // And how a send to each kind of contact goes now, with where that comes from.
+        Assert.Matches("(?m)^Cold sends: +automatic, this campaign's own\\r?$", cli.Text);
+        Assert.Matches("(?m)^Warm sends: +every_message, as nobody has chosen one\\r?$", cli.Text);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 

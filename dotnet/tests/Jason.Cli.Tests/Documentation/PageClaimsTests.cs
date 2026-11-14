@@ -1095,7 +1095,7 @@ public partial class PageClaimsTests
     {
         var agent = Flat(Agent());
 
-        Assert.Contains("If the person gave you these three lines: ```text Install Jason by following https://get.jasonharness.ai/install. When it reports Ready, start its quick-start skill and take me to my first campaign. If anything stops you, ask me directly and tell me why. ``` they have asked for the install, so do it without stopping to confirm a step.", agent, StringComparison.Ordinal);
+        Assert.Contains("If the person gave you these three lines: ```text Install Jason by following https://get.jasonharness.ai/install When it reports Ready, start its quick-start skill and take me to my first campaign. If anything stops you, ask me directly and tell me why. ``` they have asked for the install, so do it without stopping to confirm a step.", agent, StringComparison.Ordinal);
         Assert.Contains("Given only the link, you do not have that yes: ask before the install and before each act this page marks **Ask first.**", agent, StringComparison.Ordinal);
         Assert.Contains(
             "If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of [the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again. That yes covers your own host and nothing else this page marks **Ask first.** Where this machine has other agent hosts, skills for them are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands.",
@@ -1329,7 +1329,7 @@ public partial class PageClaimsTests
     public void The_install_prompt_is_three_lines_the_same_in_the_readme_the_handbook_and_the_install_page()
     {
         const string Lines =
-            "Install Jason by following https://get.jasonharness.ai/install.\n" +
+            "Install Jason by following https://get.jasonharness.ai/install\n" +
             "When it reports Ready, start its quick-start skill and take me to my first campaign.\n" +
             "If anything stops you, ask me directly and tell me why.\n";
 
@@ -1345,7 +1345,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Fact]
     public void The_install_prompt_points_at_the_install_page_at_main() =>
-        Assert.Contains("Install Jason by following https://get.jasonharness.ai/install.", Flat(Prompt()), StringComparison.Ordinal);
+        Assert.Contains("Install Jason by following https://get.jasonharness.ai/install", Flat(Prompt()), StringComparison.Ordinal);
 
     /// <summary>
     /// The steps live on the install page alone. The prompt names no command and no option, so steps cannot creep back
@@ -2464,10 +2464,10 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:10d3eed9f6964c39c61fad83a68337ec9336079b3fd7d46e7cee8dbc10c9b6a4";
+    private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:efe1dbd053cee86b1bac0897bd5faaa060c537bfb8f22345cf3e6adf40c52a31";
+    private const string AgentSectionDigest = "sha256:b8f84523824d10519f38f1f0e8cbae938f4d6b5b70e016e338227cdd79f08246";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

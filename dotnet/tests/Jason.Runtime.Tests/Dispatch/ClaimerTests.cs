@@ -2156,10 +2156,11 @@ public partial class ClaimerTests
             ISuppressionCheck? register = null,
             PatternTiming? timing = null,
             Func<string, RouteSnapshot>? routes = null,
-            IReadOnlyList<LoadedPlugin>? others = null)
+            IReadOnlyList<LoadedPlugin>? others = null,
+            DateTime? at = null)
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
-            var clock = new FixedClock(Noon);
+            var clock = new FixedClock(at ?? Noon);
             var settings = TestOptions.Settings(dispatcher);
             var journal = new JournalWriter(clock);
             var plugins = new PluginRegistry(clock);
@@ -2180,6 +2181,11 @@ public partial class ClaimerTests
                     new RouteSet(route, RouteSet.Empty.Operations),
                     RouteSnapshot.Empty(Noon, plugins.Snapshot.Id).Campaigns));
             }
+
+            _plugin = plugin;
+            _route = route;
+            _plugins = plugins;
+            _routing = routing;
 
             if (routes is not null)
             {
@@ -2203,14 +2209,52 @@ public partial class ClaimerTests
                 register ?? new NothingIsSuppressed(),
                 settings,
                 TestOptions.LaunchesSettings(),
+                TestOptions.SendingSettings(Sending),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>(),
                 timing);
         }
 
+        private readonly LoadedPlugin? _plugin;
+        private readonly Route? _route;
+        private readonly PluginRegistry _plugins;
+        private readonly RouteRegistry _routing;
+
         public JasonPaths Paths => _dir.Paths;
 
         public Claimer Claimer { get; }
+
+        /// <summary>The sending section the claim reads at each scan's start, which a test may change between scans.</summary>
+        public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());
+
+        /// <summary>
+        /// The harness's plugin loaded again with <paramref name="status"/>, as a reload would leave it, and its route frozen
+        /// again against that load, so the claim's next pre-flight reads the plugin as it now stands.
+        /// </summary>
+        public void Load(PluginStatus status)
+        {
+            var plugin = _plugin! with { Status = status };
+            _plugins.Replace(
+                new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Reload, [plugin]),
+                new ReloadReport(Noon, SnapshotSource.Reload, Activated: true, [], []));
+            _routing.Replace(new RouteSnapshot(
+                PublicId.New(RouteSnapshot.IdPrefix),
+                Noon,
+                _plugins.Snapshot.Id,
+                new RouteSet(_route!, RouteSet.Empty.Operations),
+                RouteSnapshot.Empty(Noon, _plugins.Snapshot.Id).Campaigns));
+        }
+
+        /// <summary>
+        /// The routes frozen again with <paramref name="route"/> as the global default, against the plugins as they are
+        /// loaded now, as the reload after a <c>route.set</c> leaves them.
+        /// </summary>
+        public void Reroute(Route route) => _routing.Replace(new RouteSnapshot(
+            PublicId.New(RouteSnapshot.IdPrefix),
+            Noon,
+            _plugins.Snapshot.Id,
+            new RouteSet(route, RouteSet.Empty.Operations),
+            RouteSnapshot.Empty(Noon, _plugins.Snapshot.Id).Campaigns));
 
         /// <summary>What the claim logged, with the scope each line was written under.</summary>
         public RecordingLogs Logs { get; } = new();

@@ -47,7 +47,7 @@ shells, `command(regex:jason .*)`) and `read_file(<harness folder>)`; the
 If the person gave you these three lines:
 
 ```text
-Install Jason by following https://get.jasonharness.ai/install.
+Install Jason by following https://get.jasonharness.ai/install
 When it reports Ready, start its quick-start skill and take me to my first campaign.
 If anything stops you, ask me directly and tell me why.
 ```
@@ -738,15 +738,17 @@ path elsewhere that is not on this machine is said and left as written, for you 
 the secrets among them, is placed as it was. A role skills pack the record says came from a folder that is not
 here is named, with `jason skills install` to deploy it again.
 
-**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as
-`jason project link` does; a link the runtime refuses is named with its code, the folder stays, and the answer's
-`next` carries `jason project link <id> --path <folder>`. An import on the same machine, into a second data
-directory, needs the source harness root moved aside first: the records name its folders, and the runtime refuses
-to link a folder that is present elsewhere (`harness_folder_present`). The import
-exits 0 when everything was placed and the runtime answered, 1 when it refused (nothing written) or the runtime
-did not start (the files are in place; start it with `jason runtime start`), and 2 on a usage error. Three
-things are left to you, in this order: `jason skills install`, `jason runtime autostart enable` if the runtime
-should start at logon here and the import did not register it, and `jason status`.
+**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as `jason
+project link` does; a link the runtime refuses is named with its code in `link_refused`, the folder stays, the other
+projects are still linked, and the answer's `next` carries `jason project link <id> --path <folder>`. An import on the
+same machine, into a second data directory, needs the source harness root moved aside first: the records name its
+folders, and the runtime refuses to link a folder that is present elsewhere (`harness_folder_present`). The import exits
+0 when everything was placed, the runtime answered and every project folder was linked, and 1 when it refused (nothing
+written), when the runtime did not start (the files are in place; start it with `jason runtime start`), or when a
+project folder was not linked (everything is placed and the whole answer is still printed; `link_refused` names each
+one, and `next` carries the line that links it), and 2 on a usage error. Three things are left to you, in this order:
+`jason skills install`, `jason runtime autostart enable` if the runtime should start at logon here and the import did
+not register it, and `jason status`.
 
 ---
 
@@ -756,9 +758,9 @@ The install prompt ends by starting the `quick-start` skill. In five lines:
 
 1. It asks you one question: what you sell and who should buy it. A line about yourself and how you write is welcome
    and never required.
-2. It reads which provider your email and LinkedIn go through; it does not ask you. Which accounts are connected
-   there it reads when you say go.
+2. It reads which provider your email and LinkedIn go through, and how many accounts are connected there; it does not
+   ask you. The count never holds you up: when it cannot be read at once, the plan goes on without it.
 3. It makes a draft of your first campaign and says the plan in one message: the goal, who it will look for, the channels, and
    how it will write.
-4. It stops there, until you say what to change or say go. A first message is never sent without your yes.
+4. It stops there, until you say what to change or say go. Until you choose otherwise, a first message is never sent without your yes; you may later say that sends to people who have not answered, or to people who have, go on their own.
 5. Its text is [`skills/runtime/quick-start/SKILL.md`](../skills/runtime/quick-start/SKILL.md).

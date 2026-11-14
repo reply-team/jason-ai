@@ -56,9 +56,10 @@ public sealed record PreflightVerdict(
 }
 
 /// <summary>
-/// Everything that can stop a provider work item, decided before a child process exists. Twenty-seven checks in one
+/// Everything that can stop a provider work item, decided before a child process exists. Twenty-eight checks in one
 /// order: what the runtime cannot do at all, then what the planner got wrong — the twenty-seventh, a thread seen at
-/// another plugin, numbered last and asked after the twenty-third, before the twenty-fourth — then whether another search of the campaign
+/// another plugin, numbered after the rest and asked after the twenty-third, before the twenty-fourth, and the
+/// twenty-eighth, a contact who opted out, numbered after it and asked right after the tenth — then whether another search of the campaign
 /// is in the way, then the approval it owes a person, and last whether the provider is refusing such work for now — so a manager meets the reasons an item can never run
 /// before the reasons that need their attention, nobody is asked to approve work that would have been refused
 /// anyway, and a block the provider holds is the one answer that says nothing about the work itself.
@@ -85,7 +86,7 @@ public static class ProviderOpPreflight
     private const string ContactPin = "contact";
 
     /// <summary>
-    /// The twenty-seven, in the order they are checked: the published order. The first that fails is the one the attempt
+    /// The twenty-eight, in the order they are checked: the published order. The first that fails is the one the attempt
     /// records. A check's number is its name, <see cref="Numbers"/>, and is not its place here.
     /// </summary>
     /// <remarks>
@@ -105,6 +106,7 @@ public static class ProviderOpPreflight
         AttemptErrors.ContactRequired,
         AttemptErrors.NoChannelValue,
         AttemptErrors.Suppressed,
+        AttemptErrors.OptedOut,
         AttemptErrors.ContactNotLinked,
         AttemptErrors.SendUnknown,
         AttemptErrors.SendReferenceAbsent,
@@ -128,7 +130,7 @@ public static class ProviderOpPreflight
     /// The checks added after the rest were numbered, in the order they were added: each takes the next number free
     /// wherever it is asked, so that no row's number, and no "check N" a page or a person cites, ever moves.
     /// </summary>
-    private static readonly string[] NumberedAfterTheRest = [AttemptErrors.ThreadRouteMismatch];
+    private static readonly string[] NumberedAfterTheRest = [AttemptErrors.ThreadRouteMismatch, AttemptErrors.OptedOut];
 
     /// <summary>
     /// Each check's published number, its name from release to release: the place it is asked at among the checks numbered
@@ -202,7 +204,7 @@ public static class ProviderOpPreflight
             : verdict;
     }
 
-    /// <summary>The twenty-seven checks, in the published order: the first that fails is the verdict.</summary>
+    /// <summary>The twenty-eight checks, in the published order: the first that fails is the verdict.</summary>
     private static PreflightVerdict InOrder(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes, PatternTiming timing)
     {
         var operation = facts.Item.Operation ?? string.Empty;
@@ -254,6 +256,16 @@ public static class ProviderOpPreflight
                     resolution,
                     AttemptErrors.Suppressed,
                     $"The contact's '{channel}' value is on the suppression list, so this campaign does not reach them there.");
+            }
+
+            // Right after the register and under its gate, by the person rather than the value: a value they gained after
+            // they asked to be left alone is refused as well as the ones the register holds.
+            if (facts.OptedOut is { } verdict && contract.Preflight.Suppression == SuppressionCheck.Checked)
+            {
+                return Refused(
+                    resolution,
+                    AttemptErrors.OptedOut,
+                    $"The contact asked not to be written to (opt-out verdict {verdict}), so nothing reaches them on any channel, in any campaign. Only a person's own later verdict on that reply lifts this: recorded under their name, outside any run, saying what the reply is other than an opt-out; taking a value off the suppression list does not.");
             }
         }
 

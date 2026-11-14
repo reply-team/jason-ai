@@ -163,6 +163,11 @@ for the operation and held to the route's half of the claim ([`docs/routing.md`]
 `operation.describe` resolves the same route and answers what the operation takes there: its argument schema, and the
 routed plugin's declared definition — `jason operation describe audience.search --campaign <id>`.
 
+**The accounts a send can go from are read on request too.** `sender.list` is also read when a person or an agent asks
+for a campaign, outside any work item, routed by the campaign's route for `sender.list` itself and held to the same half
+of the claim ([`docs/routing.md`](../routing.md), "A read on request"); the same document is the contract of both, and
+the operation stays work as well.
+
 ## The delivery contract
 
 One more document is published here, and it is not a canonical operation:
@@ -248,10 +253,13 @@ instead where it is not offered.
 
 A fourth family is published here, and it is no work at all: the **named preferences**, structured facts about the
 client that a person states, each with a schema, so that a skill can check that one is set before it writes and a
-screen can show it. Three are published:
+screen can show it. Five are published:
 
 - [`agent.interactive_host`](preferences/agent.interactive_host.md) — the agent host `jason session open` starts for
   the person;
+- [`send_mode.cold`](preferences/send_mode.cold.md) — whether what is sent to a contact who has not answered is
+  released without asking, unless something puts it to a person first, or goes to a person first, each one;
+- [`send_mode.warm`](preferences/send_mode.warm.md) — the same for a contact who has answered;
 - [`sender.identity`](preferences/sender.identity.md) — who messages are written as;
 - [`tone_of_voice`](preferences/tone_of_voice.md) — how the company sounds.
 
@@ -385,11 +393,12 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | Kind | Since | Subscribable | Names | What a line records |
 |---|---|---|---|---|
 | [`approval_approved`](journal/approval_approved.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person approved parked work, so it goes back to the queue to run. |
+| [`approval_automatic_applied`](journal/approval_automatic_applied.json) | `0.42.0` | no | campaign, contact, work_item, approval | The automatic mode in force for a send's contact released the send without asking a person, a pass of its text by the critic or by a person standing, and the line names the approval that records the release, where the mode came from, whether the contact was cold or warm, and the review that released it. |
 | [`approval_cancelled`](journal/approval_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision was ended because the work it was about was cancelled or passed its due date. |
 | [`approval_rejected`](journal/approval_rejected.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person rejected parked work, so it ends as failed. |
-| [`approval_requested`](journal/approval_requested.json) | `0.1.0` | yes | campaign, contact, work_item, approval | Work was parked to wait for a person's decision, and the line names the approval that asks for it. |
+| [`approval_requested`](journal/approval_requested.json) | `0.1.0` | yes | campaign, contact, work_item, approval | Work was parked to wait for a person's decision, and the line names the approval that asks for it; its reason is the approval's, which says why the work waits, a send mode's code among them. |
 | [`approval_standing_applied`](journal/approval_standing_applied.json) | `0.25.0` | yes | campaign, contact, work_item, approval | A standing approval released work without asking a person, a drafted reply under a category's or a search under the allowance, and the line names the approval that records the release, the standing approval, and the verdict the reply answers or the audience and the people the search asks for. |
-| [`approval_superseded`](journal/approval_superseded.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place: by the claim in the same save, or, where an edit of the work's input withdrew a question still pending, by the next claim. |
+| [`approval_superseded`](journal/approval_superseded.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place: by the claim in the same save, or by the next claim, where an edit of the work's input withdrew a question still pending or a doubting review ended an approval that no longer stood for the work as it would now go. |
 | [`audience_people_landed`](journal/audience_people_landed.json) | `0.36.0` | yes | campaign, contact, work_item, plugin | One page of a search's people landed in its campaign: what the page held, whom it made members, and whom it made contacts of the directory; one line per page that carried anybody. |
 | [`audience_reserve_low`](journal/audience_reserve_low.json) | `0.36.0` | yes | campaign | A campaign's untouched members fell under the threshold the campaign set, said once per crossing; a default manager trigger. |
 | [`audience_reserve_recovered`](journal/audience_reserve_recovered.json) | `0.36.0` | yes | campaign | A campaign's untouched members are back at or above the threshold it set, after a line said they had fallen under it; not a trigger. |
@@ -399,7 +408,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`campaign_created`](journal/campaign_created.json) | `0.1.0` | yes | campaign | A campaign was created as a draft, under the name the line carries. |
 | [`campaign_paused`](journal/campaign_paused.json) | `0.1.0` | yes | campaign | A campaign stopped being active, so none of its work is dispatched until it is started again. |
 | [`campaign_started`](journal/campaign_started.json) | `0.1.0` | yes | campaign | A campaign became active, from a draft or from a pause, so its work can be dispatched. |
-| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold or the project it is in; a change of several settings writes one line for each. |
+| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold, the project it is in, or its own send mode for cold or for warm contacts; a change of several settings writes one line for each, and a send mode set again by another person writes one whose old and new are the same word, under its new setter. |
 | [`contact_archived`](journal/contact_archived.json) | `0.1.0` | yes | contact | A person was archived in the contact directory, so nothing reaches out to them any more and their open work is cancelled. |
 | [`contact_created`](journal/contact_created.json) | `0.1.0` | yes | contact | A person was added to the contact directory. |
 | [`contact_updated`](journal/contact_updated.json) | `0.1.0` | yes | contact | A person's details in the contact directory changed; the line names the fields that changed and never their values. |
@@ -455,9 +464,10 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`workitem_released`](journal/workitem_released.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A work item went back to the queue to be claimed again: its attempt failed in a way worth another attempt, a restart found its attempt never started, or the question it was waiting on ended, because a person approved it or because an edit of the work's input withdrew it. The `approval_approved` or `approval_superseded` line written in the same save tells which, and is the record of a person's decision; the line's `reason` is free text and decides nothing. |
 | [`workitem_reopened`](journal/workitem_reopened.json) | `0.1.0` | yes | campaign, contact, work_item | An expired work item was given a new due date and went back to the queue. |
 | [`workitem_resumed`](journal/workitem_resumed.json) | `0.18.0` | yes | campaign, contact, work_item, attempt | A waiting work item went back to the queue: what it waited for happened, its bound came, its provider block cleared or let a trial through, or a person resumed it. |
+| [`workitem_reviewed`](journal/workitem_reviewed.json) | `0.42.0` | no | campaign, contact, work_item, attempt | A send was reviewed before it went: by a run of the campaign's role work other than the one that made it, or by a named person, the review bound to the text it read by the review hash and passing it or doubting it with a code from a closed list. A doubt's sentence is never on the line. |
 | [`workitem_scheduled`](journal/workitem_scheduled.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | The dispatcher claimed a work item and opened an attempt for it, numbered by the line. |
 | [`workitem_succeeded`](journal/workitem_succeeded.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | An attempt succeeded and its work item finished as succeeded; the line says whether the item now carries a result. |
-| [`workitem_updated`](journal/workitem_updated.json) | `0.1.0` | yes | campaign, contact, work_item | One setting of a work item changed: when it may start, when it is due, its priority, its limits, its execution profile or its result format; a change of several settings writes one line for each. |
+| [`workitem_updated`](journal/workitem_updated.json) | `0.1.0` | yes | campaign, contact, work_item | One setting of a work item changed: when it may start, when it is due, its priority, its limits, its execution profile or its result format; or, since 0.42.0, the item was marked as written in the desktop's chat, the first time its input was edited there. A change of several settings writes one line for each. |
 | [`workitem_waiting`](journal/workitem_waiting.json) | `0.18.0` | yes | campaign, contact, work_item, attempt, provider_block | A work item stopped to wait for other work items to end, for a moment, or for a provider block to clear, and is not claimed until what it waits for happens or its bound comes. |
 
 <!-- END GENERATED journal-kinds -->

@@ -31,6 +31,7 @@ public static class Operations
     public const string CampaignPause = "campaign.pause";
     public const string CampaignArchive = "campaign.archive";
     public const string CampaignUpdateContext = "campaign.update_context";
+    public const string CampaignSetSendMode = "campaign.set_send_mode";
     public const string CampaignAddContacts = "campaign.add_contacts";
     public const string CampaignRemoveContacts = "campaign.remove_contacts";
     public const string CampaignListContacts = "campaign.list_contacts";
@@ -68,6 +69,7 @@ public static class Operations
     public const string WorkItemComplete = "workitem.complete";
     public const string WorkItemWait = "workitem.wait";
     public const string WorkItemResume = "workitem.resume";
+    public const string WorkItemReview = "workitem.review";
 
     public const string ApprovalList = "approval.list";
     public const string ApprovalGet = "approval.get";
@@ -124,6 +126,8 @@ public static class Operations
     public const string AudiencePreview = "audience.preview";
     public const string AudienceFilterValues = "audience.filter_values";
     public const string AudienceAvailability = "audience.availability";
+
+    public const string SenderList = "sender.list";
 
     public const string OperationDescribe = "operation.describe";
 

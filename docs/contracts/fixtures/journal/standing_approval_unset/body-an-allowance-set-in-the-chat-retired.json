@@ -1,0 +1,7 @@
+{
+  "kind": "standing_approval_unset",
+  "version": 1,
+  "case": "an allowance set under the desktop's chat marker is retired as it was set, its mark carried over",
+  "body": { "key": "audience.search", "old": { "category": null, "operations": ["audience.search"], "expires_at": null, "max_releases": null, "audience": { "id": "aud_01JC0000000000000000000002", "number": 2 }, "max_people": 500, "max_per_search": null, "confined": true }, "new": null },
+  "expect": "valid"
+}

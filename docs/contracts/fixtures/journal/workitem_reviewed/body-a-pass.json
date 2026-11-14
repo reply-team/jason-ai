@@ -1,0 +1,11 @@
+{
+  "kind": "workitem_reviewed",
+  "version": 1,
+  "case": "a run of the campaign's role work passes a send",
+  "body": {
+    "key": "sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "old": null,
+    "new": { "result": "passed", "code": null, "operation": "message.send", "role": "reviewer" }
+  },
+  "expect": "valid"
+}

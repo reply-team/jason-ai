@@ -44,8 +44,8 @@ public static class WorkItemTransitions
 
     /// <summary>
     /// Applies a legal transition and nothing else: status and update time always, the finish time when the
-    /// item becomes finished or stops being expired, and the dispatcher's retry moment when it no longer means
-    /// anything. Throws on an illegal pair.
+    /// item becomes finished or stops being expired, a doubt's sentences when it becomes final, and the dispatcher's
+    /// retry moment when it no longer means anything. Throws on an illegal pair.
     /// </summary>
     public static void Apply(WorkItem item, WorkItemStatus to, DateTime now)
     {
@@ -66,6 +66,14 @@ public static class WorkItemTransitions
         else if (from == WorkItemStatus.Expired)
         {
             item.FinishedAt = null;
+        }
+
+        // A doubt's sentences wait on the row for the park to move them onto the preview; an item that is never left again
+        // will never be parked, so they go with it. An expired one may be reopened, and keeps them for that park.
+        if (Final.Contains(to))
+        {
+            item.AskPersonNote = null;
+            item.ReviewNote = null;
         }
 
         // The dispatcher's retry moment means nothing once the item is taken, given up, or past its due date.

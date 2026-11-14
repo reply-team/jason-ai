@@ -1051,6 +1051,11 @@ person's pin, and held to the same half of the claim for its own operation; the 
 definition, held to your declared schema first. Nothing else differs: nothing is recorded, and nothing you return is
 pinned.
 
+One more is invoked for a campaign the same way: `sender.list`, routed by the campaign's route for `sender.list` itself
+on the channel its `sender_channel` names, as its work item is, and held to the same half of the claim; the input carries
+the campaign with your own pins of it. Nothing is recorded, and nothing you return is pinned. It stays an operation you
+may be invoked for as work too.
+
 ### The contact proxy rule
 
 A provider's list or campaign holds the *provider's* contacts, not Jason's, so an operation about a person has you find
@@ -1519,7 +1524,7 @@ family, or in none:
 
 | Family | Opens |
 |---|---|
-| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources`, `kinds`, `describe` or `audience`, and its noun is not `system` or `ui` |
+| `read` | every operation that only reads: its verb is `get`, `list`, `count`, `summary`, `activity`, `activity_by_period`, `list_contacts`, `list_standing`, `resolve`, `sources`, `kinds`, `describe` or `audience`, and its noun is not `system`, `ui` or `sender` |
 | `campaign` | `campaign.create`, `campaign.update`, `campaign.start`, `campaign.pause`, `campaign.archive`, `campaign.update_context`, `campaign.add_contacts`, `campaign.remove_contacts` |
 | `contact` | `contact.create`, `contact.update`, `contact.archive` |
 | `workitem` | `workitem.create`, `workitem.update`, `workitem.cancel` |
@@ -1532,11 +1537,11 @@ No grant opens the rest: the installation's and the UI's own doors (every `syste
 `preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
 `events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
 `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
-`suppression.remove`), an
+`suppression.remove`, `campaign.set_send_mode`), a send's review (`workitem.review`), which a run or a person makes, an
 executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the
-conversation reads `contact.threads` and `contact.thread` and a campaign's audience reads `audience.preview`,
-`audience.filter_values` and `audience.availability`, which are no read here because answering one spends a provider
-call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
+conversation reads `contact.threads` and `contact.thread`, a campaign's audience reads `audience.preview`,
+`audience.filter_values` and `audience.availability`, and the provider's accounts, `sender.list`, which are no read here
+because answering one spends a provider call, and `subscription.runs`, whose records carry the envelopes other plugins' handlers made: a handler in a
 chain already holds the envelope handed to it, and a person reads the final one through the run token, so no plugin
 reads another chain's envelopes. `subscription.list` is a read by the rule above. An operation the API adds later is in none until it is classified, which a test holds. A family the
 manifest names that is not one of the seven is `api_family_unknown`.

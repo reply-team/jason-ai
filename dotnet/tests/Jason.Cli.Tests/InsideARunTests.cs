@@ -11,7 +11,7 @@ namespace Jason.Cli.Tests;
 
 /// <summary>
 /// A CLI launched inside an attempt says so on every request it sends, reads included, whatever actor it names: the
-/// attempt's id goes in the <c>Jason-Attempt</c> header as the environment names it, trimmed and not checked. The five
+/// attempt's id goes in the <c>Jason-Attempt</c> header as the environment names it, trimmed and not checked. The
 /// verbs that are a person's own word are refused by the runtime for it; the CLI sends them anyway, prints the refusal as
 /// it came and exits 1.
 /// </summary>
@@ -203,6 +203,47 @@ public class InsideARunTests
         Assert.Equal(held.Count, constructions.Count);
     }
 
+    /// <summary>
+    /// A confined call — the desktop's chat sets <c>JASON_CONFINED</c> on every turn — says so on every request it sends, in
+    /// the <c>Jason-Confined</c> header, so the runtime can record that a send was written there; a call with the variable
+    /// unset or empty sends no header at all.
+    /// </summary>
+    [Theory]
+    [InlineData("1", true)]
+    [InlineData("yes", true)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public async Task A_confined_call_says_so_on_every_request(string? variable, bool sent)
+    {
+        var variables = new Dictionary<string, string>();
+        if (variable is not null)
+        {
+            variables["JASON_CONFINED"] = variable;
+        }
+
+        using var run = new Run(variables);
+
+        Assert.Equal(ExitCodes.Success, await run.RunAsync("campaign", "list"));
+        Assert.Equal(ExitCodes.Success, await run.RunAsync("campaign", "create", "--name", "Spring outreach"));
+
+        Assert.Equal(2, run.Requests.Count);
+        Assert.All(run.Requests, request => Assert.Equal(sent ? new[] { "1" } : null, request.Confined));
+    }
+
+    /// <summary>
+    /// Every client the source makes is told whether the call is confined, from the environment, so no request leaves a
+    /// confined call without the header: each <c>new RuntimeClient(</c> under <c>dotnet/src</c> passes <c>env.Confined()</c>.
+    /// </summary>
+    [Fact]
+    public void Every_client_the_source_makes_is_told_whether_the_call_is_confined()
+    {
+        var (sites, _) = ClientSites();
+        var told = ConfinedSites();
+
+        Assert.NotEmpty(sites);
+        Assert.Equal(sites.Count, told);
+    }
+
     /// <summary>Each <c>new RuntimeClient(</c> under <c>dotnet/src</c> by file and line, and the ones of them that pass the environment's attempt and stderr.</summary>
     private static (List<(string File, int Line)> Sites, List<(string File, int Line)> Held) ClientSites()
     {
@@ -230,6 +271,21 @@ public class InsideARunTests
         return (sites, held);
     }
 
+    /// <summary>How many <c>new RuntimeClient(</c> calls under <c>dotnet/src</c> name <c>confined: env.Confined()</c>.</summary>
+    private static int ConfinedSites()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        return Directory.EnumerateFiles(Path.Combine(root.FullName, "dotnet", "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(part => part is "bin" or "obj"))
+            .Sum(path => Regex.Matches(File.ReadAllText(path), @"new\s+(?:[\w.]+\.)?RuntimeClient\s*\([^;]*?confined:\s*env\.Confined\(\)\)").Count);
+    }
+
     /// <summary>The CLI does not decide the refusal: it sends, and prints the runtime's answer as it came, exiting 1.</summary>
     [Fact]
     public async Task A_refusal_from_inside_a_run_is_printed_as_it_came_and_exits_1()
@@ -244,9 +300,9 @@ public class InsideARunTests
         Assert.Equal(envelope + Environment.NewLine, run.Output.ToString());
     }
 
-    /// <summary>Exactly the five verbs that are a person's own word say in their help, word for word, that a run is refused them.</summary>
+    /// <summary>Exactly the verbs that are a person's own word say in their help, word for word, that a run is refused them.</summary>
     [Fact]
-    public void Exactly_the_five_say_in_their_help_that_a_run_is_refused_them()
+    public void Exactly_the_persons_verbs_say_in_their_help_that_a_run_is_refused_them()
     {
         const string sentence = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
         using var paths = new TempPaths();
@@ -254,7 +310,7 @@ public class InsideARunTests
         Walk(CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths)), string.Empty);
 
         Assert.Equal(
-            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "decision answer" },
+            new[] { "approval approve", "approval reject", "approval set-standing", "approval unset-standing", "campaign set-send-mode", "decision answer", "preference set", "preference unset" },
             saying.Order(StringComparer.Ordinal));
 
         void Walk(Command command, string path)
@@ -284,7 +340,10 @@ public class InsideARunTests
     private static string[]? AttemptOf(HttpRequestMessage request) =>
         request.Headers.TryGetValues("Jason-Attempt", out var values) ? [.. values] : null;
 
-    private sealed record Sent(string Operation, string[]? Attempt);
+    private static string[]? ConfinedOf(HttpRequestMessage request) =>
+        request.Headers.TryGetValues("Jason-Confined", out var values) ? [.. values] : null;
+
+    private sealed record Sent(string Operation, string[]? Attempt, string[]? Confined);
 
     private sealed class Run : IDisposable
     {
@@ -300,7 +359,7 @@ public class InsideARunTests
                 _paths.Paths,
                 new FakeHandler(request =>
                 {
-                    Requests.Add(new Sent(request.RequestUri!.AbsolutePath, AttemptOf(request)));
+                    Requests.Add(new Sent(request.RequestUri!.AbsolutePath, AttemptOf(request), ConfinedOf(request)));
                     return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
                 }),
                 Variables: variables);

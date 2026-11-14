@@ -26,12 +26,14 @@ function fakeClipboard(fail = false) {
 }
 
 function fake() {
+    // An open card's reminder about name and tone reads the preferences; with both set it says nothing.
     return new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('approval.get', 'approval.get/pending-with-preview')
         .answer('decision.get', 'decision.get/pending-with-options')
-        .answer('campaign.get', 'campaign.get/in-project-with-folder');
+        .answer('campaign.get', 'campaign.get/in-project-with-folder')
+        .answer('preference.list', 'preference.list/set');
 }
 
 /**

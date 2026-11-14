@@ -85,7 +85,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   JSON is snake_case, enums are snake_case strings, timestamps are ISO-8601 UTC, public ids are
   prefixed ULIDs (`cmp_…`, `wi_…`, `att_…`, `rol_…`). Partial patches distinguish absent from null
   (`Optional<T>`); lists paginate with `limit`/`cursor`; every mutating request may carry `actor`
-  and `reason`. `campaign.create` and `workitem.create` also take a caller's `idempotency_key`, kept on
+  and `reason`, with one declared exception: `workitem.review` refuses a `reason`, because a reason is journaled and a
+  doubt's sentence never is. `campaign.create` and `workitem.create` also take a caller's `idempotency_key`, kept on
   the entity it created and never derived by the runtime or the CLI (`docs/work-execution.md`).
 - Work execution: work items move through one transition table (`WorkItemTransitions`) and end
   through one routine (`AttemptOutcomes`); never write a status elsewhere. The attempt id is the
@@ -112,12 +113,12 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   there and at startup, a campaign's `route.set`/`route.unset` copy the global half from the active snapshot, with
   scope `global` they write the section through the runtime's one writer of the settings file, which keeps every byte
   it does not own, and run that reload in the same act, putting the file back when it refuses, and a bad route rejects
-  the whole reload. The claim is fail-closed: twenty-seven checks in one published
+  the whole reload. The claim is fail-closed: twenty-eight checks in one published
   order, one code per reason, decided before a child exists, with the attempt kept; an audience's definition is the
   provider's own shape, held at the claim to the schema the routed plugin declares, never at create. A binding names
   an account and never a credential. A person's reads on request are routed by the person's pin; a campaign's reads
   (an audience's preview, a filter's values, whether the account may search) by the campaign's route for
-  `audience.search`, the search they serve, held to the route's half of the claim; a read or a stop of a search goes
+  `audience.search`, the search they serve, held to the route's half of the claim, and `sender.list`, a read on request, by its own route on `sender_channel`; a read or a stop of a search goes
   where the search ran. A provider identifier is pinned once and never overwritten — a
   different value is recorded beside it as a divergence and the attempt still succeeds. Provenance
   is written at the claim and completed at the end; nothing rewrites it. `docs/routing.md` is the

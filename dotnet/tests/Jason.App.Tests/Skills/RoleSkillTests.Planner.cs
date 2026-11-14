@@ -207,7 +207,7 @@ public partial class RoleSkillTests
 
         Assert.Contains("each run raises the next step's work, waits for it with `jason workitem wait`, and ends", skill, StringComparison.Ordinal);
         Assert.Contains("Raise a researcher's item for each of the ten, and wait on all ten.", skill, StringComparison.Ordinal);
-        Assert.Contains("Each send parks at its claim for a person to approve what it would send", skill, StringComparison.Ordinal);
+        Assert.Contains("Each send goes to its claim: it parks for a person to approve what it would send, unless they have chosen that this kind of contact goes automatically", skill, StringComparison.Ordinal);
         Assert.Contains("hold: wait with `--until` alone", skill, StringComparison.Ordinal);
         Assert.Contains("A reply that arrives meanwhile is the manager's and the responder's, never yours.", skill, StringComparison.Ordinal);
         Assert.Contains("raise an analyst's item to read the pilot's results, and wait on it", skill, StringComparison.Ordinal);

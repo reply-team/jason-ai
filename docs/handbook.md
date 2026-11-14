@@ -77,7 +77,7 @@ Paste this into an agent that has a shell on the machine you want Jason on. It i
 preamble, no repository tour:
 
 ```text
-Install Jason by following https://get.jasonharness.ai/install.
+Install Jason by following https://get.jasonharness.ai/install
 When it reports Ready, start its quick-start skill and take me to my first campaign.
 If anything stops you, ask me directly and tell me why.
 ```
@@ -251,11 +251,13 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked — so a runtime that is down is a failed check rather than an
 error envelope. The JSON body carries `ready` and a state per check, so an agent branches on the body rather
-than on the code. The `role_skills` check alone also carries `details`, the deployment the record in the role root
+than on the code. The `role_skills` check also carries `details`, the deployment the record in the role root
 names, as fields a program reads instead of the fact: `ref`, `source`, `commit` (empty where the record names none)
 and `roles_taught`. `roles_taught`, how many roles the runtime reports it teaches, is left out where the runtime did
 not answer or reported that it could not read its role root. Where the runtime did not answer, the record is the one
-in this installation's own role root. With no record, or one that cannot be read, there are no `details`. `--human`
+in this installation's own role root. With no record, or one that cannot be read, there are no `details`. The
+`send_modes` check, which never decides readiness, carries them too: `cold`, `cold_source`, `warm` and `warm_source`,
+each mode in force for the installation and where it comes from, in the runtime's own words. `--human`
 prints the facts alone. A check reports a fact and, where there is one, the command that repairs it; it never reads
 a log and never explains a failure, which is what keeps it from growing into a diagnostics verb.
 
@@ -422,7 +424,9 @@ any request, exit 1. `jason status --provider-cli <program>` runs a bare name on
 of PATH. Options that name a path for another reason are not under the rule: `project link --path`, `doctor --output`,
 `export` and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts:
 three starts drop it, a runtime it starts, the role work a runtime launches and the terminal `jason session open` opens;
-every other child inherits it, and none reads it. Unset or empty, nothing changes.
+every other child inherits it, and none reads it. Every request the call sends carries the header `Jason-Confined`, and
+a send it creates, or whose text it edits, then waits for a person whatever the send mode
+([docs/work-execution.md](work-execution.md), "The send mode at the claim"). Unset or empty, nothing changes.
 
 A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
 attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get

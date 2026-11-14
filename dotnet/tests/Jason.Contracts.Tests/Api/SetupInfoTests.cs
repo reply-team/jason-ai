@@ -25,11 +25,11 @@ public class SetupInfoTests
         };
 
         Assert.EndsWith(
-            "\"released_plugins\":null,\"setup\":{\"role_skills_directory\":\"/data/skills/roles\",\"plugins_directory\":\"/data/plugins\","
+            "\"released_plugins\":null,\"send_modes\":null,\"setup\":{\"role_skills_directory\":\"/data/skills/roles\",\"plugins_directory\":\"/data/plugins\","
                 + "\"custom_ui_directory\":\"/data/ui/custom\",\"settings_file\":\"/data/config/settings.json\",\"settings_file_holds_secrets\":true,\"layout\":1}}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
-        Assert.EndsWith("\"released_plugins\":null,\"setup\":null}", JsonSerializer.Serialize(info with { Setup = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"released_plugins\":null,\"send_modes\":null,\"setup\":null}", JsonSerializer.Serialize(info with { Setup = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>

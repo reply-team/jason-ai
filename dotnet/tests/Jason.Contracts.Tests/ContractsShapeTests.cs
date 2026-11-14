@@ -56,11 +56,15 @@ public class ContractsShapeTests
     [Fact]
     public void Campaign_dto_serializes_with_inline_context_and_snake_case_status()
     {
-        var dto = new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, "prj_A", "default", new JsonObject { ["icp"] = "founders" }, [], "local-claude", 900, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null);
+        var dto = new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, "prj_A", "default", new JsonObject { ["icp"] = "founders" }, [], "local-claude", 900, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null,
+            SendModes: new SendModesDto(SendMode.Automatic, null),
+            SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default)));
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);
         Assert.Equal(
             "{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"project_id\":\"prj_A\",\"project_slug\":\"default\",\"context\":{\"icp\":\"founders\"},\"external_ids\":[],\"execution_profile\":\"local-claude\",\"review_seconds\":900,"
-                + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null,\"folder_path\":null,\"audience_threshold\":null}",
+                + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null,\"folder_path\":null,\"audience_threshold\":null,"
+                + "\"send_modes\":{\"cold\":\"automatic\",\"warm\":null},"
+                + "\"send_modes_in_force\":{\"cold\":{\"mode\":\"automatic\",\"source\":\"campaign\"},\"warm\":{\"mode\":\"every_message\",\"source\":\"default\"}}}",
             json);
     }
 
@@ -183,13 +187,13 @@ public class ContractsShapeTests
         Assert.EndsWith(
             "\"skills\":{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":1048576,"
                 + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null,\"problem_code\":null,\"problem_exception\":null}],"
-                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null},\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"setup\":null}",
+                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null},\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"send_modes\":null,\"setup\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
         // A runtime older than this section reports none at all, which every other section here also does and
         // which the CLI renders as "unknown" rather than as an empty deployment.
-        Assert.EndsWith("\"skills\":null,\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"setup\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"skills\":null,\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"send_modes\":null,\"setup\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -214,12 +218,12 @@ public class ContractsShapeTests
             "\"notifications\":{\"enabled\":true,\"channels\":[{\"channel\":\"toast\",\"kind\":\"toast\",\"on\":true,"
                 + "\"outcome\":\"silenced\",\"reason\":\"disabled_for_application\",\"code\":null,\"class\":null,\"detail\":null,"
                 + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null}],"
-                + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"},\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"setup\":null}",
+                + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"},\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"send_modes\":null,\"setup\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
         // A runtime older than this section reports none, which the CLI renders as "unknown".
-        Assert.EndsWith("\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"setup\":null}", JsonSerializer.Serialize(info with { Notifications = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"notifications\":null,\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"send_modes\":null,\"setup\":null}", JsonSerializer.Serialize(info with { Notifications = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -232,7 +236,7 @@ public class ContractsShapeTests
         var info = SystemInfo() with { Harness = new HarnessInfo("/home/marta/Jason", HarnessRootState.NotAFolder) };
 
         Assert.EndsWith(
-            "\"ui\":null,\"harness\":{\"root\":\"/home/marta/Jason\",\"root_state\":\"not_a_folder\"},\"released_plugins\":null,\"setup\":null}",
+            "\"ui\":null,\"harness\":{\"root\":\"/home/marta/Jason\",\"root_state\":\"not_a_folder\"},\"released_plugins\":null,\"send_modes\":null,\"setup\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
         Assert.Equal(
@@ -260,7 +264,7 @@ public class ContractsShapeTests
         Assert.EndsWith(
             "\"released_plugins\":[{\"id\":\"reply\",\"state\":\"behind\",\"released\":{\"version\":\"0.7.0\",\"digest\":\"sha256:b\"},"
                 + "\"installed\":{\"version\":\"0.6.1\",\"digest\":\"sha256:a\"}},"
-                + "{\"id\":\"mailer\",\"state\":\"not_installed\",\"released\":{\"version\":\"1.0.0\",\"digest\":\"sha256:c\"},\"installed\":null}],\"setup\":null}",
+                + "{\"id\":\"mailer\",\"state\":\"not_installed\",\"released\":{\"version\":\"1.0.0\",\"digest\":\"sha256:c\"},\"installed\":null}],\"send_modes\":null,\"setup\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
         Assert.Equal(

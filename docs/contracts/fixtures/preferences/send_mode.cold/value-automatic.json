@@ -1,0 +1,7 @@
+{
+  "key": "send_mode.cold",
+  "version": 1,
+  "case": "what goes to a contact who has not answered is released without asking, unless something puts it to a person first",
+  "value": { "mode": "automatic" },
+  "expect": "valid"
+}

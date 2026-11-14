@@ -113,6 +113,10 @@ public class PersonTextShownTests
             {"plugin_id":"reply","available":false,"reason":"other","detail":"H","credits":{"balance":3,"price_per_person":0.5,"currency":"H"},
              "headroom":10}
             """),
+        ["sender list"] = (SenderRenderers.List, """
+            {"plugin_id":"reply","items":[{"external_id":"H","channel":"email","name":"H","address":"H","status":"active","owner":"own",
+             "vendor":{"status":"H"}}],"has_more":false,"channels":{"email":"listed","linkedin":"not_asked"},"vendor":{"ordering":"email_then_linkedin"}}
+            """),
         ["approval get"] = (ApprovalRenderers.Approval, """
             {"id":"apr_1","work_item_id":"wi_1","campaign_id":"cmp_1","operation":"audience.search","operation_version":1,"status":"pending",
              "reason":"approval_required","subject_hash":"sha256:a","subject":{},"plugin_id":"reply","binding_identity":"sha256:b",
@@ -157,6 +161,7 @@ public class PersonTextShownTests
         { "audience preview", 5 },
         { "audience filter-values", 2 },
         { "audience availability", 2 },
+        { "sender list", 3 },
         { "operation describe", 1 },
         { "approval get", 5 },
         { "campaign audience", 3 },

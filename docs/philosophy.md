@@ -126,7 +126,7 @@ Jason is built to do as much as it can on its own and nothing that should be you
 - **A provider's customer who wants to try the harness.** Try it in a provider account you keep for testing, as the
   README asks. Jason acts there only through the published operations: some run without asking, such as creating a
   campaign, pausing one, updating a contact or filing a thread, each recorded in the history, and anything that
-  reaches a person waits for your approval.
+  reaches a person waits for your approval until you choose that messages to one kind of contact go on their own.
 - **A plugin author with a provider to bring.** The contracts are published, the mechanism is the one every plugin
   uses, and [docs/plugins.md](plugins.md) is the guide.
 
@@ -139,8 +139,10 @@ Jason is built to do as much as it can on its own and nothing that should be you
   plugin, it can plan and keep records, and nothing reaches anyone. Without an agent host, the runtime still keeps its
   state and performs the provider operations already decided, but the value is in the agent, and launched roles run on
   the hosts the [host matrix](execution-profiles.md#12-the-hosts) names.
-- **Someone who wants messages sent without a person deciding.** Every operation that reaches a real person asks for an
-  approval, and its contract, not a setting, says so.
+- **Someone who wants messages sent with nobody's word behind them.** A message goes without a person reading it only
+  where a named person chose that for that kind of contact, and even then a doubted message, one no critic passed, one
+  to a person whose reply has not been judged yet and any past the day's limit wait for a person. No role can make that
+  choice, and every message it lets go is recorded under the name of the person who made it.
 - **A team that needs one shared system.** An installation is one person's, with its own register and its own history; a
   team works as several.
 - **A machine the builds do not cover.** Jason ships for Windows x64, Linux x64 and Apple-silicon macOS; there is no

@@ -22,7 +22,7 @@ public class PreferenceEndpointTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
 
         var none = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "none", new { }, Ct);
-        Assert.Equal(["agent.interactive_host", "sender.identity", "tone_of_voice"], none.Items.Select(item => item.Key));
+        Assert.Equal(["agent.interactive_host", "send_mode.cold", "send_mode.warm", "sender.identity", "tone_of_voice"], none.Items.Select(item => item.Key));
         Assert.All(none.Items, item => Assert.True(item.Value is null && item.UpdatedAt is null, $"{item.Key} is set on a new installation: {item}"));
 
         var sender = new
@@ -39,6 +39,10 @@ public class PreferenceEndpointTests
         var tone = await api.RecordAsync<PreferenceDto>(
             Operations.PreferenceSet, "tone", new { key = "tone_of_voice", value = new { summary = "Plain and warm; no exclamation marks.", formality = "informal" }, actor = Marta }, Ct);
         Assert.Equal("informal", (string?)tone.Value!["formality"]);
+
+        var cold = await api.RecordAsync<PreferenceDto>(
+            Operations.PreferenceSet, "send-mode-cold", new { key = "send_mode.cold", value = new { mode = "automatic" }, actor = Marta, reason = "the person's answer" }, Ct);
+        Assert.Equal(("send_mode.cold", "automatic"), (cold.Key, (string?)cold.Value!["mode"]));
 
         var unknown = await api.RecordErrorAsync(
             Operations.PreferenceSet, "unknown-key", new { key = "tone", value = new { summary = "Plain." }, actor = Marta }, HttpStatusCode.BadRequest, Ct);
@@ -57,10 +61,40 @@ public class PreferenceEndpointTests
         Assert.Equal("actor_required", anonymous.Code);
 
         var both = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "set", new { }, Ct);
-        Assert.Equal([null, set.ValueHash, tone.ValueHash], both.Items.Select(item => item.ValueHash));
+        Assert.Equal([null, cold.ValueHash, null, set.ValueHash, tone.ValueHash], both.Items.Select(item => item.ValueHash));
+
+        var warm = await api.RecordAsync<PreferenceDto>(
+            Operations.PreferenceSet, "send-mode-warm", new { key = "send_mode.warm", value = new { mode = "every_message" }, actor = Marta, reason = "the person's answer" }, Ct);
+        Assert.Equal(("send_mode.warm", "every_message"), (warm.Key, (string?)warm.Value!["mode"]));
 
         var unset = await api.RecordAsync<PreferenceDto>(Operations.PreferenceUnset, "removed", new { key = "sender.identity", actor = Marta, reason = "taken back" }, Ct);
         Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), unset);
+    }
+
+    /// <summary>
+    /// The send modes as the page's Settings section reads and changes them while the name and tone are unset: one kind
+    /// going automatically, both kinds answered "every message", and an answer given back, which leaves the mode unset.
+    /// </summary>
+    [Fact]
+    public async Task The_send_modes_are_listed_turned_off_and_given_back_over_the_api()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        const string answer = "the person's answer";
+
+        await api.PostOkAsync<PreferenceDto>(Operations.PreferenceSet, new { key = "send_mode.cold", value = new { mode = "automatic" }, actor = Marta, reason = answer }, Ct);
+        var automatic = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "mode-automatic-voice-unset", new { }, Ct);
+        Assert.Equal([null, "automatic", null, null, null], automatic.Items.Select(item => (string?)item.Value?["mode"]));
+
+        var off = await api.RecordAsync<PreferenceDto>(
+            Operations.PreferenceSet, "send-mode-cold-every-message", new { key = "send_mode.cold", value = new { mode = "every_message" }, actor = Marta, reason = answer }, Ct);
+        Assert.Equal(("send_mode.cold", "every_message"), (off.Key, (string?)off.Value!["mode"]));
+
+        await api.PostOkAsync<PreferenceDto>(Operations.PreferenceSet, new { key = "send_mode.warm", value = new { mode = "every_message" }, actor = Marta, reason = answer }, Ct);
+        var waits = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "modes-every-message", new { }, Ct);
+        Assert.Equal([null, "every_message", "every_message", null, null], waits.Items.Select(item => (string?)item.Value?["mode"]));
+
+        var back = await api.RecordAsync<PreferenceDto>(Operations.PreferenceUnset, "send-mode-cold", new { key = "send_mode.cold", actor = Marta, reason = answer }, Ct);
+        Assert.Equal(new PreferenceDto("send_mode.cold", null, null, null, null, null, null), back);
     }
 
     /// <summary>

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { commandPrefix, documentationAddressLimit, documentationPages, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
+import { autoEditJudgement, commandPrefix, documentationAddressLimit, documentationPages, fullAccessJudgement, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 import { memoryFiles } from '../src/chat-instructions.ts';
@@ -573,6 +573,70 @@ test('linking a project\'s folder is refused in every spelling a denied verb is 
     assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason project list').verdict, 'ask');
 });
 
+/** The scopes of the file the desktop carries, on each platform: Windows', macOS' and Linux's semantics. */
+function carriedScopes(): ChatScope[] {
+    const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    return [windows(), mac(), linux].map((scope) => ({ ...scope, denied: file.commands, deniedOperations: file.operations }));
+}
+
+/** Refused in Ask first, in Auto-edit and in Full access, as a Bash command; Plan only refuses every command besides. */
+function refusedInEveryMode(scope: ChatScope, command: string): void {
+    const input = { command };
+    assert.equal(judge('Bash', input, scope).verdict, 'deny', `${scope.platform} Ask first: ${command}`);
+    assert.equal(autoEditJudgement('Bash', input, scope).verdict, 'deny', `${scope.platform} Auto-edit: ${command}`);
+    assert.equal(fullAccessJudgement('Bash', input, scope).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+}
+
+test('a campaign\'s send mode and the send-mode preferences are refused in every spelling, in every mode: how messages are sent is the person\'s to set', () => {
+    const spellings = ['jason campaign set-send-mode cmp_A --cold automatic --actor human:Ada', 'jason campaign set-send-mode cmp_A --clear warm --actor human:Ada',
+        'jason preference set send_mode.cold --value \'{"mode":"automatic"}\' --actor human:Ada',
+        'jason preference set send_mode.warm --value \'{"mode":"automatic"}\' --actor human:Ada', 'jason preference unset send_mode.cold --actor human:Ada',
+        'jason --actor human:Ada campaign set-send-mode cmp_A --cold automatic', 'jason -- campaign set-send-mode cmp_A --cold automatic',
+        'jason campaign -- set-send-mode cmp_A --cold automatic', 'jason campaign --human set-send-mode cmp_A --cold automatic',
+        'jason preference --actor human:Ada set send_mode.cold --value x', 'jason campaign "set-send-mode" cmp_A', 'jason campaign set-send-mo\\de cmp_A',
+        "jason campaign set-send-mo''de cmp_A", 'jason campaign set-send-{mode,} cmp_A', 'X=1 jason campaign set-send-mode cmp_A',
+        'env jason preference set send_mode.warm --value x', '/usr/local/bin/jason campaign set-send-mode cmp_A', 'cmd /c jason campaign set-send-mode cmp_A',
+        'cmd.exe /c "jason preference set send_mode.cold --value x"', 'pwsh -c "jason campaign set-send-mode cmp_A"',
+        'powershell -Command "jason preference set send_mode.cold --value x"', "bash -c 'jason campaign set-send-mode cmp_A'",
+        "printf 'jason campaign set-send-mode cmp_A' | sh", `python3 -c "import subprocess; subprocess.run(['jason','campaign','set-send-mode','cmp_A'])"`,
+        "curl -X POST http://127.0.0.1:4011/v1/campaign.set_send_mode -d '{}'", 'curl -X POST http://127.0.0.1:4011/v1/preference.set -d \'{"key":"send_mode.cold"}\'',
+        'pwsh -c "Invoke-WebRequest -Method Post -Uri http://127.0.0.1:4011/v1/campaign.set_send_mode"',
+        "node -e \"fetch('http://127.0.0.1:4011/v1/preference.set',{method:'POST'})\""];
+    for (const scope of carriedScopes()) {
+        for (const command of spellings) refusedInEveryMode(scope, command);
+        // Reading a campaign and the preferences stays the agent's: a card in Ask first, never a refusal.
+        for (const command of ['jason preference list', 'jason campaign get cmp_A']) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
+    }
+    const [windowsScope] = carriedScopes();
+    for (const command of ['"C:\\Program Files\\Jason\\jason.exe" campaign set-send-mode cmp_A', 'JASON.EXE preference set send_mode.warm --value x']) {
+        refusedInEveryMode(windowsScope!, command);
+    }
+});
+
+// The CLI matches a verb only in its own case, so a mis-cased verb is a usage error there and sends nothing
+// (ConfinedVerbsTests); the desktop refuses it anyway, rather than lean on the parser. The cost: a value spelled like a
+// denied verb in another case is refused too, as the lower-case value already is, since an entry's words may have gaps.
+test('a denied verb in another letter case is refused like its lower-case form, in every mode', () => {
+    for (const scope of carriedScopes()) {
+        for (const command of ['jason Campaign Set-Send-Mode cmp_A --cold automatic', 'jason CAMPAIGN SET-SEND-MODE cmp_A', 'jason Preference Set send_mode.cold --value x',
+            'jason PREFERENCE unset send_mode.warm', 'jason Approval Approve apr_A', 'jason Runtime stop', 'jason campaign list && jason Decision Answer dec_A',
+            "bash -c 'jason Preference Set send_mode.cold --value x'", 'jason campaign update cmp_A --name "Set-Send-Mode"']) {
+            refusedInEveryMode(scope, command);
+        }
+        for (const command of ['jason Campaign list', 'jason PREFERENCE list']) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
+    }
+});
+
+test('an operation of the send modes escaped by percent is refused in Full access and shown as a card in Ask first, as an escaped approval is', () => {
+    for (const scope of carriedScopes()) {
+        for (const command of ['curl -X POST http://127.0.0.1:4011/v1/campaign%2Eset_send_mode', 'curl -X POST http://127.0.0.1:4011/v1/preference%2eset']) {
+            assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} Ask first: ${command}`);
+            assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+        }
+    }
+});
+
 test('a jason command that starts with an option is refused, as the host\'s own rule refuses it', () => {
     assert.equal(run(windows(), 'jason --actor human:ada approval approve apr_A').verdict, 'deny');
     assert.equal(run(mac(), 'jason --human campaign list').verdict, 'deny');
@@ -692,6 +756,26 @@ test('a command that names JASON_CONFINED is refused in any letter case, on ever
     // A longer name that only begins or ends like it is not it.
     for (const command of ['echo $JASON_CONFINED_X', 'printenv MY_JASON_CONFINED']) {
         for (const scope of [windows(), mac(), linux]) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
+    }
+});
+
+test('a command that names JASON_ATTEMPT_ID is refused in every mode, in any letter case, on every platform, whatever wraps it: the chat is never a run', () => {
+    const sentence = 'That command names JASON_ATTEMPT_ID, which tells jason it runs inside a role\'s attempt: the chat is never an attempt, so it never reads, sets or clears it. Nothing was run.';
+    const named = ['JASON_ATTEMPT_ID=att_01K7QN0000000000000000000R jason workitem create cmp_A --kind ai_role --role writer',
+        'export JASON_ATTEMPT_ID=att_A; jason workitem update wi_A --file -', 'env JASON_ATTEMPT_ID=att_A jason workitem create cmp_A', 'printenv jason_attempt_id',
+        'echo ${JASON_ATTEMPT_ID:-}', '$env:Jason_Attempt_Id = "att_A"; jason workitem create cmp_A', 'set JASON_ATTEMPT_ID=att_A', 'echo %jason_attempt_id%',
+        'unset JASON_ATTEMPT_ID', `python3 -c "import os, subprocess; os.environ['JASON_ATTEMPT_ID'] = 'att_A'; subprocess.run(['jason','workitem','create'])"`];
+    for (const scope of carriedScopes()) {
+        for (const command of named) {
+            refusedInEveryMode(scope, command);
+            const judged = run(scope, command);
+            assert.equal(judged.verdict === 'deny' ? judged.message : '', sentence, `${scope.platform} ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform} ${command}`);
+        }
+        // Spelled with a quote or a backslash inside it, the second look reads it.
+        for (const command of ["JASON_ATTEMPT''_ID=att_A jason workitem create cmp_A", 'echo $JASON_ATTEMPT\\_ID']) refusedInEveryMode(scope, command);
+        // A longer name that only begins or ends like it is not it.
+        for (const command of ['echo $JASON_ATTEMPT_ID_X', 'printenv MY_JASON_ATTEMPT_ID']) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
     }
 });
 

@@ -262,9 +262,14 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     /// <c>workitem.wait</c>, all of <paramref name="children"/> and bounded by the same ceiling, but written before any
     /// attempt exists, so the item is never claimed until they have ended and spends no launch waiting for them. The
     /// resume step releases it as it releases any wait — the items ended, or the ceiling came — and it is then ordinary
-    /// queued work. The respond step is its one caller: a responder waits on the read of its thread.
+    /// queued work. Its callers are a create's <c>wait_on</c> and the respond step, whose responder waits on the read of its
+    /// thread.
     /// </summary>
-    public WorkItemWait WaitFromCreation(JasonDbContext db, WorkItem item, IReadOnlyList<WorkItem> children, ActorRef actor)
+    /// <param name="runtimeItem">
+    /// Work the runtime adds to the wait after the items a caller named, the critic of a send under an automatic mode: one
+    /// item beyond the caller's bound, so a wait of a caller's hundred items and the runtime's one holds a hundred and one.
+    /// </param>
+    public WorkItemWait WaitFromCreation(JasonDbContext db, WorkItem item, IReadOnlyList<WorkItem> children, ActorRef actor, WorkItem? runtimeItem = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
@@ -274,9 +279,17 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
             throw new ArgumentException($"Work item {item.PublicId} has already been queued or tried; only a new item waits from its creation.", nameof(item));
         }
 
-        if (children.Count == 0 || children.Count > WorkItemWaitRequest.MaxWaitItems || children.Select(child => child.Id).Distinct().Count() != children.Count)
+        if (children.Count > WorkItemWaitRequest.MaxWaitItems
+            || children.Select(child => child.Id).Distinct().Count() != children.Count
+            || (runtimeItem is not null && children.Contains(runtimeItem)))
         {
-            throw new ArgumentException($"A wait from creation names between one and {WorkItemWaitRequest.MaxWaitItems} work items, each once.", nameof(children));
+            throw new ArgumentException($"A wait from creation names at most {WorkItemWaitRequest.MaxWaitItems} work items a caller named, each once, and the runtime's one beyond them.", nameof(children));
+        }
+
+        children = runtimeItem is null ? children : [.. children, runtimeItem];
+        if (children.Count == 0)
+        {
+            throw new ArgumentException("A wait from creation names at least one work item.", nameof(children));
         }
 
         var now = clock.GetUtcNow().UtcDateTime;

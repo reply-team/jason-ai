@@ -57,6 +57,10 @@
     "decided_by": null,
     "decision_reason": null,
     "campaign_name": "Autumn outreach",
-    "contact_name": "Ada Lovelace"
+    "contact_name": "Ada Lovelace",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
   }
 }

@@ -1,0 +1,60 @@
+{
+  "operation": "workitem.get",
+  "case": "parked-edited-send",
+  "request": {
+    "work_item_id": "wi_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "wi_1",
+    "campaign_id": "cmp_1",
+    "contact_id": "cnt_1",
+    "kind": "provider_op",
+    "role": null,
+    "operation": "message.send",
+    "execution_profile": null,
+    "status": "awaiting_approval",
+    "eligible": false,
+    "priority": 0,
+    "not_before": null,
+    "due_at": null,
+    "retry_after": null,
+    "timeout_seconds": null,
+    "heartbeat_seconds": null,
+    "max_attempts": null,
+    "created_by": {
+      "type": "human",
+      "id": null
+    },
+    "context": {
+      "input": {
+        "channel": "email",
+        "sender": {
+          "external_id": "s_12",
+          "address": "owner@example.test"
+        },
+        "message": {
+          "format": "email",
+          "subject": "Notes from the meetup",
+          "body": "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?"
+        }
+      }
+    },
+    "result_format": null,
+    "result": null,
+    "attempt_count": 0,
+    "current_attempt_id": null,
+    "last_error": null,
+    "attempts": [],
+    "external_reports": [],
+    "created_at": "2026-10-15T12:00:00.000Z",
+    "updated_at": "2026-10-15T12:00:00.000Z",
+    "finished_at": null,
+    "lineage": {
+      "state": "root"
+    },
+    "campaign_name": "Spring launch",
+    "contact_name": "Ines Duarte",
+    "review_hash": "sha256:recorded-3"
+  }
+}

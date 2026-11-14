@@ -14,15 +14,35 @@ namespace Jason.Contracts.Tests.Preferences;
 public sealed class PreferenceContractTests
 {
     [Fact]
-    public void The_family_publishes_the_interactive_host_the_sender_s_identity_and_the_tone_of_voice_at_version_1()
+    public void The_family_publishes_the_interactive_host_the_two_send_modes_the_sender_s_identity_and_the_tone_of_voice_at_version_1()
     {
-        Assert.Equal(["agent.interactive_host", "sender.identity", "tone_of_voice"], PreferenceCatalog.All.Select(contract => contract.Key));
+        string[] keys = ["agent.interactive_host", "send_mode.cold", "send_mode.warm", "sender.identity", "tone_of_voice"];
+        Assert.Equal(keys, PreferenceCatalog.All.Select(contract => contract.Key));
         Assert.All(PreferenceCatalog.All, contract => Assert.True(contract.Version == 1, $"{contract.Key} is at version {contract.Version}."));
-        Assert.Same(PreferenceCatalog.All[1], PreferenceCatalog.Find("sender.identity"));
+        Assert.Same(PreferenceCatalog.All[3], PreferenceCatalog.Find("sender.identity"));
         Assert.True(PreferenceCatalog.Knows("tone_of_voice"));
         Assert.True(PreferenceCatalog.Knows("agent.interactive_host"));
+        Assert.True(PreferenceCatalog.Knows("send_mode.cold"));
+        Assert.True(PreferenceCatalog.Knows("send_mode.warm"));
         Assert.False(PreferenceCatalog.Knows("tone"));
-        Assert.Equal(["agent.interactive_host", "sender.identity", "tone_of_voice"], PreferenceCatalog.Keys);
+        Assert.False(PreferenceCatalog.Knows("send_mode"));
+        Assert.Equal(keys, PreferenceCatalog.Keys);
+    }
+
+    /// <summary>
+    /// Each send mode is one word of two, the same two for a cold contact and a warm one: a third word would be a mode no
+    /// claim knows how to read, so the list is pinned where a change to it has to be made on purpose.
+    /// </summary>
+    [Theory]
+    [InlineData("send_mode.cold")]
+    [InlineData("send_mode.warm")]
+    public void A_send_mode_is_one_mode_word_automatic_or_every_message(string key)
+    {
+        var schema = PreferenceCatalog.Find(key)!.ValueSchema;
+        Assert.Equal(["mode"], Names(schema["required"]));
+        Assert.Equal(["mode"], ((JsonObject)schema["properties"]!).Select(property => property.Key));
+        Assert.False((bool)schema["additionalProperties"]!);
+        Assert.Equal(["automatic", "every_message"], Names(schema["properties"]!["mode"]!["enum"]));
     }
 
     /// <summary>

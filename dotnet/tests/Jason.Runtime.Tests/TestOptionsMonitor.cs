@@ -74,6 +74,10 @@ public static class TestOptions
     public static LiveSettings<LaunchesOptions> LaunchesSettings(LaunchesOptions? options = null) =>
         Seam(new TestOptionsMonitor<LaunchesOptions>(options ?? new LaunchesOptions()), LaunchesOptions.Section);
 
+    /// <summary>The seam over the sending section, which the claim reads for the daily ceiling of automatic sends.</summary>
+    public static LiveSettings<SendingOptions> SendingSettings(IOptionsMonitor<SendingOptions>? monitor = null) =>
+        Seam(monitor ?? new TestOptionsMonitor<SendingOptions>(new SendingOptions()), SendingOptions.Section);
+
     /// <summary>The seam of a runtime that has never read settings the validator accepted.</summary>
     public static LiveSettings<DispatcherOptions> NothingValidated() =>
         Settings(new ThrowingOptionsMonitor<DispatcherOptions>(new OptionsValidationException(

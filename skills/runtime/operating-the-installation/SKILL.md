@@ -525,7 +525,10 @@ that the installation already here is moved aside into `<data>/replaced-<stamp>/
 and run it only on the person's yes, as "Starting and stopping it" says. The export starts the runtime again when it
 was running; the import ends with it running, because it asks it to record each project folder where it now
 stands, unless the runtime does not start: then the import exits 1 with the files in place, and names
-`jason runtime start` and then `jason project link` for each project folder. Of the three
+`jason runtime start` and then `jason project link` for each project folder. When the runtime started but refused a
+project folder, the import also exits 1, with everything placed and the whole answer printed: read `link_refused` for
+each project, folder, code and message, run the `jason project link` line from `next` once the cause is removed, and
+do not call the import done before then. Of the three
 lines the import leaves to the person, `jason runtime autostart enable` is only for when they want it started at
 logon and the old machine did not do so; when it did, the import has already registered it, or said that this
 machine cannot.

@@ -12,6 +12,10 @@ import { PanelHeader } from '../../layout/panel-header';
 import { toApprovalDetail } from '../../console/live';
 import { MessageCard } from './message-card';
 import { MessageEditor } from './message-editor';
+import { Doubts } from '../send-modes/doubts';
+import { SendModesQuestion } from '../send-modes/question';
+import { ReleasedBySendMode } from '../send-modes/released';
+import { VoiceReminder } from '../send-modes/voice-reminder';
 import { REPLIES, awaitNewApproval, editable, isMessage, isStale, readItem, sentence } from './message-edit';
 
 type Props = {
@@ -162,6 +166,8 @@ export function ApprovalPanel({
                         The message could not be checked against its work item, so it cannot be approved now: {unread}
                     </p>
                 )}
+                {pending && <Doubts preview={approval.preview} />}
+                {approval.reason === 'automatic_mode' && <ReleasedBySendMode preview={approval.preview} />}
                 {intent && (
                     <div className="section">
                         <h3>What will happen</h3>
@@ -222,6 +228,8 @@ export function ApprovalPanel({
                         }}
                     />
                 )}
+                {pending && <SendModesQuestion unset={approval.send_modes_unset} approvalId={approval.id} />}
+                {pending && <VoiceReminder campaignId={approval.campaign_id} />}
                 <details className="fold">
                     <summary>Raw request</summary>
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>
