@@ -9,9 +9,10 @@ namespace Jason.Runtime.Tests.Replies;
 /// by the columns that bound it, never by walking it and never by the campaign alone: the contact's own lines and
 /// verdicts by the contact; the verdicts on a thread by the campaign and the thread; the verdict that replaced one by the
 /// campaign, the thread and its key; the observed lines on a thread by the campaign and the thread; a responder by the
-/// campaign's items of the same person, the read it was created with read from that same row; its creation by the
-/// item's own lines; the
-/// contact's public id by its row. The plans are read from the very queries the claim runs.
+/// campaign's items of the same person; its creation, its start and any patch of its context by the item's own lines;
+/// the read it names as one row by its public id, its attempts by the item's attempts, and its creation, its success
+/// and any patch of its context by its own lines; the contact's public id by its row. The plans are read from the very
+/// queries the claim runs.
 /// </summary>
 public class WarmthPlanTests
 {
@@ -32,6 +33,13 @@ public class WarmthPlanTests
                 "later: INDEX ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=? AND key=? AND rowid>?)",
                 "r: INDEX ix_work_items_campaign_id_contact_id (campaign_id=? AND contact_id=?)",
                 "c: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
+                "g: INDEX ix_work_items_public_id (public_id=?)",
+                "ga: INDEX ix_attempts_work_item_id_number (work_item_id=?)",
+                "gc: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
+                "gs: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
+                "rp: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
+                "rt: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
+                "gt: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
             ]
         },
         {

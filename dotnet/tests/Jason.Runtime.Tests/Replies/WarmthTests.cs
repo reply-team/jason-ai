@@ -7,6 +7,7 @@ using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
 using Jason.Runtime.Tests.Approvals;
 using Jason.Runtime.Tests.Harness;
+using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Replies;
@@ -460,6 +461,171 @@ public class WarmthTests
     }
 
     /// <summary>
+    /// A responder whose read failed, was cancelled or expired was released without a transcript of the thread: it saw
+    /// nothing, so its success judges no line, and the contact waits.
+    /// </summary>
+    [Theory]
+    [InlineData(WorkItemStatus.Failed)]
+    [InlineData(WorkItemStatus.Cancelled)]
+    [InlineData(WorkItemStatus.Expired)]
+    public async Task A_responder_whose_read_did_not_succeed_judges_nothing(WorkItemStatus ended)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1", readEnds: ended);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// The wait from creation is released at its ceiling too, with the read still open, so the responder may run before
+    /// the read succeeded. One that started before the read's success saw no transcript: though the read succeeds later
+    /// and the responder succeeds, the line is not judged by it, and the contact waits.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_that_started_while_its_read_was_still_open_judges_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1", readEnds: null);
+        await EndReadAsync(db, await ReadOfAsync(db, item), WorkItemStatus.Succeeded);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// The read a responder names must be a real <c>conversation.get</c> of the thread the system created: an id no item
+    /// holds, a read of another thread, a read of the thread at another plugin, or a read a person created judges nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("no such item")]
+    [InlineData("of another thread")]
+    [InlineData("at another plugin")]
+    [InlineData("created by a person")]
+    public async Task A_responder_naming_a_read_that_is_not_the_systems_read_of_the_thread_judges_nothing(string which)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var item = await CreatedResponderAsync(
+            db,
+            seed,
+            seed.Contact,
+            "thr-1",
+            readEnds: which == "at another plugin" ? null : WorkItemStatus.Succeeded,
+            readThread: which == "of another thread" ? "thr-9" : null,
+            readId: which == "no such item" ? "wi_01K52JR0000000000000000077" : null);
+        if (which == "at another plugin")
+        {
+            await EndReadAsync(db, await ReadOfAsync(db, item), WorkItemStatus.Succeeded, plugin: "other-mailbox");
+        }
+
+        if (which == "created by a person")
+        {
+            var read = await ReadOfAsync(db, item);
+            read.CreatedByType = ActorType.Human;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var attempt = await StartAsync(db, item);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// A responder created after the line whose pointer names an older read of the same thread, one that succeeded before
+    /// the line was written, judges nothing: that read cannot have seen the message that moved the thread.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_naming_an_older_read_of_the_thread_made_before_the_line_judges_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        var older = await ThreadReadAsync(db, seed, seed.Contact, "thr-1");
+        await EndReadAsync(db, older, WorkItemStatus.Succeeded);
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1", readId: older.PublicId);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// <c>workitem.update</c> may patch any key of an open item's context, the read the responder names, its plugin and
+    /// its thread included, and the read's own input. A responder or a read whose context anyone but the system patched
+    /// judges nothing, whatever the patch said, and the contact waits.
+    /// </summary>
+    [Theory]
+    [InlineData("responder", "human")]
+    [InlineData("responder", "role")]
+    [InlineData("read", "human")]
+    public async Task A_responder_or_a_read_whose_context_someone_else_patched_judges_nothing(string patched, string by)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+        var actor = by == "human" ? Ada : new ActorRef(ActorType.Role, "manager");
+
+        var item = await CreatedResponderAsync(db, seed, seed.Contact, "thr-1");
+        var target = patched == "responder" ? item : await ReadOfAsync(db, item);
+        var key = patched == "responder" ? Responder.InboundReplyKey : "input";
+        await ContextPatchedAsync(db, target, actor, key, target.Context[key]!.DeepClone());
+        var attempt = await StartAsync(db, item);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// The dispatcher's own patch of a further move onto the responder is the system's, and disqualifies nothing: the
+    /// responder created after the line with its read still clears it once both have succeeded in order.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_the_system_patched_with_a_further_move_still_judges_the_line()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var item = await CreatedResponderAsync(db, seed, seed.Contact, "thr-1");
+        var recorded = item.Context[Responder.InboundReplyKey]!.DeepClone().AsObject();
+        recorded["moves"] = new JsonArray(new JsonObject { ["line"] = "jrn_01K52JR0000000000000000009", ["at"] = "2026-09-14T12:05:00.000Z" });
+        recorded["move_count"] = 2;
+        await ContextPatchedAsync(db, item, Actors.Dispatcher, Responder.InboundReplyKey, recorded);
+        var attempt = await StartAsync(db, item);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
     /// The responder's arm needs a verdict with a nature to stand on the thread: where the one standing says none, the
     /// contact waits on the nature.
     /// </summary>
@@ -749,23 +915,45 @@ public class WarmthTests
 
     /// <summary>
     /// A responder for the thread as the respond step creates one — the system's, about the person the line names (nobody
-    /// for a line that names nobody), carrying the thread in its <c>inbound_reply</c> — created now, its
-    /// <c>workitem_created</c> line written here, and started now, its <c>workitem_processing</c> line written after it.
+    /// for a line that names nobody), carrying the thread in its <c>inbound_reply</c> — created now with its read, its
+    /// <c>workitem_created</c> line written here, and started now, after its read ended, its <c>workitem_processing</c>
+    /// line written after it.
     /// </summary>
     private static async Task<(WorkItem Item, Attempt Attempt)> ResponderAsync(
-        JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false, bool withRead = true)
+        JasonDbContext db,
+        Seed seed,
+        Contact? contact,
+        string thread,
+        bool byPerson = false,
+        bool withRead = true,
+        WorkItemStatus? readEnds = WorkItemStatus.Succeeded,
+        string? readThread = null,
+        string? readId = null)
     {
-        var item = await CreatedResponderAsync(db, seed, contact, thread, byPerson, withRead);
+        var item = await CreatedResponderAsync(db, seed, contact, thread, byPerson, withRead, readEnds, readThread, readId);
         return (item, await StartAsync(db, item));
     }
 
     /// <summary>
     /// A responder created now and not yet started: scheduled, as one waiting for its slot is. As the respond step makes it,
-    /// it names the read of the thread it was created with, unless <paramref name="withRead"/> says none was made.
+    /// a <c>conversation.get</c> of the thread is created first, the system's, its <c>workitem_created</c> line before the
+    /// responder's, and the responder names it in <c>inbound_reply.read</c>; the read then ends as
+    /// <paramref name="readEnds"/> says, or stays open where that is null. <paramref name="withRead"/> false makes no read;
+    /// <paramref name="readThread"/> makes the read of another thread; <paramref name="readId"/> names that id instead and
+    /// makes no read.
     /// </summary>
     private static async Task<WorkItem> CreatedResponderAsync(
-        JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false, bool withRead = true)
+        JasonDbContext db,
+        Seed seed,
+        Contact? contact,
+        string thread,
+        bool byPerson = false,
+        bool withRead = true,
+        WorkItemStatus? readEnds = WorkItemStatus.Succeeded,
+        string? readThread = null,
+        string? readId = null)
     {
+        var read = withRead && readId is null ? await ThreadReadAsync(db, seed, contact, readThread ?? thread) : null;
         var item = WorkItemFactory.NewAiRole(seed.Campaign, role: Responder.Role, now: Noon, configure: item =>
         {
             item.CreatedByType = byPerson ? ActorType.Human : ActorType.System;
@@ -778,12 +966,50 @@ public class WarmthTests
                 {
                     ["plugin"] = "mailbox",
                     ["thread"] = thread,
-                    ["read"] = withRead ? "wi_01K52JR0000000000000000077" : null,
+                    ["read"] = withRead ? readId ?? read!.PublicId : null,
                 },
             };
         });
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);
+        Created(db, seed, item, contact);
+        await db.SaveChangesAsync(Ct);
+        if (read is not null && readEnds is { } end)
+        {
+            await EndReadAsync(db, read, end);
+        }
+
+        return item;
+    }
+
+    /// <summary>
+    /// The read of a thread as the respond step creates one: a <c>conversation.get</c> the system created, about the
+    /// person, its input naming the thread, scheduled, its <c>workitem_created</c> line written here.
+    /// </summary>
+    private static async Task<WorkItem> ThreadReadAsync(JasonDbContext db, Seed seed, Contact? contact, string thread)
+    {
+        var read = WorkItemFactory.NewProviderOp(seed.Campaign, Responder.ReadOperation, now: Noon);
+        read.CreatedByType = ActorType.System;
+        read.Contact = contact;
+        read.Status = WorkItemStatus.Scheduled;
+        read.Context = new JsonObject
+        {
+            ["input"] = new JsonObject
+            {
+                ["thread"] = new JsonObject { ["external_id"] = thread },
+                ["limit"] = 50,
+                ["offset"] = 0,
+            },
+        };
+        db.WorkItems.Add(read);
+        await db.SaveChangesAsync(Ct);
+        Created(db, seed, read, contact);
+        await db.SaveChangesAsync(Ct);
+        return read;
+    }
+
+    /// <summary>The item's <c>workitem_created</c> line, as the work item service writes it, the system's.</summary>
+    private static void Created(JasonDbContext db, Seed seed, WorkItem item, Contact? contact) =>
         Writer.Append(
             db,
             Actors.Dispatcher,
@@ -792,17 +1018,66 @@ public class WarmthTests
             key: "kind",
             updated: new JsonObject
             {
-                ["kind"] = "ai_role",
-                ["role"] = Responder.Role,
-                ["operation"] = null,
+                ["kind"] = item.Kind == WorkItemKind.AiRole ? "ai_role" : "provider_op",
+                ["role"] = item.Role,
+                ["operation"] = item.Operation,
                 ["contact_id"] = contact?.PublicId,
                 ["priority"] = item.Priority,
                 ["not_before"] = null,
                 ["due_at"] = null,
             },
             workItem: item);
+
+    /// <summary>
+    /// The read ends now as <paramref name="status"/> says: one that ran has an attempt whose provenance names the plugin
+    /// it ran at; its transition's line is written here.
+    /// </summary>
+    private static async Task EndReadAsync(JasonDbContext db, WorkItem read, WorkItemStatus status, string plugin = "mailbox")
+    {
+        Attempt? attempt = null;
+        if (status is WorkItemStatus.Succeeded or WorkItemStatus.Failed)
+        {
+            attempt = WorkItemFactory.NewAttempt(read, read.Attempts.Count + 1, status == WorkItemStatus.Succeeded ? AttemptStatus.Succeeded : AttemptStatus.Failed, Noon);
+            attempt.FinishedAt = Noon;
+            attempt.Provenance = new AttemptProvenanceDto(
+                plugin, "1.0.0", "sha256:0", 1, 1, Responder.ReadOperation, 1, "snp_01K5B7Q2WE5X3M9T0YH4C6RDNC", "rts_01K5B7Q2WE5X3M9T0YH4C6RDND", RouteScope.GlobalDefault, "sha256:1");
+            read.AttemptCount = attempt.Number;
+            db.Attempts.Add(attempt);
+        }
+
+        var from = read.Status;
+        read.Status = status;
+        read.FinishedAt = Noon;
         await db.SaveChangesAsync(Ct);
-        return item;
+        var (key, old, updated) = status switch
+        {
+            WorkItemStatus.Succeeded => ("result_present", (JsonNode?)null, (JsonNode?)JsonValue.Create(false)),
+            WorkItemStatus.Failed => (attempt!.PublicId, null, new JsonObject { ["code"] = "provider_unavailable", ["message"] = "The read failed.", ["retriable"] = false }),
+            WorkItemStatus.Cancelled => ("status", JsonValue.Create("scheduled"), JsonValue.Create("cancelled")),
+            _ => ("due_at", JsonValue.Create("2026-09-14T12:00:00.000Z"), null),
+        };
+        Writer.Append(db, Actors.Dispatcher, WorkItemTransitions.JournalKind(from, status), campaign: null, key: key, old: old, updated: updated, workItem: read, attempt: attempt);
+        await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>The read the responder names in its <c>inbound_reply.read</c>.</summary>
+    private static Task<WorkItem> ReadOfAsync(JasonDbContext db, WorkItem responder)
+    {
+        var id = (string)responder.Context[Responder.InboundReplyKey]!["read"]!;
+        return db.WorkItems.Include(w => w.Attempts).SingleAsync(w => w.PublicId == id, Ct);
+    }
+
+    /// <summary>
+    /// A patch of the item's context as the work item service journals it: one <c>workitem_context_updated</c> line by
+    /// <paramref name="actor"/> under the key it changed.
+    /// </summary>
+    private static async Task ContextPatchedAsync(JasonDbContext db, WorkItem item, ActorRef actor, string key, JsonNode? updated)
+    {
+        var old = item.Context[key]?.DeepClone();
+        item.Context[key] = updated?.DeepClone();
+        await db.SaveChangesAsync(Ct);
+        Writer.Append(db, actor, JournalKinds.WorkItemContextUpdated, campaign: null, key: key, old: old, updated: updated?.DeepClone(), reason: "a patch", workItem: item);
+        await db.SaveChangesAsync(Ct);
     }
 
     /// <summary>The responder's first attempt starts now: its <c>workitem_processing</c> line is written here.</summary>
