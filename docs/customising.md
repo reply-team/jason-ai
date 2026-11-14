@@ -45,7 +45,9 @@ role's file.
 Each role is taught by one skill file in its own folder. Your AI edits that file and the change applies to the role's
 next piece of work; nothing is reloaded, and work already running keeps what it started with. A role that is refused at
 launch, because its file is unreadable or names itself differently from its folder, is reported by `jason status`. If you ask it to loosen what a role reports or what it asks you before acting, it tells you
-first what the change removes.
+first what the change removes. Under an automatic send mode that matters most for three things: the critic, whose pass
+is the last look before a message goes without you reading it, the doubts a drafting role raises, and the replies the
+responder marks for you. Your AI tells you first when a change would let more go out unread.
 
 ### A new role
 

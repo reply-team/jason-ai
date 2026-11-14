@@ -69,7 +69,13 @@ be read, names itself differently from its folder or is over `Roles:MaxSkillByte
 untaught, which `jason status` reports in a sentence ending in its code. Change what the role is told to do, not its
 launch contract: how it reports, what it asks a person before acting, and the approvals around real people are the
 parts that keep a role honest. Before a change that loosens one of them, say plainly what is removed, naming the thing
-removed and not only that something is, and make the change once the person has heard it.
+removed and not only that something is, and make the change once the person has heard it. Under an automatic send mode,
+three of those parts are what a message stands on when it goes without the person reading it: the critic's pass on its
+text, the last look before it goes; the doubts the role that drafted it raises, which send it to the person instead; and
+the responder's judgement of a reply, which marks the ones a person must answer. An edit that makes the critic pass
+more, a drafting role doubt less or the responder mark fewer replies for the person lets more go out unread: say that,
+in those words, before you make it. Whether messages go automatically is the person's own word, set by them and never by
+you (`approvals-and-questions`).
 
 ### A new role
 
