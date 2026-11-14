@@ -446,6 +446,10 @@ otherwise: half of what it reports is not the runtime's to know.
 job is to answer when the runtime cannot be asked. The JSON body carries `ready` and a state per check, so
 **an agent branches on the body, never on the exit code**.
 
+Under its checks, `jason status --human` prints where this installation's parts are: the role skills, plugins and
+custom UI folders and the settings file. Its JSON carries the same under `setup`, whether or not a runtime answers.
+While `setup.settings_file_holds_secrets` is true, the settings file is also where plugin secrets are kept.
+
 A check reports a fact and, where there is one, the command that repairs it. Most repairs are `jason`
 commands. One is not: putting an executable on a PATH is the shell's own act, so the `path` check prints the
 line your platform needs — a PowerShell line on Windows, an `sh` line elsewhere, the same line this product's

@@ -30,7 +30,7 @@ public class PluginPackageCheckTests
             CheckState.Failed,
             [
                 "reply 0.6.1 is installed; runtime 0.7.1 carries reply 0.7.0, the package its release publishes.",
-                "`jason plugin install reply --replace` places it in /data/plugins/reply in place of the one there, and asks the runtime to load it.",
+                "`jason plugin install reply --replace` places it in <plugins>/reply in place of the one there, and asks the runtime to load it.",
             ]
         },
         {
@@ -114,7 +114,7 @@ public class PluginPackageCheckTests
             Forwarder(ReleasedPluginState.Behind, new PluginPackageInfo("1.0.0", "sha256:earlier-forwarder")),
             Reply(ReleasedPluginState.Current, Released),
             CheckState.Failed,
-            "`jason plugin install journal-forwarder --replace` places it in /data/plugins/journal-forwarder in place of the one there, and asks the runtime to load it."
+            "`jason plugin install journal-forwarder --replace` places it in <plugins>/journal-forwarder in place of the one there, and asks the runtime to load it."
         },
         {
             Forwarder(ReleasedPluginState.NotInstalled, null),
@@ -181,7 +181,7 @@ public class PluginPackageCheckTests
         ]);
 
         Assert.Equal(CheckState.Failed, check.State);
-        Assert.Contains("`jason plugin install reply --replace` places it in /data/plugins/reply", check.Fact, StringComparison.Ordinal);
+        Assert.Contains("`jason plugin install reply --replace` places it in <plugins>/reply", check.Fact, StringComparison.Ordinal);
         Assert.EndsWith(
             "slack and telegram are not installed; runtime 0.7.1 carries each, the package its release publishes, and `jason plugin install <id>` installs one.",
             check.Fact,
@@ -308,16 +308,43 @@ public class PluginPackageCheckTests
         Assert.Contains(line, cli.Text, StringComparison.Ordinal);
     }
 
-    private static async Task<StatusCheck> CheckAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1") =>
-        Assert.Single((await ReportAsync(released, version)).Checks, c => c.Name == "plugin_package");
+    /// <summary>
+    /// The folder a package is placed in is where the command the line names places it: this CLI's own plugins folder,
+    /// joined with the id, whatever the runtime's setup section says or whether it says one at all. The runtime's data
+    /// directory (<c>/data</c> here) and a section naming another folder are both beside it, so neither can be mistaken
+    /// for it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_package_line_names_this_clis_plugins_folder_whatever_the_runtimes_setup_says(bool section)
+    {
+        var setup = section ? new SetupInfo("/elsewhere/roles", "/elsewhere/my-plugins", "/elsewhere/ui", "/elsewhere/settings.json", true) : null;
 
-    private static async Task<StatusReport> ReportAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1")
+        var check = await CheckAsync(released: [Reply(ReleasedPluginState.Behind, new PluginPackageInfo("0.6.1", "sha256:earlier"))], setup: setup);
+
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Contains("`jason plugin install reply --replace` places it in <plugins>/reply in place of the one there", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("/elsewhere", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("/data/plugins", check.Fact, StringComparison.Ordinal);
+    }
+
+    private static async Task<StatusCheck> CheckAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1", SetupInfo? setup = null) =>
+        Assert.Single((await ReportAsync(released, version, setup)).Checks, c => c.Name == "plugin_package");
+
+    /// <summary>
+    /// The report, with this CLI's own plugins folder written as <c>&lt;plugins&gt;/</c> in every fact, so a line reads the
+    /// same on every platform and a folder that is not this CLI's stays as it was said.
+    /// </summary>
+    private static async Task<StatusReport> ReportAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1", SetupInfo? setup = null)
     {
         using var dir = new TempPaths();
-        StatusCommandTests.Running(dir, version: version, releasedPlugins: released);
+        StatusCommandTests.Running(dir, version: version, releasedPlugins: released, setup: setup);
         var output = new StringWriter();
         await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, build: version), Ct);
 
-        return StatusCommandTests.Read(output);
+        var report = StatusCommandTests.Read(output);
+        var own = dir.Paths.PluginsDirectory + Path.DirectorySeparatorChar;
+        return report with { Checks = [.. report.Checks.Select(check => check with { Fact = check.Fact.Replace(own, "<plugins>/", StringComparison.Ordinal) })] };
     }
 }

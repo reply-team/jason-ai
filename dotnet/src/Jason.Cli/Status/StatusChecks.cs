@@ -261,7 +261,7 @@ internal static class StatusChecks
             checks.Add(UpdateInFlight(unfinished));
 
             checks.Add(ProviderPlugin(info));
-            checks.Add(PluginPackage(info));
+            checks.Add(PluginPackage(info, env.Paths));
             // One plugin.list answer, read once and passed on: the two checks it serves describe the same snapshot.
             var asked = client is not null && info is not null;
             var registry = asked ? await ReadAsync<PluginRegistryDto>(client!, Operations.PluginList, cancellationToken).ConfigureAwait(false) : null;
@@ -285,7 +285,9 @@ internal static class StatusChecks
             client?.Dispose();
         }
 
-        return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks);
+        // Where the parts are, from this CLI's own paths: nothing is read and nothing is asked, so it is said whatever the
+        // runtime did, and it decides nothing.
+        return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks, SetupInfo.From(env.Paths));
     }
 
     private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
@@ -916,7 +918,7 @@ internal static class StatusChecks
     /// passes with a line that says so, a development build compares against its own tree, named in the fact, and the
     /// packages not installed are one sentence.
     /// </summary>
-    private static StatusCheck PluginPackage(SystemInfoResponse? info)
+    private static StatusCheck PluginPackage(SystemInfoResponse? info, JasonPaths paths)
     {
         const string Name = "plugin_package";
         if (info is null)
@@ -937,7 +939,7 @@ internal static class StatusChecks
         var state = packages.Any(package => package.State == ReleasedPluginState.Behind) ? CheckState.Failed
             : packages.Any(package => package.State is ReleasedPluginState.Current or ReleasedPluginState.Differs) ? CheckState.Ok
             : CheckState.Absent;
-        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages)), null);
+        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages, paths)), null);
     }
 
     /// <summary>
@@ -945,7 +947,7 @@ internal static class StatusChecks
     /// sentence naming their ids, where the first of them stands, since a release publishes more packages than a person
     /// installs and what there is to do is the same for each.
     /// </summary>
-    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages)
+    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages, JasonPaths paths)
     {
         var missing = packages.Where(package => package.State == ReleasedPluginState.NotInstalled).Select(package => package.Id).ToList();
         var said = false;
@@ -953,7 +955,7 @@ internal static class StatusChecks
         {
             if (package.State != ReleasedPluginState.NotInstalled || missing.Count == 1)
             {
-                yield return PackageLine(info, package);
+                yield return PackageLine(info, package, paths);
             }
             else if (!said)
             {
@@ -964,16 +966,15 @@ internal static class StatusChecks
         }
     }
 
-    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package)
+    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package, JasonPaths paths)
     {
         var runtime = info.RuntimeVersion;
         var released = $"{package.Id} {package.Released.Version}";
         var installed = package.Installed is { } mine ? $"{package.Id} {mine.Version}" : package.Id;
 
-        // The runtime's own data directory, written with the separator it writes, so the line names the folder a person
-        // finds on that machine.
-        var separator = info.DataDir.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
-        var directory = string.Join(separator, info.DataDir.TrimEnd('/', '\\'), "plugins", package.Id);
+        // Where the command this line names places the package: `jason plugin install` writes into this CLI's own plugins
+        // folder, so that is the folder said, whatever the runtime reports.
+        var directory = paths.PluginPackageDirectory(package.Id);
 
         return package.State switch
         {

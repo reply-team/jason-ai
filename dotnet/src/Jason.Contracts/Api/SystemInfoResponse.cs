@@ -10,6 +10,7 @@ namespace Jason.Contracts.Api;
 /// The plugin packages this runtime's release publishes, each beside the package of that id the active snapshot holds;
 /// null on a runtime older than the section.
 /// </param>
+/// <param name="Setup">Where this runtime's parts are (<see cref="SetupInfo"/>); null on a runtime older than the section.</param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -27,7 +28,8 @@ public sealed record SystemInfoResponse(
     ListeningInfo? Listening = null,
     UiModuleInfo? Ui = null,
     HarnessInfo? Harness = null,
-    IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins = null);
+    IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins = null,
+    SetupInfo? Setup = null);
 
 /// <summary>
 /// A plugin package this runtime's release publishes beside its archives, and the package of the same id the active

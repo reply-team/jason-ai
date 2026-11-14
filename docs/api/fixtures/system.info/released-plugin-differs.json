@@ -159,6 +159,13 @@
           "digest": "sha256:recorded-2"
         }
       }
-    ]
+    ],
+    "setup": {
+      "role_skills_directory": "<data>/skills/roles",
+      "plugins_directory": "<data>/plugins",
+      "custom_ui_directory": "<data>/ui/custom",
+      "settings_file": "<data>/config/settings.json",
+      "settings_file_holds_secrets": true
+    }
   }
 }
