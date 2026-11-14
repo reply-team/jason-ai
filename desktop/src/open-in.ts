@@ -12,8 +12,8 @@
  *
  * And one entry opens the person's own AI on Jason itself, "Change Jason itself": the bundled `jason session open --setup`,
  * with the host its own rule chooses (the preference `agent.interactive_host`, else Claude Code). Only where that rule
- * cannot choose, by the codes in `hostUnchosen`, is it run once more with the host this desktop found, Claude Code, else
- * Codex. It is offered in the person's own installation only, never in a demo run, and it is never the default.
+ * cannot choose, by the codes in `hostUnchosen`, is it run once more with a host this desktop found that the command line
+ * did not try, Claude Code, else Codex. It is offered in the person's own installation only, never in a demo run, and it is never the default.
  */
 
 import { posix, win32 } from 'node:path';
@@ -220,15 +220,25 @@ export type ContinueFlags = (host: ContinueHost, session: string) => string[];
 /** The arguments `jason session open` is given for "Change Jason itself": with no host, the one the command line's own rule chooses. */
 export type ChangeJasonFlags = (host: ContinueHost | null) => string[];
 
-/** How "Change Jason itself" was run: by the command line's own choice of host, or by the host this desktop found. */
-export type ChangeJasonHost = 'preference' | ContinueHost;
+/**
+ * Where the host of "Change Jason itself" came from, as its log lines say it: the command line's own rule (the preference,
+ * else Claude Code), or the host this desktop found and named for the second run.
+ */
+export type ChangeJasonHost = 'preference' | 'desktop_claude' | 'desktop_codex';
+
+/**
+ * The command line's error codes a log line of "Change Jason itself" names, a closed table of the codes its act answers;
+ * any other is `other`, and an answer with no code `none`, so no text the command line printed reaches the log.
+ */
+export const changeJasonLoggedCodes: readonly string[] = ['host_unknown', 'preference_unreadable', 'host_not_found', 'folder_missing', 'terminal_not_found', 'terminal_start_failed'];
 
 /** What "Change Jason itself" needs from the run. Absent, the entry is not offered, as in a demo run. */
 export interface ChangeJasonDeps {
     /** True in the person's own installation, false in a demo run. */
     live(): boolean;
     flags: ChangeJasonFlags;
-    log?(event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: ChangeJasonHost; Exit: number }): void;
+    log?(event: 'open_in_change_jason', fields: { Host: ChangeJasonHost; Exit: number }): void;
+    log?(event: 'open_in_change_jason_refused', fields: { Host: ChangeJasonHost; Exit: number; Code: string }): void;
 }
 
 export interface OpenInDeps {
@@ -280,6 +290,30 @@ export const changeJasonNotInDemo = 'Not in the demo: Change Jason itself is for
  * (`host_not_found`). Only these are run once more with the host the desktop found.
  */
 export const hostUnchosen: readonly string[] = ['host_unknown', 'preference_unreadable', 'host_not_found'];
+
+/** The preference that names the host of a person's own session, and the host the command line takes with none set. */
+const hostPreference = 'agent.interactive_host';
+const unsetHost = 'claude_code';
+
+/**
+ * The host word the command line tried, read from `jason preference list` as it read it: the preference's word, else
+ * Claude Code's; null when the list cannot be read, so that which host was tried is not known.
+ */
+function triedHost(answer: { exit: number; stdout: string }): string | null {
+    if (answer.exit !== 0) return null;
+    try {
+        const items = (JSON.parse(answer.stdout) as { items?: unknown }).items;
+        if (!Array.isArray(items)) return null;
+        const entry = items.find((item) => typeof item === 'object' && item !== null && (item as { key?: unknown }).key === hostPreference) as { value?: { host?: unknown } | null } | undefined;
+        const word = entry?.value?.host;
+        return typeof word === 'string' ? word : unsetHost;
+    } catch {
+        return null;
+    }
+}
+
+/** A host's word on the command line. */
+const hostWord = (host: ContinueHost): string => (host === 'claude' ? 'claude_code' : host);
 
 const campaignIdShape = /^cmp_[0-9A-Za-z]{1,64}$/;
 
@@ -378,10 +412,11 @@ export class OpenIn {
 
     /**
      * "Change Jason itself": the bundled `jason session open --setup` with no host, so the preference chooses as typed by
-     * hand. Where the command line says it could not choose (`hostUnchosen`), it is run once more, and only once, with the
-     * host this desktop found, Claude Code, else Codex; with neither found, a host not installed is said as the two it
-     * needs. Nothing the page sends is read, and nothing is run in a demo run. A refusal is said by its code:
-     * `host_not_found` in the desktop's sentence, any other in the command line's own. Never kept as the next default.
+     * hand. Where the command line says it could not choose (`hostUnchosen`), it is run once more, and only once, with a
+     * host this desktop found that the command line did not try, Claude Code, else Codex (`#secondHost`). A host not
+     * installed where the desktop finds no other is said as the two the entry needs; every other refusal, the second
+     * run's included, in the command line's own sentence. Nothing the page sends is read, and nothing is run in a demo
+     * run. Never kept as the next default.
      */
     async changeJason(): Promise<OpenInRefusal | null> {
         const deps = this.#deps;
@@ -390,12 +425,12 @@ export class OpenIn {
         let host: ChangeJasonHost = 'preference';
         let answer = await deps.cli.run(['session', 'open', ...own.flags(null)]);
         let code = answer.exit === 0 ? null : cliCode(answer.stdout);
+        let second: ContinueHost | 'none' | 'unknown' | null = null;
         if (answer.exit === 1 && code !== null && hostUnchosen.includes(code)) {
-            const hosts = deps.hosts();
-            const found: ContinueHost | null = hosts.claude ? 'claude' : hosts.codex ? 'codex' : null;
-            if (found !== null) {
-                host = found;
-                answer = await deps.cli.run(['session', 'open', ...own.flags(found)]);
+            second = await this.#secondHost(code);
+            if (second === 'claude' || second === 'codex') {
+                host = second === 'claude' ? 'desktop_claude' : 'desktop_codex';
+                answer = await deps.cli.run(['session', 'open', ...own.flags(second)]);
                 code = answer.exit === 0 ? null : cliCode(answer.stdout);
             }
         }
@@ -403,8 +438,27 @@ export class OpenIn {
             own.log?.('open_in_change_jason', { Host: host, Exit: 0 });
             return null;
         }
-        own.log?.('open_in_change_jason_refused', { Host: host, Exit: answer.exit });
-        return { refused: answer.exit === 1 && code === 'host_not_found' ? changeJasonNoHost : terminalRefusal(answer) };
+        own.log?.('open_in_change_jason_refused', { Host: host, Exit: answer.exit, Code: code === null ? 'none' : changeJasonLoggedCodes.includes(code) ? code : 'other' });
+        // The two hosts the entry needs are said only where the desktop found none the command line had not tried.
+        return { refused: answer.exit === 1 && code === 'host_not_found' && second === 'none' ? changeJasonNoHost : terminalRefusal(answer) };
+    }
+
+    /**
+     * The host the second run names: the first of Claude Code and Codex this desktop finds that the command line did not
+     * try already. A preference it could not read or does not know tried no host. A host not installed was the
+     * preference's word, else Claude Code's, read once with `jason preference list`; a list that cannot be read leaves
+     * that `unknown`, and there is no second run. `none` where the desktop finds no host it may name.
+     */
+    async #secondHost(code: string): Promise<ContinueHost | 'none' | 'unknown'> {
+        const deps = this.#deps;
+        let tried: string | null = null;
+        if (code === 'host_not_found') {
+            tried = triedHost(await deps.cli.run(['preference', 'list']));
+            if (tried === null) return 'unknown';
+        }
+        const hosts = deps.hosts();
+        const found = (['claude', 'codex'] as const).filter((each) => hosts[each] && hostWord(each) !== tried);
+        return found[0] ?? 'none';
     }
 
     /** Opens the folder in the place the name says; a name not on this computer's list, or a path, is refused. */

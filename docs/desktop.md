@@ -230,9 +230,9 @@ above Continue this chat where that is offered, opens your own AI in a new termi
 plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
 `jason session open --setup`, which opens the host the preference
 [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
-host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with the host
-the desktop finds, Claude Code, else Codex. It is never the default, and the chat, which is kept out of Jason's roles,
-plugins and settings, answers a request to change one of them by pointing to it.
+host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with a host
+the desktop finds that was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept out of
+Jason's roles, plugins and settings, answers a request to change one of them by pointing to it.
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
 Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs

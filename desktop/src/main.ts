@@ -677,7 +677,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         chatFolder: () => paths.chat,
         continueFlags,
         logContinue: (event, fields) => log.info(event, fields),
-        changeJason: { live: () => runOn.mode === 'live', flags: changeJasonFlags, log: (event, fields) => log.info(event, fields) },
+        changeJason: {
+            live: () => runOn.mode === 'live',
+            flags: changeJasonFlags,
+            log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
+                event === 'open_in_change_jason' ? log.info(event, { Host: fields.Host, Exit: fields.Exit }) : log.info(event, { Host: fields.Host, Exit: fields.Exit, Code: fields.Code ?? 'none' }),
+        },
     });
     handle(seam, 'openIn.targets', origin, (campaignId, chatId) => openIn.targets(campaignId, chatId), refused);
     handle(seam, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);

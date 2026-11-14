@@ -14,6 +14,12 @@ type Answer = { exit: number; stdout: string; stderr: string };
 
 const refusal = (code: string, message = `The sentence of ${code}.`): Answer => ({ exit: 1, stdout: JSON.stringify({ error: { code, message, retryable: false } }), stderr: '' });
 const opened: Answer = { exit: 0, stdout: '{"kind":"setup","started":true}', stderr: '' };
+/** What `jason preference list` prints with the host preference naming `host`, or with none set. */
+const preferences = (host: string | null): Answer => ({
+    exit: 0,
+    stdout: JSON.stringify({ items: [{ key: 'agent.interactive_host', value: host === null ? null : { host } }, { key: 'tone_of_voice', value: null }] }),
+    stderr: '',
+});
 
 interface Bench {
     openIn: OpenIn;
@@ -22,8 +28,11 @@ interface Bench {
     logged: string[];
 }
 
-/** An installation whose command line answers `session open` from the list, in order, and every other verb with nothing. */
-function bench(options: { live?: boolean; offered?: boolean; hosts?: { claude: boolean; codex: boolean }; answers?: Answer[] } = {}): Bench {
+/**
+ * An installation whose command line answers `session open` from the list, in order, `preference list` with the answer
+ * given (by default a preference naming a host that is neither of the two), and every other verb with nothing.
+ */
+function bench(options: { live?: boolean; offered?: boolean; hosts?: { claude: boolean; codex: boolean }; answers?: Answer[]; preference?: Answer } = {}): Bench {
     const calls: { args: string[]; cwd: string | undefined }[] = [];
     const kept: PlaceId[] = [];
     const logged: string[] = [];
@@ -34,7 +43,8 @@ function bench(options: { live?: boolean; offered?: boolean; hosts?: { claude: b
         cli: {
             run: (args, given) => {
                 calls.push({ args: [...args], cwd: given?.cwd });
-                return Promise.resolve(args[0] === 'session' ? (answers.shift() ?? assert.fail(`no answer left for ${args.join(' ')}`)) : { exit: 0, stdout: '{}', stderr: '' });
+                if (args[0] === 'session') return Promise.resolve(answers.shift() ?? assert.fail(`no answer left for ${args.join(' ')}`));
+                return Promise.resolve(args[0] === 'preference' ? (options.preference ?? preferences('gemini_cli')) : { exit: 0, stdout: '{}', stderr: '' });
             },
         },
         harnessRoot: () => 'C:\\Jason',
@@ -47,7 +57,7 @@ function bench(options: { live?: boolean; offered?: boolean; hosts?: { claude: b
         continuable: () => null,
         chatFolder: () => 'C:\\data\\desktop\\chat',
         continueFlags,
-        ...(options.offered === false ? {} : { changeJason: { live: () => options.live ?? true, flags: changeJasonFlags, log: (event: string, fields: { Host: string; Exit: number }) => void logged.push(`${event}:${fields.Host}:${fields.Exit}`) } }),
+        ...(options.offered === false ? {} : { changeJason: { live: () => options.live ?? true, flags: changeJasonFlags, log: (event: string, fields: { Host: string; Exit: number; Code?: string }) => void logged.push([event, fields.Host, fields.Exit, ...(fields.Code === undefined ? [] : [fields.Code])].join(':')) } }),
     };
     return { openIn: new OpenIn(deps), calls, kept, logged };
 }
@@ -80,6 +90,7 @@ test('Change Jason itself runs jason session open --setup with no host and no wo
     assert.deepEqual(b.calls.filter((call) => call.args[0] !== 'session'), [], 'nothing else is asked');
     assert.deepEqual(b.kept, []);
     assert.deepEqual(b.logged, ['open_in_change_jason:preference:0']);
+    assert.deepEqual(b.calls.filter((call) => call.args[0] === 'preference'), [], 'the preference is read only after a host was not found');
 });
 
 test('where the preference chooses a host that is there, that host opens and the desktop names none, Codex with Claude Code found included', async () => {
@@ -94,8 +105,8 @@ test('where the command line could not choose a host, it is run once more with t
     assert.deepEqual(hostUnchosen, ['host_unknown', 'preference_unreadable', 'host_not_found']);
     for (const code of hostUnchosen) {
         for (const [hosts, word, logged] of [
-            [{ claude: true, codex: true }, 'claude_code', 'claude'],
-            [{ claude: false, codex: true }, 'codex', 'codex'],
+            [{ claude: true, codex: true }, 'claude_code', 'desktop_claude'],
+            [{ claude: false, codex: true }, 'codex', 'desktop_codex'],
         ] as const) {
             const b = bench({ hosts, answers: [refusal(code), opened] });
             assert.equal(await b.openIn.changeJason(), null, `${code} ${word}`);
@@ -105,11 +116,49 @@ test('where the command line could not choose a host, it is run once more with t
     }
 });
 
-test('the second run is the last: a host it does not find either is said as the two the entry needs, and nothing runs a third time', async () => {
-    const b = bench({ answers: [refusal('host_not_found'), refusal('host_not_found')] });
-    assert.deepEqual(await b.openIn.changeJason(), { refused: changeJasonNoHost });
+test('the second run is the last: a host it does not find either is said in the command line\'s own sentence, and nothing runs a third time', async () => {
+    const b = bench({ answers: [refusal('host_not_found'), refusal('host_not_found', 'claude was not found on the PATH.')] });
+    assert.deepEqual(await b.openIn.changeJason(), { refused: 'claude was not found on the PATH.' });
     assert.equal(sessions(b).length, 2);
-    assert.deepEqual(b.logged, ['open_in_change_jason_refused:claude:1']);
+    assert.deepEqual(b.logged, ['open_in_change_jason_refused:desktop_claude:1:host_not_found']);
+});
+
+test('the second run never names the host the command line tried: with no preference set that is Claude Code, so it is Codex, and with Codex not found there is none', async () => {
+    const both = bench({ preference: preferences(null), answers: [refusal('host_not_found'), opened] });
+    assert.equal(await both.openIn.changeJason(), null);
+    assert.deepEqual(sessions(both).map((call) => call.args), [['session', 'open', '--setup'], ['session', 'open', '--setup', '--host', 'codex']]);
+    assert.deepEqual(both.calls.filter((call) => call.args[0] === 'preference').map((call) => call.args), [['preference', 'list']], 'read once, to know which host was tried');
+    assert.deepEqual(both.logged, ['open_in_change_jason:desktop_codex:0']);
+    // Claude Code found by the desktop, not by the command line, and no Codex: nothing else to try.
+    const claudeOnly = bench({ hosts: { claude: true, codex: false }, preference: preferences(null), answers: [refusal('host_not_found')] });
+    assert.deepEqual(await claudeOnly.openIn.changeJason(), { refused: changeJasonNoHost });
+    assert.equal(sessions(claudeOnly).length, 1);
+    assert.deepEqual(claudeOnly.logged, ['open_in_change_jason_refused:preference:1:host_not_found']);
+});
+
+test('a preference naming Codex that is not installed is run once more on Claude Code, never on Codex again', async () => {
+    const b = bench({ preference: preferences('codex'), answers: [refusal('host_not_found'), opened] });
+    assert.equal(await b.openIn.changeJason(), null);
+    assert.deepEqual(sessions(b).map((call) => call.args), [['session', 'open', '--setup'], ['session', 'open', '--setup', '--host', 'claude_code']]);
+    const codexOnly = bench({ hosts: { claude: false, codex: true }, preference: preferences('codex'), answers: [refusal('host_not_found')] });
+    assert.deepEqual(await codexOnly.openIn.changeJason(), { refused: changeJasonNoHost });
+    assert.equal(sessions(codexOnly).length, 1);
+});
+
+test('where the preference list cannot be read, which host was tried is not known: there is no second run, and the command line\'s own sentence is said', async () => {
+    const b = bench({ preference: { exit: 3, stdout: '', stderr: '' }, answers: [refusal('host_not_found', 'codex was not found on the PATH.')] });
+    assert.deepEqual(await b.openIn.changeJason(), { refused: 'codex was not found on the PATH.' });
+    assert.equal(sessions(b).length, 1);
+    assert.deepEqual(b.logged, ['open_in_change_jason_refused:preference:1:host_not_found']);
+});
+
+test('a preference it could not read, or a word it does not know, tried no host: the second run takes Claude Code first, and no preference is read', async () => {
+    for (const code of ['host_unknown', 'preference_unreadable']) {
+        const b = bench({ answers: [refusal(code), opened] });
+        assert.equal(await b.openIn.changeJason(), null, code);
+        assert.deepEqual(sessions(b).at(-1)!.args, ['session', 'open', '--setup', '--host', 'claude_code'], code);
+        assert.deepEqual(b.calls.filter((call) => call.args[0] === 'preference'), [], code);
+    }
 });
 
 test('with neither host found, a command line that could not choose is not run again: a host not installed is said as the two it needs, any other code in its own sentence', async () => {
@@ -127,7 +176,7 @@ test('a refusal that is not about the host is said in the command line\'s own se
         const b = bench({ answers: [refusal(code)] });
         assert.deepEqual(await b.openIn.changeJason(), { refused: `The sentence of ${code}.` }, code);
         assert.equal(sessions(b).length, 1, code);
-        assert.deepEqual(b.logged, ['open_in_change_jason_refused:preference:1']);
+        assert.deepEqual(b.logged, [`open_in_change_jason_refused:preference:1:${code}`]);
     }
     // The code decides, never the words: a sentence that speaks of a host under another code is not run again.
     const worded = bench({ answers: [refusal('folder_missing', 'No host was found, and no folder.')] });
@@ -139,7 +188,11 @@ test('a runtime that cannot be reached is said so, and nothing is run again; a u
     const down = bench({ answers: [{ exit: 3, stdout: '', stderr: 'No runtime answered.' }] });
     assert.deepEqual(await down.openIn.changeJason(), { refused: "Jason's runtime is not running." });
     assert.equal(sessions(down).length, 1);
-    assert.deepEqual(down.logged, ['open_in_change_jason_refused:preference:3']);
+    assert.deepEqual(down.logged, ['open_in_change_jason_refused:preference:3:none']);
+    // A code outside the act's own table is logged as other: no word the command line printed reaches the log.
+    const odd = bench({ answers: [refusal('C:\\Users\\someone said so')] });
+    await odd.openIn.changeJason();
+    assert.deepEqual(odd.logged, ['open_in_change_jason_refused:preference:1:other']);
     const usage = bench({ answers: [{ exit: 2, stdout: '', stderr: '--setup is not taken with --here.\nUsage: ...' }] });
     assert.deepEqual(await usage.openIn.changeJason(), { refused: '--setup is not taken with --here.' });
     const silent = bench({ answers: [{ exit: 4, stdout: 'not json', stderr: '' }] });
@@ -167,7 +220,7 @@ test('the act answers only the runtime’s own page in its top frame, and the ma
     assert.equal(reached.length, 1);
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
     assert.match(main, /handle\(seam, 'openIn\.changeJason', origin, \(\) => openIn\.changeJason\(\), refused\);/);
-    assert.match(main, /changeJason: \{ live: \(\) => runOn\.mode === 'live', flags: changeJasonFlags,/);
+    assert.match(main, /changeJason: \{\s+live: \(\) => runOn\.mode === 'live',\s+flags: changeJasonFlags,/);
     // Whatever a page sends with it is never read.
     const b = bench();
     const act = b.openIn.changeJason.bind(b.openIn) as (...args: unknown[]) => Promise<unknown>;
