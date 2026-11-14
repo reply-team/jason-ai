@@ -85,9 +85,9 @@ public static class OperationEndpoints
             {
                 // A request through a handler's door speaks as that plugin for its whole flow, and only that one.
                 using var scope = caller is null ? null : ActorScope.ForPlugin(caller.Grant.PluginId);
-                if (context.RequestServices.GetService<RequestRun>() is { } run)
+                if (context.RequestServices.GetService<RequestRun>() is { } requestRun)
                 {
-                    run.AttemptId = InsideARun.AttemptOf(context.Request);
+                    requestRun.AttemptId = InsideARun.AttemptOf(context.Request);
                 }
 
                 var service = context.RequestServices.GetRequiredService<TService>();

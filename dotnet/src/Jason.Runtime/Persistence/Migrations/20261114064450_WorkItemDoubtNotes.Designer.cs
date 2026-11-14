@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Jason.Runtime.Persistence.Migrations
 {
     [DbContext(typeof(JasonDbContext))]
-    [Migration("20261114053309_WorkItemDoubtNotes")]
+    [Migration("20261114064450_WorkItemDoubtNotes")]
     partial class WorkItemDoubtNotes
     {
         /// <inheritdoc />
@@ -593,6 +593,26 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(0)
                         .HasColumnName("responder_watermark");
+
+                    b.Property<string>("SendModeCold")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_cold");
+
+                    b.Property<string>("SendModeColdSetBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_cold_set_by");
+
+                    b.Property<string>("SendModeWarm")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_warm");
+
+                    b.Property<string>("SendModeWarmSetBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_warm_set_by");
 
                     b.Property<string>("Status")
                         .IsRequired()
