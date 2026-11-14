@@ -424,7 +424,9 @@ any request, exit 1. `jason status --provider-cli <program>` runs a bare name on
 of PATH. Options that name a path for another reason are not under the rule: `project link --path`, `doctor --output`,
 `export` and `import`, and `logs`, which takes no path. The variable confines the call and nothing that call starts:
 three starts drop it, a runtime it starts, the role work a runtime launches and the terminal `jason session open` opens;
-every other child inherits it, and none reads it. Unset or empty, nothing changes.
+every other child inherits it, and none reads it. Every request the call sends carries the header `Jason-Confined`, and
+a send it creates, or whose text it edits, then waits for a person whatever the send mode
+([docs/work-execution.md](work-execution.md), "The send mode at the claim"). Unset or empty, nothing changes.
 
 A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
 attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get

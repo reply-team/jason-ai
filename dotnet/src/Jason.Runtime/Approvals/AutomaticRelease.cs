@@ -39,8 +39,9 @@ internal abstract record AutomaticDecision
 /// <remarks>
 /// <para>
 /// The order, each step asked only when every step above it let the send on:
-/// the send was written in the chat or its input edited there, marked on the item's own lines, read only once a mode
-/// could release it; the two modes are read, and where neither temperature resolves to automatic under a named person's
+/// the send was written in the chat or its input edited there, marked on the item's own lines, read for every send a
+/// person decides each one of, with a contact or without, since a chat send parks in every mode and ahead of a standing
+/// approval; the two modes are read, and where neither temperature resolves to automatic under a named person's
 /// word nothing about warmth is read (with no preference set both are every message); the contact's warmth in the
 /// campaign; the mode in force for it, every message ending the step; a send from the chat; a doubt that stands; a reply
 /// that waits for a judgement; one that waits for its nature; for an answer, the verdict it answers, which must stand,
@@ -76,12 +77,18 @@ public static class AutomaticRelease
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(plan);
-        if (!ReviewSubject.IsReviewable(item) || item.ContactId is not { } contact)
+        if (!ReviewSubject.IsReviewable(item))
         {
             return new AutomaticDecision.NotInForce(Chat: false);
         }
 
+        // Read for every send a person decides each one of, a contact or none, since it parks a chat send in every mode.
         var chat = await Confined(db, item.PublicId).AnyAsync(ct).ConfigureAwait(false);
+        if (item.ContactId is not { } contact)
+        {
+            return new AutomaticDecision.NotInForce(chat);
+        }
+
         var installation = await SendModes.ReadAsync(db, ct).ConfigureAwait(false);
         var cold = Releasing(SendModes.Resolve(item.Campaign, installation, Temperature.Cold));
         var warm = Releasing(SendModes.Resolve(item.Campaign, installation, Temperature.Warm));

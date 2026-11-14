@@ -174,6 +174,7 @@ public partial class ClaimerTests
     /// </summary>
     [Theory]
     [InlineData("the critic's run", null)]
+    [InlineData("the critic's run, then a copywriter's pass", null)]
     [InlineData("a person by name", null)]
     [InlineData("nobody", "not_reviewed")]
     [InlineData("a copywriter's run", "not_reviewed")]
@@ -194,6 +195,7 @@ public partial class ClaimerTests
             "the critic's run" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash),
             "a person by name" => (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
                 new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id,
+            "the critic's run, then a copywriter's pass" => await ThenAsync(await CriticPassAsync(db, reading, send.Id, send.ReviewHash), CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter")),
             "a copywriter's run" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter"),
             "a person named on a run's line" => await PassLineAsync(db, item, new ActorRef(ActorType.Human, "ada"), await RunningAsync(db, reading, "critic"), "critic"),
             "a critic's line naming another attempt" => await PassLineAsync(db, item, new ActorRef(ActorType.Attempt, "att_01K52JR0000000000000000099"), await RunningAsync(db, reading, "critic"), "critic"),
@@ -589,6 +591,60 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// Only the automatic mode's row reads warmth again at a retry. A retry under a person's own approval, or under a
+    /// standing approval's row, goes under that decision even where a reply of the contact's landed since and waits for a
+    /// verdict, with the automatic mode in force all the while.
+    /// </summary>
+    [Theory]
+    [InlineData("a person's approval")]
+    [InlineData("a standing approval")]
+    public async Task SendMode_ARetryUnderAnotherRow_ReadsNoWarmthAgain(string under)
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        string sendId;
+        if (under == "a person's approval")
+        {
+            sendId = (await ComposeAsync(db, reading, waitOn: null)).Id;
+            Assert.Empty(await ClaimSettledAsync(harness, db));
+            var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+            var clock = new FixedClock(Noon);
+            await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+            db.ChangeTracker.Clear();
+            db.Attach(reading.Campaign);
+        }
+        else
+        {
+            var verdict = await NatureVerdictAsync(db, reading, ReplyNature.Person, by: Operator);
+            await StandAsync(db, reading.Campaign);
+            sendId = (await Items(db).CreateAsync(
+                new WorkItemCreateRequest(
+                    reading.Campaign.PublicId, WorkItemKind.ProviderOp, null, "conversation.reply", reading.Contact.PublicId,
+                    null, null, null, null, null, null, null,
+                    new JsonObject { [WorkItemService.InputKey] = ReplyingIn(InThread), [StandingApprovals.VerdictKey] = verdict },
+                    null, Operator, null),
+                Ct)).Id;
+        }
+
+        Assert.Single(await ClaimSettledAsync(harness, db));
+        var decided = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(under == "a person's approval" ? "approval_required" : "standing_approval", decided.Reason);
+        await ModeAsync(db, ColdMode, "automatic");
+        await ModeAsync(db, WarmMode, "automatic");
+        await FailRetriablyAsync(db, sendId);
+        await ObservedAsync(db, reading, "2026-09-14T11:55:00.000Z");
+        db.ChangeTracker.Clear();
+
+        Assert.Single(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        var row = Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal((ApprovalStatus.Approved, decided.Reason), (row.Status, row.Reason));
+    }
+
+    /// <summary>
     /// A review is refused exactly where the claim would not read it. Released automatically and then failed for a reason
     /// that is retried, the send's retry goes under its automatic row and reads no review, so a doubt sent then is refused
     /// <c>not_reviewable</c>, naming the row, and nothing is written.
@@ -722,6 +778,40 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// The gate never meets a send that names no contact: each send acts on a contact, so the pre-flight refuses one that
+    /// names none, <c>contact_required</c>, before the approval is asked, a chat send's under a standing approval that
+    /// would cover its verdict included. The step reads the chat's mark before it asks for the contact all the same.
+    /// </summary>
+    [Fact]
+    public async Task SendMode_ASendNamingNoContact_IsRefusedBeforeTheGate()
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var verdict = await NatureVerdictAsync(db, reading, ReplyNature.Person, by: Operator);
+        await StandAsync(db, reading.Campaign);
+        WorkItemDto draft;
+        using (ConfinedScope.Open())
+        {
+            draft = await Items(db).CreateAsync(
+                new WorkItemCreateRequest(
+                    reading.Campaign.PublicId, WorkItemKind.ProviderOp, null, "conversation.reply", null,
+                    null, null, null, null, null, null, null,
+                    new JsonObject { [WorkItemService.InputKey] = ReplyingIn(InThread), [StandingApprovals.VerdictKey] = verdict },
+                    null, Operator, null),
+                Ct);
+        }
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        var item = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == draft.Id, Ct);
+        Assert.Equal((WorkItemStatus.Failed, "contact_required"), (item.Status, item.LastError!.Code));
+        Assert.Empty(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+    }
+
+    /// <summary>
     /// An edit of a send's input in the chat makes it the chat's: a send written outside the chat, its text then edited
     /// there and passed again by the critic, parks <c>sent_from_chat</c> under the automatic mode.
     /// </summary>
@@ -846,6 +936,13 @@ public partial class ClaimerTests
         db.WorkItems.Add(work);
         await db.SaveChangesAsync(Ct);
         return run;
+    }
+
+    /// <summary>The first line's id, once the review that follows it is written too.</summary>
+    private static async Task<string> ThenAsync(string first, Task<string> then)
+    {
+        await then;
+        return first;
     }
 
     /// <summary>A pass of the send's text by a running attempt of the critic's work, through the verb; its line's id.</summary>
