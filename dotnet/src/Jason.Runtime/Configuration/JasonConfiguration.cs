@@ -292,6 +292,44 @@ public static class JasonConfiguration
     }
 
     /// <summary>
+    /// The settings writer's new bytes in a temporary file beside <paramref name="settingsFile"/>, flushed to the disk; null
+    /// where it could not be made, which the commit answers as a file another program holds. On Unix the file's mode is
+    /// read inside the same guard, so a settings file removed in that instant is answered that way too, never thrown out of
+    /// the request.
+    /// </summary>
+    internal static string? WriteTemporary(string settingsFile, byte[] next, bool replacing)
+    {
+        var directory = Path.GetDirectoryName(settingsFile)!;
+        var temporary = Path.Combine(directory, $"{Path.GetFileName(settingsFile)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
+            if (!OperatingSystem.IsWindows())
+            {
+                options.UnixCreateMode = replacing ? File.GetUnixFileMode(settingsFile) : UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            }
+
+            Directory.CreateDirectory(directory);
+            using var stream = new FileStream(temporary, options);
+            stream.Write(next);
+            stream.Flush(flushToDisk: true);
+            return temporary;
+        }
+        catch (Exception unwritten) when (unwritten is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+            {
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
     /// The settings file's provider. It watches the file itself, as the loader would, and applies an edit as the loader's
     /// reload does; <see cref="Read"/> and the watch take one lock through reading the file, replacing the keys and
     /// telling the sections. The loader's watch could not be waited for: its read and its telling are closed to a
@@ -476,30 +514,7 @@ public static class JasonConfiguration
         }
 
         /// <summary>The new bytes in a temporary file beside the settings file, flushed to the disk; null where it could not be made.</summary>
-        private string? Temporary(byte[] next, bool replacing)
-        {
-            var directory = System.IO.Path.GetDirectoryName(FullPath)!;
-            var temporary = System.IO.Path.Combine(directory, $"{System.IO.Path.GetFileName(FullPath)}.{Guid.NewGuid():N}.tmp");
-            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
-            if (!OperatingSystem.IsWindows())
-            {
-                options.UnixCreateMode = replacing ? File.GetUnixFileMode(FullPath) : UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            }
-
-            try
-            {
-                Directory.CreateDirectory(directory);
-                using var stream = new FileStream(temporary, options);
-                stream.Write(next);
-                stream.Flush(flushToDisk: true);
-                return temporary;
-            }
-            catch (Exception unwritten) when (unwritten is IOException or UnauthorizedAccessException)
-            {
-                TryDelete(temporary);
-                return null;
-            }
-        }
+        private string? Temporary(byte[] next, bool replacing) => WriteTemporary(FullPath, next, replacing);
 
         private bool Renamed(string temporary)
         {

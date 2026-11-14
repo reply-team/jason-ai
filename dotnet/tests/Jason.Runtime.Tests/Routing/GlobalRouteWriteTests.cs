@@ -482,6 +482,30 @@ public class GlobalRouteWriteTests
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(api.Paths.UserSettingsFile));
     }
 
+    /// <summary>
+    /// A settings file removed between the compare and the temporary file is answered as a file the commit could not
+    /// replace, never thrown out of the request: on Unix its mode is read inside the same guard as the write, and nothing
+    /// is left behind.
+    /// </summary>
+    [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void A_settings_file_removed_before_its_mode_is_read_is_answered_and_leaves_nothing()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The mode is read on Unix only; on Windows the file takes its folder's permissions.");
+        var directory = Directory.CreateTempSubdirectory("jason-temporary-").FullName;
+        try
+        {
+            var gone = Path.Combine(directory, "settings.json");
+
+            Assert.Null(JasonConfiguration.WriteTemporary(gone, "{}"u8.ToArray(), replacing: true));
+            Assert.Empty(Directory.GetFiles(directory));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static object Global(string operation, JsonObject binding) =>
         new { scope = "global", operation, plugin = TestPlugins.FakeProviderId, binding, reason = "routed for the test" };
 
