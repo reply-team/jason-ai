@@ -142,11 +142,35 @@ describe('the two-modes question on an approval card', () => {
 describe('the quiet reminder about name and tone', () => {
     const reminder = /Your name and tone are not set\./;
 
+    /** Keeps every answer the fake gives, so a row can wait for the reminder's own reads to be answered. */
+    function answers(api: FakeApi): Promise<unknown>[] {
+        const given: Promise<unknown>[] = [];
+        const call = api.call.bind(api);
+        api.call = ((...args: Parameters<FakeApi['call']>) => {
+            const answer = call(...args);
+            given.push(answer);
+            return answer;
+        }) as FakeApi['call'];
+        return given;
+    }
+
+    /**
+     * Waits until the reminder has decided: its reads are answered, and what it does with the answers has run. The fake
+     * answers without a timer, so a task queued after the answers runs after every reaction to them, and act commits.
+     */
+    async function decided(given: Promise<unknown>[]) {
+        await act(async () => {
+            await Promise.allSettled(given);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+    }
+
     it('is not shown while both kinds were answered that every message waits', async () => {
         const api = marta().answer('preference.list', 'preference.list/modes-every-message');
+        const given = answers(api);
         mount(api, card('approval.get/modes-chosen'));
         await waitFor(() => expect(operations(api)).toEqual(['preference.list', 'campaign.get']));
-        await act(async () => {});
+        await decided(given);
         expect(screen.queryByText(reminder)).toBeNull();
     });
 
@@ -192,9 +216,10 @@ describe('the quiet reminder about name and tone', () => {
 
     it('is not shown when both are set, though a mode goes automatically', async () => {
         const api = marta().answer('preference.list', 'preference.list/set');
+        const given = answers(api);
         mount(api, card('approval.get/modes-chosen'));
         await waitFor(() => expect(operations(api)).toEqual(['preference.list']));
-        await act(async () => {});
+        await decided(given);
         expect(screen.queryByText(reminder)).toBeNull();
     });
 
