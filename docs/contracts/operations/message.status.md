@@ -58,7 +58,11 @@ nothing the caller wrote. Three refusals come before anything is run, each perma
   "rendered_body": null,
   "failure_reason": null,
   "failure_code": null,
-  "cancelled_at": null
+  "cancelled_at": null,
+  "bounced": false,
+  "bounce": null,
+  "bounced_at": null,
+  "bounce_code": null
 }
 ```
 
@@ -72,6 +76,12 @@ nothing the caller wrote. Three refusals come before anything is run, each perma
   provider's own code for a failure, as it gives it and uninterpreted, or null where it gives none.
 - `rendered_subject` and `rendered_body` are the message as it went, where the provider keeps that copy, and null
   otherwise.
+- `bounced` says whether the email went and came back as a bounce: true where the provider says it did, false where it
+  says it did not, and null where it cannot say. `bounce` is the kind, where it bounced: `hard` only where the provider
+  says the address itself does not take mail, `soft` for every other kind it names — a full mailbox, a refusal of the
+  message, a limit of the sender's own — and null where it names none. `bounced_at` is when the bounce notice came, and
+  `bounce_code` the provider's own word for the kind, uninterpreted. The four are optional: a plugin that does not
+  return them is read as returning null for each.
 
 ## What the runtime does with a send that went
 
