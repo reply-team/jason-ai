@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { posix, win32 } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, posix, win32 } from 'node:path';
 import { afterEach, test } from 'node:test';
 import { codexArguments, dataRules, rulePath } from '../src/chat-hosts.ts';
 import { chatModes, type ChatMode } from '../src/chat-modes.ts';
@@ -7,9 +8,10 @@ import { PermissionBroker, type ToolAnswer } from '../src/chat-permission-broker
 import type { ChatScope, Platform } from '../src/chat-permission-model.ts';
 
 // The chat is kept out of Jason's own parts, so that it can never rewrite the instructions Jason's own agents work by:
-// the role skills folder, the plugins folder and the settings file are refused to a turn in every mode, Full access
-// included, by the desktop's judgement of each request and by the host's own file rules. "Change Jason itself" in Open
-// in is the way to change them. True since the chat had a fence; this file keeps it true.
+// the role skills folder, the plugins folder and the settings file are refused to a Claude Code turn in every mode, Full
+// access included, by the desktop's judgement of each request and by the host's own file rules, however the path is
+// spelled; a Codex turn is held by its own read-only sandbox. "Change Jason itself" in Open in is the way to change them.
+// True since the chat had a fence; this file keeps it true.
 
 /**
  * Jason's own parts, by the data directory, each as a path inside it. A part a later layout adds or moves is a row here;
@@ -24,12 +26,27 @@ function parts(platform: Platform, data: string): { part: string; inside: string
     ];
 }
 
-/** The person's own installation, its data directory the one fenced folder, as the chat builds a turn's scope. */
-function scopeOf(platform: Platform): ChatScope {
+/**
+ * Other spellings of a path inside a part, each naming the same file: relative to the turn's working folder, and on
+ * Windows in another case, with forward slashes, and under the `\\?\` prefix. A spelling a later change finds is a row
+ * here.
+ */
+function spellings(platform: Platform, cwd: string, inside: string): string[] {
     const paths = platform === 'win32' ? win32 : posix;
-    const home = platform === 'win32' ? 'C:\\Users\\someone' : '/home/someone';
+    const relative = paths.relative(cwd, inside);
+    if (platform !== 'win32') return [relative];
+    return [relative, relative.replaceAll('\\', '/'), inside.toUpperCase(), inside.replaceAll('\\', '/'), `\\\\?\\${inside}`];
+}
+
+/**
+ * The person's own installation, its data directory the one fenced folder, as the chat builds a turn's scope: a Full
+ * access turn works in its grant's folder below `chat-full`, every other in the chat folder.
+ */
+function scopeOf(platform: Platform, mode: ChatMode = 'ask_first'): ChatScope {
+    const paths = platform === 'win32' ? win32 : posix;
+    const home = platform === 'win32' ? 'C:\\Users\\someone' : platform === 'darwin' ? '/Users/someone' : '/home/someone';
     const data = paths.join(home, '.jason');
-    const chat = paths.join(data, 'desktop', 'chat');
+    const chat = mode === 'full_access' ? paths.join(data, 'desktop', 'chat-full', 'grant-1') : paths.join(data, 'desktop', 'chat');
     return {
         platform,
         cwd: chat,
@@ -62,26 +79,29 @@ async function asked(mode: ChatMode, scope: ChatScope, tool: string, input: Reco
     return answer;
 }
 
-const platforms: readonly Platform[] = ['linux', 'win32'];
+const platforms: readonly Platform[] = ['linux', 'darwin', 'win32'];
 
 test('the modes this file holds are every mode the chat has', () => {
     assert.deepEqual(chatModes, ['ask_first', 'plan_only', 'auto_edit', 'full_access']);
 });
 
 for (const mode of chatModes) {
-    test(`${mode}: a turn may neither read nor change Jason's role skills folder, its plugins folder or its settings file`, async () => {
+    test(`${mode}: a Claude Code turn may neither read nor change Jason's role skills folder, its plugins folder or its settings file, however it spells them`, async () => {
         for (const platform of platforms) {
-            const scope = scopeOf(platform);
+            const scope = scopeOf(platform, mode);
             for (const { part, inside } of parts(platform, scope.data)) {
-                const requests: [string, Record<string, unknown>][] = [
-                    ['Read', { file_path: inside }],
-                    ['Write', { file_path: inside, content: 'x' }],
-                    ['Edit', { file_path: inside, old_string: 'a', new_string: 'b' }],
-                    ['Bash', { command: `echo x > "${inside}"` }],
-                ];
-                for (const [tool, input] of requests) {
-                    const answer = await asked(mode, scope, tool, input);
-                    assert.equal(answer.behavior, 'deny', `${platform} ${part}: ${tool}`);
+                for (const path of [inside, ...spellings(platform, scope.cwd, inside)]) {
+                    const requests: [string, Record<string, unknown>][] = [
+                        ['Read', { file_path: path }],
+                        ['Write', { file_path: path, content: 'x' }],
+                        ['Edit', { file_path: path, old_string: 'a', new_string: 'b' }],
+                        ['Bash', { command: `cat "${path}"` }],
+                        ['Bash', { command: `echo x > "${path}"` }],
+                    ];
+                    for (const [tool, input] of requests) {
+                        const answer = await asked(mode, scope, tool, input);
+                        assert.equal(answer.behavior, 'deny', `${platform} ${part} ${path}: ${tool} ${JSON.stringify(input)}`);
+                    }
                 }
             }
         }
@@ -89,7 +109,7 @@ for (const mode of chatModes) {
 
     test(`${mode}: the host's own file rules refuse Jason's role skills folder, its plugins folder and its settings file`, () => {
         for (const platform of platforms) {
-            const scope = scopeOf(platform);
+            const scope = scopeOf(platform, mode);
             const paths = platform === 'win32' ? win32 : posix;
             // A Full access turn runs in its grant's folder, and its rules are made with that grant.
             const rules = dataRules(platform, scope.data, [], [], mode === 'full_access' ? { id: 'grant-1', present: ['grant-1'] } : undefined);
@@ -104,9 +124,14 @@ for (const mode of chatModes) {
     });
 }
 
-test('a Codex turn, which the desktop does not fence, runs in its own read-only sandbox in every mode, so it changes none of them', () => {
+test('a Codex turn, which the desktop does not fence, runs only in Ask first and Plan only, in its own read-only sandbox, so it changes none of them', () => {
     for (const platform of platforms) {
+        // Its command line takes no mode: the sandbox is read-only whatever the conversation's mode.
         const args = codexArguments({ platform });
         assert.deepEqual(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2), ['--sandbox', 'read-only'], platform);
     }
+    // Auto-edit and Full access are refused on Codex before a turn starts.
+    const chat = readFileSync(join(import.meta.dirname, '..', 'src', 'chat.ts'), 'utf8');
+    assert.match(chat, /if \(program === 'codex'\) throw new ChatRefused\(codexAutoEdit\);/);
+    assert.match(chat, /if \(program === 'codex'\) throw new ChatRefused\(codexFullAccess\);/);
 });
