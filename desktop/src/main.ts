@@ -587,6 +587,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
             models,
+            // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
+            ownServers: { env: process.env, home },
             // A demo run offers no Full access (`demoFullAccess`).
             demo: runOn.mode === 'demo',
             // A box is closed, and read as a no, when its window is hidden or closed.

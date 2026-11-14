@@ -19,6 +19,7 @@ import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullA
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
+import { readOwnServers } from './own-servers.ts';
 import type { ProviderKeys } from './providers.ts';
 import {
     actBox,
@@ -119,6 +120,12 @@ export interface HostState {
      * turn uses the host's own default model; null otherwise.
      */
     modelsUnread: string | null;
+    /**
+     * The names of the person's own MCP servers, for Claude Code and Codex found here (`own-servers.ts`): Claude Code's
+     * user servers and the servers of Codex's config.toml, in the file's order, each cut at forty characters. Names and
+     * nothing else; empty for every other host, for a host not found, and for a file that is not there or cannot be read.
+     */
+    ownServers: string[];
 }
 
 export interface ReplyState {
@@ -239,6 +246,11 @@ export interface SetupDeps {
     copyLink?(link: string): void;
     /** The models Codex offered when last asked, and the background ask of the ones a day old (`model-lists.ts`). */
     models?: { lists(): KeptLists; refresh(hostIds: readonly string[]): void; unread(hostId: string): 'waiting' | 'failed' | null };
+    /**
+     * The environment and the home the person's own MCP servers are read under (`own-servers.ts`), which say where Claude
+     * Code's and Codex's files are; absent, no file is read and no host names a server.
+     */
+    ownServers?: { env: Readonly<Record<string, string | undefined>>; home: string };
 }
 
 const signInLimit = 5 * 60_000;
@@ -379,6 +391,16 @@ export class Setup {
         return { version, belowFloor: floorSentence(version), fullAccess: fullAccessSentence(version) };
     }
 
+    /** The names of a program host's own MCP servers; a file that could not be read is logged by program and kind only. */
+    async #ownServers(program: string, found: boolean): Promise<string[]> {
+        const where = this.#deps.ownServers;
+        if (where === undefined || !found || (program !== 'claude' && program !== 'codex')) return [];
+        const read = await readOwnServers(program, where.env, where.home);
+        if ('names' in read) return read.names;
+        this.#deps.log.info('own_servers_unread', { Program: program, Kind: read.unread });
+        return [];
+    }
+
     async status(): Promise<SetupState> {
         const { programs, keys } = this.#deps;
         const stored = new Set(keys.stored());
@@ -422,6 +444,7 @@ export class Setup {
                 fullAccess: fullAccessOn(host.program, host.drivesChat),
                 autoEdit: autoEditOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
+                ownServers: await this.#ownServers(host.program, found),
             });
         }
         const providerHosts: HostState[] = keyProviders.map((provider) => ({
@@ -436,6 +459,7 @@ export class Setup {
             fullAccess: fullAccessOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             autoEdit: autoEditOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             ...offered(provider.id, provider.label),
+            ownServers: [],
         }));
         // Shown from what is kept; Codex is asked again in the background where it is on the PATH or its key is stored.
         this.#deps.models?.refresh([

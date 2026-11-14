@@ -106,6 +106,7 @@ function standInDesktop(): void {
                             models: [{ id: 'opus', label: 'Opus', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] }],
                             typedModel: true,
                             modelsUnread: null,
+                            ownServers: [],
                         },
                     ],
                     reply: {
