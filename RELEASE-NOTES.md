@@ -19,35 +19,86 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.41.0
+# Jason 0.42.0-unwritten
 
-## What is new since 0.40.0
+## What is new since 0.41.0
 
-This release is about a new person's first minutes and the numbers they see: three lines pasted into your AI install Jason and hand the ready installation to a new quick-start skill, which asks one question and drafts your first campaign; the console opens in any browser tab, with the desktop or without it; Settings gains a section for your name and tone; the demo opens on its sample in seconds; and the Dashboard counts over one period you choose, with replies by category and daily trends, read through a new `reply.count`.
+This release is about how much of the sending you keep in your own hands, and what Jason holds to whatever you say: you
+state how the messages to people who have not answered, and to people who have, are to go; Jason now knows which of the
+two a person is, and waits for a reply to be judged before it writes to someone who just wrote; a doubt about a message
+goes to you before anything can release it; and a person who asks not to be written to is never written to again, on
+any address.
 
-- **Three lines install Jason and take you to a first campaign.** The README's [Quick start](https://github.com/reply-team/jason-ai/blob/v{{version}}/README.md#quick-start) now opens with a prompt to paste into your AI: "Install Jason by following https://get.jasonharness.ai/install. When it reports Ready, start its quick-start skill and take me to my first campaign. If anything stops you, ask me directly and tell me why." Those three lines are your yes to the install, so an agent given them installs without stopping to confirm each step; it asks you only for an act the install guide marks **Ask first.**, or where its own checks stop it. An agent given only the link asks before the install, as before. The README's longer install text follows under "What the install does", and the handbook carries the same three lines. See [the install guide](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/INSTALL.md#if-an-agent-installs-it).
-- **The quick-start skill.** A new runtime skill, `quick-start`, takes a ready installation to a first campaign. It asks one question, what you sell and who should buy it, where a line about yourself and how you write is welcome and never required; it reads which provider your email and LinkedIn go through instead of asking you; it makes a draft of your first campaign and says the plan in one message, the goal, who it will look for, the channels and how it will write, ending "Say what to change, or say go." It reads which accounts are connected only after you say go, and a first message is never sent without your yes. An agent that finishes an install now hands over in one order: where your files are, what it ran and changed, what is not done now with its command (starting the runtime at logon, and skills for other agent hosts), and then the quick start, whose question comes in a message of its own. Installed Jason yourself? Ask your agent to start Jason's quick-start skill. See [what the quick start does](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/INSTALL.md#9-what-the-quick-start-does).
-- **The console in any browser tab.** `jason ui open` now opens the same console the desktop's window draws, in place of the browser's older shell: the Dashboard, Needs you, People, Agents, Accounts, Performance, Activity, Work items, System, Settings and the search, everything that reads the runtime. Where the chat would be, the page says that the chat is part of Jason Desktop and links to the releases page; what only the desktop does is drawn off, with "This needs Jason Desktop." A tab the desktop opened, through **Open in**, then **Browser**, now shows the whole console too, with the chat as before: it sends only to a chat in Ask first or Plan only and never approves, and what only the desktop's window may do, the Demo | Live switch, the account acts of Connect and Accounts, the other access modes and the take-back of Full access, is drawn off with "Done in Jason Desktop's own window." Open in is not offered inside a tab. The runtime gains no route for either. See [the browser UI's page](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md#settings-and-chat-in-the-browser).
-- **Your name and tone, in Settings.** A section, **Your name and tone**, in two parts, each saved on its own: **Who writes**, your name, job title, company and the grammar forms for the writer, Neutral unless you choose another; and **How you write**, a few words and a formality. They are the named preferences `sender.identity` and `tone_of_voice`, saved through the Runtime API as you, so the section works in the desktop's window and in any tab alike. A save reads what is set again and changes only the fields you changed: a field set from a terminal in the meantime is kept, and so is everything the form does not show; with several senders set, the form edits the first and says so. Removing a value stays with `jason preference unset`. In the demo the section says it is set in Live.
-- **A one-time note on Start.** In your own installation, once a chat exists and neither your name nor your tone is set, Start shows "Jason writes in your name." with **Set preferences now**, which opens that section, and **Not now**, which closes the note for good. Nothing else reminds you.
-- **The Dashboard counts over one period.** A Period menu holds 7 days, 30 days, 3 months, 6 months, This year and Custom, with From and To; every tile and card counts over it, in calendar days of your time zone, ending now. The Dashboard opens on 30 days each time. Needs you counts what waits now, whatever the period.
-- **Interested, Meetings booked and Replies by category.** Interested and Meetings booked now count the conversations whose replies the roles judged `interested` and `meeting_booked`, with a dash where none is, and a hover that says what each counts; Bounce rate still shows a dash. A new card, **Replies by category**, lists every category the roles' verdicts use, with its conversations and replies. These count judged replies, each in the period it arrived in: a reply no role has judged yet is not among them, so they are not the Replied tile's people.
-- **Daily trends.** Beside Contacted, Replied, Interested, Meetings booked and each category, a small trend compares the last 24 hours with the 24 before them, whatever the period: a green "+N", a red "−N" or "±0", with a tooltip saying what is compared. Reply rate has none. **Show daily trends** in the Dashboard's header turns them off and on; the desktop remembers the choice, and a browser tab shows them and does not remember.
-- **`jason reply count`.** A new read of the Runtime API, `reply.count`, and its verb, `jason reply count [campaign-id...] --since <moment> --until <moment>`: for each campaign named, or every campaign not archived, and in total, how many replies the roles judged under each category word, and in how many conversations. The window is held to each reply's own arrival, `since` included and `until` not, so a reply judged days later counts in the window it arrived in; one reply counts once, under the latest verdict recorded on it. `--human` shows one row per category for each campaign, and the total last. The desktop's chat runs it without a card in Ask first and Plan only, as a read. See [the Runtime API](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/runtime-api.md#reply).
-- **The demo opens on its sample in seconds.** The sample is now made once, when the release is built, and every desktop package of the release carries it. The first start of the demo, and each **Start the Demo Over**, places it with `jason import` behind **Preparing the demo…**, in a few seconds where making it took over a minute. It is still made at the start when the archive is older than twenty-one days, by the moment the archive itself records; in a desktop built outside a release; and when the placing fails, after what it placed is taken away. See [the desktop guide](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#the-demo).
+- **Say how sends go, for people who have not answered and for people who have.** Two named preferences,
+  [`send_mode.cold`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/preferences/send_mode.cold.md) and
+  [`send_mode.warm`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/preferences/send_mode.warm.md), each `automatic` or `every_message`, set by a
+  named person with `jason preference set` and read when a send is claimed. A campaign may hold a mode of its own with
+  `jason campaign set-send-mode <campaign-id> --cold … --warm …`, set under a person's name and given back to the
+  installation's preference with `--clear`; naming neither mode, and an archived campaign, are refused. `jason status`
+  says which mode is in force for each kind of contact and where it comes from, and `jason campaign get --human` says
+  the campaign's own. A mode nobody has set reads as `every_message`, so installing this release changes nothing about
+  how your sends go, and every approval names the preferences still unset. See
+  [the send modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#send-modes).
+- **Jason knows whether a person has answered.** `jason reply record` takes `--nature`: `person`, `automatic`, `bounce`
+  or `opt_out`, in the runtime's own words. A contact is cold until a verdict that stands judges a reply of theirs, in
+  that campaign, a person's answer; from then on they are warm. A reply nobody has judged yet makes the contact wait,
+  even a warm one, since a new reply may be a request to stop; and where Jason cannot prove a reply judged, because a
+  thread runs past one page or a read did not finish, the contact keeps waiting rather than being taken for warm or
+  cold. See [the send modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#send-modes) and
+  [the Runtime API](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/runtime-api.md#reply).
+- **A person who asks not to be written to is stopped on every address.** A verdict whose nature is `opt_out` puts every
+  address and profile the contact has on the do-not-contact register in the same act, by the runtime's own actor, and
+  the claim refuses work about that contact in every campaign, including for a value they gain later. Only a person's
+  own later verdict, under their name and outside any run, lifts it; a role's verdict, or a person named from inside a
+  run, never does. A claim that refuses for this says `opted_out`. See
+  [the claim's checks](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/routing.md).
+- **A doubt about a message reaches you before anything can release it.** The one composing a message can say at
+  creation, with `--ask-person` and a code, that you should look at it, and a role that reviews a message can pass it or
+  doubt it with `jason workitem review`, bound to the text it read; an edit voids the review. A send can be created
+  waiting on its review with `--wait-on`. A doubt goes ahead of a standing approval too, so a category you let go
+  without a question still brings a doubted message to you. Nobody reviews a message they wrote or edited. See
+  [doubts about a send](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#doubts-about-a-send).
+- **The quick-start skill reads your accounts before you say go.** It tells you how many mailboxes and LinkedIn
+  accounts are connected through the provider your sends go through, in the same message as the plan, and a read that
+  fails or is slow never holds the question up.
 
-## Upgrading from 0.40.0
+## Fixed since 0.41.0
 
-Nothing stops, no setting is renamed and no database migration is added.
+- **`jason import` says when a project folder was not linked.** It exited 0 even when the runtime refused to link a
+  project's folder. It now exits 1, with everything placed and the whole answer printed, names each refused link in
+  `link_refused` with its project, folder, code and message, and keeps the `jason project link` line in `next`.
+- **The install prompt's first line no longer ends in a full stop;** a copy that still has one works as before wherever
+  the agent reads the address as an address.
 
-- **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` and `jason ui install` follow: the first brings this release's skills, the quick-start skill among them, and the second the console that `jason ui open` now opens.
-- **The packages:** reply 0.15.1, journal-forwarder 1.3.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0, each the same as in 0.40.0, so there is nothing to replace with `jason plugin install`.
-- **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the disk image for your machine from this release, or let an installed desktop offer the update.
-- **Update the desktop and Jason together.** The desktop places the page of its own version where the runtime is the one it carries, the Dashboard's switch for daily trends is remembered by this release's desktop, and the demo's prepared sample comes in this release's desktop package.
-- **`jason ui open` opens the console.** A tab it opens, and a bookmark of the page, show the console in place of the browser's older shell, once this release's UI is placed.
-- **From 0.39.x or earlier,** the notes of each release in between apply as well.
+## Upgrading from 0.41.0
+
+Nothing stops and no setting is renamed. Three database migrations run on the first start, after the backup the runtime
+already takes: an index for reading a thread's verdicts, the campaign's own send modes, and room for a send's doubt
+notes.
+
+- **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` brings this
+  release's skills.
+- **Your sends go as before.** Neither send mode is set by an update, so every send to a person still waits for a person
+  until you set one; `jason status` says so.
+- **An opt-out before this release is held as before,** by the register entries made for it then. The new opt-out lock
+  reads only verdicts that state the nature `opt_out`, which no verdict recorded before this release carries, so an
+  address such a contact gains after the update is refused only once it is put on the register by hand.
+- **A contact whose last reply was judged before this release waits for its nature,** since such a verdict states none,
+  until a verdict that does is recorded on that thread.
+- **The desktop is a separate install,** as before: `jason update` does not install it.
 
 ## Known issues
+
+The opt-out lock holds by the contact's record: another contact record of the same person, with a value the opted-out
+record never had, is not covered, since Jason does not merge contacts. The register still holds every value the
+opted-out record had.
+
+A reply the provider could not tie to one of the campaign's contacts makes nobody wait, and neither does a reply the
+campaign heard of only through a contact's pin; until a verdict names the person, a first message to them is not held
+back by it.
+
+An edit of a send's text made under no name is never matched as an editor of that send, so it does not stop anybody
+reviewing it.
 
 The demo has limits: it is email only, with no LinkedIn channel; it raises no question; a person whose message waits for your approval never answers it, because a reply is attributed once, when it is stored; and no AI role runs in the demo's runtime, so no reply there is judged, and Interested, Meetings booked and **Replies by category** have nothing to count. The sample's story began when the release was built, with no past before it, so the Dashboard's 30 days hold it for thirty days after. Where the sample is placed, the replies the story wrote are already in when the demo opens; where it is made at the start instead, its story starts that day and its replies arrive within minutes. After that, a kept demo shows nothing new of the story until **Start the Demo Over**. In a placed demo the Dashboard's daily trends read ±0 at first, since nothing of the story falls in the last 24 hours.
 
