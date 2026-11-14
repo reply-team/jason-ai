@@ -11,7 +11,8 @@ namespace Jason.Runtime.Approvals;
 /// <c>{"work_item_id": "wi_…", "operation": "…"}</c>. The key is the runtime's alone: a create or a patch that names it is
 /// refused at that field, on every item and whoever sends it, so an item that carries it was made by the runtime and its
 /// brief was never changed. The automatic mode counts a critic's pass only where the pass comes from such an item naming
-/// the send it passed, and nobody but the runtime changed the item's context since.
+/// the send it passed, whose context was changed since by nobody but the runtime's own actors: a change by a person, a
+/// role or the critic's own attempt disqualifies it.
 /// </summary>
 public static class SendReview
 {
