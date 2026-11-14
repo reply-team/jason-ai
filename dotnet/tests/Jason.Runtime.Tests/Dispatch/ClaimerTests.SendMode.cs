@@ -177,6 +177,7 @@ public partial class ClaimerTests
     [InlineData("the critic the runtime made for the send", null)]
     [InlineData("the runtime's critic, then a copywriter's pass", null)]
     [InlineData("a person by name", null)]
+    [InlineData("a person by name in the desktop's chat", "not_reviewed")]
     [InlineData("nobody", "not_reviewed")]
     [InlineData("a copywriter's run", "not_reviewed")]
     [InlineData("a person named on a run's line", "not_reviewed")]
@@ -200,6 +201,7 @@ public partial class ClaimerTests
             "a critic a person queued by hand" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.QueuedByHand),
             "the critic the runtime made for another send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.AnotherSends),
             "the runtime's critic, its context patched by a person" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.Patched),
+            "a person by name in the desktop's chat" => await InTheChatAsync(() => PersonPassAsync(db, send.Id, send.ReviewHash)),
             "a person by name" => (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
                 new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id,
             "the runtime's critic, then a copywriter's pass" => await ThenAsync(await CriticPassAsync(db, reading, send.Id, send.ReviewHash), CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter")),
@@ -1080,6 +1082,18 @@ public partial class ClaimerTests
 
         await db.SaveChangesAsync(Ct);
         return run;
+    }
+
+    /// <summary>A named person's pass of the send's text, through the verb; its line's id.</summary>
+    private static async Task<string> PersonPassAsync(JasonDbContext db, string sendId, string? hash) =>
+        (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
+            new WorkItemReviewRequest(sendId, hash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id;
+
+    /// <summary>What <paramref name="act"/> answers, done under the desktop's chat marker, as the door opens it.</summary>
+    private static async Task<T> InTheChatAsync<T>(Func<Task<T>> act)
+    {
+        using var confined = ConfinedScope.Open();
+        return await act();
     }
 
     /// <summary>The first line's id, once the review that follows it is written too.</summary>

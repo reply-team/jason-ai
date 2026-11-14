@@ -254,6 +254,57 @@ public class OptOutLiftTests
     }
 
     /// <summary>
+    /// A line recorded under the desktop's confinement mark is the chat's, not the person's own. Through the door, a named
+    /// person's verdict on the opted-out reply, saying a person wrote it, sent with <c>Jason-Confined</c> as the CLI sends it
+    /// on every chat turn, says <c>confined</c> on its line and leaves the lock standing; the same verdict sent from a
+    /// terminal, with no mark and no attempt, lifts it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_person_s_verdict_recorded_in_the_desktop_s_chat_is_the_chat_s_and_lifts_nothing(bool inTheChat)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(new DateTimeOffset(Noon)));
+        int contactKey;
+        string campaignId, contactId;
+        await using (var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var (campaign, contact, _) = await OptedOutAsync(db);
+            (campaignId, contactId, contactKey) = (campaign.PublicId, contact.PublicId, contact.Id);
+        }
+
+        var (status, text) = await api.PostAsync(
+            Operations.ReplyRecord,
+            new
+            {
+                campaign_id = campaignId,
+                plugin_id = "mailbox",
+                thread_id = "thr-1",
+                message_id = "msg-77",
+                message_at = "2026-09-14T11:30:00Z",
+                category = "interested",
+                confidence = 0.9,
+                reaction = "none",
+                contact_id = contactId,
+                nature = "person",
+                actor = new { type = "human", id = "ada" },
+            },
+            inTheChat ? new Dictionary<string, string> { ["Jason-Confined"] = "1" } : null,
+            Ct);
+
+        Assert.True(status == HttpStatusCode.OK, text);
+        var line = JsonNode.Parse(text)!;
+        Assert.Null((string?)line["attempt_id"]);
+        Assert.Equal(inTheChat ? "true" : null, line["new"]!["confined"]?.ToJsonString());
+        await using (var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            Assert.Equal(inTheChat, await OptOuts.StandingAsync(db, contactKey, Ct) is not null);
+        }
+    }
+
+    /// <summary>
     /// Through the door: a request that carries the run's header, as <c>jason</c> sends from inside a run, records a person's
     /// verdict as the run's, and the same request without it as the person's own.
     /// </summary>

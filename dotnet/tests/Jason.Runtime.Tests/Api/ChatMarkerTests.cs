@@ -54,6 +54,47 @@ public class ChatMarkerTests
         Assert.Equal(("false", "true"), (marked["old"]!.ToJsonString(), marked["new"]!.ToJsonString()));
     }
 
+    /// <summary>
+    /// What a person says through the chat is the chat's: a standing approval set, and a send's review made, under the
+    /// marker say <c>confined</c> on their lines, which the claim reads as no person's word; the same acts from a terminal
+    /// carry no member at all.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_person_s_word_said_under_the_marker_says_so_on_its_line(bool confined)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await CampaignAsync(api);
+        var headers = confined ? FromTheChat : null;
+        var send = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemCreate, Send(campaign, "Thursday at 10 works."), Ct);
+
+        var (setStatus, set) = await api.PostAsync(
+            Operations.ApprovalSetStanding,
+            new { CampaignId = campaign, Category = "interested", Actor = new { type = "human", id = "ada" } },
+            headers,
+            Ct);
+        var (reviewStatus, review) = await api.PostAsync(
+            Operations.WorkItemReview,
+            new { WorkItemId = send.Id, ReviewHash = send.ReviewHash, Result = "passed", Actor = new { type = "human", id = "ada" } },
+            headers,
+            Ct);
+
+        Assert.True(setStatus == HttpStatusCode.OK, set);
+        Assert.True(reviewStatus == HttpStatusCode.OK, review);
+        var standing = Assert.Single(await CampaignLinesAsync(api, campaign, "standing_approval_set"));
+        var reviewed = Assert.Single(await LinesAsync(api, send.Id, "workitem_reviewed"));
+        Assert.Equal(confined ? "true" : null, standing["new"]!["confined"]?.ToJsonString());
+        Assert.Equal(confined ? "true" : null, reviewed["new"]!["confined"]?.ToJsonString());
+    }
+
+    private static async Task<List<JsonNode>> CampaignLinesAsync(RuntimeApiFixture api, string campaign, string kind)
+    {
+        var (status, text) = await api.PostAsync(Operations.JournalList, new { CampaignId = campaign, Kind = kind, Limit = 100 }, Ct);
+        Assert.True(status == HttpStatusCode.OK, text);
+        return [.. JsonNode.Parse(text)!["items"]!.AsArray().Select(line => line!)];
+    }
+
     private static object Send(string campaign, string body) => new
     {
         CampaignId = campaign,
