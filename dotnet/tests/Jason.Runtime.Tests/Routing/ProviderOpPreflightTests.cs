@@ -31,6 +31,7 @@ public partial class ProviderOpPreflightTests
     private const string Activate = "campaign.activate";
     private const string Send = "message.send";
     private const string Close = "conversation.close";
+    private const string Update = "contact.update";
 
     /// <summary>
     /// The order, proven by repairing one thing at a time: everything is wrong at the start, and each repair
@@ -1124,7 +1125,7 @@ public partial class ProviderOpPreflightTests
 
     /// <summary>
     /// The second lock covers what the register covers and nothing else: a person who opted out is refused the add, the
-    /// enrolment and the send, as a suppressed address is, and not the record that they said stop nor the stop of their
+    /// update at the provider, the enrolment and the send, as a suppressed address is, and not the record that they said stop nor the stop of their
     /// enrolment, which are for them. Where both hold the register answers, so a person who lists the register finds the
     /// entry; the refusal names the verdict and says what lifts it.
     /// </summary>
@@ -1135,7 +1136,7 @@ public partial class ProviderOpPreflightTests
         Scenario OptedOut(string operation, JsonObject arguments, bool suppressed = false) => new()
         {
             Operation = operation,
-            Plugin = Scenario.Package(operations: [Add, Enroll, Optout, Stop]),
+            Plugin = Scenario.Package(operations: [Add, Enroll, Optout, Stop, Update]),
             Route = Scenario.ToTheInstalledPackage,
             Contact = Scenario.Person(("email", "ada@example.test")),
             Arguments = arguments,
@@ -1158,6 +1159,7 @@ public partial class ProviderOpPreflightTests
             ["reason"] = new JsonObject { ["code"] = "opted_out" },
         }).Check();
         var added = OptedOut(Add, Scenario.CompleteArguments).Check();
+        var updated = OptedOut(Update, new JsonObject { ["channel"] = "email", ["fields"] = new JsonObject { ["first_name"] = "Ada" } }).Check();
         var enrolled = OptedOut(Enroll, Scenario.CompleteEnrollment).Check();
         var both = OptedOut(Add, Scenario.CompleteArguments, suppressed: true).Check();
         var sending = Scenario.Sending("snd-1");
@@ -1167,8 +1169,8 @@ public partial class ProviderOpPreflightTests
         Assert.True(recorded.Passed, recorded.Code);
         Assert.True(stopped.Parks, stopped.Code);
         Assert.Equal(
-            [AttemptErrors.OptedOut, AttemptErrors.OptedOut, AttemptErrors.OptedOut, AttemptErrors.Suppressed],
-            [added.Code, enrolled.Code, sent.Code, both.Code]);
+            [AttemptErrors.OptedOut, AttemptErrors.OptedOut, AttemptErrors.OptedOut, AttemptErrors.OptedOut, AttemptErrors.Suppressed],
+            [added.Code, updated.Code, enrolled.Code, sent.Code, both.Code]);
         Assert.Equal(FailureClass.Permanent, added.Class);
         Assert.Contains(OptOutVerdict, added.Message, StringComparison.Ordinal);
         Assert.Contains("on any channel, in any campaign", added.Message, StringComparison.Ordinal);

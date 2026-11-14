@@ -988,7 +988,11 @@ the three that wait or park, so nobody is asked to approve, and no block holds, 
 `opted_out`, added after it, is asked right after `suppressed`, under the register's own gate and over the same
 operations: the register is by value, and this lock is by the person, refusing work about a contact for whom an opt-out
 verdict stands in any campaign, whatever value the work would reach them at — one they gained after the verdict
-included. It is asked only where the register found no entry, so the register answers first wherever it can.
+included. It is asked only where the register found no entry, so the register answers first wherever it can. The
+verdict itself registers every value the contact had, in the same save, by the runtime's reserved actor
+`system:opt_out`, with the verdict as the reason; the lock is lifted only by a person's later verdict on that reply,
+never by a role's, never by a person named from inside a run, and never by `suppression.remove`
+([runtime API](runtime-api.md), `reply.record`).
 The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence
 later, the held cadence where the provider holds that search, so a campaign runs one search at a time and nobody is asked to approve a spend that cannot start now. The

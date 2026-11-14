@@ -102,7 +102,8 @@ Jason-Attempt: att_...
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
-the code `decided_inside_a_run` before the body is read, and record nothing. A program that is not running inside an
+the code `decided_inside_a_run` before the body is read, and record nothing, and `reply.record`, which records a verdict
+that names a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
 so in one line on stderr, naming the variable and never its value.
 
@@ -370,6 +371,22 @@ that is not that attempt does not call them.
   no verdict. Each refusal is a 400 and writes nothing. One decision may back repeated records on the same reply, which
   supersede each other as any verdicts do. The line then names the decision as `decision_id` and the person as
   `answered_by`, their actor; both are null where no decision is named.
+  **An `opt_out` stops the person, in the same act.** The one save that records the verdict also puts every channel
+  value the contact has on the do-not-contact register (`suppression` below), each entry written by the runtime's
+  reserved actor `system:opt_out` with the reason `Asked not to be written to: opt-out verdict jrn_... in campaign
+  cmp_...`; a value already on the register gets no second entry, and nobody is asked. A verdict below any confidence
+  says `opt_out` as surely as a sure one does: the runtime reads the nature, never the confidence. The line's contact
+  column is the contact its body names, never the person of the run that records it. From then on the claim refuses
+  work about that contact in every campaign, over the operations the register covers: what the register holds as
+  `suppressed`, and a value it never held — one the contact gains later, or any value of a contact who had none — as
+  `opted_out` ([routing](routing.md) §7). Sends already parked for a person's approval stay parked and are refused
+  when they are claimed. The runtime never takes an entry off the register, and the provider's own sequence is not
+  stopped here. **Only a person's later verdict on the same reply lifts the lock**: one recorded under a `human` actor
+  outside a run, or one that carries a `decision_id` the runtime checked as above. A role's or an attempt's own verdict
+  never lifts it, and `suppression.remove` takes an entry off the register and leaves the lock. A request from inside a
+  run — one that carries `Jason-Attempt`, as `jason` sends from there — that names a `human` actor is recorded as that
+  run's verdict: the line names the run's work item and attempt, the run is checked to be of work in the same campaign
+  (a 400 at `actor` where it is not), and it lifts no lock.
   `jason reply record` sends it, `--decision` names the question and `--nature` states the nature.
 - `reply.count`: how many replies roles have judged, by the category word each verdict names, for each campaign asked
   and in total. It counts verdicts, not replies as they arrive: a reply nobody has judged yet is not in it, and the
@@ -470,8 +487,11 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 ### `suppression`
 
 - `suppression.add`: adds to the do-not-contact list, global across campaigns and scoped to one channel; an existing
-  pair answers with the entry already there.
-- `suppression.remove`: lifts a suppression; the reason is mandatory.
+  pair answers with the entry already there. The runtime adds entries of its own: an `opt_out` verdict (`reply.record`
+  above) puts every value of the contact on the list, written by `system:opt_out` with the verdict's id in the reason.
+- `suppression.remove`: lifts a suppression; the reason is mandatory. It lifts that one entry: a contact an opt-out
+  verdict stands for is still refused by the claim's `opted_out` lock, which only a person's later verdict on that reply
+  lifts.
 - `suppression.list`: the do-not-contact list.
 
 ### `events`
