@@ -23,7 +23,7 @@ namespace Jason.Contracts.Api;
 /// <param name="SettingsFile">The settings file of this installation, there or not.</param>
 /// <param name="SettingsFileHoldsSecrets">
 /// True where this layout keeps plugins' configuration (<c>Plugins:Config</c>), their secrets among it, in the settings
-/// file too. A fact of the layout rather than of the file's content, so that nobody opens the file while it is true.
+/// file too. A fact of the layout rather than of the file's content, so that it can be said without reading the file.
 /// </param>
 public sealed record SetupInfo(
     string RoleSkillsDirectory,

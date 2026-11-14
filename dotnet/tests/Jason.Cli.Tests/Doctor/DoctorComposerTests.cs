@@ -2534,20 +2534,29 @@ public sealed class DoctorComposerTests
     /// <summary>
     /// Where the parts are travels in two places, the runtime's own report and the status section, and in neither does a
     /// raw root leave the machine. The status section's parts are this CLI's own, so they read <c>&lt;data&gt;</c>; the
-    /// runtime's are its own, so they read <c>&lt;runtime_data&gt;</c> where it keeps its data in another directory and
-    /// <c>&lt;data&gt;</c> where it does not. Every member that is a path is held, one by one, and then the whole bundle.
+    /// runtime's are its own, so they read <c>&lt;runtime_data&gt;</c> where it keeps its data in another directory,
+    /// <c>~/.jason</c> where that directory is the default one in home, and <c>&lt;data&gt;</c> where it is this one. Every
+    /// member that is a path is held, one by one, and then the whole bundle.
     /// </summary>
     [Theory]
-    [InlineData(false, "<data>")]
-    [InlineData(true, "<runtime_data>")]
-    public async Task The_setup_paths_travel_rewritten_in_the_runtime_and_the_status_sections(bool runtimeElsewhere, string runtimeMark)
+    [InlineData("here")]
+    [InlineData("elsewhere")]
+    [InlineData("home")]
+    public async Task The_setup_paths_travel_rewritten_in_the_runtime_and_the_status_sections(string runtimeAt)
     {
         using var dir = new TempPaths();
-        var runtimeRoot = runtimeElsewhere ? Path.Combine(dir.Paths.Root, "other") : dir.Paths.Root;
+        var home = Path.Combine(Path.GetTempPath(), "jason-cli-tests", Guid.NewGuid().ToString("N"), "home-of-sentinel");
+        var (runtimeRoot, runtimeMark) = runtimeAt switch
+        {
+            "here" => (dir.Paths.Root, "<data>"),
+            "elsewhere" => (Path.Combine(dir.Paths.Root, "other"), "<runtime_data>"),
+            _ => (Path.Combine(home, JasonPaths.DefaultFolder), "~" + Path.DirectorySeparatorChar + JasonPaths.DefaultFolder),
+        };
         var runtime = Running(dir, dataDir: runtimeRoot);
         runtime.Info = StubRuntime.EveryField(runtimeRoot) with { Setup = SetupInfo.From(new JasonPaths(runtimeRoot)) };
 
-        var bundle = await ComposeAsync(dir, runtime);
+        var bundle = await ComposeAsync(dir, runtime, identity: MadeUp with { Home = home });
+        Assert.DoesNotContain(Everything(JsonNode.Parse(bundle.Serialize())!), text => text.Contains(home, StringComparison.OrdinalIgnoreCase));
 
         var ofRuntime = Section(bundle, "runtime")["system_info"]!["setup"]!.AsObject();
         var ofStatus = Section(bundle, "status")["setup"]!.AsObject();
