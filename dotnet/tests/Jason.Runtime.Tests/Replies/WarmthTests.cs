@@ -440,6 +440,26 @@ public class WarmthTests
     }
 
     /// <summary>
+    /// A responder the runtime created without a read of the thread (no route named the plugin that saw it, or the read
+    /// refused the thread's identifier) has seen nothing of the thread, so its success judges no line: the contact waits.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_created_without_a_read_of_the_thread_judges_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1", withRead: false);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
     /// The responder's arm needs a verdict with a nature to stand on the thread: where the one standing says none, the
     /// contact waits on the nature.
     /// </summary>
@@ -732,14 +752,19 @@ public class WarmthTests
     /// for a line that names nobody), carrying the thread in its <c>inbound_reply</c> — created now, its
     /// <c>workitem_created</c> line written here, and started now, its <c>workitem_processing</c> line written after it.
     /// </summary>
-    private static async Task<(WorkItem Item, Attempt Attempt)> ResponderAsync(JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false)
+    private static async Task<(WorkItem Item, Attempt Attempt)> ResponderAsync(
+        JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false, bool withRead = true)
     {
-        var item = await CreatedResponderAsync(db, seed, contact, thread, byPerson);
+        var item = await CreatedResponderAsync(db, seed, contact, thread, byPerson, withRead);
         return (item, await StartAsync(db, item));
     }
 
-    /// <summary>A responder created now and not yet started: scheduled, as one waiting for its slot is.</summary>
-    private static async Task<WorkItem> CreatedResponderAsync(JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false)
+    /// <summary>
+    /// A responder created now and not yet started: scheduled, as one waiting for its slot is. As the respond step makes it,
+    /// it names the read of the thread it was created with, unless <paramref name="withRead"/> says none was made.
+    /// </summary>
+    private static async Task<WorkItem> CreatedResponderAsync(
+        JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false, bool withRead = true)
     {
         var item = WorkItemFactory.NewAiRole(seed.Campaign, role: Responder.Role, now: Noon, configure: item =>
         {
@@ -749,7 +774,12 @@ public class WarmthTests
             item.Context = new JsonObject
             {
                 ["trigger"] = JournalKinds.InboundReplyObserved,
-                [Responder.InboundReplyKey] = new JsonObject { ["plugin"] = "mailbox", ["thread"] = thread },
+                [Responder.InboundReplyKey] = new JsonObject
+                {
+                    ["plugin"] = "mailbox",
+                    ["thread"] = thread,
+                    ["read"] = withRead ? "wi_01K52JR0000000000000000077" : null,
+                },
             };
         });
         db.WorkItems.Add(item);
