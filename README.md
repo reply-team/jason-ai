@@ -27,7 +27,7 @@ answered and what comes next.
 **Jason is the missing layer.** Tell it what you sell and who should buy it, in plain words. Jason finds the contacts,
 plans each person's line of contact, writes, sends through your provider, reads the replies and keeps the work going
 while you're in meetings. Your agent does the thinking, Jason keeps the memory, and every message waits for your
-approval.
+approval. Whoever installs it, you or your AI, starts from the three lines under Quick start.
 
 **You use Jason from a release.** Nothing in this repository is built, cloned or tested to use it; the source is here
 for changing Jason.
@@ -41,6 +41,20 @@ for changing Jason.
 ---
 
 ## Quick start
+
+Paste this into your AI (Claude Code, Codex or another agent). It installs Jason and takes you to your first campaign.
+
+```text
+Install Jason by following https://get.jasonharness.ai/install.
+When it reports Ready, start its quick-start skill and take me to my first campaign.
+If anything stops you, ask me directly and tell me why.
+```
+
+Prefer a window? [Jason Desktop](#jason-desktop). Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
+
+---
+
+## What the install does
 
 **Installing Jason should be the easy part: one prompt, one program, nothing to configure by hand.** Here is what that
 means today.
@@ -60,20 +74,8 @@ means today.
   for Windows, a dmg for macOS, or a deb or an AppImage for Linux, and comes off with Remove What Jason Placed… in its
   menu (macOS and Linux) or Windows's own uninstaller, and then the application itself. It keeps your data too.
 
-**1. Paste this into your agent.** It installs Jason, checks it's ready and guides you to your first campaign.
-
-```text
-Install Jason on this machine. The instructions are
-<https://get.jasonharness.ai/install>: read the whole file
-first, then follow it in order from section 2, installing from a release and building nothing. Before
-you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
-again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
-exactly what you ran and changed. Then do what the guide's hand-over says: offer me the wiring check
-once, and bring me to my first campaign in my own words.
-```
-
 If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
-yes, or run the line below yourself.
+yes, or run the install line under "Or install it yourself".
 
 <details>
 <summary>Or install it yourself</summary>
@@ -108,12 +110,12 @@ responsibility when it reaches people, is in [docs/responsible-use.md](docs/resp
 
 </details>
 
-**2. Connect your provider.** With Reply, it's one sign-in that only you do: `reply auth login`, so your key never passes
+**Connect your provider.** With Reply, it's one sign-in that only you do: `reply auth login`, so your key never passes
 through the chat. Your agent does the rest: the Reply CLI (it needs Node 20 or newer), the plugin, its grant and its route.
 You open Reply's web app only to sign in, create your first API key, or connect a LinkedIn account or a mailbox by single
 sign-on. Using another provider? Its plugin goes into `~/.jason/plugins/`, a grant names what it may run and reach, and a route points your campaigns at it.
 
-**3. Tell your agent about your first campaign.** In your own words. Want to see the whole path first? Your agent offers
+**Your first campaign.** The quick start asks one thing first: what you sell and who should buy it. Installed Jason yourself? Ask your agent to start Jason's quick-start skill. Want to see the whole path first? Your agent offers
 a [wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) once: one draft campaign in your account, with your own address as the only
 contact, and nothing sent.
 
