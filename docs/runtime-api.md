@@ -428,8 +428,9 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   The runtime writes the list into `settings.json`, keeping every byte of the file it does not own, and runs the plugin
   reload in the same act, so the answer is what `plugin.reload` answers; a reload that refuses is answered as
   `plugin.reload` answers it, with the file put back and one more detail under the field `settings.json`,
-  `settings_file_put_back` or `settings_file_not_put_back`. A grant already held, and a revoke of what is not granted,
-  write nothing and answer success. `plugin.grant` is refused `409` `grant_unrequested` for an entry the manifest does
+  `settings_file_put_back` or `settings_file_not_put_back`. A grant already held or covered by a `*`, and a revoke of
+  what is not granted, write nothing, activate nothing and answer success: the body is what `plugin.list` answers, with
+  `activated` false and the snapshot unchanged. `plugin.grant` is refused `409` `grant_unrequested` for an entry the manifest does
   not request, though a host the manifest does not name is granted where it says `any_granted_host`, and `404`
   `plugin_not_found` for a plugin the active snapshot does not hold; a directory the load would refuse is refused
   `validation_failed` on `entry` as `grant_path_refused`. `plugin.revoke` is refused `409` `grant_held_by_star` for an

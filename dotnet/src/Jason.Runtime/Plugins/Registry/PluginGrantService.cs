@@ -149,7 +149,7 @@ public sealed class PluginGrantService(
                     var loaded = before.Find(id);
                     if (!wrote && (loaded is null || Granted(loaded, capability).SequenceEqual(Resolved(loaded.Manifest, capability, inFile), StringComparer.Ordinal)))
                     {
-                        return reload.List();
+                        return reload.List() with { Activated = false };
                     }
 
                     var (answer, _) = await reload.ReloadHeldAsync(

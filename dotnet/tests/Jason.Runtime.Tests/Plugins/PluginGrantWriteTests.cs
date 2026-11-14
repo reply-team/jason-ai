@@ -157,7 +157,9 @@ public class PluginGrantWriteTests
         var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
         var snapshot = api.Resolve<PluginRegistry>().Snapshot.Id;
 
-        await GrantAsync(api, TestPlugins.FakeProviderId, "http", "localhost:5555");
+        var held = await GrantAsync(api, TestPlugins.FakeProviderId, "http", "localhost:5555");
+        Assert.False(held.Activated);
+        Assert.Equal(snapshot, held.Snapshot.Id);
         await GrantAsync(api, TestPlugins.FakeProviderId, "env", "*");
         var covered = File.ReadAllBytes(api.Paths.UserSettingsFile);
         var afterStar = api.Resolve<PluginRegistry>().Snapshot.Id;
@@ -240,8 +242,10 @@ public class PluginGrantWriteTests
         await using var api = await StartAsync();
         var snapshot = api.Resolve<PluginRegistry>().Snapshot.Id;
 
-        await RevokeAsync(api, TestPlugins.FakeProviderId, "http", "localhost:5555");
-        await RevokeAsync(api, "no-such-plugin", "env", "TOKEN");
+        var answer = await RevokeAsync(api, TestPlugins.FakeProviderId, "http", "localhost:5555");
+        Assert.False(answer.Activated);
+        Assert.Equal(snapshot, answer.Snapshot.Id);
+        Assert.False((await RevokeAsync(api, "no-such-plugin", "env", "TOKEN")).Activated);
 
         Assert.Equal(Original, File.ReadAllText(api.Paths.UserSettingsFile));
         Assert.Equal(snapshot, api.Resolve<PluginRegistry>().Snapshot.Id);
