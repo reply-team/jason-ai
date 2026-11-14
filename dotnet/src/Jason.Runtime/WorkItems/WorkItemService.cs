@@ -232,6 +232,33 @@ public sealed class WorkItemService(
         var record = lineage ?? await Lineage.ForCreationAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
         var now = clock.GetUtcNow().UtcDateTime;
+        var item = Compose(request, actor, record, campaign, contact, context, now);
+
+        // Written waiting, in the create's own save: the item is never claimable before what it waits on has ended. The
+        // wait only orders — once it is over the item is ordinary queued work, and the claim decides about it as ever.
+        if (awaited.Count > 0)
+        {
+            var writer = outcomes ?? throw new InvalidOperationException("This service was built without the outcomes that write a wait, and a create names work to wait on.");
+            writer.WaitFromCreation(db, item, awaited, actor);
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return item;
+    }
+
+    /// <summary>
+    /// Builds one new item and its <c>workitem_created</c> line, and adds both without saving, so one create can write the
+    /// work it was asked for and the work the runtime adds to it in a single save: both or neither.
+    /// </summary>
+    private WorkItem Compose(
+        WorkItemCreateRequest request,
+        ActorRef actor,
+        LineageRecord record,
+        Campaign campaign,
+        Contact? contact,
+        JsonObject context,
+        DateTime now)
+    {
         var item = new WorkItem
         {
             PublicId = PublicId.New("wi"),
@@ -278,16 +305,6 @@ public sealed class WorkItemService(
             updated: CreationSummary(item, contact),
             reason: NormalizeReason(request.Reason),
             workItem: item);
-
-        // Written waiting, in the create's own save: the item is never claimable before what it waits on has ended. The
-        // wait only orders — once it is over the item is ordinary queued work, and the claim decides about it as ever.
-        if (awaited.Count > 0)
-        {
-            var writer = outcomes ?? throw new InvalidOperationException("This service was built without the outcomes that write a wait, and a create names work to wait on.");
-            writer.WaitFromCreation(db, item, awaited, actor);
-        }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return item;
     }
 
