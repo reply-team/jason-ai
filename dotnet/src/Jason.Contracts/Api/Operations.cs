@@ -114,6 +114,8 @@ public static class Operations
 
     public const string PluginList = "plugin.list";
     public const string PluginReload = "plugin.reload";
+    public const string PluginGrant = "plugin.grant";
+    public const string PluginRevoke = "plugin.revoke";
 
     public const string UiOpen = "ui.open";
     public const string UiTokens = "ui.tokens";

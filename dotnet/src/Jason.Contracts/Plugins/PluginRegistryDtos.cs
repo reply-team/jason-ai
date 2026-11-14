@@ -130,3 +130,27 @@ public sealed record PluginRegistryDto(
 public sealed record PluginListRequest();
 
 public sealed record PluginReloadRequest(ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// The capabilities a person grants a plugin, each the list of that name under <c>Plugins:Grants:&lt;id&gt;</c> in the settings
+/// file: programs, hosts, environment variables by name, Runtime API families, directories to append lines in, and
+/// journal kinds.
+/// </summary>
+public enum PluginGrantCapability
+{
+    Exec,
+    Http,
+    Env,
+    Api,
+    Files,
+    Subscriptions,
+}
+
+/// <summary>
+/// One grant given or taken back by <c>plugin.grant</c> or <c>plugin.revoke</c>: one entry of one capability's list, a
+/// program's name, a host, a variable's name, an API family, a directory or a journal kind, or <c>*</c> for everything the
+/// manifest requests of a capability that names things. Never a secret: a variable is granted by its name, and its value
+/// stays in the runtime's environment. A grant is refused where the manifest does not request the entry; it is written to
+/// the settings file and in force when the request answers, which answers as <c>plugin.reload</c> does.
+/// </summary>
+public sealed record PluginGrantRequest(string? PluginId, PluginGrantCapability? Capability, string? Entry, ActorRef? Actor, string? Reason);
