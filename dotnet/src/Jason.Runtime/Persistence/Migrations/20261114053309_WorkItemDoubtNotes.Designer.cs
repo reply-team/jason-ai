@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Jason.Runtime.Persistence.Migrations
 {
     [DbContext(typeof(JasonDbContext))]
-    [Migration("20261114024445_WorkItemDoubtNotes")]
+    [Migration("20261114053309_WorkItemDoubtNotes")]
     partial class WorkItemDoubtNotes
     {
         /// <inheritdoc />
