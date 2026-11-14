@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Audiences;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Configuration;
@@ -91,6 +92,7 @@ internal static partial class WorkItemValidation
         }
 
         ValidateWaitOn(request.WaitOn, errors);
+        Doubts.ValidateCreate(request, errors);
         ValidateReason(request.Reason, errors);
     }
 

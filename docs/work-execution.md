@@ -442,6 +442,26 @@ by construction, since no allowance names an audience before the claim of its fi
 `approval.list_standing` answers the allowance beside the categories, with `released` (the searches it let go) and
 `people` (the people they asked for), and shows it not in force once `people` reaches `max_people`.
 
+### Doubts about a send
+
+A send a person decides each one of — provider work whose operation's `approval` is `confirm_each` — may carry a doubt,
+which goes to the person on the send's approval. A doubt is a code from one closed list, published as data under
+`$defs/code` of the [`workitem_reviewed` kind's document](contracts/journal/workitem_reviewed.json) and read from there
+(`jason journal kinds` shows it), and may carry one sentence: one line, at most 280 characters.
+
+**The creator's own doubt** is the reserved context key `ask_person`, exactly `{"code": "<code>"}`, given at
+`workitem.create` and only on such a send, answers included (`not_applicable` at `context.ask_person` otherwise). It is
+set when the work is created and never moved: a `workitem.update` whose `set` or `unset` names the key is refused at that
+field, whoever sends it. Its sentence is the request field `ask_person_note`, beside the context and refused without the
+key; a `note` member inside the key is refused and pointed there. The sentence is part of a keyed create's digest.
+
+**The sentence is kept out of every record that lasts.** It is a person's or an agent's text, so it is stored on the
+item's own row (`work_items.ask_person_note`), outside the context: no journal line, no attempt's snapshot, no read of
+the item (`workitem.get`, `workitem.list`) and no log line carries it, and a diagnostic bundle, which reads the item
+pages for their metadata, never sees it. When the claim parks the send, the sentence is moved onto the approval's
+preview, under `doubts`, and cleared from the row in the park's own save; from then on `approval.get` and
+`approval.list` are the reads that return it.
+
 ## Leases and heartbeats
 
 The lease is the whole budget of one attempt: `lock_until = claimed_at + timeout_seconds`. It is never

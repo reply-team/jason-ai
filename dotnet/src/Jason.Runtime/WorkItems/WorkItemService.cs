@@ -245,6 +245,10 @@ public sealed class WorkItemService(
             // Only a caller's create carries a key, already read; the runtime's own work never does.
             IdempotencyKey = request.IdempotencyKey,
             IdempotencyDigest = request.IdempotencyKey is null ? null : CreationKey.Digest(request),
+
+            // The creator's sentence beside its ask_person, already read as one line; outside the context, so no line and
+            // no attempt's snapshot ever carries it.
+            AskPersonNote = string.IsNullOrWhiteSpace(request.AskPersonNote) ? null : request.AskPersonNote.Trim(),
         };
 
         db.WorkItems.Add(item);
@@ -472,6 +476,7 @@ public sealed class WorkItemService(
         }
 
         ValidateContextKeys(request.Set, request.Unset, errors);
+        Doubts.RefuseInPatch(request.Set, request.Unset, errors);
         ValidateProviderInput(item, request.Set, request.Unset, _timing, errors);
         CampaignAudiences.RefuseWritten(
             item.Operation,

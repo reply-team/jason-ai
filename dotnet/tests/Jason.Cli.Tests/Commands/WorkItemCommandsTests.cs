@@ -77,6 +77,51 @@ public class WorkItemCommandsTests
     }
 
     /// <summary>
+    /// The creator's doubt is laid into the context as the reserved key, beside the operation's arguments, and its sentence
+    /// goes as the request field beside the context, never inside it.
+    /// </summary>
+    [Fact]
+    public async Task Create_lays_the_doubt_into_the_context_and_sends_its_sentence_beside_it()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send", "--input", "{\"channel\":\"email\"}",
+            "--ask-person", "sensitive_topic", "--ask-person-note", "They asked about the price.", "--actor", "role:composer");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemCreate,
+            "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"message.send\","
+                + "\"context\":{\"input\":{\"channel\":\"email\"},\"ask_person\":{\"code\":\"sensitive_topic\"}},"
+                + "\"ask_person_note\":\"They asked about the price.\",\"actor\":{\"type\":\"role\",\"id\":\"composer\"}}");
+    }
+
+    [Fact]
+    public async Task A_doubt_code_outside_the_list_is_a_usage_error_before_any_request()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send", "--ask-person", "looks_off");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    [Fact]
+    public async Task A_doubt_the_context_already_carries_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send",
+            "--context", "{\"ask_person\":{\"code\":\"other\"}}", "--ask-person", "other");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    /// <summary>
     /// Two namespaces use the same kind of words: the canonical operations a provider performs, and the verbs a
     /// person types at Jason. The help for <c>--operation</c> says which one it takes, so `campaign.get` is never
     /// mistaken for `jason campaign get`.

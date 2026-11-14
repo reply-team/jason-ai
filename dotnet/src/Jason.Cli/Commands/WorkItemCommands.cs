@@ -20,6 +20,9 @@ public static class WorkItemCommands
     /// </summary>
     private const string InputKey = "input";
 
+    /// <summary>The context key the API reserves for a creator's own doubt about a send, named here for the same reason.</summary>
+    private const string AskPersonKey = "ask_person";
+
     /// <summary>The fields <c>--clear</c> may set back to nothing; every one of them is nullable on the API.</summary>
     private static readonly string[] Clearable =
         ["not_before", "due_at", "timeout_seconds", "heartbeat_seconds", "max_attempts", "execution_profile", "result_format"];
@@ -69,10 +72,24 @@ public static class WorkItemCommands
             "--wait-on",
             "A work item of the same campaign, as wi_..., that this one waits on from its creation: it is not claimed until every one named "
             + "has ended, whichever way, or the wait's ceiling has come. Repeat the option for more than one.");
+        var askPerson = Choices.Hold(
+            new Option<string?>("--ask-person")
+            {
+                Description = "Send this to the person whatever the send mode, saying why with one code: "
+                    + Choices.Spoken(DoubtCodes.All) + ". Written into the context as ask_person; only on a send a person "
+                    + "decides each one of, and never changed or taken back once the item exists.",
+            },
+            DoubtCodes.All,
+            DoubtCodes.Knows);
+        var askPersonNote = new Option<string?>("--ask-person-note")
+        {
+            Description = "One line, at most 280 characters, saying in words why the person should look: kept beside the item, never in a "
+                + "journal line, and shown to the person on the approval. Only with --ask-person.",
+        };
         var idempotencyKey = VerbOptions.IdempotencyKey();
         var file = VerbOptions.File(
             "The object holds campaign_id, kind, role or operation, contact_id, execution_profile, priority, not_before, due_at, "
-            + "timeout_seconds, heartbeat_seconds, max_attempts, context, result_format, wait_on and idempotency_key.");
+            + "timeout_seconds, heartbeat_seconds, max_attempts, context, result_format, wait_on, ask_person_note and idempotency_key.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -91,6 +108,8 @@ public static class WorkItemCommands
         command.Options.Add(input);
         command.Options.Add(resultFormat);
         command.Options.Add(waitOn);
+        command.Options.Add(askPerson);
+        command.Options.Add(askPersonNote);
         command.Options.Add(idempotencyKey);
         command.Options.Add(file);
         command.Options.Add(reason);
@@ -111,9 +130,10 @@ public static class WorkItemCommands
                 .Set("timeout_seconds", parseResult.GetValue(timeout))
                 .Set("heartbeat_seconds", parseResult.GetValue(heartbeat))
                 .Set("max_attempts", parseResult.GetValue(maxAttempts))
-                .Set("context", Context(body, parseResult.GetValue(context), parseResult.GetValue(input)))
+                .Set("context", AskPerson(body, Context(body, parseResult.GetValue(context), parseResult.GetValue(input)), parseResult.GetValue(askPerson)))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
                 .Set("wait_on", VerbOptions.Strings(parseResult.GetValue(waitOn)))
+                .Set("ask_person_note", parseResult.GetValue(askPersonNote))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
@@ -548,6 +568,33 @@ public static class WorkItemCommands
         }
 
         carrier[InputKey] = arguments;
+        return carrier;
+    }
+
+    /// <summary>
+    /// Lays <c>--ask-person</c> into the context as the reserved key, over the context the other options made or the body
+    /// carried; a context that already carries the key is told to say it once.
+    /// </summary>
+    private static JsonObject? AskPerson(JsonObject body, JsonObject? context, string? code)
+    {
+        if (code is null)
+        {
+            return context;
+        }
+
+        var carrier = context ?? body["context"] switch
+        {
+            null => [],
+            JsonObject existing => existing,
+            _ => throw new UsageException("--ask-person writes into the context, and the body carries a context that is not a JSON object."),
+        };
+
+        if (carrier.ContainsKey(AskPersonKey))
+        {
+            throw new UsageException($"--ask-person and the context both carry '{AskPersonKey}'; give the doubt once.");
+        }
+
+        carrier[AskPersonKey] = new JsonObject { ["code"] = code };
         return carrier;
     }
 

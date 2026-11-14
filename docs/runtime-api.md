@@ -294,7 +294,9 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 
 - `workitem.create`: takes a caller's `idempotency_key`, and `wait_on`, the items of the same campaign the new item
   waits on from its creation: it is written `waiting` and is not claimed until every one of them has ended, in any
-  final state.
+  final state. A send a person decides each one of may carry the creator's own doubt as the reserved context key
+  `ask_person`, `{"code": …}`, with its one sentence in `ask_person_note`, which no line and no read of the item carries
+  ([`docs/work-execution.md`](work-execution.md), "Doubts about a send").
 - `workitem.get`
 - `workitem.list`
 - `workitem.count`
