@@ -1043,7 +1043,7 @@ public partial class PageClaimsTests
         var agent = Flat(Agent());
 
         Assert.Contains(
-            "The install prompt's \"Ready\" is `jason status` answering with `ready` true in its body. When it is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying exactly what you ran and what it changed, never as a question; and one line saying that starting the runtime at logon is not done now (§6) and which command does it. Then start the `quick-start` skill at once, with no question about what comes next: its question goes in a message of its own.",
+            "The install prompt's \"Ready\" is `jason status` answering with `ready` true in its body. When it is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying exactly what you ran and what it changed, never as a question; and one line each, with its command, for two things not done now: starting the runtime at logon (§6) and skills for this machine's other agent hosts (§4). Then start the `quick-start` skill at once, with no question about what comes next: its question goes in a message of its own.",
             agent,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1068,7 +1068,7 @@ public partial class PageClaimsTests
         Assert.Contains("If the person gave you these three lines: ```text Install Jason by following https://get.jasonharness.ai/install. When it reports Ready, start its quick-start skill and take me to my first campaign. If anything stops you, ask me directly and tell me why. ``` they have asked for the install, so do it without stopping to confirm a step.", agent, StringComparison.Ordinal);
         Assert.Contains("Given only the link, you do not have that yes: ask before the install and before each act this page marks **Ask first.**", agent, StringComparison.Ordinal);
         Assert.Contains(
-            "If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own agent reads them: run `jason skills install --host <your host>` (§4) as a step of the install, without asking again. That yes covers your own host and nothing else this page marks **Ask first.** Skills for any other host on this machine stay §4's question. Given only the link, the mark in §4 stands.",
+            "If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own agent reads them: run `jason skills install --host <your host>` (§4) as a step of the install, without asking again. That yes covers your own host and nothing else this page marks **Ask first.** Skills for any other host on this machine are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands.",
             agent,
             StringComparison.Ordinal);
     }
@@ -2433,7 +2433,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:dfe911f97419b9e6fbf54ffbf641ad338de6ef6b797b905e9059fa5dfd33167c";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:6fd7e32fd18b2e952cefe55b84c85a6a0bcaff28909ddfb1161445f2c0bf4c20";
+    private const string AgentSectionDigest = "sha256:0343e74b34c703138b596e714eaaee19b85da07e6d40fcc32b55ed7b1521fca8";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

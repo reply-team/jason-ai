@@ -547,12 +547,24 @@ public partial class InteractiveSkillTests
         Assert.Contains("What do you sell, and who should buy it? One sentence is enough, and a link to your site works too.", skill, StringComparison.Ordinal);
         Assert.Contains("If you like, add a line about yourself and how you write. You can also do that later.", skill, StringComparison.Ordinal);
         Assert.Contains("End it with exactly: \"Say what to change, or say go.\"", skill, StringComparison.Ordinal);
-        Assert.Contains("\"You have N mailboxes and M LinkedIn accounts connected; you can add more at any time.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"Email goes out through {provider}.\" and \"LinkedIn goes out through {provider}.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"Which mailboxes and LinkedIn accounts are connected there I read as soon as you say go.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"{Channel} is not connected.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("read no accounts and count none before \"go\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"{N} mailboxes and {M} LinkedIn accounts are connected; you can add more at any time.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("A routed channel that holds no account is said firmly: not one message leaves on it until an account is connected", skill, StringComparison.Ordinal);
+        Assert.Contains("Nothing is started before the person's go.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("The count never holds the person up", skill, StringComparison.Ordinal);
         Assert.Contains("no channel is connected, connecting one now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
         Assert.Contains("`reply auth login`", skill, StringComparison.Ordinal);
         Assert.Contains("\"It can be done later.\"", skill, StringComparison.Ordinal);
         Assert.Contains("Never put the offer in the plan message.", skill, StringComparison.Ordinal);
         Assert.Contains("The message after \"go\" that hands over to the planning ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--idempotency-key first-campaign ", skill, StringComparison.Ordinal);
+
+        // The sender.list read comes after "go" and never before it: a draft campaign cannot run it.
+        var go = skill.IndexOf("## 5. After \"go\"", StringComparison.Ordinal);
+        var read = skill.IndexOf("--operation sender.list", StringComparison.Ordinal);
+        Assert.True(go >= 0 && read > go, $"The sender.list read is at offset {read}; it belongs after the heading of \"go\" (offset {go}).");
     }
 }
