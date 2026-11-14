@@ -76,7 +76,8 @@ again, on any address.
   have not replied yet and for people who have: **Every message waits for you** or **Goes automatically**, with
   **Remember this**. Settings sets the choice for every agent, an agent's own Settings tab sets its own, and System says
   which mode is in force and where it comes from. A doubted message shows on its card who doubted it and why, in their
-  own words, and a held message says why it waits.
+  own words, and a held message says why it waits; one that went without asking you says so on its card, with the mode
+  it went under.
 - **Jason knows whether a person has answered.** `jason reply record` takes `--nature`: `person`, `automatic`, `bounce`
   or `opt_out`, in the runtime's own words. A contact is cold until a verdict that stands judges a reply of theirs, in
   that campaign, a person's answer; from then on they are warm. A reply nobody has judged yet makes the contact wait,
@@ -148,6 +149,10 @@ the reply is judged: until a verdict names them, a first message to them may sti
 
 A reply this campaign heard of only because another campaign knows the same person neither makes that person warm here
 nor holds a message to them here.
+
+Under `automatic` for people who have replied, a message that is not an answer, such as a follow-up planned before the
+person wrote, can still go to them on its own after their reply was marked for you. Only an answer in that conversation
+is held.
 
 The demo has limits: it is email only, with no LinkedIn channel; it raises no question; a person whose message waits for your approval never answers it, because a reply is attributed once, when it is stored; and no AI role runs in the demo's runtime, so no reply there is judged, and Interested, Meetings booked and **Replies by category** have nothing to count. The sample's story began when the release was built, with no past before it, so the Dashboard's 30 days hold it for thirty days after. Where the sample is placed, the replies the story wrote are already in when the demo opens; where it is made at the start instead, its story starts that day and its replies arrive within minutes. After that, a kept demo shows nothing new of the story until **Start the Demo Over**. In a placed demo the Dashboard's daily trends read ±0 at first, since nothing of the story falls in the last 24 hours.
 
