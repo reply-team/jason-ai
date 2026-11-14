@@ -143,6 +143,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_approvals_one_pending_per_item")
                         .HasFilter("status = 'pending'");
 
+                    b.HasIndex("CampaignId", "DecidedAt")
+                        .HasDatabaseName("ix_approvals_automatic_campaign_decided_at")
+                        .HasFilter("reason = 'automatic_mode'");
+
                     b.HasIndex("Status", "RequestedAt")
                         .HasDatabaseName("ix_approvals_status_requested_at");
 

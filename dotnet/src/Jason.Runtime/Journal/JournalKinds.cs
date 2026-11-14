@@ -74,6 +74,13 @@ public static partial class JournalKinds
     /// </summary>
     public const string ApprovalStandingApplied = "approval_standing_applied";
 
+    /// <summary>
+    /// The dispatcher released a send under the automatic mode in force for its contact instead of parking it: keyed by the
+    /// temperature, cold or warm, with the approval it wrote, the operation, the subject's hash, where the mode came from and
+    /// the review that released it. Identifiers only, never a text or a name; no program may subscribe to it.
+    /// </summary>
+    public const string ApprovalAutomaticApplied = "approval_automatic_applied";
+
     /// <summary>An expired item was given a future due date and is work again.</summary>
     public const string WorkItemReopened = "workitem_reopened";
 
@@ -344,6 +351,7 @@ public static partial class JournalKinds
         StandingApprovalSet,
         StandingApprovalUnset,
         ApprovalStandingApplied,
+        ApprovalAutomaticApplied,
         WorkItemReopened,
         WorkItemWaiting,
         WorkItemResumed,

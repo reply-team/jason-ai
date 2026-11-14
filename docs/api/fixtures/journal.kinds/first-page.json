@@ -90,11 +90,11 @@
         }
       },
       {
-        "kind": "approval_cancelled",
+        "kind": "approval_automatic_applied",
         "version": 1,
-        "since": "0.1.0",
-        "summary": "A decision was ended because the work it was about was cancelled or passed its due date.",
-        "subscribable": true,
+        "since": "0.42.0",
+        "summary": "The automatic mode in force for a send's contact released the send without asking a person, a pass of its text by the critic or by a person standing, and the line names the approval that records the release, where the mode came from, whether the contact was cold or warm, and the review that released it.",
+        "subscribable": false,
         "entities": {
           "campaign": {
             "at": [
@@ -136,35 +136,63 @@
           ],
           "properties": {
             "key": {
-              "const": "approval"
+              "enum": [
+                "cold",
+                "warm"
+              ],
+              "description": "The contact's temperature in the campaign, the mode of which released the send."
             },
             "old": {
               "type": "null"
             },
             "new": {
               "type": "object",
-              "description": "The approval by its identifiers, never its subject or its preview.",
+              "description": "The release by its identifiers, never the subject, the preview or a text.",
               "additionalProperties": false,
               "required": [
                 "id",
                 "operation",
-                "subject_hash"
+                "subject_hash",
+                "source",
+                "temperature",
+                "review"
               ],
               "properties": {
                 "id": {
                   "type": "string",
                   "pattern": "^apr_",
-                  "description": "The approval."
+                  "description": "The approval written already approved, with the reason automatic_mode, decided by the person who set the mode in force."
                 },
                 "operation": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "The operation the work performs, by its id."
+                  "enum": [
+                    "conversation.reply",
+                    "message.send",
+                    "social_invitation.send"
+                  ]
                 },
                 "subject_hash": {
                   "type": "string",
                   "pattern": "^sha256:",
-                  "description": "The digest of what was asked to be approved; the subject itself stays on the approval."
+                  "description": "The digest of what was released; the subject itself stays on the approval."
+                },
+                "source": {
+                  "enum": [
+                    "preference",
+                    "campaign"
+                  ],
+                  "description": "Where the mode in force came from: the installation's preference, or the campaign's own mode."
+                },
+                "temperature": {
+                  "enum": [
+                    "cold",
+                    "warm"
+                  ],
+                  "description": "Whether the contact had answered in the campaign, the same as the key."
+                },
+                "review": {
+                  "type": "string",
+                  "pattern": "^jrn_",
+                  "description": "The workitem_reviewed line whose pass released the send: the critic's, or a person's."
                 }
               }
             }
@@ -172,6 +200,6 @@
         }
       }
     ],
-    "next_cursor": "YXBwcm92YWxfY2FuY2VsbGVk"
+    "next_cursor": "YXBwcm92YWxfYXV0b21hdGljX2FwcGxpZWQ"
   }
 }

@@ -2156,10 +2156,11 @@ public partial class ClaimerTests
             ISuppressionCheck? register = null,
             PatternTiming? timing = null,
             Func<string, RouteSnapshot>? routes = null,
-            IReadOnlyList<LoadedPlugin>? others = null)
+            IReadOnlyList<LoadedPlugin>? others = null,
+            DateTime? at = null)
         {
             _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
-            var clock = new FixedClock(Noon);
+            var clock = new FixedClock(at ?? Noon);
             var settings = TestOptions.Settings(dispatcher);
             var journal = new JournalWriter(clock);
             var plugins = new PluginRegistry(clock);
@@ -2208,6 +2209,7 @@ public partial class ClaimerTests
                 register ?? new NothingIsSuppressed(),
                 settings,
                 TestOptions.LaunchesSettings(),
+                TestOptions.SendingSettings(Sending),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>(),
                 timing);
@@ -2221,6 +2223,9 @@ public partial class ClaimerTests
         public JasonPaths Paths => _dir.Paths;
 
         public Claimer Claimer { get; }
+
+        /// <summary>The sending section the claim reads at each scan's start, which a test may change between scans.</summary>
+        public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());
 
         /// <summary>
         /// The harness's plugin loaded again with <paramref name="status"/>, as a reload would leave it, and its route frozen
@@ -2239,6 +2244,17 @@ public partial class ClaimerTests
                 new RouteSet(_route!, RouteSet.Empty.Operations),
                 RouteSnapshot.Empty(Noon, _plugins.Snapshot.Id).Campaigns));
         }
+
+        /// <summary>
+        /// The routes frozen again with <paramref name="route"/> as the global default, against the plugins as they are
+        /// loaded now, as the reload after a <c>route.set</c> leaves them.
+        /// </summary>
+        public void Reroute(Route route) => _routing.Replace(new RouteSnapshot(
+            PublicId.New(RouteSnapshot.IdPrefix),
+            Noon,
+            _plugins.Snapshot.Id,
+            new RouteSet(route, RouteSet.Empty.Operations),
+            RouteSnapshot.Empty(Noon, _plugins.Snapshot.Id).Campaigns));
 
         /// <summary>What the claim logged, with the scope each line was written under.</summary>
         public RecordingLogs Logs { get; } = new();

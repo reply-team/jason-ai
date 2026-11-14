@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_created",
+  "version": 1,
+  "case": "a send was created under the desktop's chat marker, so it waits for the person whatever the send mode",
+  "body": { "key": "kind", "old": null, "new": { "kind": "provider_op", "role": null, "operation": "message.send", "contact_id": "cnt_01JC0000000000000000000001", "priority": 0, "not_before": null, "due_at": null, "confined": true } },
+  "expect": "valid"
+}

@@ -9,7 +9,7 @@
     "contact": { "at": "/contact_id", "presence": "sometimes" },
     "work_item": { "at": "/work_item_id", "presence": "always" }
   },
-  "field_since": {},
+  "field_since": { "/new/confined": "0.42.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -28,7 +28,8 @@
           "contact_id": { "type": ["string", "null"], "pattern": "^cnt_", "description": "The person the work is about, or null." },
           "priority": { "type": "integer" },
           "not_before": { "type": ["string", "null"], "format": "date-time", "description": "The moment before which the work does not start, or null." },
-          "due_at": { "type": ["string", "null"], "format": "date-time", "description": "The moment the work expires if it has not finished, or null." }
+          "due_at": { "type": ["string", "null"], "format": "date-time", "description": "The moment the work expires if it has not finished, or null." },
+          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: the item was created under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set. A send so marked waits for the person whatever the send mode. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and a request made around the CLI carries no marker." }
         }
       }
     }

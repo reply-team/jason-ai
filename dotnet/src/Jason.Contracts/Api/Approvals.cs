@@ -18,8 +18,10 @@ public sealed record ApprovalDto(
     ApprovalStatus Status,
 
     /// <summary>
-    /// Why the work was parked: <c>approval_required</c>, or <c>input_changed</c> after a decision; or
-    /// <c>standing_approval</c> where it was never parked, because a standing approval a person set released it.
+    /// Why the work was parked: <c>approval_required</c>, or <c>input_changed</c> after a decision; where a send mode
+    /// of <c>automatic</c> is in force for the send and held it, the code it held it by, one of
+    /// <see cref="SendModeReasons.All"/>; or, where it was never parked, <c>standing_approval</c>, because a standing
+    /// approval a person set released it, or <c>automatic_mode</c>, because the send mode a person set released it.
     /// </summary>
     string Reason,
     string SubjectHash,

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
@@ -28,8 +29,9 @@ namespace Jason.Runtime.Approvals;
 /// <para>
 /// Every read here is written as SQL that names its index, and a test pins each plan. The kind index is on <c>kind</c>
 /// alone. Its bound for these reads is the installation's lines of that kind: the standing-approval lines a person writes
-/// by hand, the releases under them, the verdicts. The campaign index would bound them instead by the campaign's every
-/// line since the moment asked — and each reply a campaign answers brings about ten of its own (the responder's work
+/// by hand and the releases under them; a later verdict on a reply is read through the verdicts' thread index instead, by
+/// the campaign, the thread and the key, which bounds it by that reply's own verdicts. The campaign index would bound the
+/// others instead by the campaign's every line since the moment asked — and each reply a campaign answers brings about ten of its own (the responder's work
 /// moving through its states, the verdict, the reply's work moving through its states, the release) besides what inbound
 /// reading writes. So the kind index reads the smaller set unless an installation has more than about ten campaigns
 /// releasing replies at once, and for a category never set it reads nothing where the campaign index reads the whole
@@ -86,6 +88,18 @@ public static class StandingApprovals
         /// review of its text — and a doubt is the person's to answer, so no standing approval releases it.
         /// </summary>
         public const string Doubted = "doubted";
+
+        /// <summary>
+        /// Covered in every other respect, but the send was written in the desktop's chat, or its input edited there, and
+        /// such a send waits for the person whatever stands for it, so no standing approval releases it.
+        /// </summary>
+        public const string SentFromChat = "sent_from_chat";
+
+        /// <summary>
+        /// Covered in every other respect, but the automatic mode would have released the send and the campaign has reached
+        /// <c>Sending:AutomaticMaxPerDay</c> for the UTC day, which never slips, so no standing approval releases it either.
+        /// </summary>
+        public const string DailyCeiling = "daily_ceiling";
     }
 
     /// <summary>The newest standing-approval line of one campaign for one category, set or unset, through the kind index.</summary>
@@ -121,13 +135,22 @@ public static class StandingApprovals
             WHERE kind = 'approval_standing_applied' AND id > {set.Id} AND key = {set.PublicId}
             """);
 
-    /// <summary>A later verdict on the same reply in the same campaign, which is the one that stands.</summary>
-    internal static IQueryable<int> Later(JasonDbContext db, JournalEntry verdict) =>
-        db.Database.SqlQuery<int>($"""
-            SELECT id AS "Value" FROM journal INDEXED BY ix_journal_kind
-            WHERE kind = 'reply_classified' AND id > {verdict.Id} AND campaign_id = {verdict.CampaignId} AND key = {verdict.Key}
+    /// <summary>
+    /// A later verdict on the same reply in the same campaign, which is the one that stands: read through the verdicts'
+    /// thread index by the campaign, the thread the verdict names and its key, which is a digest of the plugin, the thread
+    /// and the message, so it is bounded by that reply's own verdicts and never by every verdict the installation holds.
+    /// </summary>
+    internal static IQueryable<int> Later(JasonDbContext db, JournalEntry verdict)
+    {
+        ArgumentNullException.ThrowIfNull(verdict);
+        var thread = Text((verdict.New as JsonObject)?["thread"]);
+        return db.Database.SqlQuery<int>($"""
+            SELECT id AS "Value" FROM journal INDEXED BY ix_journal_campaign_verdict_thread
+            WHERE kind = 'reply_classified' AND campaign_id = {verdict.CampaignId}
+              AND json_extract(new_json, '$.thread') = {thread} AND key = {verdict.Key} AND id > {verdict.Id}
             LIMIT 1
             """);
+    }
 
     /// <summary>A change to a work item's context after it was created, read from the item's own lines.</summary>
     internal static IQueryable<int> ContextChanges(JasonDbContext db, string workItemId) =>
@@ -197,7 +220,7 @@ public static class StandingApprovals
     /// The record an allowance's set line writes: no category, the one operation, the expiry and no count of releases as a
     /// reply's has, then the audience by id and number, the ceiling in people and the cap per search.
     /// </summary>
-    internal static JsonObject AllowanceLine(AudienceRef audience, int maxPeople, int? maxPerSearch, DateTimeOffset? expiresAt) => new()
+    internal static JsonObject AllowanceLine(AudienceRef audience, int maxPeople, int? maxPerSearch, DateTimeOffset? expiresAt) => ConfinedScope.Mark(new()
     {
         ["category"] = null,
         ["operations"] = new JsonArray(Searches),
@@ -206,7 +229,7 @@ public static class StandingApprovals
         ["audience"] = new JsonObject { ["id"] = audience.Id, ["number"] = audience.Number },
         ["max_people"] = maxPeople,
         ["max_per_search"] = maxPerSearch,
-    };
+    });
 
     /// <summary>
     /// Writes an allowance, retiring the one it replaces: an unset of the newest set where there is one, then the set, both
@@ -261,13 +284,13 @@ public static class StandingApprovals
     }
 
     /// <summary>The record a set line writes: the category, the operations, the expiry and the ceiling, nothing else.</summary>
-    internal static JsonObject Line(string category, IReadOnlyList<string> operations, DateTimeOffset? expiresAt, int? maxReleases) => new()
+    internal static JsonObject Line(string category, IReadOnlyList<string> operations, DateTimeOffset? expiresAt, int? maxReleases) => ConfinedScope.Mark(new()
     {
         ["category"] = category,
         ["operations"] = new JsonArray([.. operations.Select(operation => (JsonNode?)JsonValue.Create(operation))]),
         ["expires_at"] = expiresAt is { } moment ? InboundSync.Instant(moment) : null,
         ["max_releases"] = maxReleases,
-    };
+    });
 
     /// <summary>
     /// Whether a standing approval covers this work, asked by the claim where no decision about the work is live yet: the
@@ -351,7 +374,7 @@ public static class StandingApprovals
         var newest = category is null
             ? null
             : await Newest(db, item.CampaignId, category).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        if (newest is not { Kind: JournalKinds.StandingApprovalSet })
+        if (!Sets(newest))
         {
             return Miss(Why.NoStandingApproval, cited, category);
         }
@@ -404,6 +427,7 @@ public static class StandingApprovals
         var why = allowance switch
         {
             null => Why.NoStandingApproval,
+            _ when !Sets(record!.Line) => Why.NoStandingApproval,
             _ when !string.Equals(record!.Audience!.Id, searched, StringComparison.Ordinal) => Why.AnotherAudience,
             _ when record!.ExpiresAt is { } expires && expires.UtcDateTime <= now => Why.Expired,
             _ when record!.MaxPerSearch is { } cap && count > cap => Why.OverPerSearch,
@@ -433,7 +457,8 @@ public static class StandingApprovals
     /// </summary>
     /// <remarks>
     /// The line names who answered only when <c>reply.record</c> checked the decision as it wrote the line: answered, by a
-    /// named person, with the category recorded. The claim trusts the line for that and reads no decision.
+    /// named person, with the category recorded. The claim trusts the line for that and reads no decision. A line that
+    /// carries an attempt is the run's, whatever actor it names: a person named from inside a run vouches as that run.
     /// </remarks>
     private static async Task<Author?> AuthorAsync(JasonDbContext db, WorkItem item, JournalEntry verdict, JsonObject said, CancellationToken ct)
     {
@@ -442,12 +467,18 @@ public static class StandingApprovals
             return new Author(null);
         }
 
-        if (verdict.ActorType == ActorType.Human)
+        // A verdict recorded under the desktop's chat marker is the chat's: neither a person's own word nor a run's.
+        if (ConfinedScope.Marked(said))
+        {
+            return null;
+        }
+
+        if (verdict.ActorType == ActorType.Human && verdict.AttemptId is null)
         {
             return string.IsNullOrWhiteSpace(verdict.ActorId) ? null : new Author(null);
         }
 
-        if (verdict.ActorType != ActorType.Attempt || verdict.WorkItemId is null)
+        if (verdict.ActorType is not (ActorType.Attempt or ActorType.Human) || verdict.WorkItemId is null)
         {
             return null;
         }
@@ -568,14 +599,24 @@ public static class StandingApprovals
     }
 
     /// <summary>
-    /// The answer for work <paramref name="cover"/> would release but a doubt stands about: not covered, saying
-    /// <see cref="Why.Doubted"/> beside the facts the cover names — the verdict and its category for a reply.
+    /// The answer for work <paramref name="cover"/> would release but something holds for the person: not covered, saying
+    /// <paramref name="why"/> — <see cref="Why.Doubted"/>, <see cref="Why.SentFromChat"/> or <see cref="Why.DailyCeiling"/> —
+    /// beside the facts the cover
+    /// names, the verdict and its category for a reply.
     /// </summary>
-    internal static Answer Doubted(Cover cover)
+    internal static Answer Held(Cover cover, string why)
     {
         ArgumentNullException.ThrowIfNull(cover);
-        return new(null, new Uncovered(Why.Doubted, cover.Names.DeepClone().AsObject()));
+        return new(null, new Uncovered(why, cover.Names.DeepClone().AsObject()));
     }
+
+    /// <summary>
+    /// Whether <paramref name="line"/> sets a standing approval the claim may release under: a set, written outside any run.
+    /// A set line that carries an attempt came from inside a run, which the door refuses; whatever actor it names, it sets
+    /// nothing.
+    /// </summary>
+    private static bool Sets([NotNullWhen(true)] JournalEntry? line) =>
+        line is { Kind: JournalKinds.StandingApprovalSet, AttemptId: null } && !ConfinedScope.Marked(line.New);
 
     private static Answer Miss(string why, string? verdict, string? category) =>
         new(null, new Uncovered(why, new JsonObject { ["verdict"] = verdict, ["category"] = category }));

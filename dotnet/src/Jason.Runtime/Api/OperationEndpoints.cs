@@ -50,6 +50,9 @@ public static class OperationEndpoints
             // The run the request says it comes from, for whatever reads it to check: a verdict on a reply records it.
             using var run = InsideARun.AttemptOf(context.Request) is { } named ? RunScope.Open(named) : null;
 
+            // Whether it comes from the desktop's chat, for whatever records it: a work item made, or whose input is edited, under it.
+            using var confined = InsideARun.ConfinedOf(context.Request) ? ConfinedScope.Open() : null;
+
             TRequest request;
             var caller = context.Features.Get<HandlerCaller>();
             try

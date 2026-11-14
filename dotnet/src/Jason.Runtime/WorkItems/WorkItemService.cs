@@ -567,6 +567,15 @@ public sealed class WorkItemService(
         var inputBefore = item.Context[InputKey]?.DeepClone();
         var contextChanges = ApplyContext(item, request.Set, request.Unset);
         var inputChanged = !JsonNode.DeepEquals(inputBefore, item.Context[InputKey]);
+
+        // An edit of the input in the desktop's chat makes the send the chat's, as a create there does, and for good: marked
+        // once, the first time, by one line of its own beside the edit's.
+        if (inputChanged && ConfinedScope.Confined
+            && !await AutomaticRelease.Confined(db, item.PublicId).AnyAsync(cancellationToken).ConfigureAwait(false))
+        {
+            changes.Add(new FieldChange(ConfinedKey, JsonValue.Create(false), JsonValue.Create(true)));
+        }
+
         if (changes.Count == 0 && contextChanges.Count == 0)
         {
             return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
@@ -794,17 +803,32 @@ public sealed class WorkItemService(
         return member ? contact : throw DomainErrors.ContactNotMember(contact.PublicId, campaign.PublicId);
     }
 
-    /// <summary>What the item was asked to be, so the chronicle answers "where did this work come from" on its own.</summary>
-    private static JsonObject CreationSummary(WorkItem item, Contact? contact) => new()
+    /// <summary>
+    /// What the item was asked to be, so the chronicle answers "where did this work come from" on its own; and, only where it
+    /// is so, that it was made in the desktop's chat (<see cref="ConfinedScope"/>), which a send keeps for good.
+    /// </summary>
+    private static JsonObject CreationSummary(WorkItem item, Contact? contact)
     {
-        ["kind"] = JsonSerializer.SerializeToNode(item.Kind, JasonJson.Options),
-        ["role"] = item.Role is null ? null : JsonValue.Create(item.Role),
-        ["operation"] = item.Operation is null ? null : JsonValue.Create(item.Operation),
-        ["contact_id"] = contact is null ? null : JsonValue.Create(contact.PublicId),
-        ["priority"] = JsonValue.Create(item.Priority),
-        ["not_before"] = Moment(item.NotBefore),
-        ["due_at"] = Moment(item.DueAt),
-    };
+        var summary = new JsonObject
+        {
+            ["kind"] = JsonSerializer.SerializeToNode(item.Kind, JasonJson.Options),
+            ["role"] = item.Role is null ? null : JsonValue.Create(item.Role),
+            ["operation"] = item.Operation is null ? null : JsonValue.Create(item.Operation),
+            ["contact_id"] = contact is null ? null : JsonValue.Create(contact.PublicId),
+            ["priority"] = JsonValue.Create(item.Priority),
+            ["not_before"] = Moment(item.NotBefore),
+            ["due_at"] = Moment(item.DueAt),
+        };
+        if (ConfinedScope.Confined)
+        {
+            summary[ConfinedKey] = true;
+        }
+
+        return summary;
+    }
+
+    /// <summary>The member, and the setting's key, that say an item was made or its input edited in the desktop's chat.</summary>
+    internal const string ConfinedKey = "confined";
 
     /// <summary>
     /// Exactly the campaign-context algorithm: set then unset, keys that would not move skipped, and the whole

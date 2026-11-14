@@ -159,6 +159,13 @@ public static class DomainErrors
     public static ForbiddenException ReviewByEditor(string id) =>
         new("review_by_editor", $"Work item '{id}' had its input written by the work or the person reviewing it, and nobody reviews a send they wrote; a person's own text is theirs to approve (jason approval list).");
 
+    /// <summary>
+    /// A run reviews a send whose input was written under a name that holds nobody: no name at all, or a role's, the
+    /// runtime's or a plugin's. That author may be the reviewing run, so only a person by name reviews the send from then on.
+    /// </summary>
+    public static ForbiddenException ReviewAfterAnUnnamedEdit(string id) =>
+        new("review_by_editor", $"Work item '{id}' had its input written by the work or the person reviewing it, or by an actor the runtime cannot hold to anybody, which may be this run, so only a person by name reviews it, and nobody reviews a send they wrote; a person's own text is theirs to approve (jason approval list).");
+
     /// <summary>A resume of an item that holds no wait to end.</summary>
     public static ConflictException WorkItemNotWaiting(string id, WorkItemStatus status) =>
         new("workitem_not_waiting", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; only a waiting item can be resumed.");

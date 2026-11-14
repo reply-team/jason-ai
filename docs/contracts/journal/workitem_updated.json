@@ -2,7 +2,7 @@
   "kind": "workitem_updated",
   "version": 1,
   "since": "0.1.0",
-  "summary": "One setting of a work item changed: when it may start, when it is due, its priority, its limits, its execution profile or its result format; a change of several settings writes one line for each.",
+  "summary": "One setting of a work item changed: when it may start, when it is due, its priority, its limits, its execution profile or its result format; or, since 0.42.0, the item was marked as written in the desktop's chat, the first time its input was edited there. A change of several settings writes one line for each.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -16,7 +16,7 @@
     "required": ["key", "old", "new"],
     "properties": {
       "key": {
-        "enum": ["not_before", "due_at", "priority", "timeout_seconds", "heartbeat_seconds", "max_attempts", "execution_profile", "result_format"],
+        "enum": ["not_before", "due_at", "priority", "timeout_seconds", "heartbeat_seconds", "max_attempts", "execution_profile", "result_format", "confined"],
         "description": "The setting that changed."
       },
       "old": { "type": ["string", "number", "boolean", "object", "array", "null"], "description": "The setting's value before the change." },
@@ -62,6 +62,13 @@
             "type": ["string", "number", "boolean", "object", "array", "null"],
             "description": "The caller's JSON Schema for the role's result, or null for none; an object since the runtime checks it, any JSON value an earlier release accepted."
           }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "confined", "description": "Since 0.42.0: the item's input was edited under the desktop's chat marker, the Jason-Confined header, and the item was not marked yet. Once marked it stays marked: a send so marked waits for the person whatever the send mode." },
+          "old": { "const": false },
+          "new": { "const": true }
         }
       }
     ]
