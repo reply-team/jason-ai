@@ -353,6 +353,16 @@ internal static partial class Account
             record["failure_code"] = code.DeepClone();
         }
 
+        // Whether an email bounced, its kind and its moment, only where a test planted them: a reply-cli that prints them
+        // passes Reply's `bounced`, `bounceType` and `bouncedAt` on as `bounced`, `bounce_type` and `bounced_at`, and the
+        // release this stand-in answers as prints none of them.
+        if (held["bounced"] is { } bounced)
+        {
+            record["bounced"] = bounced.DeepClone();
+            record["bounce_type"] = held["bounceType"]?.DeepClone();
+            record["bounced_at"] = held["bouncedAt"]?.DeepClone();
+        }
+
         // The message as it went, only where Reply kept that copy: a send it rendered names both.
         if (held["renderedSubject"] is { } subject)
         {

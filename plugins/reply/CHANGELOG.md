@@ -3,6 +3,13 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.16.0
+
+- `message.status` also says whether an email came back as a bounce, of which kind, when, and Reply's own word for the
+  kind. Only a dead address is a `hard` bounce; a full mailbox, a limit of the sender's own and the receiving server's
+  refusal of the message are `soft`; a kind Reply does not name, or one this package does not know, is none. Each of
+  the four is null where the installed reply-cli does not print them, which says nothing either way.
+
 ## 0.15.1
 
 - The README says the two names this package gives a search never change from one version of the package to the next:

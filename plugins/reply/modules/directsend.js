@@ -11,6 +11,9 @@
 // and is `queued`; only a send Reply is not already sending can still be cancelled. A cancel Reply answers for a send that
 // went, that it is sending or that failed is refused as `send_not_pending`, with the state that says which, and never
 // reported as cancelled; a send already cancelled answers as one cancelled now.
+//
+// A read also says whether an email came back as a bounce, of which kind, when, and Reply's own word for the kind, where
+// the installed reply-cli prints them; where it does not, each is null, which says nothing either way.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { momentOf } from "./send.js";
@@ -30,6 +33,20 @@ const LOST_TRACK = "directSend.dispatchInterrupted";
 
 // The one state that still holds the send and that a cancel can no longer stop: Reply is sending it now.
 const SENDING = "sending";
+
+// Reply's kinds of bounce, told in the document's two words. Only a dead address is `hard`. A full mailbox is `soft`, and so
+// is every kind that speaks of the sender's own limits or of the receiving server's judgement of the message: none says the
+// address is dead. `unknown`, and a word Reply adds later, name no kind the document can tell, and are null.
+const BOUNCES = {
+  "hard": "hard",
+  "soft": "soft",
+  "mailboxFull": "soft",
+  "gmailApiLimitWarning": "soft",
+  "office365LimitWarning": "soft",
+  "authenticationFailure": "soft",
+  "spamRejection": "soft",
+  "policyViolation": "soft",
+};
 
 // What a cancel answer that is not a cancelled send says became of it, in the word the refusal's details carry.
 const NOT_PENDING = { "sent": "sent", "sending": "sent", "failed": "failed" };
@@ -87,6 +104,7 @@ function recordOf(record, reference) {
   }
 
   const final = lookup(FINAL, record.state);
+  const bounce = bounceOf(record);
   const read = {
     state: final === undefined ? "queued" : final === "failed" && record.failure_code === LOST_TRACK ? "unknown" : final,
     channel: channel,
@@ -101,9 +119,32 @@ function recordOf(record, reference) {
     // nothing.
     failure_code: typeof record.failure_code === "string" && record.failure_code.length > 0 ? copyOf(record.failure_code, LONGEST_CODE) : null,
     cancelled_at: momentOrNull(record.cancelled_at),
+    bounced: bounce.bounced,
+    bounce: bounce.bounce,
+    bounced_at: bounce.bounced_at,
+    bounce_code: bounce.bounce_code,
   };
 
   return Object.keys(read).every(name => read[name] !== undefined) ? read : undefined;
+}
+
+// Whether the send bounced, of what kind, when, and Reply's own word for the kind. A reply-cli or a Reply that gives no member
+// says nothing, so each is null: a read that cannot say whether the send bounced says null, never false. The kind, the
+// moment and the word are read only of a send Reply says bounced.
+function bounceOf(record) {
+  const bounced = typeof record.bounced === "boolean" ? record.bounced : null;
+  if (bounced !== true) {
+    return { bounced: bounced, bounce: null, bounced_at: null, bounce_code: null };
+  }
+
+  const word = typeof record.bounce_type === "string" && record.bounce_type.length > 0 ? record.bounce_type : null;
+  return {
+    bounced: true,
+    bounce: word === null ? null : lookup(BOUNCES, word) ?? null,
+    bounced_at: momentOrNull(record.bounced_at),
+    // Reply's own word, as given and never interpreted; one the document cannot carry whole is none.
+    bounce_code: word === null ? null : copyOf(word, LONGEST_CODE),
+  };
 }
 
 // The channel a reference names by its prefix, or undefined for one in no channel's spelling.

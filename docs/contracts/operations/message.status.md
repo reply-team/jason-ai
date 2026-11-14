@@ -78,8 +78,9 @@ nothing the caller wrote. Three refusals come before anything is run, each perma
   otherwise.
 - `bounced` says whether the email went and came back as a bounce: true where the provider says it did, false where it
   says it did not, and null where it cannot say. `bounce` is the kind, where it bounced: `hard` only where the provider
-  says the address itself does not take mail, `soft` for every other kind it names — a full mailbox, a refusal of the
-  message, a limit of the sender's own — and null where it names none. `bounced_at` is when the bounce notice came, and
+  says the address itself does not take mail, `soft` for a kind that says the address may still take mail — a full
+  mailbox, a refusal of the message, a limit of the sender's own — and null where it names none or names one the plugin
+  cannot tell. `bounced_at` is when the bounce notice came, and
   `bounce_code` the provider's own word for the kind, uninterpreted. The four are optional: a plugin that does not
   return them is read as returning null for each.
 
@@ -92,6 +93,20 @@ work item that made the send, keyed by it, carrying the plugin, the reference, t
 identifier — never the text. A second read that finds the same send gone says nothing more. The send's own result stays
 as it was frozen, whatever it said: a finished item's result is never rewritten. The line is a trigger a campaign's
 manager may opt into; it is not a default one.
+
+## What the runtime does with a send that bounced
+
+A read that answers `bounced: true` says so in the journal, whoever made the read: a reserved line,
+`message_bounce_observed`, about the work item that made the send, keyed by it and said once, carrying the plugin, the
+reference, the channel, the message's identifier, the kind, the provider's own word for it, its moment and the read —
+never an address or the text. It is written in the change set that ends the read. A hard bounce, or one the provider
+named no kind for, also puts the contact's email on the do-not-contact register in that change set, written by the
+runtime's reserved actor `system:bounce` with the line named in the reason. The address is the email Jason would send
+that contact to when the read ends, since a send's record does not keep the address it went to; one already on the
+register is left as it is. A soft bounce stops nothing. A read that answers `bounced` false or null, and a read that
+fails, decides nothing and stops nothing. The line is a trigger a campaign's manager may opt into; it is not a default
+one, since the provider's own bounce event has already woken the manager. A person lifts a stop with
+`jason suppression remove`.
 
 ## Repeating after a lost answer
 
