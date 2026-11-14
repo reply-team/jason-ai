@@ -8,6 +8,8 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -533,6 +535,76 @@ public partial class ClaimerTests
         Assert.Null((await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == now.Id, Ct)).ReviewNote);
         db.ChangeTracker.Clear();
         Assert.Single(await ClaimSettledAsync(harness, db));
+    }
+
+    /// <summary>
+    /// The claim decides against the route and plugin snapshots it reads once it holds the database, so a review that held it
+    /// first was asked the claim's question against the same routes or older ones. The send is approved under one provider;
+    /// as the claim is about to begin, the route is set to another, under which the approval no longer stands, and a person's
+    /// doubt is accepted. The claim then decides under the new route: it does not run the send under the old approval, which
+    /// would leave the doubt unread, but parks it with the doubt on the preview.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_ARouteSetAsTheClaimBegins_IsTheRouteTheClaimDecidesBy_SoAReviewAcceptedThenIsRead()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "campaign.enroll"]),
+            route: new Route(Provider, null, null),
+            others: [TestPlugins.Loaded(Social, ["message.send"])]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        var clock = new FixedClock(Noon);
+        await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+        Assert.Equal(WorkItemStatus.Created, now.Status);
+
+        var meanwhile = new BeforeBegin(async () =>
+        {
+            harness.Reroute(new Route(Social, null, null));
+            await using var other = database.Open();
+            await new ReviewService(other, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+                new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "ada")),
+                Ct);
+        });
+        await using var claiming = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var claimed = await harness.Claimer.ClaimAsync(claiming, 4, Ct);
+
+        Assert.True(meanwhile.Fired);
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var line = await fresh.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct);
+        var parked = await fresh.Approvals.AsNoTracking().OrderByDescending(a => a.Id).FirstAsync(Ct);
+        Assert.Equal((ApprovalStatus.Pending, Social), (parked.Status, parked.PluginId));
+        var doubt = Assert.Single(parked.Preview[Doubts.PreviewKey]!.AsArray())!;
+        Assert.Equal(("review", line.PublicId, ReviewSentence), ((string?)doubt["source"], (string?)doubt["line"], (string?)doubt["note"]));
+    }
+
+    /// <summary>Another writer as a context is about to begin its first transaction: the action runs first, on contexts of its own.</summary>
+    private sealed class BeforeBegin(Func<Task> act) : Microsoft.EntityFrameworkCore.Diagnostics.DbTransactionInterceptor
+    {
+        private int _fired;
+
+        public bool Fired => _fired == 1;
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction>> TransactionStartingAsync(
+            System.Data.Common.DbConnection connection,
+            Microsoft.EntityFrameworkCore.Diagnostics.TransactionStartingEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _fired, 1) == 0)
+            {
+                await act().ConfigureAwait(false);
+            }
+
+            return result;
+        }
     }
 
     /// <summary>

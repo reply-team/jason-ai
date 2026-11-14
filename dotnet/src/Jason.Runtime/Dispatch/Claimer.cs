@@ -102,12 +102,7 @@ public sealed class Claimer(
         var ended = new List<AttemptEnd>();
         var unreadable = new List<UnreadableFile>();
 
-        // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
-        // and an activation that happens mid-scan belongs to the next one.
-        var packages = plugins.Snapshot;
-        var routing = routes.Snapshot;
-
-        // And the one setting an agent claim reads, for the same reason and in the same place: a default edited
+        // The one setting an agent claim reads is read once too, as the snapshots are below: a default edited
         // halfway through a scan belongs to the next scan, not to half of this one.
         var globalDefault = roles.Current.DefaultExecutionProfile;
 
@@ -117,6 +112,14 @@ public sealed class Claimer(
         var today = now.Date;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
+        // and an activation that happens mid-scan belongs to the next one. They are read once the scan holds the
+        // database, so a writer that asked the claim's question while it held it first (a review) asked it against
+        // these snapshots or older ones, never newer ones than the claim then decides by.
+        var packages = plugins.Snapshot;
+        var routing = routes.Snapshot;
+
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
             var item = await db.WorkItems.WithNavigation().Include(w => w.Attempts)
