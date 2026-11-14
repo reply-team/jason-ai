@@ -362,12 +362,12 @@ public static class DomainErrors
 
     /// <summary>
     /// A route for every campaign asked for from inside a run: the global scope of <c>route.set</c> and <c>route.unset</c>,
-    /// refused by the run's header with the code a person's own word is refused with there.
+    /// refused by the run's header with the code the run gate gives, since nothing inside a run changes Jason itself.
     /// </summary>
     public static ForbiddenException GlobalRouteInsideARun(string attempt) =>
         new(
             "decided_inside_a_run",
-            $"This request comes from inside attempt `{attempt}`. A route for every campaign is a person's own word, given outside any run: leave it to the person, or raise it as a decision.");
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and a route for every campaign is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody

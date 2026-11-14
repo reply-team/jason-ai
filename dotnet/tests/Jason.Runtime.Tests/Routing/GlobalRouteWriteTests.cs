@@ -575,7 +575,7 @@ public class GlobalRouteWriteTests
         Assert.Equal("decided_inside_a_run", error.Code);
         Assert.Equal(403, (int)status);
         Assert.Equal(
-            $"This request comes from inside attempt `{RunAttempt}`. A route for every campaign is a person's own word, given outside any run: leave it to the person, or raise it as a decision.",
+            $"This request comes from inside attempt `{RunAttempt}`. Nothing inside a run changes Jason itself, and a route for every campaign is part of it: leave it to the person, or raise it as a decision.",
             error.Message);
         Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
         Assert.Same(routes, api.Resolve<RouteRegistry>().Snapshot.Global);
