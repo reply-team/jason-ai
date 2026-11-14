@@ -417,8 +417,9 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
 `ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
 and a doubt is the person's to answer, so no standing approval releases it; or `sent_from_chat`: the send was written
-in the desktop's chat, which always waits for the person (§The send mode at the claim). A reply or a message that
-names no verdict is not asked about.
+in the desktop's chat, which always waits for the person (§The send mode at the claim); or `daily_ceiling`: the
+automatic mode would have released the send and its campaign has reached `Sending:AutomaticMaxPerDay` for the day,
+which never slips (§The claim rule). A reply or a message that names no verdict is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
@@ -569,17 +570,20 @@ guard as a standing approval, and in this order:
    counting pass only under an earlier hash is `edited_after_review`; none at all, `not_reviewed`. A pass by a critic
    somebody queued by hand, by the runtime's critic of another send, by another role, on a line a run wrote in a person's
    name, or naming an attempt other than its own, is shown on the preview and releases nothing.
-8. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
+8. **The daily ceiling.** The campaign has had fewer sends released by the mode since 00:00Z than
+   `Sending:AutomaticMaxPerDay`; at it, `daily_ceiling`, and the preview carries `daily_ceiling` with the limit, the
+   count and since when (§The claim rule).
+9. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
    `automatic_mode`, requested and decided at the claim's moment, decided by the person who set the mode in force.
 
-A park of steps 3 to 7 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
+A park of steps 3 to 8 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
 above, and its preview carries `send_mode`, the facts and never the code: the `mode`, its `source` (`preference` or
 `campaign`) and the contact's `temperature` (`cold` or `warm`), all three null while the contact waits on a verdict,
 and the `review` line the step read — the pass, the pass under the earlier text, or another role's — or null. Where
 no mode is in force the reason is what it always was. The parks of steps 5 to 7 **fall through to a standing
-approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat
-and a doubted one do not: they park even where a standing approval would have covered it, and its preview's
-`standing_approval` says `sent_from_chat` or `doubted`. A send written in the desktop's chat always waits for the person,
+approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat,
+a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
+its preview's `standing_approval` says `sent_from_chat`, `doubted` or `daily_ceiling`. A send written in the desktop's chat always waits for the person,
 whatever the send mode, `every_message` included.
 
 **A release decides once, but warmth is read again.** A retry of the same subject runs under the row the mode wrote, and

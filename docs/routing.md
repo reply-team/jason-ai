@@ -494,10 +494,13 @@ at the claim):
    `awaiting_nature`, `reply_not_from_a_person`, `escalated`);
 7. the runtime's own critic for the send, or a person, passed the text as it now reads (`edited_after_review`,
    `not_reviewed`);
-8. released, under an approved row with the reason `automatic_mode` that names the person who set the mode.
+8. the campaign has had fewer sends released by the mode since 00:00Z than `Sending:AutomaticMaxPerDay`
+   (`daily_ceiling`);
+9. released, under an approved row with the reason `automatic_mode` that names the person who set the mode.
 
-A send held at steps 3 to 7 parks with the code as its approval's reason. The holds of steps 5 to 7 then ask the
-standing approval as before; a send written in the chat and a doubted one park whatever a standing approval says.
+A send held at steps 3 to 8 parks with the code as its approval's reason. The holds of steps 5 to 7 then ask the
+standing approval as before; a send written in the chat, a doubted one and one at the daily ceiling park whatever a
+standing approval says.
 These are steps of the twenty-fifth check, not checks of their own: the table keeps its rows.
 It is asked after every refusal on purpose. What a person is asked to approve is the composed input, so it has to be
 composed and to satisfy the operation's own schema before anybody can be shown it; and nobody is ever
