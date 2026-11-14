@@ -53,9 +53,10 @@ while plugin secrets are kept in the settings file, whether or not any is set ye
 
 A role's skill teaches that role for every campaign. When the person wants something for one campaign, for one
 project, or as how they themselves write, that is not a change to Jason: it is kept where the pack's other skills keep
-it. Something for one campaign is that campaign's context (`managed-campaign-work`). A standing rule for one project,
-or for all of their work, is the project's or the client's memory file (`planner-in-session`). How they sound is the
-`tone_of_voice` preference (`planner-in-session`). Ask which of these the person means before you edit a role's file,
+it. A standing rule for one campaign, for one project or for all of their work is the memory file at that level, the
+campaign's, the project's or the client's (`planner-in-session`); a fact or a decision every role of one campaign
+shares is that campaign's context (`managed-campaign-work`). How they sound is the `tone_of_voice` preference
+(`planner-in-session`). Ask which of these the person means before you edit a role's file,
 and edit the file only when they mean every campaign.
 
 A role is taught by the `SKILL.md` in its own folder under the role skills folder, named by the role: the copywriter's
@@ -81,9 +82,9 @@ jason role list --human
 A role is a name that matches `^[a-z][a-z0-9-]{0,63}$`. `role add` registers it. Then make its folder under the role
 skills folder, named exactly like the role, with a `SKILL.md` whose front matter names the same: `name`, a
 `description` that says when Jason launches it, and `metadata.status`. The file is what teaches it its job; write it
-the way the shipped roles' files are written. A role has no update or remove verb: its description and entry command
-are fixed when it is added. Ask the person before registering one, and say why: a role cannot be edited or removed after
-`role add`.
+the way the shipped roles' files are written. Ask the person before registering one, and say why: its description and
+entry command cannot be changed after `role add`, and it cannot be removed; its profile is the one thing
+`jason role set-profile` changes later.
 
 How the role runs is its profile or its entry command. A role with neither fails its work with `role_not_launchable`;
 `jason role set-profile <name> --execution-profile <profile>` names a profile that exists (`jason profile list`), and
@@ -114,7 +115,8 @@ jason plugin list --human
 
 The reload reads every package again and swaps the snapshot, or keeps the old one and says what is wrong; fix what it
 names and reload again. A package built here is yours: an update and `jason plugin install` leave it as it is unless
-the person says otherwise. The plugin guide is `docs/plugins.md`. For an example, read a package already in the plugins folder: the smallest one a
+the person says otherwise. The plugin guide is `docs/plugins.md`
+(<https://github.com/reply-team/jason-ai/blob/main/docs/plugins.md>). For an example, read a package already in the plugins folder: the smallest one a
 release publishes is `ntfy`, which `jason plugin install ntfy` places there if it is not, and `reply` is the one
 provider.
 
@@ -125,7 +127,7 @@ jason plugin grant my-crm --http <host> --actor human:<Name>
 jason plugin grant my-crm --exec <program> --actor human:<Name>
 jason plugin grant my-crm --env <name> --actor human:<Name>
 jason plugin grant my-crm --api <family> --actor human:<Name>
-jason plugin grant my-crm --files <path> --actor human:<Name>
+jason plugin grant my-crm --files <directory> --actor human:<Name>
 jason plugin grant my-crm --subscription <kind> --actor human:<Name>
 jason plugin revoke my-crm --http <host> --actor human:<Name>
 ```
@@ -155,11 +157,13 @@ jason route unset --global --operation <operation> --actor human:<Name>
 ```
 
 A route says which plugin performs an operation. The global route is the one every campaign without a route of its own
-uses; a campaign's own route, set with `--campaign`, is read first. The runtime writes the settings file itself and
-loads the plugins again, so the route is in force at once, and a load that refuses puts the file back and says why.
+uses; a campaign's own route, set with `--campaign`, is read first. A global route is written to the settings file by
+the runtime, which loads the plugins again, so the route is in force at once, and a load that refuses puts the file
+back and says why.
 `jason route list` shows what is in force. A route never falls back to another plugin: where the named plugin cannot do
-the work, the work stops, which is the safe failure, so check with `jason plugin list` that the plugin performs the
-operation before you route it.
+the work, the work stops, which is the safe failure, so before you route it check that the plugin performs the
+operation, in `jason plugin list`'s JSON (`--human` shortens the list), or with
+`jason route resolve --campaign <id> --operation <operation>` after the route is set.
 
 ## What an update keeps
 
