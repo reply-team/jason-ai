@@ -16,7 +16,7 @@ import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
-import type { DesktopPaths } from './paths.ts';
+import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import type { ProviderKeys } from './providers.ts';
@@ -446,7 +446,7 @@ export class Setup {
         let settings: unknown = {};
         let settingsRefused = this.#reloadRefusal;
         try {
-            settings = parseInstallationSettings(readText(this.#deps.paths.installationSettings));
+            settings = parseInstallationSettings(readText(dataLayout(this.#deps.paths.data).userSettingsFile));
         } catch (error) {
             settings = {};
             settingsRefused = (error as Error).message;
@@ -752,6 +752,8 @@ export class Setup {
 
     connectReply(): Promise<void> {
         return this.#serial(async () => {
+            // Refused before the sign-in, since the sign-in ends in the plugin's wiring and the skills' deploy.
+            this.#writableLayout();
             const result = await this.#run('reply', 'auth login', ['auth', 'login'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
             if (result.exit !== 0) throw new Refused(words(result, 'Reply did not sign in.'));
@@ -761,6 +763,7 @@ export class Setup {
 
     connectReplyWithKey(key: unknown): Promise<void> {
         return this.#serial(async () => {
+            this.#writableLayout();
             if (typeof key !== 'string' || key.trim() === '') throw new Refused('Enter the key.');
             const result = await this.#run('reply', 'auth login --with-token', ['auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
@@ -796,11 +799,36 @@ export class Setup {
         if (reload.exit !== 0) throw this.#reloadRefused(reload);
     }
 
-    /** The settings file as an object for an edit; one the desktop cannot parse is logged by its path and refused. */
-    #readForEdit(): Record<string, unknown> {
-        const file = this.#deps.paths.installationSettings;
+    /**
+     * The data directory's layout as its stamp says it at this moment, for a card that writes. A stamp this build refuses,
+     * a layout newer than it runs or a stamp it cannot read, refuses the card before it runs a program, places a plugin
+     * or writes a file, in the words `jason runtime start` refuses it in, since the parts may already be where a later
+     * layout keeps them.
+     */
+    #writableLayout(): DataLayout {
+        const layout = dataLayout(this.#deps.paths.data);
+        const refusal = layoutRefusal(layout, this.#deps.bundleVersion);
+        if (refusal !== null) {
+            this.#deps.log.warn('settings_layout_refused', { Code: refusal.code });
+            throw new Refused(refusal.message);
+        }
+        return layout;
+    }
+
+    /** The settings file a card edits, placed by the layout `#writableLayout` answers. */
+    #settingsFile(): string {
+        const layout = this.#writableLayout();
+        // Every layout this build runs keeps plugins' configuration in this one file; a layout that keeps it apart is
+        // newer than this build and refused above, so the cards never write a secret where a later layout keeps none.
+        if (!layout.userSettingsFileHoldsSecrets) throw new Error('The Connect cards write one settings file, and this layout keeps two.');
+        return layout.userSettingsFile;
+    }
+
+    /** The settings file and what it holds, for an edit; one the desktop cannot parse is logged by its path and refused. */
+    #readForEdit(): { file: string; settings: Record<string, unknown> } {
+        const file = this.#settingsFile();
         try {
-            return parseInstallationSettings(readText(file));
+            return { file, settings: parseInstallationSettings(readText(file)) };
         } catch (error) {
             this.#deps.log.warn('settings_refused', { Path: file });
             throw new Refused(`${(error as Error).message} ${editByHand}`);
@@ -813,10 +841,11 @@ export class Setup {
      * is just before the write, so an edit made while the package was fetched is not lost.
      */
     async #placeAndEdit(pluginId: string, edit: (settings: Record<string, unknown>) => Record<string, unknown>): Promise<void> {
-        edit(this.#readForEdit());
+        edit(this.#readForEdit().settings);
         const placed = await this.#deps.cli.run(['plugin', 'install', pluginId, ...feedArguments(this.#deps.settings())], { timeoutMs: installLimit });
         if (placed.exit !== 0) throw new Refused(words(placed, `jason plugin install ${pluginId} did not place the plugin.`));
-        writeAtomically(this.#deps.paths.installationSettings, `${JSON.stringify(edit(this.#readForEdit()), null, 2)}\n`);
+        const { file, settings } = this.#readForEdit();
+        writeAtomically(file, `${JSON.stringify(edit(settings), null, 2)}\n`);
     }
 
     /**
@@ -898,7 +927,7 @@ export class Setup {
         return this.#serial(async () => {
             const plugin = bundledPlugin(pluginId);
             if (plugin === undefined || plugin.target.where !== 'binding') throw new Refused('That is not a plugin the desktop disconnects.');
-            const settings = this.#readForEdit();
+            const { file, settings } = this.#readForEdit();
             let next: Record<string, unknown>;
             try {
                 next = withPluginDisconnected(settings, plugin);
@@ -906,7 +935,7 @@ export class Setup {
                 throw error instanceof Refused ? new Refused(`${error.message} ${editByHand}`) : error;
             }
             const written = JSON.stringify(next) !== JSON.stringify(settings);
-            if (written) writeAtomically(this.#deps.paths.installationSettings, `${JSON.stringify(next, null, 2)}\n`);
+            if (written) writeAtomically(file, `${JSON.stringify(next, null, 2)}\n`);
             const reload = await this.#reloadPlugins();
             const listed = reload.exit === 0 ? await this.#deps.cli.run(['plugin', 'list']) : null;
             this.#deps.log.info('plugin_disconnected', {

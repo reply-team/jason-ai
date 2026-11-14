@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { demoDirectory } from './mode.ts';
-import { desktopPaths } from './paths.ts';
+import { dataLayout } from './paths.ts';
 
 /** The cadence the demo's manager is left with: the slowest `Manager:ReviewSeconds` allows, a week. */
 export const demoReviewSeconds = 604800;
@@ -59,12 +59,12 @@ export function mergeSettings(settings: Record<string, unknown>, values: Record<
 }
 
 /**
- * Writes the demo installation's settings into `<demo>/config/settings.json`, the harness root the sibling of
+ * Writes the demo installation's settings into its settings file (`<demo>/config/settings.json` in layout 1), the harness root the sibling of
  * `personHarnessRoot`: a file already there keeps its other keys; a file that is not a JSON object is refused, and the
  * start that called this is then the person's own (`startOn`). Written through a file renamed over it.
  */
 export function writeDemoSettings(demo: string, personHarnessRoot: string): void {
-    const file = desktopPaths(demo).installationSettings;
+    const file = dataLayout(demo).userSettingsFile;
     let settings: Record<string, unknown> = {};
     if (existsSync(file)) {
         const read: unknown = JSON.parse(readFileSync(file, 'utf8'));

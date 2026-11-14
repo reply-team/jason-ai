@@ -27,6 +27,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { demoReviewSeconds } from './demo-settings.ts';
 import { demoDirectory } from './mode.ts';
+import { dataLayout } from './paths.ts';
 import { parseStory, type Story, type StoryPerson, type StorySend } from './demo-story.ts';
 
 /** Raised when the story changes in a way a seeded directory must not be kept through. */
@@ -372,7 +373,8 @@ export async function ensureSeeded(deps: SeedDeps, version = seedVersion): Promi
     }
 }
 
-const settingsFile = (deps: SeedDeps): string => join(deps.places.data, 'config', 'settings.json');
+/** Where the demo provider's configuration is kept, by the demo directory's layout: the settings file in layout 1. */
+const secretsFile = (deps: SeedDeps): string => dataLayout(deps.places.data).secretsFile;
 
 interface Context {
     refs: Map<string, string>;
@@ -460,10 +462,10 @@ async function runStep(deps: SeedDeps, step: SeedStep, context: Context, number:
                 return outcome === null ? null : outcome;
             }
             case 'story-start': {
-                const text = deps.readText(settingsFile(deps));
+                const text = deps.readText(secretsFile(deps));
                 const settings = (text === null ? {} : JSON.parse(text)) as { Plugins?: { Config?: Record<string, Record<string, string>> } };
                 settings.Plugins = { ...settings.Plugins, Config: { ...settings.Plugins?.Config, [demoPluginId]: { story_start: deps.now().toISOString() } } };
-                deps.writeText(settingsFile(deps), `${JSON.stringify(settings, null, 2)}\n`);
+                deps.writeText(secretsFile(deps), `${JSON.stringify(settings, null, 2)}\n`);
                 return null;
             }
         }
@@ -628,7 +630,7 @@ export async function openOnTheSample<T>(deps: OpeningDeps<T>): Promise<{ loaded
 export const markerPath = (data: string): string => join(data, 'demo-seed.json');
 
 /** The plugin folder the provider package is placed in, and the data module of it the story is read from. */
-export const placedPackage = (data: string): string => join(data, 'plugins', demoPluginId);
+export const placedPackage = (data: string): string => join(dataLayout(data).pluginsDirectory, demoPluginId);
 export const storyModule = (data: string): string => join(placedPackage(data), 'modules', 'story.js');
 
 /** The seed's dependencies on the machine's own files. */
