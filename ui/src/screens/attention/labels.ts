@@ -40,6 +40,11 @@ export function approvalNote(status: string, decidedBy: string | null | undefine
     return decidedBy ? `decided by ${decidedBy}` : null;
 }
 
+// WAITING FOR THE CLAIM'S PARK REASONS. The claim will park a send for the person with a reason of its own, and each
+// needs one sentence here; until then `reasonLabel` shows the code as the runtime sent it. The proposed codes, to be
+// replaced by the ones that land: not_reviewed (no review of this text), review_doubts, ask_person, awaiting_judgement,
+// awaiting_nature, daily_ceiling, and an answer to a reply that is an opt-out, a bounce or an automatic one, or a
+// verdict whose reaction is escalate. The sentences are drafted in the unit's notes, not here.
 export function reasonLabel(reason: string): string {
     switch (reason) {
         case 'approval_required':

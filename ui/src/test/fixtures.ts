@@ -23,6 +23,7 @@ import type {
     CampaignSummary,
     Campaign,
     CampaignTransitionRequest,
+    CampaignSetSendModeRequest,
     CampaignSummaryRequest,
     CampaignSummaryResponse,
     CampaignActivityRequest,
@@ -70,6 +71,8 @@ import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/appr
 import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
 import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
+import approvalGetModesChosen from '../../../docs/api/fixtures/approval.get/modes-chosen.json';
+import approvalGetWithDoubts from '../../../docs/api/fixtures/approval.get/with-doubts.json';
 import approvalGetOtherPending from '../../../docs/api/fixtures/approval.get/other-pending.json';
 import approvalGetPendingWithPreview from '../../../docs/api/fixtures/approval.get/pending-with-preview.json';
 import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
@@ -77,6 +80,7 @@ import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-
 import approvalListDecided from '../../../docs/api/fixtures/approval.list/decided.json';
 import approvalListEmpty from '../../../docs/api/fixtures/approval.list/empty.json';
 import approvalListMessagesPending from '../../../docs/api/fixtures/approval.list/messages-pending.json';
+import approvalListOneModeUnset from '../../../docs/api/fixtures/approval.list/one-mode-unset.json';
 import approvalListPending from '../../../docs/api/fixtures/approval.list/pending.json';
 import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/summer-pending.json';
 import approvalListUnauthorized from '../../../docs/api/fixtures/approval.list/unauthorized.json';
@@ -115,6 +119,11 @@ import campaignGetInbox from '../../../docs/api/fixtures/campaign.get/inbox.json
 import campaignGetInboxQuiet from '../../../docs/api/fixtures/campaign.get/inbox-quiet.json';
 import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
+import campaignGetSendModeOverride from '../../../docs/api/fixtures/campaign.get/send-mode-override.json';
+import campaignSetSendModeCleared from '../../../docs/api/fixtures/campaign.set_send_mode/cleared.json';
+import campaignSetSendModeNotHuman from '../../../docs/api/fixtures/campaign.set_send_mode/not-human.json';
+import campaignSetSendModeSet from '../../../docs/api/fixtures/campaign.set_send_mode/set.json';
+import campaignSetSendModeWarmAutomatic from '../../../docs/api/fixtures/campaign.set_send_mode/warm-automatic.json';
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
 import campaignGetUnknown from '../../../docs/api/fixtures/campaign.get/unknown.json';
 import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinked.json';
@@ -252,6 +261,8 @@ import routeResolveOwnRoute from '../../../docs/api/fixtures/route.resolve/own-r
 import routeResolveUnroutedFirst from '../../../docs/api/fixtures/route.resolve/unrouted-first.json';
 import preferenceListNone from '../../../docs/api/fixtures/preference.list/none.json';
 import preferenceListSet from '../../../docs/api/fixtures/preference.list/set.json';
+import preferenceSetSendModeCold from '../../../docs/api/fixtures/preference.set/send-mode-cold.json';
+import preferenceSetSendModeWarm from '../../../docs/api/fixtures/preference.set/send-mode-warm.json';
 import preferenceSetSender from '../../../docs/api/fixtures/preference.set/sender.json';
 import preferenceSetTone from '../../../docs/api/fixtures/preference.set/tone.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
@@ -394,6 +405,8 @@ export const fixtures = {
     'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/modes-chosen': approvalGetModesChosen satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/with-doubts': approvalGetWithDoubts satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/other-pending': approvalGetOtherPending satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/pending-with-preview': approvalGetPendingWithPreview satisfies Exchange<
         { approval_id: string },
@@ -407,6 +420,10 @@ export const fixtures = {
     'approval.list/decided': approvalListDecided satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/empty': approvalListEmpty satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/messages-pending': approvalListMessagesPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/one-mode-unset': approvalListOneModeUnset satisfies Exchange<
         ApprovalListRequest,
         Page<ApprovalSummary>
     >,
@@ -520,6 +537,23 @@ export const fixtures = {
     'campaign.get/inbox-quiet': campaignGetInboxQuiet satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/send-mode-override': campaignGetSendModeOverride satisfies Exchange<
+        { campaign_id: string },
+        Campaign
+    >,
+    'campaign.set_send_mode/cleared': campaignSetSendModeCleared satisfies Exchange<
+        CampaignSetSendModeRequest,
+        Campaign
+    >,
+    'campaign.set_send_mode/not-human': campaignSetSendModeNotHuman satisfies Exchange<
+        CampaignSetSendModeRequest,
+        ErrorEnvelope
+    >,
+    'campaign.set_send_mode/set': campaignSetSendModeSet satisfies Exchange<CampaignSetSendModeRequest, Campaign>,
+    'campaign.set_send_mode/warm-automatic': campaignSetSendModeWarmAutomatic satisfies Exchange<
+        CampaignSetSendModeRequest,
+        Campaign
+    >,
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
@@ -850,6 +884,8 @@ export const fixtures = {
     'route.resolve/unrouted-first': routeResolveUnroutedFirst satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
     'preference.list/none': preferenceListNone satisfies Exchange<object, Page<PreferenceItem>>,
     'preference.list/set': preferenceListSet satisfies Exchange<object, Page<PreferenceItem>>,
+    'preference.set/send-mode-cold': preferenceSetSendModeCold satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
+    'preference.set/send-mode-warm': preferenceSetSendModeWarm satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.set/sender': preferenceSetSender satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.set/tone': preferenceSetTone satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
