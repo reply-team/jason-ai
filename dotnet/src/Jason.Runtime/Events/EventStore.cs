@@ -144,6 +144,17 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         var fresh = keyed.Where(entry => !held.Contains(entry.Key)).ToList();
         var pins = await PinsAsync(db, source.PluginId, [.. fresh.Select(entry => entry.Read)], ct).ConfigureAwait(false);
 
+        // Beside the members the contact rule reads: which one campaign, if exactly one, wrote to each person the page's
+        // replies name, through the plugin that saw the thread. Decided now and carried by the line, never worked out again.
+        var replied = fresh
+            .Where(entry => entry.Read.Kind == ReadEvent.ThreadMoved && entry.Read.MovedByTheOtherSide)
+            .Select(entry => pins.ContactOf(entry.Read))
+            .OfType<ContactPin>()
+            .Select(pin => pin.ContactId)
+            .Distinct()
+            .ToList();
+        var soleSenders = await SoleSenders.OfAsync(db, source.PluginId, replied, ct).ConfigureAwait(false);
+
         // Which campaigns each event concerns, decided by the pins as they stand now and never again. A campaign two rules
         // both find is one campaign, told once, by the first rule that found it.
         var found = fresh
@@ -188,11 +199,17 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
 
                 // What happened before the campaign went live, or before the person it was found by joined it, is history:
                 // kept, and found to concern it, and said by no line.
+                // The mark goes on the line of the campaign the contact rule found, when that campaign is the one that wrote
+                // to the person: a writer the rule did not find (one that excluded the person) marks nobody.
                 var campaign = campaigns[attributed.CampaignId];
+                var soleSender = string.Equals(attributed.Rule, EventAttributionRules.ContactPin, StringComparison.Ordinal)
+                    && contact is not null
+                    && soleSenders.TryGetValue(contact.ContactId, out var writer)
+                    && writer == campaign.Id;
                 if (campaign.EventsFrom is not { } from
                     || row.OccurredAt < from
                     || (attributed.SaidFrom is { } joined && row.OccurredAt < joined)
-                    || Line(source.PluginId, read, row, contact, attributed.Rule) is not { } line)
+                    || Line(source.PluginId, read, row, contact, attributed.Rule, soleSender) is not { } line)
                 {
                     continue;
                 }
@@ -270,26 +287,37 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
     /// The line an event says in a campaign, or none. A thread the other side moved — or one the provider cannot say who
     /// moved — is said as the inbound read says a reply, with the same fields and under the same key; a thread the
     /// account or the provider moved is no reply and says nothing; every other kind is said as a provider event, with
-    /// its kind. Either says which rule found the campaign, under <c>attributed_by</c>.
+    /// its kind. Either says which rule found the campaign, under <c>attributed_by</c>; a reply found by the contact's pin in
+    /// the one campaign that wrote to the person through the plugin also says <c>sole_sender</c>, true, and no other line
+    /// carries it.
     /// </summary>
-    private static (string Kind, string Key, JsonObject New)? Line(string pluginId, ReadEvent read, ProviderEvent row, ContactPin? contact, string rule)
+    private static (string Kind, string Key, JsonObject New)? Line(string pluginId, ReadEvent read, ProviderEvent row, ContactPin? contact, string rule, bool soleSender)
     {
         if (read.Kind == ReadEvent.ThreadMoved)
         {
-            return read.MovedByTheOtherSide
-                ? (JournalKinds.InboundReplyObserved, EventKeys.Line(pluginId, read), new JsonObject
-                {
-                    ["plugin"] = pluginId,
-                    ["thread"] = read.Text("thread"),
-                    ["channel"] = read.Text("channel"),
-                    ["last_activity_at"] = EventKeys.Moment(read),
-                    ["unread"] = read.Data["unread"]?.DeepClone(),
-                    ["has_meeting_intent"] = read.Data["has_meeting_intent"]?.DeepClone(),
-                    ["contact_id"] = contact?.ContactPublicId,
-                    ["event_id"] = row.PublicId,
-                    ["attributed_by"] = rule,
-                })
-                : null;
+            if (!read.MovedByTheOtherSide)
+            {
+                return null;
+            }
+
+            var reply = new JsonObject
+            {
+                ["plugin"] = pluginId,
+                ["thread"] = read.Text("thread"),
+                ["channel"] = read.Text("channel"),
+                ["last_activity_at"] = EventKeys.Moment(read),
+                ["unread"] = read.Data["unread"]?.DeepClone(),
+                ["has_meeting_intent"] = read.Data["has_meeting_intent"]?.DeepClone(),
+                ["contact_id"] = contact?.ContactPublicId,
+                ["event_id"] = row.PublicId,
+                ["attributed_by"] = rule,
+            };
+            if (soleSender)
+            {
+                reply["sole_sender"] = true;
+            }
+
+            return (JournalKinds.InboundReplyObserved, EventKeys.Line(pluginId, read), reply);
         }
 
         var updated = new JsonObject

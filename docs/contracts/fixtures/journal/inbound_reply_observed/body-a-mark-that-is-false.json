@@ -1,0 +1,11 @@
+{
+  "kind": "inbound_reply_observed",
+  "version": 1,
+  "case": "the mark is present only where it is true",
+  "body": {
+    "key": "sha256:3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+    "old": null,
+    "new": { "plugin": "example-mail", "thread": "thr-20931", "channel": "email", "last_activity_at": "2026-10-28T09:12:44.000Z", "unread": true, "has_meeting_intent": null, "contact_id": "cnt_01JC0000000000000000000003", "event_id": "evt_01JC0000000000000000000004", "attributed_by": "contact_pin", "sole_sender": false }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/sole_sender", "reason": "const" }] }
+}

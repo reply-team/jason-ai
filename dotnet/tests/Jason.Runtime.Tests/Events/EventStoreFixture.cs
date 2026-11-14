@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -117,6 +118,43 @@ internal sealed class EventStoreFixture : IDisposable
         var since = addedAt ?? Noon.AddDays(-1);
         db.CampaignContacts.Add(new CampaignContact { CampaignId = campaign.Id, ContactId = contact.Id, State = state, AddedAt = since, UpdatedAt = since });
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// A provider operation of the campaign about the contact, ended as said — a send that succeeded at the plugin unless
+    /// said otherwise — with its one attempt, whose provenance names the plugin that ran it.
+    /// </summary>
+    public async Task<WorkItem> SentAsync(
+        Contact contact,
+        Campaign campaign,
+        string operation = "message.send",
+        string plugin = Reader,
+        WorkItemStatus status = WorkItemStatus.Succeeded,
+        AttemptStatus attemptStatus = AttemptStatus.Succeeded,
+        FailureClass? failure = null,
+        JsonNode? result = null)
+    {
+        await using var db = Open();
+        var item = WorkItemFactory.NewProviderOp(campaign, operation, Noon.AddDays(-1));
+        item.Campaign = null;
+        item.CampaignId = campaign.Id;
+        item.ContactId = contact.Id;
+        item.Status = status;
+        item.Result = result;
+        var attempt = WorkItemFactory.NewAttempt(item, 1, attemptStatus, Noon.AddDays(-1));
+        attempt.FinishedAt = Noon.AddDays(-1);
+        attempt.Provenance = new AttemptProvenanceDto(
+            plugin, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
+            operation, 1, PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC", "rts_01K5B7Q2WE5X3M9T0YH4C6RDND",
+            RouteScope.CampaignDefault, "binding-a", CorrelationId: attempt.PublicId);
+        if (failure is { } failed)
+        {
+            attempt.Error = new AttemptErrorDto("provider_unknown", "The provider did not say whether it sent.", false, Class: failed);
+        }
+
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync();
+        return item;
     }
 
     /// <summary>Stores a page through a context of its own, as the reader will.</summary>
