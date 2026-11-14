@@ -1,4 +1,4 @@
-import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import type { DesktopCommand } from '../platform/desktop';
@@ -9,7 +9,7 @@ import { navigate, parseRoute, route } from '../router';
 import * as classicAttention from '../screens/attention/store';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, setupFound, chatDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
@@ -935,6 +935,94 @@ describe('the console', () => {
             { token: '123:abc', target: '-1001' },
         ]);
         await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1));
+    });
+
+    describe('the person’s own MCP servers', () => {
+        const withServers = (claude: string[], codex: string[], codexFound = true) => ({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, ownServers: claude }
+                    : each.id === 'codex'
+                      ? {
+                            ...each,
+                            found: codexFound,
+                            version: codexFound ? '0.130.0' : null,
+                            install: null,
+                            ownServers: codex,
+                        }
+                      : each,
+            ),
+        });
+        const rowOf = (connect: HTMLElement, label: string) =>
+            within(connect).getByText(label, { selector: 'b' }).closest<HTMLElement>('.setrow')!;
+        const openConnect = async (desktop: StubDesktop) => {
+            renderConsole(pending(new FakeApi()), desktop);
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            show('Connect');
+            return waitFor(() => panel('Connect'));
+        };
+
+        it('names them in one line under each host that has them: one, five, and the first five then how many more', async () => {
+            const connect = await openConnect(
+                chatDesktop(withServers(['github'], ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'])),
+            );
+            expect(rowOf(connect, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
+                'Your MCP servers: github. For now they work when you open Jason in Claude Code, from Open in.',
+            );
+            expect(rowOf(connect, 'Codex').querySelector('.own-servers')?.textContent).toBe(
+                'Your MCP servers: one, two, three, four, five and 3 more. For now they work when you open Jason in Codex, from Open in.',
+            );
+            cleanup();
+            const five = await openConnect(
+                chatDesktop(withServers(['github', 'linear', 'sentry', 'notion', 'figma'], [])),
+            );
+            expect(rowOf(five, 'Claude Code').querySelector('.own-servers')?.textContent).toBe(
+                'Your MCP servers: github, linear, sentry, notion, figma. For now they work when you open Jason in Claude Code, from Open in.',
+            );
+            expect(rowOf(five, 'Codex').querySelector('.own-servers')).toBeNull();
+        });
+
+        it('says nothing at all for a host with none, a host not found, or another host', async () => {
+            const connect = await openConnect(chatDesktop(withServers([], ['kept'], false)));
+            expect(connect.querySelectorAll('.own-servers')).toHaveLength(0);
+            expect(connect.textContent).not.toContain('MCP');
+        });
+
+        it('are read by the Connect row alone: no other source of the page names the field', () => {
+            const readers = (dir: string): string[] =>
+                readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+                    const path = `${dir}/${entry.name}`;
+                    if (entry.isDirectory()) return entry.name === 'test' ? [] : readers(path);
+                    return /\.tsx?$/.test(entry.name) &&
+                        !/\.test\.tsx?$/.test(entry.name) &&
+                        !entry.name.endsWith('.d.ts')
+                        ? [path]
+                        : [];
+                });
+            // The run starts in ui/. The words' keys (`connect.ownServers`) are no read of the field.
+            const naming = readers('src').filter((path) => /(?<!connect\.)ownServers/.test(readFileSync(path, 'utf8')));
+            expect(naming).toEqual(['src/console/connect.ts']);
+        });
+
+        it('draws a name as text, and gives none to the chat', async () => {
+            const desktop = chatDesktop(withServers([hostile, 'made-up-server'], []));
+            renderConsole(pending(new FakeApi()), desktop);
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.status')).toBe(true));
+            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+            const toChat = JSON.stringify(desktop.calls.filter((each) => each.name.startsWith('chat.')));
+            expect(toChat).not.toContain('made-up-server');
+            expect(toChat).not.toContain('onerror');
+            show('Connect');
+            const connect = await waitFor(() => panel('Connect'));
+            const line = rowOf(connect, 'Claude Code').querySelector('.own-servers')!;
+            expect(line.textContent).toContain(`${hostile}, made-up-server`);
+            expect(line.querySelector('img')).toBeNull();
+            expect((window as { hit?: number }).hit).toBeUndefined();
+        });
     });
 
     it("says under the versions line, as text, that the runtime is not the bundle's version", async () => {

@@ -128,7 +128,9 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         ]);
         expect(within(menu()).getByText('Agents')).not.toBeNull();
         expect(within(menu()).getByText('Editors')).not.toBeNull();
-        expect(within(menu()).getAllByText('A new session in a terminal')).toHaveLength(2);
+        expect(
+            within(menu()).getAllByText('A new session in a terminal, with your own settings and tools'),
+        ).toHaveLength(2);
         // Copy path carries the folder as its subtitle; the arrow carries his title.
         expect(within(within(menu()).getByRole('menuitem', { name: /^Copy path/ })).getByText('Jason')).not.toBeNull();
         expect(arrow().getAttribute('title')).toBe('Open in…');

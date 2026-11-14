@@ -378,6 +378,10 @@ is the same path with `-demo` after it.
   command and a link, and the command runs on a click when `npm` is present, never without one; Node itself is never
   installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
   sign-in.
+  Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
+  servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
+  runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a
+  plugin, and claude.ai connectors or ChatGPT apps are not listed here and work there all the same.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's
