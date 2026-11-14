@@ -324,6 +324,8 @@ public class GlobalRouteWriteTests
     [InlineData(SettingsPutBack.ChangedSince, false, "settings_file_not_put_back", "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.", "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it.")]
     [InlineData(SettingsPutBack.Held, false, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload.")]
     [InlineData(SettingsPutBack.Held, true, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.NotWritable, false, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.NotWritable, true, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload.")]
     public void A_refused_reload_says_what_became_of_the_file(SettingsPutBack putBack, bool takenAway, string code, string detail, string clause)
     {
         var rejected = new DomainException(409, "plugin_reload_rejected", "The plugins were not loaded again.", false, [new ErrorDetail("plugins/x", "manifest_invalid", "A package problem.")]);
@@ -483,9 +485,9 @@ public class GlobalRouteWriteTests
     }
 
     /// <summary>
-    /// A settings file removed between the compare and the temporary file is answered as a file the commit could not
-    /// replace, never thrown out of the request: on Unix its mode is read inside the same guard as the write, and nothing
-    /// is left behind.
+    /// A settings file removed between the compare and the temporary file is answered as a file another writer changed,
+    /// which the writer reads again, never thrown out of the request: on Unix its mode is read inside the same guard as the
+    /// write, and nothing is left behind.
     /// </summary>
     [Fact]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
@@ -497,13 +499,85 @@ public class GlobalRouteWriteTests
         {
             var gone = Path.Combine(directory, "settings.json");
 
-            Assert.Null(JasonConfiguration.WriteTemporary(gone, "{}"u8.ToArray(), replacing: true));
+            Assert.Null(JasonConfiguration.WriteTemporary(gone, "{}"u8.ToArray(), replacing: true, out var failure));
+            Assert.Equal(SettingsCommit.Changed, failure);
             Assert.Empty(Directory.GetFiles(directory));
         }
         finally
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    /// <summary>
+    /// A settings file that cannot be written is refused as one waiting does not mend: not retryable, and never said to be
+    /// held open by another program. Read-only on Windows; on Unix its folder is, since a rename over a read-only file in a
+    /// folder that can be written succeeds there.
+    /// </summary>
+    [Fact]
+    public async Task A_settings_file_that_cannot_be_written_is_refused_as_one_to_make_writable()
+    {
+        Assert.SkipWhen(!OperatingSystem.IsWindows() && Environment.UserName == "root", "Root writes a read-only folder.");
+        await using var api = await StartAsync();
+        var path = api.Paths.UserSettingsFile;
+        var folder = api.Paths.ConfigDirectory;
+        UnixFileMode? mode = null;
+        if (OperatingSystem.IsWindows())
+        {
+            File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+        }
+        else
+        {
+            mode = File.GetUnixFileMode(folder);
+            File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        }
+
+        ErrorBody error;
+        try
+        {
+            error = await api.PostErrorAsync(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), HttpStatusCode.Conflict, Ct);
+        }
+        finally
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+            }
+            else
+            {
+                File.SetUnixFileMode(folder, mode!.Value);
+            }
+        }
+
+        Assert.Equal("settings_file_not_writable", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Equal(
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; make it writable, then run the command again.",
+            error.Message);
+        Assert.Equal(Original, File.ReadAllText(path));
+        Assert.Empty(TemporaryFiles(api.Paths));
+        Assert.Empty((await LinesAsync(api)).Items);
+    }
+
+    /// <summary>
+    /// A file another program holds open is refused as one to send again. Windows refuses a rename over a held file with
+    /// the denial it gives a read-only one, so this is the case the two are told apart in.
+    /// </summary>
+    [Fact]
+    public async Task A_settings_file_another_program_holds_open_is_refused_as_busy_and_worth_sending_again()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses a rename over a file another handle holds.");
+        await using var api = await StartAsync();
+        ErrorBody error;
+        using (new FileStream(api.Paths.UserSettingsFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            error = await api.PostErrorAsync(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), HttpStatusCode.Conflict, Ct);
+        }
+
+        Assert.Equal("settings_file_busy", error.Code);
+        Assert.True(error.Retryable);
+        Assert.Equal(Original, File.ReadAllText(api.Paths.UserSettingsFile));
+        Assert.Empty(TemporaryFiles(api.Paths));
     }
 
     private static object Global(string operation, JsonObject binding) =>

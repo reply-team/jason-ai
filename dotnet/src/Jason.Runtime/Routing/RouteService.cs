@@ -463,12 +463,7 @@ public sealed class RouteService(
             SettingsPutBack.ChangedSince => (
                 "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.",
                 "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it."),
-            _ when takenAway => (
-                "Another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.",
-                "another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload."),
-            _ => (
-                "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.",
-                "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload."),
+            _ => NotPutBack(putBack, takenAway),
         };
         var details = refused.Details ?? [];
         var message = refused.Code == "plugin_reload_rejected"
@@ -480,6 +475,26 @@ public sealed class RouteService(
             message,
             refused.Retryable,
             [.. details, new ErrorDetail(PluginLoader.SettingsFileField, SettingsWriter.Code(putBack), detail)]);
+    }
+
+    /// <summary>
+    /// A file that still holds what the write left: why it could not be put back, what it holds, and the hand edit that
+    /// mends it, as a detail's sentences and as a clause of the rejected reload's.
+    /// </summary>
+    private static (string Detail, string Clause) NotPutBack(SettingsPutBack putBack, bool takenAway)
+    {
+        var cause = putBack == SettingsPutBack.Held
+            ? "another program held the settings file open"
+            : "the settings file could not be written again";
+        var (state, mend) = takenAway
+            ? ("the route this took away is gone from the file and still in force", "put the route back into the file by hand")
+            : ("it holds the route this wrote, which is not in force", "take the route out of the file by hand");
+        mend += ", or fix what the load refused and run jason plugin reload";
+        return (
+            $"{Capital(cause)}, so it was not put back: {state}; the routes in force are unchanged. {Capital(mend)}.",
+            $"{cause}, so it was not put back: {state}; {mend}.");
+
+        static string Capital(string text) => string.Concat(char.ToUpperInvariant(text[0]).ToString(), text.AsSpan(1));
     }
 
     /// <summary>A global route names no campaign: one that does is a caller that meant a campaign's route, or meant both.</summary>

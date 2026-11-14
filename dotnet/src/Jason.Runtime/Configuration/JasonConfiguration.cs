@@ -71,8 +71,14 @@ public enum SettingsCommit
     /// <summary>The file no longer holds what the writer edited: another writer wrote it. Nothing was written.</summary>
     Changed,
 
-    /// <summary>Another handle held the file, or its folder could not be written. Nothing was written.</summary>
+    /// <summary>Another program holds the file open, which it may let go of. Nothing was written.</summary>
     Busy,
+
+    /// <summary>
+    /// The file or its folder cannot be written — it is read-only, this user may not write it, or the disk is full — which
+    /// waiting does not mend. Nothing was written.
+    /// </summary>
+    NotWritable,
 }
 
 public static class JasonConfiguration
@@ -293,12 +299,13 @@ public static class JasonConfiguration
 
     /// <summary>
     /// The settings writer's new bytes in a temporary file beside <paramref name="settingsFile"/>, flushed to the disk; null
-    /// where it could not be made, which the commit answers as a file another program holds. On Unix the file's mode is
-    /// read inside the same guard, so a settings file removed in that instant is answered that way too, never thrown out of
-    /// the request.
+    /// where it could not be made, with <paramref name="failure"/> saying why (<see cref="Unwritten"/>). On Unix the file's
+    /// mode is read inside the same guard, so a settings file removed in that instant is answered as a file another writer
+    /// changed, never thrown out of the request.
     /// </summary>
-    internal static string? WriteTemporary(string settingsFile, byte[] next, bool replacing)
+    internal static string? WriteTemporary(string settingsFile, byte[] next, bool replacing, out SettingsCommit failure)
     {
+        failure = SettingsCommit.Committed;
         var directory = Path.GetDirectoryName(settingsFile)!;
         var temporary = Path.Combine(directory, $"{Path.GetFileName(settingsFile)}.{Guid.NewGuid():N}.tmp");
         try
@@ -317,6 +324,7 @@ public static class JasonConfiguration
         }
         catch (Exception unwritten) when (unwritten is IOException or UnauthorizedAccessException)
         {
+            failure = Unwritten(unwritten, settingsFile);
             try
             {
                 File.Delete(temporary);
@@ -326,6 +334,65 @@ public static class JasonConfiguration
             }
 
             return null;
+        }
+    }
+
+    private const int SharingViolation = unchecked((int)0x80070020);
+
+    private const int LockViolation = unchecked((int)0x80070021);
+
+    /// <summary>
+    /// What a failure to read, write, replace or remove the settings file says of it: <see cref="SettingsCommit.Busy"/>
+    /// only where another program holds it open, which it may let go of; <see cref="SettingsCommit.Changed"/> where it
+    /// went in between; and <see cref="SettingsCommit.NotWritable"/> for everything else — a read-only file or folder, a
+    /// file this user may not write, a full disk — which waiting does not mend.
+    /// </summary>
+    /// <remarks>
+    /// Only Windows refuses a file another handle holds, and it refuses a rename over one with the same denial it gives a
+    /// read-only file, so a denial is told apart by opening the file for writing, sharing everything, and writing nothing:
+    /// a file that opens, or that is refused as shared, is held; one refused as denied is not writable. On Unix a rename or
+    /// a removal is never refused for a handle another program holds, so no failure there is one that clears.
+    /// </remarks>
+    internal static SettingsCommit Unwritten(Exception failure, string settingsFile)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+        if (failure is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return SettingsCommit.Changed;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return SettingsCommit.NotWritable;
+        }
+
+        if (failure is IOException { HResult: SharingViolation or LockViolation })
+        {
+            return SettingsCommit.Busy;
+        }
+
+        return failure is UnauthorizedAccessException && HeldOpen(settingsFile) ? SettingsCommit.Busy : SettingsCommit.NotWritable;
+    }
+
+    private static bool HeldOpen(string settingsFile)
+    {
+        try
+        {
+            if (File.GetAttributes(settingsFile).HasFlag(FileAttributes.ReadOnly))
+            {
+                return false;
+            }
+
+            using var probe = new FileStream(settingsFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+            return true;
+        }
+        catch (IOException shared) when (shared.HResult is SharingViolation or LockViolation)
+        {
+            return true;
+        }
+        catch (Exception denied) when (denied is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
@@ -470,7 +537,7 @@ public static class JasonConfiguration
                 }
                 catch (Exception held) when (held is IOException or UnauthorizedAccessException)
                 {
-                    return SettingsCommit.Busy;
+                    return Unwritten(held, FullPath);
                 }
 
                 if (!(now is null ? expected is null : expected is not null && now.AsSpan().SequenceEqual(expected)))
@@ -481,9 +548,9 @@ public static class JasonConfiguration
                 // From here to the rename is the window the remarks name.
                 if (next is null)
                 {
-                    if (now is not null && !Removed())
+                    if (now is not null && Removed() is { } unremoved)
                     {
-                        return SettingsCommit.Busy;
+                        return unremoved;
                     }
 
                     Data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -491,16 +558,16 @@ public static class JasonConfiguration
                     return SettingsCommit.Committed;
                 }
 
-                var temporary = Temporary(next, now is not null);
+                var temporary = WriteTemporary(FullPath, next, now is not null, out var unwritten);
                 if (temporary is null)
                 {
-                    return SettingsCommit.Busy;
+                    return unwritten;
                 }
 
-                if (!Renamed(temporary))
+                if (Renamed(temporary) is { } unrenamed)
                 {
                     TryDelete(temporary);
-                    return SettingsCommit.Busy;
+                    return unrenamed;
                 }
 
                 using (var written = new MemoryStream(next, writable: false))
@@ -513,45 +580,31 @@ public static class JasonConfiguration
             }
         }
 
-        /// <summary>The new bytes in a temporary file beside the settings file, flushed to the disk; null where it could not be made.</summary>
-        private string? Temporary(byte[] next, bool replacing) => WriteTemporary(FullPath, next, replacing);
+        /// <summary>Renames the temporary file over the settings file; null where it did, else why not (<see cref="Unwritten"/>).</summary>
+        private SettingsCommit? Renamed(string temporary) => Retried(() => File.Move(temporary, FullPath, overwrite: true));
 
-        private bool Renamed(string temporary)
+        /// <summary>Removes the settings file; null where it did, else why not (<see cref="Unwritten"/>).</summary>
+        private SettingsCommit? Removed() => Retried(() => File.Delete(FullPath));
+
+        /// <summary>The act, tried again while another program holds the file, and given up at once where waiting does not mend it.</summary>
+        private SettingsCommit? Retried(Action act)
         {
             for (var attempt = 1; ; attempt++)
             {
                 try
                 {
-                    File.Move(temporary, FullPath, overwrite: true);
-                    return true;
-                }
-                catch (Exception held) when ((held is IOException or UnauthorizedAccessException) && attempt < RenameAttempts)
-                {
-                    Thread.Sleep(RenameRetry);
+                    act();
+                    return null;
                 }
                 catch (Exception held) when (held is IOException or UnauthorizedAccessException)
                 {
-                    return false;
-                }
-            }
-        }
+                    var failure = Unwritten(held, FullPath);
+                    if (failure != SettingsCommit.Busy || attempt >= RenameAttempts)
+                    {
+                        return failure;
+                    }
 
-        private bool Removed()
-        {
-            for (var attempt = 1; ; attempt++)
-            {
-                try
-                {
-                    File.Delete(FullPath);
-                    return true;
-                }
-                catch (Exception held) when ((held is IOException or UnauthorizedAccessException) && attempt < RenameAttempts)
-                {
                     Thread.Sleep(RenameRetry);
-                }
-                catch (Exception held) when (held is IOException or UnauthorizedAccessException)
-                {
-                    return false;
                 }
             }
         }

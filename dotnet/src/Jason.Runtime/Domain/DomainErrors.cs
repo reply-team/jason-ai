@@ -243,13 +243,24 @@ public static class DomainErrors
             "The settings file kept changing while this wrote it, so nothing was written; run the command again.",
             retryable: true);
 
-    /// <summary>Another program held the settings file, so it could not be read or replaced; nothing was written.</summary>
+    /// <summary>Another program held the settings file open, so it could not be read or replaced; nothing was written.</summary>
     public static DomainException SettingsFileBusy() =>
         new(
             StatusCodes.Status409Conflict,
             "settings_file_busy",
             "Another program holds the settings file open, so nothing was written; close it, then run the command again.",
             retryable: true);
+
+    /// <summary>
+    /// The settings file or its folder cannot be written, and waiting does not mend that: it is read-only, this user may
+    /// not write it, or the disk is full. Nothing was written.
+    /// </summary>
+    public static DomainException SettingsFileNotWritable() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_not_writable",
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; make it writable, then run the command again.",
+            retryable: false);
 
     /// <summary>
     /// A <c>JASON_</c> environment variable sets the path the writer would write, and overrides the file: a write would

@@ -16,6 +16,9 @@ public enum SettingsPutBack
 
     /// <summary>Another program held the file, so it could not be put back: it still holds what this wrote.</summary>
     Held,
+
+    /// <summary>The file could not be written again — it was made read-only, or the disk filled — so it still holds what this wrote.</summary>
+    NotWritable,
 }
 
 /// <summary>
@@ -68,8 +71,8 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
     /// <param name="edits">Every path the caller owns, in order; nothing else in the file is touched.</param>
     /// <param name="section">The section the edits are in, for the log.</param>
     /// <exception cref="DomainException">
-    /// <c>setting_shadowed</c>, <c>settings_file_unreadable</c>, <c>settings_file_not_editable</c>, <c>settings_file_changed</c>
-    /// or <c>settings_file_busy</c>, each with nothing written.
+    /// <c>setting_shadowed</c>, <c>settings_file_unreadable</c>, <c>settings_file_not_editable</c>, <c>settings_file_changed</c>,
+    /// <c>settings_file_busy</c> or <c>settings_file_not_writable</c>, each with nothing written.
     /// </exception>
     public async Task<T> WriteAsync<T>(
         IReadOnlyList<SettingsEdit> edits,
@@ -100,7 +103,8 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
             {
                 SettingsCommit.Committed => SettingsPutBack.PutBack,
                 SettingsCommit.Changed => SettingsPutBack.ChangedSince,
-                _ => SettingsPutBack.Held,
+                SettingsCommit.Busy => SettingsPutBack.Held,
+                _ => SettingsPutBack.NotWritable,
             };
             Restored(logger, section, Code(outcome), null);
             if (failure is DomainException domain)
@@ -130,7 +134,9 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
             }
             catch (Exception held) when (held is IOException or UnauthorizedAccessException)
             {
-                throw Refuse(section, DomainErrors.SettingsFileBusy());
+                throw Refuse(section, JasonConfiguration.Unwritten(held, paths.UserSettingsFile) == SettingsCommit.Busy
+                    ? DomainErrors.SettingsFileBusy()
+                    : DomainErrors.SettingsFileNotWritable());
             }
 
             SettingsEditResult edited;
@@ -158,6 +164,8 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
                     return (before, edited.Bytes);
                 case SettingsCommit.Busy:
                     throw Refuse(section, DomainErrors.SettingsFileBusy());
+                case SettingsCommit.NotWritable:
+                    throw Refuse(section, DomainErrors.SettingsFileNotWritable());
                 case SettingsCommit.Changed when attempt >= Attempts:
                     throw Refuse(section, DomainErrors.SettingsFileChanged());
             }
