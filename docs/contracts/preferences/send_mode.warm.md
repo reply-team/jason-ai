@@ -15,6 +15,17 @@ without being asked, or `every_message`, and each one waits for a person as it a
 [`send_mode.cold`](send_mode.cold.md) is the same choice for a contact who has not answered, and each key is decided
 on its own: setting one leaves the other as it is.
 
+`automatic` does not mean that nothing waits. A send still goes to a person, as under `every_message`, where it was
+written or edited in the desktop's chat; where its writer or a reviewer doubted it; where its contact has a reply
+waiting to be judged, or one judged before Jason recorded what kind it was; where it answers an automatic reply, a
+bounce or a request to stop, or a conversation marked for the person; where neither the critic Jason made for it nor a
+person passed the text it carries, or it was edited after the pass; and where its campaign has already released the
+day's ceiling of automatic sends, `Sending:AutomaticMaxPerDay`. Where a standing approval a person set for a category
+of reply covers the send, it still releases one held for its contact's waiting reply, for what it answers or for its
+review, as it would under `every_message`; it never releases one written in the chat, doubted or past the ceiling. And
+no send goes to a contact who asked not to be written to, in any mode: the claim refuses it.
+[The send mode at the claim](../../work-execution.md#the-send-mode-at-the-claim) gives the order these are asked in.
+
 ## The value
 
 ```json
