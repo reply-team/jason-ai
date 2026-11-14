@@ -8,6 +8,7 @@ import { start, type Starts } from './start';
 
 const windowObject = { platform: 'darwin' } as JasonDesktop;
 const tabObject = { platform: 'linux' } as JasonDesktop;
+const noneObject = { platform: 'win32' } as JasonDesktop;
 const bridge = {} as Bridge;
 
 function deps(over: Partial<Starts> & { bridge?: Bridge | null } = {}) {
@@ -19,11 +20,11 @@ function deps(over: Partial<Starts> & { bridge?: Bridge | null } = {}) {
         windowDesktop: () => undefined,
         session: { bootstrap, bridge: { value: over.bridge ?? null } },
         tabDesktop: vi.fn(() => tabObject),
+        noDesktop: vi.fn(() => noneObject),
         setPlace: vi.fn((kind: string) => void order.push(`place:${kind}`)),
         startConsole: vi.fn(async (_desktop: JasonDesktop, bootstrapped: boolean) => {
             order.push(`console:${bootstrapped}`);
         }),
-        startClassic: vi.fn(async () => void order.push('classic')),
         ...over,
     };
     return { made, bootstrap, order };
@@ -38,7 +39,6 @@ describe('the start of the page', () => {
         expect(made.startConsole).toHaveBeenCalledWith(windowObject, false);
         expect(bootstrap).not.toHaveBeenCalled();
         expect(made.tabDesktop).not.toHaveBeenCalled();
-        expect(made.startClassic).not.toHaveBeenCalled();
     });
 
     it('reads the pairing in a browser, then starts the console over the tab object when a bridge is held', async () => {
@@ -47,14 +47,14 @@ describe('the start of the page', () => {
         expect(order).toEqual(['bootstrap', 'place:tab', 'console:true']);
         expect(made.tabDesktop).toHaveBeenCalledWith(bridge);
         expect(made.startConsole).toHaveBeenCalledWith(tabObject, true);
-        expect(made.startClassic).not.toHaveBeenCalled();
     });
 
-    it('keeps the classic shell for a browser tab with no bridge', async () => {
+    it('starts the console over the object that does nothing of the desktop in a browser tab with no bridge', async () => {
         const { made, order } = deps();
         await start(made);
-        // A place that has no desktop is named, so it can do nothing of one.
-        expect(order).toEqual(['bootstrap', 'place:none', 'classic']);
-        expect(made.startConsole).not.toHaveBeenCalled();
+        // The place that has no desktop is named, so it can do nothing of one.
+        expect(order).toEqual(['bootstrap', 'place:none', 'console:true']);
+        expect(made.startConsole).toHaveBeenCalledWith(noneObject, true);
+        expect(made.tabDesktop).not.toHaveBeenCalled();
     });
 });

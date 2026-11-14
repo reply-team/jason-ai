@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { expect, openSystem, test } from './fixtures';
 
 const policy = "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
 
@@ -15,11 +15,10 @@ test('the bundle runs under the policy the runtime sends: no refused resource, n
     const { url } = await jason.uiOpen();
     const first = await page.goto(url);
     expect(first?.headers()['content-security-policy']).toBe(policy);
-    await expect(page.getByRole('navigation')).toBeVisible();
-    await expect(page.getByRole('navigation')).toBeVisible();
-    await page.goto(`${jason.origin}/ui/#/system`);
+    await expect(page.locator('.jc-console .side')).toBeVisible();
+    await openSystem(page);
     await expect(page.getByText('Paired browsers')).toBeVisible();
-    await expect(page.locator('.sidebar')).toHaveCSS('font-family', /Inter/);
+    await expect(page.locator('.jc-console')).toHaveCSS('font-family', /Inter/);
 
     expect(violations).toEqual([]);
 });

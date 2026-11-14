@@ -5,7 +5,7 @@ import type { PlaceKind } from './platform/places';
 // Which shell the page starts, and over which object. In Jason Desktop's own window the console starts at once, with
 // nothing awaited before it. In a browser the page first learns whether the desktop opened the tab with a bridge, which
 // takes the pairing's bootstrap; then a tab with a bridge gets the console over the tab's object, and any other tab
-// keeps the classic shell.
+// gets the console over an object that does nothing of the desktop's, and says where the chat is.
 
 export interface Starts {
     /** The window's object, undefined in a browser. */
@@ -14,10 +14,11 @@ export interface Starts {
     session: { bootstrap: () => Promise<void>; bridge: { value: Bridge | null } };
     /** The object of a tab with a bridge. */
     tabDesktop: (bridge: Bridge) => JasonDesktop;
+    /** The object of a tab with no desktop. */
+    noDesktop: () => JasonDesktop;
     setPlace: (kind: PlaceKind, desktop?: JasonDesktop) => void;
     /** Mounts the console; `bootstrapped` says the pairing is already read. */
     startConsole: (desktop: JasonDesktop, bootstrapped: boolean) => Promise<void>;
-    startClassic: () => Promise<void>;
 }
 
 export async function start(deps: Starts): Promise<void> {
@@ -29,9 +30,10 @@ export async function start(deps: Starts): Promise<void> {
     await deps.session.bootstrap();
     const bridge = deps.session.bridge.value;
     if (bridge === null) {
-        // The classic shell has no desktop to ask: its place can do nothing of one.
-        deps.setPlace('none');
-        return deps.startClassic();
+        // A tab with no desktop shows the console too, over an object that can do nothing of the desktop's.
+        const none = deps.noDesktop();
+        deps.setPlace('none', none);
+        return deps.startConsole(none, true);
     }
     const tab = deps.tabDesktop(bridge);
     deps.setPlace('tab', tab);

@@ -2,7 +2,9 @@ import { lazy, Suspense } from 'react';
 import { session } from '../../api/session';
 import { t } from '../../platform/i18n';
 
-export const releasesPage = 'https://github.com/reply-team/jason-ai/releases';
+import { releasesPage } from '../../platform/places';
+
+export { releasesPage };
 
 // The chat's code and its stylesheet load only for a tab the desktop opened.
 const TabChat = lazy(() => import('./tab-chat').then((module) => ({ default: module.TabChat })));
