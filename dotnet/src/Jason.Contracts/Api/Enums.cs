@@ -197,6 +197,18 @@ public enum RouteScope
 }
 
 /// <summary>
+/// Which half of routing a <c>route.set</c> or <c>route.unset</c> writes: one campaign's routes, kept in the database, or
+/// the global routes every campaign without a route of its own falls back to, kept in the settings file. Left out, it is
+/// the campaign's: a request that names no scope and no campaign is refused for the missing campaign, so a caller that
+/// forgets the campaign never re-routes every campaign.
+/// </summary>
+public enum RouteWriteScope
+{
+    Campaign,
+    Global,
+}
+
+/// <summary>
 /// created → scheduled → processing → succeeded | failed, with cancelled and expired as the two ways an item
 /// ends without running. A retriable failure returns the item to created; an expired item can be reopened.
 /// <para>

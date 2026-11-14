@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -31,6 +32,9 @@ public sealed class RouteService(
     RouteActivator activator,
     ReloadGate gate,
     TimeProvider clock,
+    PluginService reload,
+    SettingsWriter writer,
+    SettingsFile settingsFile,
     PatternTiming? timing = null)
 {
     /// <summary>How a binding is matched against its plugin's patterns: the runtime's one default, which a test replaces.</summary>
@@ -123,6 +127,11 @@ public sealed class RouteService(
     public async Task<RoutesDto> SetAsync(RouteSetRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.Scope == RouteWriteScope.Global)
+        {
+            return await SetGlobalAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
@@ -225,6 +234,11 @@ public sealed class RouteService(
     public async Task<RoutesDto> UnsetAsync(RouteUnsetRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.Scope == RouteWriteScope.Global)
+        {
+            return await UnsetGlobalAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
@@ -272,6 +286,221 @@ public sealed class RouteService(
             },
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Sends one operation's work, one channel of it, or all provider work to a plugin for every campaign with no route of
+    /// its own: the route is written to the settings file by the settings writer and frozen by the plugin reload in the
+    /// same act, so it is in force once this answers, and a reload that refuses puts the file back. The route is checked
+    /// against the active plugins before anything is written, as a campaign's is; the reload over the packages as they
+    /// are now is what decides.
+    /// </summary>
+    private async Task<RoutesDto> SetGlobalAsync(RouteSetRequest request, CancellationToken cancellationToken)
+    {
+        var actor = Actors.Resolve(request.Actor);
+
+        var errors = new ValidationErrors();
+        var reason = Reason(request.Reason, errors);
+        if (string.IsNullOrWhiteSpace(request.Plugin))
+        {
+            errors.Add("plugin", "required", "plugin is required; a route names the plugin that performs the work.");
+        }
+
+        NoCampaign(request.CampaignId, errors);
+        var channel = ChannelOrNone(request.Channel, request.Operation, errors);
+        var binding = request.Binding?.DeepClone().AsObject();
+        if (binding is not null && !RoutesOptions.Carries(binding))
+        {
+            errors.Add(
+                "binding",
+                "not_representable_globally",
+                "binding holds a value the settings file cannot keep as written — a string spelled like a number or a boolean, an empty object or list, keys that differ only in case, or a key with a colon; set it for each campaign with --campaign, which keeps JSON as it is.");
+        }
+
+        errors.ThrowIfAny();
+
+        var operation = OperationOrDefault(request.Operation);
+        var plugin = request.Plugin!.Trim();
+        var path = GlobalPath(operation, channel);
+        if (RouteActivator.Check(plugins.Snapshot, operation, channel, plugin, binding, _timing) is { } problem)
+        {
+            var detail = new ErrorDetail(path, problem.Code, problem.Message);
+            throw problem.Code == SchemaValidator.PatternTimedOut
+                ? DomainErrors.ValidationTimedOut([detail])
+                : new ValidationException([detail]);
+        }
+
+        SettingsEdit[] edits =
+        [
+            SettingsEdit.Set($"{path}:{nameof(RouteEntry.Plugin)}", JsonValue.Create(plugin)),
+            binding is null
+                ? SettingsEdit.Remove($"{path}:{nameof(RouteEntry.Binding)}")
+                : SettingsEdit.Set($"{path}:{nameof(RouteEntry.Binding)}", binding),
+        ];
+        return await WriteGlobalAsync(operation, channel, edits, new Route(plugin, binding, null), actor, reason, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Takes one global route away, as <see cref="SetGlobalAsync"/> writes one. A route the file does not hold and the
+    /// active routes do not either is the state asked for: nothing is written and nothing is activated. The objects the
+    /// route leaves empty go with it, and nothing beside it: an operation's own route and its channel routes stay apart.
+    /// </summary>
+    private async Task<RoutesDto> UnsetGlobalAsync(RouteUnsetRequest request, CancellationToken cancellationToken)
+    {
+        var actor = Actors.Resolve(request.Actor);
+
+        var errors = new ValidationErrors();
+        var reason = Reason(request.Reason, errors);
+        NoCampaign(request.CampaignId, errors);
+        var channel = ChannelOrNone(request.Channel, request.Operation, errors);
+        errors.ThrowIfAny();
+
+        var operation = OperationOrDefault(request.Operation);
+        var path = GlobalPath(operation, channel);
+        if (operation is not null && channel is not null && RouteActivator.ChannelProblem(operation, channel) is { } problem)
+        {
+            throw new ValidationException([new ErrorDetail(path, problem.Code, problem.Message)]);
+        }
+
+        List<SettingsEdit> edits =
+        [
+            SettingsEdit.Remove($"{path}:{nameof(RouteEntry.Plugin)}"),
+            SettingsEdit.Remove($"{path}:{nameof(RouteEntry.Binding)}"),
+            SettingsEdit.RemoveIfEmpty(path),
+        ];
+        if (channel is not null)
+        {
+            edits.Add(SettingsEdit.RemoveIfEmpty($"{RouteActivator.GlobalOperationField(operation!)}:{nameof(OperationRouteEntry.Channels)}"));
+            edits.Add(SettingsEdit.RemoveIfEmpty(RouteActivator.GlobalOperationField(operation!)));
+        }
+
+        return await WriteGlobalAsync(operation, channel, edits, wanted: null, actor, reason, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The global half's one shape: under the reload gate, the settings writer edits the file, and the reload freezes it
+    /// with a <c>global_routes_updated</c> line in the same save as its <c>plugins_reloaded</c>. A file the edit left as
+    /// it was is reloaded only where the routes in force are not already what was asked, so a route written by hand and
+    /// never reloaded is put in force by the same request. A refused reload puts the file back
+    /// (<see cref="SettingsWriter"/>), and the answer says whether it did.
+    /// </summary>
+    private async Task<RoutesDto> WriteGlobalAsync(
+        string? operation,
+        string? channel,
+        IReadOnlyList<SettingsEdit> edits,
+        Route? wanted,
+        ActorRef actor,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        await gate.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var before = registry.Snapshot;
+            return await writer.WriteAsync(
+                edits,
+                RoutesOptions.Section,
+                async (wrote, token) =>
+                {
+                    if (!wrote && Same(At(before.Global, operation, channel), wanted))
+                    {
+                        return ToDto(before, only: null);
+                    }
+
+                    // A write has just loaded the file under the settings lock; a file left as it was is read now, as a
+                    // reload reads it, since its watch may not yet have told the runtime of a hand edit.
+                    var (_, routes) = await reload.ReloadHeldAsync(
+                        actor,
+                        reason,
+                        wrote ? null : settingsFile.Read(),
+                        recordRefusal: false,
+                        routeRefusal: RouteRefusal,
+                        besides: after =>
+                        {
+                            var old = Recorded(At(before.Global, operation, channel));
+                            var now = Recorded(At(after.Global, operation, channel));
+                            if (old is not null || now is not null)
+                            {
+                                journal.Append(db, actor, JournalKinds.GlobalRoutesUpdated, campaign: null, key: JournalKey(operation, channel), old: old, updated: now, reason: reason);
+                            }
+                        },
+                        token).ConfigureAwait(false);
+                    return ToDto(routes, only: null);
+                },
+                PutBackSaid,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Semaphore.Release();
+        }
+    }
+
+    /// <summary>A refused route set, answered as a campaign route write answers it where every refusal is a search's or a send's.</summary>
+    private static DomainException? RouteRefusal(RouteCandidate candidate) =>
+        candidate.Refusals.All(problem => problem.Code == RouteProblemCodes.OrphansSearch)
+            ? DomainErrors.RouteOrphansSearch(candidate.Refusals)
+            : candidate.Refusals.All(problem => problem.Code == RouteProblemCodes.OrphansSend)
+                ? DomainErrors.RouteOrphansSend(candidate.Refusals, candidate.StrandedSends)
+                : null;
+
+    /// <summary>
+    /// The refusal of a write the reload refused after it, with what became of the file said in one more detail, under the
+    /// settings file's own field, and for a rejected reload in its first sentence too.
+    /// </summary>
+    private static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack)
+    {
+        var (detail, clause) = putBack switch
+        {
+            SettingsPutBack.PutBack => (
+                "The settings file was put back as it was; the routes in force are unchanged.",
+                "the settings file was put back as it was."),
+            SettingsPutBack.ChangedSince => (
+                "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.",
+                "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it."),
+            _ => (
+                "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged.",
+                "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force."),
+        };
+        var details = refused.Details ?? [];
+        var message = refused.Code == "plugin_reload_rejected"
+            ? string.Create(CultureInfo.InvariantCulture, $"The plugins were not loaded again: {details.Count} problem(s), so the route was not written: {clause}")
+            : refused.Message;
+        return new DomainException(
+            refused.StatusCode,
+            refused.Code,
+            message,
+            refused.Retryable,
+            [.. details, new ErrorDetail(PluginLoader.SettingsFileField, SettingsWriter.Code(putBack), detail)]);
+    }
+
+    /// <summary>A global route names no campaign: one that does is a caller that meant a campaign's route, or meant both.</summary>
+    private static void NoCampaign(string? campaignId, ValidationErrors errors)
+    {
+        if (!string.IsNullOrWhiteSpace(campaignId))
+        {
+            errors.Add("campaign_id", "not_allowed", "campaign_id cannot be given with scope global: a global route is every campaign's; leave scope out to route one campaign.");
+        }
+    }
+
+    /// <summary>The global route's path in the settings file, as a rejected reload names it: <c>Routes:Default</c>, an operation's, or a channel's under it.</summary>
+    private static string GlobalPath(string? operation, string? channel) =>
+        operation is null ? RouteActivator.GlobalDefaultField
+        : channel is null ? RouteActivator.GlobalOperationField(operation)
+        : RouteActivator.GlobalChannelField(operation, channel);
+
+    /// <summary>The route a set holds for the default, an operation, or one channel of it; null where it holds none.</summary>
+    private static Route? At(RouteSet set, string? operation, string? channel) =>
+        operation is null ? set.Default
+        : channel is null ? set.Operations.GetValueOrDefault(operation)
+        : set.ChannelRoute(operation, channel);
+
+    /// <summary>Whether a route in force is the one asked for: the same plugin and the same binding, or none for none.</summary>
+    private static bool Same(Route? held, Route? wanted) =>
+        held is null || wanted is null
+            ? held is null && wanted is null
+            : string.Equals(held.PluginId, wanted.PluginId, StringComparison.Ordinal) && JsonNode.DeepEquals(held.Binding, wanted.Binding);
+
+    private static JsonObject? Recorded(Route? route) => route is null ? null : Recorded(route.PluginId, route.Binding);
 
     /// <summary>The campaign's default route, or one operation's own route: a row of <c>campaign_routes</c>.</summary>
     private Task<CampaignRoute?> OperationRowAsync(Campaign campaign, string? operation, CancellationToken cancellationToken) =>
