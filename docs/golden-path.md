@@ -6,12 +6,13 @@ and reads it back. It is not the real work, which begins with a campaign planned
 [Jason's roles](../skills/runtime/roles). Every `jason` command below is a command the end-to-end tests execute,
 and the three guarantees at the end are the three tests that prove them.
 
-It is an explicitly synthetic familiarisation run, and you may skip it: offered once when an installation is ready, it
-meets the system and proves its wiring with your own address as the only contact. What it makes at your provider is
-real, and small: one draft campaign in your account, which nobody starts and which holds nobody but you. Skipped or
-finished, the real work begins the same way: with you telling your agent about your first campaign in your own words —
-typed, a link, a file or a voice note, or an example to start from. Skipping it connects no provider: that waits until
-the work first needs one, and this page's Reply CLI section and steps 3 to 5 are how it is connected then.
+It is an explicitly synthetic familiarisation run, and you may skip it: the quick start mentions it in its last
+line and it is taken only when you say so. It meets the system and proves its wiring with your own address as the
+only contact. What it makes at your provider is real, and small: one draft campaign in your account, which nobody
+starts and which holds nobody but you. Skipped or finished, the real work begins the same way: with you telling
+your agent about your first campaign in your own words — typed, a link, a file or a voice note, or an example to
+start from. Skipping it connects no provider: that waits until the work first needs one, and this page's Reply CLI
+section and steps 3 to 5 are how it is connected then.
 
 The provider here is [Reply](https://reply.io) through [`plugins/reply/`](../plugins/reply/README.md), because
 that is the plugin this repository ships. Nothing in the runtime knows about it: a different provider is a
