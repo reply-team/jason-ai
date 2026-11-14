@@ -1,0 +1,7 @@
+{
+  "kind": "global_routes_updated",
+  "version": 1,
+  "case": "the global default moved to another plugin",
+  "body": { "key": "default", "old": { "plugin": "example-provider", "binding": null }, "new": { "plugin": "example-other", "binding": { "workspace": "eu-team" } } },
+  "expect": "valid"
+}

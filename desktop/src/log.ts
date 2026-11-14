@@ -122,6 +122,8 @@ export const templates = {
     open_in_remember_failed: 'The place Open in used last could not be kept',
     open_in_continued: 'A chat was continued in a terminal in {Host}',
     open_in_continue_refused: 'A chat could not be continued in a terminal in {Host}',
+    open_in_change_jason: 'Change Jason itself was opened, its host from {Host}; jason session open exited {Exit}',
+    open_in_change_jason_refused: 'Change Jason itself could not be opened, its host from {Host}; jason session open exited {Exit} with the code {Code}',
     bridge_opened: 'The browser bridge listens on 127.0.0.1:{Port}',
     bridge_closed: 'The browser bridge closed, ending {Sessions} sessions',
     bridge_paired: 'A browser tab paired with the bridge; {Sessions} sessions are live',

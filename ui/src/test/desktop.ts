@@ -204,6 +204,8 @@ export interface StubDesktop extends JasonDesktop {
     /**
      * What `openIn.targets` answers: the places this computer has, the default and the folder's name. `openIn.open` of a
      * place keeps it as the default (Copy path excepted), as the desktop does, and answers null or the refusal a test set.
+     * It carries no Change Jason itself unless a test sets `changeJason`, which `openIn.changeJason` answers with null or
+     * the refusal a test set, changing no default.
      */
     openInKept: DesktopOpenInAnswer;
     /**
@@ -398,6 +400,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                 return null;
             }),
             continueChat: answering('openIn.continueChat', () => null),
+            changeJason: answering('openIn.changeJason', () => null),
         },
         pairing: { paired: call('pairing.paired') },
         calls,

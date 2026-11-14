@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { defaultLimits, fileLines, fileLogger, fileName, heldLimit, holesOf, limitsFrom, lineOf, LogHold, releaseAtQuit, releasedAfter, templates, type Logger } from '../src/log.ts';
+import { changeJasonLoggedCodes } from '../src/open-in.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
     const directory = mkdtempSync(join(tmpdir(), 'jason-desktop-log-'));
@@ -25,6 +26,16 @@ test('the templates are a closed table whose fields are named holes and nothing 
         // No hole for free text: what a person or a program said has no place to go.
         for (const hole of holesOf(template)) assert.doesNotMatch(hole, /(?:Message|Text|Error|Output|Stderr|Stdout|Key|Token|Prompt|Reason|Url|Value|Args)$/, `${name}: ${hole}`);
     }
+});
+
+test('Change Jason itself is logged by where its host came from, and a refusal by the command line\'s code from a closed table', () => {
+    assert.deepEqual(holesOf(templates.open_in_change_jason), ['Host', 'Exit']);
+    assert.deepEqual(holesOf(templates.open_in_change_jason_refused), ['Host', 'Exit', 'Code']);
+    // The host's source reads as a source: the preference, or the host the desktop found.
+    assert.equal(templates.open_in_change_jason, 'Change Jason itself was opened, its host from {Host}; jason session open exited {Exit}');
+    assert.equal(templates.open_in_change_jason_refused, 'Change Jason itself could not be opened, its host from {Host}; jason session open exited {Exit} with the code {Code}');
+    assert.doesNotMatch(templates.open_in_change_jason_refused, /chosen by/);
+    assert.deepEqual(changeJasonLoggedCodes, ['host_unknown', 'preference_unreadable', 'host_not_found', 'folder_missing', 'terminal_not_found', 'terminal_start_failed']);
 });
 
 test('a line is the runtime’s compact JSON form: @t, @mt, @l unless Information, the holes, the source', () => {

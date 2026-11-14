@@ -1457,7 +1457,9 @@ by its line and byte, never by what the file holds; the previous snapshot stays 
 journaled, and `plugin reload` exits 1. A file that is not there rejects nothing: the reload resolves
 the settings in force, and the runtime's log says by the failure's type that the file could not be
 read. Where no setting has come from the file, as on an installation that has never had one, those
-are the defaults and nothing is said.
+are the defaults and nothing is said. The runtime itself writes this file in one place only: `jason route set --global` and
+`jason route unset --global` edit the `Routes` section, keeping every other byte of it, and run this reload in the same
+act ([docs/routing.md](routing.md), §3).
 
 Two consequences worth knowing. A capability the manifest never requested is **absent** from the
 invocation rather than empty, which is a different thing from one that is present and always says no.

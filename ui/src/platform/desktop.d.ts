@@ -524,6 +524,11 @@ export interface DesktopOpenInAnswer {
     folder: string;
     /** Present only when the chat the page named may be continued in a terminal. */
     continue?: DesktopOpenInContinue;
+    /**
+     * Present only in the person's own installation, never in the demo: the entry "Change Jason itself", which
+     * `openIn.changeJason` opens. It names no host: the person's preference chooses one when the entry is chosen.
+     */
+    changeJason?: true;
 }
 
 /**
@@ -610,6 +615,13 @@ export interface JasonDesktop {
          * one whose turn runs, or the command line's own sentence when it refused. Never the next default.
          */
         continueChat(chatId: string): Promise<DesktopRefusal | null>;
+        /**
+         * Opens the person's own AI on Jason itself, "Change Jason itself", in a new terminal: the desktop runs
+         * `jason session open --setup`, whose host the preference chooses, else the host the desktop finds. The page sends
+         * nothing. Null once the terminal was opened; a refusal in the demo, with no host to open, or in the command line's
+         * own sentence. Never the next default.
+         */
+        changeJason(): Promise<DesktopRefusal | null>;
     };
     pairing: {
         /**

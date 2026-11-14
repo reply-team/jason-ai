@@ -63,6 +63,7 @@ describe('the transport', () => {
             'fullAccess.takeBack',
             'openIn.open',
             'openIn.continueChat',
+            'openIn.changeJason',
             'links.take',
             'pairing.paired',
         ])

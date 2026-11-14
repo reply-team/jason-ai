@@ -30,7 +30,7 @@ const mode = { get: true, set: true, startOver: true, onPreparing: true } as con
     true
 >;
 // Open in: the places this computer offers for a folder and the act of opening one; the page names a place, never a path.
-const openIn = { targets: true, open: true, continueChat: true } as const satisfies Record<
+const openIn = { targets: true, open: true, continueChat: true, changeJason: true } as const satisfies Record<
     keyof JasonDesktop['openIn'],
     true
 >;
@@ -139,6 +139,7 @@ describe('the desktop seam', () => {
             'openIn.targets',
             'openIn.open',
             'openIn.continueChat',
+            'openIn.changeJason',
             'pairing.paired',
             'chat.send',
             'chat.stop',
