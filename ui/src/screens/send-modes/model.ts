@@ -50,6 +50,22 @@ export async function forget(api: Api, kind: Kind): Promise<void> {
     );
 }
 
+/** The facts the claim decided a send on, as the approval's preview carries them under `send_mode`; each null where unsaid. */
+export type SendModeFacts = {
+    mode: string | null;
+    source: string | null;
+    temperature: string | null;
+    review: string | null;
+};
+
+/** The preview's send-mode facts, or null where it carries none or not in the runtime's shape. */
+export function sendModeOf(preview: Record<string, unknown>): SendModeFacts | null {
+    const facts = preview['send_mode'];
+    if (!isObject(facts)) return null;
+    const word = (key: string): string | null => (typeof facts[key] === 'string' ? facts[key] : null);
+    return { mode: word('mode'), source: word('source'), temperature: word('temperature'), review: word('review') };
+}
+
 export type Doubt = { source: string; who: string | null; role: string | null; code: string; note: string | null };
 
 const isObject = (value: unknown): value is Record<string, unknown> =>

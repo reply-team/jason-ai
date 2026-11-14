@@ -14,6 +14,7 @@ import { MessageCard } from './message-card';
 import { MessageEditor } from './message-editor';
 import { Doubts } from '../send-modes/doubts';
 import { SendModesQuestion } from '../send-modes/question';
+import { ReleasedBySendMode } from '../send-modes/released';
 import { VoiceReminder } from '../send-modes/voice-reminder';
 import { REPLIES, awaitNewApproval, editable, isMessage, isStale, readItem, sentence } from './message-edit';
 
@@ -166,6 +167,7 @@ export function ApprovalPanel({
                     </p>
                 )}
                 {pending && <Doubts preview={approval.preview} />}
+                {approval.reason === 'automatic_mode' && <ReleasedBySendMode preview={approval.preview} />}
                 {intent && (
                     <div className="section">
                         <h3>What will happen</h3>

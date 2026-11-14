@@ -72,6 +72,16 @@ import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/ema
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
 import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
 import approvalGetModesChosen from '../../../docs/api/fixtures/approval.get/modes-chosen.json';
+import approvalGetParkAnswersNoVerdict from '../../../docs/api/fixtures/approval.get/park-answers-no-verdict.json';
+import approvalGetParkAwaitingJudgement from '../../../docs/api/fixtures/approval.get/park-awaiting-judgement.json';
+import approvalGetParkAwaitingNature from '../../../docs/api/fixtures/approval.get/park-awaiting-nature.json';
+import approvalGetParkDoubted from '../../../docs/api/fixtures/approval.get/park-doubted.json';
+import approvalGetParkEditedAfterReview from '../../../docs/api/fixtures/approval.get/park-edited-after-review.json';
+import approvalGetParkEscalated from '../../../docs/api/fixtures/approval.get/park-escalated.json';
+import approvalGetParkNotReviewed from '../../../docs/api/fixtures/approval.get/park-not-reviewed.json';
+import approvalGetParkReplyNotFromAPerson from '../../../docs/api/fixtures/approval.get/park-reply-not-from-a-person.json';
+import approvalGetParkSentFromChat from '../../../docs/api/fixtures/approval.get/park-sent-from-chat.json';
+import approvalGetReleasedAutomatically from '../../../docs/api/fixtures/approval.get/released-automatically.json';
 import approvalGetWithDoubts from '../../../docs/api/fixtures/approval.get/with-doubts.json';
 import approvalGetOtherPending from '../../../docs/api/fixtures/approval.get/other-pending.json';
 import approvalGetPendingWithPreview from '../../../docs/api/fixtures/approval.get/pending-with-preview.json';
@@ -316,6 +326,7 @@ import workitemCountZero from '../../../docs/api/fixtures/workitem.count/zero.js
 import workitemGetAwaiting from '../../../docs/api/fixtures/workitem.get/awaiting.json';
 import workitemGetExpired from '../../../docs/api/fixtures/workitem.get/expired.json';
 import workitemGetFailed from '../../../docs/api/fixtures/workitem.get/failed.json';
+import workitemGetParkedSend from '../../../docs/api/fixtures/workitem.get/parked-send.json';
 import workitemGetOpen from '../../../docs/api/fixtures/workitem.get/open.json';
 import workitemGetSucceeded from '../../../docs/api/fixtures/workitem.get/succeeded.json';
 import workitemListAdaNow from '../../../docs/api/fixtures/workitem.list/ada-now.json';
@@ -410,6 +421,37 @@ export const fixtures = {
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/modes-chosen': approvalGetModesChosen satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-answers-no-verdict': approvalGetParkAnswersNoVerdict satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-awaiting-judgement': approvalGetParkAwaitingJudgement satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-awaiting-nature': approvalGetParkAwaitingNature satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-doubted': approvalGetParkDoubted satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-edited-after-review': approvalGetParkEditedAfterReview satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-escalated': approvalGetParkEscalated satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-not-reviewed': approvalGetParkNotReviewed satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-reply-not-from-a-person': approvalGetParkReplyNotFromAPerson satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-sent-from-chat': approvalGetParkSentFromChat satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/released-automatically': approvalGetReleasedAutomatically satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
     'approval.get/with-doubts': approvalGetWithDoubts satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/other-pending': approvalGetOtherPending satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/pending-with-preview': approvalGetPendingWithPreview satisfies Exchange<
@@ -982,6 +1024,7 @@ export const fixtures = {
     'workitem.get/awaiting': workitemGetAwaiting satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/expired': workitemGetExpired satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/failed': workitemGetFailed satisfies Exchange<{ work_item_id: string }, WorkItem>,
+    'workitem.get/parked-send': workitemGetParkedSend satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/open': workitemGetOpen satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/succeeded': workitemGetSucceeded satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.list/ada-now': workitemListAdaNow satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,

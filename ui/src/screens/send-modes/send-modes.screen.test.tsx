@@ -18,7 +18,7 @@ const marta = () =>
         .answer('campaign.get', 'campaign.get/details');
 const operations = (api: FakeApi) => api.calls.map((call) => call.operation);
 const voiceLine =
-    'Jason now writes in your name without your look. Saying who writes and how, in Settings under "Your name and tone", makes those messages err less.';
+    'Jason now sends messages in your name without you reading each one first. Saying who writes and how, in Settings under "Your name and tone", helps them sound like you.';
 
 const card = (name: 'approval.get/pending-with-preview' | 'approval.get/modes-chosen' | 'approval.get/with-doubts') =>
     structuredClone(fixtures[name].response) as unknown as Approval;
@@ -375,5 +375,95 @@ describe('the send modes in Settings', () => {
         mountSettings(api);
         expect(await screen.findByText('The send modes could not be read.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    });
+});
+
+describe('why the send mode held a send, or let one go', () => {
+    const why = () =>
+        Array.from(document.querySelectorAll('.facts dt')).find((dt) => dt.textContent === "Why it's here")
+            ?.nextElementSibling?.textContent;
+    // A message card is checked against its item before Approve is offered: the item as it waits.
+    const held = () => marta().answer('workitem.get', 'workitem.get/parked-send');
+
+    it.each([
+        [
+            'approval.get/park-sent-from-chat',
+            "This send was written in Jason's chat, so it waits for you whatever the send mode.",
+        ],
+        ['approval.get/park-doubted', 'A doubt was raised about this send, so it waits for you; the doubt is below.'],
+        [
+            'approval.get/park-awaiting-judgement',
+            'A reply from this contact has not been judged yet, so nothing goes to them automatically until it is.',
+        ],
+        [
+            'approval.get/park-awaiting-nature',
+            'A reply from this contact was judged before Jason recorded what kind of reply it was, so nothing goes to them automatically until it is judged again.',
+        ],
+        ['approval.get/park-answers-no-verdict', 'This answer names no judged reply, so it is not sent automatically.'],
+        [
+            'approval.get/park-reply-not-from-a-person',
+            'The reply this answers was an automatic reply, a bounce or a request to stop, which never gets an automatic answer.',
+        ],
+        ['approval.get/park-escalated', 'A reply in this conversation was marked for you to decide.'],
+        [
+            'approval.get/park-edited-after-review',
+            'The text was edited after it was reviewed, so the review no longer stands for it.',
+        ],
+        [
+            'approval.get/park-not-reviewed',
+            "No critic's or person's review passed this text, so the automatic mode does not send it.",
+        ],
+    ] as const)('%s says why it waits', async (name, sentence) => {
+        const api = held();
+        mount(api, structuredClone(fixtures[name].response) as unknown as Approval);
+        expect(why()).toBe(sentence);
+        await waitFor(() => expect(operations(api)).toContain('workitem.get'));
+        await act(async () => {});
+        // A send that waits is not one that went.
+        expect(screen.queryByRole('heading', { name: 'Sent without asking you' })).toBeNull();
+    });
+
+    it('shows a critic’s doubt with its own sentence, under the reason it waits', async () => {
+        const api = held();
+        mount(api, structuredClone(fixtures['approval.get/park-doubted'].response) as unknown as Approval);
+        expect(
+            screen.getByText('The critic role doubted this: It makes a claim the brief or your notes do not support.'),
+        ).toBeTruthy();
+        expect(screen.getByText('Their words: It promises a discount the brief never offers.')).toBeTruthy();
+        await waitFor(() => expect(operations(api)).toContain('workitem.get'));
+        await act(async () => {});
+    });
+
+    it('says a send went without asking, under which mode and after a review, and where to change it', () => {
+        const api = marta();
+        mount(api, structuredClone(fixtures['approval.get/released-automatically'].response) as unknown as Approval);
+
+        expect(why()).toBe('The send mode let it go without asking you, after a review passed its text.');
+        const card = screen.getByRole('heading', { name: 'Sent without asking you' }).closest('div')!;
+        expect(
+            within(card).getByText('People who have not replied yet: Goes automatically · your choice for every agent'),
+        ).toBeTruthy();
+        expect(within(card).getByText('A review passed its text before it went.')).toBeTruthy();
+        expect(
+            within(card).getByText(/To have every message wait for you again, change it in Settings\./),
+        ).toBeTruthy();
+        expect(within(card).getByRole('button', { name: 'Open Settings' })).toBeTruthy();
+        // A decided card asks nothing and reads nothing.
+        expect(screen.queryByRole('heading', { name: 'How should messages go?' })).toBeNull();
+        expect(api.calls).toEqual([]);
+    });
+
+    it('points to the agent’s own tab when the mode that let it go is the agent’s', () => {
+        const approval = structuredClone(
+            fixtures['approval.get/released-automatically'].response,
+        ) as unknown as Approval;
+        (approval.preview['send_mode'] as { source: string }).source = 'campaign';
+        mount(marta(), approval);
+        const card = screen.getByRole('heading', { name: 'Sent without asking you' }).closest('div')!;
+        expect(within(card).getByText(/· set for this agent$/)).toBeTruthy();
+        expect(
+            within(card).getByText('This agent sets its own mode; change it under the agent’s Settings tab.'),
+        ).toBeTruthy();
+        expect(within(card).queryByRole('button', { name: 'Open Settings' })).toBeNull();
     });
 });

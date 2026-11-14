@@ -260,7 +260,7 @@ export const en = {
     'modes.question.remembered': 'Remembered.',
     'modes.question.refused': 'That did not go through: {why}',
     'modes.question.voice':
-        'Jason now writes in your name without your look. Saying who writes and how, in Settings under "Your name and tone", makes those messages err less.',
+        'Jason now sends messages in your name without you reading each one first. Saying who writes and how, in Settings under "Your name and tone", helps them sound like you.',
     'modes.settings.open': 'Open Settings',
     'modes.settings.heading': 'How messages go',
     'modes.settings.lead': 'For every agent. An agent may set its own under its Settings tab, and that one goes first.',
@@ -299,6 +299,28 @@ export const en = {
     'modes.agent.apply': 'Apply',
     'modes.agent.applied': 'Applied.',
     'modes.agent.refused': 'That did not go through: {why}',
+    'modes.park.sent_from_chat': "This send was written in Jason's chat, so it waits for you whatever the send mode.",
+    'modes.park.doubted': 'A doubt was raised about this send, so it waits for you; the doubt is below.',
+    'modes.park.awaiting_judgement':
+        'A reply from this contact has not been judged yet, so nothing goes to them automatically until it is.',
+    'modes.park.awaiting_nature':
+        'A reply from this contact was judged before Jason recorded what kind of reply it was, so nothing goes to them automatically until it is judged again.',
+    'modes.park.answers_no_verdict': 'This answer names no judged reply, so it is not sent automatically.',
+    'modes.park.reply_not_from_a_person':
+        'The reply this answers was an automatic reply, a bounce or a request to stop, which never gets an automatic answer.',
+    'modes.park.escalated': 'A reply in this conversation was marked for you to decide.',
+    'modes.park.edited_after_review':
+        'The text was edited after it was reviewed, so the review no longer stands for it.',
+    'modes.park.not_reviewed':
+        "No critic's or person's review passed this text, so the automatic mode does not send it.",
+    'modes.park.daily_ceiling':
+        'This campaign has reached its limit of automatic sends for today, so this one waits for you to approve it.',
+    'modes.park.automatic_mode': 'The send mode let it go without asking you, after a review passed its text.',
+    'modes.released.heading': 'Sent without asking you',
+    'modes.released.mode': '{kind}: {mode} · {source}',
+    'modes.released.review': 'A review passed its text before it went.',
+    'modes.released.change': 'To have every message wait for you again, change it in Settings.',
+    'modes.released.change.campaign': 'This agent sets its own mode; change it under the agent’s Settings tab.',
     'modes.system.heading': 'Send modes',
     'modes.system.cold': 'To people who have not replied yet',
     'modes.system.warm': 'To people who have replied',
