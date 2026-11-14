@@ -1024,13 +1024,18 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// The same members at every level beneath, lists item by item. A member either side leaves null is a value the data
-    /// leaves empty (a person with no last name), so kinds are compared only where both hold one.
+    /// The same members at every level beneath, lists item by item. A null may stand only against a scalar, a value the
+    /// data leaves empty (a person with no last name); a null against an object or a list is a shape difference, since it
+    /// would hide everything beneath it.
     /// </summary>
     private static void SameShape(string where, JsonNode? staged, JsonNode? claimed)
     {
         if (staged is null || claimed is null)
         {
+            var other = staged ?? claimed;
+            Assert.False(
+                other is JsonObject or JsonArray,
+                $"{where}: staged {Kind(staged)}, claimed {Kind(claimed)}; a null stands only against a scalar");
             return;
         }
 
