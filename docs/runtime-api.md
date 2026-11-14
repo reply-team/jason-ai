@@ -321,6 +321,9 @@ that is not that attempt does not call them.
 
 - `approval.list`: what is waiting; pending by default.
 - `approval.get`
+- Every approval answer, the four verbs' alike, carries `send_modes_unset`: the send-mode preferences nobody has set
+  yet, `send_mode.cold` and `send_mode.warm`, an empty list once both are.
+  [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved. An
   approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
   approving a search under another audience than the allowance names takes the allowance back in the same act.

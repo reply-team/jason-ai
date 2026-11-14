@@ -340,6 +340,12 @@ work item, the campaign, the operation, the subject hash, the actor and the reas
 preview live on the row and in what `approval.get` answers, which is where somebody entitled to read
 them reads them.
 
+Every approval answer — `approval.get`, each item of `approval.list`, and what `approval.approve` and `approval.reject`
+answer — also carries `send_modes_unset`: the keys of the two send-mode preferences, `send_mode.cold` and
+`send_mode.warm`, that nobody has set yet, in key order, and an empty list once both are. It is the installation's open
+question, read when the answer is made, the same on every approval whatever it is about and however it stands: nothing is
+stored about having asked it, and a key unset again is back in the list. While a key is unset, its mode is every message.
+
 ### Standing approvals
 
 A person may decide in advance for one kind of reply, and for the searches under one of a campaign's audiences (the
