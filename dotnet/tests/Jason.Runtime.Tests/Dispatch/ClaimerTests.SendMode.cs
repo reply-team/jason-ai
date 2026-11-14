@@ -167,19 +167,23 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// Whose pass releases: the critic's run, or a person by name outside any run. A pass by another role is shown and
-    /// releases nothing; a line that names a person but carries an attempt is the run's, and a run's line that names another
+    /// Whose pass releases: the critic the runtime made for this send, or a person by name outside any run. A critic queued
+    /// by hand, one the runtime made for another send, or one whose context anybody but the runtime patched is shown and
+    /// releases nothing, as another role's pass; a line that names a person but carries an attempt is the run's, and a run's line that names another
     /// attempt than the one it carries is nobody's pass. None that counts parks the send <c>not_reviewed</c>, the newest pass
     /// of its text on the preview where one stands.
     /// </summary>
     [Theory]
-    [InlineData("the critic's run", null)]
-    [InlineData("the critic's run, then a copywriter's pass", null)]
+    [InlineData("the critic the runtime made for the send", null)]
+    [InlineData("the runtime's critic, then a copywriter's pass", null)]
     [InlineData("a person by name", null)]
     [InlineData("nobody", "not_reviewed")]
     [InlineData("a copywriter's run", "not_reviewed")]
     [InlineData("a person named on a run's line", "not_reviewed")]
     [InlineData("a critic's line naming another attempt", "not_reviewed")]
+    [InlineData("a critic a person queued by hand", "not_reviewed")]
+    [InlineData("the critic the runtime made for another send", "not_reviewed")]
+    [InlineData("the runtime's critic, its context patched by a person", "not_reviewed")]
     [Critical(Family.S2, "the automatic mode: only the critic's or a person's pass releases")]
     public async Task SendMode_WhosePassReleases(string who, string? parks)
     {
@@ -192,10 +196,13 @@ public partial class ClaimerTests
         var item = await db.WorkItems.Include(w => w.Campaign).SingleAsync(w => w.PublicId == send.Id, Ct);
         string? shown = who switch
         {
-            "the critic's run" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash),
+            "the critic the runtime made for the send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash),
+            "a critic a person queued by hand" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.QueuedByHand),
+            "the critic the runtime made for another send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.AnotherSends),
+            "the runtime's critic, its context patched by a person" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.Patched),
             "a person by name" => (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
                 new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id,
-            "the critic's run, then a copywriter's pass" => await ThenAsync(await CriticPassAsync(db, reading, send.Id, send.ReviewHash), CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter")),
+            "the runtime's critic, then a copywriter's pass" => await ThenAsync(await CriticPassAsync(db, reading, send.Id, send.ReviewHash), CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter")),
             "a copywriter's run" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter"),
             "a person named on a run's line" => await PassLineAsync(db, item, new ActorRef(ActorType.Human, "ada"), await RunningAsync(db, reading, "critic"), "critic"),
             "a critic's line naming another attempt" => await PassLineAsync(db, item, new ActorRef(ActorType.Attempt, "att_01K52JR0000000000000000099"), await RunningAsync(db, reading, "critic"), "critic"),
@@ -1009,6 +1016,72 @@ public partial class ClaimerTests
         return run;
     }
 
+    /// <summary>Which critic reviews a send: the one the runtime made for it, or one of the three that release nothing.</summary>
+    internal enum Critic
+    {
+        TheRuntimes,
+        QueuedByHand,
+        AnotherSends,
+        Patched,
+    }
+
+    /// <summary>
+    /// A running attempt of a critic's work, made as the runtime will make it for a send: created by the runtime's own actor,
+    /// its created line saying so, and its context's <c>send_review</c> naming the send; or queued by a person, naming another
+    /// send, or with its context patched by a person afterwards.
+    /// </summary>
+    private static async Task<Attempt> CriticRunAsync(JasonDbContext db, Reading reading, string sendId, Critic critic)
+    {
+        var campaign = db.Campaigns.Local.FirstOrDefault(c => c.Id == reading.Campaign.Id);
+        if (campaign is null)
+        {
+            db.Attach(reading.Campaign);
+            campaign = reading.Campaign;
+        }
+
+        var operation = await db.WorkItems.AsNoTracking().Where(w => w.PublicId == sendId).Select(w => w.Operation).SingleAsync(Ct);
+        var creator = critic == Critic.QueuedByHand ? Operator : Actors.Runtime;
+        var work = WorkItemFactory.NewAiRole(campaign, role: AutomaticRelease.CriticRole, now: Noon);
+        work.CreatedByType = creator.Type;
+        work.CreatedById = creator.Id;
+        work.Context = new JsonObject
+        {
+            [SendReview.Key] = new JsonObject
+            {
+                [SendReview.WorkItemIdMember] = critic == Critic.AnotherSends ? "wi_01K52JR0000000000000000055" : sendId,
+                [SendReview.OperationMember] = operation,
+            },
+        };
+        work.Status = WorkItemStatus.Processing;
+        var run = WorkItemFactory.NewAttempt(work, 1, AttemptStatus.Running, Noon);
+        db.WorkItems.Add(work);
+        var journal = new JournalWriter(new FixedClock(Noon));
+        journal.Append(
+            db,
+            creator,
+            JournalKinds.WorkItemCreated,
+            campaign,
+            key: "kind",
+            updated: new JsonObject
+            {
+                ["kind"] = "ai_role",
+                ["role"] = AutomaticRelease.CriticRole,
+                ["operation"] = null,
+                ["contact_id"] = null,
+                ["priority"] = work.Priority,
+                ["not_before"] = null,
+                ["due_at"] = null,
+            },
+            workItem: work);
+        if (critic == Critic.Patched)
+        {
+            journal.Append(db, Operator, JournalKinds.WorkItemContextUpdated, campaign, key: "brief", old: null, updated: "Look at the tone.", workItem: work);
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return run;
+    }
+
     /// <summary>The first line's id, once the review that follows it is written too.</summary>
     private static async Task<string> ThenAsync(string first, Task<string> then)
     {
@@ -1017,9 +1090,10 @@ public partial class ClaimerTests
     }
 
     /// <summary>A pass of the send's text by a running attempt of the critic's work, through the verb; its line's id.</summary>
-    private static async Task<string> CriticPassAsync(JasonDbContext db, Reading reading, string sendId, string? hash, string role = "critic")
+    private static async Task<string> CriticPassAsync(
+        JasonDbContext db, Reading reading, string sendId, string? hash, string role = "critic", Critic critic = Critic.TheRuntimes)
     {
-        var run = await RunningAsync(db, reading, role);
+        var run = role == AutomaticRelease.CriticRole ? await CriticRunAsync(db, reading, sendId, critic) : await RunningAsync(db, reading, role);
         var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
             new WorkItemReviewRequest(sendId, hash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Attempt, run.PublicId)),
             Ct);

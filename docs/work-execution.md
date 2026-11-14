@@ -548,11 +548,14 @@ guard as a standing approval, and in this order:
    `reply_not_from_a_person`; a verdict whose reaction is `escalate`, `escalated` — and `escalated` too where a verdict
    that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
    or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
-7. **A review that passed the text as it now reads.** The newest review under the send's review hash that passed,
-   written by a running attempt of the campaign's `critic` role or by a person by name, outside a run, counts; any such
-   pass counts, whatever was reviewed after it, since a doubt was asked before. A counting pass only under an earlier
-   hash is `edited_after_review`; none at all, `not_reviewed`. A copywriter's pass, a pass on a line a run wrote in a
-   person's name, or one naming an attempt other than its own, does not count.
+7. **A review that passed the text as it now reads.** A pass under the send's review hash counts where a person by name
+   wrote it, outside a run, or where the runtime's own critic did: a running attempt of the `critic` work the runtime
+   makes for a send created under an automatic mode, which it creates under its own actor, names the send and its
+   operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`), and whose context nobody but
+   the runtime changed since. Any such pass counts, whatever was reviewed after it, since a doubt was asked before. A
+   counting pass only under an earlier hash is `edited_after_review`; none at all, `not_reviewed`. A pass by a critic
+   somebody queued by hand, by the runtime's critic of another send, by another role, on a line a run wrote in a person's
+   name, or naming an attempt other than its own, is shown on the preview and releases nothing.
 8. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
    `automatic_mode`, requested and decided at the claim's moment, decided by the person who set the mode in force.
 

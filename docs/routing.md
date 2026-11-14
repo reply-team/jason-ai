@@ -492,7 +492,8 @@ at the claim):
 5. the contact waits on no verdict (`awaiting_judgement`, `awaiting_nature`);
 6. an answer answers a person's reply, in a conversation nobody escalated at or after it (`answers_no_verdict`,
    `awaiting_nature`, `reply_not_from_a_person`, `escalated`);
-7. the critic or a person passed the text as it now reads (`edited_after_review`, `not_reviewed`);
+7. the runtime's own critic for the send, or a person, passed the text as it now reads (`edited_after_review`,
+   `not_reviewed`);
 8. released, under an approved row with the reason `automatic_mode` that names the person who set the mode.
 
 A send held at steps 3 to 7 parks with the code as its approval's reason. The holds of steps 5 to 7 then ask the

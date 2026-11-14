@@ -15,6 +15,7 @@ public class AutomaticReleasePlanTests
     [Theory]
     [InlineData("whether the send was written in the chat", "ix_journal_work_item_id_public_id (work_item_id=?)")]
     [InlineData("every review of the send", "ix_journal_work_item_id_public_id (work_item_id=?)")]
+    [InlineData("a critic's created line and its context's changes", "ix_journal_work_item_id_public_id (work_item_id=?)")]
     [InlineData("the newest verdict on the reply's thread", "ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=?)")]
     [InlineData("the verdict that stands for the reply an answer names", "ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=? AND key=?)")]
     [InlineData("every verdict on the reply's thread, for an escalation", "ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=?)")]
@@ -26,6 +27,7 @@ public class AutomaticReleasePlanTests
         {
             "whether the send was written in the chat" => AutomaticRelease.Confined(db, "wi_01K52JR0000000000000000007"),
             "every review of the send" => AutomaticRelease.ReviewLines(db, "wi_01K52JR0000000000000000007"),
+            "a critic's created line and its context's changes" => AutomaticRelease.CriticLines(db, "wi_01K52JR0000000000000000008"),
             "the newest verdict on the reply's thread" => AutomaticRelease.NewestOnThread(db, 3, "501", "stand-in-provider"),
             "the verdict that stands for the reply an answer names" => AutomaticRelease.StandingUnder(db, 3, "501", "sha256:verdict"),
             "every verdict on the reply's thread, for an escalation" => AutomaticRelease.OnThread(db, 3, "501", "stand-in-provider"),

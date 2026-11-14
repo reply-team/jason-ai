@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
@@ -51,8 +52,10 @@ internal abstract record AutomaticDecision
 /// </para>
 /// <para>
 /// A mode in force releases in the name of the person who set it, so a mode whose setter is not a named person releases
-/// nothing. The critic is known by its role's name, <see cref="CriticRole"/>, which the runtime writes on the review's
-/// line from the reviewing attempt's work; a pass by any other role is shown and releases nothing. A person's pass counts
+/// nothing. The critic whose pass releases is the one the runtime made for the send (<see cref="CriticsAsync"/>): its
+/// work created under the runtime's own actor, its <see cref="SendReview.Key"/> naming the send, its context changed by
+/// nobody but the runtime; a critic somebody queued by hand, the runtime's critic of another send, or another role is
+/// shown and releases nothing. A person's pass counts
 /// where the line names a person and carries no attempt: a line that carries an attempt is the run's, whatever actor it
 /// names, and a run's pass is the critic's only where the line's actor is the attempt it carries.
 /// </para>
@@ -207,10 +210,14 @@ public static class AutomaticRelease
             ORDER BY id
             """).AsNoTracking();
 
-    /// <summary>Whether a review line is a pass that counts: the critic's run's, or a named person's outside any run.</summary>
-    internal static bool Counts(JournalEntry line)
+    /// <summary>
+    /// Whether a review line is a pass that counts: a named person's outside any run, or the pass of a running attempt of
+    /// the critic's work the runtime made for this send, whose attempt is among <paramref name="critics"/>.
+    /// </summary>
+    internal static bool Counts(JournalEntry line, IReadOnlySet<string> critics)
     {
         ArgumentNullException.ThrowIfNull(line);
+        ArgumentNullException.ThrowIfNull(critics);
         if (!string.Equals(Text(line.New?["result"]), "passed", StringComparison.Ordinal))
         {
             return false;
@@ -219,12 +226,66 @@ public static class AutomaticRelease
         return line.ActorType switch
         {
             ActorType.Human => !string.IsNullOrWhiteSpace(line.ActorId) && line.AttemptId is null,
-            ActorType.Attempt => line.AttemptId is not null
-                && string.Equals(line.ActorId, line.AttemptId, StringComparison.Ordinal)
-                && string.Equals(Text(line.New?["role"]), CriticRole, StringComparison.Ordinal),
+            ActorType.Attempt => line.AttemptId is { } attempt
+                && string.Equals(line.ActorId, attempt, StringComparison.Ordinal)
+                && string.Equals(Text(line.New?["role"]), CriticRole, StringComparison.Ordinal)
+                && critics.Contains(attempt),
             _ => false,
         };
     }
+
+    /// <summary>
+    /// Of the attempts the item's review lines carry, those of the critic's work the runtime made for this send: the work
+    /// was created by the runtime's own actor, as its created line says; its <see cref="SendReview.Key"/> names this send
+    /// and its operation; and no line says that anybody but the runtime changed its context since. Read by the attempts the
+    /// lines carry, and by each such work item's own lines, through the journal's work item index.
+    /// </summary>
+    internal static async Task<IReadOnlySet<string>> CriticsAsync(JasonDbContext db, WorkItem send, IEnumerable<JournalEntry> lines, CancellationToken ct)
+    {
+        var carried = lines.Where(line => line.ActorType == ActorType.Attempt && line.AttemptId is not null)
+            .Select(line => line.AttemptId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var critics = new HashSet<string>(StringComparer.Ordinal);
+        if (carried.Count == 0)
+        {
+            return critics;
+        }
+
+        var runs = await db.Attempts.AsNoTracking()
+            .Where(attempt => carried.Contains(attempt.PublicId))
+            .Select(attempt => new { attempt.PublicId, Work = attempt.WorkItem!.PublicId, attempt.WorkItem.Role, attempt.WorkItem.Context })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var run in runs)
+        {
+            if (!string.Equals(run.Role, CriticRole, StringComparison.Ordinal)
+                || !string.Equals(SendReview.Named(run.Context), send.PublicId, StringComparison.Ordinal)
+                || !string.Equals(SendReview.Operation(run.Context), send.Operation, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var own = await CriticLines(db, run.Work).ToListAsync(ct).ConfigureAwait(false);
+            var created = own.Where(line => line.Kind == JournalKinds.WorkItemCreated).ToList();
+            if (created.Count == 1
+                && created[0].ActorType == ActorType.System
+                && string.Equals(created[0].ActorId, Actors.Runtime.Id, StringComparison.Ordinal)
+                && own.All(line => line.ActorType == ActorType.System))
+            {
+                critics.Add(run.PublicId);
+            }
+        }
+
+        return critics;
+    }
+
+    /// <summary>A work item's created line and its context's changes, through the journal's work item index.</summary>
+    internal static IQueryable<JournalEntry> CriticLines(JasonDbContext db, string workItemId) =>
+        db.Journal.FromSqlInterpolated($"""
+            SELECT * FROM journal INDEXED BY ix_journal_work_item_id_public_id
+            WHERE work_item_id = {workItemId} AND kind IN ('workitem_created', 'workitem_context_updated')
+            """).AsNoTracking();
 
     /// <summary>The mode, where it releases: automatic, set by a named person.</summary>
     private static ModeInForce? Releasing(ModeInForce mode) =>
@@ -331,12 +392,13 @@ public static class AutomaticRelease
         var hash = ReviewSubject.Hash(item);
         var lines = await ReviewLines(db, item.PublicId).ToListAsync(ct).ConfigureAwait(false);
         var current = lines.Where(line => string.Equals(line.Key, hash, StringComparison.Ordinal)).ToList();
-        if (current.LastOrDefault(Counts) is { } pass)
+        var critics = await CriticsAsync(db, item, lines, ct).ConfigureAwait(false);
+        if (current.LastOrDefault(line => Counts(line, critics)) is { } pass)
         {
             return (pass.PublicId, null, null);
         }
 
-        if (lines.LastOrDefault(line => !string.Equals(line.Key, hash, StringComparison.Ordinal) && Counts(line)) is { } older)
+        if (lines.LastOrDefault(line => !string.Equals(line.Key, hash, StringComparison.Ordinal) && Counts(line, critics)) is { } older)
         {
             return (null, SendModeReasons.EditedAfterReview, older.PublicId);
         }
