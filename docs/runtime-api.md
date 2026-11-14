@@ -336,7 +336,7 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   review. Where the runtime cannot yet tell whether the claim would read the review, because an approval is live and the
   pre-flight stops the send at a check before the approval's (its plugin unavailable, say), so no subject can be
   composed to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send
-  reach the approval. A doubt accepted then leaves the send with no approval to run under, whatever changes after; a
+  reach the approval. An accepted doubt leaves the send with no approval to run under, whatever changes after; a
   pass leaves a person's approval as it stood, and the claim may run the send under that approval without reading the
   pass. `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document
   publishes, and may carry one `note`, a line of at most 280 characters that the line never carries and the person reads

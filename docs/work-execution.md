@@ -495,8 +495,8 @@ since the claim would run it under the decision already made and read no review.
 the runtime cannot yet tell whether the claim would read the review, because an approval is live and the pre-flight
 stops the send at a check that comes before the approval's (its plugin unavailable, say), so no subject can be composed
 to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send reach the
-approval; a provider block, the one check after the approval's, does not stop a review from being judged. A doubt
-accepted then leaves the send with no approval to run under, whatever changes after; a pass leaves a person's approval
+approval; a provider block, the one check after the approval's, does not stop a review from being judged. An
+accepted doubt leaves the send with no approval to run under, whatever changes after; a pass leaves a person's approval
 as it stood, and the claim may run the send under that approval without reading the pass. The doubt does so by
 superseding, in the review's own save, the approved row still live, which no longer stands for the send as it would now
 go (`approval_superseded`, under the reviewer's name). Who reviews: a running attempt of the same campaign's role work,
