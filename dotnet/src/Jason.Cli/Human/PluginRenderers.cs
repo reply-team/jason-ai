@@ -80,6 +80,32 @@ public static class PluginRenderers
     }
 
     /// <summary>
+    /// What <c>plugin grant</c> or <c>plugin revoke</c> left in force, said from the body the runtime answered, then what
+    /// the reload activated as <see cref="Reload"/> says it, where one ran.
+    /// </summary>
+    public static string? Granted(string json, string id, string noun, string entry, bool revoke, string settingsFile)
+    {
+        var registry = RenderText.Read<PluginRegistryDto>(json);
+        if (registry?.Plugins is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            revoke
+                ? $"{id} is not granted the {noun} {entry} now; work already running keeps what it was started with."
+                : $"{id} is granted the {noun} {entry}, in force now.",
+        };
+        if (Reload(json, settingsFile) is { } reloaded)
+        {
+            lines.Add(reloaded);
+        }
+
+        return RenderText.Lines(lines);
+    }
+
+    /// <summary>
     /// What the reload activated, and what each plugin still needs (<see cref="Needs"/>). A refused reload never reaches
     /// here: it is an API error, printed verbatim with exit code 1.
     /// </summary>

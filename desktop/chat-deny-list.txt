@@ -41,6 +41,8 @@ import
 suppression remove
 route set
 route unset
+plugin grant
+plugin revoke
 role set-profile
 #
 # The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when
@@ -69,6 +71,8 @@ journal.stream
 suppression.remove
 route.set
 route.unset
+plugin.grant
+plugin.revoke
 role.set_profile
 role.add
 project.link

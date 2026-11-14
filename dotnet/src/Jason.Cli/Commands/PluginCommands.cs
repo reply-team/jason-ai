@@ -25,10 +25,12 @@ public static class PluginCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var plugin = new Command("plugin", "Place a plugin package the release publishes, show the plugins the runtime has loaded, and load them again from disk.");
+        var plugin = new Command("plugin", "Place a plugin package the release publishes, show the plugins the runtime has loaded, load them again from disk, and grant a plugin what its manifest asks for or take a grant back.");
         plugin.Subcommands.Add(Install(env, actor));
         plugin.Subcommands.Add(List(env, actor));
         plugin.Subcommands.Add(Reload(env, actor));
+        plugin.Subcommands.Add(Grant(env, actor, revoke: false));
+        plugin.Subcommands.Add(Grant(env, actor, revoke: true));
         return plugin;
     }
 
@@ -252,6 +254,89 @@ public static class PluginCommands
                 Operations.PluginReload,
                 body,
                 new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Reload(json, env.Paths.UserSettingsFile)),
+                cancellationToken);
+        });
+
+        return command;
+    }
+
+    /// <summary>Each grant a flag names: the capability the request names, the noun a person reads, and what the flag's help says.</summary>
+    private static readonly (string Flag, string Capability, string Placeholder, string Noun, string Grants)[] Grants =
+    [
+        ("--http", "http", "host", "host", "A host it may send requests to, as its manifest names it, or any host where the manifest says any_granted_host. * grants every host the manifest names."),
+        ("--exec", "exec", "program", "program", "A program it may run, by the name its manifest gives it. * grants every program it names."),
+        ("--env", "env", "name", "variable", "An environment variable it may read, by name. The value stays in the runtime's environment and is never written here. * grants every variable it names."),
+        ("--api", "api", "family", "API family", "A family of Runtime API operations its handler may call (read, campaign, contact, workitem, suppression, report, journal.append), out of those its manifest asks for. * grants every family it asks for."),
+        ("--files", "files", "path", "directory", "An absolute directory it may append lines in, where its manifest asks to write files. Never the home or data directory, the harness root, a folder holding one, or the top of a drive."),
+        ("--subscription", "subscriptions", "kind", "journal kind", "A journal kind it is handed lines of, out of those its manifest subscribes to. * admits every kind it declares."),
+    ];
+
+    /// <summary>A grant named by no flag, or by more than one.</summary>
+    internal const string OneGrant = "Name one grant: --http, --exec, --env, --api, --files or --subscription, once.";
+
+    /// <summary>
+    /// <c>grant</c> and <c>revoke</c>: one entry of one capability, written to the settings file by the runtime and in force
+    /// when it answers. The runtime refuses what the manifest does not ask for, and what is asked from inside a run.
+    /// </summary>
+    private static Command Grant(CliEnvironment env, Option<string?> actor, bool revoke)
+    {
+        var command = new Command(
+            revoke ? "revoke" : "grant",
+            (revoke
+                ? "Take a grant back. Written and in force at once; work already running keeps what it was started with. "
+                : "Grant a plugin something its manifest asks for: a host, a program, a variable, an operation, a folder or a subscription. Written to the settings file and in force at once; a grant the manifest does not ask for is refused. ")
+            + ActorOption.NoDefaultForAnAct);
+        var id = new Argument<string>("id") { Description = "The plugin's id." };
+        var flags = Grants.Select(grant => new Option<string?>(grant.Flag)
+        {
+            HelpName = grant.Placeholder,
+            Description = revoke ? $"The {grant.Noun} to take back, as it was granted. * takes back a * entry and nothing named beside it." : grant.Grants,
+        }).ToArray();
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        foreach (var flag in flags)
+        {
+            command.Options.Add(flag);
+        }
+
+        command.Options.Add(reason);
+        command.Options.Add(human);
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            var named = parseResult.GetValue(id)!;
+            if (!PluginIds.IsWellFormed(named))
+            {
+                throw new UsageException($"'{named}' is not a plugin's id: a lowercase letter, then lowercase letters, digits or dashes.");
+            }
+
+            var given = flags
+                .Select((flag, at) => (Grant: Grants[at], Value: parseResult.GetValue(flag)))
+                .Where(flag => flag.Value is not null)
+                .ToList();
+            if (given.Count != 1 || string.IsNullOrWhiteSpace(given[0].Value))
+            {
+                throw new UsageException(OneGrant);
+            }
+
+            var (grant, entry) = given[0];
+            var body = RequestBody.Empty()
+                .Set("plugin_id", named)
+                .Set("capability", grant.Capability)
+                .Set("entry", entry)
+                .Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(
+                body,
+                revoke ? "plugin revoke" : "plugin grant",
+                "the CLI will not put this account's name on a change of what a plugin may use by itself",
+                $"name who does it, e.g. {ActorOption.Name} human:<Name>");
+
+            return OperationRunner.RunAsync(
+                env,
+                revoke ? Operations.PluginRevoke : Operations.PluginGrant,
+                body,
+                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Granted(json, named, grant.Noun, entry!, revoke, env.Paths.UserSettingsFile)),
                 cancellationToken);
         });
 

@@ -63,6 +63,8 @@ public static class ConfinedVerbs
         (Kind.Acts, "suppression remove"),
         (Kind.Acts, "route set"),
         (Kind.Acts, "route unset"),
+        (Kind.Acts, "plugin grant"),
+        (Kind.Acts, "plugin revoke"),
         (Kind.Acts, "role set-profile"),
         (Kind.ChatsOwn, "role add"),
         (Kind.ChatsOwn, "project link"),

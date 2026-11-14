@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Jason.Cli;
+using Jason.Cli.Commands;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
@@ -473,6 +474,95 @@ public class PluginCommandsTests
             Problems = [],
         };
         return registry with { Snapshot = registry.Snapshot with { PluginCount = 1 }, Plugins = [reply] };
+    }
+
+    [Theory]
+    [InlineData("--http", "http", "api.example.com")]
+    [InlineData("--exec", "exec", "dotnet")]
+    [InlineData("--env", "env", "FAKE_TOKEN")]
+    [InlineData("--api", "api", "journal.append")]
+    [InlineData("--files", "files", "/home/u/Jason/exports")]
+    [InlineData("--subscription", "subscriptions", "workitem_failed")]
+    public async Task Grant_sends_the_capability_its_flag_names_and_the_entry(string flag, string capability, string entry)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("plugin", "grant", "fake-provider", flag, entry, "--reason", "it posts to the CRM", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.PluginGrant,
+            $"{{\"plugin_id\":\"fake-provider\",\"capability\":\"{capability}\",\"entry\":\"{entry}\",\"reason\":\"it posts to the CRM\",\"actor\":{{\"type\":\"human\",\"id\":\"ada\"}}}}");
+    }
+
+    [Fact]
+    public async Task Revoke_sends_the_same_body_to_its_own_operation()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("plugin", "revoke", "fake-provider", "--http", "*", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.PluginRevoke, "{\"plugin_id\":\"fake-provider\",\"capability\":\"http\",\"entry\":\"*\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    [Theory]
+    [InlineData("grant")]
+    [InlineData("revoke")]
+    public async Task No_grant_named_two_named_or_one_named_twice_is_a_usage_error_and_nothing_is_sent(string verb)
+    {
+        foreach (var (flags, said) in new (string[], string)[]
+        {
+            ([], PluginCommands.OneGrant),
+            (["--http", "api.example.com", "--env", "FAKE_TOKEN"], PluginCommands.OneGrant),
+            (["--env", " "], PluginCommands.OneGrant),
+            (["--http", "api.example.com", "--http", "localhost:5555"], "--http"),
+        })
+        {
+            using var cli = new CliRun();
+
+            var exit = await cli.RunAsync(["plugin", verb, "fake-provider", .. flags, "--actor", "human:ada"]);
+
+            Assert.Equal(ExitCodes.Usage, exit);
+            Assert.Null(cli.Url);
+            Assert.Contains(said, cli.Error.ToString(), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task An_id_that_is_no_plugin_s_is_a_usage_error_and_nothing_is_sent()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("plugin", "grant", "Fake_Provider", "--http", "api.example.com", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_what_is_granted_now_and_what_the_reload_activated()
+    {
+        using var cli = new CliRun(JsonSerializer.Serialize(TwoPlugins(), JasonJson.Options));
+
+        var exit = await cli.RunAsync("plugin", "grant", "fake-provider", "--http", "api.example.com", "--actor", "human:ada", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.StartsWith("fake-provider is granted the host api.example.com, in force now." + Environment.NewLine, cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_after_a_revoke_says_that_running_work_keeps_what_it_started_with()
+    {
+        using var cli = new CliRun(JsonSerializer.Serialize(TwoPlugins(), JasonJson.Options));
+
+        var exit = await cli.RunAsync("plugin", "revoke", "fake-provider", "--env", "FAKE_TOKEN", "--actor", "human:ada", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.StartsWith(
+            "fake-provider is not granted the variable FAKE_TOKEN now; work already running keeps what it was started with." + Environment.NewLine,
+            cli.Text,
+            StringComparison.Ordinal);
     }
 
     /// <summary>A registry the way a machine with one working plugin and one it cannot run answers.</summary>

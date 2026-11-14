@@ -314,13 +314,15 @@ public class DefaultActorTests
         ["route", "set", "--campaign", "cmp_A", "--plugin", "fake-provider", "--operation", "campaign.get"],
         ["route", "unset", "--campaign", "cmp_A", "--operation", "campaign.get"],
         ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
+        ["plugin", "grant", "fake-provider", "--http", "api.example.com"],
+        ["plugin", "revoke", "fake-provider", "--env", "FAKE_TOKEN"],
     ];
 
     /// <summary>
     /// Of those, the acts the runtime takes from any caller: lifting someone's opt-out, moving which account acts for a
     /// campaign, and changing which agent host runs a role. The CLI alone asks who does them.
     /// </summary>
-    internal static readonly string[] RuntimeTakesFromAnyone = ["suppression remove", "route set", "route unset", "role set-profile"];
+    internal static readonly string[] RuntimeTakesFromAnyone = ["suppression remove", "route set", "route unset", "role set-profile", "plugin grant", "plugin revoke"];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
     internal static readonly string[][] Runs =
@@ -525,7 +527,7 @@ public class DefaultActorTests
     private static (string Help, string Form) Expected(string[] verb) => VerbOf(verb) switch
     {
         "workitem resume" => (ActorOption.NoDefaultForResume, "name who ends it, e.g. --actor human:<Name>"),
-        "suppression remove" or "route set" or "route unset" or "role set-profile" => (ActorOption.NoDefaultForAnAct, "name who does it, e.g. --actor human:<Name>"),
+        "suppression remove" or "route set" or "route unset" or "role set-profile" or "plugin grant" or "plugin revoke" => (ActorOption.NoDefaultForAnAct, "name who does it, e.g. --actor human:<Name>"),
         "report submit" => (ActorOption.NoDefaultForReport, "write --actor human:<Name> or --actor role:<id>"),
         _ => (ActorOption.NoDefault, "write --actor human:<Name>"),
     };
