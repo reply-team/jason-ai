@@ -153,6 +153,57 @@ public class ReplyStubChangesTests
         Assert.Contains("GET /v3/inbox/threads/changes", (string?)error["detail"], StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A bounce notice is an inbound message on the thread of the send it answers, with nothing in the message saying it is
+    /// one: the feed flags the thread as holding a bounce, for good, and its last message, where the notice is the newest,
+    /// is the notice, inbound, with its own id and moment. The notice is no reply, so a thread whose only inbound message is
+    /// one holds none; a thread that holds a reply as well carries both flags.
+    /// </summary>
+    [Fact]
+    public async Task A_bounce_notice_flags_the_thread_and_is_its_inbound_last_message_without_flagging_a_reply()
+    {
+        using var account = new ReplyAccount()
+            .WithThread(Bounced(ReplyConversationListTests.Thread(501, Ago(5), inbound: false), Ago(3)))
+            .WithThread(Bounced(ReplyConversationListTests.Thread(502, Ago(4)), Ago(2)))
+            .WithThread(ReplyConversationListTests.Thread(503, Ago(1)));
+
+        var (exit, stdout, _) = await account.RunAsync(Line("inbox", "changes"), Ct);
+
+        Assert.Equal(0, exit);
+        var items = JsonNode.Parse(stdout)!["items"]!.AsArray();
+        Assert.Equal([501, 502, 503], items.Select(item => (int)item!["threadId"]!));
+        Assert.Equal(
+            [(true, false), (true, true), (false, true)],
+            items.Select(item => ((bool)item!["flags"]!["hasBounce"]!, (bool)item["flags"]!["hasReply"]!)));
+        var notice = items[0]!["lastMessage"]!.AsObject();
+        Assert.Equal(
+            ("<b501@mailer.example.com>", false, Ago(3)),
+            ((string?)notice["messageId"], (bool)notice["isOutbound"]!, (string?)notice["date"]));
+        Assert.Equal(Ago(3), (string?)items[0]!["lastActivityDate"]);
+        Assert.DoesNotContain("_bounce", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The thread with a bounce notice landed on it at a moment: an inbound message with an id and a moment of its own,
+    /// marked for the stand-in alone, and the thread's last activity moved to it.
+    /// </summary>
+    internal static JsonObject Bounced(JsonObject thread, string at)
+    {
+        thread["messages"]!.AsArray().Add(new JsonObject
+        {
+            ["channel"] = "email",
+            ["messageId"] = $"<b{thread["id"]}@mailer.example.com>",
+            ["isOutbound"] = false,
+            ["date"] = at,
+            ["fromAddress"] = "mailer-daemon@mailer.example.com",
+            ["subject"] = "Undelivered Mail Returned to Sender",
+            ["body"] = "The address was not found.",
+            ["_bounce"] = true,
+        });
+        thread["lastActivityDate"] = at;
+        return thread;
+    }
+
     [Theory]
     [InlineData("--top", "0", "usage.range")]
     [InlineData("--top", "1001", "usage.range")]

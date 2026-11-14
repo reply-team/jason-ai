@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Events;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Tests.Plugins.Invocation;
 
@@ -143,6 +144,142 @@ public class ReplyEventsReadTests
         }
 
         Assert.Equal(mover, (string?)Assert.Single(events)!["moved_by"]);
+    }
+
+    /// <summary>
+    /// A bounce notice that lands on the thread of a send is the thread's newest message, inbound, and the feed flags the
+    /// thread as holding a bounce and no reply: that is a bounce, never the other side's move. It is one <c>bounce</c>
+    /// event — the thread's contact and sequence, no message and no kind, since the feed names neither, and the notice's
+    /// own moment — and no <c>thread_moved</c> for that thread. Read again, as the hour a read after a finished one reads
+    /// again brings it back, it is the same event to the store's key, so the runtime keeps it once.
+    /// </summary>
+    [Fact]
+    public async Task A_bounce_notice_on_top_of_a_thread_is_one_bounce_event_and_no_move_and_reads_the_same_twice()
+    {
+        using var account = new ReplyAccount()
+            .WithThread(ReplyStubChangesTests.Bounced(ReplyConversationListTests.Thread(501, Ago(40), inbound: false), Ago(30)))
+            .WithThread(ReplyConversationListTests.Thread(502, Ago(20), contactId: 1002));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var first = Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct));
+        var again = Page(await ReadAsync(api, Input(cursor: (string)first["cursor"]!), Ct));
+
+        Assert.Equal(
+            JsonNode.Parse($$"""
+                [{"kind":"bounce","id":null,"occurred_at":"{{Utc(Ago(30))}}","contact":"1001","campaign":"7","message":null,"bounce":null},
+                 {"kind":"thread_moved","id":null,"occurred_at":"{{Utc(Ago(20))}}","thread":"502","contact":"1002","campaign":"7",
+                  "moved_by":"other_side","channel":"email","unread":null,"has_meeting_intent":false}]
+                """)!.ToJsonString(),
+            first["events"]!.ToJsonString());
+        Assert.Equal(first["events"]!.ToJsonString(), again["events"]!.ToJsonString());
+        Assert.Equal(StoreKey(first["events"]![0]), StoreKey(again["events"]![0]));
+        Assert.DoesNotContain("Undelivered", first.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What Reply's item says decides it. A bounce is the flag of a bounce, no flag of a reply, and an inbound last message;
+    /// its moment is that message's own, not the thread's last activity, and its campaign the item's sequence or none.
+    /// A thread flagged with both is a moved thread as it was: the flags hold for good and the feed cannot say which came
+    /// last, so the reader of the thread says what it is. A flag on a thread whose last message is the account's, or where
+    /// Reply gave none, changes nothing either; nor does a flag that is not a boolean true, or a feed that never sets one.
+    /// A bounce Reply names no person for has nobody to name and is left out, as the account's moves are.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"hasBounce":true,"hasReply":false}""", "in", "bounce")]
+    [InlineData("""{"hasBounce":true}""", "in", "bounce")]
+    [InlineData("""{"hasBounce":true,"hasReply":false}""", "in, no sequence", "bounce")]
+    [InlineData("""{"hasBounce":true,"hasReply":false}""", "in, no date", "bounce")]
+    [InlineData("""{"hasBounce":true,"hasReply":true}""", "in", "other_side")]
+    [InlineData("""{"hasBounce":true,"hasReply":false}""", "out", "kept out")]
+    [InlineData("""{"hasBounce":true,"hasReply":true}""", "out", null)]
+    [InlineData("""{"hasBounce":true,"hasReply":false}""", "none", null)]
+    [InlineData("""{"hasBounce":"true","hasReply":false}""", "in", "other_side")]
+    [InlineData("""{"hasBounce":false,"hasReply":false}""", "in", "other_side")]
+    [InlineData("""{"hasReply":false}""", "in", "other_side")]
+    [InlineData(null, "in", "other_side")]
+    [InlineData("""{"hasBounce":true,"hasReply":false}""", "in, no contact", "kept out")]
+    public async Task A_bounce_is_reply_s_bounce_flag_without_its_reply_flag_on_an_inbound_last_message(string? flags, string last, string? read)
+    {
+        var item = new JsonObject
+        {
+            ["threadId"] = 501, ["contactId"] = 1001, ["channel"] = "email", ["lastActivityDate"] = Ago(10), ["sequenceId"] = 7,
+        };
+        if (last != "none")
+        {
+            item["lastMessage"] = new JsonObject { ["messageId"] = "<b501@mailer.example.com>", ["isOutbound"] = last == "out", ["date"] = Ago(12) };
+        }
+
+        if (last == "in, no sequence")
+        {
+            item.Remove("sequenceId");
+        }
+
+        if (last == "in, no date")
+        {
+            item["lastMessage"]!.AsObject().Remove("date");
+        }
+
+        if (last == "in, no contact")
+        {
+            item.Remove("contactId");
+        }
+
+        if (flags is not null)
+        {
+            item["flags"] = JsonNode.Parse(flags);
+        }
+
+        using var account = new ReplyAccount().Returns(Feed, new JsonObject { ["items"] = new JsonArray(item), ["has_more"] = false, ["cursor"] = "AAAA" });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var events = Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct))["events"]!.AsArray();
+
+        if (read == "kept out")
+        {
+            Assert.Empty(events);
+            return;
+        }
+
+        var only = Assert.Single(events)!;
+        if (read != "bounce")
+        {
+            Assert.Equal(("thread_moved", read), ((string?)only["kind"], (string?)only["moved_by"]));
+            return;
+        }
+
+        Assert.Equal(
+            JsonNode.Parse($$"""
+                {"kind":"bounce","id":null,"occurred_at":"{{Utc(last == "in, no date" ? Ago(10) : Ago(12))}}","contact":"1001",
+                 "campaign":{{(last == "in, no sequence" ? "null" : "\"7\"")}},"message":null,"bounce":null}
+                """)!.ToJsonString(),
+            only.ToJsonString());
+    }
+
+    /// <summary>
+    /// A bounce is held to the end of a span by the thread's place in the feed, its last activity, as every item is: the
+    /// notice's own moment, which may be earlier, neither ends a span early nor lets one run past its end.
+    /// </summary>
+    [Fact]
+    public async Task A_bounce_past_the_end_of_a_span_ends_it_by_the_thread_s_last_activity()
+    {
+        var item = new JsonObject
+        {
+            ["threadId"] = 501, ["contactId"] = 1001, ["channel"] = "email", ["lastActivityDate"] = Ago(10),
+            ["flags"] = new JsonObject { ["hasBounce"] = true, ["hasReply"] = false },
+            ["lastMessage"] = new JsonObject { ["messageId"] = "<b501@mailer.example.com>", ["isOutbound"] = false, ["date"] = Ago(30) },
+        };
+        using var account = new ReplyAccount().Returns(Feed, new JsonObject { ["items"] = new JsonArray(item), ["has_more"] = true, ["cursor"] = "AAAA" });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+        var until = Moment(Now.AddMinutes(-20));
+
+        var page = Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1)), until: until), Ct));
+
+        Assert.Empty(page["events"]!.AsArray());
+        Assert.False((bool)page["has_more"]!);
+        Assert.Equal("u|" + until + "|", (string)page["cursor"]!);
     }
 
     /// <summary>
@@ -704,6 +841,9 @@ public class ReplyEventsReadTests
         Assert.Null(failed.ExternalIds);
         return failed;
     }
+
+    /// <summary>The key the runtime's store keeps an event under, which says whether two reads are one event.</summary>
+    private static string StoreKey(JsonNode? read) => EventKeys.Store(ReplyPlugins.PluginId, ReadEvent.Read(read)!);
 
     private static string[] Threads(JsonObject page) => [.. page["events"]!.AsArray().Select(item => (string)item!["thread"]!)];
 }

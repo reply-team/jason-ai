@@ -13,12 +13,17 @@ using System.Text.RegularExpressions;
 /// a page ended at, and an empty page hands back one at the moment it was read, ahead of the one it was given. A cursor or
 /// a moment older than the window is <c>inbox.cursor_expired</c>; a cursor Reply never issued, or one ahead of its clock,
 /// is <c>inbox.cursor_refused</c>, the CLI's word for Reply's refusal without a code of its own that names the cursor. A
-/// thread marked <c>_deleted</c> is not in the feed.
+/// thread marked <c>_deleted</c> is not in the feed. A message marked <c>_bounce</c> is a bounce notice, which lands on the
+/// thread of the send it answers as an inbound message with nothing in it saying it is one: it flags the thread as holding
+/// a bounce, for good, flags no reply, and is the item's last message where it is the newest.
 /// </summary>
 internal static partial class Account
 {
     /// <summary>What a test plants on a thread that Reply deleted: the inbox's own files still hold it, the feed does not.</summary>
     private const string DeletedMark = "_deleted";
+
+    /// <summary>What a test plants on a message that is a bounce notice: the feed flags it, and nothing else of it says so.</summary>
+    private const string BounceMark = "_bounce";
 
     /// <summary>What a test plants to have every page hand back an empty cursor, which reply-cli passes on unread.</summary>
     private const string FeedFile = "feed.json";
@@ -129,15 +134,16 @@ internal static partial class Account
         }
 
         item["hasMeetingIntent"] = thread["hasMeetingIntent"] is JsonValue intent && intent.GetValue<bool>();
+        var messages = (thread["messages"] as JsonArray ?? []).OfType<JsonObject>().ToList();
         item["flags"] = new JsonObject
         {
-            ["hasReply"] = Inbound(thread),
-            ["hasBounce"] = false,
+            ["hasReply"] = messages.Any(message => !Notice(message) && message["isOutbound"] is JsonValue outbound && !outbound.GetValue<bool>()),
+            ["hasBounce"] = messages.Any(Notice),
             ["hasAutoReply"] = false,
             ["hasOutOfOffice"] = false,
         };
 
-        var last = (thread["messages"] as JsonArray ?? []).OfType<JsonObject>()
+        var last = messages
             .OrderBy(message => DateTimeOffset.TryParse(Text(message, "date"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at) ? at : DateTimeOffset.MinValue)
             .LastOrDefault();
         if (last is not null)
@@ -152,6 +158,8 @@ internal static partial class Account
 
         return item;
     }
+
+    private static bool Notice(JsonObject message) => message[BounceMark] is JsonValue mark && mark.GetValue<bool>();
 
     private static bool EmptyCursors(string root)
     {
