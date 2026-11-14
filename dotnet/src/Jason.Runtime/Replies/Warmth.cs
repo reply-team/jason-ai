@@ -42,10 +42,13 @@ public enum WarmthState
 /// <para>
 /// AWAITING: a line of the campaign's own read that names the contact and that no standing verdict on its thread has
 /// judged. A verdict judges a line when it stands, says a nature, and is about a message
-/// at or after the line's move, or stands while a responder the runtime created for that thread succeeded with an
-/// attempt that started after the line was written (our own send into a replied thread moves it, and the responder that
-/// wakes on it finds the verdict standing and records nothing). The attempt's start is its <c>workitem_processing</c>
-/// line, so the order is the chronicle's own, never a clock. When the only verdicts that would judge a line say no
+/// at or after the line's move, or stands while a responder the runtime created for that thread after the line was
+/// written has succeeded (our own send into a replied thread moves it, and the responder that wakes on it finds the
+/// verdict standing and records nothing). The respond step creates each responder with a read of the thread of its
+/// own, so a responder created after the line read the message that moved it; a move patched onto a responder that
+/// already existed is never judged by that one, and the next responder created on the thread judges every earlier
+/// line of it at once. The creation is the responder's <c>workitem_created</c> line, so the order is the chronicle's
+/// own, never a clock. When the only verdicts that would judge a line say no
 /// nature, the contact awaits the nature rather than a judgement. A waiting reply outranks warmth: a warm contact's new
 /// reply may be a request to stop, so it is judged before anything else is sent. A provider event's <c>reply_detected</c>
 /// line is not a reply that waits. A line that names nobody makes wait only a contact a standing verdict names on its thread.
@@ -55,7 +58,7 @@ public enum WarmthState
 /// as the standing approvals' reads are: the contact's own lines and verdicts through the contact index; the verdicts
 /// on a thread through the verdicts' thread index by the campaign and the thread, and the one that replaced a verdict
 /// through the same index by its key; the observed lines on a thread through their thread index; a responder through
-/// the campaign's items of the same person, its attempts by item, and an attempt's start through the item's own lines.
+/// the campaign's items of the same person, and its creation through the item's own lines.
 /// None is bounded by the campaign's whole chronicle.
 /// </para>
 /// </remarks>
@@ -158,8 +161,8 @@ public static class Warmth
 
     /// <summary>
     /// Whether a standing verdict on the observed line <c>o</c>'s thread, whose nature passes <paramref name="nature"/>,
-    /// judges it: about a message at or after its move, or standing while a responder the runtime
-    /// created for the thread succeeded with an attempt that started after it. Correlated with the line <paramref name="line"/> alone and the
+    /// judges it: about a message at or after its move, or standing while a responder the runtime created for the thread
+    /// after the line has succeeded. Correlated with the line <paramref name="line"/> alone and the
     /// contact the responder is about, <paramref name="contact"/>, an expression. The verdicts are read by the line's
     /// thread, through the verdicts' thread index.
     /// </summary>
@@ -176,10 +179,7 @@ public static class Warmth
                       AND r.role = 'responder' AND r.created_by_type = 'system' AND r.status = 'succeeded'
                       AND json_extract(r.context_json, '$.inbound_reply.plugin') = json_extract({line}.new_json, '$.plugin')
                       AND json_extract(r.context_json, '$.inbound_reply.thread') = json_extract({line}.new_json, '$.thread')
-                      AND EXISTS (SELECT 1 FROM attempts AS a INDEXED BY ix_attempts_work_item_id_number
-                          WHERE a.work_item_id = r.id AND a.status = 'succeeded'
-                            AND EXISTS (SELECT 1 FROM journal AS s INDEXED BY ix_journal_work_item_id_public_id
-                                WHERE s.work_item_id = r.public_id AND s.kind = 'workitem_processing'
-                                  AND s.attempt_id = a.public_id AND s.id > {line}.id)))))
+                      AND EXISTS (SELECT 1 FROM journal AS c INDEXED BY ix_journal_work_item_id_public_id
+                          WHERE c.work_item_id = r.public_id AND c.kind = 'workitem_created' AND c.id > {line}.id))))
         """;
 }

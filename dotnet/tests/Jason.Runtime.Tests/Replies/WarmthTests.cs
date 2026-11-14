@@ -232,7 +232,7 @@ public class WarmthTests
         await using var db = database.Open();
         var seed = await SeedAsync(db);
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
-        var (_, attempt) = await ResponderAsync(db, seed, "thr-1");
+        var (_, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
 
         var entry = await new ReplyService(db, Writer).RecordAsync(
             Request(seed.Campaign, contact: null, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person)
@@ -345,11 +345,11 @@ public class WarmthTests
 
     /// <summary>
     /// Our own send into a replied thread moves it, and the read says the move as a reply. The responder the runtime
-    /// creates for that line starts after it, finds the verdict standing and records nothing; when it has succeeded the
-    /// contact is warm again. Until then they wait.
+    /// creates for that line, with a read of its own made after it, finds the verdict standing and records nothing; when
+    /// it has succeeded the contact is warm again. Until then they wait.
     /// </summary>
     [Fact]
-    public async Task Our_own_move_waits_until_a_responder_started_after_it_succeeds_with_a_verdict_standing()
+    public async Task Our_own_move_waits_until_a_responder_created_after_it_succeeds_with_a_verdict_standing()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -359,12 +359,60 @@ public class WarmthTests
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
         var moved = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
 
-        var (item, attempt) = await ResponderAsync(db, seed, "thr-1");
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
         var running = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
         await FinishAsync(db, item, attempt, succeeded: true);
 
         Assert.Equal(WarmthState.AwaitingJudgement, moved);
         Assert.Equal(WarmthState.AwaitingJudgement, running);
+        Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// The line lands while a responder created for an earlier move of the thread is scheduled; the move is patched onto
+    /// it, and it starts after the line and succeeds with a verdict standing. It was created before the line, so its read
+    /// may have run before the message that moved the thread: the line is not judged by it, and the contact still waits.
+    /// </summary>
+    [Fact]
+    public async Task A_line_patched_onto_a_scheduled_responder_that_starts_after_it_and_succeeds_leaves_the_contact_waiting()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        var scheduled = await CreatedResponderAsync(db, seed, seed.Contact, "thr-1");
+
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+        var attempt = await StartAsync(db, scheduled);
+        await FinishAsync(db, scheduled, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// A move patched onto a responder that already existed stays awaiting when that responder succeeds; the next
+    /// responder the runtime creates on the thread, after a later move, read the whole thread, so its success clears the
+    /// later line and the patched one at once.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_created_after_a_later_line_of_the_thread_clears_the_earlier_patched_line_too()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        var (first, firstAttempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+        await FinishAsync(db, first, firstAttempt, succeeded: true);
+        var patched = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
+
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:10:00.000Z");
+        var (next, nextAttempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
+        await FinishAsync(db, next, nextAttempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, patched);
         Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
@@ -385,7 +433,7 @@ public class WarmthTests
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
 
-        var (item, attempt) = await ResponderAsync(db, seed, which == "of another thread" ? "thr-9" : "thr-1", byPerson: which == "created by a person");
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, which == "of another thread" ? "thr-9" : "thr-1", byPerson: which == "created by a person");
         await FinishAsync(db, item, attempt, succeeded: which != "failed");
 
         Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
@@ -404,15 +452,15 @@ public class WarmthTests
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", nature: null);
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
-        var (item, attempt) = await ResponderAsync(db, seed, "thr-1");
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
         await FinishAsync(db, item, attempt, succeeded: true);
 
         Assert.Equal(WarmthState.AwaitingNature, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
     /// <summary>
-    /// A move patched onto a responder that is already open, whose attempt started before the line: the responder's arm
-    /// does not judge it, because its attempt did not start after the line. What clears the line is a verdict with a
+    /// A move patched onto a responder that is already open: the responder's arm does not judge it, because the responder
+    /// was not created after the line. What clears the line is a verdict with a
     /// nature recorded on the thread after it — the open responder's own verdict when it records after the patch, or any
     /// later one, a person's by hand included. Where the responder recorded its verdict before the patch and nothing
     /// records after, nothing clears it: the contact stays awaiting and a send to them parks for the person.
@@ -424,7 +472,7 @@ public class WarmthTests
         await using var db = database.Open();
         var seed = await SeedAsync(db);
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
-        var (item, attempt) = await ResponderAsync(db, seed, "thr-1");
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
         await FinishAsync(db, item, attempt, succeeded: true);
@@ -438,7 +486,7 @@ public class WarmthTests
 
     /// <summary>
     /// The open responder records its verdict about the earlier message after the patched move was written: the verdict
-    /// is about a message before the move and the responder's attempt started before it, so nothing judges the move and
+    /// is about a message before the move and the responder was created before it, so nothing judges the move and
     /// the contact stays awaiting. A journal id above the line's judges nothing.
     /// </summary>
     [Fact]
@@ -448,7 +496,7 @@ public class WarmthTests
         await using var db = database.Open();
         var seed = await SeedAsync(db);
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
-        var (item, attempt) = await ResponderAsync(db, seed, "thr-1");
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
         await FinishAsync(db, item, attempt, succeeded: true);
@@ -536,7 +584,7 @@ public class WarmthTests
         Assert.Equal(WarmthState.Cold, await Warmth.OfAsync(db, seed.Campaign.Id, stranger.Id, Ct));
     }
 
-    /// <summary>The unnamed line is judged as any line is: the contact's responder that started after it and succeeded.</summary>
+    /// <summary>The unnamed line is judged as any line is: the contact's responder created after it that succeeded.</summary>
     [Fact]
     public async Task An_unnamed_own_line_judged_by_the_responder_arm_makes_the_contact_warm_again()
     {
@@ -548,7 +596,7 @@ public class WarmthTests
         await ObservedAsync(db, seed.Campaign, contact: null, "thr-1", "2026-09-14T12:05:00.000Z");
         var waiting = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
 
-        var (item, attempt) = await ResponderAsync(db, seed, "thr-1");
+        var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1");
         await FinishAsync(db, item, attempt, succeeded: true);
 
         Assert.Equal(WarmthState.AwaitingJudgement, waiting);
@@ -658,30 +706,64 @@ public class WarmthTests
         new ReplyService(db, Writer).RecordAsync(Request(campaign, contact, thread, message, at, nature), Ct);
 
     /// <summary>
-    /// A responder for the thread as the respond step creates one — the system's, about the contact, carrying the thread in
-    /// its <c>inbound_reply</c> — whose attempt starts now: its <c>workitem_processing</c> line is written here.
+    /// A responder for the thread as the respond step creates one — the system's, about the person the line names (nobody
+    /// for a line that names nobody), carrying the thread in its <c>inbound_reply</c> — created now, its
+    /// <c>workitem_created</c> line written here, and started now, its <c>workitem_processing</c> line written after it.
     /// </summary>
-    private static async Task<(WorkItem Item, Attempt Attempt)> ResponderAsync(JasonDbContext db, Seed seed, string thread, bool byPerson = false)
+    private static async Task<(WorkItem Item, Attempt Attempt)> ResponderAsync(JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false)
+    {
+        var item = await CreatedResponderAsync(db, seed, contact, thread, byPerson);
+        return (item, await StartAsync(db, item));
+    }
+
+    /// <summary>A responder created now and not yet started: scheduled, as one waiting for its slot is.</summary>
+    private static async Task<WorkItem> CreatedResponderAsync(JasonDbContext db, Seed seed, Contact? contact, string thread, bool byPerson = false)
     {
         var item = WorkItemFactory.NewAiRole(seed.Campaign, role: Responder.Role, now: Noon, configure: item =>
         {
             item.CreatedByType = byPerson ? ActorType.Human : ActorType.System;
-            item.Contact = seed.Contact;
-            item.Status = WorkItemStatus.Processing;
-            item.AttemptCount = 1;
+            item.Contact = contact;
+            item.Status = WorkItemStatus.Scheduled;
             item.Context = new JsonObject
             {
                 ["trigger"] = JournalKinds.InboundReplyObserved,
                 [Responder.InboundReplyKey] = new JsonObject { ["plugin"] = "mailbox", ["thread"] = thread },
             };
         });
-        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Running, Noon);
         db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+        Writer.Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.WorkItemCreated,
+            seed.Campaign,
+            key: "kind",
+            updated: new JsonObject
+            {
+                ["kind"] = "ai_role",
+                ["role"] = Responder.Role,
+                ["operation"] = null,
+                ["contact_id"] = contact?.PublicId,
+                ["priority"] = item.Priority,
+                ["not_before"] = null,
+                ["due_at"] = null,
+            },
+            workItem: item);
+        await db.SaveChangesAsync(Ct);
+        return item;
+    }
+
+    /// <summary>The responder's first attempt starts now: its <c>workitem_processing</c> line is written here.</summary>
+    private static async Task<Attempt> StartAsync(JasonDbContext db, WorkItem item)
+    {
+        item.Status = WorkItemStatus.Processing;
+        item.AttemptCount = 1;
+        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Running, Noon);
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(Ct);
         Writer.Append(db, Actors.Dispatcher, JournalKinds.WorkItemProcessing, campaign: null, key: "attempt", updated: JsonValue.Create(1), workItem: item, attempt: attempt);
         await db.SaveChangesAsync(Ct);
-        return (item, attempt);
+        return attempt;
     }
 
     private static async Task FinishAsync(JasonDbContext db, WorkItem item, Attempt attempt, bool succeeded)

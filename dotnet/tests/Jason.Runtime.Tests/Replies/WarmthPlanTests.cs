@@ -9,7 +9,7 @@ namespace Jason.Runtime.Tests.Replies;
 /// by the columns that bound it, never by walking it and never by the campaign alone: the contact's own lines and
 /// verdicts by the contact; the verdicts on a thread by the campaign and the thread; the verdict that replaced one by the
 /// campaign, the thread and its key; the observed lines on a thread by the campaign and the thread; a responder by the
-/// campaign's items of the same person; its attempts by the item; an attempt's start by the item's own lines; the
+/// campaign's items of the same person; its creation by the item's own lines; the
 /// contact's public id by its row. The plans are read from the very queries the claim runs.
 /// </summary>
 public class WarmthPlanTests
@@ -30,8 +30,7 @@ public class WarmthPlanTests
                 "v: INDEX ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=?)",
                 "later: INDEX ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=? AND key=? AND rowid>?)",
                 "r: INDEX ix_work_items_campaign_id_contact_id (campaign_id=? AND contact_id=?)",
-                "a: INDEX ix_attempts_work_item_id_number (work_item_id=?)",
-                "s: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
+                "c: INDEX ix_journal_work_item_id_public_id (work_item_id=?)",
             ]
         },
         {
