@@ -1,0 +1,20 @@
+{
+  "operation": "campaign.set_send_mode",
+  "case": "not-human",
+  "request": {
+    "campaign_id": "cmp_1",
+    "warm": "automatic",
+    "actor": {
+      "type": "role",
+      "id": "manager"
+    }
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "send_mode_not_human",
+      "message": "An actor of type 'role' cannot set a campaign's send mode; it is a person's standing word about how the campaign's sends go.",
+      "retryable": false
+    }
+  }
+}

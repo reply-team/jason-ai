@@ -55,14 +55,15 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         var fetched = await query.OrderBy(a => a.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return Paging.ToPage(fetched, limit, a => a.PublicId, Summary);
+        var unset = await UnsetAsync(cancellationToken).ConfigureAwait(false);
+        return Paging.ToPage(fetched, limit, a => a.PublicId, a => Summary(a, unset));
     }
 
     public async Task<ApprovalDto> GetAsync(ApprovalGetRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var approval = await LoadAsync(request.ApprovalId, tracking: false, cancellationToken).ConfigureAwait(false);
-        return Detail(approval);
+        return Detail(approval, await UnsetAsync(cancellationToken).ConfigureAwait(false));
     }
 
     /// <summary>The work is let back into the queue, where the claim will check that it is still what was approved.</summary>
@@ -135,7 +136,8 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
             throw DomainErrors.ApprovalNotPending(approval.PublicId, await StandsAsync(approval.PublicId, cancellationToken).ConfigureAwait(false));
         }
 
-        return Detail(approval);
+        // The decision is written; what follows reads only, and is not cancelled once it is.
+        return Detail(approval, await UnsetAsync(CancellationToken.None).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -308,9 +310,16 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
             ?? throw DomainErrors.ApprovalNotFound(id);
     }
 
-    private static ApprovalDto Detail(Approval approval) =>
-        ApprovalMapper.ToDto(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId, approval.WorkItem.Campaign.Name, ContactNames.Display(approval.WorkItem.Contact));
+    /// <summary>
+    /// The installation's open question, carried by every approval until it is answered: the send-mode keys nobody has set.
+    /// A fact read as it is asked, with nothing stored about having asked it, so an unset brings it back.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> UnsetAsync(CancellationToken cancellationToken) =>
+        SendModes.Unset(await SendModes.ReadAsync(db, cancellationToken).ConfigureAwait(false));
 
-    private static ApprovalSummaryDto Summary(Approval approval) =>
-        ApprovalMapper.ToSummary(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId, approval.WorkItem.Campaign.Name, ContactNames.Display(approval.WorkItem.Contact));
+    private static ApprovalDto Detail(Approval approval, IReadOnlyList<string> sendModesUnset) =>
+        ApprovalMapper.ToDto(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId, approval.WorkItem.Campaign.Name, ContactNames.Display(approval.WorkItem.Contact), sendModesUnset);
+
+    private static ApprovalSummaryDto Summary(Approval approval, IReadOnlyList<string> sendModesUnset) =>
+        ApprovalMapper.ToSummary(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId, approval.WorkItem.Campaign.Name, ContactNames.Display(approval.WorkItem.Contact), sendModesUnset);
 }

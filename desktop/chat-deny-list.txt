@@ -8,8 +8,8 @@
 # again. The operation lines are checked against the Runtime API and the verbs, and are edited by hand.
 #
 # The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a
-# preference, a block cleared, work resumed, a send reviewed, a report and a subscription rewound. The CLI gives them
-# no default actor, and gives none to four verbs further down either.
+# preference, a campaign's send mode, a block cleared, work resumed, a send reviewed, a report and a subscription
+# rewound. The CLI gives them no default actor, and gives none to four verbs further down either.
 approval approve
 approval reject
 approval set-standing
@@ -17,6 +17,7 @@ approval unset-standing
 decision answer
 preference set
 preference unset
+campaign set-send-mode
 block clear
 workitem resume
 workitem review
@@ -58,6 +59,7 @@ approval.unset_standing
 decision.answer
 preference.set
 preference.unset
+campaign.set_send_mode
 block.clear
 workitem.resume
 workitem.review

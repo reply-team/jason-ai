@@ -1358,6 +1358,11 @@ public class StatusCommandTests
             registry);
     }
 
+    /// <summary>The installation's send modes the runtime's <c>system.info</c> answers with; without them it says none, as an older runtime does.</summary>
+    internal static void SendModes(TempPaths dir, SendModesInForce modes) => SendModeAnswers[dir.Paths.Root] = modes;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SendModesInForce> SendModeAnswers = [];
+
     /// <summary>
     /// A role of the person's own on the roster beside the seeded ones: not shipped, and with the entry command it was added
     /// with, where it was added with one.
@@ -1477,7 +1482,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins }, JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root) }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

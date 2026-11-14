@@ -47,7 +47,7 @@ shells, `command(regex:jason .*)`) and `read_file(<harness folder>)`; the
 If the person gave you these three lines:
 
 ```text
-Install Jason by following https://get.jasonharness.ai/install.
+Install Jason by following https://get.jasonharness.ai/install
 When it reports Ready, start its quick-start skill and take me to my first campaign.
 If anything stops you, ask me directly and tell me why.
 ```

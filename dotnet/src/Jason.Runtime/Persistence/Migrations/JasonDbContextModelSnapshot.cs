@@ -591,6 +591,26 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("responder_watermark");
 
+                    b.Property<string>("SendModeCold")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_cold");
+
+                    b.Property<string>("SendModeColdSetBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_cold_set_by");
+
+                    b.Property<string>("SendModeWarm")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_warm");
+
+                    b.Property<string>("SendModeWarmSetBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("send_mode_warm_set_by");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)

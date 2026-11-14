@@ -17,6 +17,12 @@ public static class Actors
     /// <summary>The dispatcher's own writes: claims, expiries and lost leases are the runtime acting, not a role.</summary>
     public static ActorRef Dispatcher { get; } = new(ActorType.System, "dispatcher");
 
+    /// <summary>
+    /// The stop an opt-out makes: the register entries the runtime writes itself when a verdict says a person asked not to
+    /// be written to, so a reader of the register tells them apart from the entries a person or a role added.
+    /// </summary>
+    public static ActorRef OptOut { get; } = new(ActorType.System, "opt_out");
+
     /// <summary>A running executor. Work it creates stays traceable to the attempt that asked for it.</summary>
     public static ActorRef ForAttempt(Attempt attempt)
     {

@@ -100,11 +100,12 @@ Jason-Attempt: att_...
 ```
 
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
-operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
+operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the ones that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
-the code `decided_inside_a_run` before the body is read, and record nothing. A program that is not running inside an
-attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
-so in one line on stderr, naming the variable and never its value.
+the code `decided_inside_a_run` before the body is read, and record nothing, and `reply.record`, which records a verdict
+that names a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running
+inside an attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent:
+`jason` says so in one line on stderr, naming the variable and never its value.
 
 ## The request form
 
@@ -146,12 +147,12 @@ so in one line on stderr, naming the variable and never its value.
   `system` is refused because it is the runtime's own. The type `plugin` is refused the same way to every caller but a
   handler capability, which must name its own plugin as the id. Some operations ask for more: `approval.approve`,
   `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.answer`, `block.clear`,
-  `preference.set` and `preference.unset` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
+  `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
   records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume`, `workitem.review` and
-  `report.submit` take no such default: given no actor, the CLI refuses all eleven itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
+  `report.submit` take no such default: given no actor, the CLI refuses all twelve itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.
@@ -192,7 +193,10 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `system.info`: what `jason runtime status` shows. Its `routes` section counts the global overrides and the campaign
   routes, the routes that name a channel among them, and says in `channel_route_count` how many name one. A runtime older
   than channel routes has no such member, which is how `jason route set` and `jason route unset` know that `--channel`
-  would be ignored there and decline to send it.
+  would be ignored there and decline to send it. Its `send_modes` section is the installation's send mode in force
+  for a cold contact and for a warm one, each `{mode, source}`, the source `preference` or `default`: never who set
+  one, which `preference.list` answers, and never a campaign's own, which `campaign.get` answers. `jason status` says
+  it in its `send_modes` check.
 - `system.shutdown`: `jason runtime stop` sends it.
 - `system.drain`: stop claiming; `jason update apply` sends it.
 - `system.resume`: claim again. No command sends it.
@@ -209,6 +213,14 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item.
 - `campaign.archive`
 - `campaign.update_context`
+- `campaign.set_send_mode`: the campaign's own send mode for its cold contacts, its warm ones or both, `automatic` or
+  `every_message`; null gives a mode back to the installation's `send_mode.cold` or `send_mode.warm`, and an absent
+  one is left alone. A person's word: only a named `human` sets it (`send_mode_not_human`, `actor_required`), and a
+  request from inside a run is refused. Each mode that moves is one `campaign_updated` line, and so is a mode set again by
+  another person, which becomes theirs: its old and its new are the same word, under the new setter; the same person
+  asking again writes nothing. Every answer that carries a campaign whole says the campaign's own in `send_modes`, each
+  null where it sets none, and the mode a send to a cold or a warm contact goes under now in `send_modes_in_force`,
+  each `{mode, source}`, the source `campaign`, `preference` or `default`; `campaign.update` takes no mode.
 - `campaign.add_contacts`: the people Jason's campaign is about; enrolling them at the provider is a `provider_op`
   work item.
 - `campaign.remove_contacts`
@@ -336,6 +348,9 @@ that is not that attempt does not call them.
 
 - `approval.list`: what is waiting; pending by default.
 - `approval.get`
+- Every approval answer, the four verbs' alike, carries `send_modes_unset`: the send-mode preferences nobody has set
+  yet, `send_mode.cold` and `send_mode.warm`, an empty list once both are.
+  [`docs/work-execution.md`](work-execution.md), "Approvals".
 - `approval.approve`: the work is let back into the queue, where the claim checks that it is still what was approved. An
   approval of a search may carry `allow`, which sets the campaign's allowance for the search's audience in the same act;
   approving a search under another audience than the allowance names takes the allowance back in the same act.
@@ -392,6 +407,25 @@ that is not that attempt does not call them.
   no verdict. Each refusal is a 400 and writes nothing. One decision may back repeated records on the same reply, which
   supersede each other as any verdicts do. The line then names the decision as `decision_id` and the person as
   `answered_by`, their actor; both are null where no decision is named.
+  **An `opt_out` stops the person, in the same act.** The one save that records the verdict also puts every channel
+  value the contact has on the do-not-contact register (`suppression` below), each entry written by the runtime's
+  reserved actor `system:opt_out` with the reason `Asked not to be written to: opt-out verdict jrn_... in campaign
+  cmp_...`; a value already on the register gets no second entry, and nobody is asked. A verdict below any confidence
+  says `opt_out` as surely as a sure one does: the runtime reads the nature, never the confidence. The line's contact
+  column is the contact its body names, never the person of the run that records it. From then on the claim refuses
+  work about that contact in every campaign, over the operations the register covers: what the register holds as
+  `suppressed`, and a value it never held — one the contact gains later, or any value of a contact who had none — as
+  `opted_out` ([routing](routing.md) §7). Sends already parked for a person's approval stay parked and are refused
+  when they are claimed. The runtime never takes an entry off the register, and the provider's own sequence is not
+  stopped here. **Only a person's own later verdict on the same reply in that verdict's campaign lifts the
+  lock**: one recorded under a `human` actor that names the person (`human:<Name>`), outside any run, that states a
+  `nature` other than `opt_out`. A role's or an attempt's own verdict never lifts it, nor does a `human` actor with no
+  name, a verdict that states no nature, or one that carries a `decision_id` by that alone — a run may carry an answer
+  given the other way, before the opt-out, or about another reply. `suppression.remove` takes an entry off the register
+  and leaves the lock. A request from inside a
+  run — one that carries `Jason-Attempt`, as `jason` sends from there — that names a `human` actor is recorded as that
+  run's verdict: the line names the run's work item and attempt, the run is checked to be of work in the same campaign
+  (a 400 at `actor` where it is not), and it lifts no lock.
   `jason reply record` sends it, `--decision` names the question and `--nature` states the nature.
 - `reply.count`: how many replies roles have judged, by the category word each verdict names, for each campaign asked
   and in total. It counts verdicts, not replies as they arrive: a reply nobody has judged yet is not in it, and the
@@ -492,8 +526,11 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 ### `suppression`
 
 - `suppression.add`: adds to the do-not-contact list, global across campaigns and scoped to one channel; an existing
-  pair answers with the entry already there.
-- `suppression.remove`: lifts a suppression; the reason is mandatory.
+  pair answers with the entry already there. The runtime adds entries of its own: an `opt_out` verdict (`reply.record`
+  above) puts every value of the contact on the list, written by `system:opt_out` with the verdict's id in the reason.
+- `suppression.remove`: lifts a suppression; the reason is mandatory. It lifts that one entry: a contact an opt-out
+  verdict stands for is still refused by the claim's `opted_out` lock, which only a person's own later verdict on that
+  reply lifts: recorded under their name, outside any run, saying what the reply is other than an opt-out.
 - `suppression.list`: the do-not-contact list.
 
 ### `events`
@@ -593,11 +630,13 @@ interrupted.
   or through another tool and Jason should know. The report is kept as the claim it is; what it carries is in
   [the reporting skill](../skills/runtime/reporting-outside-effects/SKILL.md).
 - **A decision in a person's name**: `approval.approve`, `approval.reject`, `approval.set_standing`,
-  `approval.unset_standing` and `decision.answer`. Each needs an `actor` of type `human` that names the person, and each is refused for any other type. The runtime cannot tell a
-  person from a program that holds the token, so a program records only what a person decided
-  ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)). A request to any of the five that
+  `approval.unset_standing`, `decision.answer`, `preference.set`, `preference.unset` and `campaign.set_send_mode`. Each
+  needs an `actor` of type `human` that names the person, and each is refused for any other type. The runtime cannot
+  tell a person from a program that holds the token, so a program records only what a person decided
+  ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)). A request to any of them that
   carries `Jason-Attempt`, as `jason` sends from inside a run, is answered `403` `decided_inside_a_run` whatever person
-  it names, and changes nothing: a person's word is given outside the run that asked. That is a higher bar, not a
+  it names, and changes nothing: a person's word is given outside any run. A preference is refused there for every key,
+  since no person is in a run to state one. That is a higher bar, not a
   boundary: a run that dropped the header and named a person would not be told apart.
 - **Work**: `workitem.create`, with `kind` `ai_role` for a role's work or `provider_op` for an operation a plugin
   performs, its arguments in the context's `input` and checked against the operation's contract

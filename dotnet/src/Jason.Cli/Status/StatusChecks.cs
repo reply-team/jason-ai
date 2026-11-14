@@ -279,6 +279,7 @@ internal static class StatusChecks
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
             checks.Add(HarnessRoot(info));
+            checks.Add(SendModes(info));
         }
         finally
         {
@@ -431,6 +432,51 @@ internal static class StatusChecks
             // value is ever read from an answer.
             _ => throw new ArgumentOutOfRangeException(nameof(info), harness.RootState, "There is no such harness root state."),
         };
+    }
+
+    /// <summary>
+    /// How the installation's sends go: for a contact who has not answered and for one who has, the mode in force and where
+    /// it comes from, as the runtime reports it. Optional and never a failure: every message waiting for a person is a way
+    /// to work, so this never decides readiness. Who chose a mode is the person's name, which this check never carries;
+    /// <c>jason preference list</c> says it.
+    /// </summary>
+    private static StatusCheck SendModes(SystemInfoResponse? info)
+    {
+        const string Name = "send_modes";
+        if (info is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so how its sends go was not asked.", Repair.Start);
+        }
+
+        if (info.SendModes is not { } modes)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime is older than this CLI and does not say how its sends go.", null);
+        }
+
+        var fact = $"To a contact who has not answered: {ModeInWords(modes.Cold)}. To a contact who has: {ModeInWords(modes.Warm)}.";
+        return new StatusCheck(Name, false, CheckState.Ok, fact, null) with
+        {
+            Details = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["cold"] = Word(modes.Cold.Mode),
+                ["cold_source"] = Word(modes.Cold.Source),
+                ["warm"] = Word(modes.Warm.Mode),
+                ["warm_source"] = Word(modes.Warm.Source),
+            },
+        };
+
+        static string ModeInWords(SendModeInForce mode) =>
+            (mode.Mode == SendMode.Automatic ? "sent without asking" : "every message waits for a person")
+            + mode.Source switch
+            {
+                SendModeSource.Preference => ", as the installation's preference says",
+                SendModeSource.Campaign => ", as the campaign's own says",
+                _ => ", as nobody has chosen yet",
+            };
+
+        static string Word<TEnum>(TEnum value)
+            where TEnum : struct, Enum =>
+            System.Text.Json.JsonNamingPolicy.SnakeCaseLower.ConvertName(value.ToString());
     }
 
     /// <summary>

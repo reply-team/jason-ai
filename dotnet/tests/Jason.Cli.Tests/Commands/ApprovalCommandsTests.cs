@@ -467,6 +467,32 @@ public class ApprovalCommandsTests
         Assert.Contains("Contact:       Ada\u200c\u200d\u00adLovelace\uFFFD\uFFFDx (cnt_1) | email ada@example.test", lines);
     }
 
+    /// <summary>
+    /// The installation's open question is said on the approval a person reads, while it is open, naming the keys; once
+    /// both modes are chosen the line is gone.
+    /// </summary>
+    [Theory]
+    [InlineData("[\"send_mode.cold\",\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.cold, send_mode.warm; until a person sets them, every send waits for approval")]
+    [InlineData("[\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.warm; until a person sets them, every send waits for approval")]
+    [InlineData("[]", null)]
+    public async Task Get_says_which_send_modes_nobody_has_chosen_while_any_is_open(string unset, string? said)
+    {
+        using var cli = new CliRun(OneApproval.Replace("\"preview\": {", $"\"send_modes_unset\": {unset}, \"preview\": {{", StringComparison.Ordinal));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        if (said is null)
+        {
+            Assert.DoesNotContain(lines, line => line.StartsWith("Send modes:", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.Contains(said, lines);
+        }
+    }
+
     private static string WithExample(string example) =>
         OneApproval.Replace("\"preview\": {", $"\"preview\": {{\"example\": {example},", StringComparison.Ordinal);
 

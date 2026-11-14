@@ -44,6 +44,7 @@ public static class ConfinedVerbs
         (Kind.PersonsWord, "decision answer"),
         (Kind.PersonsWord, "preference set"),
         (Kind.PersonsWord, "preference unset"),
+        (Kind.PersonsWord, "campaign set-send-mode"),
         (Kind.PersonsWord, "block clear"),
         (Kind.PersonsWord, "workitem resume"),
         (Kind.PersonsWord, "workitem review"),

@@ -16,6 +16,7 @@ using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Replies;
 using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
@@ -855,13 +856,15 @@ public sealed class Claimer(
             await db.Entry(contact).Collection(person => person.Channels).LoadAsync(ct).ConfigureAwait(false);
         }
 
+        var pins = await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false);
+        var suppressed = await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false);
         return new PreflightFacts(
             item,
             campaign,
             contact,
-            await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false),
+            pins,
             campaignPins,
-            await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false),
+            suppressed,
             blocks,
             unsettled,
             send,
@@ -869,7 +872,8 @@ public sealed class Claimer(
             search,
             audience,
             inTheWay,
-            thread);
+            thread,
+            suppressed ? null : await OptedOutAsync(db, contract, item, contact, ct).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -971,4 +975,15 @@ public sealed class Claimer(
         && CanonicalInput.ConsumedChannel(contract, item) is { } channel
         && CanonicalInput.Reachable(contact, channel) is { } reachable
         && await suppression.IsSuppressedAsync(db, channel, reachable.Value, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// The second question, under the register's own gate and asked only where the register answered no: whether an
+    /// opt-out verdict stands for the person, by the contact's own lines, whatever value the work would reach them at.
+    /// </summary>
+    private static async Task<string?> OptedOutAsync(JasonDbContext db, OperationContract contract, WorkItem item, Contact contact, CancellationToken ct) =>
+        contract.Preflight.Suppression == SuppressionCheck.Checked
+        && CanonicalInput.ConsumedChannel(contract, item) is { } channel
+        && CanonicalInput.Reachable(contact, channel) is not null
+            ? await OptOuts.StandingAsync(db, contact.Id, ct).ConfigureAwait(false)
+            : null;
 }

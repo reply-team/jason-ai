@@ -57,7 +57,7 @@ public sealed partial class ApiGrantDocTests
 
     [Theory]
     [InlineData("docs/plugins.md", "A subscriber granted `workitem` writes can feed itself through a role: an item it creates may run a role, and what that role does afterwards is ordinary work.")]
-    [InlineData("docs/plugins.md", "a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`, `suppression.remove`)")]
+    [InlineData("docs/plugins.md", "a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`, `suppression.remove`, `campaign.set_send_mode`)")]
     [InlineData("docs/plugins.md", "`host.call` refuses the same way, with `details: { capability: \"api\", operation }`.")]
     [InlineData("docs/plugins.md", "`actor` or `reason` among the arguments is a `TypeError`; they are the host's to set.")]
     [InlineData("docs/plugins.md", "Every call is bounded by the smaller of 30 seconds and what remains of the invocation, and reads at most 1 MiB of answer.")]

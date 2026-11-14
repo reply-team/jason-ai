@@ -78,6 +78,12 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Plugin:", approval.PluginId));
         text.AppendLine(Line("Account:", approval.BindingIdentity));
         AppendExample(text, preview?["example"]);
+        // The installation's open question, while it is open: which send modes nobody has chosen, and what that means.
+        if (approval.SendModesUnset is { Count: > 0 } unset)
+        {
+            text.AppendLine(Line("Send modes:", $"not chosen yet: {string.Join(", ", unset)}; until a person sets them, every send waits for approval"));
+        }
+
         text.AppendLine(Line("Status:", RenderText.Snake(approval.Status)));
         text.AppendLine(Line("Parked:", approval.Reason));
         text.AppendLine(Line("Requested:", RenderText.Moment(approval.RequestedAt)));

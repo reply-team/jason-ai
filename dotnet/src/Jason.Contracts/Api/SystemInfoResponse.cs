@@ -10,6 +10,11 @@ namespace Jason.Contracts.Api;
 /// The plugin packages this runtime's release publishes, each beside the package of that id the active snapshot holds;
 /// null on a runtime older than the section.
 /// </param>
+/// <param name="SendModes">
+/// The installation's send mode in force for a cold contact and for a warm one, each with where it comes from: the
+/// preference, or the default, which is every message. Two closed words each and never a person's name or a value; a
+/// campaign's own modes are the campaign's to answer. Null on a runtime older than the section.
+/// </param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -27,7 +32,8 @@ public sealed record SystemInfoResponse(
     ListeningInfo? Listening = null,
     UiModuleInfo? Ui = null,
     HarnessInfo? Harness = null,
-    IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins = null);
+    IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins = null,
+    SendModesInForce? SendModes = null);
 
 /// <summary>
 /// A plugin package this runtime's release publishes beside its archives, and the package of the same id the active

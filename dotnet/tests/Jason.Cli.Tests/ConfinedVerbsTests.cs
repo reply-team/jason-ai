@@ -21,6 +21,7 @@ public class ConfinedVerbsTests
         ["decision answer"] = ["decision", "answer", "dec_A", "--answer", "Yes, go ahead."],
         ["preference set"] = ["preference", "set", "outreach.tone", "--value", "{\"tone\":\"plain\"}"],
         ["preference unset"] = ["preference", "unset", "outreach.tone"],
+        ["campaign set-send-mode"] = ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
         ["block clear"] = ["block", "clear", "blk_A"],
         ["workitem resume"] = ["workitem", "resume", "wi_A"],
         ["workitem review"] = ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],

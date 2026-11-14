@@ -47,6 +47,9 @@ public static class OperationEndpoints
                 return;
             }
 
+            // The run the request says it comes from, for whatever reads it to check: a verdict on a reply records it.
+            using var run = InsideARun.AttemptOf(context.Request) is { } named ? RunScope.Open(named) : null;
+
             TRequest request;
             var caller = context.Features.Get<HandlerCaller>();
             try

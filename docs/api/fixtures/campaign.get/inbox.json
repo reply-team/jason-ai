@@ -18,6 +18,20 @@
     "updated_at": "2026-09-16T00:00:00.000Z",
     "archived_at": null,
     "folder_path": null,
-    "audience_threshold": null
+    "audience_threshold": null,
+    "send_modes": {
+      "cold": null,
+      "warm": null
+    },
+    "send_modes_in_force": {
+      "cold": {
+        "mode": "every_message",
+        "source": "default"
+      },
+      "warm": {
+        "mode": "every_message",
+        "source": "default"
+      }
+    }
   }
 }

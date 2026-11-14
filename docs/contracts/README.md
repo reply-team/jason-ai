@@ -253,10 +253,13 @@ instead where it is not offered.
 
 A fourth family is published here, and it is no work at all: the **named preferences**, structured facts about the
 client that a person states, each with a schema, so that a skill can check that one is set before it writes and a
-screen can show it. Three are published:
+screen can show it. Five are published:
 
 - [`agent.interactive_host`](preferences/agent.interactive_host.md) — the agent host `jason session open` starts for
   the person;
+- [`send_mode.cold`](preferences/send_mode.cold.md) — whether what is sent to a contact who has not answered goes
+  without being asked, or each send to a person first;
+- [`send_mode.warm`](preferences/send_mode.warm.md) — the same for a contact who has answered;
 - [`sender.identity`](preferences/sender.identity.md) — who messages are written as;
 - [`tone_of_voice`](preferences/tone_of_voice.md) — how the company sounds.
 
@@ -404,7 +407,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`campaign_created`](journal/campaign_created.json) | `0.1.0` | yes | campaign | A campaign was created as a draft, under the name the line carries. |
 | [`campaign_paused`](journal/campaign_paused.json) | `0.1.0` | yes | campaign | A campaign stopped being active, so none of its work is dispatched until it is started again. |
 | [`campaign_started`](journal/campaign_started.json) | `0.1.0` | yes | campaign | A campaign became active, from a draft or from a pause, so its work can be dispatched. |
-| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold or the project it is in; a change of several settings writes one line for each. |
+| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold, the project it is in, or its own send mode for cold or for warm contacts; a change of several settings writes one line for each. |
 | [`contact_archived`](journal/contact_archived.json) | `0.1.0` | yes | contact | A person was archived in the contact directory, so nothing reaches out to them any more and their open work is cancelled. |
 | [`contact_created`](journal/contact_created.json) | `0.1.0` | yes | contact | A person was added to the contact directory. |
 | [`contact_updated`](journal/contact_updated.json) | `0.1.0` | yes | contact | A person's details in the contact directory changed; the line names the fields that changed and never their values. |
