@@ -668,7 +668,7 @@ public partial class ClaimerTests
         var refused = await Assert.ThrowsAsync<ConflictException>(() => ReviewAsync(db, reading, send.Id, send.ReviewHash, ReviewResult.Doubts, "off_brief", ReviewSentence, harness.Claimer));
 
         Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{approval.PublicId}' stands for the send as it would now go", refused.Message, StringComparison.Ordinal);
         await using var fresh = database.Open();
         Assert.Equal(pass, (await fresh.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct)).PublicId);
     }
