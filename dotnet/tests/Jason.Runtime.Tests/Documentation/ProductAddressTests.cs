@@ -187,7 +187,7 @@ public sealed partial class ProductAddressTests : IDisposable
     [InlineData("https://jasonharness.ai/releases/latest/download/manifest.json", null)]
     [InlineData("https://get.jasonharness.ai.example.com/releases/latest/download/manifest.json", null)]
     [InlineData("https://get.jasonharness.ai/releases", null)]
-    [InlineData("The instructions are <https://get.jasonharness.ai/install>: read the whole file", "a short path")]
+    [InlineData("Install Jason by following https://get.jasonharness.ai/install.", "a short path")]
     [InlineData("served as plain text at `https://get.jasonharness.ai/install`, the address", "a short path")]
     [InlineData("https://get.jasonharness.ai/install?ref=linkedin-ads", "a short path")]
     [InlineData("https://get.jasonharness.ai/desktop/windows", "a short path")]

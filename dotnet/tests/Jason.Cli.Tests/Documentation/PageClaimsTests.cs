@@ -760,7 +760,7 @@ public partial class PageClaimsTests
     public void The_readme_says_to_start_the_install_session_without_connectors_above_the_prompt()
     {
         var readme = Page("docs", "handbook.md");
-        var fence = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
+        var fence = readme.IndexOf("```text\nInstall Jason by following", StringComparison.Ordinal);
         var sentence = readme.IndexOf("Start the agent session for the install without external connectors: the prompt below needs none.", StringComparison.Ordinal);
 
         Assert.True(fence > 0, "the prompt's fence is where the page has it");
@@ -784,7 +784,7 @@ public partial class PageClaimsTests
     public void The_readme_says_what_auto_mode_does_at_the_install_above_the_prompt()
     {
         var readme = Page("docs", "handbook.md");
-        var fence = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
+        var fence = readme.IndexOf("```text\nInstall Jason by following", StringComparison.Ordinal);
         Assert.True(fence > 0, "the prompt's fence is where the page has it");
         var above = Flat(readme[..fence]);
 
@@ -806,7 +806,7 @@ public partial class PageClaimsTests
     [InlineData("docs/handbook.md")]
     public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector(string page)
     {
-        var prompt = Fenced(Page(page.Split('/')), "```text\nInstall Jason on this machine");
+        var prompt = Fenced(Page(page.Split('/')), "```text\nInstall Jason by following");
         Assert.DoesNotContain("connector", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(PromptDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prompt))));
     }
@@ -829,7 +829,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_install_prompt_builds_nothing()
     {
-        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
+        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason by following");
         var agent = Flat(Agent());
 
         Assert.DoesNotContain("from source", prompt, StringComparison.OrdinalIgnoreCase);
@@ -1194,26 +1194,27 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Before anything runs, the agent tells the person in a few words what it will install and where, and waits for
-    /// their yes; each act the page marks is asked again when it comes. The yes is the consent the rest of the install
-    /// acts on.
+    /// If anything stops the agent, it asks the person directly and says why, so a stop is a clear question and never a
+    /// silent halt. The person who pastes the prompt has asked for the install, so it asks for no yes before it begins.
     /// </summary>
     [Fact]
-    public void The_install_prompt_asks_one_question_before_anything_runs() =>
-        Assert.Contains(
-            "Before you run anything, tell me in a few words what you will install and where, and wait for my yes",
-            Flat(Prompt()),
-            StringComparison.Ordinal);
+    public void The_install_prompt_asks_the_person_directly_when_anything_stops_it()
+    {
+        var prompt = Flat(Prompt());
+
+        Assert.Contains("If anything stops you, ask me directly and tell me why.", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("wait for my yes", prompt, StringComparison.Ordinal);
+    }
 
     /// <summary>
-    /// The prompt says where Jason comes from in the person's own words — a release, with nothing built — and leaves the
-    /// address to the install page, whose section 2 carries it. It names no package, no package manager and no address of
-    /// a download, so the guard against commands holds.
+    /// The prompt names the install page alone and leaves where Jason comes from to it: a release, whose address its
+    /// section 2 carries. The prompt names no package, no package manager and no address of a download, so the guard
+    /// against commands holds.
     /// </summary>
     [Fact]
-    public void The_install_prompt_names_the_release_source_in_the_person_s_voice()
+    public void The_install_prompt_leaves_the_release_source_to_the_install_page()
     {
-        Assert.Contains("installing from a release and building nothing", Flat(Prompt()), StringComparison.Ordinal);
+        Assert.DoesNotContain("/releases/", Prompt(), StringComparison.Ordinal);
         Assert.Contains(
             "https://get.jasonharness.ai/releases/latest/download/install.sh",
             Section(Page("docs", "INSTALL.md"), "## 2. "),
@@ -1221,13 +1222,14 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Jason is used from a release, and the first things a reader meets say so: the prompt has the agent build nothing,
-    /// and the README says under its opening, before Quick start, that nothing in the repository is built to use it.
+    /// Jason is used from a release, and the first things a reader meets say so: the install page's section for an agent
+    /// has it build nothing, and the README says under its opening, before Quick start, that nothing in the repository
+    /// is built to use it.
     /// </summary>
     [Fact]
-    public void The_prompt_and_the_readme_s_opening_say_Jason_is_used_from_a_release()
+    public void The_install_page_and_the_readme_s_opening_say_Jason_is_used_from_a_release()
     {
-        Assert.Contains("building nothing", Flat(Prompt()), StringComparison.Ordinal);
+        Assert.Contains("build nothing", Flat(Agent()), StringComparison.Ordinal);
 
         var readme = Page("README.md");
         var quickStart = readme.IndexOf("\n## Quick start\n", StringComparison.Ordinal);
@@ -1239,28 +1241,30 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The agent's report at the end names the next step, so an install never ends on whether it worked alone: after a
-    /// ready installation the next step is the question of what comes next, and after one that is not ready it is the
-    /// step that remains.
+    /// An install does not end on whether it worked: when Jason reports Ready, the agent starts the quick-start skill
+    /// and takes the person to their first campaign.
     /// </summary>
     [Fact]
-    public void The_install_prompt_asks_for_the_next_step() =>
+    public void The_install_prompt_starts_the_quick_start_skill_when_Jason_is_ready() =>
         Assert.Contains(
-            "At the end, tell me whether Jason can start work and exactly what you ran and changed.",
+            "When it reports Ready, start its quick-start skill and take me to my first campaign.",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
     /// <summary>
-    /// And when Jason can start work, the person is asked once, in their own voice: a synthetic walk to meet it first, or
-    /// their real work at once. A prompt that said nothing of it would leave the choice to the install page alone, which
-    /// the person pasting the prompt never reads; one that asked at every turn would keep them from the work.
+    /// The prompt is these three lines, the same in the README and in the handbook, and no others.
     /// </summary>
     [Fact]
-    public void The_install_prompt_asks_once_what_comes_next_when_Jason_can_start_work() =>
-        Assert.Contains(
-            "Then do what the guide's hand-over says: offer me the wiring check once, and bring me to my first campaign in my own words.",
-            Flat(Prompt()),
-            StringComparison.Ordinal);
+    public void The_install_prompt_is_three_lines_the_same_in_the_readme_and_the_handbook()
+    {
+        const string Lines =
+            "Install Jason by following https://get.jasonharness.ai/install.\n" +
+            "When it reports Ready, start its quick-start skill and take me to my first campaign.\n" +
+            "If anything stops you, ask me directly and tell me why.\n";
+
+        Assert.Equal(Lines, Fenced(Page("README.md"), "```text\nInstall Jason by following"));
+        Assert.Equal(Lines, Fenced(Page("docs", "handbook.md"), "```text\nInstall Jason by following"));
+    }
 
     /// <summary>
     /// The prompt sends the agent to the install page as a single plain file: the download address's short path, which
@@ -1269,7 +1273,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Fact]
     public void The_install_prompt_points_at_the_install_page_at_main() =>
-        Assert.Contains("<https://get.jasonharness.ai/install>", Prompt(), StringComparison.Ordinal);
+        Assert.Contains("Install Jason by following https://get.jasonharness.ai/install.", Flat(Prompt()), StringComparison.Ordinal);
 
     /// <summary>
     /// The steps live on the install page alone. The prompt names no command and no option, so steps cannot creep back
@@ -1278,7 +1282,7 @@ public partial class PageClaimsTests
     [Fact]
     public void The_install_prompt_names_no_command()
     {
-        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
+        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason by following");
 
         Assert.DoesNotContain("`", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("--", prompt, StringComparison.Ordinal);
@@ -1294,8 +1298,7 @@ public partial class PageClaimsTests
     [Fact]
     public void Ask_first_is_spelled_one_way_and_marks_acts_in_sections_2_to_6()
     {
-        Assert.Contains("\"Ask first\"", Flat(Prompt()), StringComparison.Ordinal);
-        Assert.All(AskFirst().Matches(Prompt()), match => Assert.Equal("Ask first", match.Value));
+        Assert.DoesNotContain("Ask first", Prompt(), StringComparison.OrdinalIgnoreCase);
 
         var install = Page("docs", "INSTALL.md");
         var found = AskFirst().Matches(install).ToList();
@@ -2389,7 +2392,7 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:dfe911f97419b9e6fbf54ffbf641ad338de6ef6b797b905e9059fa5dfd33167c";
+    private const string PromptDigest = "sha256:10d3eed9f6964c39c61fad83a68337ec9336079b3fd7d46e7cee8dbc10c9b6a4";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
     private const string AgentSectionDigest = "sha256:a2d9a1e07b5a0869c3baccc6af1200f03b879ef5f72491eab6614131ee3f4fa5";
@@ -2422,7 +2425,7 @@ public partial class PageClaimsTests
     private static string Prompt()
     {
         var readme = Page("README.md");
-        var open = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
+        var open = readme.IndexOf("```text\nInstall Jason by following", StringComparison.Ordinal);
         Assert.True(open >= 0, "the README no longer has the prompt as a fenced block.");
 
         var close = readme.IndexOf("```", open + 7, StringComparison.Ordinal);
