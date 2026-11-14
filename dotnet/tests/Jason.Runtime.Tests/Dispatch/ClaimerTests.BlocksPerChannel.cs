@@ -1,8 +1,12 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
+using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Dispatch;
@@ -76,6 +80,161 @@ public partial class ClaimerTests
             $"The block on every channel is {rows[everywhere.Id].Status}, trial {rows[everywhere.Id].TrialWorkItemId}, next {rows[everywhere.Id].NextTrialAt:O}.");
         Assert.Null(rows[mailbox.Id].TrialWorkItemId);
     }
+
+    /// <summary>
+    /// A sender's block on every channel and its email block both open, an email send parked on the block on every channel
+    /// from before the email block opened, and nothing of the email block's own that could run: its one item is in a
+    /// paused campaign. The email block draws its trial from the email work the block on every channel holds, as an
+    /// account's is drawn from its senders' blocks, so the backlog is not left with nothing scheduled to move it. The claim
+    /// runs that item as the email block's trial, and its send getting past clears both blocks.
+    /// </summary>
+    [Fact]
+    public async Task A_senders_email_block_draws_its_trial_from_the_email_work_its_block_on_every_channel_holds_and_getting_past_clears_both()
+    {
+        using var harness = SendingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (backlog, everywhere, mailbox) = await BacklogOnEveryChannelAsync(harness, db);
+
+        var due = await global::Jason.Runtime.Dispatch.Resumer.DueTrialsAsync(db, Noon, Ct);
+        Assert.Null(due.Single(row => row.BlockId == everywhere.Id).WaitId);
+        Assert.NotNull(due.Single(row => row.BlockId == mailbox.Id).WaitId);
+        Assert.Equal(1, await Resumer().ResumeAsync(db, Ct));
+        var rows = await Blocks(database);
+        Assert.Equal(((int?)null, (int?)backlog.Id), (rows[everywhere.Id].TrialWorkItemId, rows[mailbox.Id].TrialWorkItemId));
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        Assert.Equal(backlog.PublicId, work.WorkItemPublicId);
+        await GotPastAsync(db, backlog.Id, "email");
+
+        rows = await Blocks(database);
+        Assert.Equal((ProviderBlockStatus.Cleared, ProviderBlockStatus.Cleared), (rows[everywhere.Id].Status, rows[mailbox.Id].Status));
+    }
+
+    /// <summary>
+    /// The same backlog item drawn as the email block's trial and refused again with the email block: it parks on the email
+    /// block, which is seen again and put off a cadence, and the block on every channel, which let nothing through, is as
+    /// it was.
+    /// </summary>
+    [Fact]
+    public async Task Backlog_work_drawn_as_the_email_blocks_trial_and_refused_again_parks_on_the_email_block()
+    {
+        using var harness = SendingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (backlog, everywhere, mailbox) = await BacklogOnEveryChannelAsync(harness, db);
+        Assert.Equal(1, await Resumer().ResumeAsync(db, Ct));
+        Assert.Equal(backlog.PublicId, Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct)).WorkItemPublicId);
+
+        var seen = mailbox.SeenCount;
+        await BlockedAsync(db, backlog.Id, "email", said: "email");
+
+        var rows = await Blocks(database);
+        Assert.True(
+            rows[mailbox.Id] is { Status: ProviderBlockStatus.Open, TrialWorkItemId: null } && rows[mailbox.Id].SeenCount == seen + 1 && rows[mailbox.Id].NextTrialAt == Noon.AddSeconds(900),
+            $"The email block is {rows[mailbox.Id].Status}, trial {rows[mailbox.Id].TrialWorkItemId}, seen {rows[mailbox.Id].SeenCount}, next {rows[mailbox.Id].NextTrialAt:O}.");
+        Assert.True(
+            rows[everywhere.Id] is { Status: ProviderBlockStatus.Open, TrialWorkItemId: null } && rows[everywhere.Id].NextTrialAt == Noon,
+            $"The block on every channel is {rows[everywhere.Id].Status}, trial {rows[everywhere.Id].TrialWorkItemId}, next {rows[everywhere.Id].NextTrialAt:O}.");
+        await using var fresh = database.Open();
+        var wait = await fresh.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == backlog.Id && w.Status == WaitStatus.Open, Ct);
+        Assert.Equal(mailbox.Id, wait.ProviderBlockId);
+    }
+
+    /// <summary>
+    /// Sender <c>snd-1</c>'s block on every channel and its email block, both due at noon; an approved email send parked on
+    /// the block on every channel, and one parked on the email block in a campaign paused since, which no trial may draw.
+    /// </summary>
+    private static async Task<(WorkItem Backlog, ProviderBlock Everywhere, ProviderBlock Mailbox)> BacklogOnEveryChannelAsync(Harness harness, JasonDbContext db)
+    {
+        var backlog = Sending(db, NewCampaign(db), "email");
+        var paused = Sending(db, NewCampaign(db), "email");
+        await ApproveAllAsync(harness, db);
+        var everywhere = SendersBlock(db, backlog.Campaign!, channel: null, nextTrialAt: Noon);
+        var mailbox = SendersBlock(db, paused.Campaign!, channel: "email", nextTrialAt: Noon);
+        await db.SaveChangesAsync(Ct);
+        ParkOn(db, backlog, everywhere);
+        ParkOn(db, paused, mailbox);
+        paused.Campaign!.Status = CampaignStatus.Paused;
+        await db.SaveChangesAsync(Ct);
+        return (backlog, everywhere, mailbox);
+    }
+
+    private static Campaign NewCampaign(JasonDbContext db)
+    {
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        return campaign;
+    }
+
+    /// <summary>Every send waiting for a person's approval asks for it at a claim and is approved, back in the queue.</summary>
+    private static async Task ApproveAllAsync(Harness harness, JasonDbContext db)
+    {
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 8, Ct));
+        foreach (var approval in await db.Approvals.Include(a => a.WorkItem).Where(a => a.Status == ApprovalStatus.Pending).ToListAsync(Ct))
+        {
+            approval.Status = ApprovalStatus.Approved;
+            approval.DecidedAt = Noon;
+            approval.DecidedByType = ActorType.Human;
+            approval.DecidedById = "operator";
+            approval.DecisionReason = "go ahead";
+            WorkItemTransitions.Apply(approval.WorkItem!, WorkItemStatus.Created, Noon);
+        }
+
+        await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>The item waits on <paramref name="block"/>, as a park leaves it.</summary>
+    private static void ParkOn(JasonDbContext db, WorkItem item, ProviderBlock block)
+    {
+        item.Status = WorkItemStatus.Waiting;
+        db.WorkItemWaits.Add(new WorkItemWait { WorkItem = item, ProviderBlock = block, OpenedAt = Noon });
+    }
+
+    private static async Task<Dictionary<int, ProviderBlock>> Blocks(TestDatabase database)
+    {
+        await using var read = database.Open();
+        return await read.ProviderBlocks.AsNoTracking().ToDictionaryAsync(b => b.Id, Ct);
+    }
+
+    private static AttemptOutcomes BlockOutcomes()
+    {
+        var clock = new FixedClock(Noon);
+        return new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(TestOptions.Dispatcher(o => o.Blocks.TrialSeconds = 900)));
+    }
+
+    /// <summary>The item's latest attempt, a send from <c>snd-1</c> on <paramref name="channel"/>, got past the provider's blocks.</summary>
+    private static async Task GotPastAsync(JasonDbContext db, int itemId, string channel)
+    {
+        var item = await db.WorkItems.SingleAsync(w => w.Id == itemId, Ct);
+        var attempt = await db.Attempts.Where(a => a.WorkItemId == itemId).OrderByDescending(a => a.Number).FirstAsync(Ct);
+        await BlockOutcomes().AnsweredAsync(db, item, attempt, BlockRows.Plugin, SendArgs(channel), BlockAnswer.GotPast, null, null, Ct);
+        await db.SaveChangesAsync(Ct);
+        db.ChangeTracker.Clear();
+    }
+
+    /// <summary>The item's latest attempt was refused with a block of <c>snd-1</c> on <paramref name="said"/>, or on every channel.</summary>
+    private static async Task BlockedAsync(JasonDbContext db, int itemId, string channel, string? said)
+    {
+        var item = await db.WorkItems.SingleAsync(w => w.Id == itemId, Ct);
+        var attempt = await db.Attempts.Where(a => a.WorkItemId == itemId).OrderByDescending(a => a.Number).FirstAsync(Ct);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Processing, Noon);
+        var block = new JsonObject { ["scope"] = "sender", ["reason"] = "limit", ["sender_external_id"] = "snd-1" };
+        if (said is not null)
+        {
+            block["channel"] = said;
+        }
+
+        await BlockOutcomes().AnsweredAsync(db, item, attempt, BlockRows.Plugin, SendArgs(channel), BlockAnswer.Blocked, block, null, Ct);
+        await db.SaveChangesAsync(Ct);
+        db.ChangeTracker.Clear();
+    }
+
+    private static JsonObject SendArgs(string channel) => new()
+    {
+        ["args"] = new JsonObject { ["channel"] = channel, ["sender"] = new JsonObject { ["external_id"] = "snd-1" } },
+    };
 
     private static Harness SendingHarness() => new(
         plugin: TestPlugins.Loaded(BlockRows.Plugin, ["message.send"]),

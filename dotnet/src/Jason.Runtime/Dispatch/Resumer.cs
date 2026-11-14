@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
@@ -18,8 +19,8 @@ namespace Jason.Runtime.Dispatch;
 /// so what is released can be claimed in that scan too.
 /// <para>
 /// The condition is read from rows, never from an event: a wait whose items had all ended before it was written, or whose
-/// deadline passed while the runtime was down, is simply ready at the next scan. Nothing here reads a context or anything
-/// anybody wrote — statuses, identifiers and the clock only — and no campaign: a released item is ordinary created work,
+/// deadline passed while the runtime was down, is simply ready at the next scan. Nothing here reads what a context means or
+/// anything else anybody wrote — statuses, identifiers, the channel a held item names and the clock only — and no campaign: a released item is ordinary created work,
 /// and whether its campaign lets it run is the claim's to decide, as for any other.
 /// </para>
 /// </summary>
@@ -93,7 +94,7 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
             var item = wait is null
                 ? null
                 : await db.WorkItems.FirstOrDefaultAsync(w => w.Id == wait.WorkItemId && w.Status == WorkItemStatus.Waiting, ct).ConfigureAwait(false);
-            if (block is null || wait is null || item is null || !ProviderBlocks.Holds(block, wait.ProviderBlock))
+            if (block is null || wait is null || item is null || !ProviderBlocks.Holds(block, wait.ProviderBlock, ChannelOf(item)))
             {
                 db.ChangeTracker.Clear();
                 continue;
@@ -141,10 +142,12 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
     /// as its own, since the account covers them. A sender's block on every channel and its blocks on one channel each
     /// hold trials of their own, neither waiting for the other: the block on every channel is only the channel unknown, and
     /// its trial is drawn among the items it holds whose channel has no open block of that sender, since the channel's
-    /// block governs that channel. Raw SQL because the pick is a correlated subquery with an order, joined
+    /// block governs that channel, and the channel's block draws its trial from those items as well as its own. Raw SQL
+    /// because the pick is a correlated subquery with an order, joined
     /// in the order it is written — the blocks a trial is drawn from, then their waits — so the waits are read by block
     /// rather than every waiting item by its status; its plan is pinned by a test — the due blocks by the index of the blocks by status and trial moment, an account's open sender
-    /// blocks, and a sender's open block on an item's channel, by the index of one open block a sender, each block's waits
+    /// blocks, a channel's sender's open block on every channel, and a sender's open block on an item's channel, by the
+    /// index of one open block a sender, each block's waits
     /// by the index of the waits by block and status, and every other row by a key.
     /// </summary>
     internal static Task<List<DueTrial>> DueTrialsAsync(JasonDbContext db, DateTime now, CancellationToken ct) =>
@@ -213,15 +216,25 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
     /// Where a work item's context keeps the channel its composed input names at
     /// <see cref="ProviderBlockContract.ChannelPointer"/>: the arguments are the context's input, as written.
     /// </summary>
-    private static string ChannelPath()
+    private static string ChannelPath() => $"$.{WorkItemService.InputKey}.{ChannelArgument()}";
+
+    /// <summary>The argument <see cref="ProviderBlockContract.ChannelPointer"/> names, refused where it is not one plain name.</summary>
+    private static string ChannelArgument()
     {
         const string arguments = "/args/";
         var pointer = ProviderBlockContract.ChannelPointer;
         return pointer.StartsWith(arguments, StringComparison.Ordinal) && pointer.Length > arguments.Length
             && pointer[arguments.Length..].All(static c => c is (>= 'a' and <= 'z') or '_')
-            ? $"$.{WorkItemService.InputKey}.{pointer[arguments.Length..]}"
+            ? pointer[arguments.Length..]
             : throw new InvalidOperationException($"The channel pointer '{pointer}' cannot be read from a work item's context.");
     }
+
+    /// <summary>The channel a held item's input names, read where the trial query reads it, or null where it names none.</summary>
+    private static string? ChannelOf(WorkItem item) =>
+        item.Context[WorkItemService.InputKey] is JsonObject arguments
+        && arguments[ChannelArgument()] is JsonValue value && value.TryGetValue<string>(out var channel)
+            ? channel
+            : null;
 
     private static string ComposeTrials()
     {
@@ -233,7 +246,9 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
         var tried = Words(OperationCatalog.TriedByProviderBlock);
 
         // The channel an item names, where its context keeps it: a sender's block on every channel draws its trial only among
-        // the items whose channel has no open block of that sender, since that channel's block governs it.
+        // the items whose channel has no open block of that sender, since that channel's block governs it, and a sender's
+        // block on one channel draws from the items on its channel that the sender's block on every channel holds as well as
+        // from its own, as an account's draws from its senders' blocks.
         var channel = ChannelPath();
 
         return $$"""
@@ -244,8 +259,12 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
                      CROSS JOIN campaigns c
                      WHERE (h.id = b.id
                             OR (b.scope = {{Text(ProviderBlockScope.Account)}} AND h.plugin_id = b.plugin_id AND h.binding_identity = b.binding_identity
-                                AND h.status = {{Text(ProviderBlockStatus.Open)}} AND h.scope = {{Text(ProviderBlockScope.Sender)}}))
+                                AND h.status = {{Text(ProviderBlockStatus.Open)}} AND h.scope = {{Text(ProviderBlockScope.Sender)}})
+                            OR (b.scope = {{Text(ProviderBlockScope.Sender)}} AND b.channel IS NOT NULL AND h.plugin_id = b.plugin_id
+                                AND h.binding_identity = b.binding_identity AND h.status = {{Text(ProviderBlockStatus.Open)}}
+                                AND h.scope = {{Text(ProviderBlockScope.Sender)}} AND h.sender_external_id = b.sender_external_id AND h.channel IS NULL))
                        AND x.provider_block_id = h.id AND w.id = x.work_item_id AND c.id = w.campaign_id
+                       AND (h.id = b.id OR b.scope = {{Text(ProviderBlockScope.Account)}} OR json_extract(w.context_json, '{{channel}}') = b.channel)
                        AND x.status = {{Text(WaitStatus.Open)}} AND w.status = {{Text(WorkItemStatus.Waiting)}}
                        AND (c.status = {{Text(CampaignStatus.Active)}} OR (c.status = {{Text(CampaignStatus.Paused)}} AND w.operation IN ({{protective}})))
                        AND (w.due_at IS NULL OR w.due_at > {0})

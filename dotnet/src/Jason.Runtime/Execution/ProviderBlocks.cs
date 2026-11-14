@@ -115,32 +115,41 @@ public static class ProviderBlocks
     /// <summary>
     /// What is wrong with a sender's block <paramref name="said"/> beside a call whose input is <paramref name="input"/>, or
     /// null: a block that names a channel says it is that channel's alone, so one that names another channel than the call
-    /// was asked to send on is a broken answer, refused as a block outside its contract is. A call that names no channel
-    /// is held to nothing here, as a call that names no sender is not held to the sender its block names.
+    /// was asked to send on, or names one for a call that names none, is a broken answer, refused as a block outside its
+    /// contract is. A block that names no channel is held to nothing here.
     /// </summary>
     public static SchemaProblem? OffChannel(JsonNode? said, JsonObject? input)
     {
         var named = said is JsonObject block ? Text(block, "channel") : null;
         var asked = Channel(input);
-        return named is null || asked is null || string.Equals(named, asked, StringComparison.Ordinal)
-            ? null
-            : new SchemaProblem(
-                "/channel",
-                "const",
-                $"The block names the channel '{named}', but the call was asked to send on '{asked}'; a block that names a channel is that channel's alone.");
+        if (named is null || string.Equals(named, asked, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return new SchemaProblem(
+            ChannelMember,
+            "const",
+            asked is null
+                ? $"The block names the channel '{named}', but the call was asked to send on no channel; a block that names a channel is that channel's alone."
+                : $"The block names the channel '{named}', but the call was asked to send on '{asked}'; a block that names a channel is that channel's alone.");
     }
 
     /// <summary>
-    /// Whether <paramref name="block"/> holds work parked on <paramref name="parkedOn"/>: it is that block, or it is the
-    /// account's block and <paramref name="parkedOn"/> the open block of a sender under that account, which it covers.
+    /// Whether <paramref name="block"/> may draw its trial from work parked on <paramref name="parkedOn"/> whose input names
+    /// <paramref name="channel"/>: it is that block; or it is the account's block and <paramref name="parkedOn"/> the open
+    /// block of a sender under that account, which it covers; or it is a sender's block on one channel and
+    /// <paramref name="parkedOn"/> the same sender's open block on every channel, holding work on that channel, which the
+    /// channel's block governs.
     /// </summary>
-    public static bool Holds(ProviderBlock block, ProviderBlock? parkedOn) =>
+    public static bool Holds(ProviderBlock block, ProviderBlock? parkedOn, string? channel) =>
         block is not null && parkedOn is not null
         && (parkedOn.Id == block.Id
-            || (block.Scope == ProviderBlockScope.Account
-                && parkedOn is { Scope: ProviderBlockScope.Sender, Status: ProviderBlockStatus.Open }
+            || (parkedOn is { Scope: ProviderBlockScope.Sender, Status: ProviderBlockStatus.Open }
                 && string.Equals(parkedOn.PluginId, block.PluginId, StringComparison.Ordinal)
-                && string.Equals(parkedOn.BindingIdentity, block.BindingIdentity, StringComparison.Ordinal)));
+                && string.Equals(parkedOn.BindingIdentity, block.BindingIdentity, StringComparison.Ordinal)
+                && (block.Scope == ProviderBlockScope.Account
+                    || (OneChannelOf(block, parkedOn) && string.Equals(block.Channel, channel, StringComparison.Ordinal)))));
 
     /// <summary>
     /// Whether a save was refused because a block it opens is already open — opened by another attempt that read the
@@ -432,6 +441,9 @@ public static class ProviderBlocks
 
     /// <summary>The start of what SQLite says when either one-open index refuses a block: both lead with the plugin.</summary>
     private const string OneOpenRefused = "UNIQUE constraint failed: provider_blocks.plugin_id";
+
+    /// <summary>Where in a block its channel is, as a problem with the block names it.</summary>
+    private const string ChannelMember = "/channel";
 
     private static bool Blocked(JournalEntry entry, ProviderBlock block, int campaignId) =>
         entry.Kind == JournalKinds.ProviderBlocked

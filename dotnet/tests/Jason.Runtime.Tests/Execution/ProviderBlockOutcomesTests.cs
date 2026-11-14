@@ -480,6 +480,39 @@ public class ProviderBlockOutcomesTests
     }
 
     /// <summary>
+    /// A trial of the sender's email block whose call is refused with the sender's block on every channel has got past
+    /// nothing either: the email block stays open, undecided, its next trial a cadence off rather than due at once, and the
+    /// trial parks on the block on every channel its answer opened.
+    /// </summary>
+    [Fact]
+    public async Task A_trial_of_a_senders_email_block_that_meets_its_block_on_every_channel_leaves_it_open_and_undecided()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var outcomes = NewOutcomes();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var mailbox = BlockRows.Block(opener, Noon.AddHours(-1), Noon, ProviderBlockScope.Sender, "12", reason: "limit", channel: "email");
+        db.AddRange(opener, mailbox);
+        await db.SaveChangesAsync(Ct);
+        var (trial, attempt) = await RunningAsync(db, campaign);
+        mailbox.TrialWorkItemId = trial.Id;
+        await db.SaveChangesAsync(Ct);
+
+        await outcomes.AnsweredAsync(db, trial, attempt, BlockRows.Plugin, Input("12", "email"), BlockAnswer.Blocked, Said("sender", "limit", "12"), null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
+        Assert.True(
+            blocks.Count == 2
+            && blocks[0] is { Status: ProviderBlockStatus.Open, Channel: "email", TrialWorkItemId: null, ClearedByAttemptId: null } && blocks[0].NextTrialAt == Noon.AddSeconds(900)
+            && blocks[1] is { Status: ProviderBlockStatus.Open, Channel: null, TrialWorkItemId: null },
+            $"The blocks are {string.Join(", ", blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status}/trial {x.TrialWorkItemId}/next {x.NextTrialAt:O}"))}.");
+        Assert.Equal(blocks[1].Id, (await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == trial.Id, Ct)).ProviderBlockId);
+        Assert.False(await db.Journal.AsNoTracking().AnyAsync(e => e.Kind == JournalKinds.ProviderBlockCleared, Ct));
+    }
+
+    /// <summary>
     /// A send that names its sender and no channel and gets past clears only the sender's block on every channel: it says
     /// nothing of any one channel, so the sender's block on a channel stays open.
     /// </summary>

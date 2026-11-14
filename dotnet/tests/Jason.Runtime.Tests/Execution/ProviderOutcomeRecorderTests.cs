@@ -1051,23 +1051,27 @@ public class ProviderOutcomeRecorderTests
 
     /// <summary>
     /// A sender's block that names a channel says the block is that channel's alone, so one that names another channel
-    /// than the call was asked to send on is a broken answer: refused as a block outside its contract is, recorded
-    /// permanent with what is wrong named beside it, and kept nowhere. The same block on the call's own channel is kept,
-    /// and the item waits on it.
+    /// than the call was asked to send on, or names one for a call that names none, is a broken answer: refused as a block
+    /// outside its contract is, recorded permanent with what is wrong named beside it, and kept nowhere. The same block on
+    /// the call's own channel is kept, and the item waits on it.
     /// </summary>
     [Theory]
-    [InlineData("email", true)]
-    [InlineData("linkedin", false)]
-    public async Task A_senders_block_on_another_channel_than_the_call_was_asked_to_send_on_is_refused(string said, bool kept)
+    [InlineData("email", "email", true)]
+    [InlineData("linkedin", "email", false)]
+    [InlineData("email", null, false)]
+    public async Task A_senders_block_on_another_channel_than_the_call_was_asked_to_send_on_is_refused(string said, string? asked, bool kept)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
         var scene = await SeedAsync(db, operation: Send.Id);
         var block = new JsonObject { ["scope"] = "sender", ["sender_external_id"] = "12", ["channel"] = said, ["reason"] = "limit" };
-        var input = new JsonObject
+        var args = new JsonObject { ["sender"] = new JsonObject { ["external_id"] = "12" } };
+        if (asked is not null)
         {
-            ["args"] = new JsonObject { ["channel"] = "email", ["sender"] = new JsonObject { ["external_id"] = "12" } },
-        };
+            args["channel"] = asked;
+        }
+
+        var input = new JsonObject { ["args"] = args };
 
         await scene.Recorder.RecordAsync(
             db,

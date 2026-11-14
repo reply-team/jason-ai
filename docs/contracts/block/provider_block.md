@@ -52,9 +52,9 @@ channel or an events read reports is an answer outside its contract.
   they consume (`email`, `linkedin`). A provider that numbers its mailboxes apart from its social accounts, so that one
   identifier may name a mailbox and a social account at once, says it on every sender's block. Absent, the block holds
   the sender on every channel that has no open block of its own. Present only when `scope` is `sender`: an account's
-  block holds every channel. A block that names another channel than the one the call was asked to send on is refused
-  as a block outside the schema is: the channel a block names is the provider's word that the block is that channel's
-  alone.
+  block holds every channel. A block that names another channel than the one the call was asked to send on, or names one
+  for a call that names none, is refused as a block outside the schema is: the channel a block names is the provider's
+  word that the block is that channel's alone.
 - `reason` is why, in the contract's words, never the provider's: `billing` (credits, a plan, a subscription or a
   payment), `limit` (an allowance the provider counts), `credential` (a key or a sign-in the provider no longer
   accepts), `channel` (a mailbox or a social account disconnected or paused), or `other` where none of these fits.
@@ -100,7 +100,7 @@ in a log, a journal line, a notification or a `wait` block. A person who has rem
 A sender's block that names a channel holds the work whose input names that sender at `/args/sender/external_id` and
 that channel at `/args/channel`; the sender's block that names none holds the sender's work on every channel that has
 no open block of its own. A call that gets past clears the sender's blocks on its own channel and on every channel,
-never one on another channel, and nothing else but a person clears a block.
+never one on another channel, and nothing else but a person clears a sender's block.
 A block that does not satisfy the schema is recorded `permanent`, with what is
 wrong with it named beside the error, so a malformed block never stands for a real one. A read made on request outside
 any work item, such as `contact.threads`, answers a blocked failure as an API error carrying the plugin's code with
