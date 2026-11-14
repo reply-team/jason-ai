@@ -614,19 +614,20 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
   every time, held to the real tree by a test.
-- **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt): everything the CLI
-  reserves for a person (approving and rejecting, answering a decision, a standing approval, a preference, clearing a
-  block, resuming work, a report, rewinding a subscription), everything that changes the installation, follows it
-  without end or carries it off the machine (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`,
-  `update`, `uninstall`, `ui`, `session`, `journal watch`, `export`, `import`), and four more that decide who is reached
-  or what runs (`suppression remove`, `route set`, `route unset`, `role set-profile`). **`role add` and `project link` are
-  typed in a terminal**: a role's entry command is started by the dispatcher, and a project's linked folder becomes a
-  working folder of every chat on its campaigns. A command that names an operation these verbs call is refused too.
-  Also refused: any `reply` command but the two above, any read or write under the data directory outside the chat folder (the
-  settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
-  where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the
-  agent to the chat's own instruction files, to the `.claude`, `.agents` and `.codex` folders of the chat folder and to
-  its `.mcp.json`.
+- **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any letter case:
+  everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
+  preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
+  subscription), everything that changes the installation, follows it without end or carries it off the machine
+  (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `ui`, `session`,
+  `journal watch`, `export`, `import`), and four more that decide who is reached or what runs (`suppression remove`,
+  `route set`, `route unset`, `role set-profile`). **`role add` and `project link` are typed in a terminal**: a role's
+  entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
+  its campaigns. A command that names an operation these verbs call is refused too. Also refused: any `reply` command
+  but the two above, any read or write under the data directory outside the chat folder (the settings file and the run
+  file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that
+  names `JASON_ATTEMPT_ID` (a chat is never a role's run), a command that changes where the shell finds a program
+  (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the agent to the chat's own
+  instruction files, to the `.claude`, `.agents` and `.codex` folders of the chat folder and to its `.mcp.json`.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the chat
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
@@ -636,7 +637,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
   What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
   input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
-  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, the data directory). Full access
+  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, `JASON_ATTEMPT_ID`, the data directory). Full access
   does not run it. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
