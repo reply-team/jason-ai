@@ -128,9 +128,9 @@ public static class StatusCommand
         carries any. --human prints the facts alone.
 
         Below the checks, --human prints where this installation's parts are: its role skills, plugins and
-        custom UI folders, and its settings file, saying when that file holds plugin secrets too. The JSON
-        carries the same under setup, composed by this CLI from its own data directory, so it is there whether
-        or not the runtime answers, and it never decides ready.
+        custom UI folders, and its settings file, saying whether that file is also where plugin secrets are
+        kept. The JSON carries the same under setup, composed by this CLI from its own data directory, so it
+        is there whether or not the runtime answers, and it never decides ready.
 
         Exit codes: 0 when every required check passed, 1 when one did not. Never 3: "the runtime did not
         answer" is this command's answer rather than a reason it has none.
@@ -224,7 +224,7 @@ public static class StatusCommand
             ("Plugins:", setup.PluginsDirectory),
             ("Custom UI:", setup.CustomUiDirectory),
             setup.SettingsFileHoldsSecrets
-                ? ("Settings:", $"{setup.SettingsFile} (holds plugin secrets)")
+                ? ("Settings:", $"{setup.SettingsFile} (where plugin secrets are kept)")
                 : ("Settings you may change:", setup.SettingsFile),
         ];
 

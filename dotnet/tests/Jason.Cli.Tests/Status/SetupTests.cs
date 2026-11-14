@@ -81,7 +81,7 @@ public class SetupTests
                 $"Role skills: {dir.Paths.RoleSkillsDirectory}",
                 $"Plugins:     {dir.Paths.PluginsDirectory}",
                 $"Custom UI:   {dir.Paths.UiCustomDirectory}",
-                $"Settings:    {dir.Paths.UserSettingsFile} (holds plugin secrets)",
+                $"Settings:    {dir.Paths.UserSettingsFile} (where plugin secrets are kept)",
             ],
             lines[first..(first + 4)]);
         Assert.Equal(string.Empty, lines[first - 1]);
@@ -112,7 +112,7 @@ public class SetupTests
                 "Settings you may change: /data/settings.json",
             ],
             lines[Array.FindIndex(lines, line => line.StartsWith("Role skills:", StringComparison.Ordinal))..][..4]);
-        Assert.DoesNotContain("holds plugin secrets", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("plugin secrets", text, StringComparison.Ordinal);
         Assert.DoesNotContain("To repair:", text, StringComparison.Ordinal);
     }
 }
