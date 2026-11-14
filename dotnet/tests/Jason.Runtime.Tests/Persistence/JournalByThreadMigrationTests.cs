@@ -19,6 +19,8 @@ public class JournalByThreadMigrationTests
 {
     private const string PreviousMigration = "20261113000729_ChannelRoutes";
 
+    private const string ThisMigration = "20261113021003_JournalByThread";
+
     private const string Index = "ix_journal_campaign_thread";
 
     [Fact]
@@ -27,7 +29,12 @@ public class JournalByThreadMigrationTests
         using var dir = AtThePreviousMigration();
         var before = Shape(dir.Paths.DatabaseFile);
 
-        new DatabaseMigrator(dir.Paths).Migrate();
+        // To this migration and no further, so a later migration's own change is not read as this one's.
+        SqliteConnection.ClearAllPools();
+        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(ThisMigration);
+        }
 
         var after = Shape(dir.Paths.DatabaseFile);
         var added = Assert.Single(after.Except(before));

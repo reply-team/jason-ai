@@ -51,10 +51,12 @@ public enum WarmthState
 /// line is not a reply that waits. A line that names nobody makes wait only a contact a standing verdict names on its thread.
 /// </para>
 /// <para>
-/// Every read is written SQL that names its index, and a test pins each plan, as the standing approvals' reads are:
-/// the person's own lines through the contact index, the verdicts, and the one that replaced each, through the campaign's own lines, the campaign's own observed
-/// lines through their filtered index, a responder through the campaign's items of the same person, its attempts by
-/// item, and an attempt's start through the item's own lines.
+/// Every read is written SQL that names its index, and a test pins each plan and the columns each search is bounded by,
+/// as the standing approvals' reads are: the contact's own lines and verdicts through the contact index; the verdicts
+/// on a thread through the verdicts' thread index by the campaign and the thread, and the one that replaced a verdict
+/// through the same index by its key; the observed lines on a thread through their thread index; a responder through
+/// the campaign's items of the same person, its attempts by item, and an attempt's start through the item's own lines.
+/// None is bounded by the campaign's whole chronicle.
 /// </para>
 /// </remarks>
 public static class Warmth
@@ -90,6 +92,11 @@ public static class Warmth
     /// The worst wait among the contact's own lines that no verdict with a nature has judged: 2 when one has no verdict
     /// that judges it at all, 1 when every such line is judged only by verdicts that say no nature, 0 when none waits.
     /// </summary>
+    /// <remarks>
+    /// The lines that name nobody are reached from the contact's own standing verdicts, through the thread each names,
+    /// never from the campaign's unnamed lines: inbound sync writes one for every thread of the account that moved, so a
+    /// campaign may hold thousands, and only those on a thread the contact's verdicts name are read.
+    /// </remarks>
     internal static IQueryable<int> Awaiting(JasonDbContext db, int campaignId, int contactId) =>
         db.Database.SqlQuery<int>(FormattableStringFactory.Create(
             $$"""
@@ -101,18 +108,16 @@ public static class Warmth
                   AND NOT {{Judged("o", "IS NOT NULL", "o.contact_id")}}
                 UNION ALL
                 SELECT CASE WHEN {{Judged("u", "IS NULL", "{0}")}} THEN {{WaitsForNature}} ELSE {{WaitsForJudgement}} END AS w
-                FROM journal AS u INDEXED BY ix_journal_campaign_kind_key
-                WHERE u.campaign_id = {1} AND u.kind = 'inbound_reply_observed' AND u.contact_id IS NULL
-                  AND json_extract(u.new_json, '$.contact_id') IS NULL
+                FROM journal AS n INDEXED BY ix_journal_contact_id_public_id
+                CROSS JOIN journal AS u INDEXED BY ix_journal_campaign_thread
+                WHERE n.contact_id = {0} AND n.campaign_id = {1} AND n.kind = 'reply_classified'
+                  AND json_extract(n.new_json, '$.contact_id') = (SELECT public_id FROM contacts WHERE id = {0})
+                  AND {{Stands("n", "nl")}}
+                  AND u.campaign_id = n.campaign_id AND u.kind = 'inbound_reply_observed'
+                  AND json_extract(u.new_json, '$.thread') = json_extract(n.new_json, '$.thread')
+                  AND json_extract(u.new_json, '$.plugin') = json_extract(n.new_json, '$.plugin')
+                  AND u.contact_id IS NULL AND json_extract(u.new_json, '$.contact_id') IS NULL
                   AND coalesce(json_extract(u.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin'
-                  AND EXISTS (SELECT 1 FROM journal AS n INDEXED BY ix_journal_campaign_id_id
-                      WHERE n.campaign_id = u.campaign_id AND n.kind = 'reply_classified'
-                        AND json_extract(n.new_json, '$.plugin') = json_extract(u.new_json, '$.plugin')
-                        AND json_extract(n.new_json, '$.thread') = json_extract(u.new_json, '$.thread')
-                        AND json_extract(n.new_json, '$.contact_id') = (SELECT public_id FROM contacts WHERE id = {0})
-                        AND NOT EXISTS (SELECT 1 FROM journal AS nl INDEXED BY ix_journal_campaign_id_id
-                            WHERE nl.kind = 'reply_classified' AND nl.id > n.id
-                              AND nl.campaign_id = n.campaign_id AND nl.key = n.key))
                   AND NOT {{Judged("u", "IS NOT NULL", "{0}")}})
             """,
             contactId,
@@ -122,37 +127,49 @@ public static class Warmth
     /// A verdict that names the contact, stands, says <c>person</c>, on a thread the campaign's own read saw move.
     /// </summary>
     internal static IQueryable<int> Warming(JasonDbContext db, int campaignId, int contactId) =>
-        db.Database.SqlQuery<int>($"""
+        db.Database.SqlQuery<int>(FormattableStringFactory.Create(
+            $$"""
             SELECT v.id AS "Value" FROM journal AS v INDEXED BY ix_journal_contact_id_public_id
-            WHERE v.contact_id = {contactId} AND v.campaign_id = {campaignId} AND v.kind = 'reply_classified'
-              AND json_extract(v.new_json, '$.contact_id') = (SELECT public_id FROM contacts WHERE id = {contactId})
+            WHERE v.contact_id = {0} AND v.campaign_id = {1} AND v.kind = 'reply_classified'
+              AND json_extract(v.new_json, '$.contact_id') = (SELECT public_id FROM contacts WHERE id = {0})
               AND json_extract(v.new_json, '$.nature') = 'person'
-              AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_campaign_id_id
-                  WHERE later.kind = 'reply_classified' AND later.id > v.id
-                    AND later.campaign_id = v.campaign_id AND later.key = v.key)
-              AND EXISTS (SELECT 1 FROM journal AS o INDEXED BY ix_journal_campaign_kind_key
+              AND {{Stands("v", "later")}}
+              AND EXISTS (SELECT 1 FROM journal AS o INDEXED BY ix_journal_campaign_thread
                   WHERE o.campaign_id = v.campaign_id AND o.kind = 'inbound_reply_observed'
-                    AND json_extract(o.new_json, '$.plugin') = json_extract(v.new_json, '$.plugin')
                     AND json_extract(o.new_json, '$.thread') = json_extract(v.new_json, '$.thread')
+                    AND json_extract(o.new_json, '$.plugin') = json_extract(v.new_json, '$.plugin')
                     AND coalesce(json_extract(o.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin')
             LIMIT 1
-            """);
+            """,
+            contactId,
+            campaignId));
+
+    /// <summary>
+    /// Whether the verdict <paramref name="verdict"/> stands: no later verdict of its campaign under its key, read by the
+    /// key through the verdicts' thread index. The key is a digest of the plugin, the thread and the message, so a later
+    /// verdict under it is on the same thread.
+    /// </summary>
+    private static string Stands(string verdict, string later) => $"""
+        NOT EXISTS (SELECT 1 FROM journal AS {later} INDEXED BY ix_journal_campaign_verdict_thread
+            WHERE {later}.kind = 'reply_classified' AND {later}.campaign_id = {verdict}.campaign_id
+              AND json_extract({later}.new_json, '$.thread') = json_extract({verdict}.new_json, '$.thread')
+              AND {later}.key = {verdict}.key AND {later}.id > {verdict}.id)
+        """;
 
     /// <summary>
     /// Whether a standing verdict on the observed line <c>o</c>'s thread, whose nature passes <paramref name="nature"/>,
     /// judges it: about a message at or after its move, or standing while a responder the runtime
     /// created for the thread succeeded with an attempt that started after it. Correlated with the line <paramref name="line"/> alone and the
-    /// contact the responder is about, <paramref name="contact"/>, an expression.
+    /// contact the responder is about, <paramref name="contact"/>, an expression. The verdicts are read by the line's
+    /// thread, through the verdicts' thread index.
     /// </summary>
     private static string Judged(string line, string nature, string contact) => $"""
-        EXISTS (SELECT 1 FROM journal AS v INDEXED BY ix_journal_campaign_id_id
+        EXISTS (SELECT 1 FROM journal AS v INDEXED BY ix_journal_campaign_verdict_thread
             WHERE v.kind = 'reply_classified' AND v.campaign_id = {line}.campaign_id
-              AND json_extract(v.new_json, '$.plugin') = json_extract({line}.new_json, '$.plugin')
               AND json_extract(v.new_json, '$.thread') = json_extract({line}.new_json, '$.thread')
+              AND json_extract(v.new_json, '$.plugin') = json_extract({line}.new_json, '$.plugin')
               AND json_extract(v.new_json, '$.nature') {nature}
-              AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_campaign_id_id
-                  WHERE later.kind = 'reply_classified' AND later.id > v.id
-                    AND later.campaign_id = v.campaign_id AND later.key = v.key)
+              AND {Stands("v", "later")}
               AND (julianday(json_extract(v.new_json, '$.message_at')) >= julianday(json_extract({line}.new_json, '$.last_activity_at'))
                 OR EXISTS (SELECT 1 FROM work_items AS r INDEXED BY ix_work_items_campaign_id_contact_id
                     WHERE r.campaign_id = {line}.campaign_id AND r.contact_id = {contact}

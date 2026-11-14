@@ -5,7 +5,9 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
+using Jason.Runtime.Tests.Approvals;
 using Jason.Runtime.Tests.Harness;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Replies;
 
@@ -551,6 +553,38 @@ public class WarmthTests
 
         Assert.Equal(WarmthState.AwaitingJudgement, waiting);
         Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// Inbound sync writes a line for every thread of the account that moved, most naming nobody. The read of a contact's
+    /// wait visits none of them on a thread the contact's verdicts do not name: forty more such lines on other threads leave
+    /// the number of steps the read takes, and of steps of a full scan, exactly as they were, while the one unnamed line on
+    /// the contact's own thread still makes them wait. The steps are counted, not timed. A seek reads the key just past its
+    /// range to know the range has ended, so a line of a thread on either side of the contact's is there in both counts.
+    /// </summary>
+    [Fact]
+    public async Task The_wait_read_visits_no_unnamed_line_of_another_thread()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-1", "2026-09-14T12:05:00.000Z");
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-0", "2026-09-14T12:05:00.000Z");
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-2", "2026-09-14T12:05:00.000Z");
+        var before = await QueryPlans.StepsAsync(db, Warmth.Awaiting(db, seed.Campaign.Id, seed.Contact.Id).ToQueryString(), Ct);
+
+        for (var other = 0; other < 20; other++)
+        {
+            await ObservedAsync(db, seed.Campaign, contact: null, $"thr-0-{other}", "2026-09-14T12:05:00.000Z");
+            await ObservedAsync(db, seed.Campaign, contact: null, $"thr-2-{other}", "2026-09-14T12:05:00.000Z");
+        }
+
+        var after = await QueryPlans.StepsAsync(db, Warmth.Awaiting(db, seed.Campaign.Id, seed.Contact.Id).ToQueryString(), Ct);
+
+        Assert.Equal(before, after);
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
     private sealed record Seed(Campaign Campaign, Contact Contact);
