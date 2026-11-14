@@ -44,6 +44,15 @@ public partial class ClaimerTests
         var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal((ApprovalStatus.Approved, "automatic_mode", ActorType.Human, "Marta"), (approval.Status, approval.Reason, approval.DecidedByType, approval.DecidedById));
         Assert.Equal(pass, (string?)approval.Preview["send_mode"]!["review"]);
+
+        // The pass counts because the critic is the claim's own kind of critic: one created line by system:runtime, its key
+        // naming this send and its operation, and no change of its context by anybody else.
+        var run = (await fresh.Attempts.AsNoTracking().SingleAsync(a => a.WorkItem!.PublicId == critic.PublicId, Ct)).PublicId;
+        var sent = await WorkItemService.LoadAsync(fresh, send.Id, Ct);
+        var lines = await AutomaticRelease.ReviewLines(fresh, send.Id).ToListAsync(Ct);
+        Assert.Equal([run], await AutomaticRelease.CriticsAsync(fresh, sent, lines, Ct));
+        var own = await AutomaticRelease.CriticLines(fresh, critic.PublicId).ToListAsync(Ct);
+        Assert.Equal((JournalKinds.WorkItemCreated, ActorType.System, "runtime"), (Assert.Single(own).Kind, own[0].ActorType, own[0].ActorId));
     }
 
     /// <summary>The claim cannot launch the critic it was handed — nothing starts it any more — and fails it; the send then goes to the person.</summary>
