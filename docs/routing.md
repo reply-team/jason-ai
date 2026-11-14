@@ -852,6 +852,9 @@ hold it to. It invokes nothing.
 - **A channel route carries one operation.** A route for `message.send` on a channel does not route `sender.list` on
   it, so where only the sends have a route for a channel, that channel's accounts are read, as work or on request,
   wherever `sender.list`'s own route goes, which may be another provider than the one the sends go through.
+- **An opt-out lock holds by the contact's record.** The `opted_out` check refuses work about the contact whose
+  verdict stands, and the register holds every value that record had; another contact record of the same person, with a
+  value the opted-out record never had, is not covered, since Jason does not merge contacts.
 - **Routes are not exported or imported.** The global half is a settings file you can copy; the campaign
   half is database rows, readable through `route list` and writable only one route at a time.
 

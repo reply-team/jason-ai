@@ -493,6 +493,10 @@ work has ended; whatever way it ended, the claim then decides as ever. A doubt p
 any standing approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying
 `doubted`, and no row is born approved; a pass is no doubt and leaves the standing approval to decide.
 
+An edit made under no name, or as `role:<name>` outside a run, names no author a review could tell apart and is never
+matched as an editor of a send: only a person who gave their name and an attempt are, so such an edit stops nobody
+reviewing the send.
+
 **The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
 item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the
 context: no journal line, no attempt's snapshot, no read of
@@ -505,6 +509,53 @@ stands: `source` (`ask_person` or `review`), `by` (the actor that doubted), `rol
 `code`, `note` (the sentence, or null) and `line` (the `workitem_reviewed` line, or null for `ask_person`). A send
 parked again after an edit or an expiry carries the creator's `ask_person` sentence over from its earlier approval's
 preview, since the key is never taken back; a review's is not carried, because the text it was about no longer stands.
+
+### Send modes
+
+A send to a person goes under one of two send modes, `automatic` or `every_message`: one for a contact who has not
+answered in the campaign, cold, and one for a contact who has, warm. The mode in force is the campaign's own where it
+sets one, else the installation's preference `send_mode.cold` or `send_mode.warm`, else `every_message`
+([`send_mode.cold`](contracts/preferences/send_mode.cold.md),
+[`send_mode.warm`](contracts/preferences/send_mode.warm.md)). It is read when a send is claimed, never frozen when the
+work is made.
+
+**Cold, warm or waiting.** Where a contact stands in a campaign is read from that campaign's own chronicle alone — its
+`inbound_reply_observed` lines and its `reply_classified` verdicts — and from the responders the runtime made for a
+thread. Nothing is stored for it, another campaign's verdicts are never read, and nothing here reads a category, a
+reaction or the words of a reply.
+
+- **Warm** is a verdict that stands in the campaign (no later verdict under its key), whose `nature` is `person`, whose
+  body names this contact, on a thread the campaign's own read saw move. Once warm, always warm: no moment is read.
+- **Waiting** is a reply of the contact's, seen by the campaign's own read, that no standing verdict has judged since it
+  moved. A contact waits for a judgement, or, where the only verdicts that would judge it state no nature, for the
+  nature. A waiting reply outranks warmth: a warm contact's new reply may be a request to stop, so it is judged before
+  anything else is said of the contact. A provider event's `reply_detected` line is not a reply that waits.
+- A verdict **judges** a reply when it stands, states a nature and is about a message at or after the reply's move. A
+  responder's verdict does too, where the responder read the whole thread after the reply moved: the read was a
+  `conversation.get` of the reply's thread that succeeded and whose page was all of it, nothing more to come, and the
+  responder that waited on it ran after it and succeeded. Every order here is the journal's own, never a clock.
+
+**Where the wait fails closed.** What does not prove a reply judged leaves the contact waiting:
+
+- On a thread longer than one page the responder's read proves nothing, since its result says there is more: the contact
+  stays waiting.
+- A read still open when its wait ran out, or one that failed, was cancelled or expired, leaves the contact waiting: the
+  responder saw no transcript and judges nothing. So does a responder with no read, because no route named the plugin
+  that saw the thread, or the read refused its identifier.
+- A reply that reaches the thread while its responder is already waiting or running is added to that responder, which
+  does not judge it, whatever it then does. The contact waits until a verdict about that reply is recorded, or until the
+  next responder the runtime creates on that thread succeeds: it reads the whole thread, so it clears every earlier
+  reply of it at once. In practice this heals at the thread's next move.
+- A responder or a read whose context anyone but the runtime changed judges nothing, since `workitem.update` may rewrite
+  any key of an open item's context.
+- A reply the campaign heard of only through the contact's pin makes nobody wait, and a verdict on its thread warms
+  nobody: the contact stays as they were.
+- A move on a thread that names no contact makes wait only a contact a standing verdict names on that thread, and only a
+  responder that names that contact judges it: the responder made for the unnamed move is about nobody and clears
+  nothing, so the contact waits for a verdict about a message at or after the move, or for a later responder that names
+  them.
+- A contact whose last reply was judged by a verdict recorded before 0.42.0 waits for its nature, since such a verdict
+  states none, until a verdict with a nature is recorded on that thread.
 
 ## Leases and heartbeats
 
