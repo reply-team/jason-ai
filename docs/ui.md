@@ -99,6 +99,17 @@ listed, so whatever arrives next is shown. After a decision, the next item opene
 shows. Approving, rejecting and answering are the person's, here as on the command line, and so are the two buttons that
 brief an agent on one item, [Copy prompt](#copy-prompt) and [Open an AI session](#open-an-ai-session).
 
+**The send modes.** A pending approval's card carries the installation's open question, `send_modes_unset` on every
+approval answer: for people who have not replied yet and for people who have, whether every message waits for you or goes
+automatically. Nothing is chosen for you; **Remember this** sets `send_mode.cold` or `send_mode.warm` as you
+(`jason preference set`), and the question is gone once both are set. Approve and Reject never wait on it. A send that
+was doubted shows, above the message, who doubted it and why, with the sentence they wrote drawn as text
+(`preview.doubts`). Once the modes are answered, a quiet line points to Settings, "Your name and tone", while either is
+unset, and **Hide for 7 days** keeps it away for a week in this browser's own storage, nothing sent to the runtime. An
+agent's **Settings** tab says what each kind goes under for that agent and from where (`send_modes_in_force`), and sets
+the agent's own or gives it back to the choice for every agent (`jason campaign set-send-mode`); System says the
+installation's (`send_modes` of `system.info`).
+
 ## Agents
 
 The page calls a campaign with its chat an agent: **Agents** in the sidebar, **Add to agent**, "Find an agent". It is the
