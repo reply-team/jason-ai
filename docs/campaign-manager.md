@@ -65,6 +65,8 @@ nothing of it. `audience_people_landed` is out: people a search brings in are th
 told when the reserve runs low and when the search ends.
 `message_sent_observed` is out by default, and a campaign's installation may add it: a send the provider took for later
 going out is the course the campaign planned, and it is worth a review only where the plan waits on that moment.
+`message_bounce_observed` is out by default too, and may be added the same way: the provider's bounce event that asked
+for the read already woke the manager, and the line only adds which send bounced and of what kind.
 Everything about profiles, plugins, routes and roles is operator maintenance, not campaign meaning.
 
 **The rules are settings, never a skill.** `Manager:Triggers` is a list of chronicle kinds, and every

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -217,9 +218,14 @@ public static class AttemptHandler
             }
         }
         catch (DbUpdateException failure) when (!again
-            && (ProviderBlocks.OpenedFirstElsewhere(failure) || ProviderBlocks.ClearedFirstElsewhere(failure)))
+            && (ProviderBlocks.OpenedFirstElsewhere(failure) || ProviderBlocks.ClearedFirstElsewhere(failure)
+                || SuppressionService.HeldFirstElsewhere(failure)))
         {
             await RollBackAsync(db).ConfigureAwait(false);
+
+            // The same holds of the register: a read that found a bounce staged the address another writer put on the
+            // register between this one's read of it and its save. The address is already on the register, so deciding
+            // again stages nothing and the read ends as it answered: never a failed or a repeated read.
             // Another attempt on the same account changed its blocks between this one's read of them and its save: it
             // opened first the block this one met, or cleared first a block this one got past or met again. One block
             // is kept open per account and per sender and a block's status guards it, so this save was refused whole.
