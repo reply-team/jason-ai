@@ -210,6 +210,69 @@ public static class SessionOpener
             : (ExitCodes.Success, null, false);
     }
 
+    /// <summary>A host chosen for a session at a folder or on Jason itself, and its program with what goes before its own arguments.</summary>
+    internal sealed record ChosenHost(AgentHostKind Host, IReadOnlyList<string> Program);
+
+    /// <summary>
+    /// The host of a session with no item, and its program: <paramref name="named"/> where <c>--host</c> named one, asking
+    /// the runtime nothing; else the one the preference names, read with <c>preference.list</c>, else Claude Code. A refusal
+    /// is written here and its exit code returned with no host: no runtime (as the read wrote it), a preference that could
+    /// not be read (<paramref name="unreadable"/>), a word no host has, <paramref name="refusedFor"/>'s own refusal of the
+    /// host the preference named, and a program not found.
+    /// </summary>
+    internal static async Task<(int Exit, ChosenHost? Chosen)> ChooseHostAsync(
+        CliEnvironment env,
+        AgentHostKind? named,
+        string unreadable,
+        Func<AgentHostKind, int?>? refusedFor,
+        CancellationToken cancellationToken)
+    {
+        var host = named;
+        if (host is null)
+        {
+            var (preferenceExit, word, said) = await PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
+            if (said)
+            {
+                return (preferenceExit, null);
+            }
+
+            if (preferenceExit == ExitCodes.ApiError)
+            {
+                return (Refuse(env, CliErrors.PreferenceUnreadable, unreadable), null);
+            }
+
+            host = word is null ? DefaultHost : AgentHosts.Parse(word);
+            if (host is null)
+            {
+                return (Refuse(
+                    env,
+                    CliErrors.HostUnknown,
+                    $"The preference {PreferenceKey} names '{word}', which this jason does not know as a host; it knows {AgentHosts.Vocabulary}. Nothing was started. {ChooseAnother}"), null);
+            }
+
+            if (refusedFor?.Invoke(host.Value) is { } refused)
+            {
+                return (refused, null);
+            }
+        }
+
+        var (found, lookup) = HostProgram(env, host.Value);
+        return found is null
+            ? (Refuse(env, CliErrors.HostNotFound, NotFound(AgentHosts.Word(host.Value), AgentHosts.Of(host.Value).CommandWord, lookup)), null)
+            : (ExitCodes.Success, new ChosenHost(host.Value, found));
+    }
+
+    /// <summary>
+    /// A refusal of a session with no item: the API's error envelope on stdout with <paramref name="code"/>, the sentence
+    /// on stderr, and exit 1.
+    /// </summary>
+    internal static int Refuse(CliEnvironment env, string code, string message)
+    {
+        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+        env.Error.WriteLine(message);
+        return ExitCodes.ApiError;
+    }
+
     /// <summary>
     /// The host's program and what goes before its own arguments, found by its command word as Jason finds every program it
     /// starts by name: an <c>.exe</c>, npm's shim read for what it starts (the interpreter and entry script it names, or

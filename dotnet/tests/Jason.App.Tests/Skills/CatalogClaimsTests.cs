@@ -22,9 +22,9 @@ public sealed partial class CatalogClaimsTests
 
         Assert.Equal(["operating-the-installation"], Mentioning("jason skills install"));
         Assert.Equal(["operating-the-installation"], Mentioning("jason skills update"));
-        Assert.Equal(["operating-the-installation", "troubleshooting-jason"], Mentioning("jason status"));
+        Assert.Equal(["customising-jason", "operating-the-installation", "troubleshooting-jason"], Mentioning("jason status"));
         Assert.Contains(
-            $"Of the {InteractiveCount()}, `jason skills install` and `jason skills update` are mentioned only by `operating-the-installation`, `jason status` only by it and `troubleshooting-jason`",
+            $"Of the {InteractiveCount()}, `jason skills install` and `jason skills update` are mentioned only by `operating-the-installation`, `jason status` only by it, `troubleshooting-jason` and `customising-jason`",
             catalog,
             StringComparison.Ordinal);
         Assert.DoesNotContain("`jason skills update` and `jason status` are mentioned only by `operating-the-installation`", catalog, StringComparison.Ordinal);

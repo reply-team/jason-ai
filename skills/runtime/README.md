@@ -8,8 +8,8 @@ this pack ships with Jason **0.42.0**.
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
-**What they do not teach yet.** Of the eight, `jason skills install` and `jason skills update` are mentioned only
-by `operating-the-installation`, `jason status` only by it and `troubleshooting-jason`, and
+**What they do not teach yet.** Of the nine, `jason skills install` and `jason skills update` are mentioned only
+by `operating-the-installation`, `jason status` only by it, `troubleshooting-jason` and `customising-jason`, and
 `jason logs` and `jason doctor` are taught by `troubleshooting-jason` only. `verified` in
 this repository means a named agent host read *that exact text* — its description and its body — while driving
 this runtime and the digest of what it read is recorded, so a verified text cannot gain the new verbs without
@@ -54,6 +54,9 @@ description that promises everything matches nothing.
   becomes research work items, what Jason already holds and the launched researcher's notes read as a lead, the
   method left to `sdr-operations`, and an answer that says what was established and what was not. The session file
   of the researcher, below.
+- [`customising-jason`](customising-jason/SKILL.md) — Changing Jason itself rather than doing campaign work: a
+  role's instruction, a new role, a plugin for a service the person uses, a route or a grant, what an update keeps and
+  what is never touched; the skill the session `jason session open --setup` starts is told to use.
 
 ### Installing them
 
@@ -63,7 +66,7 @@ jason skills install --pack jason-runtime-skills
 jason skills update --pack jason-runtime-skills
 ```
 
-That deploys the eight interactive skills into the agent harnesses it finds, and the nine role skills below
+That deploys the nine interactive skills into the agent harnesses it finds, and the nine role skills below
 into the runtime's own data directory, where the runtime reads them at every launch. The second destination is
 not optional: a runtime with no role skills launches every role untaught — which is why it can be deployed on
 its own, into nothing but the runtime's directory:
