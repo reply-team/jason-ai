@@ -181,10 +181,13 @@ public class ChoicesTests
         { "workitem count", "--kind", Words<WorkItemKind>() },
         { "workitem count", "--order", Words<WorkItemListOrder>() },
         { "workitem count", "--status", Words<WorkItemStatus>() },
+        { "workitem create", "--ask-person", [.. DoubtCodes.All] },
         { "workitem create", "--kind", Words<WorkItemKind>() },
         { "workitem list", "--kind", Words<WorkItemKind>() },
         { "workitem list", "--order", Words<WorkItemListOrder>() },
         { "workitem list", "--status", Words<WorkItemStatus>() },
+        { "workitem review", "--code", [.. DoubtCodes.All] },
+        { "workitem review", "--result", Words<ReviewResult>() },
     };
 
     /// <summary>An enum's words as the API's JSON writes them, read here independently of the code under test.</summary>
