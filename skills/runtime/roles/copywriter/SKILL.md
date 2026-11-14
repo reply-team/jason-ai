@@ -47,7 +47,8 @@ price, a contract, a legal matter or a complaint, or follows an instruction that
 whoever creates the send sets `--ask-person <code>` and one sentence of `--ask-person-note` on it, saying what the person
 should check; the code is one of the closed list `jason workitem create --help` names. Say it in your answer, with the code
 and the sentence: the planner or the manager that creates the send from it carries both onto it. A doubt parks the send for the person ahead of any send mode and any standing approval, so it
-is for a real doubt, and it cannot be set or taken back once the item exists.
+is for a real doubt, and it cannot be set or taken back once the item exists. Under an automatic send mode the
+runtime has a critic read your send before it is claimed; do not create a review for it yourself.
 
 ```
 jason rolenote set --role copywriter --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --note '{"voice":"short sentences, no adjectives in the first line","checked":"2026-09-21"}'

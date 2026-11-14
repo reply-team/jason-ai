@@ -306,7 +306,8 @@ approval for this campaign and this category, under which the runtime releases y
 may also have chosen that what goes to a contact who has answered goes automatically (the `send_mode.warm` preference,
 or the campaign's own mode), which is theirs to set and never yours, and which the claim reads when it runs the item, not
 when you create it; without either, it parks for a person's approval, and you do not approve it. You never set a
-standing approval or a send mode.
+standing approval or a send mode. Under an automatic send mode the runtime has a critic read your send before it is
+claimed; do not create a review for it yourself.
 
 **Say when a person should look, whatever the mode.** Read memory first: the person's memory files the envelope names,
 which hold their standing words, and your own notes. Where the draft goes into a case none of them covers, or the reply holds

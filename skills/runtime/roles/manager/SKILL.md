@@ -107,7 +107,8 @@ showed.
 paragraphs below allow, and the first one's context holds `ask_person`, give the new one the same code and the same
 sentence, its `ask_person_note`, with `--ask-person` and `--ask-person-note`; where you create one from a copywriter's
 or a personalizer's answer that says a person should look, carry its code and its sentence the same way. Either is set
-when the item is created and never after, so a doubt left out then reaches nobody.
+when the item is created and never after, so a doubt left out then reaches nobody. Under an automatic send mode the
+runtime has a critic read your send before it is claimed; do not create a review for it yourself.
 
 **A send for a later moment.** Where a `message.send` or a `social_invitation.send` that names a moment in
 `send_after` ends `capability_not_offered` or `argument_unsupported`, you may create a new item without it, with

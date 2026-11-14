@@ -180,6 +180,22 @@ public partial class SendModeSkillTests
         Assert.DoesNotContain("the send was created waiting on your item", skill, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Whoever writes or creates a send is told, in the ruled words, that under an automatic mode the runtime has a
+    /// critic read it, so no role queues a review of its own send.
+    /// </summary>
+    [Fact]
+    public void The_roles_that_write_or_create_a_send_leave_its_review_to_the_runtime()
+    {
+        const string ruled = "Under an automatic send mode the runtime has a critic read your send before it is claimed; do not create a review for it yourself.";
+        foreach (var role in new[] { "copywriter", "personalizer", "responder", "manager", "planner" })
+        {
+            Assert.Contains(ruled, RoleSkillTests.Flattened(role), StringComparison.Ordinal);
+        }
+
+        Assert.Contains(ruled, InteractiveSkillTests.Flattened("planner-in-session"), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_composing_roles_say_when_to_ask_the_person_and_to_read_memory_first()
     {
