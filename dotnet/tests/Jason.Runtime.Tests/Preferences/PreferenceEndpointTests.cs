@@ -72,6 +72,32 @@ public class PreferenceEndpointTests
     }
 
     /// <summary>
+    /// The send modes as the page's Settings section reads and changes them while the name and tone are unset: one kind
+    /// going automatically, both kinds answered "every message", and an answer given back, which leaves the mode unset.
+    /// </summary>
+    [Fact]
+    public async Task The_send_modes_are_listed_turned_off_and_given_back_over_the_api()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        const string answer = "the person's answer";
+
+        await api.PostOkAsync<PreferenceDto>(Operations.PreferenceSet, new { key = "send_mode.cold", value = new { mode = "automatic" }, actor = Marta, reason = answer }, Ct);
+        var automatic = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "mode-automatic-voice-unset", new { }, Ct);
+        Assert.Equal([null, "automatic", null, null, null], automatic.Items.Select(item => (string?)item.Value?["mode"]));
+
+        var off = await api.RecordAsync<PreferenceDto>(
+            Operations.PreferenceSet, "send-mode-cold-every-message", new { key = "send_mode.cold", value = new { mode = "every_message" }, actor = Marta, reason = answer }, Ct);
+        Assert.Equal(("send_mode.cold", "every_message"), (off.Key, (string?)off.Value!["mode"]));
+
+        await api.PostOkAsync<PreferenceDto>(Operations.PreferenceSet, new { key = "send_mode.warm", value = new { mode = "every_message" }, actor = Marta, reason = answer }, Ct);
+        var waits = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "modes-every-message", new { }, Ct);
+        Assert.Equal([null, "every_message", "every_message", null, null], waits.Items.Select(item => (string?)item.Value?["mode"]));
+
+        var back = await api.RecordAsync<PreferenceDto>(Operations.PreferenceUnset, "send-mode-cold", new { key = "send_mode.cold", actor = Marta, reason = answer }, Ct);
+        Assert.Equal(new PreferenceDto("send_mode.cold", null, null, null, null, null, null), back);
+    }
+
+    /// <summary>
     /// A request line names the operation and never the body, and no template the runtime writes names a value; this reads
     /// the log a real start wrote back, after a value was set and unset, and finds none of it.
     /// </summary>
