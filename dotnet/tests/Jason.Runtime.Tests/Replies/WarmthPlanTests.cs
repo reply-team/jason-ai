@@ -6,7 +6,7 @@ namespace Jason.Runtime.Tests.Replies;
 
 /// <summary>
 /// Each read warmth makes names the index it is answered from, and SQLite answers every table it touches from that index,
-/// never by walking it: the person's own lines by the contact, a verdict and the one that replaced it by the kind, the
+/// never by walking it: the person's own lines by the contact, a verdict and the one that replaced it by the campaign's own lines, the
 /// campaign's own observed lines by their filtered index, a responder by the campaign's items of the same person, its
 /// attempts by the item, and an attempt's start by the item's own lines. The plans are read from the very queries the
 /// claim runs.
@@ -21,8 +21,8 @@ public class WarmthPlanTests
             "awaiting",
             [
                 "o: ix_journal_contact_id_public_id (contact_id=?)",
-                "v: ix_journal_kind (kind=?)",
-                "later: ix_journal_kind (kind=? AND rowid>?)",
+                "v: ix_journal_campaign_id_id (campaign_id=?)",
+                "later: ix_journal_campaign_id_id (campaign_id=? AND id>?)",
                 "r: ix_work_items_campaign_id_contact_id (campaign_id=? AND contact_id=?)",
                 "a: ix_attempts_work_item_id_number (work_item_id=?)",
                 "s: ix_journal_work_item_id_public_id (work_item_id=?)",
@@ -32,7 +32,7 @@ public class WarmthPlanTests
             "warming",
             [
                 "v: ix_journal_contact_id_public_id (contact_id=?)",
-                "later: ix_journal_kind (kind=? AND rowid>?)",
+                "later: ix_journal_campaign_id_id (campaign_id=? AND id>?)",
                 "o: ix_journal_campaign_kind_key (campaign_id=? AND kind=?)",
             ]
         },

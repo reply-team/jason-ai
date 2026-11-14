@@ -40,7 +40,7 @@ public enum WarmthState
 /// </para>
 /// <para>
 /// AWAITING: a line of the campaign's own read that names the contact and that no standing verdict on its thread has
-/// judged. A verdict judges a line when it stands, says a nature, and was recorded after the line, or is about a message
+/// judged. A verdict judges a line when it stands, says a nature, and is about a message
 /// at or after the line's move, or stands while a responder the runtime created for that thread succeeded with an
 /// attempt that started after the line was written (our own send into a replied thread moves it, and the responder that
 /// wakes on it finds the verdict standing and records nothing). The attempt's start is its <c>workitem_processing</c>
@@ -51,7 +51,7 @@ public enum WarmthState
 /// </para>
 /// <para>
 /// Every read is written SQL that names its index, and a test pins each plan, as the standing approvals' reads are:
-/// the person's own lines through the contact index, the verdicts through the kind index, the campaign's own observed
+/// the person's own lines through the contact index, the verdicts, and the one that replaced each, through the campaign's own lines, the campaign's own observed
 /// lines through their filtered index, a responder through the campaign's items of the same person, its attempts by
 /// item, and an attempt's start through the item's own lines.
 /// </para>
@@ -110,7 +110,7 @@ public static class Warmth
             WHERE v.contact_id = {contactId} AND v.campaign_id = {campaignId} AND v.kind = 'reply_classified'
               AND json_extract(v.new_json, '$.contact_id') IS NOT NULL
               AND json_extract(v.new_json, '$.nature') = 'person'
-              AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_kind
+              AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_campaign_id_id
                   WHERE later.kind = 'reply_classified' AND later.id > v.id
                     AND later.campaign_id = v.campaign_id AND later.key = v.key)
               AND EXISTS (SELECT 1 FROM journal AS o INDEXED BY ix_journal_campaign_kind_key
@@ -123,21 +123,20 @@ public static class Warmth
 
     /// <summary>
     /// Whether a standing verdict on the observed line <c>o</c>'s thread, whose nature passes <paramref name="nature"/>,
-    /// judges it: recorded after it, about a message at or after its move, or standing while a responder the runtime
+    /// judges it: about a message at or after its move, or standing while a responder the runtime
     /// created for the thread succeeded with an attempt that started after it. Correlated with <c>o</c> alone, so it
     /// carries no parameter of its own.
     /// </summary>
     private static string Judged(string nature) => $"""
-        EXISTS (SELECT 1 FROM journal AS v INDEXED BY ix_journal_kind
+        EXISTS (SELECT 1 FROM journal AS v INDEXED BY ix_journal_campaign_id_id
             WHERE v.kind = 'reply_classified' AND v.campaign_id = o.campaign_id
               AND json_extract(v.new_json, '$.plugin') = json_extract(o.new_json, '$.plugin')
               AND json_extract(v.new_json, '$.thread') = json_extract(o.new_json, '$.thread')
               AND json_extract(v.new_json, '$.nature') {nature}
-              AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_kind
+              AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_campaign_id_id
                   WHERE later.kind = 'reply_classified' AND later.id > v.id
                     AND later.campaign_id = v.campaign_id AND later.key = v.key)
-              AND (v.id > o.id
-                OR julianday(json_extract(v.new_json, '$.message_at')) >= julianday(json_extract(o.new_json, '$.last_activity_at'))
+              AND (julianday(json_extract(v.new_json, '$.message_at')) >= julianday(json_extract(o.new_json, '$.last_activity_at'))
                 OR EXISTS (SELECT 1 FROM work_items AS r INDEXED BY ix_work_items_campaign_id_contact_id
                     WHERE r.campaign_id = o.campaign_id AND r.contact_id = o.contact_id
                       AND r.role = 'responder' AND r.created_by_type = 'system' AND r.status = 'succeeded'

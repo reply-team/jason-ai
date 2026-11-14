@@ -390,9 +390,13 @@ public class WarmthTests
         Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
-    /// <summary>The same patched move is judged by the open responder's own verdict when it records after the patch.</summary>
+    /// <summary>
+    /// The open responder records its verdict about the earlier message after the patched move was written: the verdict
+    /// is about a message before the move and the responder's attempt started before it, so nothing judges the move and
+    /// the contact stays awaiting. A journal id above the line's judges nothing.
+    /// </summary>
     [Fact]
-    public async Task A_move_patched_onto_a_running_responder_is_judged_by_its_verdict_recorded_after_the_patch()
+    public async Task A_running_responders_verdict_about_the_earlier_message_recorded_after_the_patch_does_not_judge_the_move()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -403,7 +407,36 @@ public class WarmthTests
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
         await FinishAsync(db, item, attempt, succeeded: true);
 
-        Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>A verdict about an old message re-recorded after a newer move does not judge the move.</summary>
+    [Fact]
+    public async Task A_verdict_about_an_old_message_recorded_again_after_a_newer_move_does_not_judge_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>A verdict about the earlier message, recorded before the line of the later move, judges nothing of it.</summary>
+    [Fact]
+    public async Task A_verdict_about_an_earlier_message_recorded_before_the_later_line_does_not_judge_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
     private sealed record Seed(Campaign Campaign, Contact Contact);
