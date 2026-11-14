@@ -85,8 +85,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   JSON is snake_case, enums are snake_case strings, timestamps are ISO-8601 UTC, public ids are
   prefixed ULIDs (`cmp_…`, `wi_…`, `att_…`, `rol_…`). Partial patches distinguish absent from null
   (`Optional<T>`); lists paginate with `limit`/`cursor`; every mutating request may carry `actor`
-  and `reason`, but `workitem.review`, which refuses a `reason` because a reason is journaled and a doubt's sentence
-  never is. `campaign.create` and `workitem.create` also take a caller's `idempotency_key`, kept on
+  and `reason`, with one declared exception: `workitem.review` refuses a `reason`, because a reason is journaled and a
+  doubt's sentence never is. `campaign.create` and `workitem.create` also take a caller's `idempotency_key`, kept on
   the entity it created and never derived by the runtime or the CLI (`docs/work-execution.md`).
 - Work execution: work items move through one transition table (`WorkItemTransitions`) and end
   through one routine (`AttemptOutcomes`); never write a status elsewhere. The attempt id is the
