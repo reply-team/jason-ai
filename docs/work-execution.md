@@ -169,7 +169,8 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   `block_cleared` or `block_trial` (§Provider blocks). A responder its campaign's daily limit holds waits here as well,
   held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule). An item created with
   `wait_on` is written waiting from its first moment, on the items of its campaign the create names (at most 100, each
-  once; another campaign's item or one that does not exist is refused at `wait_on[i]`): it is never claimed before
+  once; another campaign's item or one that does not exist is refused at `wait_on[i]`; under an automatic send mode the
+  critic the runtime creates for a send follows them, and may be the hundred and first): it is never claimed before
   every one of them has ended, in any final state, or `Dispatcher:AiRole:MaxWaitSeconds` has passed, and spends no
   launch waiting. The wait only orders: once it is over the item is ordinary queued work, and the claim decides about it
   as about any other. A send created waiting on the work that reviews it is how a review lands before the send is
@@ -491,6 +492,22 @@ runtime's: the send is created waiting on the review's work (`wait_on`, §Lifecy
 work has ended; whatever way it ended, the claim then decides as ever. A doubt parks the send for the person ahead of
 any standing approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying
 `doubted`, and no row is born approved; a pass is no doubt and leaves the standing approval to decide.
+
+**Under an automatic send mode the runtime creates the review itself.** When a send a person decides each one of is
+created about a contact while the send mode in force for its campaign, for cold or for warm contacts, is `automatic` and
+was set by a named person, the same save creates a `critic` work item by `system:runtime`, of the send's campaign,
+contact, priority, due date and lineage, whose context is the reserved key `send_review`, exactly
+`{"work_item_id": "wi_…", "operation": "…"}` and nothing else, and writes the send waiting on it, after any items its
+`wait_on` named. A keyed repeat answers with what the first create made, and a create that loses the race on its key
+leaves no critic behind. A create or a patch that names `send_review` is refused `not_allowed` at that field, on every
+item, whoever sends it, so an item that carries the key was made by the runtime and its brief was never changed. Nothing
+is created under `every_message`, for a send that carries `ask_person`, for one written in the desktop's chat, for one
+about nobody, or where no critic could be launched (no profile resolves for it and no entry command does), and the send
+is then not held. The modes are read for this once, when the send is created: a later change neither adds nor removes
+the critic, and the claim reads the modes again when it decides. No second critic is created when the send's input is
+edited, and the critic is not cancelled when the send ends first. A critic that fails, is cancelled, expires or ends
+without a review, or a wait whose ceiling comes first, releases the send without a pass, and the claim parks it for the
+person as `not_reviewed` unless a standing approval covers it.
 
 **The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
 item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the

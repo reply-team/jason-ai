@@ -175,6 +175,32 @@ public class SendReviewQueueTests
         Assert.Empty(await CriticsAsync(db));
     }
 
+    /// <summary>A send written in the desktop's chat always waits for the person, so a critic would be a run for nothing.</summary>
+    [Fact]
+    [Critical(Family.S2, "a send written in the chat is never given a critic: it waits for the person")]
+    public async Task A_send_written_in_the_chat_is_not_reviewed_first()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ModesAsync(db, "automatic", "automatic");
+
+        WorkItemDto made;
+        using (ConfinedScope.Open())
+        {
+            made = await Service(db).CreateAsync(Send(seed), Ct);
+        }
+
+        Assert.Equal(WorkItemStatus.Created, made.Status);
+        Assert.Empty(await CriticsAsync(db));
+        Assert.Equal(true, (bool?)(await db.Journal.AsNoTracking().SingleAsync(line => line.Kind == JournalKinds.WorkItemCreated, Ct)).New!["confined"]);
+
+        // The same send outside the chat is given its critic.
+        var outside = await Service(db).CreateAsync(Send(seed), Ct);
+        Assert.Equal(WorkItemStatus.Waiting, outside.Status);
+        Assert.Single(await CriticsAsync(db));
+    }
+
     [Fact]
     public async Task A_send_about_nobody_is_not_reviewed_first()
     {

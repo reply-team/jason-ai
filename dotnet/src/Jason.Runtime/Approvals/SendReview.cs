@@ -23,9 +23,6 @@ public static class SendReview
     /// <summary>The member of <see cref="Key"/> that names the send's operation.</summary>
     public const string OperationMember = "operation";
 
-    /// <summary>The role of the work the runtime creates: the shipped critic, by its name.</summary>
-    public const string CriticRole = "critic";
-
     /// <summary>The reason the critic's <c>workitem_created</c> line carries.</summary>
     public const string Reason = "a send to review before it is claimed";
 
@@ -51,13 +48,6 @@ public static class SendReview
             [OperationMember] = operation,
         },
     };
-
-    /// <summary>
-    /// Whether <paramref name="mode"/> would release a send: automatic, set by a named person. The claim asks the same of
-    /// the mode in force when it decides.
-    /// </summary>
-    internal static bool Releases(ModeInForce mode) =>
-        mode is { Mode: SendMode.Automatic, SetBy: { Type: ActorType.Human, Id: { } id } } && !string.IsNullOrWhiteSpace(id);
 
     /// <summary>A create never names <see cref="Key"/>, whatever the work and whoever sends it.</summary>
     internal static void RefuseAtCreate(JsonObject? context, ValidationErrors errors)

@@ -218,8 +218,11 @@ public static class AutomaticRelease
         };
     }
 
-    /// <summary>The mode, where it releases: automatic, set by a named person.</summary>
-    private static ModeInForce? Releasing(ModeInForce mode) =>
+    /// <summary>
+    /// The mode, where it releases: automatic, set by a named person. A create asks it too, before the runtime creates the
+    /// critic of a send.
+    /// </summary>
+    internal static ModeInForce? Releasing(ModeInForce mode) =>
         mode is { Mode: SendMode.Automatic, SetBy: { Type: ActorType.Human, Id: { } id } } && !string.IsNullOrWhiteSpace(id) ? mode : null;
 
     private static string? Awaiting(WarmthState state) => state switch

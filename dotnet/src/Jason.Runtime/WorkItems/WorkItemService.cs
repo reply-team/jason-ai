@@ -258,27 +258,29 @@ public sealed class WorkItemService(
     /// <summary>
     /// The critic the runtime creates for <paramref name="send"/>, composed into the create's own save; null where it
     /// creates none. It creates one for a send a person decides each one of, about a contact, that does not ask the person
-    /// itself, where the campaign's send mode for cold or for warm contacts would release it and a critic could be
-    /// launched. The critic is the runtime's own work: a <c>critic</c> item of the send's campaign, contact, priority, due
-    /// date and lineage, whose context names the send under <see cref="SendReview.Key"/> and nothing else. The modes are read
-    /// here only to decide whether to create it; the claim reads them again when it decides about the send.
+    /// itself and was not written in the desktop's chat, where the campaign's send mode for cold or for warm contacts would
+    /// release it and a critic could be launched. The critic is the runtime's own work: a <c>critic</c> item of the send's
+    /// campaign, contact, priority, due date and lineage, whose context names the send under <see cref="SendReview.Key"/>
+    /// and nothing else. The modes are read here only to decide whether to create it; the claim reads them again when it
+    /// decides about the send.
     /// </summary>
     private async Task<WorkItem?> CriticAsync(WorkItem send, Campaign campaign, Contact? contact, LineageRecord record, DateTime now, CancellationToken cancellationToken)
     {
-        if (!ReviewSubject.IsReviewable(send) || contact is null || Doubts.AskPersonCode(send) is not null || roles is null)
+        // A send written in the desktop's chat always waits for the person, so a critic would be a run for nothing.
+        if (!ReviewSubject.IsReviewable(send) || contact is null || Doubts.AskPersonCode(send) is not null || ConfinedScope.Confined || roles is null)
         {
             return null;
         }
 
         var installation = await SendModes.ReadAsync(db, cancellationToken).ConfigureAwait(false);
-        if (!SendReview.Releases(SendModes.Resolve(campaign, installation, Temperature.Cold))
-            && !SendReview.Releases(SendModes.Resolve(campaign, installation, Temperature.Warm)))
+        if (AutomaticRelease.Releasing(SendModes.Resolve(campaign, installation, Temperature.Cold)) is null
+            && AutomaticRelease.Releasing(SendModes.Resolve(campaign, installation, Temperature.Warm)) is null)
         {
             return null;
         }
 
         var settings = roles.Current;
-        if (!await RoleLaunch.ConfiguredAsync(db, new EntryCommandResolver(roles), settings, SendReview.CriticRole, campaign.ExecutionProfile, record, cancellationToken).ConfigureAwait(false))
+        if (!await RoleLaunch.ConfiguredAsync(db, new EntryCommandResolver(roles), settings, AutomaticRelease.CriticRole, campaign.ExecutionProfile, record, cancellationToken).ConfigureAwait(false))
         {
             return null;
         }
@@ -286,7 +288,7 @@ public sealed class WorkItemService(
         var request = new WorkItemCreateRequest(
             CampaignId: campaign.PublicId,
             Kind: WorkItemKind.AiRole,
-            Role: SendReview.CriticRole,
+            Role: AutomaticRelease.CriticRole,
             Operation: null,
             ContactId: contact.PublicId,
             ExecutionProfile: null,
