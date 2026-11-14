@@ -134,7 +134,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   invocation goes to the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON
   Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3
   rejected, 4 host failure). Declaration is not permission: capabilities are requested by the manifest
-  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load; a manifest's `any_granted_host` lets a person
+  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load; `plugin.grant` and `plugin.revoke` write one
+  list there through the runtime's one writer of the settings file and run that load in the same act, and refuse an entry
+  the manifest does not request, where one written by hand is only a warning; a manifest's `any_granted_host` lets a person
   grant a host it does not declare, and `*` still means the declared hosts alone. Configuration is `Plugins:Config:<id>`:
   text only, frozen at each load, handed on stdin and read with `host.config`, a secret of the invocation, never in a
   package. A failure carries one of
@@ -200,7 +202,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   build, placing a plugin package the release publishes — rather than ask the runtime anything (each is the
   one such verb under a noun whose other verbs are operations, `plugin install` asks only the reload
   `plugin reload` asks and never starts a runtime, and the verb-map tests hold the `ui` group to its three
-  operations and `install` and the `plugin` group to its two and `install`); `jason logs` reads the
+  operations and `install` and the `plugin` group to its four and `install`); `jason logs` reads the
   installation's log files, which the runtime writes and is never asked about; `jason session open` starts the
   person's own agent host — the one the named preference `agent.interactive_host` names — in a new terminal window at
   the campaign's folder with the item's brief as its first input, a terminal being no runtime's to start or know about,
