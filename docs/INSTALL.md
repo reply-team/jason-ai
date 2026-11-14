@@ -432,6 +432,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
 | role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | every plugin is granted something of each capability it asks for |
+| the data directory is laid out as this jason runs it (`layout.json`; none means layout 1) — a layout a newer Jason set up, or a stamp that cannot be read, fails it with the sentence the refused verbs say | |
 | | a route is configured |
 | | a binding names an account |
 | | a provider CLI **you name** answers |
@@ -447,8 +448,10 @@ job is to answer when the runtime cannot be asked. The JSON body carries `ready`
 **an agent branches on the body, never on the exit code**.
 
 Under its checks, `jason status --human` prints where this installation's parts are: the role skills, plugins and
-custom UI folders and the settings file. Its JSON carries the same under `setup`, whether or not a runtime answers.
-While `setup.settings_file_holds_secrets` is true, the settings file is also where plugin secrets are kept.
+custom UI folders, the settings file and the layout. Its JSON carries the same under `setup`, whether or not a runtime
+answers. While `setup.settings_file_holds_secrets` is true, the settings file is also where plugin secrets are kept.
+`setup.layout` is the layout the data directory's `layout.json` names, 1 where there is none, and null where it cannot
+be read: `jason status` never guesses one.
 
 A check reports a fact and, where there is one, the command that repairs it. Most repairs are `jason`
 commands. One is not: putting an executable on a PATH is the shell's own act, so the `path` check prints the

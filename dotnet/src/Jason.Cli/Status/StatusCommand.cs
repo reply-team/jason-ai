@@ -226,6 +226,7 @@ public static class StatusCommand
             setup.SettingsFileHoldsSecrets
                 ? ("Settings:", $"{setup.SettingsFile} (where plugin secrets are kept)")
                 : ("Settings you may change:", setup.SettingsFile),
+            ("Layout:", setup.Layout is { } layout ? layout.ToString(System.Globalization.CultureInfo.InvariantCulture) : "unreadable"),
         ];
 
         var width = lines.Max(line => line.Label.Length) + 1;

@@ -193,7 +193,9 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   would be ignored there and decline to send it. Its `setup` section says where this Jason's parts are:
   `role_skills_directory` (the same folder as `role_skills_directory` in the `skills` section), `plugins_directory`,
   `custom_ui_directory`, `settings_file`, and `settings_file_holds_secrets`, true while plugin secrets are kept in the
-  settings file, whether or not any is set. A runtime older than the section has no such member.
+  settings file, whether or not any is set, and `layout`, the layout the data directory is in: 1 today, and always a
+  number here, since a runtime never starts on a layout it does not run. A runtime older than the section has no such
+  member, and one older than the layout has no `layout`.
 - `system.shutdown`: `jason runtime stop` sends it.
 - `system.drain`: stop claiming; `jason update apply` sends it.
 - `system.resume`: claim again. No command sends it.
