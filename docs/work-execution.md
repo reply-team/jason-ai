@@ -173,7 +173,9 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   every one of them has ended, in any final state, or `Dispatcher:AiRole:MaxWaitSeconds` has passed, and spends no
   launch waiting. The wait only orders: once it is over the item is ordinary queued work, and the claim decides about it
   as about any other. A send created waiting on the work that reviews it is how a review lands before the send is
-  claimed (§Approvals, "Reviews of a send").
+  claimed (§Doubts about a send); when the wait's ceiling releases such a send while its review still runs, the claim
+  does not wait for it: the person is asked without the review, and a review that comes after the park is refused
+  `not_reviewable`.
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
 - **`expired`** — the due date passed before anyone claimed it, before anyone answered the
@@ -475,9 +477,9 @@ never carries the doubt's sentence. Which review stands for the send is read fro
 current hash: the newest doubt, over any pass of the same text, or else the newest pass, or none. A doubt is answered
 only by the person's decision on the approval, never by a later pass. The order between a send and its review is the
 runtime's: the send is created waiting on the review's work (`wait_on`, §Lifecycle), so it is not claimed before that
-work has ended; whatever way it ended, the claim then decides as ever. A doubt parks the send for the person ahead of any standing
-approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying `doubted`, and
-no row is born approved; a pass is no doubt and leaves the standing approval to decide.
+work has ended; whatever way it ended, the claim then decides as ever. A doubt parks the send for the person ahead of
+any standing approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying
+`doubted`, and no row is born approved; a pass is no doubt and leaves the standing approval to decide.
 
 **The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
 item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the
