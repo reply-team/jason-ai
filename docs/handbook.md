@@ -77,7 +77,7 @@ Paste this into an agent that has a shell on the machine you want Jason on. It i
 preamble, no repository tour:
 
 ```text
-Install Jason by following https://get.jasonharness.ai/install.
+Install Jason by following https://get.jasonharness.ai/install
 When it reports Ready, start its quick-start skill and take me to my first campaign.
 If anything stops you, ask me directly and tell me why.
 ```
