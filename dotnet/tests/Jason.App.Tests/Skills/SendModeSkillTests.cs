@@ -265,7 +265,9 @@ public partial class SendModeSkillTests
         Assert.Contains("In the chat of Jason Desktop you cannot set a mode: the chat refuses `preference set`, `preference unset` and `campaign set-send-mode`. There the approval's card asks the question and the person answers on it.", skill, StringComparison.Ordinal);
         Assert.All(new[] { "preference set", "preference unset", "campaign set-send-mode" }, verb => Assert.Contains(verb, denied));
         Assert.Contains("give the person the command to type in a terminal instead, as `operating-the-installation` does for `jason project link`", skill, StringComparison.Ordinal);
-        Assert.Contains("When a person chooses **goes automatically**, say once, as a fact and never as a condition of setting it, that Jason then writes in their name without their look, and that their name and tone, set in Settings (\"Your name and tone\"), make those sends err less. The mode is on at once either way.", skill, StringComparison.Ordinal);
+        Assert.Contains("When a person chooses **goes automatically**, say once, as a fact and never as a condition of setting it, that Jason then sends messages in their name without them reading each one first, and that their name and tone, set in Settings (\"Your name and tone\"), help those messages sound like them. The mode is on at once either way.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("without their look", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("err less", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -285,6 +287,7 @@ public partial class SendModeSkillTests
         Assert.Contains("--actor human:", lift, StringComparison.Ordinal);
         Assert.DoesNotContain("--nature opt_out", lift, StringComparison.Ordinal);
         Assert.DoesNotContain("--decision", lift, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop you can do neither: the chat refuses that verb, and you cannot lift the lock there either; give the person the `reply record` line, and the `suppression remove` line where one is needed, to type in a terminal.", skill, StringComparison.Ordinal);
         NaturesFollowTheCategory(records);
     }
 
