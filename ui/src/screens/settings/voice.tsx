@@ -14,11 +14,10 @@ import {
     senderCount,
     senderForm,
     senderKey,
+    Unreadable,
     toneForm,
     toneKey,
     valueOf,
-    type Formality,
-    type GenderForms,
     type SenderForm,
     type ToneForm,
 } from './voice-model';
@@ -28,7 +27,15 @@ import { voiceKnown } from './voice-state';
 
 type Said = { kind: 'saved' | 'empty' | 'refused'; text: string } | null;
 
-const messageOf = (error: unknown): string => (error instanceof ApiError ? error.message : t('voice.refused'));
+/** Whether a stored word is none of the words this build knows: it is shown as it is, as one more choice. */
+const unknownWord = (word: string, known: readonly string[]): boolean => word !== '' && !known.includes(word);
+
+const messageOf = (error: unknown): string =>
+    error instanceof Unreadable
+        ? t('voice.unreadable')
+        : error instanceof ApiError
+          ? error.message
+          : t('voice.refused');
 
 /** "Your name and tone": who writes and how they write, each part saved on its own. Live only; the demo says where. */
 export function VoiceSection() {
@@ -153,10 +160,11 @@ export function VoiceSection() {
                             <span>{t('voice.sender.gender')}</span>
                             <select
                                 value={sender.gender}
-                                onChange={(event) =>
-                                    setSender({ ...sender, gender: event.target.value as GenderForms })
-                                }
+                                onChange={(event) => setSender({ ...sender, gender: event.target.value })}
                             >
+                                {unknownWord(sender.gender, genderForms) && (
+                                    <option value={sender.gender}>{sender.gender}</option>
+                                )}
                                 {genderForms.map((each) => (
                                     <option key={each} value={each}>
                                         {t(`voice.sender.gender.${each}`)}
@@ -184,11 +192,12 @@ export function VoiceSection() {
                             <span>{t('voice.tone.formality')}</span>
                             <select
                                 value={tone.formality}
-                                onChange={(event) =>
-                                    setTone({ ...tone, formality: event.target.value as Formality | '' })
-                                }
+                                onChange={(event) => setTone({ ...tone, formality: event.target.value })}
                             >
                                 <option value="">{t('voice.tone.formality.none')}</option>
+                                {unknownWord(tone.formality, formalities) && (
+                                    <option value={tone.formality}>{tone.formality}</option>
+                                )}
                                 {formalities.map((each) => (
                                     <option key={each} value={each}>
                                         {t(`voice.tone.formality.${each}`)}

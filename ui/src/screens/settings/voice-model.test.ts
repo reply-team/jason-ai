@@ -144,6 +144,31 @@ describe('a save writes only what the person changed', () => {
     });
 });
 
+describe('a stored word this build does not know', () => {
+    it('is shown as it is and left as read when the person did not touch it, for the grammar forms', () => {
+        const stored = { senders: [{ name: 'Ada', gender_forms: 'epicene' }] };
+        const shown = senderForm(stored);
+        expect(shown.gender).toBe('epicene');
+        expect(mergeSender(stored, { ...shown, name: 'Ada L.' }, shown)).toEqual({
+            senders: [{ name: 'Ada L.', gender_forms: 'epicene' }],
+        });
+        expect(mergeSender(stored, { ...shown, gender: 'neutral' }, shown)).toEqual({
+            senders: [{ name: 'Ada', gender_forms: 'neutral' }],
+        });
+    });
+
+    it('is shown as it is and left as read when the person did not touch it, for the formality', () => {
+        const stored = { summary: 'Plain', formality: 'ceremonial' };
+        const shown = toneForm(stored);
+        expect(shown.formality).toBe('ceremonial');
+        expect(mergeTone(stored, { ...shown, summary: 'Warm' }, shown)).toEqual({
+            summary: 'Warm',
+            formality: 'ceremonial',
+        });
+        expect(mergeTone(stored, { ...shown, formality: '' }, shown)).toEqual({ summary: 'Plain' });
+    });
+});
+
 describe('what is stated', () => {
     const item = (key: string, value: unknown) => ({
         key,

@@ -27,9 +27,12 @@ export const genderForms: readonly GenderForms[] = ['feminine', 'masculine', 'ne
 export const formalities: readonly Formality[] = ['informal', 'neutral', 'formal'];
 
 /** What the "Who writes" part shows. */
-export type SenderForm = { name: string; title: string; company: string; gender: GenderForms };
-/** What the "How you write" part shows; an empty formality is none stated. */
-export type ToneForm = { summary: string; formality: Formality | '' };
+export type SenderForm = { name: string; title: string; company: string; gender: string };
+/**
+ * What the "How you write" part shows; an empty formality is none stated. A stored word this build does not know is
+ * carried as it is, never turned into a known one.
+ */
+export type ToneForm = { summary: string; formality: string };
 
 export const emptySender: SenderForm = { name: '', title: '', company: '', gender: 'neutral' };
 export const emptyTone: ToneForm = { summary: '', formality: '' };
@@ -68,25 +71,25 @@ export function senderForm(value: unknown): SenderForm {
         return emptySender;
     }
     if (!first) return emptySender;
-    const gender = genderForms.find((each) => each === first['gender_forms']);
+    const gender = text(first['gender_forms']);
     return {
         name: text(first['name']),
         title: text(first['title']),
         company: text(first['company']),
-        gender: gender ?? 'neutral',
+        gender: gender === '' ? 'neutral' : gender,
     };
 }
 
 /** The form's values from a stored tone of voice. */
 export function toneForm(value: unknown): ToneForm {
     if (!isObject(value)) return emptyTone;
-    const formality = formalities.find((each) => each === value['formality']);
-    return { summary: text(value['summary']), formality: formality ?? '' };
+    return { summary: text(value['summary']), formality: text(value['formality']) };
 }
 
 /**
  * Sets a text member only where the person changed it: a field equal to what the form painted is left as the stored
- * value holds it, so a member set elsewhere since is never taken away. A field changed to nothing takes the member away.
+ * value holds it, so a member set elsewhere since is never taken away. A field the person emptied takes the member away:
+ * the schema allows an empty title or company, but an empty one says nothing.
  */
 function put(into: Record<string, unknown>, key: string, now: string, painted: string): void {
     if (now === painted) return;
@@ -109,7 +112,7 @@ export function mergeSender(current: unknown, form: SenderForm, painted: SenderF
     if (form.name !== painted.name || text(first['name']) === '') first['name'] = form.name.trim();
     put(first, 'title', form.title, painted.title);
     put(first, 'company', form.company, painted.company);
-    if (form.gender !== painted.gender || !genderForms.some((each) => each === first['gender_forms'])) {
+    if (form.gender !== painted.gender || typeof first['gender_forms'] !== 'string') {
         first['gender_forms'] = form.gender;
     }
     return { ...(isObject(current) ? current : {}), senders: [first, ...senders.slice(1)] };
