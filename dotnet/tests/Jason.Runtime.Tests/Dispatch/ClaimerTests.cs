@@ -2240,6 +2240,17 @@ public partial class ClaimerTests
                 RouteSnapshot.Empty(Noon, _plugins.Snapshot.Id).Campaigns));
         }
 
+        /// <summary>
+        /// The routes frozen again with <paramref name="route"/> as the global default, against the plugins as they are
+        /// loaded now, as the reload after a <c>route.set</c> leaves them.
+        /// </summary>
+        public void Reroute(Route route) => _routing.Replace(new RouteSnapshot(
+            PublicId.New(RouteSnapshot.IdPrefix),
+            Noon,
+            _plugins.Snapshot.Id,
+            new RouteSet(route, RouteSet.Empty.Operations),
+            RouteSnapshot.Empty(Noon, _plugins.Snapshot.Id).Campaigns));
+
         /// <summary>What the claim logged, with the scope each line was written under.</summary>
         public RecordingLogs Logs { get; } = new();
 

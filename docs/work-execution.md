@@ -467,21 +467,31 @@ key; a `note` member inside the key is refused and pointed there. The sentence i
 
 **A review of the send** is `workitem.review`, written as the reserved line
 [`workitem_reviewed`](contracts/journal/workitem_reviewed.json): `passed`, or `doubts` with a code and an optional
-sentence (`note`). It is bound to the text it read by the **review hash**, the canonical hash of the operation, the
-work item and its context's `input` as stored, which `workitem.get` answers as `review_hash` on such a send. Nothing but
-an edit of the input moves the hash — a pin, a rename, the campaign's status or a route leave it as it is — and an edit
+sentence (`note`). It is bound to the text it read by the **review hash**, the canonical hash of the operation, the work
+item and its context's `input` as stored, which `workitem.get` answers as `review_hash` on such a send. Nothing but an
+edit of the input moves the hash — a pin, a rename, the campaign's status or a route leave it as it is — and an edit
 voids every review made before it: the line under the old hash no longer stands, the doubt's sentence is cleared in the
-edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or
-`waiting` is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is
-refused `not_reviewable` exactly where the claim would not read it: where an approval stands for the send's text as it
-now reads, since a retry goes under the decision already made and reads no review. Who reviews: a running attempt of the
-same campaign's role work, other than every attempt of the work that created the send (a retry of the composer is the
-same author), or a person by name who did not create it (`review_by_creator`); a person's own send goes to them as an
-approval, their own explicit yes. Whoever wrote the send's input since it was made is one of its authors and does not
-review it either, read from the send's own `workitem_context_updated` lines for `input`: a person by name, or any
-attempt of a work that did (`review_by_editor`). Inside a run a review speaks as its run: an actor other than the
-attempt the request's header names is refused; and a send created inside a run is created under that run's name, since
-its creator is who a review is told apart from: a create naming a person, another attempt or nobody is refused
+edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or `waiting`
+is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is refused
+`not_reviewable` exactly where the claim would not read it: where an approval stands for the send as it would now go,
+since the claim would run it under the decision already made and read no review. The one exception fails closed: where
+the runtime cannot yet tell whether the claim would read the review, because an approval is live and the pre-flight
+stops the send at a check that comes before the approval's (its plugin unavailable, say), so no subject can be composed
+to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send reach the
+approval; a provider block, the one check after the approval's, does not stop a review from being judged. A doubt
+accepted then leaves the send with no approval to run under, whatever changes after; a pass leaves a person's approval
+as it stood, and the claim may run the send under that approval without reading the pass. The doubt does so by
+superseding, in the review's own save, the approved row still live, which no longer stands for the send as it would now
+go (`approval_superseded`, under the reviewer's name). Who reviews: a running attempt of the same campaign's role work,
+other than every attempt of the work that created the send (a retry of the composer is the same author), or a person by
+name who did not create it (`review_by_creator`); a person's own send goes to them as an approval, their own explicit
+yes. Whoever wrote the send's input since it was made is one of its authors and does not review it either, read from the
+send's own `workitem_context_updated` lines for `input`: a person by name, or any attempt of a work that did
+(`review_by_editor`). An edit by an actor the runtime cannot hold to anybody, under no name or as a role outside a run,
+has an author no run can be told apart from, so from then on only a person by name reviews the send, and a run is
+refused `review_by_editor`. Inside a run a review speaks as its run: an actor other than the attempt the request's
+header names is refused; and a send created inside a run is created under that run's name, since its creator is who a
+review is told apart from: a create naming a person, another attempt or nobody is refused
 `created_as_another_inside_a_run`. A patch of such a send's input inside a run is the same door: one naming anybody but
 the run is refused `updated_as_another_inside_a_run`. The verb takes no `reason`, since a reason is journaled and the
 line never carries the doubt's sentence. Which review stands for the send is read from the send's own lines under its

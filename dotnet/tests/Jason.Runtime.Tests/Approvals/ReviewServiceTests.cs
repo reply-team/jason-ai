@@ -276,6 +276,44 @@ public class ReviewServiceTests
         }
     }
 
+    /// <summary>
+    /// An edit of the send's input under a name that holds nobody (no name at all, or a role's outside a run) has an author
+    /// no run can be told apart from, so from then on only a person by name reviews the send: a run is refused
+    /// <c>review_by_editor</c> and nothing is written. With no such edit a run that neither made nor edited the send reviews
+    /// it, as before.
+    /// </summary>
+    [Theory]
+    [InlineData("an edit under no name, then a run reviews", false)]
+    [InlineData("an edit as a role outside a run, then a run reviews", false)]
+    [InlineData("an edit under no name, then a person by name reviews", true)]
+    [InlineData("an edit as a role outside a run, then a person by name reviews", true)]
+    [InlineData("an edit by a person by name, then a run reviews", true)]
+    public async Task An_edit_under_a_name_that_holds_nobody_leaves_the_send_to_a_person_by_name(string path, bool accepted)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        ActorRef? editor = path.StartsWith("an edit under no name", StringComparison.Ordinal) ? null
+            : path.StartsWith("an edit as a role", StringComparison.Ordinal) ? new ActorRef(ActorType.Role, "x")
+            : new ActorRef(ActorType.Human, "grace");
+        await Items(db).UpdateAsync(Patch(seed.Send.PublicId, new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") }) with { Actor = editor }, Ct);
+        var reviewer = path.EndsWith("a person by name reviews", StringComparison.Ordinal) ? Ada : Run(seed.ReviewRun);
+
+        if (accepted)
+        {
+            await Service(db).ReviewAsync(Doubt(seed, "off_brief") with { Actor = reviewer, Note = Sentence }, Ct);
+            Assert.Equal((ReviewResult.Doubts, "off_brief"), await StandsAsync(db, seed));
+            return;
+        }
+
+        var refused = await Assert.ThrowsAsync<ForbiddenException>(() => Service(db).ReviewAsync(Doubt(seed, "off_brief") with { Actor = reviewer, Note = Sentence }, Ct));
+
+        Assert.Equal("review_by_editor", refused.Code);
+        Assert.Contains("only a person by name reviews it", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(Sentence, refused.Message, StringComparison.Ordinal);
+        await NothingWrittenAsync(database, seed);
+    }
+
     /// <summary>A person by name, from outside a run, reviews a send somebody else made, a run or another person.</summary>
     [Theory]
     [InlineData("a run")]
