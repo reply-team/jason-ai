@@ -23,7 +23,7 @@ public class SendModesCheckTests
         },
         {
             new SendModesInForce(Mode(SendMode.Automatic, SendModeSource.Preference), Mode(SendMode.EveryMessage, SendModeSource.Preference)),
-            "To a contact who has not answered: sent without asking, as the installation's preference says. To a contact who has: every message waits for a person, as the installation's preference says.",
+            "To a contact who has not answered: released without asking unless something puts one to a person first, as the installation's preference says. To a contact who has: every message waits for a person, as the installation's preference says.",
             "automatic", "preference", "every_message", "preference"
         },
     };
