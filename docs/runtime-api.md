@@ -216,7 +216,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.set_send_mode`: the campaign's own send mode for its cold contacts, its warm ones or both, `automatic` or
   `every_message`; null gives a mode back to the installation's `send_mode.cold` or `send_mode.warm`, and an absent
   one is left alone. A person's word: only a named `human` sets it (`send_mode_not_human`, `actor_required`), and a
-  request from inside a run is refused. Each mode that moves is one `campaign_updated` line, and so is a mode set again by
+  request from inside a run is refused. Naming neither mode is a validation error at `cold`, and an archived campaign is
+  refused (`campaign_archived`). Each mode that moves is one `campaign_updated` line, and so is a mode set again by
   another person, which becomes theirs: its old and its new are the same word, under the new setter; the same person
   asking again writes nothing. Every answer that carries a campaign whole says the campaign's own in `send_modes`, each
   null where it sets none, and the mode a send to a cold or a warm contact goes under now in `send_modes_in_force`,
@@ -308,7 +309,7 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 
 - `workitem.create`: takes a caller's `idempotency_key`, and `wait_on`, the items of the same campaign the new item
   waits on from its creation: it is written `waiting` and is not claimed until every one of them has ended, in any
-  final state. A send a person decides each one of may carry the creator's own doubt as the reserved context key
+  final state. A send to a person may carry the creator's own doubt as the reserved context key
   `ask_person`, `{"code": …}`, with its one sentence in `ask_person_note`, which no line and no read of the item carries
   ([`docs/work-execution.md`](work-execution.md), "Doubts about a send"). Inside a run such a send is created under the
   run's own name: one that names a person, another attempt or nobody is refused `created_as_another_inside_a_run`
@@ -321,7 +322,7 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
   profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval
   withdraws the question, and the work goes back to the queue, where the claim asks again about what it now says.
-  Inside a run a patch that names the `input` of a send a person decides each one of is made under the run's own name:
+  Inside a run a patch that names the `input` of a send to a person is made under the run's own name:
   one that names a person, another attempt or nobody is refused `updated_as_another_inside_a_run` (403).
 - `workitem.cancel`: stops the work for good.
 - `workitem.heartbeat`: the attempt's "I am still here".
@@ -331,13 +332,13 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 - `workitem.resume`: ends a wait before what it waited for has happened, on somebody's word.
 - `workitem.review`: a review of a send before it goes, written as the journal line `workitem_reviewed` and answered
   with that line. It names the send by `work_item_id` and the text it read by `review_hash`, the hash `workitem.get`
-  answers on a send a person decides each one of; a send whose input moved since is refused `review_stale`, and only a
+  answers on a send to a person; a send whose input moved since is refused `review_stale`, and only a
   send still `created` or `waiting` is reviewed (`not_reviewable`); a review is also refused `not_reviewable` where an
   approval stands for the send as it would now go, since the claim would run it under that approval without reading a
   review. Where the runtime cannot yet tell whether the claim would read the review, because an approval is live and the
   pre-flight stops the send at a check before the approval's (its plugin unavailable, say), so no subject can be
   composed to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send
-  reach the approval. A doubt accepted then leaves the send with no approval to run under, whatever changes after; a
+  reach the approval. An accepted doubt leaves the send with no approval to run under, whatever changes after; a
   pass leaves a person's approval as it stood, and the claim may run the send under that approval without reading the
   pass. `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document
   publishes, and may carry one `note`, a line of at most 280 characters that the line never carries and the person reads

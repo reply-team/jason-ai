@@ -81,8 +81,8 @@ public static class Doubts
     }
 
     /// <summary>
-    /// The creator's <c>ask_person</c> and its sentence, as a create asks for them: the key only on a send a person decides
-    /// each one of, holding exactly a code of the list; the sentence only beside the key, one line of at most
+    /// The creator's <c>ask_person</c> and its sentence, as a create asks for them: the key only on a send to a person,
+    /// holding exactly a code of the list; the sentence only beside the key, one line of at most
     /// <see cref="DoubtCodes.MaxNoteLength"/> characters.
     /// </summary>
     internal static void ValidateCreate(WorkItemCreateRequest request, ValidationErrors errors)

@@ -472,8 +472,8 @@ public class ApprovalCommandsTests
     /// both modes are chosen the line is gone.
     /// </summary>
     [Theory]
-    [InlineData("[\"send_mode.cold\",\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.cold, send_mode.warm; until a person sets them, every send waits for approval")]
-    [InlineData("[\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.warm; until a person sets them, every send waits for approval")]
+    [InlineData("[\"send_mode.cold\",\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.cold, send_mode.warm; a send to a contact it covers waits for a person unless the campaign sets a mode of its own")]
+    [InlineData("[\"send_mode.warm\"]", "Send modes:    not chosen yet: send_mode.warm; a send to a contact it covers waits for a person unless the campaign sets a mode of its own")]
     [InlineData("[]", null)]
     public async Task Get_says_which_send_modes_nobody_has_chosen_while_any_is_open(string unset, string? said)
     {

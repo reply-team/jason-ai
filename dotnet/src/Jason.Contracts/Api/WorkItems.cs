@@ -239,7 +239,7 @@ public sealed record WorkItemDto(
 
     /// <summary>
     /// The hash a review of this send is bound to (<c>workitem.review</c>): the operation, the item and its context's
-    /// input, canonically. Present only on a send a person decides each one of; an edit of the input changes it.
+    /// input, canonically. Present only on a send to a person; an edit of the input changes it.
     /// </summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReviewHash = null);
 

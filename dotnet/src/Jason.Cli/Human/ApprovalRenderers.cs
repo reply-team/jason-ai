@@ -81,7 +81,7 @@ public static class ApprovalRenderers
         // The installation's open question, while it is open: which send modes nobody has chosen, and what that means.
         if (approval.SendModesUnset is { Count: > 0 } unset)
         {
-            text.AppendLine(Line("Send modes:", $"not chosen yet: {string.Join(", ", unset)}; until a person sets them, every send waits for approval"));
+            text.AppendLine(Line("Send modes:", $"not chosen yet: {string.Join(", ", unset)}; a send to a contact it covers waits for a person unless the campaign sets a mode of its own"));
         }
 
         text.AppendLine(Line("Status:", RenderText.Snake(approval.Status)));

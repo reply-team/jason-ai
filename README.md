@@ -7,7 +7,7 @@
 **It works with the Claude Code or Codex plan you already pay for. No model API bill, no seats.**
 
 Describe your idea. Jason finds the contacts, plans a line for every person, writes, sends, reads the replies<br>
-and keeps going after the chat ends. Nine specialists, and nothing sent without your yes.
+and keeps going after the chat ends. Nine specialists, and you choose how much they ask you.
 
 [![Release](https://img.shields.io/github/v/release/reply-team/jason-ai)](https://github.com/reply-team/jason-ai/releases/latest)
 [![Runs on](https://img.shields.io/badge/runs%20on-Claude%20Code%20%2B%205%20more-D97757)](#quick-start)
@@ -26,8 +26,9 @@ answered and what comes next.
 
 **Jason is the missing layer.** Tell it what you sell and who should buy it, in plain words. Jason finds the contacts,
 plans each person's line of contact, writes, sends through your provider, reads the replies and keeps the work going
-while you're in meetings. Your agent does the thinking, Jason keeps the memory, and every message waits for your
-approval. Whoever installs it, you or your AI, starts from the three lines under Quick start.
+while you're in meetings. Your agent does the thinking, Jason keeps the memory, and you choose whether each message
+waits for your yes or goes on its own. Whoever installs it, you or your AI, starts from the three lines under
+Quick start.
 
 **You use Jason from a release.** Nothing in this repository is built, cloned or tested to use it; the source is here
 for changing Jason.
@@ -138,7 +139,7 @@ to.
 | **AI / LLM** | Runs on your subscription, with no API key and nothing to connect. Any agent with a shell can run your session through Jason's CLI and skills. Six hosts can run the nine background roles: Claude Code, measured on real runs; Codex, measured on Windows but not yet run on an account (its sandbox there needs an administrator once); Cursor CLI, GitHub Copilot CLI, Gemini CLI and Antigravity CLI, built from each host's documentation and not yet run on an account. Jason ships no model and holds no model credentials. | [Which agent does what](#runs-on-the-plan-you-already-pay-for) · [Execution profiles](https://github.com/reply-team/jason-ai/blob/main/docs/execution-profiles.md) |
 | **Search and personalization** | Find leads through Reply's Live Data API (1B+ B2B contacts, with a preview of the audience size before you spend credits), or through your own tools: anything your agent can reach, a CSV, your CRM. A Researcher and a Personalizer role work per person. Jason has no contact database of its own. | [Finding leads](#finding-leads) |
 | **Deliverability and warm-up** | Deliverability modules ship with Jason: sending and LinkedIn guardrail skills (authentication, warm-up, pacing, bounces, recovery) and a Deliverability role that reads bounces, opt-outs and failures and can pause a campaign at once. Warm-up itself runs in the provider you connect: Reply, or TrulyInbox, Lemwarm, Warmy and others. Jason has no warm-up engine of its own. | [Deliverability](#deliverability-and-warm-up) |
-| **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in the chat or the browser UI. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the desktop's chat and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [Nothing reaches a person without you](#nothing-reaches-a-person-without-you) |
+| **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in the chat or the browser UI. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the desktop's chat and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [You choose how much it asks you](#you-choose-how-much-it-asks-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 20 guides, 30 operation contracts in Markdown and JSON with 942 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
@@ -158,7 +159,7 @@ to.
 - [Just ask](#just-ask)
 - [Jason Desktop](#jason-desktop)
 - [The team](#the-team)
-- [Nothing reaches a person without you](#nothing-reaches-a-person-without-you)
+- [You choose how much it asks you](#you-choose-how-much-it-asks-you)
 - [Your outbound stack](#your-outbound-stack)
 - [Make it yours](#make-it-yours)
   - [Plugins are JavaScript](#plugins-are-javascript)
@@ -328,13 +329,18 @@ for that campaign.
 
 ---
 
-## Nothing reaches a person without you
+## You choose how much it asks you
 
 Jason does as much as it can on its own, and nothing that should be yours.
 
-- **Approvals are the rule, not a setting.** Every operation that reaches a real person is parked with a record of
-  exactly what would be done, until you decide. Approve in the chat or in the browser UI, where you see the person,
-  the account it goes from and the full message.
+- **Every message waits for you until you choose otherwise.** Every operation that reaches a real person is parked
+  with a record of exactly what would be done, until you decide. Approve in the chat or in the browser UI, where you see
+  the person, the account it goes from and the full message.
+- **Or it goes on its own, where you say so.** You choose, separately for people who have not answered and for people
+  who have, that messages go automatically, for every campaign or for one. A critic reads each such message before it
+  goes, and a message it or another role doubts, one to a person whose reply has not been judged yet, one written in the
+  desktop's chat and any past the campaign's daily limit still wait for you. Only a named person turns it on, a role
+  never can, and every message it lets go is logged under that person's name.
 - **A yes in advance, only if you give one.** You can pre-approve drafted replies to one category of reply in one
   campaign, such as `interested`, with an expiry and a ceiling if you want them. A search for people sends nothing, but
   it spends your provider's credits, so the first search for a new audience always waits for you; after it, you can let
@@ -668,11 +674,14 @@ skills · release notes on every release.
 ## FAQ
 
 **Does it ever send on its own?**
-No. Every message to a real person waits for your approval. One nuance, said plainly: if a campaign enrols someone
-into your provider's own sequence, you approve that enrolment once for that person, and the provider then sends the
-sequence's steps. And if you choose to, you can pre-approve drafted replies to one category of reply in one campaign,
-and let the searches that top up one of a campaign's audiences find more people up to a number you set: a search sends
-nothing, though it spends your provider's credits. No role can turn either on.
+Only where you say so. Until you choose otherwise, every message to a real person waits for your approval. You can
+choose, separately for people who have not answered and for people who have, that messages go automatically; a critic
+reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the
+desktop's chat and any past the campaign's daily limit still wait for you. One nuance, said plainly: if a campaign
+enrols someone into your provider's own sequence, you approve that enrolment once for that person, and the provider then
+sends the sequence's steps. And if you choose to, you can pre-approve drafted replies to one category of reply in one
+campaign, and let the searches that top up one of a campaign's audiences find more people up to a number you set: a
+search sends nothing, though it spends your provider's credits. No role can turn either on.
 
 **What if my laptop is closed?**
 Jason pauses. When you're back, it picks up where it left off and checks for new replies. Nothing is lost, and nothing

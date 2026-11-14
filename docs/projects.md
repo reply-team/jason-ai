@@ -187,7 +187,7 @@ invoked for one ([the contracts README](contracts/README.md) describes the famil
 | Key | What it says |
 |---|---|
 | `agent.interactive_host` | The agent host `jason session open` starts for the person in a terminal of their own: one of the host words. Unset means `claude_code`. |
-| `send_mode.cold` | How what Jason sends to a contact who has not answered in the campaign goes: `automatic`, released without asking, or `every_message`, each one to a person first. Unset means `every_message`. |
+| `send_mode.cold` | How what Jason sends to a contact who has not answered in the campaign goes: `automatic`, released without asking unless something puts it to a person first (a doubt, a text nobody passed, a reply waiting to be judged or the day's ceiling, among others), or `every_message`, each one to a person first. Unset means `every_message`. |
 | `send_mode.warm` | The same for a contact who has answered in the campaign. Unset means `every_message`. |
 | `sender.identity` | Who messages are written as: one or more senders, the first of whom writes whenever a campaign names no other — each with the name they sign with, the forms a message uses for them in a language that marks them, and what else a writer needs. |
 | `tone_of_voice` | How the company sounds: the tone in words, how formal it is, how a first message opens and closes, and up to three messages the person likes. |

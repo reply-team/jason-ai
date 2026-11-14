@@ -44,7 +44,7 @@ public static class ReviewSubject
         return item.Kind == WorkItemKind.ProviderOp && IsReviewable(item.Operation);
     }
 
-    /// <summary>Whether <paramref name="operation"/> is one a person decides each one of.</summary>
+    /// <summary>Whether <paramref name="operation"/> is a send to a person.</summary>
     public static bool IsReviewable(string? operation) =>
         operation is not null
         && OperationCatalog.Find(operation) is { } contract

@@ -466,7 +466,7 @@ internal static class StatusChecks
         };
 
         static string ModeInWords(SendModeInForce mode) =>
-            (mode.Mode == SendMode.Automatic ? "sent without asking" : "every message waits for a person")
+            (mode.Mode == SendMode.Automatic ? "released without asking unless something puts one to a person first" : "every message waits for a person")
             + mode.Source switch
             {
                 SendModeSource.Preference => ", as the installation's preference says",
