@@ -348,6 +348,10 @@ applies to the turns a person starts by sending, from the next one on.
   "Full access has ended. The folder the AI worked in is kept for seven days and then removed: <path>", with an Open
   folder button, and removes it after seven days. Added campaign or project folders whose `.claude` holds skills,
   agents or commands are left out of a turn, and the chat says so once.
+- **A denied verb in any letter case is refused, in every mode.** `jason Campaign Set-Send-Mode` is refused as
+  `jason campaign set-send-mode` is (`holdsEntry` folds the words). The CLI takes a mis-cased verb for a usage error and
+  sends nothing, and the fence does not lean on that. A value spelled like a denied verb is refused too, in any case, as
+  its lower-case spelling already was.
 - **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands, the operations by
   their dots, the confining variable and the data directory's names are looked for a second time over a normalised text:
   quotes and a backslash inside a word removed, a bracket, a comma or a parenthesis read as a space. `appro\ve`,

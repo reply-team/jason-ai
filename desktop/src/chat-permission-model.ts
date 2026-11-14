@@ -629,14 +629,17 @@ function programOf(platform: Platform, token: string): string {
 /**
  * True when a jason command's words hold a deny-list entry: its first word is the command's first, and its other words
  * follow in order with anything between, so options before a verb (`approval --actor human:x approve`) do not hide it.
- * The first word is held in place, so `contact update ... update` is not the `update` entry.
+ * The first word is held in place, so `contact update ... update` is not the `update` entry. The words are compared in
+ * any letter case (an entry is lower case by the file's own rule): the CLI takes a mis-cased verb for a usage error, and
+ * the fence does not lean on that.
  */
 function holdsEntry(words: readonly string[], entry: string): boolean {
     const [first, ...rest] = entry.split(' ');
-    if (words[0] !== first) return false;
+    const folded = words.map((word) => word.toLowerCase());
+    if (folded[0] !== first) return false;
     let at = 1;
     for (const word of rest) {
-        while (at < words.length && words[at] !== word) at++;
+        while (at < folded.length && folded[at] !== word) at++;
         if (at === words.length) return false;
         at++;
     }

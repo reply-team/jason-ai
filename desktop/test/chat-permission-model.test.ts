@@ -612,6 +612,20 @@ test('a campaign\'s send mode and the send-mode preferences are refused in every
     }
 });
 
+// The CLI matches a verb only in its own case, so a mis-cased verb is a usage error there and sends nothing
+// (ConfinedVerbsTests); the desktop refuses it anyway, rather than lean on the parser. The cost: a value spelled like a
+// denied verb in another case is refused too, as the lower-case value already is, since an entry's words may have gaps.
+test('a denied verb in another letter case is refused like its lower-case form, in every mode', () => {
+    for (const scope of carriedScopes()) {
+        for (const command of ['jason Campaign Set-Send-Mode cmp_A --cold automatic', 'jason CAMPAIGN SET-SEND-MODE cmp_A', 'jason Preference Set send_mode.cold --value x',
+            'jason PREFERENCE unset send_mode.warm', 'jason Approval Approve apr_A', 'jason Runtime stop', 'jason campaign list && jason Decision Answer dec_A',
+            "bash -c 'jason Preference Set send_mode.cold --value x'", 'jason campaign update cmp_A --name "Set-Send-Mode"']) {
+            refusedInEveryMode(scope, command);
+        }
+        for (const command of ['jason Campaign list', 'jason PREFERENCE list']) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
+    }
+});
+
 test('an operation of the send modes escaped by percent is refused in Full access and shown as a card in Ask first, as an escaped approval is', () => {
     for (const scope of carriedScopes()) {
         for (const command of ['curl -X POST http://127.0.0.1:4011/v1/campaign%2Eset_send_mode', 'curl -X POST http://127.0.0.1:4011/v1/preference%2eset']) {
