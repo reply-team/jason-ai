@@ -201,6 +201,68 @@ public static class DomainErrors
 
     public static NotFoundException ApprovalNotFound(string id) => new("approval_not_found", $"No approval with id '{id}'.");
 
+    /// <summary>
+    /// The settings writer met a file the runtime's own parser does not read. The place is said as a person finds it in
+    /// an editor — the line and the byte — and with no exception's type, which the log says; nothing of the file is quoted.
+    /// </summary>
+    public static DomainException SettingsFileUnreadable(Configuration.SettingsFileFailure failure) =>
+        new(
+            StatusCodes.Status409Conflict,
+            Plugins.Manifest.ProblemCodes.SettingsFileUnreadable,
+            failure.Place() is { } place
+                ? $"The settings file could not be read ({place}), so nothing was written; fix it, then run the command again."
+                : "The settings file could not be read, so nothing was written; fix it, then run the command again.",
+            retryable: false);
+
+    /// <summary>
+    /// The settings writer cannot change the setting without touching bytes it does not own (<see cref="Configuration.SettingsDocument"/>).
+    /// The setting is named by its path, each key written as <see cref="Jason.Contracts.Configuration.SettingKey.ShownPath"/> writes it.
+    /// </summary>
+    public static DomainException SettingsFileNotEditable(string setting, Configuration.SettingsRefusal refusal) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_not_editable",
+            $"The settings file says {setting} in a way this writer cannot change without touching what it does not own ({Why(refusal)}), so nothing was written; change it by hand, then run jason plugin reload.",
+            retryable: false);
+
+    private static string Why(Configuration.SettingsRefusal refusal) => refusal switch
+    {
+        Configuration.SettingsRefusal.Twice => "twice, in different cases",
+        Configuration.SettingsRefusal.NotAnObject => "through a value that is not an object",
+        Configuration.SettingsRefusal.NotUtf8 => "not in UTF-8",
+        Configuration.SettingsRefusal.ColonKey => "with a key that holds a colon, which is the same setting written a second way",
+        Configuration.SettingsRefusal.CheckRefused => "in a form the writer's check of its own edit refused",
+        _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "a refusal with no words."),
+    };
+
+    /// <summary>Another writer kept changing the settings file between the writer's read and its commit; nothing was written.</summary>
+    public static DomainException SettingsFileChanged() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_changed",
+            "The settings file kept changing while this wrote it, so nothing was written; run the command again.",
+            retryable: true);
+
+    /// <summary>Another program held the settings file, so it could not be read or replaced; nothing was written.</summary>
+    public static DomainException SettingsFileBusy() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_busy",
+            "Another program holds the settings file open, so nothing was written; close it, then run the command again.",
+            retryable: true);
+
+    /// <summary>
+    /// A <c>JASON_</c> environment variable sets the path the writer would write, and overrides the file: a write would
+    /// answer success for a setting that is not the one in force. Named by the setting and the variable's form, never
+    /// by what either holds.
+    /// </summary>
+    public static DomainException SettingShadowed(string setting) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "setting_shadowed",
+            $"{setting} is set by the environment variable {Configuration.JasonConfiguration.EnvironmentPrefix}{setting.Replace(":", "__", StringComparison.Ordinal)}, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.",
+            retryable: false);
+
     /// <summary>No provider block has this id. Nothing deletes a block, so this is a wrong id.</summary>
     public static NotFoundException BlockNotFound(string id) => new("block_not_found", $"No provider block with id '{id}'.");
 
