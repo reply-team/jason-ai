@@ -717,7 +717,8 @@ everything in it, a token under `Plugins:Config` included: keep the archive as y
 **Before anything is written**, the import refuses an archive it cannot read, a name in it that would land
 outside the data directory or the harness root, a file whose size or SHA-256 is not the one `export.json` lists,
 an archive a newer Jason wrote, an archive whose data directory is in a layout newer than this jason runs
-(`layout_newer`), and an installation already here — a database, or a harness root with a folder
+(`layout_newer`), an archive whose layout stamp cannot be read or names another layout than `export.json` does, and an
+installation already here — a database, or a harness root with a folder
 marker in it, which a Jason that has run once on the new machine has. The refusal names what is there. Give
 `--replace` to move it aside and place the archive instead: the data directory's parts go into
 `<data>/replaced-<stamp>/` — `state/` whole, the database's `-wal` and `-shm` files and its backups with it — and

@@ -983,6 +983,7 @@ public static class ImportCommand
             {
                 var manifest = Listing(file, zip);
                 Check(file, zip, manifest, trees);
+                Stamp(file, zip, manifest);
                 return new Archive(file, zip, manifest, settingsName);
             }
             catch
@@ -990,6 +991,47 @@ public static class ImportCommand
                 zip.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// The layout stamp the archive carries, when it carries one, read by the stamp's own rules and held to the layout
+        /// <c>export.json</c> says: an archive whose stamp cannot be read, or names another layout, would place a data
+        /// directory that refuses at its next start, or one that says it is laid out as it is not.
+        /// </summary>
+        private static void Stamp(string file, ZipArchive zip, ExportManifest manifest)
+        {
+            var name = ExportManifest.DataPrefix + LayoutStamp.FileName;
+            if (zip.GetEntry(name) is not { } entry)
+            {
+                return;
+            }
+
+            // Its size and digest are export.json's and were held to it; a stamp is small, and one that is not is no stamp.
+            var stamp = entry.Length > LayoutStamp.MaxBytes
+                ? null
+                : LayoutStamp.Parse(name, ReadAll(entry));
+            var said = manifest.Layout ?? 1;
+            if (stamp is not { State: LayoutStampState.Read } read)
+            {
+                throw new ImportRefusal(
+                    CliErrors.ImportUnreadable,
+                    $"The archive {file} carries a layout stamp, {name}, that cannot be read ({stamp?.Problem ?? "it is larger than a stamp"}). Nothing was written.");
+            }
+
+            if (read.Layout != said)
+            {
+                throw new ImportRefusal(
+                    CliErrors.ImportUnreadable,
+                    string.Create(CultureInfo.InvariantCulture, $"The archive {file} carries a layout stamp of layout {read.Layout}, and its {ExportManifest.FileName} says layout {said}, so it cannot tell how the data directory it carries is laid out. Nothing was written."));
+            }
+        }
+
+        private static byte[] ReadAll(ZipArchiveEntry entry)
+        {
+            using var stream = entry.Open();
+            using var bytes = new MemoryStream();
+            stream.CopyTo(bytes);
+            return bytes.ToArray();
         }
 
         private static ExportManifest Listing(string file, ZipArchive zip)
@@ -1312,7 +1354,8 @@ public static class ImportCommand
             + "directory no export carries, a file entry named where an import places a folder, or a folder entry named as one "
             + "of the database files); a file whose size or SHA-256 is not the one export.json lists; an archive a newer "
             + "Jason wrote, naming the version to install first, or a jason_version no Jason writes; a data directory laid out in a "
-            + "layout newer than this jason runs (layout_newer), or a layout below 1; an update in flight, "
+            + "layout newer than this jason runs (layout_newer), or a layout below 1; a layout stamp, data/layout.json, "
+            + "that cannot be read or names a layout export.json does not; an update in flight, "
             + "naming 'jason update apply', or an update ledger that cannot be read, by its path; a harness root the runtime's "
             + "rule refuses, or a --root that JASON_Harness__Root contradicts, naming the variable; a settings file in the "
             + "archive that is not a JSON object, or whose Harness:Root is an object or an array; a command run from the "

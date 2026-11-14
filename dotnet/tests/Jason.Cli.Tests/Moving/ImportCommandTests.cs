@@ -149,6 +149,8 @@ public sealed class ImportCommandTests
     [InlineData("data/run/runtime.lock", "a part of the data directory no export carries")]
     [InlineData("data/state/backups/jason-20261101T000000Z.db", "a backup no export carries")]
     [InlineData("data/ui/default/index.html", "the shipped UI no export carries")]
+    [InlineData("data/setup/plugins/x/plugin.yaml", "a later layout's part, which this layout does not keep")]
+    [InlineData("data/skills/.staging/x/SKILL.md", "the role skills' staging no export carries")]
     public async Task A_listed_part_of_the_data_directory_no_export_carries_is_refused_by_the_place_rule_and_nothing_is_written(string name, string why)
     {
         using var from = new MovingMachine();
@@ -415,6 +417,58 @@ public sealed class ImportCommandTests
         using var again = new MovingMachine();
         var archive = new MovingArchive(from).Installation().With("data/layout.json/inside.txt").Write("jason-export-folder.zip");
         Refused(again, await Import(again, Options(archive)), "import_refused");
+    }
+
+    /// <summary>
+    /// A stamp the archive carries is read by the stamp's own rules and held to the layout <c>export.json</c> says: one
+    /// that cannot be read, or names another layout, is refused before anything is written, since the directory it would
+    /// place would refuse at its next start or say it is laid out as it is not.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"layout\":", 1, "carries a layout stamp, data/layout.json, that cannot be read (it is not JSON at line 1, byte 11)")]
+    [InlineData("{\"layout\":1}", 1, "carries a layout stamp, data/layout.json, that cannot be read (it names no version that wrote it)")]
+    [InlineData("{\"layout\":2,\"written_by\":\"0.33.0\"}", 1, "carries a layout stamp of layout 2, and its export.json says layout 1")]
+    [InlineData("{\"layout\":2,\"written_by\":\"0.33.0\"}", null, "carries a layout stamp of layout 2, and its export.json says layout 1")]
+    public async Task A_layout_stamp_in_the_archive_that_cannot_be_read_or_names_another_layout_is_refused(string stamp, int? layout, string says)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = layout }.Installation().With("data/layout.json", stamp).Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_unreadable");
+        Assert.Contains(says, error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A layout <c>export.json</c> gives as anything but a whole number is a listing this Jason cannot read.</summary>
+    [Fact]
+    public async Task An_export_json_whose_layout_is_not_a_number_is_unreadable_and_nothing_is_written()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from).Installation().Write();
+        using (var archive = ZipFile.Open(file, ZipArchiveMode.Update))
+        {
+            var listing = archive.GetEntry("export.json")!;
+            string text;
+            using (var reader = new StreamReader(listing.Open()))
+            {
+                text = reader.ReadToEnd();
+            }
+
+            Assert.Contains("\"layout\": 1", text, StringComparison.Ordinal);
+            listing.Delete();
+            using var writer = new StreamWriter(archive.CreateEntry("export.json").Open());
+            writer.Write(text.Replace("\"layout\": 1", "\"layout\": \"x\"", StringComparison.Ordinal));
+        }
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_unreadable");
+        Assert.StartsWith("The export.json in ", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>With <c>--replace</c>, a stamp here describes the directory going aside, and goes aside with it.</summary>
@@ -1440,6 +1494,7 @@ public sealed class ImportCommandTests
         Assert.Contains("Refused before anything is written", help, StringComparison.Ordinal);
         Assert.Contains("an archive a newer Jason wrote", help, StringComparison.Ordinal);
         Assert.Contains("a data directory laid out in a layout newer than this jason runs (layout_newer), or a layout below 1", help, StringComparison.Ordinal);
+        Assert.Contains("a layout stamp, data/layout.json, that cannot be read or names a layout export.json does not", help, StringComparison.Ordinal);
         Assert.Contains("ui/custom/, logs/ and layout.json", help, StringComparison.Ordinal);
         Assert.Contains("a file entry named where an import places a folder, or a folder entry named as one of the database files", help, StringComparison.Ordinal);
         Assert.Contains("Nothing is deleted", help, StringComparison.Ordinal);
