@@ -12,7 +12,7 @@ namespace Jason.Contracts.Api;
 /// <remarks>
 /// A read is known by its verb, so an operation that asks a question is a read without a second list to keep: the verb
 /// is one of <see cref="ReadVerbs"/> and the noun is not one of <see cref="ClosedNouns"/>, the installation's and the
-/// UI's own doors. A conversation read is no read here, and neither is a read a campaign's route answers — an audience's
+/// UI's own doors and the provider's accounts. A conversation read is no read here, and neither is a read a campaign's route answers — an audience's
 /// preview, a filter's values, whether the account may search — since answering each spends a provider call. Everything that
 /// changes a person's decisions, the installation, its routes and grants, or an executor's fenced attempt is in
 /// <see cref="Never"/>, and an operation added to the API is unclassified until it is a read, in a family or never,
@@ -38,8 +38,11 @@ public static class OperationFamilies
         "sources", "kinds", "describe", "audience",
     }.ToFrozenSet(StringComparer.Ordinal);
 
-    /// <summary>The nouns no read of a handler's reaches: the installation's own and the UI's own.</summary>
-    public static IReadOnlySet<string> ClosedNouns { get; } = new[] { "system", "ui" }.ToFrozenSet(StringComparer.Ordinal);
+    /// <summary>
+    /// The nouns no read of a handler's reaches: the installation's own, the UI's own, and the provider's accounts, a noun
+    /// whose every operation spends a provider call.
+    /// </summary>
+    public static IReadOnlySet<string> ClosedNouns { get; } = new[] { "system", "ui", "sender" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>The write families, each the operations of its noun a handler may be granted.</summary>
     public static IReadOnlyDictionary<string, IReadOnlyList<string>> Writes { get; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
@@ -73,6 +76,7 @@ public static class OperationFamilies
         Operations.PreferenceSet, Operations.PreferenceUnset,
         Operations.ContactThreads, Operations.ContactThread,
         Operations.AudiencePreview, Operations.AudienceFilterValues, Operations.AudienceAvailability,
+        Operations.SenderList,
         Operations.WorkItemHeartbeat, Operations.WorkItemSetResult, Operations.WorkItemComplete, Operations.WorkItemWait,
         Operations.WorkItemResume,
         Operations.ApprovalApprove, Operations.ApprovalReject, Operations.ApprovalSetStanding, Operations.ApprovalUnsetStanding,
