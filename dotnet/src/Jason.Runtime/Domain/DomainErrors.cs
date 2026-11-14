@@ -295,6 +295,16 @@ public static class DomainErrors
             $"This request comes from inside attempt `{attempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
 
     /// <summary>
+    /// A send a person decides each one of, created from inside a run under a name other than that run's: a person, another
+    /// attempt, or nobody. The run's own name is what tells a review of the send apart from its author, so the CLI's
+    /// default, the attempt itself, is the only actor such a create takes there.
+    /// </summary>
+    public static ForbiddenException CreatedAsAnotherInsideARun(string attempt) =>
+        new(
+            "created_as_another_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`, and a send a person decides each one of is created there under that attempt's own name, so a review can tell who wrote it: leave the actor out, or name attempt:{attempt}.");
+
+    /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
     /// offered would be an answer that reads like a quotation and is not one.
     /// </summary>

@@ -468,7 +468,9 @@ edit's own save, and a review sent with the old hash is refused `review_stale`. 
 running attempt of the same campaign's role work, other than every attempt of the work that created the send (a retry of
 the composer is the same author), or a person by name who did not create it (`review_by_creator`); a person's own send
 goes to them as an approval, their own explicit yes. Inside a run a review speaks as its run: an actor other than the
-attempt the request's header names is refused. The verb takes no `reason`, since a reason is journaled and the line
+attempt the request's header names is refused; and a send created inside a run is created under that run's name, since
+its creator is who a review is told apart from: a create naming a person, another attempt or nobody is refused
+`created_as_another_inside_a_run`. The verb takes no `reason`, since a reason is journaled and the line
 never carries the doubt's sentence. Which review stands for the send is read from the send's own lines under its
 current hash: the newest doubt, over any pass of the same text, or else the newest pass, or none. A doubt is answered
 only by the person's decision on the approval, never by a later pass. The order between a send and its review is the

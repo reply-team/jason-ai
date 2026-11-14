@@ -298,7 +298,9 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   waits on from its creation: it is written `waiting` and is not claimed until every one of them has ended, in any
   final state. A send a person decides each one of may carry the creator's own doubt as the reserved context key
   `ask_person`, `{"code": …}`, with its one sentence in `ask_person_note`, which no line and no read of the item carries
-  ([`docs/work-execution.md`](work-execution.md), "Doubts about a send").
+  ([`docs/work-execution.md`](work-execution.md), "Doubts about a send"). Inside a run such a send is created under the
+  run's own name: one that names a person, another attempt or nobody is refused `created_as_another_inside_a_run`
+  (403), so a review can tell its author apart.
 - `workitem.get`
 - `workitem.list`
 - `workitem.count`

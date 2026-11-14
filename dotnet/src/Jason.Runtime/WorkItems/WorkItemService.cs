@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Api;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Audiences;
@@ -40,6 +41,10 @@ namespace Jason.Runtime.WorkItems;
 /// Writes the wait of an item created waiting on others (<c>wait_on</c>). Optional only for the tests that build this
 /// service by hand and create nothing waiting; the runtime always supplies it.
 /// </param>
+/// <param name="run">
+/// The attempt the request says it comes from: inside a run, a send a review covers is created under that attempt's own
+/// name. Null outside a request and for a request that names none.
+/// </param>
 public sealed class WorkItemService(
     JasonDbContext db,
     JournalWriter journal,
@@ -47,7 +52,8 @@ public sealed class WorkItemService(
     WorkItemCanceller canceller,
     LiveSettings<PluginsOptions> plugins,
     PatternTiming? timing = null,
-    AttemptOutcomes? outcomes = null)
+    AttemptOutcomes? outcomes = null,
+    RequestRun? run = null)
 {
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
@@ -79,6 +85,17 @@ public sealed class WorkItemService(
     {
         ArgumentNullException.ThrowIfNull(request);
         var actor = Actors.Resolve(request.Actor);
+
+        // Inside a run, a send a review covers is the run's own: made under another name, a run could pass its own text
+        // as a reviewer who did not write it. Asked before anything else, a keyed repeat included.
+        if (run?.AttemptId is { } header
+            && request.Kind == WorkItemKind.ProviderOp
+            && ReviewSubject.IsReviewable(Trimmed(request.Operation))
+            && !(actor.Type == ActorType.Attempt && string.Equals(actor.Id?.Trim(), header, StringComparison.Ordinal)))
+        {
+            throw DomainErrors.CreatedAsAnotherInsideARun(header);
+        }
+
         if (request.IdempotencyKey is null)
         {
             var item = await CreateCoreAsync(request, actor, lineage: null, cancellationToken).ConfigureAwait(false);
