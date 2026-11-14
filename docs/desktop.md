@@ -193,7 +193,7 @@ opens a folder in the place you used last, and its arrow lists every place avail
   ([below](#the-chat-in-a-browser-tab)).
 
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
-otherwise the first place of the list. Copy path and Browser are never the default, and a terminal is always there. The desktop keeps the choice
+otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
 your folders.
 
@@ -222,8 +222,16 @@ than shown.
 **What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
 and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
 own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
-refused, as the commands that start a session on your computer. It does not open the data directory; the one folder of it
-a terminal is opened in is the chat's own, to continue a chat.
+refused, as the commands that start a session on your computer. It does not open the data directory; the folders of it a
+terminal is opened in are the chat's own, to continue a chat, and the role skills folder, to change Jason itself.
+
+**Changing Jason itself.** In your own installation, never in the demo, the menu's group above the last holds **Change
+Jason itself**, which opens your own AI in a new terminal on Jason's role skills folder, with its plugins folder beside it
+and a first message that tells it how Jason is changed: the desktop runs `jason session open --setup`, which opens the host
+the preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only
+where that host cannot be chosen or is not installed runs it once more with the host the desktop finds, Claude Code, else
+Codex. It is never the default, and the chat, which is kept out of Jason's roles, plugins and settings, answers a request to
+change one of them by pointing to it.
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
 Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs
