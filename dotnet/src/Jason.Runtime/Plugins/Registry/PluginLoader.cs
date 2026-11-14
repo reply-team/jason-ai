@@ -334,10 +334,9 @@ public sealed class PluginLoader(
             return refused;
         }
 
-        var root = harness?.Root ?? HarnessRoot.Of(new HarnessOptions(), _home);
         for (var index = 0; index < grants.Files.Count; index++)
         {
-            if (HarnessRoot.GrantRefusal(grants.Files[index], paths, _home, root) is { } sentence)
+            if (FileGrantRefusal(grants.Files[index]) is { } sentence)
             {
                 refused.Add(new ManifestProblem(ProblemCodes.GrantPathRefused, string.Create(CultureInfo.InvariantCulture, $"grants.files[{index}]"), sentence));
             }
@@ -345,6 +344,13 @@ public sealed class PluginLoader(
 
         return refused;
     }
+
+    /// <summary>
+    /// Why a load would refuse this directory as a <c>Files</c> grant, in the sentence the refusal says, or null where it
+    /// would keep it: held against the home and the harness root this load holds every grant against.
+    /// </summary>
+    internal string? FileGrantRefusal(string directory) =>
+        HarnessRoot.GrantRefusal(directory, paths, _home, harness?.Root ?? HarnessRoot.Of(new HarnessOptions(), _home));
 
     private static CandidateReport Invalid(CandidateDirectory candidate, string? id, string code, string path, string message) =>
         new(candidate.Name, id, CandidateStatus.Invalid, [new ManifestProblem(code, path, message)]);

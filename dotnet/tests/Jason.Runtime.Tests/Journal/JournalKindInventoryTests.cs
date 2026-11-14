@@ -32,6 +32,7 @@ public sealed class JournalKindInventoryTests
         [JournalKinds.SuppressionRemoved] = "the addresses and numbers put on or taken off the do-not-contact register",
         [JournalKinds.RoutesUpdated] = "the accounts a campaign's routes and the global routes bind",
         [JournalKinds.GlobalRoutesUpdated] = "the accounts a campaign's routes and the global routes bind",
+        [JournalKinds.PluginGrantsUpdated] = "the grants people gave plugins: hosts, programs, variable names, API families, directories and journal kinds",
         [JournalKinds.DecisionAnswered] = "the options decisions were answered with",
         [JournalKinds.WorkItemFailed] = "the errors attempts ended with",
         [JournalKinds.ExternalIdPinned] = "provider identifiers",

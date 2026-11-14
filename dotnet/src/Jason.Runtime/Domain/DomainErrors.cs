@@ -643,4 +643,25 @@ public static class DomainErrors
         new("actor_required", "actor.id is required on a preference: what is recorded has to name the person whose word it is.");
 
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
+
+    /// <summary>A grant names a plugin the active snapshot does not hold, so there is no manifest to hold it to.</summary>
+    public static NotFoundException PluginNotFound(string id) =>
+        new(
+            "plugin_not_found",
+            $"No plugin '{id}' is loaded, so nothing was granted; jason plugin list names the ones that are, and a package copied in loads at jason plugin reload.");
+
+    /// <summary>
+    /// <c>plugin.grant</c> asked for what the plugin's manifest does not request: stricter than a grant written by hand,
+    /// which the load keeps as a warning, since a verb that writes what the load ignores misleads whoever ran it.
+    /// </summary>
+    public static ConflictException GrantUnrequested(string message) => new("grant_unrequested", message);
+
+    /// <summary>
+    /// <c>plugin.revoke</c> asked to take back an entry that a <c>*</c> in the same list grants: the verb takes one entry
+    /// out and never rewrites the person's list, so the star is not expanded into the names it stands for.
+    /// </summary>
+    public static ConflictException GrantHeldByStar(string setting, string entry, string id, string flag) =>
+        new(
+            "grant_held_by_star",
+            $"{setting} grants '*', which covers '{entry}', so nothing was taken back: take back '*' with jason plugin revoke {id} --{flag} '*', then grant what it should keep.");
 }
