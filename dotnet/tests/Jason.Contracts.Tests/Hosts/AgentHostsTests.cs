@@ -211,6 +211,39 @@ public class AgentHostsTests
     }
 
     /// <summary>
+    /// The flag a person's session is given a second folder by (<c>jason session open --setup</c>), read from the host's
+    /// own reference: Claude Code's <c>--help</c> and Codex's source at the version the desktop's chat needs. The other
+    /// four were not checked, so they are given none rather than a flag nobody read.
+    /// </summary>
+    [Theory]
+    [InlineData(AgentHostKind.ClaudeCode, "--add-dir")]
+    [InlineData(AgentHostKind.Codex, "--add-dir")]
+    [InlineData(AgentHostKind.CopilotCli, null)]
+    [InlineData(AgentHostKind.CursorCli, null)]
+    [InlineData(AgentHostKind.GeminiCli, null)]
+    [InlineData(AgentHostKind.AntigravityCli, null)]
+    public void A_persons_session_takes_a_second_folder_only_by_the_flag_its_host_documents(AgentHostKind kind, string? flag)
+    {
+        const string Prompt = "Brief.";
+        const string Folder = "/data/plugins";
+
+        Assert.Equal(flag, AgentHosts.Of(kind).InteractiveFolderFlag);
+        var prompted = AgentHosts.InteractiveArguments(kind, Prompt);
+        Assert.Equal(flag is null ? prompted : [.. prompted, flag, Folder], AgentHosts.InteractiveArguments(kind, Prompt, Folder));
+        Assert.Equal(prompted, AgentHosts.InteractiveArguments(kind, Prompt, null));
+    }
+
+    /// <summary>
+    /// Claude Code's <c>--add-dir</c> takes every bare word after it as one more folder, so the folder comes after the
+    /// first prompt: before it, the brief would be read as a folder and the session would start with no first input.
+    /// </summary>
+    [Fact]
+    public void The_second_folder_follows_the_first_prompt_so_a_flag_of_many_values_takes_only_the_folder()
+    {
+        Assert.Equal(["Brief.", "--add-dir", "/data/plugins"], AgentHosts.InteractiveArguments(AgentHostKind.ClaudeCode, "Brief.", "/data/plugins"));
+    }
+
+    /// <summary>
     /// How each host continues one of its own conversations by its id, as its own <c>--help</c> says: Claude Code after
     /// <c>--resume</c>, Codex after its <c>resume</c> subcommand; the other four have no words here and cannot be asked to.
     /// </summary>

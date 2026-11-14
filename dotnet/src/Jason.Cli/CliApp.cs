@@ -79,6 +79,9 @@ namespace Jason.Cli;
 /// for no folder. <c>--resume</c> has the host continue its own conversation of that id instead of starting a new one,
 /// by the words the host takes for it, kept beside its other words in <c>AgentHosts</c>; a host with no such words is
 /// refused before a terminal is looked for. Neither asks the runtime anything new.
+/// With --setup it opens the same terminal at the role skills folder <c>SetupInfo</c> names, with the plugins folder
+/// beside it where the host takes a second folder, and the setup brief as its first input, which names the skill
+/// customising-jason; of the runtime it asks only <c>preference.list</c>, and only when no <c>--host</c> is given.
 /// </para>
 /// <para>
 /// <c>export</c> is the tenth, a verb like <c>doctor</c>. It writes this installation's files — the database, the

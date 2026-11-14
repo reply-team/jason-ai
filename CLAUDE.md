@@ -209,8 +209,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   with no first input, and asks the runtime only `campaign.get`, `project.get`, `system.info` and `preference.list`;
   `--here` opens it at the folder the command runs in, reading no marker there, and `--resume <id>` has the host continue
   its own conversation of that id by the host's own words, kept beside its other words in `AgentHosts`, a host with none
-  refused before a terminal is looked for (the verb-map tests hold the `session` noun to `open` alone, and `open` to
-  its options); `jason export`
+  refused before a terminal is looked for; and with `--setup` it opens the same terminal at the installation's role
+  skills folder, its plugins folder beside it where the host takes one, with the setup brief as its first input, asking
+  the runtime only `preference.list` and only when no `--host` is given (the verb-map tests hold the `session` noun to
+  `open` alone, and `open` to its options); `jason export`
   writes this installation's files — the database, the settings, the plugins, the role skills, the custom UI, the logs and
   the harness root's tree — into one archive, which is a true copy only while the runtime is stopped and so no operation of the
   runtime's can stand behind it: of the runtime it asks only to stop and to start, and only under `--stop`;
