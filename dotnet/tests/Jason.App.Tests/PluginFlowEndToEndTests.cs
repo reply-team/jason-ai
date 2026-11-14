@@ -67,7 +67,7 @@ public class PluginFlowEndToEndTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-plugins", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "config"));
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
 
         // A package of the test's own is installed by copying its directory; `jason plugin install` places only what a release publishes.
@@ -284,7 +284,7 @@ public class PluginFlowEndToEndTests
     /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
     private static Task<CliResult> StartRuntimeAsync(string root) =>
         EndToEnd.PatientStart.RunAsync(
-            new JasonPaths(root),
+            new JasonPaths(root, 1),
             within => JasonAsync(root, within, "runtime", "start"),
             () => JasonAsync(root, "runtime", "status"),
             result => (result.ExitCode, result.Output));

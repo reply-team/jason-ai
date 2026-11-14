@@ -108,7 +108,7 @@ public class RequestBodyTests
     }
 
     private static CliEnvironment Env(TextReader input) =>
-        new(TextWriter.Null, TextWriter.Null, new JasonPaths("unused"), In: input, Variables: new Dictionary<string, string>());
+        new(TextWriter.Null, TextWriter.Null, new JasonPaths("unused", 1), In: input, Variables: new Dictionary<string, string>());
 }
 
 /// <summary>A JSON file that exists only for the duration of one test.</summary>

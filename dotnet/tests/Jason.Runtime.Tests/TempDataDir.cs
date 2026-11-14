@@ -11,7 +11,7 @@ public sealed class TempDataDir : IDisposable
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        Paths = new JasonPaths(root);
+        Paths = new JasonPaths(root, 1);
     }
 
     public JasonPaths Paths { get; }

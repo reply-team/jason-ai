@@ -30,7 +30,7 @@ public class DataDirectoryRefusalTests
         await File.WriteAllTextAsync(blocker, "this is a file, not a directory", Ct);
 
         var refusal = await Assert.ThrowsAsync<DataDirectoryUnusableException>(
-            () => RuntimeHost.StartAsync(new JasonPaths(Path.Combine(blocker, "data")), null, Ct));
+            () => RuntimeHost.StartAsync(new JasonPaths(Path.Combine(blocker, "data"), 1), null, Ct));
 
         Assert.Contains("did not start", refusal.Message, StringComparison.Ordinal);
         Assert.Contains(Path.Combine(blocker, "data"), refusal.Message, StringComparison.Ordinal);
@@ -49,7 +49,7 @@ public class DataDirectoryRefusalTests
     public async Task A_refusal_part_way_through_the_layout_does_not_say_nothing_was_written()
     {
         using var tree = new TempTree();
-        var data = new JasonPaths(Path.Combine(tree.Root, "data"));
+        var data = new JasonPaths(Path.Combine(tree.Root, "data"), 1);
         Directory.CreateDirectory(data.Root);
         await File.WriteAllTextAsync(data.RunDirectory, "a file where the run directory goes", Ct);
 

@@ -14,7 +14,7 @@ public sealed class InstalledPluginsTests
     public void Every_directory_that_holds_a_manifest_is_an_installed_plugin_by_its_name()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
         Package(paths, "reply");
         Package(paths, "fake-provider");
 
@@ -29,7 +29,7 @@ public sealed class InstalledPluginsTests
     public void A_directory_without_a_manifest_is_not_a_plugin()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
         Directory.CreateDirectory(Path.Combine(paths.PluginsDirectory, "half-installed"));
         Package(paths, "complete");
 
@@ -45,7 +45,7 @@ public sealed class InstalledPluginsTests
     public void A_directory_whose_name_no_plugin_can_have_is_not_a_plugin(string name)
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
         Package(paths, name);
         Package(paths, "reply");
 
@@ -56,7 +56,7 @@ public sealed class InstalledPluginsTests
     public void A_file_and_a_directory_that_starts_with_a_dot_are_not_plugins()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
         Package(paths, "reply");
         Package(paths, ".git");
         File.WriteAllText(Path.Combine(paths.PluginsDirectory, "notes.txt"), "mine");
@@ -68,7 +68,7 @@ public sealed class InstalledPluginsTests
     public void Plugin_names_are_compared_without_regard_to_case_as_settings_keys_are()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
         Package(paths, "reply");
 
         Assert.Contains("REPLY", InstalledPlugins.Ids(paths));
@@ -79,7 +79,7 @@ public sealed class InstalledPluginsTests
     {
         using var tree = new TempTree();
 
-        Assert.Empty(InstalledPlugins.Ids(new JasonPaths(tree.Root)));
+        Assert.Empty(InstalledPlugins.Ids(new JasonPaths(tree.Root, 1)));
     }
 
     /// <summary>A plugins directory that is a file where a directory belongs cannot be listed, and a listing that cannot be read names nothing.</summary>
@@ -87,7 +87,7 @@ public sealed class InstalledPluginsTests
     public void A_plugins_directory_that_cannot_be_listed_has_no_plugins()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
         File.WriteAllText(paths.PluginsDirectory, "not a directory");
 
         Assert.Empty(InstalledPlugins.Ids(paths));

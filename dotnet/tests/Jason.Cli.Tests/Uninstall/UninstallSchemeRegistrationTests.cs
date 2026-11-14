@@ -267,7 +267,7 @@ public sealed class UninstallSchemeRegistrationTests
 
     [Fact]
     public void This_installation_s_command_is_none_where_its_path_holds_a_percent() =>
-        Assert.Null(UninstallReader.LinkCommand(new CliEnvironment(new StringWriter(), new StringWriter(), new JasonPaths(Path.GetTempPath()), InstallPath: @"C:\Users\Ann%1x\Jason\jason.exe")));
+        Assert.Null(UninstallReader.LinkCommand(new CliEnvironment(new StringWriter(), new StringWriter(), new JasonPaths(Path.GetTempPath(), 1), InstallPath: @"C:\Users\Ann%1x\Jason\jason.exe")));
 
     [Theory]
     [InlineData("on Windows, the notification registration: the AppUserModelID key the toast was shown under, the two entries Windows made for it, and the jason: link registration where its command names this executable")]

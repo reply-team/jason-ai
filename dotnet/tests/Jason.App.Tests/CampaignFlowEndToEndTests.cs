@@ -30,7 +30,7 @@ public class CampaignFlowEndToEndTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-flow", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         var seenPids = new Dictionary<int, DateTimeOffset>();
 
         try
@@ -165,7 +165,7 @@ public class CampaignFlowEndToEndTests
     /// </summary>
     private static string RuntimeLogTail(string root)
     {
-        var logs = new JasonPaths(root).LogsDirectory;
+        var logs = new JasonPaths(root, 1).LogsDirectory;
         string? newest = null;
         try
         {
@@ -251,7 +251,7 @@ public class CampaignFlowEndToEndTests
     /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
     private static Task<CliResult> StartRuntimeAsync(string root) =>
         EndToEnd.PatientStart.RunAsync(
-            new JasonPaths(root),
+            new JasonPaths(root, 1),
             within => JasonAsync(root, within, "runtime", "start"),
             () => JasonAsync(root, "runtime", "status"),
             result => (result.ExitCode, result.Output));

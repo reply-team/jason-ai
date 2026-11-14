@@ -713,7 +713,7 @@ public sealed class ProjectLinkTests
     {
         var tree = Path.Combine(Path.GetTempPath(), "jason-tests", Guid.NewGuid().ToString("N"));
         var home = Path.Combine(tree, "home");
-        var data = new JasonPaths(Path.Combine(tree, "data", ".jason"));
+        var data = new JasonPaths(Path.Combine(tree, "data", ".jason"), 1);
         var folder = place switch
         {
             "home" => home,

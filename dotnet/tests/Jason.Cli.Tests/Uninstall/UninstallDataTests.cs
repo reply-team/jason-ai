@@ -258,6 +258,27 @@ public class UninstallDataTests
     }
 
     /// <summary>
+    /// The layout stamp and the folder layout 2 keeps a person's parts in are Jason's in every layout: a purge by a build
+    /// that runs layout 1 removes a <c>setup/</c> a later build made, and a stamp that says layout 1.
+    /// </summary>
+    [Fact]
+    public async Task The_purge_removes_the_layout_stamp_and_the_setup_folder()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        File.WriteAllText(dir.Paths.LayoutFile, """{"layout":1,"written_by":"0.42.0"}""");
+        Write(Path.Combine(dir.Paths.Root, "setup", "plugins", "a.plugin", "plugin.yaml"), "id: a.plugin");
+
+        var (exit, _) = await RunAsync(dir, purgeData: true, yes: true);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("layout.json", Contracts.Discovery.JasonPaths.OwnEntries);
+        Assert.Contains("setup", Contracts.Discovery.JasonPaths.OwnEntries);
+        Assert.False(File.Exists(dir.Paths.LayoutFile), "the purge left the layout stamp.");
+        Assert.False(Directory.Exists(Path.Combine(dir.Paths.Root, "setup")), "the purge left the setup folder.");
+    }
+
+    /// <summary>
     /// The purge removes what Jason keeps in the data directory, and nothing else. <c>JASON_DATA_DIR</c> may name
     /// any directory, and the purge used to delete the one it named with everything in it; somebody's own file
     /// beside Jason's is theirs, and the directory holding it stays and is named.
@@ -592,7 +613,7 @@ public class UninstallDataTests
         var before = Snapshot(top, except: "\0");
         var output = new StringWriter();
         var remover = new RecordingRemover { ReallyRemoves = true };
-        var env = Machine(dir, output, remover) with { Paths = new Contracts.Discovery.JasonPaths(data) };
+        var env = Machine(dir, output, remover) with { Paths = new Contracts.Discovery.JasonPaths(data, 1) };
 
         int exit;
         using (held.Length > 0 ? new FileStream(HarnessMarker.PathIn(held), FileMode.Open, FileAccess.Read, FileShare.None) : null)
@@ -660,13 +681,15 @@ public class UninstallDataTests
 
     /// <summary>
     /// Every path this product composes under the data directory begins with one of the names the purge
-    /// removes. A directory added to the layout and not to that list would be left behind by every purge; this
+    /// removes, in either layout. A directory added to a layout and not to that list would be left behind by every purge; this
     /// is where that arrives instead.
     /// </summary>
-    [Fact]
-    public void Every_path_the_product_composes_under_the_data_directory_is_one_of_its_own_entries()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Every_path_the_product_composes_under_the_data_directory_is_one_of_its_own_entries(int layout)
     {
-        var paths = new Contracts.Discovery.JasonPaths(Path.Combine(Path.GetTempPath(), "jason-own-entries"));
+        var paths = new Contracts.Discovery.JasonPaths(Path.Combine(Path.GetTempPath(), "jason-own-entries"), layout);
         var composed = new List<string>();
 
         foreach (var property in typeof(Contracts.Discovery.JasonPaths).GetProperties().Where(property => property.PropertyType == typeof(string) && property.Name != nameof(paths.Root)))
@@ -674,7 +697,7 @@ public class UninstallDataTests
             composed.Add((string)property.GetValue(paths)!);
         }
 
-        composed.AddRange(paths.Layout);
+        composed.AddRange(paths.StartDirectories);
         composed.Add(paths.AttemptWorkDirectory("wi_X", "att_X"));
         composed.Add(paths.PluginPackageDirectory("some.plugin"));
         composed.Add(paths.PluginInvocationDirectory("inv_X"));

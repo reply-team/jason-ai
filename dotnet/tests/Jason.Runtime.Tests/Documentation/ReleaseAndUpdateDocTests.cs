@@ -376,7 +376,7 @@ public class ReleaseAndUpdateDocTests
 
         // The two directories, named from the paths the code composes rather than from memory.
         var page = Read();
-        var update = new UpdatePaths(new JasonPaths(Path.Combine("~", ".jason")));
+        var update = new UpdatePaths(new JasonPaths(Path.Combine("~", ".jason"), 1));
         Assert.Contains($"update/{Path.GetFileName(update.Applier)}", page, StringComparison.Ordinal);
         Assert.Contains($"update/{Path.GetFileName(update.Previous)}", page, StringComparison.Ordinal);
 

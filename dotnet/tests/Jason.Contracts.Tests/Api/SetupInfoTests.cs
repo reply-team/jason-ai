@@ -41,7 +41,7 @@ public class SetupInfoTests
     [InlineData("elsewhere/jason-setup-b")]
     public void Setup_is_composed_from_jason_paths_alone(string folder)
     {
-        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), folder));
+        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), folder), 1);
 
         var setup = SetupInfo.From(paths);
 

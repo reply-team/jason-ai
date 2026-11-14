@@ -158,7 +158,7 @@ public sealed class PluginAssetTests
         var (exit, output) = await RunStepThreeAsync(releases.Releases, data, id);
 
         Assert.True(exit == 0, $"Step 3's line for {id} exited {exit}:\n{output}");
-        var installed = new JasonPaths(data).PluginPackageDirectory(id);
+        var installed = new JasonPaths(data, 1).PluginPackageDirectory(id);
         var expected = PackageDigest.Compute(source);
         var actual = PackageDigest.Compute(installed);
         Assert.True(
@@ -196,7 +196,7 @@ public sealed class PluginAssetTests
         var (exit, output) = await RunStepThreeAsync(releases.Releases, data, "reply");
 
         Assert.True(exit == 1, $"Step 3's line exited {exit} over a release whose checksums.txt has {mismatch}:\n{output}");
-        var plugins = new JasonPaths(data).PluginsDirectory;
+        var plugins = new JasonPaths(data, 1).PluginsDirectory;
         Assert.False(
             Directory.EnumerateFileSystemEntries(plugins).Any(),
             $"Step 3's line left {string.Join(", ", Directory.EnumerateFileSystemEntries(plugins).Select(Path.GetFileName))} in {plugins} from a package whose checksums.txt has {mismatch}:\n{output}");
@@ -311,7 +311,7 @@ public sealed class PluginAssetTests
     private static string DataDirectory(TempTree tree)
     {
         var data = tree.NewDirectory("data");
-        foreach (var directory in new JasonPaths(data).Layout)
+        foreach (var directory in new JasonPaths(data, 1).StartDirectories)
         {
             Directory.CreateDirectory(directory);
         }
@@ -337,7 +337,7 @@ public sealed class PluginAssetTests
         var output = new StringWriter();
         var exit = await CliApp.RunAsync(
             [.. arguments[1..], "--feed", feed],
-            new CliEnvironment(output, output, new JasonPaths(data), BuildVersion: Version),
+            new CliEnvironment(output, output, new JasonPaths(data, 1), BuildVersion: Version),
             TestContext.Current.CancellationToken);
         return (exit, output.ToString());
     }

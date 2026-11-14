@@ -293,7 +293,7 @@ public class CodexHostTests
     [Fact]
     public void The_registered_host_reads_the_descriptors_folder_and_this_build_as_it_is()
     {
-        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), "jason-codex-registration"));
+        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), "jason-codex-registration"), 1);
         var services = new ServiceCollection();
         services.AddSingleton(paths);
         services.AddDispatcherModule();
