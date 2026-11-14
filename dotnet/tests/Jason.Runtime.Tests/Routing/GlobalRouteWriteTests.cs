@@ -127,6 +127,31 @@ public class GlobalRouteWriteTests
     }
 
     /// <summary>
+    /// The other way round: the route is in force and a hand edit took it out of the file without a reload. Setting it
+    /// writes it back and reloads, and since the reload leaves the route in force as it was, no line says it changed.
+    /// </summary>
+    [Fact]
+    public async Task A_write_that_leaves_the_route_in_force_as_it_was_journals_no_change()
+    {
+        await using var api = await StartAsync();
+        await api.PostOkAsync<RoutesDto>(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), Ct);
+        var reloads = (await ReloadedAsync(api)).Items.Count;
+        var monitor = api.Resolve<IOptionsMonitor<RoutesOptions>>();
+        File.WriteAllText(api.Paths.UserSettingsFile, Original);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (monitor.CurrentValue.Operations.ContainsKey("campaign.get") && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(25, Ct);
+        }
+
+        await api.PostOkAsync<RoutesDto>(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), Ct);
+
+        Assert.Equal(WithRoute, File.ReadAllText(api.Paths.UserSettingsFile));
+        Assert.Equal(reloads + 1, (await ReloadedAsync(api)).Items.Count);
+        Assert.Single((await LinesAsync(api)).Items);
+    }
+
+    /// <summary>
     /// The route was checked against the active plugins and held, so it was written; the reload over the packages as they
     /// are now refused, so the file is put back byte for byte, the routes in force stay, and nothing is journaled.
     /// </summary>
