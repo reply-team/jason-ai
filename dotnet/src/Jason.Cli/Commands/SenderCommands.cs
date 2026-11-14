@@ -25,7 +25,7 @@ public static class SenderCommands
         var command = new Command(
             "list",
             "Ask the provider for one page of the accounts a send can go from: each one's channel, whether it can send now, whose it is, "
-                + "its name, its address and the identifier a send names it by. Free, and nothing is recorded.");
+                + "its name, its address and the identifier a send names it by. It asks the provider once, and nothing is recorded.");
         var campaign = new Option<string?>("--campaign")
         {
             Description = "The campaign, as cmp_...; its route for sender.list, on the channel asked for, names the provider that answers.",
