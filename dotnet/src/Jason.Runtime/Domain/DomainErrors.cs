@@ -134,7 +134,6 @@ public static class DomainErrors
     public static InvalidRequestException WaitNotAllowed(string id, string why) =>
         new("wait_not_allowed", $"Work item '{id}' cannot wait: {why}");
 
-    /// <summary>A resume of an item that holds no wait to end.</summary>
     /// <summary>
     /// A review is for a send before it goes: provider work a person decides each one of, still queued or waiting. Work of
     /// another kind is never reviewed, and a send already parked, claimed or finished has gone past the point a review is for.
@@ -153,6 +152,7 @@ public static class DomainErrors
     public static ForbiddenException ReviewByCreator(string id) =>
         new("review_by_creator", $"Work item '{id}' was made by the work or the person reviewing it, and nobody reviews their own send; a person's own send is theirs to approve (jason approval list).");
 
+    /// <summary>A resume of an item that holds no wait to end.</summary>
     public static ConflictException WorkItemNotWaiting(string id, WorkItemStatus status) =>
         new("workitem_not_waiting", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; only a waiting item can be resumed.");
 

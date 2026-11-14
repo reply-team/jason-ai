@@ -313,6 +313,48 @@ public class ReviewServiceTests
         await NothingWrittenAsync(database, seed);
     }
 
+    /// <summary>
+    /// A review that read the send still to go and saves after the claim parked it is refused <c>not_reviewable</c> and
+    /// writes nothing, whatever it would have changed on the row: a pass, a doubt without a sentence, the same sentence again.
+    /// The park arrives between the review's read and its save by construction, on a connection of its own.
+    /// </summary>
+    [Theory]
+    [InlineData("a pass")]
+    [InlineData("a doubt without a sentence")]
+    [InlineData("the same sentence again")]
+    public async Task A_review_that_loses_the_race_with_the_park_is_refused_not_reviewable(string review)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        if (review == "the same sentence again")
+        {
+            await Service(db).ReviewAsync(Doubt(seed, "off_brief") with { Note = Sentence }, Ct);
+        }
+
+        var before = await db.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct);
+        var park = new CompetingInsert(
+            database.File,
+            context => context.ChangeTracker.Entries<JournalEntry>().Any(e => e.State == EntityState.Added)
+                ? $"UPDATE work_items SET status = 'awaiting_approval' WHERE id = {seed.Send.Id};"
+                : null);
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(park).Options);
+        var request = review switch
+        {
+            "a pass" => Pass(seed),
+            "a doubt without a sentence" => Doubt(seed, "off_brief"),
+            _ => Doubt(seed, "off_brief") with { Note = Sentence },
+        };
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(racing).ReviewAsync(request, Ct));
+
+        Assert.True(park.Fired);
+        Assert.Equal("not_reviewable", refused.Code);
+        await using var fresh = database.Open();
+        Assert.Equal(before, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct));
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct)).Status);
+    }
+
     /// <summary>The read is bounded by the send's own lines: answered from the index of the journal by work item.</summary>
     [Fact]
     public async Task The_read_of_a_send_s_reviews_uses_the_index_of_the_journal_by_work_item()

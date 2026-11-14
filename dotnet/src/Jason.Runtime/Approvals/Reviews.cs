@@ -135,7 +135,19 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
             item.ReviewNote = note;
         }
 
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        // The row is written on every review, whatever it changes, so the save is guarded by the status the review read: a
+        // claim that parked or took the send meanwhile wins, and the review, with its line, is refused rather than landing
+        // after the person was asked.
+        db.Entry(item).Property(w => w.Status).IsModified = true;
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw DomainErrors.NotReviewable(item.PublicId, "it moved on while the review was made, and a review is made while the send is still queued or waiting");
+        }
+
         return JournalWriter.ToDto(entry, item.Campaign!.PublicId) with { ContactId = item.Contact?.PublicId };
     }
 
