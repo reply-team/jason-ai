@@ -64,6 +64,13 @@ public sealed class DesktopLayoutStampsTests
             }
             finally
             {
+                // A link at the name goes as itself first: a recursive delete will not take a junction whose target is gone.
+                var link = new FileInfo(Path.Combine(data, LayoutStamp.FileName));
+                if (link.LinkTarget is not null && link.Attributes.HasFlag(FileAttributes.Directory))
+                {
+                    Directory.Delete(link.FullName);
+                }
+
                 Directory.Delete(data, recursive: true);
             }
         }
@@ -77,6 +84,7 @@ public sealed class DesktopLayoutStampsTests
         null => true,
         "posix" => !OperatingSystem.IsWindows(),
         "posix_unprivileged" => !OperatingSystem.IsWindows() && !Environment.IsPrivilegedProcess,
+        "win32" => OperatingSystem.IsWindows(),
         _ => throw new InvalidOperationException($"No case is kept to '{only}'."),
     };
 
@@ -105,6 +113,15 @@ public sealed class DesktopLayoutStampsTests
                 break;
             case "dangling_link":
                 File.CreateSymbolicLink(file, Path.Combine(data, "gone.json"));
+                break;
+            case "dangling_junction":
+                // A junction asks for no privilege, and .NET makes none: cmd's mklink makes it, to a folder that is not there.
+                using (var make = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe") { ArgumentList = { "/d", "/c", "mklink", "/J", file, Path.Combine(data, "gone") }, RedirectStandardOutput = true })!)
+                {
+                    await make.WaitForExitAsync(ct);
+                    Assert.Equal(0, make.ExitCode);
+                }
+
                 break;
             case "device_link":
                 File.CreateSymbolicLink(file, "/dev/null");

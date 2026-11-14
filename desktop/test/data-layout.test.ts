@@ -82,9 +82,9 @@ interface StampCase {
     name: string;
     text?: string;
     base64?: string;
-    on_disk?: 'missing' | 'folder' | 'oversized' | 'under_a_file' | 'dangling_link' | 'fifo' | 'device_link' | 'unaskable';
+    on_disk?: 'missing' | 'folder' | 'oversized' | 'under_a_file' | 'dangling_link' | 'fifo' | 'device_link' | 'unaskable' | 'dangling_junction';
     /** The systems a case can be made on: a pipe, a device and a folder's mode are macOS's and Linux's, and root is refused no look. */
-    only?: 'posix' | 'posix_unprivileged';
+    only?: 'posix' | 'posix_unprivileged' | 'win32';
     state: 'missing' | 'read' | 'unreadable';
     layout?: number;
     written_by?: string;
@@ -104,7 +104,7 @@ const fixture = JSON.parse(readFileSync(join(here, 'fixtures', 'layout-stamps.js
 /** Whether this run can make the case. */
 function applies(stamp: StampCase): boolean {
     if (stamp.only === undefined) return true;
-    if (process.platform === 'win32') return false;
+    if (stamp.only === 'win32' || process.platform === 'win32') return stamp.only === 'win32' && process.platform === 'win32';
     return stamp.only === 'posix' || process.getuid?.() !== 0;
 }
 
@@ -129,6 +129,9 @@ function holding(t: { after(fn: () => void): void }, stamp: StampCase): string {
             return join(data, 'inner');
         case 'dangling_link':
             symlinkSync(join(data, 'gone.json'), file);
+            return data;
+        case 'dangling_junction':
+            symlinkSync(join(data, 'gone'), file, 'junction');
             return data;
         case 'device_link':
             symlinkSync('/dev/null', file);
@@ -224,15 +227,13 @@ test('what is at the name is asked before anything is opened, and only nothing t
     const data = scratch(t);
     symlinkSync(join(data, 'gone'), join(data, 'layout.json'), 'junction');
     assert.deepEqual(readLayoutStamp(data), { state: 'unreadable', path: join(data, 'layout.json'), problem: 'it could not be read' });
-    const asked: string[] = [];
     const errors: Record<string, string> = { ENOENT: 'none', ENOTDIR: 'none', EACCES: 'unaskable', ELOOP: 'unaskable', ENAMETOOLONG: 'unaskable', EPERM: 'unaskable' };
     for (const [code, kind] of Object.entries(errors)) {
         const found = findStamp(join(data, 'x'), {
             stat: () => {
                 throw Object.assign(new Error(code), { code });
             },
-            lstat: (path) => {
-                asked.push(path);
+            lstat: () => {
                 throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
             },
         });
