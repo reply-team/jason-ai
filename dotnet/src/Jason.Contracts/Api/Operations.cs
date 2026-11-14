@@ -68,6 +68,7 @@ public static class Operations
     public const string WorkItemComplete = "workitem.complete";
     public const string WorkItemWait = "workitem.wait";
     public const string WorkItemResume = "workitem.resume";
+    public const string WorkItemReview = "workitem.review";
 
     public const string ApprovalList = "approval.list";
     public const string ApprovalGet = "approval.get";

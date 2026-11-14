@@ -386,6 +386,16 @@ public enum ReplyReaction
 }
 
 /// <summary>
+/// What a review of a send found: it passes the text it read, or it doubts it, with a code from the closed list
+/// <see cref="DoubtCodes"/>. A doubt stands over every pass of the same text; only the person's decision answers it.
+/// </summary>
+public enum ReviewResult
+{
+    Passed,
+    Doubts,
+}
+
+/// <summary>
 /// Where the chain started for one journal line stands. <c>Running</c> while its handlers run or one waits to be tried
 /// again; <c>succeeded</c> when every handler answered; <c>failed</c> when one ended it; <c>superseded</c> when its kind's
 /// position moved under it — a rewind, or the kind left without a subscriber — so its end recorded nothing further.

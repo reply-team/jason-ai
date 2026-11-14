@@ -308,6 +308,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             // One key names one item in its campaign; the same key in another campaign is another item.
             item.Property(w => w.IdempotencyKey).HasMaxLength(128);
             item.Property(w => w.IdempotencyDigest).HasMaxLength(71);
+
+            // A doubt's sentence, plain text and never JSON, so no converter quotes it into an error.
+            item.Property(w => w.AskPersonNote).HasMaxLength(DoubtCodes.MaxNoteLength);
+            item.Property(w => w.ReviewNote).HasMaxLength(DoubtCodes.MaxNoteLength);
             item.HasIndex(w => new { w.CampaignId, w.IdempotencyKey })
                 .IsUnique()
                 .HasFilter("idempotency_key IS NOT NULL")

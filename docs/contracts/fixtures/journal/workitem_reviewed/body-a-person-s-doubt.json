@@ -1,0 +1,11 @@
+{
+  "kind": "workitem_reviewed",
+  "version": 1,
+  "case": "a named person doubts a send, with a code and no role",
+  "body": {
+    "key": "sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "old": null,
+    "new": { "result": "doubts", "code": "sensitive_topic", "operation": "conversation.reply", "role": null }
+  },
+  "expect": "valid"
+}

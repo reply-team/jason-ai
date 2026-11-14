@@ -100,5 +100,19 @@ public sealed class WorkItem
     /// <summary>The <c>sha256:</c> of the request that created the item under its key, which a repeat must match.</summary>
     public string? IdempotencyDigest { get; set; }
 
+    /// <summary>
+    /// The sentence the creator gave beside the context's <c>ask_person</c> code: a person's or an agent's text at rest.
+    /// Never journaled, never logged and never in a read of the item; moved onto the approval's preview at the park and
+    /// cleared there, in the park's own save.
+    /// </summary>
+    public string? AskPersonNote { get; set; }
+
+    /// <summary>
+    /// The sentence of the latest doubting review of this item, kept exactly as <see cref="AskPersonNote"/> is: never
+    /// journaled, logged or read back, and moved onto the approval's preview at the park and cleared there. A change of
+    /// the context's input clears it, since the review it came with no longer stands.
+    /// </summary>
+    public string? ReviewNote { get; set; }
+
     public List<Attempt> Attempts { get; } = [];
 }
