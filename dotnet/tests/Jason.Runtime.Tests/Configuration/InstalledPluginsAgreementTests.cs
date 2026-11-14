@@ -23,7 +23,7 @@ public class InstalledPluginsAgreementTests
     public void The_client_names_the_plugins_the_runtime_names()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
         var longest = "a" + new string('b', 63);
         var packages = new[] { "reply", "fake-provider", longest, "UPPER", ".hidden", "a.b", "with space", "under_score", "9lives", "-dash", "x", longest + "c" };
         foreach (var name in packages)
@@ -46,7 +46,7 @@ public class InstalledPluginsAgreementTests
     public void Neither_names_anything_where_there_is_no_plugins_directory()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
 
         Assert.Empty(SafeBinding.InstalledPluginIds(paths));
         Assert.Empty(InstalledPlugins.Ids(paths));

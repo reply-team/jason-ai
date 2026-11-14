@@ -35,7 +35,7 @@ internal sealed class MovingMachine : IDisposable
         Directory.CreateDirectory(Data);
         Directory.CreateDirectory(Home);
         Directory.CreateDirectory(Here);
-        Paths = new JasonPaths(Data);
+        Paths = new JasonPaths(Data, 1);
         Processes = new FakeProcessControl { OnLaunch = Launch };
         Handler = new StandIn(this);
     }
@@ -239,6 +239,7 @@ internal sealed class MovingMachine : IDisposable
             }
 
             return machine.Answers?.Invoke(operation, body)
+                ?? (operation == "project.link" ? RuntimeVerbs.Response(HttpStatusCode.OK, "{\"id\":\"prj_made_up\"}") : null)
                 ?? RuntimeVerbs.Response(
                     HttpStatusCode.NotFound,
                     JsonSerializer.Serialize(new ErrorResponse(new ErrorBody("not_found", "No such operation here.", false)), JasonJson.Options));

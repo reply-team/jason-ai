@@ -12,7 +12,7 @@ explains it. Where the two seem to differ, the document is right and this page i
 `jason session open` starts the person's own agent host in a new terminal window: on one approval or question, at the
 campaign's folder, with the item's brief as its first input, which the UI's Open an AI session button does on Windows
 too; or at a folder, a campaign's, a project's or the harness root, or the folder it runs in with `--here`, with no first input, when neither `--host` names
-another nor `--shell` asks for a plain shell. This key says which host that is. It is the host the person types and works in, not the host a role runs on:
+another nor `--shell` asks for a plain shell; or, with `--setup`, at the installation's role skills folder with the setup brief as its first input, when `--host` names no other. This key says which host that is. It is the host the person types and works in, not the host a role runs on:
 a role's host is its execution profile's, and this key changes nothing a role does.
 
 ## The value
@@ -42,7 +42,7 @@ never falls back to another host, since the person named one.
 ## Setting it
 
 A preference is the person's word, so only a person sets it, and the request names them as its actor; a role Jason
-launches is refused when it sets or unsets one (`preference_not_human`).
+launches is refused when it sets or unsets one, from inside its run whatever actor it names (`decided_inside_a_run`).
 
 ```sh
 jason preference set agent.interactive_host --value-file host.json --actor human:Marta

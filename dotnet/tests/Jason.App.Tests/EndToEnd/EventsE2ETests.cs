@@ -262,7 +262,7 @@ public class EventsE2ETests
             _mark = mark;
             Root = Path.Combine(Path.GetTempPath(), "jason-events", Guid.NewGuid().ToString("N"));
             Workspace = Path.Combine(Path.GetTempPath(), "jason-events-account", Guid.NewGuid().ToString("N"));
-            Paths = new JasonPaths(Root);
+            Paths = new JasonPaths(Root, 1);
             Directory.CreateDirectory(Path.Combine(Root, "config"));
             Directory.CreateDirectory(Workspace);
             File.WriteAllText(Paths.UserSettingsFile, Settings(Workspace, paging));

@@ -1349,6 +1349,7 @@ body,
 .jc-console .open-in-menu button.on {
     background: var(--hover);
 }
+.jc-console .open-in-change,
 .jc-console .open-in-continue {
     display: flex;
     flex-direction: column;

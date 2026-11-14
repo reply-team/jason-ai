@@ -279,6 +279,36 @@ public partial class PageClaimsTests
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <c>session open --setup</c> is the verb's third form, and every place that states what the verb does says it: the
+    /// declared exception where it is written, the page that is its contract, the preference that names its host, the
+    /// hosts table's page and the decision. A page that left it out would tell its reader there is no way in from the
+    /// command line to change Jason itself.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md", "and with `--setup` it opens the same terminal at the installation's role skills folder, its plugins folder beside it where the host takes one, with the setup brief as its first input, asking the runtime only `preference.list` and only when no `--host` is given")]
+    [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "With --setup it opens the same terminal at the role skills folder <c>SetupInfo</c> names, with the plugins folder beside it where the host takes a second folder, and the setup brief as its first input")]
+    [InlineData("docs/ui.md", "With `--setup`, the same verb opens your own agent host on Jason itself: at its role skills folder, with the setup brief as its first input.")]
+    [InlineData("docs/contracts/preferences/agent.interactive_host.md", "or, with `--setup`, at the installation's role skills folder with the setup brief as its first input")]
+    [InlineData("docs/execution-profiles.md", "or, opened with `--setup` at the role skills folder with the setup brief as its first message")]
+    [InlineData("docs/architecture.md", "or, with `--setup`, at the installation's role skills folder with the setup brief, which names the skill customising-jason, as its first input")]
+    public void Every_page_that_says_what_session_open_does_says_its_setup_form(string page, string said)
+    {
+        var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
+
+        Assert.Contains(said, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The help says the setup form in the words the release agreed, and what it is not taken with.</summary>
+    [Fact]
+    public void The_session_help_says_its_setup_form()
+    {
+        Assert.Contains(
+            "With --setup: at this installation's role skills folder, with its plugins folder beside it where the host can take one, running the host --host names, else the one the preference agent.interactive_host names (default claude_code), with the setup brief as its first message. Opening it changes nothing. Its answer says whether the skill customising-jason is deployed for that host, by Jason's receipt. Not with an item, --campaign, --project, --here, --shell or --resume.",
+            Jason.Cli.Session.SessionCommands.OpenDescription,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The help names both forms and the flags of the folder's, and that it carries no first input.</summary>
     [Fact]
     public void The_session_help_says_its_folder_form()
@@ -1065,7 +1095,7 @@ public partial class PageClaimsTests
     {
         var agent = Flat(Agent());
 
-        Assert.Contains("If the person gave you these three lines: ```text Install Jason by following https://get.jasonharness.ai/install. When it reports Ready, start its quick-start skill and take me to my first campaign. If anything stops you, ask me directly and tell me why. ``` they have asked for the install, so do it without stopping to confirm a step.", agent, StringComparison.Ordinal);
+        Assert.Contains("If the person gave you these three lines: ```text Install Jason by following https://get.jasonharness.ai/install When it reports Ready, start its quick-start skill and take me to my first campaign. If anything stops you, ask me directly and tell me why. ``` they have asked for the install, so do it without stopping to confirm a step.", agent, StringComparison.Ordinal);
         Assert.Contains("Given only the link, you do not have that yes: ask before the install and before each act this page marks **Ask first.**", agent, StringComparison.Ordinal);
         Assert.Contains(
             "If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of [the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again. That yes covers your own host and nothing else this page marks **Ask first.** Where this machine has other agent hosts, skills for them are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands.",
@@ -1299,7 +1329,7 @@ public partial class PageClaimsTests
     public void The_install_prompt_is_three_lines_the_same_in_the_readme_the_handbook_and_the_install_page()
     {
         const string Lines =
-            "Install Jason by following https://get.jasonharness.ai/install.\n" +
+            "Install Jason by following https://get.jasonharness.ai/install\n" +
             "When it reports Ready, start its quick-start skill and take me to my first campaign.\n" +
             "If anything stops you, ask me directly and tell me why.\n";
 
@@ -1315,7 +1345,7 @@ public partial class PageClaimsTests
     /// </summary>
     [Fact]
     public void The_install_prompt_points_at_the_install_page_at_main() =>
-        Assert.Contains("Install Jason by following https://get.jasonharness.ai/install.", Flat(Prompt()), StringComparison.Ordinal);
+        Assert.Contains("Install Jason by following https://get.jasonharness.ai/install", Flat(Prompt()), StringComparison.Ordinal);
 
     /// <summary>
     /// The steps live on the install page alone. The prompt names no command and no option, so steps cannot creep back
@@ -2434,10 +2464,10 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:10d3eed9f6964c39c61fad83a68337ec9336079b3fd7d46e7cee8dbc10c9b6a4";
+    private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:efe1dbd053cee86b1bac0897bd5faaa060c537bfb8f22345cf3e6adf40c52a31";
+    private const string AgentSectionDigest = "sha256:b8f84523824d10519f38f1f0e8cbae938f4d6b5b70e016e338227cdd79f08246";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

@@ -7,7 +7,7 @@
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" }
   },
-  "field_since": { "/old/audience": "0.36.0", "/old/max_people": "0.36.0", "/old/max_per_search": "0.36.0" },
+  "field_since": { "/old/audience": "0.36.0", "/old/max_people": "0.36.0", "/old/max_per_search": "0.36.0", "/old/confined": "0.42.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -33,7 +33,8 @@
             "description": "The operations it releases, in ordinal order."
           },
           "expires_at": { "type": ["null", "string"], "format": "date-time", "description": "When it stops releasing work; null where it does not expire." },
-          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." }
+          "max_releases": { "type": ["null", "integer"], "minimum": 1, "maximum": 10000, "description": "How many releases it makes before it stops; null where it has no ceiling." },
+          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: it was set under the desktop's chat marker, as its set line says, and so had set nothing." }
         }
       },
       "allowance": {
@@ -63,7 +64,8 @@
             }
           },
           "max_people": { "type": "integer", "minimum": 1, "maximum": 100000, "description": "The most people the searches under it may ask for, added up." },
-          "max_per_search": { "type": ["null", "integer"], "minimum": 1, "maximum": 1000, "description": "The most people one search under it may ask for; null where it caps none." }
+          "max_per_search": { "type": ["null", "integer"], "minimum": 1, "maximum": 1000, "description": "The most people one search under it may ask for; null where it caps none." },
+          "confined": { "const": true, "description": "Since 0.42.0, and only where it is so: it was set under the desktop's chat marker, as its set line says, and so had set nothing." }
         }
       }
     },

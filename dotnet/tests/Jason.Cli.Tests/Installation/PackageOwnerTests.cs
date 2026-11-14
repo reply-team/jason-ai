@@ -274,7 +274,7 @@ public sealed class PackageOwnerTests : IDisposable
         var brew = _layouts.Homebrew();
         using var output = new StringWriter();
 
-        Assert.Null(PackageOwner.Of(new CliEnvironment(output, output, new JasonPaths(_layouts.Root), InstallPath: brew.Executable)));
+        Assert.Null(PackageOwner.Of(new CliEnvironment(output, output, new JasonPaths(_layouts.Root, 1), InstallPath: brew.Executable)));
     }
 
     /// <summary>The environment names the installation and its records, and the rule is asked about what it names.</summary>
@@ -284,7 +284,7 @@ public sealed class PackageOwnerTests : IDisposable
         var brew = _layouts.Homebrew();
         using var output = new StringWriter();
 
-        var owner = PackageOwner.Of(new CliEnvironment(output, output, new JasonPaths(_layouts.Root), InstallPath: brew.Executable, Managers: new PlantedRecords()));
+        var owner = PackageOwner.Of(new CliEnvironment(output, output, new JasonPaths(_layouts.Root, 1), InstallPath: brew.Executable, Managers: new PlantedRecords()));
 
         Assert.Equal("Homebrew", owner?.Manager);
     }
@@ -303,7 +303,7 @@ public sealed class PackageOwnerTests : IDisposable
         }
 
         using var output = new StringWriter();
-        var owner = PackageOwner.Of(new CliEnvironment(output, output, new JasonPaths(_layouts.Root), InstallPath: winget.Link, Managers: new PlantedRecords(winget.Registration())));
+        var owner = PackageOwner.Of(new CliEnvironment(output, output, new JasonPaths(_layouts.Root, 1), InstallPath: winget.Link, Managers: new PlantedRecords(winget.Registration())));
 
         Assert.NotNull(owner);
         Assert.Equal(winget.Executable, owner.Executable);

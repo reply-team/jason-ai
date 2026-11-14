@@ -45,7 +45,7 @@ public class VerbMapTests
     private static readonly string[] Nouns =
     [
         "approval", "audience", "block", "campaign", "contact", "decision", "events", "journal", "operation", "plugin", "preference", "profile", "project",
-        "reply", "report", "role", "rolenote", "route", "runtime", "session", "skills", "subscription", "suppression", "ui", "update", "workitem",
+        "reply", "report", "role", "rolenote", "route", "runtime", "sender", "session", "skills", "subscription", "suppression", "ui", "update", "workitem",
     ];
 
     [Fact]
@@ -211,12 +211,12 @@ public class VerbMapTests
     }
 
     /// <summary>
-    /// The <c>plugin</c> group is its two operations and one verb that is none: <c>install</c>, which places the package
+    /// The <c>plugin</c> group is its four operations and one verb that is none: <c>install</c>, which places the package
     /// the release names in the plugins directory, as <c>ui install</c> places the release's UI, and asks the runtime only
     /// the reload <c>plugin reload</c> asks. The eighth exception, made here in the open.
     /// </summary>
     [Fact]
-    public void The_plugin_verb_group_is_its_two_operations_and_install()
+    public void The_plugin_verb_group_is_its_four_operations_and_install()
     {
         using var paths = new TempPaths();
         var group = Jason.Cli.Commands.PluginCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
@@ -228,7 +228,7 @@ public class VerbMapTests
             .Where(name => name.StartsWith("plugin.", StringComparison.Ordinal))
             .Select(name => name["plugin.".Length..]);
 
-        Assert.Equal(["install", "list", "reload"], verbs);
+        Assert.Equal(["grant", "install", "list", "reload", "revoke"], verbs);
         Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
         Assert.DoesNotContain("install", operations);
     }
@@ -246,11 +246,12 @@ public class VerbMapTests
 
         Assert.Equal(["open"], group.Subcommands.Select(command => command.Name));
 
-        // Its two forms are these options and no others: an item's (--approval, --question) and a folder's (--campaign,
-        // --project, --here, --host, --shell, --resume), with --dry-run and --human for both. A further option is a change
-        // of the declared exception and is made in the open, with its text in CliApp.
+        // Its three forms are these options and no others: an item's (--approval, --question), a folder's (--campaign,
+        // --project, --here, --host, --shell, --resume) and Jason's own (--setup, with --host), with --dry-run and --human
+        // for all three. A further option is a change of the declared exception and is made in the open, with its text in
+        // CliApp.
         Assert.Equal(
-            ["--approval", "--question", "--campaign", "--project", "--here", "--host", "--shell", "--resume", "--dry-run", "--human"],
+            ["--approval", "--question", "--campaign", "--project", "--here", "--host", "--shell", "--resume", "--setup", "--dry-run", "--human"],
             group.Subcommands.Single().Options.Select(option => option.Name).Where(name => name.StartsWith("--", StringComparison.Ordinal)));
         Assert.DoesNotContain(
             typeof(Contracts.Api.Operations).GetFields().Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue()!),

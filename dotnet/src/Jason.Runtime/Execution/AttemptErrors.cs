@@ -133,6 +133,12 @@ public static class AttemptErrors
     public const string Suppressed = "suppressed";
 
     /// <summary>
+    /// A verdict that stands says the person asked not to be written to: nothing reaches them on any channel, in any
+    /// campaign, whatever value the work would use. Lifted only by a person's own later verdict on that reply: a named human, outside any run, stating a nature other than opt_out.
+    /// </summary>
+    public const string OptedOut = "opted_out";
+
+    /// <summary>
     /// The operation works by the routed plugin's pin alone, and that plugin has pinned nothing for the person: nobody at
     /// the provider is known to be them, so there is nothing to act on and nobody is looked up to find out.
     /// </summary>

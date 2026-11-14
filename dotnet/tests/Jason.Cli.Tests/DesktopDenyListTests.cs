@@ -89,7 +89,7 @@ public class DesktopDenyListTests
         "campaign get", "campaign list", "campaign list-contacts", "campaign summary", "contact get", "contact list",
         "contact thread", "contact threads", "decision get", "decision list", "events sources", "journal kinds", "journal list",
         "logs", "operation describe", "plugin list", "preference list", "project get", "project list", "reply count", "report get",
-        "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "status",
+        "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "sender list", "status",
         "subscription list", "subscription runs", "suppression list", "workitem count", "workitem get", "workitem list",
         "workitem wait",
     ];
@@ -194,13 +194,14 @@ public class DesktopDenyListTests
     {
         [ConfinedVerbs.Kind.PersonsWord] =
             "#\n# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a\n" +
-            "# preference, a block cleared, work resumed, a report and a subscription rewound. The CLI gives them no default actor,\n" +
-            "# and gives none to four verbs further down either.\n",
+            "# preference, a campaign's send mode, a block cleared, work resumed, a send reviewed, a report and a subscription\n" +
+            "# rewound. The CLI gives them no default actor, and gives none to six verbs further down either.\n",
         [ConfinedVerbs.Kind.Installation] =
             "#\n# The verbs that change the installation, follow it without end, or carry it off the machine:\n",
         [ConfinedVerbs.Kind.Acts] =
             "#\n# The verbs the CLI gives no default actor that change who is reached or what runs: taking someone off the\n" +
-            "# do-not-contact register, changing which plugin performs an operation, and changing which profile a role runs on.\n",
+            "# do-not-contact register, changing which plugin performs an operation, granting a plugin something or taking a\n" +
+            "# grant back, and changing which profile a role runs on.\n",
         [ConfinedVerbs.Kind.ChatsOwn] =
             "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
             "# work names the role, and linking a project's folder, which then becomes a working folder of every chat on the\n" +
@@ -230,6 +231,65 @@ public class DesktopDenyListTests
         }
 
         Assert.Equal(text, File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// How the desktop page's "Refused, with no card" bullet says each verb a person reserves: in words, since a person
+    /// reads it, where the other groups are named by their commands. A verb added to that group is red here until the page
+    /// says it.
+    /// </summary>
+    private static readonly Dictionary<string, string> PersonsWordOnThePage = new(StringComparer.Ordinal)
+    {
+        ["approval approve"] = "approving and rejecting",
+        ["approval reject"] = "approving and rejecting",
+        ["approval set-standing"] = "a standing approval",
+        ["approval unset-standing"] = "a standing approval",
+        ["decision answer"] = "answering a decision",
+        ["preference set"] = "a preference",
+        ["preference unset"] = "a preference",
+        ["campaign set-send-mode"] = "a campaign's send mode",
+        ["block clear"] = "clearing a block",
+        ["workitem resume"] = "resuming work",
+        ["workitem review"] = "reviewing a send",
+        ["report submit"] = "a report",
+        ["subscription rewind"] = "rewinding a subscription",
+    };
+
+    private static readonly string[] NumberWords =
+        ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+
+    /// <summary>
+    /// The desktop page's bullet on what the chat refuses with no card is the deny list's command half as a person reads
+    /// it: every verb of <see cref="ConfinedVerbs.Table"/> is named there, the installation's and the verbs that change who
+    /// is reached or what runs each listed in the table's order, and the number word before a group is that group's size.
+    /// </summary>
+    [Fact]
+    public void The_desktop_page_names_every_verb_the_chat_refuses_with_no_card()
+    {
+        var page = File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", "desktop.md")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var bullet = Regex.Match(page, @"(?ms)^- \*\*Refused, with no card\.\*\*.*?(?=^- )").Value;
+        Assert.False(string.IsNullOrEmpty(bullet), "docs/desktop.md has no \"Refused, with no card\" bullet.");
+        var flat = Regex.Replace(bullet, @"\s+", " ");
+
+        string[] Group(ConfinedVerbs.Kind kind) => [.. ConfinedVerbs.Table.Where(entry => entry.Kind == kind).Select(entry => entry.Command)];
+        static string[] Named(string list) => [.. Regex.Matches(list, "`(?<verb>[^`]+)`").Select(match => match.Groups["verb"].Value)];
+
+        var unsaid = Group(ConfinedVerbs.Kind.PersonsWord)
+            .Where(verb => !PersonsWordOnThePage.TryGetValue(verb, out var words) || !flat.Contains(words, StringComparison.Ordinal))
+            .ToList();
+        Assert.True(unsaid.Count == 0, $"The bullet does not say these verbs a person reserves: {string.Join(", ", unsaid)}");
+
+        var installation = Regex.Match(flat, @"carries it off the machine \((?<list>[^)]*)\)");
+        Assert.True(installation.Success, "The bullet no longer lists the verbs that change the installation.");
+        Assert.Equal(Group(ConfinedVerbs.Kind.Installation), Named(installation.Groups["list"].Value));
+
+        var acts = Regex.Match(flat, @"(?<count>[a-z]+) more that decide who is reached or what runs \((?<list>[^)]*)\)");
+        Assert.True(acts.Success, "The bullet no longer lists the verbs that decide who is reached or what runs.");
+        Assert.Equal(Group(ConfinedVerbs.Kind.Acts), Named(acts.Groups["list"].Value));
+        Assert.Equal(NumberWords[Group(ConfinedVerbs.Kind.Acts).Length], acts.Groups["count"].Value);
+
+        var unnamed = Group(ConfinedVerbs.Kind.ChatsOwn).Where(verb => !flat.Contains($"`{verb}`", StringComparison.Ordinal)).ToList();
+        Assert.True(unnamed.Count == 0, $"The bullet does not name these verbs the chat refuses beyond the CLI's table: {string.Join(", ", unnamed)}");
     }
 
     [Fact]
@@ -303,6 +363,20 @@ public class DesktopDenyListTests
         var declared = Regex.Matches(model, @"^export const confinedVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
 
         Assert.Equal(Confinement.Variable, Assert.Single(declared).Groups["name"].Value);
+    }
+
+    /// <summary>
+    /// The desktop spells the attempt's variable once, in its permission model, and refuses a command that names it by that
+    /// declaration; it is the name the CLI reads the attempt from, so the name the chat may not claim is the one that counts.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_attempt_variable_is_the_cli_s()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+
+        var declared = Regex.Matches(model, @"^export const attemptVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
+
+        Assert.Equal(ExecutionEnvironment.AttemptIdVariable, Assert.Single(declared).Groups["name"].Value);
     }
 
     /// <summary>

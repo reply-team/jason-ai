@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 
@@ -11,7 +12,11 @@ namespace Jason.Runtime.Campaigns;
 /// </summary>
 public static class CampaignMapper
 {
-    public static CampaignDto ToDto(Campaign campaign)
+    /// <summary>
+    /// One campaign whole: its own send modes as the row holds them, and the modes in force for it, the campaign's own
+    /// over the installation's preferences in <paramref name="installation"/>.
+    /// </summary>
+    public static CampaignDto ToDto(Campaign campaign, InstallationModes installation)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var project = ProjectOf(campaign);
@@ -30,7 +35,9 @@ public static class CampaignMapper
             campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null,
             campaign.IdempotencyKey,
             campaign.FolderPath,
-            campaign.AudienceThreshold);
+            campaign.AudienceThreshold,
+            new SendModesDto(campaign.SendModeCold, campaign.SendModeWarm),
+            SendModes.InForce(campaign, installation));
     }
 
     public static CampaignSummaryDto ToSummary(Campaign campaign)

@@ -78,8 +78,25 @@ public static class ApprovalRenderers
         text.AppendLine(Line("Plugin:", approval.PluginId));
         text.AppendLine(Line("Account:", approval.BindingIdentity));
         AppendExample(text, preview?["example"]);
+        // The installation's open question, while it is open: which send modes nobody has chosen, and what that means.
+        if (approval.SendModesUnset is { Count: > 0 } unset)
+        {
+            text.AppendLine(Line("Send modes:", $"not chosen yet: {string.Join(", ", unset)}; a send to a contact it covers waits for a person unless the campaign sets a mode of its own"));
+        }
+
         text.AppendLine(Line("Status:", RenderText.Snake(approval.Status)));
         text.AppendLine(Line("Parked:", approval.Reason));
+        // Why the automatic mode did not let it go, in the sentence a person reads, and what it decided on; neither line is
+        // printed where the mode had no say, so every other card reads as it always did.
+        if (SendModeReasons.Sentence(approval.Reason) is { } why)
+        {
+            text.AppendLine(Line("Why:", why));
+        }
+
+        if (SendMode(preview?["send_mode"]) is { } mode)
+        {
+            text.AppendLine(Line("Send mode:", mode));
+        }
         text.AppendLine(Line("Requested:", RenderText.Moment(approval.RequestedAt)));
         text.AppendLine(Line("Decided:", RenderText.Moment(approval.DecidedAt)));
         text.AppendLine(Line("Decided by:", RenderText.Actor(approval.DecidedBy)));
@@ -214,6 +231,33 @@ public static class ApprovalRenderers
         if (facts["count"] is JsonValue count)
         {
             said.Add($"this search asks {count.ToJsonString()}");
+        }
+
+        return string.Join("; ", said);
+    }
+
+    /// <summary>
+    /// What the automatic mode decided the send on, from the preview's <c>send_mode</c>: the mode and where it came from, the
+    /// contact's temperature, and the review it read. Null where the preview carries none, which is every approval parked
+    /// where no automatic mode is in force.
+    /// </summary>
+    private static string? SendMode(JsonNode? mode)
+    {
+        if (mode is not JsonObject facts)
+        {
+            return null;
+        }
+
+        var said = new List<string>();
+        if ((string?)facts["mode"] is { } word)
+        {
+            said.Add((string?)facts["source"] is { } source ? $"{word}, from the {source}" : word);
+        }
+
+        said.Add((string?)facts["temperature"] is { } temperature ? $"a {temperature} contact" : "the contact's reply waits on a verdict");
+        if ((string?)facts["review"] is { } review)
+        {
+            said.Add($"review {RenderText.Shown(review)}");
         }
 
         return string.Join("; ", said);

@@ -84,7 +84,7 @@ internal static class ProgramVerbs
         var output = new StringWriter();
         var exit = await CliApp.RunAsync(
             [.. path, "--help"],
-            new CliEnvironment(output, new StringWriter(), new JasonPaths(tree.Root)),
+            new CliEnvironment(output, new StringWriter(), new JasonPaths(tree.Root, 1)),
             TestContext.Current.CancellationToken);
 
         var text = output.ToString();

@@ -130,7 +130,7 @@ placed, and the verb exits 1 with `load: rejected` in its body and the runtime's
 that answered, the body also says what the runtime made of the package — its `status`, its `problems` with their
 messages, its `capabilities` as the reload answered them, requested and granted, and `settings_file`, the file step 4
 edits — and under `--human` the verb prints each problem with its message and, while the package is granted nothing it
-asks for, the sentence that names the key under `Plugins:Grants:reply`, that file and `jason plugin reload`.
+asks for, the sentence that names the `jason plugin grant` command that grants it, in force at once.
 
 So the package is the one released with your runtime, file for file: it has the content digest of the release's own
 tree, and `jason status` says so in its `plugin_package` check, which fails when the package installed is an earlier
@@ -169,9 +169,9 @@ work goes through. Both live in `~/.jason/config/settings.json`:
 `Grants` is the answer to what the manifest asked for: declaration is not permission. `Binding` names the account
 by the CLI profile that holds its credential — never a credential itself.
 
-**A global route is written here rather than through the CLI**, because an installer has to be able to write one
-before a runtime has ever run. `jason route set` writes a *campaign's* route and refuses a global one with a
-usage error that says so. A campaign override, when you want one, is written with the CLI:
+**A global route is written here by an installer**, because it has to be able to write one before a runtime has
+ever run. On a running installation, `jason route set --global` writes the same section and puts it in force at
+once ([routing.md](routing.md), §3). A campaign override, when you want one, is written with the CLI:
 
 ```
 jason route set --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin reply --actor human:ada
@@ -352,11 +352,12 @@ working keep working.
 - [`docs/plugins.md`](plugins.md) — writing a package for another provider.
 - [`docs/contracts/`](contracts/README.md) — the operations themselves, one document each, and what a plugin has to
   demonstrate.
-- [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Eight skills,
+- [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Nine skills,
   one per moment somebody asks for something: `quick-start` takes a person from a fresh install to a first
   campaign; `managed-campaign-work` turns an objective into durable work;
   `approvals-and-questions` presents what is waiting on a person; `operating-the-installation` covers the
   runtime, its plugins, its routes and its updates; `troubleshooting-jason` says why work stopped;
   `reporting-outside-effects` tells Jason about an effect produced somewhere else; `planner-in-session` brings the
-  planner's judgement into the conversation where a campaign is planned; and `researcher-in-session` brings the
-  researcher's into the one where an account or a person is looked into.
+  planner's judgement into the conversation where a campaign is planned; `researcher-in-session` brings the
+  researcher's into the one where an account or a person is looked into; and `customising-jason` changes Jason itself:
+  its roles, its plugins and its settings.

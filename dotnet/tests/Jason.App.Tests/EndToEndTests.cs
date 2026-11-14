@@ -19,7 +19,7 @@ public class EndToEndTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
 
         // The first runtime's port is read again once it is gone, so it is one no operating system hands out of its own
         // choosing: a port the OS chose for a runtime another test started could otherwise be the dead one, and that
@@ -75,7 +75,7 @@ public class EndToEndTests
     {
         const string sentinel = "SENTINEL_E_ROLES";
         var root = Path.Combine(Path.GetTempPath(), "jason-e2e", Guid.NewGuid().ToString("N"));
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         Directory.CreateDirectory(paths.ConfigDirectory);
         await File.WriteAllTextAsync(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":8192}}""", Ct);
 
@@ -107,7 +107,7 @@ public class EndToEndTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
 
         using var runtime = new RuntimeProcess(root, environment: new Dictionary<string, string> { [Confinement.Variable] = "1" });
         try
@@ -267,7 +267,7 @@ public class EndToEndTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
 
         using var runtime = new RuntimeProcess(root);
         try

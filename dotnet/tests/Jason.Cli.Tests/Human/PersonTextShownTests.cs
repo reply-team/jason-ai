@@ -96,7 +96,7 @@ public class PersonTextShownTests
             {"id":"cnt_1","first_name":"H","company":"H","title":"H","time_zone":"H","channels":[],"custom":{"H":1},
              "external_ids":[],"created_at":"T","updated_at":"T"}
             """),
-        ["plugin list"] = (json => PluginRenderers.Registry(json, "settings.json"), """
+        ["plugin list"] = (json => PluginRenderers.Registry(json), """
             {"snapshot":{"id":"snp_1","loaded_at":"T","source":"reload","plugin_count":0},"routing_snapshot_id":"rts_1","plugins":[],
              "last_reload":{"at":"T","source":"reload","activated":false,
              "candidates":[{"directory":"H","status":"invalid","problems":[{"code":"field_invalid","path":"name","message":"H"}]}],
@@ -112,6 +112,10 @@ public class PersonTextShownTests
         ["audience availability"] = (AudienceRenderers.Availability, """
             {"plugin_id":"reply","available":false,"reason":"other","detail":"H","credits":{"balance":3,"price_per_person":0.5,"currency":"H"},
              "headroom":10}
+            """),
+        ["sender list"] = (SenderRenderers.List, """
+            {"plugin_id":"reply","items":[{"external_id":"H","channel":"email","name":"H","address":"H","status":"active","owner":"own",
+             "vendor":{"status":"H"}}],"has_more":false,"channels":{"email":"listed","linkedin":"not_asked"},"vendor":{"ordering":"email_then_linkedin"}}
             """),
         ["approval get"] = (ApprovalRenderers.Approval, """
             {"id":"apr_1","work_item_id":"wi_1","campaign_id":"cmp_1","operation":"audience.search","operation_version":1,"status":"pending",
@@ -157,6 +161,7 @@ public class PersonTextShownTests
         { "audience preview", 5 },
         { "audience filter-values", 2 },
         { "audience availability", 2 },
+        { "sender list", 3 },
         { "operation describe", 1 },
         { "approval get", 5 },
         { "campaign audience", 3 },

@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_updated",
+  "version": 1,
+  "case": "a send once marked as the chat's stays marked; no line takes the mark back",
+  "body": { "key": "confined", "old": true, "new": false },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

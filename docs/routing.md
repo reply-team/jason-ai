@@ -121,10 +121,11 @@ no route of its own at the global scope. A key under `Channels` that is no chann
 routes, a channel its argument does not allow, and a plugin that reads no events are refused at the reload (§7). A file
 without `Channels` means what it always meant.
 
-**A global route is frozen into the active route snapshot by `jason plugin reload`, and by the load at
-startup — editing the file changes nothing until then.** It is the same discipline plugin grants
-already follow, and for the same reason: what is running should change when somebody says so, not when
-a file is saved. `jason runtime status --human` names the snapshot that is actually active — here on a
+**A global route is frozen into the active route snapshot by `jason plugin reload`, by the load at startup, and by
+`jason route set --global` and `jason route unset --global`, which write this file and run that same reload in one
+act; a load that refuses puts the file back as it was. A hand edit changes nothing until a reload.** It is the same
+discipline plugin grants already follow, and for the same reason: what is running should change when somebody says so,
+not when a file is saved. `jason runtime status --human` names the snapshot that is actually active — here on a
 runtime whose global default is one plugin and which also holds one campaign route:
 
 ```text
@@ -132,6 +133,42 @@ Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY | default fake-provider | 0 
 ```
 
 The override and campaign counts include channel routes; a runtime that holds any adds `| N of them by channel`.
+
+### A global route from the command line
+
+```sh
+jason route set   --global --plugin acme-provider --binding '{"workspace":"eu-team"}' --actor human:you@example.com
+jason route set   --global --operation campaign.get --plugin other-provider --actor human:you@example.com
+jason route unset --global --operation campaign.get --actor human:you@example.com
+```
+
+The runtime writes the route into `settings.json` and freezes it by the plugin reload in the same act, under the
+reload gate, so it is in force when the command answers; the reload journals `plugins_reloaded`, and a route it
+changed is journaled as `global_routes_updated` (§6). The edit keeps every byte of the file it does not own — the
+comments, the layout, the other sections and every secret in them — and the route is checked against the active
+plugins before anything is written, as a campaign's is. A route the file holds already and the routes in force hold
+too writes and activates nothing; one the file holds and no reload froze is put in force. A reload that refuses, over
+the packages as they are now, puts the file back as it was, and the answer's last detail, under the field
+`settings.json`, says whether it did: `settings_file_put_back`, or `settings_file_not_put_back` where another writer
+changed the file in between, which is left as that writer left it, or where another program held the file open or it
+could not be written again, which is left holding what the write left, out of force. No command mends that while loads
+refuse, so the detail says the hand edit that does — a new route taken out, a route the write replaced or took away put
+back, as the file held it before the write — or the reload that makes the file true.
+
+Nothing inside a dispatched run changes Jason itself: a global route set or unset sent from inside a run, which the
+CLI marks with the `Jason-Attempt` header, is refused `403` `decided_inside_a_run`, the code the run gate gives there,
+with a sentence that says so, and a campaign's own route is set from a run as before (§4).
+
+Six refusals write nothing, each naming the setting by its path and never a value the file holds:
+`settings_file_unreadable`, a file the runtime's own parser does not read, named by the line and the byte where it
+stopped; `settings_file_not_editable`, a setting the file says in a way the writer cannot change without touching what
+it does not own, such as one it says twice, or a file that is a link to another file, which the write would
+replace with a file of its own; `settings_file_changed`, a file another program kept changing while the runtime wrote
+it, worth sending again; `settings_file_busy`, a file another program holds open, worth sending again;
+`settings_file_not_writable`, a file or folder that is read-only or that this user may not write, or a full disk, which
+sending again does not mend; and `setting_shadowed`, a setting a `JASON_` environment variable gives a value, named as
+the environment spells it, where a write to the file would never be in force. A binding the file would read back as something else is refused as
+`not_representable_globally` ("What a global binding cannot express", §4).
 
 ## 4. A campaign's own routes
 
@@ -166,16 +203,12 @@ that activates a global edit somebody left in the file, and the operator who edi
 wrote a campaign route will see the *old* global set in the answer. That is not a stale read; it is
 the freeze rule seen from the other side. `jason plugin reload` is what picks the edit up.
 
-**There is no global `route set`.** The API writes campaign routes only, and the CLI refuses the command
-before it sends anything — a usage error, exit 2 — saying where a global route lives instead:
+A write names its scope: `--campaign` or `--global`, exactly one. One that names neither, or both, is refused before
+anything is sent, a usage error, exit 2, so a write that forgot its campaign never re-routes every campaign:
 
 ```text
---campaign is required: only a campaign's routes are written through the API. A global route is
-written under "Routes" in settings.json and activated with 'jason plugin reload'.
+--campaign or --global is required: --campaign routes one campaign's work, --global every campaign's that has no route of its own.
 ```
-
-The reason is worth stating rather than accepting: a reload freezes plugins and routes together, so a
-global route becomes active by the same explicit act as the packages it names.
 
 Five smaller rules, each of which somebody will meet:
 
@@ -218,12 +251,12 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the twenty-seven answers a claim can give (§7),
+**`usable: true` is about the route, not about an item.** Of the twenty-eight answers a claim can give (§7),
 resolve answers the first two in its own words — an operation this build does not publish is a 400,
 nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
-numbers 3 to 7. The last twenty are questions about a work item, which resolve does not have: whether a
+numbers 3 to 7. The last twenty-one are questions about a work item, which resolve does not have: whether a
 contact is named, whether that person is reachable on the channel the operation consumes, whether that
-value is suppressed, whether the routed plugin has pinned the person an operation that works by the pin
+value is suppressed, whether the person stands opted out, whether the routed plugin has pinned the person an operation that works by the pin
 alone acts on, whether the send a read or a take-back names is this campaign's, whether it kept the provider's reference, whether it was
 made under the route the item is routed to, the same three questions of the search a status read or a stop names, whether an audience named
 by its number is one the campaign holds, whether the composed input satisfies the schema, whether the definition it carries satisfies the
@@ -263,6 +296,10 @@ characters, and the value reaching the plugin is the number.
 
 The escape hatch is real and is in the same place: set that binding **per campaign** with
 `jason route set --binding`, which carries JSON and never passes through the configuration system.
+
+`jason route set --global` refuses such a binding rather than freeze one the caller did not send, as
+`not_representable_globally`, and with it the other shapes the round trip changes: an empty object or list, keys that
+differ only in case, and a key that holds a colon.
 
 ## 5. The binding handshake
 
@@ -453,13 +490,20 @@ An activated load journals `plugins_reloaded` with the routes it froze beside th
 channel route — `message.send/linkedin` — with the old and new values. A line keyed by an operation and a channel is
 about that channel's route only, never the operation's own.
 
+A global route write journals `global_routes_updated`, keyed the same three ways and naming no campaign, with the old
+and new routes as the reload froze them, in the same save as that reload's `plugins_reloaded`, which carries the same
+actor and reason; a reload that left the route as it was writes no such line, and a request that finds the route
+already in force in the file and in the snapshot writes nothing and journals neither. A runtime that stops between the
+write and the reload — a crash, a machine switched off — leaves the route in the file and out of force; the next start
+freezes it with the rest of the file, and no `global_routes_updated` line says so.
+
 ## 7. Fail-closed: every reason, and what to change
 
 Nothing falls back. An operation the routed plugin cannot perform ends the work item with the reason;
 handing the work to whichever other plugin happens to implement it would mean a campaign acting against
 an account nobody named.
 
-### At the claim — the twenty-seven, in the order they are checked
+### At the claim — the twenty-eight, in the order they are checked
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
@@ -480,7 +524,28 @@ The twenty-fifth is not a refusal at all: it is the gate the runtime owes a pers
 it is **parked** rather than failed — no attempt, nothing spent, and `approval.list` is where it waits. Where a
 person decided in advance — a standing approval for the campaign and the category of the verdict a drafted reply
 answers — and nothing has been decided about the item yet, it is not parked: it runs in the same claim, under an
-approved row that names that person.
+approved row that names that person. Where nothing has been decided about a send yet, the row asks, in this order and
+before the standing approval, whether a send mode of `automatic` releases it (`docs/work-execution.md` §The send mode
+at the claim):
+
+1. a mode of `automatic`, set by a named person, stands for the send's campaign; where none does, nothing more is asked
+   and the contact's warmth is not read;
+2. the contact's warmth, and the mode for it, which must be `automatic`;
+3. the send was not written in the desktop's chat (`sent_from_chat`);
+4. no doubt stands about it (`doubted`);
+5. the contact waits on no verdict (`awaiting_judgement`, `awaiting_nature`);
+6. an answer answers a person's reply, in a conversation nobody escalated at or after it (`answers_no_verdict`,
+   `awaiting_nature`, `reply_not_from_a_person`, `escalated`);
+7. the runtime's own critic for the send, or a person, passed the text as it now reads (`edited_after_review`,
+   `not_reviewed`);
+8. the campaign has had fewer sends released by the mode since 00:00Z than `Sending:AutomaticMaxPerDay`
+   (`daily_ceiling`);
+9. released, under an approved row with the reason `automatic_mode` that names the person who set the mode.
+
+A send held at steps 3 to 8 parks with the code as its approval's reason. The holds of steps 5 to 7 then ask the
+standing approval as before; a send written in the chat, a doubted one and one at the daily ceiling park whatever a
+standing approval says.
+These are steps of the twenty-fifth check, not checks of their own: the table keeps its rows.
 It is asked after every refusal on purpose. What a person is asked to approve is the composed input, so it has to be
 composed and to satisfy the operation's own schema before anybody can be shown it; and nobody is ever
 asked to approve reaching somebody the suppression register already protects, or acting on somebody the
@@ -512,6 +577,7 @@ reply that could only be refused.
 | 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
 | 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out, or takes back a send to them, declares `preflight.suppression: not_applicable` — today `optout.record`, `enrollment.stop` and `message.cancel`, and `audience.search_cancel`, which stops a search and reaches nobody — and meets neither the check nor the read: a suppressed person is exactly who it is for |
+| 28 | `opted_out` | permanent | a verdict that stands says the person asked not to be written to: a `reply_classified` line of any campaign whose nature is `opt_out` and whose body names this contact, with no later verdict on that reply that lifts it. The register is by value and this lock is by the person: it is asked right after row 10, under the same gate and over the same operations, and refuses what row 10 would for a value the register never held — an address or a profile the contact gained after the verdict, or any value of a contact who had none when they asked. It is asked only where row 10 found no entry, so a person who lists the register finds the entry wherever one is. Like the register, it holds in every campaign: a person's request to be left alone is not one campaign's. Only a person's own later verdict on the same reply in that verdict's campaign lifts it — recorded under a `human` actor that names the person, outside any run, and stating a nature other than `opt_out`; a role's or a run's own verdict never lifts it, nor does a person named from inside a run or in the desktop's chat (a verdict recorded under the chat's marker, `confined` on its line, is the chat's), a `human` actor with no name, a verdict that states no nature, or one that carries a person's answer to the campaign's question (`decision_id`) by that alone. `suppression.remove` takes one entry off the register and leaves this lock where it is ([runtime API](runtime-api.md), `reply.record`). The lock holds by the contact record: another contact record of the same person, with a value the opted-out record never had, is not covered, since Jason does not merge contacts |
 | 11 | `contact_not_linked` | permanent | the operation works by the routed plugin's pin alone — `preflight.provider_contact: pinned_only`, today `contact.delete` and `conversation.list` about a person — and that plugin has pinned nobody for the person. A pin held only by another plugin names nobody here, and nobody is looked up by an address to find out. A `find_or_create` or `find_only` operation of the routed plugin links the person, or route the operation to the plugin whose pin they carry; then create a new item (while the item carries an unsettled send, only once the provider has said the earlier attempt did not act) |
 | 12 | `send_unknown` | permanent | the operation reads or takes back one send — its input schema names `send`, today `message.status` and `message.cancel` — and the work item `args.send` names is not one of this campaign's, or is not an operation that makes a send: `message.send` or `social_invitation.send`. Name the work item that made the send, in this campaign; then create a new item. An operation that names no send never meets this check, nor the two after it |
 | 13 | `send_reference_absent` | permanent | the send named has no reference to act by: it has not succeeded, or the provider gave it none. The runtime composes `send.reference` from the send's own attempt and from nothing a caller writes, so there is nothing to read or take back yet. Wait for the send to succeed, or create a new item for another one |
@@ -527,7 +593,7 @@ reply that could only be refused.
 | 23 | `provider_answer_lost` | ambiguous | the item carries an unsettled send — an earlier attempt of it started and ended ambiguous, whatever ended after it — so it may have reached the person, and the operation's document settles a lost answer by the work item's key — `recovery_read.by_key`, today `message.send` and `social_invitation.send` — while the routed plugin's manifest does not list the operation under `settles_by_key` (`docs/plugins.md` §3), or the routed package, by its id and digest, or its binding is not the one the latest such attempt's provenance names, or that provenance names none, or the item's arguments are not the ones that attempt's snapshot kept, or the input composed now is not the one that attempt was composed with — compared by that provenance's `input_digest`, the canonical `sha256:` (keys in ordinal order, so member order alone is no difference) of everything in the composed input but the campaign's status, and so neither the binding, compared by its identity, nor the invocation's context: the arguments, the send, the person with the projected fields, the consumed channel's value and the pins, the campaign with its name and pins, and the work item's key. A pin the compared attempt and every later attempt of the item recorded, from the answers they ended with, is left out of the input composed now before it is named, since the input that attempt was composed with could not carry it and every later attempt ran only because its claim found it the same request; a pin an earlier attempt, another item or another plugin recorded is not left out. A digest names the input and carries none of it, no address included, and an attempt claimed before attempts named their input carries none and is compared on its arguments alone. A route, a binding or a package changed in between makes the ending final, since the key settles a send only at the provider and the account that took it, and so does an item edited since, a person whose address, field or pin changed since, or a campaign renamed or pinned since, since the key settles only the request it went with and the provider answers a repeat with the earlier send; a campaign paused and resumed in between asks nothing else of the provider. Nothing says the repeat would be settled by the key, so it is not made: the item is as unsettled as the attempt that may have acted, and it is final. Find out from the provider whether the first attempt acted, and create a new item only if it did not. An item no earlier attempt left ambiguous never meets this check. **The same hold covers every operation whose `cost` is `metered` and whose `repeat_after_ambiguous` is `after_recovery_read`** — today `audience.search`, `campaign.enroll` and `campaign.activate` beside the two sends — but for the manifest's `settles_by_key` and the package's digest: its blind repeat would spend again, and its recovery read finds what the earlier attempt may have started only at the provider and account that took it, for the request it went with, whichever version of the package started it (`docs/plugins.md` §7). So a route moved to another plugin or account, or a count or a definition edited while the item waited, makes the ending final, rather than start a second search that nothing could find, read or stop; a package updated in between, under the same id, does not |
 | 27 | `thread_route_mismatch` | permanent | the operation names a thread — its input schema names `thread`, today `conversation.get`, `conversation.reply`, `conversation.classify`, `conversation.close` and `conversation.reopen` — and the campaign's own `inbound_reply_observed` lines name that thread, but none of them at the plugin the item is routed to. A thread is held only by the provider it was seen at. **The check compares the plugin, never the account.** An account is known only by the identity of the whole binding, which carries more than the account — a behaviour flag beside the profile, say — so a route edited in such a field would make every thread the campaign knows one seen elsewhere, and refuse every reply to an existing conversation until that thread moved again; another account of the same plugin is the provider's to refuse, as a thread it does not hold, which acts on nobody. A read or a filing of a thread is routed where the campaign saw it, whatever its own operation resolves to — the rule a send's cancel has (row 14): a route that names a plugin and account the lines name, newest first, then a route that names the plugin under any binding, each asked of the operation's own route, then the campaign's route for `conversation.list`, then any of the campaign's routes and the global ones, channel routes included, in the order of precedence — so it is refused here only where no route names the plugin any more. **An id seen at more than one plugin** names neither thread by itself: a read or a filing goes where the operation's own route says, never to the newest sighting, and is refused here, saying the id is held at more than one plugin, where that route names none of them. A reply is routed by its channel, as any `conversation.reply` is, and refused here where that channel's route names another plugin than the thread was seen at, before a person is asked to approve it. A line names its plugin; its account is the binding the read that found the thread ran under — the inbound read's attempt, or the events source the stored event was read from, a source with no binding naming a route with none — and a line whose read left no record of an account is a sighting of its plugin all the same. A thread no line of the campaign names, another campaign's included, never meets this check. Route the operation, or its channel, to the plugin that saw the thread, then create a new item |
 | 24 | `search_unfinished` | — | **not a failure**: the operation is `audience.search`, and another search of the campaign has not ended — a search whose row is not ended, running or held at the provider, another `audience.search` item of the campaign running now, or one open again with no row after an attempt of it started and ended ambiguous, whose start may have acted although its answer was lost, so that it may be running at the provider. A campaign runs one search at a time: a second one would spend beside the first, and the provider refuses only a second search of the same definition. The item waits as `waiting`, with no attempt, its last error naming the search in the way, and is claimed again a search cadence later, the held cadence where the provider holds that search; nobody is asked to approve it meanwhile. Of two searches whose starts both lost their answers, the older goes first and the newer waits behind it. A search item that has ended — failed, cancelled or expired — is in nobody's way, even one whose start may have acted: what it may have started is a person's to find at the provider (row 23). Let that search end, or stop it with `audience.search_cancel`; one whose answer was lost settles at its own next attempt, which reads the provider's searches first and starts none of its own if one was started |
-| 25 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved, unless a standing approval covers it: then it runs in the same claim, under a row the person who set the standing approval decided. `docs/work-execution.md` §Approvals |
+| 25 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved, unless a standing approval covers it: then it runs in the same claim, under a row the person who set the standing approval decided, or, for a send, a send mode of `automatic` releases it at the steps listed above, under a row the person who set the mode decided; a send the mode holds parks with the step's code as its reason. `docs/work-execution.md` §Approvals |
 | 26 | `provider_blocked` | — | **not a failure**: an open block of the routed plugin and binding holds the work — the account's, which covers every sending account under it, or the block of the sending account the input names at `/args/sender/external_id`. Only the operations whose contract says `dispatch.under_provider_block: waits` are held: every `reach: act` operation, `campaign.pause` and `optout.record`. The item waits as `waiting`, its `wait.blocked_by` naming the block, with no attempt; one item at a time is the block's trial and runs, an act wherever one can run, and what an act answers decides the block; a control's answer decides nothing but `blocked`. Nothing is to change on the item: what clears a block is on the provider's side. `docs/work-execution.md` §Provider blocks |
 
 Two of these are worth a second sentence. `input_invalid` and `definition_invalid` are the only ones classed
@@ -784,7 +850,7 @@ Three more are a campaign's reads, made when a person or an agent asks about the
 `audience.preview` (how many people an audience holds, and a sample of them without contact details),
 `audience.filter_values` (the values one of the provider's filters takes) and `audience.availability` (whether the
 account may search now, and what it has left) — `jason audience preview`, `jason audience filter-values` and
-`jason audience availability`. **A campaign's read is routed by the campaign's route for `audience.search`**, the search
+`jason audience availability`. **A campaign's audience read is routed by the campaign's route for `audience.search`**, the search
 it serves, whatever the read's own operation resolves to: a definition is previewed, a filter's values offered and the
 account asked at the provider and account that would run the search, never one provider's audience previewed and another
 one's search approved. It is resolved as the claim resolves it (§2) and held to the same route's half of §7 for the read's
@@ -798,8 +864,17 @@ read from the campaign's audiences and previewed by the definition it was made f
 number the campaign holds none under is `audience_unknown` (404), as at the claim. The answer is held to the document as
 a person's read is, and nothing is recorded, pinned or journaled: a preview makes no audience.
 
+One more is a campaign's read, made the same way and routed another way: `sender.list` (`jason sender list`), the
+accounts a send can go from. **It is routed by the campaign's route for `sender.list` itself**, on the channel its
+`sender_channel` names, or by the operation alone where it names none: the rule its work item meets at the claim, and the
+one `route resolve` and `operation describe` answer for it. It is held to the same route's half of §7 under the same
+codes; the input is composed as a work item's would be, the arguments and the campaign with the routed plugin's own pins,
+and names nobody; and the answer is held to the document. It names a campaign, and an archived one is not refused: it is
+read by the routes in force, which leave the archived campaign's own out from the next activation (§6), except while one of its searches is still followed, when they are kept (§6). Nothing is
+recorded, pinned or journaled, and the operation stays work as well.
+
 The same route answers what an operation takes for a campaign: `operation.describe` (`jason operation describe
-<operation> --campaign <id>`) resolves the campaign's route for the operation now — for a campaign's read on request,
+<operation> --campaign <id>`) resolves the campaign's route for the operation now — for an audience read on request,
 its route for `audience.search`, where the read goes — holds it to the same route's half, and
 answers the operation's argument schema and, for an operation carrying a definition, the routed plugin's
 `audience_definition` as declared — its schema and its keys — so a definition is written against the schema the claim will
@@ -839,6 +914,9 @@ hold it to. It invokes nothing.
   the same operation, and routing is how you choose between them.
 - **A read on request has no bound of its own.** It runs outside the handler pool, one child each;
   `Dispatcher:MaxParallel` bounds work items only.
+- **A channel route carries one operation.** A route for `message.send` on a channel does not route `sender.list` on
+  it, so where only the sends have a route for a channel, that channel's accounts are read, as work or on request,
+  wherever `sender.list`'s own route goes, which may be another provider than the one the sends go through.
 - **Routes are not exported or imported.** The global half is a settings file you can copy; the campaign
   half is database rows, readable through `route list` and writable only one route at a time.
 

@@ -21,8 +21,10 @@ public class ConfinedVerbsTests
         ["decision answer"] = ["decision", "answer", "dec_A", "--answer", "Yes, go ahead."],
         ["preference set"] = ["preference", "set", "outreach.tone", "--value", "{\"tone\":\"plain\"}"],
         ["preference unset"] = ["preference", "unset", "outreach.tone"],
+        ["campaign set-send-mode"] = ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
         ["block clear"] = ["block", "clear", "blk_A"],
         ["workitem resume"] = ["workitem", "resume", "wi_A"],
+        ["workitem review"] = ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report submit"] = ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription rewind"] = ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
         ["runtime"] = ["runtime", "status"],
@@ -40,6 +42,8 @@ public class ConfinedVerbsTests
         ["suppression remove"] = ["suppression", "remove", "--channel", "email", "--value", "someone@example.com", "--reason", "asked again"],
         ["route set"] = ["route", "set", "--campaign", "cmp_A", "--plugin", "fake-provider", "--operation", "campaign.get"],
         ["route unset"] = ["route", "unset", "--campaign", "cmp_A", "--operation", "campaign.get"],
+        ["plugin grant"] = ["plugin", "grant", "fake-provider", "--http", "api.example.com"],
+        ["plugin revoke"] = ["plugin", "revoke", "fake-provider", "--env", "FAKE_TOKEN"],
         ["role set-profile"] = ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
         ["role add"] = ["role", "add", "researcher", "--execution-profile", "local-claude"],
         ["project link"] = ["project", "link", "prj_A", "--path", "."],
@@ -121,6 +125,7 @@ public class ConfinedVerbsTests
     [Theory]
     [InlineData("report submit")]
     [InlineData("workitem resume")]
+    [InlineData("workitem review")]
     public async Task A_role_attempt_s_own_verbs_run_as_before_where_the_variable_is_unset(string entry)
     {
         var run = await DefaultActorTests.RunEachAsync(Samples[entry], new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = Attempt });
@@ -156,6 +161,86 @@ public class ConfinedVerbsTests
         Assert.Equal(ExitCodes.ApiError, run.Exit);
         Assert.Empty(run.Requests);
         Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+    }
+
+    /// <summary>
+    /// A global route is refused as a campaign's is: the entry is the verb, so every scope of it is covered, and the
+    /// desktop's chat, which sets the variable on every turn in every mode, never re-routes every campaign.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "route", "set", "--global", "--plugin", "fake-provider")]
+    [InlineData("--actor", "human:x", "route", "unset", "--global", "--operation", "campaign.get")]
+    public async Task Confined_a_global_route_write_is_refused_and_nothing_is_sent(params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Empty(run.Requests);
+        Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+    }
+
+    /// <summary>
+    /// A grant changes what a plugin may reach and run, so it is refused as a route is, by every flag: the desktop's chat,
+    /// which sets the variable on every turn in every mode, never grants a plugin anything or takes a grant back.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--http", "api.example.com")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--exec", "node")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--env", "*")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--api", "campaign")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--files", "/srv/lines")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--subscription", "workitem_failed")]
+    [InlineData("--actor", "human:x", "plugin", "revoke", "fake-provider", "--http", "api.example.com")]
+    public async Task Confined_a_plugin_grant_or_revoke_is_refused_and_nothing_is_sent(params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Empty(run.Requests);
+        Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+    }
+
+    /// <summary>
+    /// A verb of the table in another letter case is no verb of the CLI: it is a usage error, with the variable set or
+    /// not, and nothing is sent. The desktop's chat refuses the mis-cased form itself and does not lean on this.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "Campaign", "Set-Send-Mode", "cmp_A", "--cold", "automatic")]
+    [InlineData("--actor", "human:x", "CAMPAIGN", "SET-SEND-MODE", "cmp_A", "--cold", "automatic")]
+    [InlineData("--actor", "human:x", "PREFERENCE", "SET", "send_mode.cold", "--value", "{}")]
+    [InlineData("--actor", "human:x", "Preference", "Unset", "send_mode.warm")]
+    [InlineData("--actor", "human:x", "campaign", "Set-Send-Mode", "cmp_A", "--cold", "automatic")]
+    [InlineData("--actor", "human:x", "Approval", "approve", "apr_A")]
+    public async Task A_table_verb_in_another_letter_case_is_a_usage_error_and_nothing_is_sent(params string[] args)
+    {
+        foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string>() })
+        {
+            var run = await DefaultActorTests.RunEachAsync(args, variables);
+
+            Assert.Equal(ExitCodes.Usage, run.Exit);
+            Assert.Empty(run.Requests);
+        }
+    }
+
+    /// <summary>
+    /// The bar reads the verb and never the key: a send mode's preferences are refused confined as any preference is, with
+    /// an attempt named or not, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("preference", "set", "send_mode.cold", "--value", "{\"mode\":\"automatic\"}")]
+    [InlineData("preference", "set", "send_mode.warm", "--value", "{\"mode\":\"every_message\"}")]
+    [InlineData("preference", "unset", "send_mode.cold")]
+    [InlineData("preference", "unset", "send_mode.warm")]
+    public async Task Confined_a_send_mode_preference_is_refused_whatever_its_key_and_nothing_is_sent(params string[] args)
+    {
+        foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string> { [Variable] = "1", ["JASON_ATTEMPT_ID"] = Attempt } })
+        {
+            var run = await DefaultActorTests.RunEachAsync(["--actor", "human:x", .. args], variables);
+
+            Assert.Equal(ExitCodes.ApiError, run.Exit);
+            Assert.Empty(run.Requests);
+            Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+        }
     }
 
     /// <summary>The verbs a role attempt and a chat's agent keep are untouched with the variable set.</summary>

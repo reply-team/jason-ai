@@ -1,0 +1,7 @@
+{
+  "kind": "global_routes_updated",
+  "version": 1,
+  "case": "a channel's global route taken away, keyed by the operation and the channel",
+  "body": { "key": "message.send/linkedin", "old": { "plugin": "example-provider", "binding": { "seat": "sales-1" } }, "new": null },
+  "expect": "valid"
+}

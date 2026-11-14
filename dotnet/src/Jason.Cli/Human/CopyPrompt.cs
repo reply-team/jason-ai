@@ -79,7 +79,7 @@ public static class CopyPrompt
         text.Append(decidedState is null
             ? string.Create(CultureInfo.InvariantCulture, $"5. Come back to the person with a short summary and a proposed {(approval ? "decision" : "answer")}, with your reasons.\n")
             : $"5. If the person asks, come back with a short summary of what was decided and why.\n");
-        text.Append("\nYou decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. Do not run jason approval approve, jason approval reject, jason approval set-standing or jason decision answer.");
+        text.Append("\nYou decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. So does how messages are sent: a campaign's send mode and the preferences send_mode.cold and send_mode.warm are the person's to set. Do not run jason approval approve, jason approval reject, jason approval set-standing, jason decision answer, jason workitem review, jason campaign set-send-mode, jason preference set or jason preference unset.");
         return text.ToString();
     }
 }

@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { configuration } from '../electron-builder.config.mjs';
+import { windowTitle } from '../src/window-title.ts';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repository = join(desktop, '..');
@@ -42,7 +43,7 @@ test('the wordmark and the mark are images the starting page carries, for a ligh
         assert.doesNotMatch(text, /<script|<style|href=|<image|onload/i, `${file} is plain paths`);
     }
     const page = read('shell', 'starting.html');
-    assert.match(page, /<title>Jason<\/title>/);
+    assert.ok(page.includes(`<title>${windowTitle}</title>`), 'the starting page is called as the window is');
     assert.match(page, /src="brand\/wordmark\.svg"/);
     assert.match(page, /srcset="brand\/wordmark-dark\.svg"[^>]*prefers-color-scheme: dark/);
     assert.match(page, /class="launch-emblem"/);

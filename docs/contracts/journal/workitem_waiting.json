@@ -26,9 +26,9 @@
         "properties": {
           "on": {
             "type": "array",
-            "maxItems": 100,
+            "maxItems": 101,
             "items": { "type": "string", "pattern": "^wi_" },
-            "description": "The work items it waits on, by their ids; empty where it waits on none."
+            "description": "The work items it waits on, by their ids; empty where it waits on none. At most a hundred a caller named, and after them the critic the runtime creates for a send under an automatic send mode."
           },
           "mode": { "enum": ["all", "any", null], "description": "Whether it waits for all of them to end or for any one; null where it waits on none." },
           "until": { "type": ["null", "string"], "format": "date-time", "description": "The moment it waits for; null where it names none." },

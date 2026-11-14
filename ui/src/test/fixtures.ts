@@ -23,6 +23,7 @@ import type {
     CampaignSummary,
     Campaign,
     CampaignTransitionRequest,
+    CampaignSetSendModeRequest,
     CampaignSummaryRequest,
     CampaignSummaryResponse,
     CampaignActivityRequest,
@@ -70,6 +71,19 @@ import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/appr
 import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
 import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
+import approvalGetModesChosen from '../../../docs/api/fixtures/approval.get/modes-chosen.json';
+import approvalGetParkAnswersNoVerdict from '../../../docs/api/fixtures/approval.get/park-answers-no-verdict.json';
+import approvalGetParkAwaitingJudgement from '../../../docs/api/fixtures/approval.get/park-awaiting-judgement.json';
+import approvalGetParkAwaitingNature from '../../../docs/api/fixtures/approval.get/park-awaiting-nature.json';
+import approvalGetParkDailyCeiling from '../../../docs/api/fixtures/approval.get/park-daily-ceiling.json';
+import approvalGetParkDoubted from '../../../docs/api/fixtures/approval.get/park-doubted.json';
+import approvalGetParkEditedAfterReview from '../../../docs/api/fixtures/approval.get/park-edited-after-review.json';
+import approvalGetParkEscalated from '../../../docs/api/fixtures/approval.get/park-escalated.json';
+import approvalGetParkNotReviewed from '../../../docs/api/fixtures/approval.get/park-not-reviewed.json';
+import approvalGetParkReplyNotFromAPerson from '../../../docs/api/fixtures/approval.get/park-reply-not-from-a-person.json';
+import approvalGetParkSentFromChat from '../../../docs/api/fixtures/approval.get/park-sent-from-chat.json';
+import approvalGetReleasedAutomatically from '../../../docs/api/fixtures/approval.get/released-automatically.json';
+import approvalGetWithDoubts from '../../../docs/api/fixtures/approval.get/with-doubts.json';
 import approvalGetOtherPending from '../../../docs/api/fixtures/approval.get/other-pending.json';
 import approvalGetPendingWithPreview from '../../../docs/api/fixtures/approval.get/pending-with-preview.json';
 import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
@@ -77,6 +91,7 @@ import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-
 import approvalListDecided from '../../../docs/api/fixtures/approval.list/decided.json';
 import approvalListEmpty from '../../../docs/api/fixtures/approval.list/empty.json';
 import approvalListMessagesPending from '../../../docs/api/fixtures/approval.list/messages-pending.json';
+import approvalListOneModeUnset from '../../../docs/api/fixtures/approval.list/one-mode-unset.json';
 import approvalListPending from '../../../docs/api/fixtures/approval.list/pending.json';
 import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/summer-pending.json';
 import approvalListUnauthorized from '../../../docs/api/fixtures/approval.list/unauthorized.json';
@@ -115,6 +130,11 @@ import campaignGetInbox from '../../../docs/api/fixtures/campaign.get/inbox.json
 import campaignGetInboxQuiet from '../../../docs/api/fixtures/campaign.get/inbox-quiet.json';
 import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
+import campaignGetSendModeOverride from '../../../docs/api/fixtures/campaign.get/send-mode-override.json';
+import campaignSetSendModeCleared from '../../../docs/api/fixtures/campaign.set_send_mode/cleared.json';
+import campaignSetSendModeNotHuman from '../../../docs/api/fixtures/campaign.set_send_mode/not-human.json';
+import campaignSetSendModeSet from '../../../docs/api/fixtures/campaign.set_send_mode/set.json';
+import campaignSetSendModeWarmAutomatic from '../../../docs/api/fixtures/campaign.set_send_mode/warm-automatic.json';
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
 import campaignGetUnknown from '../../../docs/api/fixtures/campaign.get/unknown.json';
 import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinked.json';
@@ -250,10 +270,16 @@ import routeResolveGlobalDefault from '../../../docs/api/fixtures/route.resolve/
 import routeResolveNoRoute from '../../../docs/api/fixtures/route.resolve/no-route.json';
 import routeResolveOwnRoute from '../../../docs/api/fixtures/route.resolve/own-route.json';
 import routeResolveUnroutedFirst from '../../../docs/api/fixtures/route.resolve/unrouted-first.json';
+import preferenceListModeAutomaticVoiceUnset from '../../../docs/api/fixtures/preference.list/mode-automatic-voice-unset.json';
+import preferenceListModesEveryMessage from '../../../docs/api/fixtures/preference.list/modes-every-message.json';
 import preferenceListNone from '../../../docs/api/fixtures/preference.list/none.json';
 import preferenceListSet from '../../../docs/api/fixtures/preference.list/set.json';
+import preferenceSetSendModeCold from '../../../docs/api/fixtures/preference.set/send-mode-cold.json';
+import preferenceSetSendModeColdEveryMessage from '../../../docs/api/fixtures/preference.set/send-mode-cold-every-message.json';
+import preferenceSetSendModeWarm from '../../../docs/api/fixtures/preference.set/send-mode-warm.json';
 import preferenceSetSender from '../../../docs/api/fixtures/preference.set/sender.json';
 import preferenceSetTone from '../../../docs/api/fixtures/preference.set/tone.json';
+import preferenceUnsetSendModeCold from '../../../docs/api/fixtures/preference.unset/send-mode-cold.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
 import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
 import systemInfoWithUi from '../../../docs/api/fixtures/system.info/with-ui.json';
@@ -301,6 +327,8 @@ import workitemCountZero from '../../../docs/api/fixtures/workitem.count/zero.js
 import workitemGetAwaiting from '../../../docs/api/fixtures/workitem.get/awaiting.json';
 import workitemGetExpired from '../../../docs/api/fixtures/workitem.get/expired.json';
 import workitemGetFailed from '../../../docs/api/fixtures/workitem.get/failed.json';
+import workitemGetParkedEditedSend from '../../../docs/api/fixtures/workitem.get/parked-edited-send.json';
+import workitemGetParkedSend from '../../../docs/api/fixtures/workitem.get/parked-send.json';
 import workitemGetOpen from '../../../docs/api/fixtures/workitem.get/open.json';
 import workitemGetSucceeded from '../../../docs/api/fixtures/workitem.get/succeeded.json';
 import workitemListAdaNow from '../../../docs/api/fixtures/workitem.list/ada-now.json';
@@ -373,7 +401,7 @@ import personWorkitemGetResearcherFindingSecond from '../../../docs/api/fixtures
 import personWorkitemListResearcherFindings from '../../../docs/api/fixtures/workitem.list/researcher-findings.json';
 import personWorkitemListResearcherFindingsTwo from '../../../docs/api/fixtures/workitem.list/researcher-findings-two.json';
 
-import type { PreferenceItem, PreferenceSetRequest } from '../screens/settings/voice-model';
+import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
 export type Exchange<Req, Res> = { operation: string; case: string; request: Req; status: number; response: Res };
 
@@ -394,6 +422,43 @@ export const fixtures = {
     'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/modes-chosen': approvalGetModesChosen satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-answers-no-verdict': approvalGetParkAnswersNoVerdict satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-awaiting-judgement': approvalGetParkAwaitingJudgement satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-awaiting-nature': approvalGetParkAwaitingNature satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-daily-ceiling': approvalGetParkDailyCeiling satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-doubted': approvalGetParkDoubted satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-edited-after-review': approvalGetParkEditedAfterReview satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-escalated': approvalGetParkEscalated satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-not-reviewed': approvalGetParkNotReviewed satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/park-reply-not-from-a-person': approvalGetParkReplyNotFromAPerson satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-sent-from-chat': approvalGetParkSentFromChat satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/released-automatically': approvalGetReleasedAutomatically satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/with-doubts': approvalGetWithDoubts satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/other-pending': approvalGetOtherPending satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/pending-with-preview': approvalGetPendingWithPreview satisfies Exchange<
         { approval_id: string },
@@ -407,6 +472,10 @@ export const fixtures = {
     'approval.list/decided': approvalListDecided satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/empty': approvalListEmpty satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/messages-pending': approvalListMessagesPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/one-mode-unset': approvalListOneModeUnset satisfies Exchange<
         ApprovalListRequest,
         Page<ApprovalSummary>
     >,
@@ -520,6 +589,23 @@ export const fixtures = {
     'campaign.get/inbox-quiet': campaignGetInboxQuiet satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/send-mode-override': campaignGetSendModeOverride satisfies Exchange<
+        { campaign_id: string },
+        Campaign
+    >,
+    'campaign.set_send_mode/cleared': campaignSetSendModeCleared satisfies Exchange<
+        CampaignSetSendModeRequest,
+        Campaign
+    >,
+    'campaign.set_send_mode/not-human': campaignSetSendModeNotHuman satisfies Exchange<
+        CampaignSetSendModeRequest,
+        ErrorEnvelope
+    >,
+    'campaign.set_send_mode/set': campaignSetSendModeSet satisfies Exchange<CampaignSetSendModeRequest, Campaign>,
+    'campaign.set_send_mode/warm-automatic': campaignSetSendModeWarmAutomatic satisfies Exchange<
+        CampaignSetSendModeRequest,
+        Campaign
+    >,
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
@@ -848,10 +934,28 @@ export const fixtures = {
     'route.resolve/no-route': routeResolveNoRoute satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
     'route.resolve/own-route': routeResolveOwnRoute satisfies Exchange<RouteResolveRequest, RouteResolution>,
     'route.resolve/unrouted-first': routeResolveUnroutedFirst satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
+    'preference.list/mode-automatic-voice-unset': preferenceListModeAutomaticVoiceUnset satisfies Exchange<
+        object,
+        Page<PreferenceItem>
+    >,
+    'preference.list/modes-every-message': preferenceListModesEveryMessage satisfies Exchange<
+        object,
+        Page<PreferenceItem>
+    >,
     'preference.list/none': preferenceListNone satisfies Exchange<object, Page<PreferenceItem>>,
     'preference.list/set': preferenceListSet satisfies Exchange<object, Page<PreferenceItem>>,
+    'preference.set/send-mode-cold': preferenceSetSendModeCold satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
+    'preference.set/send-mode-cold-every-message': preferenceSetSendModeColdEveryMessage satisfies Exchange<
+        PreferenceSetRequest,
+        PreferenceItem
+    >,
+    'preference.set/send-mode-warm': preferenceSetSendModeWarm satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.set/sender': preferenceSetSender satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.set/tone': preferenceSetTone satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
+    'preference.unset/send-mode-cold': preferenceUnsetSendModeCold satisfies Exchange<
+        PreferenceUnsetRequest,
+        PreferenceItem
+    >,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
     'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,
@@ -926,6 +1030,11 @@ export const fixtures = {
     'workitem.get/awaiting': workitemGetAwaiting satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/expired': workitemGetExpired satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/failed': workitemGetFailed satisfies Exchange<{ work_item_id: string }, WorkItem>,
+    'workitem.get/parked-edited-send': workitemGetParkedEditedSend satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/parked-send': workitemGetParkedSend satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/open': workitemGetOpen satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/succeeded': workitemGetSucceeded satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.list/ada-now': workitemListAdaNow satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,

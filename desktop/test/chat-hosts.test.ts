@@ -92,7 +92,7 @@ test('the host\'s argv carries every deny-list entry as a disallowed tool, and a
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
-test('a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: 72 verbs are allowed', () => {
+test('a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: 73 verbs are allowed', () => {
     const args = claudeArguments(turn);
     const disallowed = valuesOf(args, '--disallowedTools');
     assert.ok(disallowed.includes('Bash(jason role add:*)'));
@@ -102,7 +102,7 @@ test('a Claude turn is denied adding a role and linking a project\'s folder and 
     assert.ok(!allowed.includes('Bash(jason project link:*)'));
     assert.ok(allowed.includes('Bash(jason role list:*)'));
     assert.ok(allowed.includes('Bash(jason project list:*)'));
-    assert.equal(allowed.length, 72);
+    assert.equal(allowed.length, 73);
 });
 
 test('the PowerShell and Monitor tools are taken out of every turn by a bare rule, so the one shell is the fenced one', () => {
@@ -226,7 +226,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
     const plain = targetsOf(rules).filter((target) => !target.startsWith('//System/Volumes/Data/'));
     assert.deepEqual(targetsOf(rules).filter((target) => target.startsWith('//System/Volumes/Data/')), plain.map((target) => `//System/Volumes/Data${target.slice(1)}`));
     assert.deepEqual(plain, [
-        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//Users/a/.jason/${name}`),
+        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'].map((name) => `//Users/a/.jason/${name}`),
         '//Users/a/.jason/jason.db',
         ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over'].map((name) => `//Users/a/.jason/desktop/${name}`),
         '//Users/a/.jason/desktop/notes.txt',
@@ -239,7 +239,7 @@ test('the data rules refuse every entry of the data directory but desktop, and e
 
 test('the data rules name the known entries even before they exist, so one made during a turn is refused too', () => {
     assert.deepEqual(targetsOf(dataRules('linux', '/home/a/.jason', [], [])), [
-        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'].map((name) => `//home/a/.jason/${name}`),
+        ...['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'].map((name) => `//home/a/.jason/${name}`),
         ...['settings.json', 'provider-keys', 'electron', 'turns', 'rollback', 'bundle', 'conversations', 'claude-keyed', 'codex-keyed', 'models.json', 'skills-records', 'chat-full', 'chat-full-ended', 'chat-full-records', 'full-access.json', 'full-access-taken-back', 'window-pairing.json', 'mode', 'demo-start-over'].map((name) => `//home/a/.jason/desktop/${name}`),
     ]);
 });
@@ -295,6 +295,31 @@ test('every top-level entry the runtime\'s paths and the command line write in t
     assert.deepEqual([...names].filter((name) => !knownDataEntries.includes(name)), []);
 });
 
+test('the known data entries are the names JasonPaths puts in the data directory, as data-layouts.json carries them, with doctor added and desktop taken out', () => {
+    const layouts = JSON.parse(readFileSync(join(here, '..', 'data-layouts.json'), 'utf8')) as { own_entries: string[] };
+    // `doctor` is where `jason doctor` writes, which a purge does not take; `desktop` is the desktop's own folder, which
+    // the rules name entry by entry instead, so that the chat folder in it stays open.
+    const expected = [...layouts.own_entries.filter((name) => name !== 'desktop'), 'doctor'];
+    assert.deepEqual([...knownDataEntries].sort(), [...expected].sort());
+    assert.equal(new Set(knownDataEntries).size, knownDataEntries.length);
+    for (const name of ['setup', 'layout.json']) assert.ok(knownDataEntries.includes(name), name);
+});
+
+test('the host\'s own rules refuse Read and Edit of setup/ and layout.json, and of everything under them, in every mode, before either exists', () => {
+    for (const platform of ['linux', 'darwin', 'win32'] as const) {
+        const data = platform === 'win32' ? 'C:\\Users\\a\\.jason' : '/home/a/.jason';
+        const rules = dataRules(platform, data, [], []);
+        for (const mode of ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const) {
+            const args = claudeArguments({ ...turn, mode, dataRules: rules, ...(mode === 'full_access' ? { settingsFile: '/data/desktop/turns/turn-1.settings.json' } : {}) });
+            const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--setting-sources'));
+            for (const name of ['setup', 'layout.json']) {
+                const rule = rulePath(platform, platform === 'win32' ? `${data}\\${name}` : `${data}/${name}`);
+                for (const each of [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`]) assert.ok(refused.includes(each), `${platform} ${mode}: ${each}`);
+            }
+        }
+    }
+});
+
 test('the host\'s environment puts the bundled jason first on PATH and names the data directory', () => {
     const env = hostEnvironment({ Path: '/usr/bin:/bin', HOME: '/h', JASON_DATA_DIR: '/old' }, { platform: 'darwin', bundleVersion: null, bundle: '/app/bundle', data: '/d', program: 'codex', keyed: false, provider: {} });
     assert.equal(env.PATH, '/app/bundle:/usr/bin:/bin');
@@ -334,6 +359,21 @@ test('with no bundle version a host\'s environment carries no label for reply-cl
 
 test('a Claude turn is denied, by the host itself, any command that names JASON_CONFINED', () => {
     assert.ok(valuesOf(claudeArguments(turn), '--disallowedTools').includes('Bash(*JASON_CONFINED*)'));
+});
+
+test('a Claude turn is denied, by the host itself, any command that names JASON_ATTEMPT_ID, in every mode', () => {
+    for (const mode of ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const) {
+        assert.equal(valuesOf(claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn.settings.json' }), '--disallowedTools').filter((rule) => rule === 'Bash(*JASON_ATTEMPT_ID*)').length, 1, mode);
+    }
+});
+
+test('no host\'s environment carries an attempt id the desktop inherited, in any letter case: a chat turn is never a run', () => {
+    for (const program of ['claude', 'codex'] as const) {
+        for (const platform of ['win32', 'darwin', 'linux'] as const) {
+            const env = hostEnvironment({ PATH: '/x', JASON_ATTEMPT_ID: 'att_A', jason_attempt_id: 'att_B', Jason_Attempt_Id: 'att_C' }, { platform, bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
+            assert.deepEqual(Object.keys(env).filter((name) => name.toUpperCase() === 'JASON_ATTEMPT_ID'), [], `${program} ${platform}`);
+        }
+    }
 });
 
 test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE_AUTO_BACKGROUND_TASKS', () => {

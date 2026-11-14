@@ -9,6 +9,7 @@
 import { cpSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { demoDirectory } from './mode.ts';
+import { dataLayout } from './paths.ts';
 
 /** Where the carried package is inside a bundle folder (`resources/bundle` once packaged). */
 export function carriedDemoPlugin(bundle: string): string {
@@ -16,14 +17,14 @@ export function carriedDemoPlugin(bundle: string): string {
 }
 
 /**
- * Puts a copy of the carried package into `<data>/plugins/demo/`, replacing an earlier copy whole. `data` must be the
+ * Puts a copy of the carried package into the plugins folder's `demo/` (`<data>/plugins/demo/` in layout 1), replacing an earlier copy whole. `data` must be the
  * demo's data directory for this person, `demoDirectory(person)` exactly (`mode.ts`); any other is refused before a thing
  * is written. Throws when the carried package is not there or the copy fails, leaving no half-placed package behind.
  */
 export function placeDemoPlugin(carried: string, data: string, person: string): void {
     if (data !== demoDirectory(person)) throw new Error('That is not the demo installation’s data directory, so the demo provider is not placed there.');
     if (!existsSync(join(carried, 'plugin.yaml')) || !statSync(carried).isDirectory()) throw new Error('This build carries no demo provider.');
-    const plugins = join(data, 'plugins');
+    const plugins = dataLayout(data).pluginsDirectory;
     const target = join(plugins, 'demo');
     mkdirSync(plugins, { recursive: true });
     rmSync(target, { recursive: true, force: true });

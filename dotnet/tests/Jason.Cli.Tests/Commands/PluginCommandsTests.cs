@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Jason.Cli;
+using Jason.Cli.Commands;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
@@ -70,7 +71,7 @@ public class PluginCommandsTests
             fake-provider  1.0.0    provider      valid        echo.run, exec.run ...  exec 1/1 | http 0/2 | env 1/2 | subscriptions 1/2  3f2a9c1b4d5e
             notifier       0.2.0    notification  unavailable  -                       exec 1/1 | http - | env - | subscriptions -        9a8b7c6d5e4f
 
-            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them under Plugins:Grants:fake-provider:Http in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.
+            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them with `jason plugin grant fake-provider --http <host> --actor human:<Name>`, in force at once.
             notifier unavailable: executable_missing — No 'notify' was found.
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
@@ -227,7 +228,7 @@ public class PluginCommandsTests
         Assert.Equal(
             $"""
             activated snapshot snp_01J4 with 2 plugins
-            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them under Plugins:Grants:fake-provider:Http in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.
+            fake-provider is loaded and granted only part of what it asks for. It asks to reach: localhost:5555, api.example.com. Grant them with `jason plugin grant fake-provider --http <host> --actor human:<Name>`, in force at once.
             notifier unavailable: executable_missing — No 'notify' was found.
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
@@ -285,7 +286,7 @@ public class PluginCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(
-            $"reply is loaded and granted nothing. It asks to run: reply. Grant it under Plugins:Grants:reply:Exec in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            "reply is loaded and granted nothing. It asks to run: reply. Grant it with `jason plugin grant reply --exec <program> --actor human:<Name>`, in force at once.",
             Lines(cli.Text)[^1]);
         if (verb == "list")
         {
@@ -316,14 +317,12 @@ public class PluginCommandsTests
 
         await cli.RunAsync("plugin", verb, "--human");
 
-        var file = cli.Environment.Paths.UserSettingsFile;
         Assert.Equal(
             "reply is loaded and granted only part of what it asks for."
-            + $" It asks to reach: api.example.com. Grant it under Plugins:Grants:reply:Http in {file}."
-            + $" It asks to call: read, journal.append. Grant them under Plugins:Grants:reply:Api in {file}."
-            + $" It asks to be told of: workitem_failed. Grant it under Plugins:Grants:reply:Subscriptions in {file}."
-            + $" It asks for directories to write to; grant them under Plugins:Grants:reply:Files in {file}, each an absolute path."
-            + " Then run `jason plugin reload`.",
+            + " It asks to reach: api.example.com. Grant it with `jason plugin grant reply --http <host> --actor human:<Name>`, in force at once."
+            + " It asks to call: read, journal.append. Grant them with `jason plugin grant reply --api <family> --actor human:<Name>`, in force at once."
+            + " It asks to be told of: workitem_failed. Grant it with `jason plugin grant reply --subscription <kind> --actor human:<Name>`, in force at once."
+            + " It asks for directories to write to; grant one with `jason plugin grant reply --files <absolute path> --actor human:<Name>`.",
             Lines(cli.Text)[^1]);
     }
 
@@ -337,7 +336,7 @@ public class PluginCommandsTests
         await cli.RunAsync("plugin", "list", "--human");
 
         Assert.Equal(
-            $"reply is loaded and granted nothing. It asks to read: FAKE_TOKEN. Grant it under Plugins:Grants:reply:Env in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            "reply is loaded and granted nothing. It asks to read: FAKE_TOKEN. Grant it with `jason plugin grant reply --env <name> --actor human:<Name>`, in force at once.",
             Lines(cli.Text)[^1]);
     }
 
@@ -389,7 +388,7 @@ public class PluginCommandsTests
             new[]
             {
                 "reply unavailable: executable_missing — 'reply' was not found. executable_incompatible — 'other' is 0.1.0, older than 0.4.0.",
-                $"reply is loaded and granted nothing. It asks to run: reply. Grant it under Plugins:Grants:reply:Exec in {cli.Environment.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+                "reply is loaded and granted nothing. It asks to run: reply. Grant it with `jason plugin grant reply --exec <program> --actor human:<Name>`, in force at once.",
             },
             Lines(cli.Text)[^2..]);
     }
@@ -429,9 +428,37 @@ public class PluginCommandsTests
         await cli.RunAsync("plugin", verb, "--help");
 
         Assert.Contains(
-            "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a plugin asks for and is granted nothing of is named with the key that grants it in the settings file this CLI uses.",
+            "With --human, each unavailable plugin's problems are named with the runtime's words, and each capability a plugin asks for and is granted nothing of is named with the jason plugin grant command that grants it, in force at once.",
             System.Text.RegularExpressions.Regex.Replace(cli.Text, @"\s+", " "),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Both helps say the verb is refused from inside a run because nothing inside a run changes Jason itself, never that
+    /// it is a person's word; the grant's help names what --api grants as a family, and the help of --files says every
+    /// place the load refuses.
+    /// </summary>
+    [Theory]
+    [InlineData("grant")]
+    [InlineData("revoke")]
+    public async Task The_grant_helps_say_they_are_refused_inside_a_run_and_where_a_directory_may_not_be(string verb)
+    {
+        using var cli = new CliRun();
+
+        await cli.RunAsync("plugin", verb, "--help");
+
+        var text = System.Text.RegularExpressions.Regex.Replace(cli.Text, @"\s+", " ");
+        Assert.Contains(ActorOption.NoDefaultForAnAct + " " + ActorOption.ChangesJasonInsideARun, text, StringComparison.Ordinal);
+        Assert.Equal("From inside a run (the environment names an attempt) this is refused: nothing inside a run changes Jason itself.", ActorOption.ChangesJasonInsideARun);
+        Assert.DoesNotContain(ActorOption.RefusedInsideARun, text, StringComparison.Ordinal);
+        if (verb == "grant")
+        {
+            Assert.Contains("Grant a plugin something its manifest asks for: a host, a program, a variable, an API family, a folder or a subscription.", text, StringComparison.Ordinal);
+            Assert.Contains(
+                "Never the home directory, the data directory or the harness root, a folder inside or holding one of them, or the top of a drive.",
+                text,
+                StringComparison.Ordinal);
+        }
     }
 
     private static string Serialize(PluginRegistryDto registry) => JsonSerializer.Serialize(registry, JasonJson.Options);
@@ -473,6 +500,122 @@ public class PluginCommandsTests
             Problems = [],
         };
         return registry with { Snapshot = registry.Snapshot with { PluginCount = 1 }, Plugins = [reply] };
+    }
+
+    [Theory]
+    [InlineData("--http", "http", "api.example.com")]
+    [InlineData("--exec", "exec", "dotnet")]
+    [InlineData("--env", "env", "FAKE_TOKEN")]
+    [InlineData("--api", "api", "journal.append")]
+    [InlineData("--files", "files", "/home/u/Jason/exports")]
+    [InlineData("--subscription", "subscriptions", "workitem_failed")]
+    public async Task Grant_sends_the_capability_its_flag_names_and_the_entry(string flag, string capability, string entry)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("plugin", "grant", "fake-provider", flag, entry, "--reason", "it posts to the CRM", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.PluginGrant,
+            $"{{\"plugin_id\":\"fake-provider\",\"capability\":\"{capability}\",\"entry\":\"{entry}\",\"reason\":\"it posts to the CRM\",\"actor\":{{\"type\":\"human\",\"id\":\"ada\"}}}}");
+    }
+
+    [Fact]
+    public async Task Revoke_sends_the_same_body_to_its_own_operation()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("plugin", "revoke", "fake-provider", "--http", "*", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.PluginRevoke, "{\"plugin_id\":\"fake-provider\",\"capability\":\"http\",\"entry\":\"*\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    [Theory]
+    [InlineData("grant")]
+    [InlineData("revoke")]
+    public async Task No_grant_named_two_named_or_one_named_twice_is_a_usage_error_and_nothing_is_sent(string verb)
+    {
+        foreach (var (flags, said) in new (string[], string)[]
+        {
+            ([], PluginCommands.OneGrant),
+            (["--http", "api.example.com", "--env", "FAKE_TOKEN"], PluginCommands.OneGrant),
+            (["--env", " "], PluginCommands.OneGrant),
+            (["--http", "api.example.com", "--http", "localhost:5555"], "--http"),
+        })
+        {
+            using var cli = new CliRun();
+
+            var exit = await cli.RunAsync(["plugin", verb, "fake-provider", .. flags, "--actor", "human:ada"]);
+
+            Assert.Equal(ExitCodes.Usage, exit);
+            Assert.Null(cli.Url);
+            Assert.Contains(said, cli.Error.ToString(), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task An_id_that_is_no_plugin_s_is_a_usage_error_and_nothing_is_sent()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("plugin", "grant", "Fake_Provider", "--http", "api.example.com", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    /// <summary>
+    /// The first line is said from the body the runtime answered, the plugin's granted list, and never from what was asked
+    /// alone: where the two disagree it says so. Hosts compare without regard to case, directories after a separator at
+    /// the end is trimmed; a revoke of <c>*</c> says what a star stands for.
+    /// </summary>
+    [Theory]
+    [InlineData("grant", "--http", "api.example.com", "api.example.com", "fake-provider is granted the host api.example.com, in force now.")]
+    [InlineData("grant", "--http", "API.example.com", "api.example.com", "fake-provider is granted the host API.example.com, in force now.")]
+    [InlineData("grant", "--http", "api.example.com", null, "fake-provider is still not granted the host api.example.com: the grants in force do not hold it.")]
+    [InlineData("revoke", "--http", "api.example.com", null, "fake-provider is not granted the host api.example.com now; work already running keeps what it was started with.")]
+    [InlineData("revoke", "--http", "API.example.com", "api.example.com", "fake-provider is still granted the host API.example.com: nothing in the file matched it.")]
+    [InlineData("revoke", "--files", "/srv/lines/", "/srv/lines", "fake-provider is still granted the directory /srv/lines/: nothing in the file matched it.")]
+    [InlineData("revoke", "--http", "*", "localhost:5555", "fake-provider's grant of every host its manifest names is taken back; what is granted by name stays. Work already running keeps what it was started with.")]
+    public async Task Human_mode_says_the_grant_from_the_body_the_runtime_answered(string verb, string flag, string entry, string? granted, string said)
+    {
+        using var cli = new CliRun(JsonSerializer.Serialize(Answering(flag, granted, activated: true), JasonJson.Options));
+
+        var exit = await cli.RunAsync("plugin", verb, "fake-provider", flag, entry, "--actor", "human:ada", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.StartsWith(said + Environment.NewLine + "activated snapshot snp_01J4 with 2 plugins", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A grant already held, and a revoke of what is not granted, activate nothing, so no snapshot line follows.</summary>
+    [Theory]
+    [InlineData("grant", "fake-provider is granted the host api.example.com, in force now.", "api.example.com")]
+    [InlineData("revoke", "fake-provider is not granted the host api.example.com now; work already running keeps what it was started with.", null)]
+    public async Task Human_mode_prints_no_activated_snapshot_for_a_request_that_activated_nothing(string verb, string said, string? granted)
+    {
+        using var cli = new CliRun(JsonSerializer.Serialize(Answering("--http", granted, activated: false), JasonJson.Options));
+
+        var exit = await cli.RunAsync("plugin", verb, "fake-provider", "--http", "api.example.com", "--actor", "human:ada", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(said + Environment.NewLine, cli.Text);
+    }
+
+    /// <summary><see cref="TwoPlugins"/> with fake-provider granted one entry, or nothing, of the flag's capability.</summary>
+    private static PluginRegistryDto Answering(string flag, string? granted, bool activated)
+    {
+        var registry = TwoPlugins();
+        var plugin = registry.Plugins[0];
+        IReadOnlyList<string> list = granted is null ? [] : [granted];
+        var capabilities = flag switch
+        {
+            "--http" => plugin.Capabilities with { Http = new ListCapabilityDto(["localhost:5555", "api.example.com"], list) },
+            "--files" => plugin.Capabilities with { Files = new FilesCapabilityDto(true, list) },
+            _ => throw new ArgumentOutOfRangeException(nameof(flag), flag, "a flag these rows do not use."),
+        };
+        return registry with { Plugins = [plugin with { Capabilities = capabilities }, registry.Plugins[1]], Activated = activated };
     }
 
     /// <summary>A registry the way a machine with one working plugin and one it cannot run answers.</summary>

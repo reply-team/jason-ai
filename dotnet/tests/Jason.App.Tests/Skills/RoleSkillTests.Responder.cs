@@ -31,7 +31,7 @@ public partial class RoleSkillTests
         // Somebody who said stop is the one case where waiting is the harm. Jason's own register first, because it
         // stops Jason's reach at once; then the provider's half, which runs without anybody approving it; and taking
         // them out of the campaign proposed for a person, never done on the responder's own say.
-        var register = skill.IndexOf("jason suppression add --channel email", StringComparison.Ordinal);
+        var register = skill.IndexOf("--nature opt_out --reason", StringComparison.Ordinal);
         var optout = skill.IndexOf("--operation optout.record", StringComparison.Ordinal);
         var stop = skill.IndexOf("--operation enrollment.stop", StringComparison.Ordinal);
         Assert.True(register >= 0 && optout > register && stop > optout, "the register, then the opt-out, then the proposed stop");
@@ -103,11 +103,11 @@ public partial class RoleSkillTests
 
         // A probable stop is the one act that does not wait: the register entry is Jason's own and a person lifts it.
         Assert.Contains(
-            "where your best guess is `opt_out`, put them on the register at once, as below, and leave the provider's `optout.record` and the proposed stop for the answer",
+            "where your best guess is `opt_out`, record that guess with `--nature opt_out --contact <their id>`, which puts them on the register at once, and leave the provider's `optout.record` and the proposed stop for the answer",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "the question says the entry was made and that an answer naming another category takes it off, and your summary says the entry was made",
+            "the question says that the register was written and the contact locked, and that an answer naming another category has the register's entries taken off but leaves the lock, which only a verdict the person records themselves lifts. Your summary says the register was written.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("below `question_below` it is `escalate`", skill, StringComparison.Ordinal);
@@ -211,7 +211,7 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("responder");
 
-        Assert.Contains("without one, it parks for a person's approval, and you do not approve it.", skill, StringComparison.Ordinal);
+        Assert.Contains("without either, it parks for a person's approval, and you do not approve it.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("It reaches a person, so it parks for a person's approval", skill, StringComparison.Ordinal);
         Assert.Contains("One work item is one reply to one person and one approval: two replies are two work items, never one item for both.", skill, StringComparison.Ordinal);
     }
@@ -247,7 +247,14 @@ public partial class RoleSkillTests
 
         Assert.Contains("Somebody who asked to stop is sent no answer: recording the stop is the whole of what you do about that reply.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "Where no single person was found, the register's entry is still made, by the address they wrote from; no `optout.record` item is created, because it needs the person, and your answer says that the provider's half waits for a person.",
+            "Where no single person was found, there is no contact to record the verdict against, and `--nature opt_out` is refused without one: make the register's entry by hand, by the address they wrote from,",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "jason suppression add --channel email --value marta@example.com --reason \"replied asking to be taken off the list\"",
+            SkillPack.PrintedCommands(SkillPack.Find("responder").File));
+        Assert.Contains(
+            "and record the verdict without a nature, since no contact is stopped by it; no `optout.record` item is created, because it needs the person, and your answer says that the provider's half waits for a person.",
             skill,
             StringComparison.Ordinal);
         Assert.True(
@@ -614,12 +621,12 @@ public partial class RoleSkillTests
         var skill = Flattened("responder");
         var printed = SkillPack.PrintedCommands(SkillPack.Find("responder").File);
 
-        var record = Assert.Single(printed, line => line.StartsWith("jason reply record ", StringComparison.Ordinal));
+        var record = Assert.Single(printed, line => line.StartsWith("jason reply record ", StringComparison.Ordinal) && line.Contains("--category interested", StringComparison.Ordinal));
         Assert.DoesNotContain("--actor", record, StringComparison.Ordinal);
         Assert.Contains("The reason names the rule you applied and never quotes or paraphrases the reply.", skill, StringComparison.Ordinal);
         Assert.Contains("is `draft` whenever you write a reply, whether or not a standing approval exists", skill, StringComparison.Ordinal);
         Assert.Contains("Whether it goes out now or waits for a person is the runtime's to decide, never yours.", skill, StringComparison.Ordinal);
-        Assert.Contains("You never set a standing approval.", skill, StringComparison.Ordinal);
+        Assert.Contains("You never set a standing approval or a send mode.", skill, StringComparison.Ordinal);
         Assert.Contains("say in your summary whether the reply goes out or waits", skill, StringComparison.Ordinal);
         Assert.Contains("find the one for the category you recorded, and whether it is `in_force`", skill, StringComparison.Ordinal);
         Assert.NotNull(typeof(Jason.Contracts.Api.StandingApprovalDto).GetProperty("InForce"));

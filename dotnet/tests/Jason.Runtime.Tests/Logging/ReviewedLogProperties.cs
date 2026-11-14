@@ -148,7 +148,9 @@ internal static class ReviewedLogProperties
 
     /// <summary>
     /// Names that are not on the list because their values are free text a person typed, kept here so the reason is
-    /// written down beside the decision. A plugin reload's reason goes to the journal and never to a log.
+    /// written down beside the decision. A plugin reload's reason goes to the journal and never to a log. A doubt's
+    /// sentence about a send — the creator's beside <c>ask_person</c>, a doubting review's — is a person's or an agent's
+    /// text at rest on the work item, read only onto the approval's preview, and reaches neither the journal nor a log.
     /// </summary>
-    public static IReadOnlySet<string> Refused { get; } = new HashSet<string>(StringComparer.Ordinal) { "Reason" };
+    public static IReadOnlySet<string> Refused { get; } = new HashSet<string>(StringComparer.Ordinal) { "Reason", "Note", "AskPersonNote", "ReviewNote", "Doubt" };
 }

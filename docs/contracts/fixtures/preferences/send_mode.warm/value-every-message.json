@@ -1,0 +1,7 @@
+{
+  "key": "send_mode.warm",
+  "version": 1,
+  "case": "every message to a contact who has answered goes to a person first",
+  "value": { "mode": "every_message" },
+  "expect": "valid"
+}

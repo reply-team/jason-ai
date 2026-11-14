@@ -254,12 +254,17 @@ A provider on a fresh installation is connected by four acts, in this order, and
 `docs/golden-path.md` say each in full:
 
 1. Install the package: `jason plugin install reply`, the release's own, placed and loaded and granted nothing yet.
-2. Grant it what it asks for, under `Plugins:Grants:<id>` in the settings file (`~/.jason/config/settings.json`).
-3. Route its work, under `Routes` in the same file: the plugin, and the account its work goes through.
+2. Grant it what it asks for, under `Plugins:Grants:<id>` in the settings file (`~/.jason/config/settings.json`). On a
+   running installation `jason plugin grant <id> --exec <program> --actor human:<Name>` (or `--http`, `--env`, `--api`,
+   `--files`, `--subscription`) writes one grant there and puts it in force at once, and refuses one the manifest does
+   not ask for.
+3. Route its work, under `Routes` in the same file: the plugin, and the account its work goes through. On a running
+   installation `jason route set --global --plugin <id> --binding '<account>' --actor human:<Name>` writes the same
+   route there and puts it in force at once, as `docs/routing.md` says.
 4. Reload: `jason plugin reload`, which reads the grant and the route together.
 
 `jason plugin install --human` and `jason plugin list --human` name each capability a plugin asks for and is granted
-nothing of, with the key that grants it and the settings file: that sentence is what to ask the person to allow. The
+nothing of, with the `jason plugin grant` command that grants it: that sentence is what to ask the person to allow. The
 program a package runs comes first, the Reply CLI section of `docs/golden-path.md`. Where `npm install -g` is refused
 with `EACCES`, npm's global prefix is a directory this account does not own: install it under a prefix of the
 account's own, `npm install -g --prefix ~/.local reply-cli`, and put `~/.local/bin` on the search path the runtime
@@ -520,7 +525,10 @@ that the installation already here is moved aside into `<data>/replaced-<stamp>/
 and run it only on the person's yes, as "Starting and stopping it" says. The export starts the runtime again when it
 was running; the import ends with it running, because it asks it to record each project folder where it now
 stands, unless the runtime does not start: then the import exits 1 with the files in place, and names
-`jason runtime start` and then `jason project link` for each project folder. Of the three
+`jason runtime start` and then `jason project link` for each project folder. When the runtime started but refused a
+project folder, the import also exits 1, with everything placed and the whole answer printed: read `link_refused` for
+each project, folder, code and message, run the `jason project link` line from `next` once the cause is removed, and
+do not call the import done before then. Of the three
 lines the import leaves to the person, `jason runtime autostart enable` is only for when they want it started at
 logon and the old machine did not do so; when it did, the import has already registered it, or said that this
 machine cannot.

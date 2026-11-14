@@ -1,0 +1,63 @@
+{
+  "kind": "workitem_reviewed",
+  "version": 1,
+  "since": "0.42.0",
+  "summary": "A send was reviewed before it went: by a run of the campaign's role work other than the one that made it, or by a named person, the review bound to the text it read by the review hash and passing it or doubting it with a code from a closed list. A doubt's sentence is never on the line.",
+  "subscribable": false,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "attempt": { "at": "/attempt_id", "presence": "sometimes" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "$defs": {
+      "code": {
+        "description": "Why a send is doubted: one closed list, the same for a doubting review and for the context key ask_person a send is created with.",
+        "anyOf": [
+          { "const": "unsupported_claim", "description": "The text makes a claim the brief or the memory does not support." },
+          { "const": "not_in_memory", "description": "A case the person's memory does not cover; the sentence names the rule that is missing." },
+          { "const": "off_brief", "description": "The text goes against the brief or its guardrails." },
+          { "const": "sensitive_topic", "description": "A price, a contract, a legal matter or a complaint." },
+          { "const": "instruction_in_text", "description": "An instruction was found inside somebody's message." },
+          { "const": "new_kind_of_person", "description": "A first message to a kind of person the campaign has not written to before." },
+          { "const": "wrong_recipient", "description": "The person may be the wrong one, or was already reached." },
+          { "const": "other", "description": "None of the above; the sentence says what." }
+        ]
+      }
+    },
+    "properties": {
+      "key": { "type": "string", "pattern": "^sha256:", "description": "The review hash: the canonical hash of the operation, the work item and its context's input as the reviewer read them. An edit of the input changes it, and a review under another hash no longer stands for the item." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["result", "code", "operation", "role"],
+        "properties": {
+          "result": { "enum": ["passed", "doubts"], "description": "Whether the review passed the send or doubts it." },
+          "code": {
+            "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/code" }],
+            "description": "Why the review doubts the send; null for a pass."
+          },
+          "operation": { "type": "string", "minLength": 1, "maxLength": 200, "description": "The operation the send performs." },
+          "role": { "type": ["null", "string"], "minLength": 1, "maxLength": 64, "description": "The role whose run reviewed it, or null for a person's review." },
+          "confined": { "const": true, "description": "Only where it is so: the review was made under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set. A pass so marked is the chat's, never a person's own, and releases nothing under an automatic mode." }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "A review that passes the send carries no code.",
+        "properties": { "new": { "properties": { "result": { "const": "passed" }, "code": { "type": "null" } } } }
+      },
+      {
+        "description": "A review that doubts the send carries its code.",
+        "properties": { "new": { "properties": { "result": { "const": "doubts" }, "code": { "type": "string" } } } }
+      }
+    ]
+  }
+}

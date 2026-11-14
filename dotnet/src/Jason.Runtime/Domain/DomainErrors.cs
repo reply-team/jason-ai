@@ -134,6 +134,38 @@ public static class DomainErrors
     public static InvalidRequestException WaitNotAllowed(string id, string why) =>
         new("wait_not_allowed", $"Work item '{id}' cannot wait: {why}");
 
+    /// <summary>
+    /// A review is for a send before it goes: a send to a person, still queued or waiting. Work of
+    /// another kind is never reviewed, and a send already parked, claimed or finished has gone past the point a review is for.
+    /// </summary>
+    public static ConflictException NotReviewable(string id, string why) =>
+        new("not_reviewable", $"Work item '{id}' cannot be reviewed: {why}.");
+
+    /// <summary>The send's input moved after the reviewer read it, so the review would be about a text it never read.</summary>
+    public static ConflictException ReviewStale(string id) =>
+        new("review_stale", $"Work item '{id}' has changed since its review_hash was read; read it again with workitem.get and review what it says now.");
+
+    /// <summary>
+    /// The reviewer made the send: an attempt of the work that created it, or the person who created it. A person's own
+    /// send goes to them as an approval, which is their own explicit yes and a different act from a review.
+    /// </summary>
+    public static ForbiddenException ReviewByCreator(string id) =>
+        new("review_by_creator", $"Work item '{id}' was made by the work or the person reviewing it, and nobody reviews their own send; a person's own send is theirs to approve (jason approval list).");
+
+    /// <summary>
+    /// The reviewer wrote the send's input after it was made: a person by their name, or an attempt of the work that did.
+    /// Whoever writes the text is one of its authors, and nobody reviews their own send.
+    /// </summary>
+    public static ForbiddenException ReviewByEditor(string id) =>
+        new("review_by_editor", $"Work item '{id}' had its input written by the work or the person reviewing it, and nobody reviews a send they wrote; a person's own text is theirs to approve (jason approval list).");
+
+    /// <summary>
+    /// A run reviews a send whose input was written under a name that holds nobody: no name at all, or a role's, the
+    /// runtime's or a plugin's. That author may be the reviewing run, so only a person by name reviews the send from then on.
+    /// </summary>
+    public static ForbiddenException ReviewAfterAnUnnamedEdit(string id) =>
+        new("review_by_editor", $"Work item '{id}' had its input written by the work or the person reviewing it, or by an actor the runtime cannot hold to anybody, which may be this run, so only a person by name reviews it, and nobody reviews a send they wrote; a person's own text is theirs to approve (jason approval list).");
+
     /// <summary>A resume of an item that holds no wait to end.</summary>
     public static ConflictException WorkItemNotWaiting(string id, WorkItemStatus status) =>
         new("workitem_not_waiting", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; only a waiting item can be resumed.");
@@ -201,6 +233,80 @@ public static class DomainErrors
 
     public static NotFoundException ApprovalNotFound(string id) => new("approval_not_found", $"No approval with id '{id}'.");
 
+    /// <summary>
+    /// The settings writer met a file the runtime's own parser does not read. The place is said as a person finds it in
+    /// an editor — the line and the byte — and with no exception's type, which the log says; nothing of the file is quoted.
+    /// </summary>
+    public static DomainException SettingsFileUnreadable(Configuration.SettingsFileFailure failure) =>
+        new(
+            StatusCodes.Status409Conflict,
+            Plugins.Manifest.ProblemCodes.SettingsFileUnreadable,
+            failure.Place() is { } place
+                ? $"The settings file could not be read ({place}), so nothing was written; fix it, then run the command again."
+                : "The settings file could not be read, so nothing was written; fix it, then run the command again.",
+            retryable: false);
+
+    /// <summary>
+    /// The settings writer cannot change the setting without touching bytes it does not own (<see cref="Configuration.SettingsDocument"/>).
+    /// The setting is named by its path, each key written as <see cref="Jason.Contracts.Configuration.SettingKey.ShownPath"/> writes it.
+    /// </summary>
+    public static DomainException SettingsFileNotEditable(string setting, Configuration.SettingsRefusal refusal) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_not_editable",
+            $"The settings file says {setting} in a way this writer cannot change without touching what it does not own ({Why(refusal)}), so nothing was written; change it by hand, then run jason plugin reload.",
+            retryable: false);
+
+    private static string Why(Configuration.SettingsRefusal refusal) => refusal switch
+    {
+        Configuration.SettingsRefusal.Twice => "twice",
+        Configuration.SettingsRefusal.NotAnObject => "through a value that is not an object",
+        Configuration.SettingsRefusal.NotUtf8 => "not in UTF-8",
+        Configuration.SettingsRefusal.ColonKey => "with a key that holds a colon, which is the same setting written a second way",
+        Configuration.SettingsRefusal.CheckRefused => "in a form this writer's own check refused",
+        Configuration.SettingsRefusal.Link => "through a link to another file, which a write would replace with a file of its own",
+        _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "a refusal with no words."),
+    };
+
+    /// <summary>Another writer kept changing the settings file between the writer's read and its commit; nothing was written.</summary>
+    public static DomainException SettingsFileChanged() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_changed",
+            "The settings file kept changing while this wrote it, so nothing was written; run the command again.",
+            retryable: true);
+
+    /// <summary>Another program held the settings file open, so it could not be read or replaced; nothing was written.</summary>
+    public static DomainException SettingsFileBusy() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_busy",
+            "Another program holds the settings file open, so nothing was written; close it, then run the command again.",
+            retryable: true);
+
+    /// <summary>
+    /// The settings file or its folder cannot be written, and waiting does not mend that: it is read-only, this user may
+    /// not write it, or the disk is full. Nothing was written.
+    /// </summary>
+    public static DomainException SettingsFileNotWritable() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_not_writable",
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then run the command again.",
+            retryable: false);
+
+    /// <summary>
+    /// A <c>JASON_</c> environment variable sets the path the writer would write, and overrides the file: a write would
+    /// answer success for a setting that is not the one in force. Named by the setting and the variable as the environment
+    /// spells it (<see cref="Configuration.SettingsFile.Shadowing"/>), never by what either holds.
+    /// </summary>
+    public static DomainException SettingShadowed(string setting, string variable) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "setting_shadowed",
+            $"{setting} is set by the environment variable {variable}, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.",
+            retryable: false);
+
     /// <summary>No provider block has this id. Nothing deletes a block, so this is a wrong id.</summary>
     public static NotFoundException BlockNotFound(string id) => new("block_not_found", $"No provider block with id '{id}'.");
 
@@ -267,14 +373,53 @@ public static class DomainErrors
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot answer a decision; a question raised for a person is a person's to answer.");
 
     /// <summary>
-    /// A person's own word — an approval, a rejection, a standing approval set or taken back, an answer — sent by a CLI that
+    /// A person's own word — an approval, a rejection, a standing approval set or taken back, an answer, a preference set or
+    /// taken back, a campaign's send mode — sent by a CLI that
     /// says it runs inside an attempt, whatever actor the body claims. The attempt is quoted as the request named it and
     /// never looked up: presence is the fact. The message carries the remedy, for the agent that reads it.
     /// </summary>
     public static ForbiddenException DecidedInsideARun(string attempt) =>
         new(
             "decided_inside_a_run",
-            $"This request comes from inside attempt `{attempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
+            $"This request comes from inside attempt `{attempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
+
+    /// <summary>
+    /// Inside a run, a patch of a send's input that names anybody but the run: whoever writes the text is one of its
+    /// authors, and a review is told apart from them by the name the edit was made under.
+    /// </summary>
+    public static ForbiddenException UpdatedAsAnotherInsideARun(string attempt) =>
+        new(
+            "updated_as_another_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. A send to a person has its input written there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
+
+    /// <summary>
+    /// A send to a person, created from inside a run under a name other than that run's: a person, another
+    /// attempt, or nobody. The run's own name is what tells a review of the send apart from its author, so the CLI's
+    /// default, the attempt itself, is the only actor such a create takes there.
+    /// </summary>
+    public static ForbiddenException CreatedAsAnotherInsideARun(string attempt) =>
+        new(
+            "created_as_another_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. A send to a person is created there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
+
+    /// <summary>
+    /// A plugin's grant given or taken back from inside a run, refused by the run's header with the code the run gate
+    /// gives, before the body is read. A grant is taken from any actor outside a run; what is refused is a run changing
+    /// Jason itself.
+    /// </summary>
+    public static ForbiddenException ChangesJasonInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and what a plugin may use is part of it: leave it to the person, or raise it as a decision.");
+
+    /// <summary>
+    /// A route for every campaign asked for from inside a run: the global scope of <c>route.set</c> and <c>route.unset</c>,
+    /// refused by the run's header with the code the run gate gives, since nothing inside a run changes Jason itself.
+    /// </summary>
+    public static ForbiddenException GlobalRouteInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and a route for every campaign is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
@@ -333,6 +478,18 @@ public static class DomainErrors
         new(
             "approval_not_human",
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot set or unset a standing approval; it is a person's decision, made in advance.");
+
+    /// <summary>
+    /// A campaign's send mode is a person's standing word about how its sends go, so it is refused to whoever may not
+    /// decide one: no role and no run sets it.
+    /// </summary>
+    public static InvalidRequestException SendModeNotHuman(ActorType type) =>
+        new(
+            "send_mode_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot set a campaign's send mode; it is a person's standing word about how the campaign's sends go.");
+
+    public static InvalidRequestException SendModeActorRequired() =>
+        new("actor_required", "actor.id is required on a campaign's send mode: the sends it releases go in the name of the person who set it.");
 
     public static InvalidRequestException StandingApprovalActorRequired() =>
         new("actor_required", "actor.id is required on a standing approval: what is recorded has to name the person whose decision it is.");
@@ -560,4 +717,25 @@ public static class DomainErrors
         new("actor_required", "actor.id is required on a preference: what is recorded has to name the person whose word it is.");
 
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
+
+    /// <summary>A grant names a plugin the active snapshot does not hold, so there is no manifest to hold it to.</summary>
+    public static NotFoundException PluginNotFound(string id) =>
+        new(
+            "plugin_not_found",
+            $"No plugin '{id}' is loaded, so nothing was granted; jason plugin list names the ones that are, and a package copied in loads at jason plugin reload.");
+
+    /// <summary>
+    /// <c>plugin.grant</c> asked for what the plugin's manifest does not request: stricter than a grant written by hand,
+    /// which the load keeps as a warning, since a verb that writes what the load ignores misleads whoever ran it.
+    /// </summary>
+    public static ConflictException GrantUnrequested(string message) => new("grant_unrequested", message);
+
+    /// <summary>
+    /// <c>plugin.revoke</c> asked to take back an entry that a <c>*</c> in the same list grants: the verb takes one entry
+    /// out and never rewrites the person's list, so the star is not expanded into the names it stands for.
+    /// </summary>
+    public static ConflictException GrantHeldByStar(string setting, string entry, string id, string flag) =>
+        new(
+            "grant_held_by_star",
+            $"{setting} grants '*', which covers '{entry}', so nothing was taken back: take back '*' with jason plugin revoke {id} --{flag} '*', then grant what it should keep.");
 }

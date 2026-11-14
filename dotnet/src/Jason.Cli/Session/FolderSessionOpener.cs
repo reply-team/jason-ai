@@ -93,44 +93,21 @@ public static class FolderSessionOpener
         string? hostWord = null;
         if (!request.Shell)
         {
-            if (host is null)
+            var (chosenExit, chosen) = await SessionOpener.ChooseHostAsync(
+                env,
+                host,
+                $"The preference {SessionOpener.PreferenceKey} could not be read, so no host was chosen and nothing was started; --host <host> names one, or --shell opens a plain shell.",
+                preferred => CannotResume(env, request, preferred),
+                cancellationToken).ConfigureAwait(false);
+            if (chosen is null)
             {
-                var (preferenceExit, word, said) = await SessionOpener.PreferredHostAsync(env, cancellationToken).ConfigureAwait(false);
-                if (said)
-                {
-                    return preferenceExit;
-                }
-
-                if (preferenceExit == ExitCodes.ApiError)
-                {
-                    return Refuse(env, CliErrors.PreferenceUnreadable, $"The preference {SessionOpener.PreferenceKey} could not be read, so no host was chosen and nothing was started; --host <host> names one, or --shell opens a plain shell.");
-                }
-
-                host = word is null ? SessionOpener.DefaultHost : AgentHosts.Parse(word);
-                if (host is null)
-                {
-                    return Refuse(
-                        env,
-                        CliErrors.HostUnknown,
-                        $"The preference {SessionOpener.PreferenceKey} names '{word}', which this jason does not know as a host; it knows {AgentHosts.Vocabulary}. Nothing was started. {SessionOpener.ChooseAnother}");
-                }
-
-                if (CannotResume(env, request, host.Value) is { } refused)
-                {
-                    return refused;
-                }
+                return chosenExit;
             }
 
-            hostWord = AgentHosts.Word(host.Value);
-            var (found, lookup) = SessionOpener.HostProgram(env, host.Value);
-            if (found is null)
-            {
-                return Refuse(env, CliErrors.HostNotFound, SessionOpener.NotFound(hostWord, AgentHosts.Of(host.Value).CommandWord, lookup));
-            }
-
+            hostWord = AgentHosts.Word(chosen.Host);
             program = request.Resume is { } id
-                ? [.. found, .. AgentHosts.ResumeArguments(host.Value, id) ?? throw new InvalidOperationException("A host with no words to resume by reached the launch; it is refused before its program is looked for.")]
-                : found;
+                ? [.. chosen.Program, .. AgentHosts.ResumeArguments(chosen.Host, id) ?? throw new InvalidOperationException("A host with no words to resume by reached the launch; it is refused before its program is looked for.")]
+                : chosen.Program;
         }
 
         if (!Directory.Exists(path))
@@ -291,12 +268,7 @@ public static class FolderSessionOpener
         return (Refuse(env, CliErrors.RuntimeError, $"The runtime's answer to {operation} could not be read, so nothing was started."), null);
     }
 
-    private static int Refuse(CliEnvironment env, string code, string message)
-    {
-        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
-        env.Error.WriteLine(message);
-        return ExitCodes.ApiError;
-    }
+    private static int Refuse(CliEnvironment env, string code, string message) => SessionOpener.Refuse(env, code, message);
 
     /// <summary>
     /// The answer: <c>program</c> is the program's path, as in the item form's answer (the shell's under <c>--shell</c>),

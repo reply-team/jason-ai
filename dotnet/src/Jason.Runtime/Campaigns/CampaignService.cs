@@ -5,6 +5,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Decisions;
@@ -126,7 +127,7 @@ public sealed class CampaignService(
         // key exists for. Cancellation lands only before anything is on the disk.
         await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
         await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -142,7 +143,7 @@ public sealed class CampaignService(
             .ConfigureAwait(false);
 
         return made is null ? null
-            : string.Equals(made.IdempotencyDigest, digest, StringComparison.Ordinal) ? CampaignMapper.ToDto(made)
+            : string.Equals(made.IdempotencyDigest, digest, StringComparison.Ordinal) ? await AnswerAsync(made).ConfigureAwait(false)
             : throw DomainErrors.IdempotencyKeyReused(made.PublicId);
     }
 
@@ -155,7 +156,7 @@ public sealed class CampaignService(
             .Include(c => c.Project)
             .FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
             ?? throw DomainErrors.CampaignNotFound(id);
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     public async Task<Page<CampaignSummaryDto>> ListAsync(CampaignListRequest request, CancellationToken cancellationToken)
@@ -335,7 +336,7 @@ public sealed class CampaignService(
 
         if (changes.Count == 0)
         {
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         campaign.UpdatedAt = clock.GetUtcNow().UtcDateTime;
@@ -348,7 +349,7 @@ public sealed class CampaignService(
         if (move is not { } taking)
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         // The update is written and held uncommitted, the folder moves by one rename into the new project's, and only then
@@ -370,8 +371,99 @@ public sealed class CampaignService(
             throw;
         }
 
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// A campaign's own send mode for its cold contacts, its warm ones, or both: a person's standing word about how this
+    /// campaign's sends go, so only a person who gives their name sets it, and the name is kept beside the mode, since the
+    /// claim releases a send in that person's name. An absent mode is left alone, null gives it back to the installation,
+    /// and a mode the campaign already holds under the same person writes nothing; set again by another person, it becomes
+    /// theirs. Each mode that moved, or changed hands, is one <c>campaign_updated</c> line.
+    /// </summary>
+    public async Task<CampaignDto> SetSendModeAsync(CampaignSetSendModeRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var actor = SendModeSetter(request.Actor);
+
+        var errors = new ValidationErrors();
+        ValidateReason(request.Reason, errors);
+        if (!request.Cold.IsSet && !request.Warm.IsSet)
+        {
+            errors.Add("cold", "required", "name cold, warm or both: a mode word sets the campaign's own, and null gives it back to the installation.");
+        }
+
+        errors.ThrowIfAny();
+
+        var campaign = await LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign.Status == CampaignStatus.Archived)
+        {
+            throw DomainErrors.CampaignArchived(campaign.PublicId);
+        }
+
+        var changes = new List<FieldChange>();
+        if (request.Cold.IsSet && Moves(campaign.SendModeCold, campaign.SendModeColdSetBy, request.Cold.Value, actor))
+        {
+            changes.Add(new FieldChange("send_mode_cold", ModeWord(campaign.SendModeCold), ModeWord(request.Cold.Value)));
+            campaign.SendModeCold = request.Cold.Value;
+            campaign.SendModeColdSetBy = request.Cold.Value is null ? null : actor.Id;
+        }
+
+        if (request.Warm.IsSet && Moves(campaign.SendModeWarm, campaign.SendModeWarmSetBy, request.Warm.Value, actor))
+        {
+            changes.Add(new FieldChange("send_mode_warm", ModeWord(campaign.SendModeWarm), ModeWord(request.Warm.Value)));
+            campaign.SendModeWarm = request.Warm.Value;
+            campaign.SendModeWarmSetBy = request.Warm.Value is null ? null : actor.Id;
+        }
+
+        if (changes.Count == 0)
+        {
+            return await AnswerAsync(campaign).ConfigureAwait(false);
+        }
+
+        campaign.UpdatedAt = clock.GetUtcNow().UtcDateTime;
+        var reason = NormalizeReason(request.Reason);
+        foreach (var change in changes)
+        {
+            journal.Append(db, actor, JournalKinds.CampaignUpdated, campaign, key: change.Key, old: change.Old, updated: change.New, reason: reason);
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The campaign as an answer says it, with the send modes in force for it, read from the installation's two
+    /// preferences as they stand now. The read is not cancelled: it follows writes that are finished whether or not their
+    /// caller is still there.
+    /// </summary>
+    private async Task<CampaignDto> AnswerAsync(Campaign campaign) =>
+        CampaignMapper.ToDto(campaign, await SendModes.ReadAsync(db, CancellationToken.None).ConfigureAwait(false));
+
+    /// <summary>
+    /// Who sets a campaign's send mode: a person who gives their name. An absent actor is an anonymous person, which is
+    /// right for creating work and wrong here, as it is for a standing approval.
+    /// </summary>
+    private static ActorRef SendModeSetter(ActorRef? claimed)
+    {
+        var actor = Actors.Resolve(claimed);
+        if (actor.Type != ActorType.Human)
+        {
+            throw DomainErrors.SendModeNotHuman(actor.Type);
+        }
+
+        return string.IsNullOrWhiteSpace(actor.Id) ? throw DomainErrors.SendModeActorRequired() : actor;
+    }
+
+    /// <summary>
+    /// Whether a request moves a mode: to another word, or to the same word under another person, because the claim
+    /// releases a send in the name beside the mode. A null asked of a null moves nothing, whoever asks.
+    /// </summary>
+    private static bool Moves(SendMode? held, string? heldBy, SendMode? asked, ActorRef actor) =>
+        held != asked || (asked is not null && !string.Equals(heldBy, actor.Id, StringComparison.Ordinal));
+
+    private static JsonNode? ModeWord(SendMode? mode) =>
+        mode is { } word ? JsonValue.Create(SnakeCaseEnumConverter<SendMode>.Format(word)) : null;
 
     public Task<CampaignDto> StartAsync(CampaignTransitionRequest request, CancellationToken cancellationToken) =>
         TransitionAsync(request, CampaignStatus.Active, JournalKinds.CampaignStarted, cancellationToken);
@@ -453,7 +545,7 @@ public sealed class CampaignService(
         ContextRules.EnsureWithinLimits(context);
         if (changes.Count == 0)
         {
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         campaign.Context = context;
@@ -465,7 +557,7 @@ public sealed class CampaignService(
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -499,7 +591,7 @@ public sealed class CampaignService(
         // with the campaign and write nothing, so repeating a call is never a second event in the chronicle.
         if (campaign.Status == target)
         {
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         if (campaign.Status == CampaignStatus.Archived)
@@ -558,7 +650,7 @@ public sealed class CampaignService(
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         canceller.StopCancelled();
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     /// <summary>draft → active, paused → active (a resume), active → paused, and anything at all → archived.</summary>

@@ -57,7 +57,7 @@ the number the cap compares, once the value has been changed by this version.
 ## Setting it
 
 A preference is the person's word, so only a person sets it, and the request names them as its actor. An agent working
-for the person in their own session sets it on their answer, under their name; a role Jason launches is refused when it sets or unsets one (`preference_not_human`).
+for the person in their own session sets it on their answer, under their name; a role Jason launches is refused when it sets or unsets one, from inside its run whatever actor it names (`decided_inside_a_run`).
 
 ```sh
 jason preference set sender.identity --value-file sender.json --actor human:Marta

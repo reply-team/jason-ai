@@ -79,6 +79,9 @@ namespace Jason.Cli;
 /// for no folder. <c>--resume</c> has the host continue its own conversation of that id instead of starting a new one,
 /// by the words the host takes for it, kept beside its other words in <c>AgentHosts</c>; a host with no such words is
 /// refused before a terminal is looked for. Neither asks the runtime anything new.
+/// With --setup it opens the same terminal at the role skills folder <c>SetupInfo</c> names, with the plugins folder
+/// beside it where the host takes a second folder, and the setup brief as its first input, which names the skill
+/// customising-jason; of the runtime it asks only <c>preference.list</c>, and only when no <c>--host</c> is given.
 /// </para>
 /// <para>
 /// <c>export</c> is the tenth, a verb like <c>doctor</c>. It writes this installation's files — the database, the
@@ -138,6 +141,13 @@ public static class CliApp
         {
             env.Error.WriteLine(ConfinedVerbs.Sentence);
             return ExitCodes.ApiError;
+        }
+
+        // A data directory a newer Jason laid out, or whose stamp cannot be read, once for every verb that touches a part
+        // that moves: before anything is read, written, stopped or asked.
+        if (LayoutGatedVerbs.Refusal(env, parseResult) is { } layout)
+        {
+            return LayoutGatedVerbs.Refuse(env, parseResult, layout);
         }
 
         // The default handler would swallow everything an action throws and report it as one unhandled
@@ -216,7 +226,7 @@ public static class CliApp
     }
 
     /// <summary>The verb as it was typed, from the root's subcommand down: <c>campaign list-contacts</c>.</summary>
-    private static string Verb(ParseResult parseResult)
+    internal static string Verb(ParseResult parseResult)
     {
         var names = new List<string>();
         for (var command = parseResult.CommandResult; command.Parent is CommandResult parent; command = parent)
@@ -239,6 +249,7 @@ public static class CliApp
         root.Subcommands.Add(PreferenceCommands.Build(env, actor));
         root.Subcommands.Add(ContactCommands.Build(env, actor));
         root.Subcommands.Add(AudienceCommands.Build(env, actor));
+        root.Subcommands.Add(SenderCommands.Build(env, actor));
         root.Subcommands.Add(WorkItemCommands.Build(env, actor));
         root.Subcommands.Add(RoleCommands.Build(env, actor));
         root.Subcommands.Add(RoleNoteCommands.Build(env, actor));
@@ -267,6 +278,7 @@ public static class CliApp
         root.Subcommands.Add(ImportCommand.Build(env));
 
         ConfinedVerbs.Describe(root);
+        LayoutGatedVerbs.Describe(root);
         return root;
     }
 }

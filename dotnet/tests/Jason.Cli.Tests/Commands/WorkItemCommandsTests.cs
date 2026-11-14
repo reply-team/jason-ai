@@ -59,6 +59,99 @@ public class WorkItemCommandsTests
                 + "\"context\":{\"icp\":\"founders\"},\"result_format\":{\"type\":\"object\"},\"reason\":\"the plan asks for it\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
     }
 
+    /// <summary>The items a create waits on are named one option each, in the order given, as the API's list.</summary>
+    [Fact]
+    public async Task Create_sends_each_item_to_wait_on_as_the_wait_on_list()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send",
+            "--wait-on", "wi_REVIEW", "--wait-on", "wi_OTHER", "--actor", "role:composer");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemCreate,
+            "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"message.send\",\"wait_on\":[\"wi_REVIEW\",\"wi_OTHER\"],"
+                + "\"actor\":{\"type\":\"role\",\"id\":\"composer\"}}");
+    }
+
+    /// <summary>
+    /// The creator's doubt is laid into the context as the reserved key, beside the operation's arguments, and its sentence
+    /// goes as the request field beside the context, never inside it.
+    /// </summary>
+    [Fact]
+    public async Task Create_lays_the_doubt_into_the_context_and_sends_its_sentence_beside_it()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send", "--input", "{\"channel\":\"email\"}",
+            "--ask-person", "sensitive_topic", "--ask-person-note", "They asked about the price.", "--actor", "role:composer");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemCreate,
+            "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"message.send\","
+                + "\"context\":{\"input\":{\"channel\":\"email\"},\"ask_person\":{\"code\":\"sensitive_topic\"}},"
+                + "\"ask_person_note\":\"They asked about the price.\",\"actor\":{\"type\":\"role\",\"id\":\"composer\"}}");
+    }
+
+    /// <summary>A review is sent under the API's names, and its sentence as the note, never as a reason.</summary>
+    [Fact]
+    public async Task Review_sends_the_hash_the_result_the_code_and_the_note_under_their_api_names()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "review", "wi_SEND", "--review-hash", "sha256:ab", "--result", "doubts", "--code", "off_brief",
+            "--note", "It promises a discount the brief never offers.", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemReview,
+            "{\"work_item_id\":\"wi_SEND\",\"review_hash\":\"sha256:ab\",\"result\":\"doubts\",\"code\":\"off_brief\","
+                + "\"note\":\"It promises a discount the brief never offers.\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    [Theory]
+    [InlineData("--reason", "looks fine")]
+    [InlineData("--code", "looks_off")]
+    [InlineData("--result", "maybe")]
+    public async Task A_review_with_a_reason_or_a_word_outside_its_lists_is_a_usage_error_before_any_request(string option, string value)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "review", "wi_SEND", "--review-hash", "sha256:ab", "--result", "passed", option, value, "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    [Fact]
+    public async Task A_doubt_code_outside_the_list_is_a_usage_error_before_any_request()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send", "--ask-person", "looks_off");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
+    [Fact]
+    public async Task A_doubt_the_context_already_carries_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send",
+            "--context", "{\"ask_person\":{\"code\":\"other\"}}", "--ask-person", "other");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
     /// <summary>
     /// Two namespaces use the same kind of words: the canonical operations a provider performs, and the verbs a
     /// person types at Jason. The help for <c>--operation</c> says which one it takes, so `campaign.get` is never

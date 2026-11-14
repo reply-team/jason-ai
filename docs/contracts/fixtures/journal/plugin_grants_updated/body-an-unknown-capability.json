@@ -1,0 +1,7 @@
+{
+  "kind": "plugin_grants_updated",
+  "version": 1,
+  "case": "a capability no grant has",
+  "body": { "key": "example-provider/config", "old": { "plugin": "example-provider", "capability": "http", "granted": [] }, "new": { "plugin": "example-provider", "capability": "config", "granted": ["token"] } },
+  "expect": { "invalid": [{ "pointer": "/new/capability", "reason": "enum" }] }
+}

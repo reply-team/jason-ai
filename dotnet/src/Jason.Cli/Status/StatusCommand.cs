@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using Jason.Cli.Commands;
 using Jason.Cli.Human;
+using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Status;
@@ -105,8 +106,8 @@ public static class StatusCommand
         The grants check names each plugin that asks for a capability and is granted nothing of it, by
         its id and the capability's key under Plugins:Grants, and never what the manifest asks for. Such a
         plugin runs without what it is not granted, and nothing else stops, so the check never decides
-        readiness. 'jason plugin list --human' says what each asks for, the key that grants it and the settings
-        file, and 'jason plugin reload' reads the grant.
+        readiness. 'jason plugin list --human' says what each asks for and the 'jason plugin grant' command
+        that grants it, in force at once.
 
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. The name is found the way Jason finds every
@@ -125,6 +126,12 @@ public static class StatusCommand
         it teaches, is left out where the runtime did not answer or reported that it could not read its
         role root. With no record, or one that cannot be read, there are no details. No other check
         carries any. --human prints the facts alone.
+
+        Below the checks, --human prints where this installation's parts are: its role skills, plugins and
+        custom UI folders, and its settings file, saying whether that file is also where plugin secrets are
+        kept and, while it is, that jason route set --global and jason plugin grant change its routes and
+        grants. The JSON carries the same under setup, composed by this CLI from its own data directory, so it
+        is there whether or not the runtime answers, and it never decides ready.
 
         Exit codes: 0 when every required check passed, 1 when one did not. Never 3: "the runtime did not
         answer" is this command's answer rather than a reason it has none.
@@ -181,6 +188,8 @@ public static class StatusCommand
         }
 
         output.WriteLine(table.Render());
+        output.WriteLine();
+        RenderSetup(output, report.Setup);
 
         // Each line once, in the order it was first called for. Four checks that all want the runtime
         // started want it started once, and a list that printed `jason runtime start` four times was the
@@ -201,6 +210,30 @@ public static class StatusCommand
         foreach (var repair in repairs)
         {
             output.WriteLine($"  {repair}");
+        }
+    }
+
+    /// <summary>
+    /// Where the parts are, one line each, the labels in one column. While the settings file holds plugin secrets too the
+    /// line says so; where it holds none, it is the person's to change.
+    /// </summary>
+    private static void RenderSetup(TextWriter output, SetupInfo setup)
+    {
+        (string Label, string Value)[] lines =
+        [
+            ("Role skills:", setup.RoleSkillsDirectory),
+            ("Plugins:", setup.PluginsDirectory),
+            ("Custom UI:", setup.CustomUiDirectory),
+            setup.SettingsFileHoldsSecrets
+                ? ("Settings:", $"{setup.SettingsFile} (where plugin secrets are kept: change routes and grants with `jason route set --global` and `jason plugin grant`)")
+                : ("Settings you may change:", setup.SettingsFile),
+            ("Layout:", setup.Layout is { } layout ? layout.ToString(System.Globalization.CultureInfo.InvariantCulture) : "unreadable"),
+        ];
+
+        var width = lines.Max(line => line.Label.Length) + 1;
+        foreach (var (label, value) in lines)
+        {
+            output.WriteLine(label.PadRight(width) + value);
         }
     }
 

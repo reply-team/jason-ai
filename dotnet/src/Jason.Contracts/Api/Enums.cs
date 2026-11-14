@@ -197,6 +197,18 @@ public enum RouteScope
 }
 
 /// <summary>
+/// Which half of routing a <c>route.set</c> or <c>route.unset</c> writes: one campaign's routes, kept in the database, or
+/// the global routes every campaign without a route of its own falls back to, kept in the settings file. Left out, it is
+/// the campaign's: a request that names no scope and no campaign is refused for the missing campaign, so a caller that
+/// forgets the campaign never re-routes every campaign.
+/// </summary>
+public enum RouteWriteScope
+{
+    Campaign,
+    Global,
+}
+
+/// <summary>
 /// created → scheduled → processing → succeeded | failed, with cancelled and expired as the two ways an item
 /// ends without running. A retriable failure returns the item to created; an expired item can be reopened.
 /// <para>
@@ -383,6 +395,29 @@ public enum ReplyReaction
     Draft,
     Escalate,
     None,
+}
+
+/// <summary>
+/// What a review of a send found: it passes the text it read, or it doubts it, with a code from the closed list
+/// <see cref="DoubtCodes"/>. A doubt stands over every pass of the same text; only the person's decision answers it.
+/// </summary>
+public enum ReviewResult
+{
+    Passed,
+    Doubts,
+}
+
+/// <summary>
+/// What a reply is, in the runtime's own closed words: a person's answer, an automatic reply, a failed delivery, or a
+/// person asking not to be written to. Unlike a verdict's category, which the skills own and the runtime never reads,
+/// this is the runtime's to read: <c>person</c> is what makes a contact warm in the campaign.
+/// </summary>
+public enum ReplyNature
+{
+    Person,
+    Automatic,
+    Bounce,
+    OptOut,
 }
 
 /// <summary>

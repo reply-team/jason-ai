@@ -28,10 +28,10 @@ public partial class RoleSkillTests
         Assert.DoesNotContain("No operation this build publishes sends outreach", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("Nothing here composes outreach and sends it.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "**The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn message to one person outside any campaign; `social_invitation.send`, a LinkedIn connection request with its note; and `conversation.reply`, an answer inside the thread the person wrote in. A person approves each one with a preview before it is sent.**",
+            "**The operations that write a message a person outside Jason receives are `message.send`, an email or a LinkedIn message to one person outside any campaign; `social_invitation.send`, a LinkedIn connection request with its note; and `conversation.reply`, an answer inside the thread the person wrote in. Each one waits for a person, who approves it with a preview, unless that person has chosen that sends to this kind of contact go automatically.**",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains("Each is its own decision, one message to one person, and the dispatcher runs one only after a person has approved it.", skill, StringComparison.Ordinal);
+        Assert.Contains("Each is its own act, one message to one person, and the claim decides which when it runs the item: the choice is the person's and never a role's.", skill, StringComparison.Ordinal);
         Assert.Contains("What you write is this work item's result; completing it sends nothing.", skill, StringComparison.Ordinal);
         Assert.Contains(
             "whatever goes out after that is the provider's doing, on its schedule, and nobody approves those messages one by one.",

@@ -1,0 +1,29 @@
+{
+  "operation": "approval.list",
+  "case": "one-mode-unset",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_1",
+        "work_item_id": "wi_1",
+        "campaign_id": "cmp_1",
+        "operation": "campaign.enroll",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:subject",
+        "plugin_id": "stand-in-provider",
+        "requested_at": "2026-09-14T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Flow",
+        "contact_name": null,
+        "send_modes_unset": [
+          "send_mode.warm"
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}

@@ -5,7 +5,9 @@ namespace Jason.Contracts.Api;
 /// <summary>
 /// One decision about one work item, as a caller reads it. The subject is what is being approved and the preview
 /// is what a person reads before deciding; both were written when the work was parked, so what is answered here
-/// is what the claim saw rather than a fresh assembly against rows that may have moved since.
+/// is what the claim saw rather than a fresh assembly against rows that may have moved since. <c>send_modes_unset</c> is
+/// the one member read at the moment of asking: the installation's send-mode preferences nobody has set yet, by key, empty
+/// once both are, on every approval whatever it is about.
 /// </summary>
 public sealed record ApprovalDto(
     string Id,
@@ -16,8 +18,10 @@ public sealed record ApprovalDto(
     ApprovalStatus Status,
 
     /// <summary>
-    /// Why the work was parked: <c>approval_required</c>, or <c>input_changed</c> after a decision; or
-    /// <c>standing_approval</c> where it was never parked, because a standing approval a person set released it.
+    /// Why the work was parked: <c>approval_required</c>, or <c>input_changed</c> after a decision; where a send mode
+    /// of <c>automatic</c> is in force for the send and held it, the code it held it by, one of
+    /// <see cref="SendModeReasons.All"/>; or, where it was never parked, <c>standing_approval</c>, because a standing
+    /// approval a person set released it, or <c>automatic_mode</c>, because the send mode a person set released it.
     /// </summary>
     string Reason,
     string SubjectHash,
@@ -33,9 +37,13 @@ public sealed record ApprovalDto(
     ActorRef? DecidedBy,
     string? DecisionReason,
     string CampaignName,
-    string? ContactName);
+    string? ContactName,
+    IReadOnlyList<string>? SendModesUnset = null);
 
-/// <summary>A listing stays small: what it is about, and how far it has got. The subject is read one at a time.</summary>
+/// <summary>
+/// A listing stays small: what it is about, and how far it has got. The subject is read one at a time.
+/// <c>send_modes_unset</c> is the same on every item: the installation's send-mode preferences nobody has set yet.
+/// </summary>
 public sealed record ApprovalSummaryDto(
     string Id,
     string WorkItemId,
@@ -49,7 +57,8 @@ public sealed record ApprovalSummaryDto(
     DateTimeOffset? DecidedAt,
     ActorRef? DecidedBy,
     string CampaignName,
-    string? ContactName);
+    string? ContactName,
+    IReadOnlyList<string>? SendModesUnset = null);
 
 /// <summary>
 /// Pending by default: the question a person opens this with is "what am I holding up?". <c>statuses</c> names several

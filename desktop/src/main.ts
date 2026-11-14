@@ -21,7 +21,7 @@ import { OpenIn, type PlaceId } from './open-in.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
 import { editorEnvironment, openInHarnessRoot } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
-import { continueFlags, terminalFlags } from './open-in-terminal.ts';
+import { changeJasonFlags, continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
@@ -29,16 +29,16 @@ import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type Linu
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
-import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
+import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
-import { loggedCli, startInstallation, StartFailed } from './installation.ts';
+import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
-import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
+import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
 import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftRuntimeStops, noteLeftStopped, placingInFlight, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
@@ -64,6 +64,7 @@ import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
+import { keepWindowTitle, windowTitle } from './window-title.ts';
 
 function readText(file: string): string | null {
     try {
@@ -244,7 +245,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
     // Held while the prepared demo is placed (`demo-archive.ts`); its file is opened, and the limits read, once it is let go.
-    const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(paths.installationSettings))));
+    const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile))));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
     // What this start carries (`bundle-copy.ts`): an AppImage's copy under <data>/desktop/bundle/<version>/, the bundle
@@ -264,7 +265,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         height: 860,
         minWidth: 900,
         minHeight: 600,
-        title: 'Jason',
+        title: windowTitle,
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
@@ -286,6 +287,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     window.on('closed', () => {
         current = null;
     });
+    // The console's own <title> is the browser tab's, and an older console's says "Jason": the window keeps its name.
+    keepWindowTitle(window);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
     window.setMenuBarVisibility(conduct.menuBar);
     // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it. On Linux
@@ -368,7 +371,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               log,
               // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
               stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),
-              refused: (why) => dialog.showErrorBox('Jason', why),
+              refused: (why) => dialog.showErrorBox(windowTitle, why),
               async beforeInstall() {
                   quitting = true;
                   repairer.stop();
@@ -458,7 +461,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     let sampleMaking = false;
     const back = () => {
         const refusal = applyMode('live', modeDeps, sampleMaking);
-        if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
+        if (refusal !== null) dialog.showErrorBox(windowTitle, refusal.refused);
     };
     // Start the Demo Over: one question first (everything done in the demo goes), then the demo's runtime is stopped, a
     // request is left in the person's own desktop folder and the desktop starts again. This run lives inside the demo's
@@ -472,7 +475,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         if (startInFlight) return { refused: 'The demo is still starting. Try again in a moment.' };
         if (sampleMaking) return { refused: demoPreparing };
         const parent = current;
-        const options = { type: 'question' as const, title: 'Jason', message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
+        const options = { type: 'question' as const, title: windowTitle, message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
         const { response } = parent === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(parent, options);
         if (response !== 0) return null;
         const outcome = await startDemoOver({
@@ -497,11 +500,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const startOverFromMenu = () => {
         void startOver().then(
             (refusal) => {
-                if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
+                if (refusal !== null) dialog.showErrorBox(windowTitle, refusal.refused);
             },
             () => {
                 log.warn('demo_start_over_refused', { Cause: 'threw' });
-                dialog.showErrorBox('Jason', 'The demo could not be started over.');
+                dialog.showErrorBox(windowTitle, 'The demo could not be started over.');
             },
         );
     };
@@ -647,12 +650,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
     // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
-    // in this run's chat folder, by this run's CLI: in a demo run, the demo's.
+    // in this run's chat folder, by this run's CLI: in a demo run, the demo's. "Change Jason itself" is offered in the
+    // person's own installation only, never in a demo run.
     const openIn = new OpenIn({
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
         cli,
-        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), desktopPaths(runOn.person).installationSettings)),
+        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), dataLayout(runOn.person).userSettingsFile)),
         isDirectory: isFolder,
         remembered: () => settings.openIn ?? null,
         remember: (id: PlaceId) => {
@@ -676,10 +680,17 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         chatFolder: () => paths.chat,
         continueFlags,
         logContinue: (event, fields) => log.info(event, fields),
+        changeJason: {
+            live: () => runOn.mode === 'live',
+            flags: changeJasonFlags,
+            log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
+                event === 'open_in_change_jason' ? log.info(event, { Host: fields.Host, Exit: fields.Exit }) : log.info(event, { Host: fields.Host, Exit: fields.Exit, Code: fields.Code ?? 'none' }),
+        },
     });
     handle(seam, 'openIn.targets', origin, (campaignId, chatId) => openIn.targets(campaignId, chatId), refused);
     handle(seam, 'openIn.open', origin, (target, campaignId) => openIn.open(target, campaignId), refused);
     handle(seam, 'openIn.continueChat', origin, (chatId) => openIn.continueChat(chatId), refused);
+    handle(seam, 'openIn.changeJason', origin, () => openIn.changeJason(), refused);
     // A turn never outlives the window: closing it stops every host and forgets every "always".
     // Nor does a listing of Codex's models: it is ended the way a turn's host is, and the asks that wait are dropped.
     // Nor does a browser tab's bridge: its sessions end with it.
@@ -808,12 +819,16 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
-        const kept = settleStart(rollback, app.getVersion(), false, log);
+        const layoutRefused = error instanceof LayoutRefused;
+        const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
         const said = error instanceof Error ? error.message : String(error);
-        const notice =
-            kept === null
-                ? said
-                : keptNotice(said, kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
+        const notice = failedStartNotice(
+            said,
+            layoutRefused,
+            kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
+            aside ?? applicationFolder(process.platform, process.execPath),
+            process.platform,
+        );
         if (current !== null) await showStarting(current, notice, true);
     } finally {
         startInFlight = false;
@@ -904,7 +919,7 @@ if (unsandboxed !== null) {
  */
 function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
-    const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
+    const personHarness = harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile);
     demoWhere = demoPlaces(personDirectory, personHarness);
     // Whether this installation is new is read first, of the person's directory: before this start writes anything there,
     // before Electron makes its profile, before the single-instance lock. A new installation's first start opens on the
@@ -947,10 +962,10 @@ function chooseInstallation(installerStart: boolean): void {
     // after the directory is made and before any runtime start, and a step that fails makes this run the person's own.
     prepareLive = (demo) =>
         prepareDemo(demo, {
-            harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))),
+            harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile))),
             place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
             route: writeDemoRoute,
-            fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+            fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile)),
             runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),
         });
     // A demo that holds nothing yet is placed from the archive the application carries, when it is fresh, rather than made
@@ -1101,7 +1116,7 @@ async function stopLeftRuntimeAndStart(log: Logger): Promise<void> {
             } catch {
                 // The record stays as it was.
             }
-            dialog.showErrorBox('Jason', demoUnopened);
+            dialog.showErrorBox(windowTitle, demoUnopened);
             again();
         },
     });

@@ -623,7 +623,9 @@ describe('A campaign’s people', () => {
                 'campaign.summary/all-after',
             )
             .answer('approval.get', 'approval.get/for-campaign-row')
-            .answer('approval.approve', answered);
+            .answer('approval.approve', answered)
+            // The card's reminder about name and tone reads the preferences; with both set it says nothing.
+            .answer('preference.list', 'preference.list/set');
         open(api, people('waiting'));
         expect(await screen.findByRole('button', { name: /^Waiting\s*3$/ })).toBeTruthy();
 
@@ -849,7 +851,10 @@ describe('A campaign’s Sequence', () => {
     });
 
     it('a waiting approval opens in place, and Back finds the sequence under the chip it left', async () => {
-        const api = timelineApi().answer('approval.get', 'approval.get/for-campaign-row');
+        // The card's reminder about name and tone reads the preferences; with both set it says nothing.
+        const api = timelineApi()
+            .answer('approval.get', 'approval.get/for-campaign-row')
+            .answer('preference.list', 'preference.list/set');
         open(api, { ...table, id: 'cmp_1', tab: 'sequence' });
         await waitFor(() => expect(sent(api, 'journal.list')).toHaveLength(1));
         fireEvent.click(screen.getByRole('button', { name: 'Changes' }));

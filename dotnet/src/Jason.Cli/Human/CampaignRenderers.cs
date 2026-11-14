@@ -50,6 +50,13 @@ public static class CampaignRenderers
             lines.Add(Line("Reserve:", string.Create(CultureInfo.InvariantCulture, $"threshold {threshold} untouched")));
         }
 
+        // How a send to each kind of contact goes now, and why; a runtime older than send modes says nothing of them.
+        if (campaign.SendModesInForce is { } modes)
+        {
+            lines.Add(Line("Cold sends:", SendMode(modes.Cold)));
+            lines.Add(Line("Warm sends:", SendMode(modes.Warm)));
+        }
+
         // Only for a campaign created under a key: the key its creator chose, which a repeat of that create sends again.
         if (campaign.IdempotencyKey is { } key)
         {
@@ -59,6 +66,15 @@ public static class CampaignRenderers
         lines.AddRange(RenderText.ExternalIds(campaign.ExternalIds));
         return RenderText.Lines(lines);
     }
+
+    /// <summary>A mode in force, in its own word, and where it comes from in a person's.</summary>
+    private static string SendMode(SendModeInForce mode) =>
+        RenderText.Snake(mode.Mode) + mode.Source switch
+        {
+            SendModeSource.Campaign => ", this campaign's own",
+            SendModeSource.Preference => ", the installation's preference",
+            _ => ", as nobody has chosen one",
+        };
 
     /// <summary>
     /// A page of campaigns, and the cursor that continues it. Each campaign's project is shown by the slug the listing

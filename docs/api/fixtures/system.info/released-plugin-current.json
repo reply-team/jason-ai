@@ -45,7 +45,11 @@
         "20261105002401_SubscriptionRunner",
         "20261111143412_Audience",
         "20261113000729_ChannelRoutes",
-        "20261113021003_JournalByThread"
+        "20261113021003_JournalByThread",
+        "20261114031653_JournalVerdictsByThread",
+        "20261114050917_CampaignSendModes",
+        "20261114064450_WorkItemDoubtNotes",
+        "20261114084851_ApprovalsAutomaticByDay"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -81,7 +85,11 @@
         "20261105002401_SubscriptionRunner",
         "20261111143412_Audience",
         "20261113000729_ChannelRoutes",
-        "20261113021003_JournalByThread"
+        "20261113021003_JournalByThread",
+        "20261114031653_JournalVerdictsByThread",
+        "20261114050917_CampaignSendModes",
+        "20261114064450_WorkItemDoubtNotes",
+        "20261114084851_ApprovalsAutomaticByDay"
       ],
       "backup_file": null
     },
@@ -159,6 +167,24 @@
           "digest": "sha256:recorded-1"
         }
       }
-    ]
+    ],
+    "send_modes": {
+      "cold": {
+        "mode": "every_message",
+        "source": "default"
+      },
+      "warm": {
+        "mode": "every_message",
+        "source": "default"
+      }
+    },
+    "setup": {
+      "role_skills_directory": "<data>/skills/roles",
+      "plugins_directory": "<data>/plugins",
+      "custom_ui_directory": "<data>/ui/custom",
+      "settings_file": "<data>/config/settings.json",
+      "settings_file_holds_secrets": true,
+      "layout": 1
+    }
   }
 }

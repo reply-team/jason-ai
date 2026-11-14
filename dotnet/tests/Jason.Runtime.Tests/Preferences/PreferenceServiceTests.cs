@@ -448,11 +448,13 @@ public class PreferenceServiceTests
 
         var page = await service.ListAsync(new PreferenceListRequest(null, null), Ct);
 
-        Assert.Equal(3, page.Items.Count);
+        Assert.Equal(5, page.Items.Count);
         Assert.Equal(new PreferenceDto("agent.interactive_host", null, null, null, null, null, null), page.Items[0]);
-        Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), page.Items[1]);
-        Assert.Equal(tone with { Value = null }, page.Items[2] with { Value = null });
-        Assert.True(JsonNode.DeepEquals(tone.Value, page.Items[2].Value), $"The listed value is {page.Items[2].Value?.ToJsonString()}.");
+        Assert.Equal(new PreferenceDto("send_mode.cold", null, null, null, null, null, null), page.Items[1]);
+        Assert.Equal(new PreferenceDto("send_mode.warm", null, null, null, null, null, null), page.Items[2]);
+        Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), page.Items[3]);
+        Assert.Equal(tone with { Value = null }, page.Items[4] with { Value = null });
+        Assert.True(JsonNode.DeepEquals(tone.Value, page.Items[4].Value), $"The listed value is {page.Items[4].Value?.ToJsonString()}.");
         Assert.Null(page.NextCursor);
     }
 
@@ -465,11 +467,14 @@ public class PreferenceServiceTests
 
         var first = await service.ListAsync(new PreferenceListRequest(2, null), Ct);
         var second = await service.ListAsync(new PreferenceListRequest(2, first.NextCursor), Ct);
+        var third = await service.ListAsync(new PreferenceListRequest(2, second.NextCursor), Ct);
 
-        Assert.Equal(["agent.interactive_host", "sender.identity"], first.Items.Select(item => item.Key));
+        Assert.Equal(["agent.interactive_host", "send_mode.cold"], first.Items.Select(item => item.Key));
         Assert.NotNull(first.NextCursor);
-        Assert.Equal(["tone_of_voice"], second.Items.Select(item => item.Key));
-        Assert.Null(second.NextCursor);
+        Assert.Equal(["send_mode.warm", "sender.identity"], second.Items.Select(item => item.Key));
+        Assert.NotNull(second.NextCursor);
+        Assert.Equal(["tone_of_voice"], third.Items.Select(item => item.Key));
+        Assert.Null(third.NextCursor);
     }
 
     private static async Task NothingWrittenAsync(JasonDbContext db)

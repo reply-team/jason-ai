@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Audiences;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Configuration;
@@ -90,7 +91,49 @@ internal static partial class WorkItemValidation
             ValidateResultFormat(request.ResultFormat, timing, errors);
         }
 
+        ValidateWaitOn(request.WaitOn, errors);
+        Doubts.ValidateCreate(request, errors);
+        SendReview.RefuseAtCreate(request.Context, errors);
         ValidateReason(request.Reason, errors);
+    }
+
+    /// <summary>
+    /// The items a create waits on, by their shape: at least one where the field is given, at most a wait's limit, each
+    /// named once and none blank. Whether each is an item of the same campaign is read against the database at create.
+    /// </summary>
+    public static void ValidateWaitOn(IReadOnlyList<string>? waitOn, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        if (waitOn is null)
+        {
+            return;
+        }
+
+        if (waitOn.Count == 0)
+        {
+            errors.Add("wait_on", "invalid", "wait_on names at least one work item, or is left out.");
+            return;
+        }
+
+        if (waitOn.Count > WorkItemWaitRequest.MaxWaitItems)
+        {
+            errors.Add("wait_on", "too_many", string.Create(CultureInfo.InvariantCulture, $"wait_on names at most {WorkItemWaitRequest.MaxWaitItems} work items."));
+            return;
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < waitOn.Count; index++)
+        {
+            var field = string.Create(CultureInfo.InvariantCulture, $"wait_on[{index}]");
+            if (string.IsNullOrWhiteSpace(waitOn[index]))
+            {
+                errors.Add(field, "invalid", "wait_on names a work item by its id, as wi_....");
+            }
+            else if (!seen.Add(waitOn[index].Trim()))
+            {
+                errors.Add(field, "duplicate", "wait_on names each work item once.");
+            }
+        }
     }
 
     /// <summary>The per-item overrides of the kind's defaults; null means "use the default" and is always allowed.</summary>

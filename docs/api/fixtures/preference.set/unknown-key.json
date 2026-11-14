@@ -21,7 +21,7 @@
         {
           "field": "key",
           "code": "unknown",
-          "message": "key must name a preference this build knows: agent.interactive_host, sender.identity, tone_of_voice."
+          "message": "key must name a preference this build knows: agent.interactive_host, send_mode.cold, send_mode.warm, sender.identity, tone_of_voice."
         }
       ]
     }

@@ -287,6 +287,41 @@ public partial class ClaimerTests
         Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
     }
 
+    /// <summary>
+    /// An allowance is a person's word, so a set line that carries an attempt is a run's and allows nothing, whoever it
+    /// names: a top-up under the audience it names parks, its preview saying <c>no_standing_approval</c>.
+    /// </summary>
+    [Fact]
+    public async Task Allowance_ASetLineCarryingAnAttempt_AllowsNothing()
+    {
+        using var harness = SearchHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var spring = await SpringAsync(harness, db);
+        var software = await db.Audiences.AsNoTracking().SingleAsync(a => a.CampaignId == spring.Id && a.Number == 1, Ct);
+        var work = WorkItemFactory.NewAiRole(spring, role: "manager", now: Noon);
+        work.Status = WorkItemStatus.Processing;
+        var run = WorkItemFactory.NewAttempt(work, 1, AttemptStatus.Running, Noon);
+        db.WorkItems.Add(work);
+        await db.SaveChangesAsync(Ct);
+        new JournalWriter(new FixedClock(new DateTimeOffset(Noon.AddHours(-1)))).Append(
+            db,
+            Operator,
+            JournalKinds.StandingApprovalSet,
+            spring,
+            key: StandingApprovals.Searches,
+            updated: StandingApprovals.AllowanceLine(new AudienceRef(software.PublicId, 1), maxPeople: 500, maxPerSearch: null, expiresAt: null),
+            attempt: run);
+        var topUp = Search(db, spring, new JsonObject { ["audience"] = 1, ["count"] = 50 });
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        var waiting = await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItemId == topUp.Id, Ct);
+        Assert.Equal((ApprovalStatus.Pending, StandingApprovals.Why.NoStandingApproval), (waiting.Status, (string?)waiting.Preview["standing_approval"]!["why"]));
+    }
+
     private static JsonObject InRetail =>new() { ["industries"] = new JsonArray("Retail"), ["titles"] = new JsonArray("Store Manager") };
 
     /// <summary>A campaign whose first two searches made its audiences 1 (software) and 2 (logistics), each probe still waiting.</summary>

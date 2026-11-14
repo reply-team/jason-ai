@@ -28,6 +28,9 @@ internal sealed class MovingArchive
 
     public string Version { get; set; } = MovingMachine.Version;
 
+    /// <summary>The layout the archive says it carries; null is an archive written before the layout stamp, which says none.</summary>
+    public int? Layout { get; set; } = 1;
+
     public bool Registered { get; set; }
 
     /// <summary>Changes the listing after it is composed from the files.</summary>
@@ -67,6 +70,7 @@ internal sealed class MovingArchive
         var manifest = new ExportManifest(
             ExportManifest.CurrentFormat,
             Version,
+            Layout,
             ExportedAt,
             ExportManifest.ThisSystem(),
             From.Data,

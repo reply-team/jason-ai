@@ -9,7 +9,7 @@ public static class DataDirectoryLayout
     {
         ArgumentNullException.ThrowIfNull(paths);
         Directory.CreateDirectory(paths.Root);
-        foreach (var directory in paths.Layout)
+        foreach (var directory in paths.StartDirectories)
         {
             Directory.CreateDirectory(directory);
         }

@@ -1,0 +1,30 @@
+{
+  "operation": "preference.set",
+  "case": "send-mode-warm",
+  "request": {
+    "key": "send_mode.warm",
+    "value": {
+      "mode": "every_message"
+    },
+    "actor": {
+      "type": "human",
+      "id": "Marta"
+    },
+    "reason": "the person's answer"
+  },
+  "status": 200,
+  "response": {
+    "key": "send_mode.warm",
+    "value": {
+      "mode": "every_message"
+    },
+    "value_hash": "sha256:recorded-4",
+    "value_bytes": 24,
+    "created_at": "2026-10-16T09:00:00.000Z",
+    "updated_at": "2026-10-16T09:00:00.000Z",
+    "updated_by": {
+      "type": "human",
+      "id": "Marta"
+    }
+  }
+}

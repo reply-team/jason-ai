@@ -182,11 +182,13 @@ A named preference is a structured fact about the client that a person states, w
 skill can check that it is set before it writes for a person to send and a screen can show it. The catalog is a contract
 family of its own, one document per key under `docs/contracts/preferences/`, embedded into the runtime and read by a
 catalog of its own, never the operation catalog: no work item names a key, no route carries one and no plugin is
-invoked for one ([the contracts README](contracts/README.md) describes the family). It holds three keys:
+invoked for one ([the contracts README](contracts/README.md) describes the family). It holds five keys:
 
 | Key | What it says |
 |---|---|
 | `agent.interactive_host` | The agent host `jason session open` starts for the person in a terminal of their own: one of the host words. Unset means `claude_code`. |
+| `send_mode.cold` | How what Jason sends to a contact who has not answered in the campaign goes: `automatic`, released without asking unless something puts it to a person first (a doubt, a text nobody passed, a reply waiting to be judged or the day's ceiling, among others), or `every_message`, each one to a person first. Unset means `every_message`. |
+| `send_mode.warm` | The same for a contact who has answered in the campaign. Unset means `every_message`. |
 | `sender.identity` | Who messages are written as: one or more senders, the first of whom writes whenever a campaign names no other — each with the name they sign with, the forms a message uses for them in a language that marks them, and what else a writer needs. |
 | `tone_of_voice` | How the company sounds: the tone in words, how formal it is, how a first message opens and closes, and up to three messages the person likes. |
 
@@ -212,7 +214,8 @@ schema.
   approval does: an actor that is not a person is refused as `preference_not_human`, and one that names nobody as
   `actor_required`. In the planner's session, on the person's answer, the session skill runs
   `jason preference set <key> …` with the person's name as the actor, as approvals are given in a session. A role Jason
-  launches reads the preferences and never writes one.
+  launches reads the preferences and never writes one: a request to set or unset any key from inside a run is refused as
+  `decided_inside_a_run` before its actor is read, whatever person it names.
 
 | Operation | Request | Answer and refusals |
 |---|---|---|

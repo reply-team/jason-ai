@@ -82,6 +82,11 @@ public static class CreationKey
             ["max_attempts"] = request.MaxAttempts,
             ["context"] = Document(request.Context),
             ["result_format"] = Document(request.ResultFormat),
+
+            // Named only when the request named them, so a key stored before items could carry them still matches the
+            // request that made it.
+            ["ask_person_note"] = Trimmed(request.AskPersonNote),
+            ["wait_on"] = request.WaitOn is { } waitOn ? new JsonArray([.. waitOn.Select(id => JsonValue.Create(id?.Trim()))]) : null,
         });
     }
 

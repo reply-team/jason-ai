@@ -47,7 +47,7 @@ shells, `command(regex:jason .*)`) and `read_file(<harness folder>)`; the
 If the person gave you these three lines:
 
 ```text
-Install Jason by following https://get.jasonharness.ai/install.
+Install Jason by following https://get.jasonharness.ai/install
 When it reports Ready, start its quick-start skill and take me to my first campaign.
 If anything stops you, ask me directly and tell me why.
 ```
@@ -432,6 +432,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
 | role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | every plugin is granted something of each capability it asks for |
+| the data directory is laid out as this jason runs it (`layout.json`; none means layout 1) — a layout a newer Jason set up, or a stamp that cannot be read, fails it with the sentence the refused verbs say | |
 | | a route is configured |
 | | a binding names an account |
 | | a provider CLI **you name** answers |
@@ -445,6 +446,13 @@ otherwise: half of what it reports is not the runtime's to know.
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked. The JSON body carries `ready` and a state per check, so
 **an agent branches on the body, never on the exit code**.
+
+Under its checks, `jason status --human` prints where this installation's parts are: the role skills, plugins and
+custom UI folders, the settings file and the layout. Its JSON carries the same under `setup`, whether or not a runtime
+answers. While `setup.settings_file_holds_secrets` is true, the settings file is also where plugin secrets are kept, and
+`--human` names `jason route set --global` and `jason plugin grant` for its routes and grants. `setup.layout` is the
+layout the data directory's `layout.json` names, 1 where there is none, and null where it cannot be read: `jason status`
+never guesses one.
 
 A check reports a fact and, where there is one, the command that repairs it. Most repairs are `jason`
 commands. One is not: putting an executable on a PATH is the shell's own act, so the `path` check prints the
@@ -500,7 +508,7 @@ installation. `jason plugin list` says which kinds each plugin declares and whic
 it, with the keys under `Plugins:Grants:<id>` that would grant it — `reply is granted nothing it asks for under Exec.`
 It quotes a plugin's id and those keys and never what the manifest asks for, and it never decides `ready`: such a
 plugin runs without what it is not granted, and nothing else stops. `jason plugin list --human` says what each asks
-for, the key that grants it and the settings file, and `jason plugin reload` reads the grant.
+for and the `jason plugin grant` command that grants it, in force at once.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 
@@ -698,8 +706,8 @@ jason status
 ```
 
 **What travels:** the database, the settings file, the plugins, the role skills with their record, a custom UI
-under `ui/custom/`, the logs, and the harness root's tree — your memory files and every project's and campaign's
-folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256. Whether the runtime started at logon travels as
+under `ui/custom/`, the logs, the layout stamp `layout.json` when there is one, and the harness root's tree — your memory files and every project's and campaign's
+folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256 and the layout the data directory is in. Whether the runtime started at logon travels as
 a fact: the import registers it again on a machine that can, and on one that cannot says "No logon registration,
 and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
 work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an
@@ -709,7 +717,9 @@ everything in it, a token under `Plugins:Config` included: keep the archive as y
 
 **Before anything is written**, the import refuses an archive it cannot read, a name in it that would land
 outside the data directory or the harness root, a file whose size or SHA-256 is not the one `export.json` lists,
-an archive a newer Jason wrote, and an installation already here — a database, or a harness root with a folder
+an archive a newer Jason wrote, an archive whose data directory is in a layout newer than this jason runs
+(`layout_newer`), an archive whose layout stamp cannot be read or names another layout than `export.json` does, and an
+installation already here — a database, or a harness root with a folder
 marker in it, which a Jason that has run once on the new machine has. The refusal names what is there. Give
 `--replace` to move it aside and place the archive instead: the data directory's parts go into
 `<data>/replaced-<stamp>/` — `state/` whole, the database's `-wal` and `-shm` files and its backups with it — and
@@ -728,15 +738,17 @@ path elsewhere that is not on this machine is said and left as written, for you 
 the secrets among them, is placed as it was. A role skills pack the record says came from a folder that is not
 here is named, with `jason skills install` to deploy it again.
 
-**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as
-`jason project link` does; a link the runtime refuses is named with its code, the folder stays, and the answer's
-`next` carries `jason project link <id> --path <folder>`. An import on the same machine, into a second data
-directory, needs the source harness root moved aside first: the records name its folders, and the runtime refuses
-to link a folder that is present elsewhere (`harness_folder_present`). The import
-exits 0 when everything was placed and the runtime answered, 1 when it refused (nothing written) or the runtime
-did not start (the files are in place; start it with `jason runtime start`), and 2 on a usage error. Three
-things are left to you, in this order: `jason skills install`, `jason runtime autostart enable` if the runtime
-should start at logon here and the import did not register it, and `jason status`.
+**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as `jason
+project link` does; a link the runtime refuses is named with its code in `link_refused`, the folder stays, the other
+projects are still linked, and the answer's `next` carries `jason project link <id> --path <folder>`. An import on the
+same machine, into a second data directory, needs the source harness root moved aside first: the records name its
+folders, and the runtime refuses to link a folder that is present elsewhere (`harness_folder_present`). The import exits
+0 when everything was placed, the runtime answered and every project folder was linked, and 1 when it refused (nothing
+written), when the runtime did not start (the files are in place; start it with `jason runtime start`), or when a
+project folder was not linked (everything is placed and the whole answer is still printed; `link_refused` names each
+one, and `next` carries the line that links it), and 2 on a usage error. Three things are left to you, in this order:
+`jason skills install`, `jason runtime autostart enable` if the runtime should start at logon here and the import did
+not register it, and `jason status`.
 
 ---
 
@@ -746,9 +758,9 @@ The install prompt ends by starting the `quick-start` skill. In five lines:
 
 1. It asks you one question: what you sell and who should buy it. A line about yourself and how you write is welcome
    and never required.
-2. It reads which provider your email and LinkedIn go through; it does not ask you. Which accounts are connected
-   there it reads when you say go.
+2. It reads which provider your email and LinkedIn go through, and how many accounts are connected there; it does not
+   ask you. The count never holds you up: when it cannot be read at once, the plan goes on without it.
 3. It makes a draft of your first campaign and says the plan in one message: the goal, who it will look for, the channels, and
    how it will write.
-4. It stops there, until you say what to change or say go. A first message is never sent without your yes.
+4. It stops there, until you say what to change or say go. Until you choose otherwise, a first message is never sent without your yes; you may later say that sends to people who have not answered, or to people who have, go on their own.
 5. Its text is [`skills/runtime/quick-start/SKILL.md`](../skills/runtime/quick-start/SKILL.md).

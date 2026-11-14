@@ -16,9 +16,9 @@ for permission to stop is the destructive choice, so it runs `auto`. Nothing in 
 register does not refuse it (`preflight.suppression: not_applicable`), and its work runs while its Jason campaign is
 paused (`dispatch.in_paused_campaign: runs`).
 
-There are two records, by design. Jason's own register — `jason suppression add`, read by the claim — stops Jason's
-reach at once; the responder role writes it before it creates this operation's work item. This operation records the
-stop at the provider, whose flag the plugin
+There are two records, by design. Jason's own register, read by the claim, stops Jason's reach at once: a verdict whose
+nature is `opt_out` puts every value of the person on it in the same act (`reply.record`), and `jason suppression add`
+puts one there by hand. This operation records the stop at the provider, whose flag the plugin
 reads before every write. The four facts are Jason's: the provider holds a yes or a no.
 
 ## Finding the person

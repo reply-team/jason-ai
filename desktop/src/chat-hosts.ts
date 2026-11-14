@@ -8,7 +8,7 @@ import { isEffort, type Effort } from './chat-models.ts';
 import { allowRules, denyRules } from './chat-deny.ts';
 import type { ChatMode } from './chat-modes.ts';
 import { promptToolName } from './chat-permission-endpoint.ts';
-import { confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
+import { attemptVariable, confinedVariable, guardedNames, replyNoCardForms, searchVariables, type Platform } from './chat-permission-model.ts';
 import { compareVersions, noChromeFrom } from './host-version.ts';
 import { withReplyClient } from './reply-client.ts';
 import { isSessionMarker } from './session-markers.ts';
@@ -154,6 +154,13 @@ export function fullAccessSettings(hookUrl: string, secret: string) {
  */
 export const confinedRule = `Bash(*${confinedVariable}*)`;
 
+/**
+ * The host's own refusal of any Bash command that names `JASON_ATTEMPT_ID`, anywhere in it: the variable names the
+ * role's attempt a jason runs inside, and a chat turn is never one, so a command that names it could only claim one. The
+ * rule is the exact spelling; the permission model refuses the name in any letter case.
+ */
+export const attemptRule = `Bash(*${attemptVariable}*)`;
+
 /** A session to resume, refused unless it has the shape a host names one in: it never stands where an option would. */
 function resumable(session: string): string {
     if (!sessionShape.test(session)) throw new Error('That session is not one the desktop passes to a host.');
@@ -204,7 +211,7 @@ export function claudeArguments(turn: ClaudeTurn): string[] {
     if (mode === 'full_access' && !turn.settingsFile) throw new Error('A turn in Full access needs its settings file.');
     const args = ['-p', '--output-format', 'stream-json', '--verbose'];
     args.push('--allowedTools', ...claudeAllowedTools, ...allowRules(mode === 'plan_only' ? (turn.reads ?? []) : turn.allowed));
-    args.push('--disallowedTools', ...claudeRemovedTools, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, ...turn.dataRules);
+    args.push('--disallowedTools', ...claudeRemovedTools, ...(mode === 'plan_only' ? planRemovedTools : []), ...denyRules(turn.denied), confinedRule, ...searchRules, attemptRule, ...turn.dataRules);
     args.push('--setting-sources', 'project');
     args.push('--settings', mode === 'full_access' ? (turn.settingsFile as string) : mode === 'plan_only' ? planTurnSettings : claudeTurnSettings);
     if (mode === 'plan_only') args.push('--permission-mode', 'plan');
@@ -321,9 +328,12 @@ export function rulePath(platform: Platform, path: string): string {
 
 /**
  * The data directory's own entries, which the runtime, the command line and the desktop make: named by the data rules
- * whether they exist yet or not, so one made while a turn runs is refused as well.
+ * whether they exist yet or not, so one made while a turn runs is refused as well. `setup` is where a later layout keeps
+ * the roles, the plugins and the settings a person sets up, and `layout.json` the stamp that says so: both are refused
+ * before any build makes them. A test holds this list to `JasonPaths.OwnEntries` as `desktop/data-layouts.json` carries
+ * it, with `doctor` added and `desktop` taken out.
  */
-export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'];
+export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'];
 
 /**
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,
@@ -490,7 +500,8 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and
  * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`. Every host's turn carries `JASON_CONFINED=1`, whatever the desktop
  * inherited, so the jason it runs reads a request's content from standard input only and runs a provider check's
- * program by a bare name only; the desktop's own calls of jason do not carry it. Every host's turn also carries the
+ * program by a bare name only; the desktop's own calls of jason do not carry it. No host's turn carries a
+ * `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every host's turn also carries the
  * harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
  * runs may put in its User-Agent; nothing defends it. A turn that names an effort is started without an inherited
@@ -531,7 +542,7 @@ export function hostEnvironment(
             path = value;
             continue;
         }
-        if (upper === 'JASON_DATA_DIR' || upper === confinedVariable) continue;
+        if (upper === 'JASON_DATA_DIR' || upper === confinedVariable || upper === attemptVariable) continue;
         if (options.home !== undefined && (options.platform === 'win32' ? upper : name) === 'HOME') continue;
         env[name] = value;
     }

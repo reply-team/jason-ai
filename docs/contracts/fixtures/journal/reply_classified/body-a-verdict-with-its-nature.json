@@ -1,0 +1,11 @@
+{
+  "kind": "reply_classified",
+  "version": 1,
+  "case": "a verdict that says what the reply is in the runtime's words",
+  "body": {
+    "key": "sha256:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+    "old": null,
+    "new": { "plugin": "example-mail", "thread": "thr-20931", "message_id": "msg-77310", "message_at": "2026-10-28T09:12:44.000Z", "contact_id": "cnt_01JC0000000000000000000003", "category": "unsubscribe", "confidence": 0.86, "reaction": "none", "goal_id": null, "goal_kind": null, "decision_id": null, "answered_by": null, "nature": "opt_out" }
+  },
+  "expect": "valid"
+}

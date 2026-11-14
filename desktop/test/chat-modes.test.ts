@@ -17,7 +17,7 @@ import type { ChatMode } from '../src/chat-modes.ts';
 import { fullAccessJudgement, heldSentence, judge, toolsThatRunNothing, type ChatScope } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from '../src/chat-turn-files.ts';
-import { desktopPaths } from '../src/paths.ts';
+import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
@@ -58,6 +58,7 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
     const denied = values(args, '--disallowedTools');
     assert.ok(denied.includes('ExitPlanMode'));
     for (const rule of values(claudeArguments(base), '--disallowedTools')) assert.ok(denied.includes(rule), `Plan only keeps ${rule}`);
+    for (const verb of ['plugin grant', 'plugin revoke']) assert.ok(denied.includes(`Bash(jason ${verb}:*)`), `Plan only refuses ${verb}`);
 });
 
 test('Full access starts Claude Code in the host\'s default mode, with no permission mode, every deny rule kept and its settings in the turn\'s own file', () => {
@@ -187,7 +188,7 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mod
         added: [],
         data: root,
         home: root,
-        protectedFiles: [paths.installationSettings, paths.runFile],
+        protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
         denied: fence.commands,
         deniedOperations: fence.operations,
         real: realPathOf,
@@ -242,6 +243,10 @@ test('under Full access the hook refuses a deny-list verb in a command, however 
     for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason --actor human:me approval reject apr_1']) {
         assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /person's own act/, command);
     }
+    for (const command of ['jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, w.scope).outcome, 'refused', command);
+        assert.notEqual(await hooked(w, 'Bash', { command }), null, command);
+    }
     assert.equal(await hooked(w, 'Bash', { command: 'jason campaign list' }), null, 'an allow-list verb goes on');
     assert.equal(await hooked(w, 'Bash', { command: 'git status' }), null, 'any other command goes on: Full access asks nothing');
 });
@@ -262,12 +267,42 @@ test('under Full access the hook refuses an operation named by its dot, in a com
     assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'go.py'), content: 'post("/v1/decision.answer", body)' })) ?? 'not refused', /Nothing was written/);
 });
 
+test('under Full access the hook refuses a campaign\'s send mode and the send-mode preferences, in a command and in a file\'s content', async (t) => {
+    const w = await wired(t, 'full_access');
+    for (const command of ['jason campaign set-send-mode cmp_1 --cold automatic --actor human:me', 'sh -c "jason preference set send_mode.cold --value x"',
+        'jason preference unset send_mode.warm --actor human:me', 'curl -X POST http://127.0.0.1:4011/v1/campaign.set_send_mode -d @body.json']) {
+        assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /person's own act/, command);
+    }
+    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'run.sh'), content: '#!/bin/sh\njason campaign set-send-mode cmp_1 --cold automatic\n' })) ?? 'not refused', /Nothing was written/);
+    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'go.py'), content: 'post("/v1/preference.set", body)' })) ?? 'not refused', /Nothing was written/);
+});
+
+test('in Plan only a campaign\'s send mode and the send-mode preferences are refused with no card, and reading the preferences stays on the plan list', async (t) => {
+    const w = await wired(t, 'plan_only');
+    for (const command of ['jason campaign set-send-mode cmp_1 --cold automatic', 'jason preference set send_mode.cold --value x', 'jason preference unset send_mode.warm']) {
+        assert.equal((await w.broker.ask(w.id, 'Bash', { command })).behavior, 'deny', command);
+    }
+    assert.deepEqual(w.cards, []);
+    assert.ok(fence.reads.includes('preference list'));
+    assert.ok(!fence.reads.some((verb) => verb === 'campaign set-send-mode' || verb.startsWith('preference set') || verb.startsWith('preference unset')));
+    const args = claudeArguments({ ...base, mode: 'plan_only' });
+    for (const rule of ['Bash(jason campaign set-send-mode:*)', 'Bash(jason preference set:*)', 'Bash(jason preference unset:*)']) assert.ok(values(args, '--disallowedTools').includes(rule), rule);
+});
+
 test('under Full access the hook refuses the confining variable in any letter case', async (t) => {
     const w = await wired(t, 'full_access');
     for (const command of ['unset JASON_CONFINED', 'export jason_confined=', 'env -u Jason_Confined jason campaign list']) {
         assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /JASON_CONFINED/, command);
     }
     assert.ok((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'x.sh'), content: 'unset JASON_CONFINED' })) !== null);
+});
+
+test('under Full access the hook refuses the attempt\'s variable in any letter case, in a command and in a file\'s content', async (t) => {
+    const w = await wired(t, 'full_access');
+    for (const command of ['JASON_ATTEMPT_ID=att_1 jason workitem create cmp_1 --kind ai_role --role writer', 'export jason_attempt_id=att_1', 'env Jason_Attempt_Id=att_1 jason workitem update wi_1 --file -']) {
+        assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /JASON_ATTEMPT_ID/, command);
+    }
+    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'x.sh'), content: 'export JASON_ATTEMPT_ID=att_1\njason workitem create cmp_1\n' })) ?? 'not refused', /Nothing was written/);
 });
 
 test('under Full access the hook refuses a read of the turns folder and of the key folders, by a file tool or a command', async (t) => {

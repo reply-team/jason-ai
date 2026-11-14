@@ -68,8 +68,12 @@ public sealed record RoutesDto(
 
 /// <summary>
 /// Sends one campaign's work somewhere. <c>Operation</c> null is the campaign's default route, which hides
-/// every global operation override for that campaign. There is no global <c>route.set</c>: the global set lives
-/// in the settings file and is activated by a plugin reload, so that what a reload freezes is what the file says.
+/// every global operation override for that campaign.
+/// <para>
+/// With <c>Scope</c> <see cref="RouteWriteScope.Global"/> it sends that work for every campaign with no route of its own
+/// instead, and names no campaign: the route is written to the settings file and the plugins are loaded again in the
+/// same act, so that what a reload freezes is still what the file says.
+/// </para>
 /// <para>
 /// <c>Channel</c> names a channel under <c>Operation</c>, one the operation's document lets a route name: the route is
 /// then that channel's alone, set beside the operation's own route and never in its place. Null is the operation's own
@@ -83,10 +87,13 @@ public sealed record RouteSetRequest(
     JsonObject? Binding,
     ActorRef? Actor,
     string? Reason,
-    string? Channel = null);
+    string? Channel = null,
+    RouteWriteScope? Scope = null);
 
 /// <summary>
 /// Takes one campaign route away: the default, an operation's own route, or with <c>Channel</c> one channel's route under
 /// <c>Operation</c> — each alone, so taking the operation's route away leaves its channel routes, and the other way round.
+/// With <c>Scope</c> <see cref="RouteWriteScope.Global"/> it takes one global route away instead, as <see cref="RouteSetRequest"/>
+/// writes one.
 /// </summary>
-public sealed record RouteUnsetRequest(string? CampaignId, string? Operation, ActorRef? Actor, string? Reason, string? Channel = null);
+public sealed record RouteUnsetRequest(string? CampaignId, string? Operation, ActorRef? Actor, string? Reason, string? Channel = null, RouteWriteScope? Scope = null);

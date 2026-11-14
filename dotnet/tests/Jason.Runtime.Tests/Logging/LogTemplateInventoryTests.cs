@@ -55,7 +55,7 @@ public sealed class LogTemplateInventoryTests
     /// How many templates the scan finds. Exact on purpose: a template added, removed or no longer read changes it,
     /// and the failure lists every template found so the change can be seen and the number moved knowingly.
     /// </summary>
-    private const int TemplateCount = 137;
+    private const int TemplateCount = 140;
 
     private static readonly Regex Marker = new(
         @"LoggerMessage\.Define(?<scope>Scope)?(?:<[^<>()]*>)?\s*\(|\[\s*LoggerMessage\s*\(|new\s+(?:Serilog\.Events\.)?(?<property>LogEventProperty)\s*\(|\??\.\s*(?<method>LogTrace|LogDebug|LogInformation|LogWarning|LogError|LogCritical|Log|Verbose|Debug|Information|Warning|Error|Fatal|Write|BeginScope)\s*(?:<(?:[^<>()]|<[^<>()]*>)*>\s*)?\(",
@@ -236,6 +236,16 @@ public sealed class LogTemplateInventoryTests
         Assert.DoesNotContain("Reason", ReviewedLogProperties.Names);
         Assert.Contains("Reason", ReviewedLogProperties.Refused);
         Assert.Empty(ReviewedLogProperties.Names.Intersect(ReviewedLogProperties.Refused));
+    }
+
+    /// <summary>A doubt's sentence about a send is free text at rest on the work item, read only onto the approval's preview.</summary>
+    [Fact]
+    public void A_doubt_s_sentence_is_not_a_property_any_log_line_may_carry()
+    {
+        string[] sentence = ["Note", "AskPersonNote", "ReviewNote", "Doubt"];
+
+        Assert.All(sentence, name => Assert.Contains(name, ReviewedLogProperties.Refused));
+        Assert.Empty(ReviewedLogProperties.Names.Intersect(sentence));
     }
 
     /// <summary>

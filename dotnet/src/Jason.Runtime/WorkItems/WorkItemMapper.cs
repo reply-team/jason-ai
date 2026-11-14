@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Reports;
@@ -59,7 +60,8 @@ public static class WorkItemMapper
             new LineageDto(item.LineageState, item.LineageProfileName, item.LineageProfileRevision, item.LineageFromAttemptId),
             item.IdempotencyKey,
             item.Campaign.Name,
-            ContactNames.Display(item.Contact));
+            ContactNames.Display(item.Contact),
+            ReviewHash: ReviewSubject.IsReviewable(item) ? ReviewSubject.Hash(item) : null);
     }
 
     public static WorkItemSummaryDto ToSummary(WorkItem item, DateTime now)

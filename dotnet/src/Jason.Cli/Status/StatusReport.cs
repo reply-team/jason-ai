@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Jason.Contracts.Api;
 
 namespace Jason.Cli.Status;
 
@@ -27,8 +28,9 @@ public enum CheckState
 /// reading a version does not parse a sentence written for a person, and it carries nothing the fact could not.
 /// </remarks>
 /// <param name="Details">
-/// Fields of the fact, by name, and null on every check that has none; omitted from the body when null. Only
-/// <c>role_skills</c> carries them: the deployment in the role root.
+/// Fields of the fact, by name, and null on every check that has none; omitted from the body when null. Two checks
+/// carry them: <c>role_skills</c>, the deployment in the role root, and <c>send_modes</c>, each mode in force and its
+/// source as the runtime's own words.
 /// </param>
 public sealed record StatusCheck(
     string Name,
@@ -45,4 +47,8 @@ public sealed record StatusCheck(
 /// True when every required check passed. It is here because the exit code of this verb is the one thing about
 /// it that departs from the published table, and a caller reading a body should never have to know that.
 /// </param>
-public sealed record StatusReport(bool Ready, IReadOnlyList<StatusCheck> Checks);
+/// <param name="Setup">
+/// Where this installation's parts are, composed from this CLI's own data directory, so it is there whether or not a
+/// runtime answers. A fact beside the checks rather than one of them: it never decides <see cref="Ready"/>.
+/// </param>
+public sealed record StatusReport(bool Ready, IReadOnlyList<StatusCheck> Checks, SetupInfo Setup);

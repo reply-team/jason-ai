@@ -149,6 +149,8 @@ public sealed class ImportCommandTests
     [InlineData("data/run/runtime.lock", "a part of the data directory no export carries")]
     [InlineData("data/state/backups/jason-20261101T000000Z.db", "a backup no export carries")]
     [InlineData("data/ui/default/index.html", "the shipped UI no export carries")]
+    [InlineData("data/setup/plugins/x/plugin.yaml", "a later layout's part, which this layout does not keep")]
+    [InlineData("data/skills/.staging/x/SKILL.md", "the role skills' staging no export carries")]
     public async Task A_listed_part_of_the_data_directory_no_export_carries_is_refused_by_the_place_rule_and_nothing_is_written(string name, string why)
     {
         using var from = new MovingMachine();
@@ -348,6 +350,142 @@ public sealed class ImportCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
+    }
+
+    // ---- layouts -----------------------------------------------------------------------------------------------------
+
+    /// <summary>An archive written before the layout stamp says no layout, and carries layout 1: it is placed as it was.</summary>
+    [Fact]
+    public async Task An_archive_that_names_no_layout_is_placed_as_layout_one()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = null, Version = "0.32.0" }.Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
+    }
+
+    /// <summary>
+    /// A data directory a later layout keeps is refused by its layout, before any of its names is held to the parts this
+    /// build carries, so the refusal says why rather than naming a part no export of this build carries.
+    /// </summary>
+    [Fact]
+    public async Task An_archive_of_a_newer_layout_is_refused_as_layout_newer_before_its_names_are_read()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = 2 }.Installation().With("data/setup/plugins/reply/plugin.yaml").Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "layout_newer");
+        Assert.Contains($"laid out by Jason {MovingMachine.Version} (layout 2), newer than this jason runs (layout 1)", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task An_archive_whose_layout_is_below_one_is_unreadable_and_nothing_is_written(int layout)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = layout }.Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_unreadable");
+        Assert.Contains($"gives layout {layout}, and layouts count from 1", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A stamp the archive carries is placed beside the database; a folder by its name is refused as no part.</summary>
+    [Fact]
+    public async Task A_layout_stamp_in_the_archive_is_placed_and_a_folder_of_its_name_is_refused()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from).Installation().With("data/layout.json", """{"layout":1,"written_by":"0.33.0"}""").Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("""{"layout":1,"written_by":"0.33.0"}""", File.ReadAllText(Path.Combine(to.Data, "layout.json")));
+
+        using var again = new MovingMachine();
+        var archive = new MovingArchive(from).Installation().With("data/layout.json/inside.txt").Write("jason-export-folder.zip");
+        Refused(again, await Import(again, Options(archive)), "import_refused");
+    }
+
+    /// <summary>
+    /// A stamp the archive carries is read by the stamp's own rules and held to the layout <c>export.json</c> says: one
+    /// that cannot be read, or names another layout, is refused before anything is written, since the directory it would
+    /// place would refuse at its next start or say it is laid out as it is not.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"layout\":", 1, "carries a layout stamp, data/layout.json, that cannot be read (it is not JSON at line 1, byte 11)")]
+    [InlineData("{\"layout\":1}", 1, "carries a layout stamp, data/layout.json, that cannot be read (it names no version that wrote it)")]
+    [InlineData("{\"layout\":2,\"written_by\":\"0.33.0\"}", 1, "carries a layout stamp of layout 2, and its export.json says layout 1")]
+    [InlineData("{\"layout\":2,\"written_by\":\"0.33.0\"}", null, "carries a layout stamp of layout 2, and its export.json says layout 1")]
+    public async Task A_layout_stamp_in_the_archive_that_cannot_be_read_or_names_another_layout_is_refused(string stamp, int? layout, string says)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = layout }.Installation().With("data/layout.json", stamp).Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_unreadable");
+        Assert.Contains(says, error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A layout <c>export.json</c> gives as anything but a whole number is a listing this Jason cannot read.</summary>
+    [Fact]
+    public async Task An_export_json_whose_layout_is_not_a_number_is_unreadable_and_nothing_is_written()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from).Installation().Write();
+        using (var archive = ZipFile.Open(file, ZipArchiveMode.Update))
+        {
+            var listing = archive.GetEntry("export.json")!;
+            string text;
+            using (var reader = new StreamReader(listing.Open()))
+            {
+                text = reader.ReadToEnd();
+            }
+
+            Assert.Contains("\"layout\": 1", text, StringComparison.Ordinal);
+            listing.Delete();
+            using var writer = new StreamWriter(archive.CreateEntry("export.json").Open());
+            writer.Write(text.Replace("\"layout\": 1", "\"layout\": \"x\"", StringComparison.Ordinal));
+        }
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_unreadable");
+        Assert.StartsWith("The export.json in ", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>With <c>--replace</c>, a stamp here describes the directory going aside, and goes aside with it.</summary>
+    [Fact]
+    public async Task With_replace_the_layout_stamp_here_goes_aside_with_the_parts()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.PlantData("state/jason.db", "the database here");
+        to.PlantData("layout.json", """{"layout":1,"written_by":"0.33.0"}""");
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Replace = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("""{"layout":1,"written_by":"0.33.0"}""", File.ReadAllText(Path.Combine(to.Data, "replaced-" + Stamp, "layout.json")));
+        Assert.False(File.Exists(Path.Combine(to.Data, "layout.json")));
     }
 
     // ---- an update in flight -----------------------------------------------------------------------------------------
@@ -1007,7 +1145,7 @@ public sealed class ImportCommandTests
     }
 
     [Fact]
-    public async Task A_link_the_runtime_refuses_is_listed_with_its_code_and_is_not_fatal()
+    public async Task A_link_the_runtime_refuses_is_listed_with_its_code_and_the_import_answers_one_with_the_placing_kept()
     {
         using var from = new MovingMachine();
         using var to = new MovingMachine
@@ -1020,7 +1158,7 @@ public sealed class ImportCommandTests
 
         var exit = await Import(to, Options(file));
 
-        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(ExitCodes.ApiError, exit);
         using var answer = JsonDocument.Parse(to.Out.ToString());
         var refused = Assert.Single(answer.RootElement.GetProperty("link_refused").EnumerateArray());
         Assert.Equal("prj_01ACME", refused.GetProperty("project_id").GetString());
@@ -1031,6 +1169,78 @@ public sealed class ImportCommandTests
         Assert.Contains(
             $"jason project link prj_01ACME --path {Path.Combine(to.Harness, "projects", "acme")}",
             answer.RootElement.GetProperty("next").EnumerateArray().Select(next => next.GetString()));
+    }
+
+    [Fact]
+    public async Task One_project_linking_and_one_refused_answers_one_with_both_in_the_body_and_the_next_project_still_linked()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine
+        {
+            Answers = (operation, body) => operation != "project.link"
+                ? null
+                : JsonDocument.Parse(body).RootElement.GetProperty("project_id").GetString() == "prj_01ACME"
+                    ? RuntimeVerbs.Response(HttpStatusCode.Conflict, "{\"error\":{\"code\":\"harness_folder_present\",\"message\":\"Made up, a folder stands.\",\"retryable\":false}}")
+                    : RuntimeVerbs.Response(HttpStatusCode.OK, "{\"id\":\"prj_made_up\"}"),
+        };
+        var file = new MovingArchive(from).Installation().Mark("harness/projects/beta", HarnessMarker.Project, "prj_01BETA").Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(2, to.Calls.Count(call => call.Operation == "project.link"));
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        Assert.True(answer.RootElement.GetProperty("started").GetBoolean());
+        Assert.False(answer.RootElement.TryGetProperty("error", out _));
+        var refused = Assert.Single(answer.RootElement.GetProperty("link_refused").EnumerateArray());
+        Assert.Equal("prj_01ACME", refused.GetProperty("project_id").GetString());
+        Assert.Equal("harness_folder_present", refused.GetProperty("code").GetString());
+        var linked = Assert.Single(answer.RootElement.GetProperty("linked").EnumerateArray());
+        Assert.Equal("prj_01BETA", linked.GetProperty("project_id").GetString());
+        Assert.Equal(Path.Combine(to.Harness, "projects", "beta"), linked.GetProperty("path").GetString());
+        Assert.True(Directory.Exists(Path.Combine(to.Harness, "projects", "acme")));
+        var next = answer.RootElement.GetProperty("next").EnumerateArray().Select(item => item.GetString()).ToArray();
+        Assert.Contains($"jason project link prj_01ACME --path {Path.Combine(to.Harness, "projects", "acme")}", next);
+        Assert.DoesNotContain(next, item => item!.Contains("prj_01BETA", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_link_asked_of_a_runtime_that_does_not_answer_is_a_refusal_with_exit_one_and_never_three()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine
+        {
+            Answers = (operation, _) => operation == "project.link" ? throw new HttpRequestException("made up, refused") : null,
+        };
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        var refused = Assert.Single(answer.RootElement.GetProperty("link_refused").EnumerateArray());
+        Assert.Equal("runtime_unreachable", refused.GetProperty("code").GetString());
+        Assert.True(Directory.Exists(Path.Combine(to.Harness, "projects", "acme")));
+    }
+
+    [Fact]
+    public async Task Under_human_a_refused_link_is_followed_by_a_closing_line_saying_the_import_is_incomplete()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine
+        {
+            Answers = (operation, _) => operation == "project.link"
+                ? RuntimeVerbs.Response(HttpStatusCode.Conflict, "{\"error\":{\"code\":\"harness_folder_present\",\"message\":\"Made up.\",\"retryable\":false}}")
+                : null,
+        };
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Human = true });
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var lines = to.Out.ToString().ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Contains("was not linked (harness_folder_present)", string.Join('\n', lines), StringComparison.Ordinal);
+        Assert.Equal("The import is incomplete: a project folder was not linked. Link each one with the 'jason project link' line under 'Left to you'.", lines[^1].Trim());
     }
 
     [Fact]
@@ -1131,6 +1341,7 @@ public sealed class ImportCommandTests
         Assert.Contains("Imported the installation Jason 0.33.0 exported at 2026-11-08 09:30:00Z", said, StringComparison.Ordinal);
         Assert.Contains("Left to you:", said, StringComparison.Ordinal);
         Assert.Contains("jason status", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("The import is incomplete", said, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -1355,6 +1566,9 @@ public sealed class ImportCommandTests
         var help = to.Out.ToString().ReplaceLineEndings(" ");
         Assert.Contains("Refused before anything is written", help, StringComparison.Ordinal);
         Assert.Contains("an archive a newer Jason wrote", help, StringComparison.Ordinal);
+        Assert.Contains("a data directory laid out in a layout newer than this jason runs (layout_newer), or a layout below 1", help, StringComparison.Ordinal);
+        Assert.Contains("a layout stamp, data/layout.json, that cannot be read or names a layout export.json does not", help, StringComparison.Ordinal);
+        Assert.Contains("ui/custom/, logs/ and layout.json", help, StringComparison.Ordinal);
         Assert.Contains("a file entry named where an import places a folder, or a folder entry named as one of the database files", help, StringComparison.Ordinal);
         Assert.Contains("Nothing is deleted", help, StringComparison.Ordinal);
         Assert.Contains("<data>/replaced-<stamp>/", help, StringComparison.Ordinal);
@@ -1362,9 +1576,10 @@ public sealed class ImportCommandTests
         Assert.Contains("a jason.db-wal or jason.db-shm beside no database", help, StringComparison.Ordinal);
         Assert.Contains("The harness root: --root, else JASON_Harness__Root, else the Harness:Root this machine's settings file names, else Jason in the home directory", help, StringComparison.Ordinal);
         Assert.Contains("Harness:Root first", help, StringComparison.Ordinal);
+        Assert.Contains("A refused link is named in link_refused by project, folder, code and message; the folder and everything placed stay, the other projects are still linked, next carries 'jason project link <id> --path <folder>', and the exit is 1", help, StringComparison.Ordinal);
         Assert.Contains("Left to you: jason skills install", help, StringComparison.Ordinal);
-        Assert.Contains("Exit codes: 0 placed and the runtime answered", help, StringComparison.Ordinal);
-        Assert.Contains("Exit codes: 0 placed and the runtime answered; 1 refused, with nothing written; placed and the runtime did not start; or stopped part-way, which the answer names; 2 usage.", help, StringComparison.Ordinal);
+        Assert.Contains("Exit codes: 0 placed, the runtime answered and every project folder was linked", help, StringComparison.Ordinal);
+        Assert.Contains("Exit codes: 0 placed, the runtime answered and every project folder was linked; 1 refused, with nothing written; placed and the runtime did not start; placed and a project folder not linked, which link_refused names and the answer keeps whole; or stopped part-way, which the answer names; 2 usage.", help, StringComparison.Ordinal);
         Assert.Contains("an update in flight, naming 'jason update apply'", help, StringComparison.Ordinal);
         Assert.Contains("a --root that JASON_Harness__Root contradicts, naming the variable", help, StringComparison.Ordinal);
         Assert.Contains("a settings file in the archive that is not a JSON object", help, StringComparison.Ordinal);

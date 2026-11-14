@@ -13,10 +13,11 @@ namespace Jason.Runtime.Tests.Api;
 
 /// <summary>
 /// A person's word given from inside a run. The CLI says where it runs with one header, <c>Jason-Attempt</c>, whenever its
-/// environment names the attempt it was launched for; the five verbs that are a person's own word — the two decisions on an
-/// approval, a standing approval set or taken back, and an answer — refuse any request that carries it, whatever actor
-/// the body claims, and record nothing. Every other verb reads past the header: the fenced ones keep their attempt in the
-/// body, and the header is never their fence.
+/// environment names the attempt it was launched for; the verbs that are a person's own word — the two decisions on an
+/// approval, a standing approval set or taken back, an answer, a preference set or taken back, and a campaign's send mode
+/// — refuse any request
+/// that carries it, whatever actor the body claims, and record nothing. Every other verb reads past the header: the fenced
+/// ones keep their attempt in the body, and the header is never their fence.
 /// </summary>
 public class InsideARunTests
 {
@@ -39,6 +40,9 @@ public class InsideARunTests
         Operations.ApprovalSetStanding,
         Operations.ApprovalUnsetStanding,
         Operations.DecisionAnswer,
+        Operations.PreferenceSet,
+        Operations.PreferenceUnset,
+        Operations.CampaignSetSendMode,
     ];
 
     /// <summary>
@@ -61,7 +65,7 @@ public class InsideARunTests
         Assert.Equal("decided_inside_a_run", error.Code);
         Assert.False(error.Retryable);
         Assert.Equal(
-            $"This request comes from inside attempt `{HeaderAttempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
+            $"This request comes from inside attempt `{HeaderAttempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
             error.Message);
         Assert.Equal(before, await StateAsync(api));
 
@@ -108,16 +112,50 @@ public class InsideARunTests
     }
 
     /// <summary>
-    /// The five and no more. The other verbs that take no default actor — a preference set or unset, a block's clear, a
-    /// resume, a report and a subscription's rewind — are not among them: a resume and a report are a run's to make, and
-    /// the rest are a person's already by their actor. A sixth is a decision of its own, made here on purpose.
+    /// These and no more. A campaign's send mode is among them, since the claim releases sends in the name of the person
+    /// who set it. A preference is among them for every key, not for the keys that steer sends alone: a preference
+    /// is what a named person states, and in a dispatched run no person is there, so a run that names a person on any key
+    /// is what the refusal exists for. The gate is by operation and never reads the body, so it holds a key nobody has
+    /// written yet; refusing some keys in the service instead would be a second mechanism the next sensitive key had to
+    /// remember. The other verbs that take no default actor — a block's clear, a resume, a report and a subscription's
+    /// rewind — are not among them: a resume and a report are a run's to make, and the rest are a person's already by
+    /// their actor. Another is a decision of its own, made here on purpose.
     /// </summary>
     [Fact]
-    public void Exactly_the_five_verbs_that_are_a_persons_own_word_refuse()
+    public void Exactly_the_verbs_that_are_a_persons_own_word_refuse()
     {
         Assert.Equal(
             PersonsVerbs.Select(row => row.Data).Order(StringComparer.Ordinal),
-            Jason.Runtime.Api.InsideARun.Refusing.Order(StringComparer.Ordinal));
+            Jason.Runtime.Api.InsideARun.PersonsWord.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A grant given or taken back changes Jason itself, and a role Jason launches is not the person who runs it: inside a
+    /// run the two are refused by the header alone, before the body is read, and the settings file is not touched.
+    /// </summary>
+    [Theory]
+    [InlineData(Operations.PluginGrant)]
+    [InlineData(Operations.PluginRevoke)]
+    public async Task A_grant_given_or_taken_back_from_inside_a_run_is_refused_and_writes_nothing(string operation)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var before = File.ReadAllBytes(api.Paths.UserSettingsFile);
+
+        var (status, text) = await api.PostAsync(operation, new { plugin_id = "fake-provider", capability = "env", entry = "FAKE_TOKEN", actor = Ada }, Inside, Ct);
+        var (unread, unreadText) = await api.PostRawAsync(operation, "{not json", Inside, Ct);
+
+        Assert.True(status == HttpStatusCode.Forbidden, $"{operation} answered {(int)status}: {text}");
+        var error = JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
+        Assert.Equal("decided_inside_a_run", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Equal(
+            $"This request comes from inside attempt `{HeaderAttempt}`. Nothing inside a run changes Jason itself, and what a plugin may use is part of it: leave it to the person, or raise it as a decision.",
+            error.Message);
+        Assert.True(unread == HttpStatusCode.Forbidden, $"{operation} answered {(int)unread}: {unreadText}");
+        Assert.Equal(before, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        Assert.Equal(
+            [Operations.PluginGrant, Operations.PluginRevoke],
+            Jason.Runtime.Api.InsideARun.ChangesJason.Order(StringComparer.Ordinal));
     }
 
     public static TheoryData<string> OtherVerbs =>
@@ -174,6 +212,16 @@ public class InsideARunTests
 
             case Operations.DecisionAnswer:
                 return new { decision_id = (await RunningAsync(api, raiseDecision: true)).Decision, answer = "Keep going", actor = Ada };
+
+            case Operations.PreferenceSet:
+                return new { key = "send_mode.cold", value = new { mode = "automatic" }, actor = Ada };
+
+            case Operations.CampaignSetSendMode:
+                return new { campaign_id = await CampaignAsync(api), cold = "automatic", actor = Ada };
+
+            case Operations.PreferenceUnset:
+                await api.PostOkAsync<PreferenceDto>(Operations.PreferenceSet, new { key = "tone_of_voice", value = new { summary = "Plain." }, actor = Ada }, Ct);
+                return new { key = "tone_of_voice", actor = Ada };
 
             case Operations.WorkItemWait:
                 {

@@ -268,7 +268,7 @@ public sealed partial class CopyPromptTests
         Assert.EndsWith(YouDecideNothing, run.Output.TrimEnd(), StringComparison.Ordinal);
     }
 
-    private const string YouDecideNothing = "You decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. Do not run jason approval approve, jason approval reject, jason approval set-standing or jason decision answer.";
+    private const string YouDecideNothing = "You decide nothing. Approving, rejecting and answering stay with the person, and so does a standing approval: setting one is the person's own act. So does how messages are sent: a campaign's send mode and the preferences send_mode.cold and send_mode.warm are the person's to set. Do not run jason approval approve, jason approval reject, jason approval set-standing, jason decision answer, jason workitem review, jason campaign set-send-mode, jason preference set or jason preference unset.";
 
     [Theory]
     [InlineData("approval", "apr_1", "approval.get", "pending-with-preview")]

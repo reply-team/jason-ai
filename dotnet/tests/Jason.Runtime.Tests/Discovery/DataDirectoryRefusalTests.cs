@@ -30,7 +30,7 @@ public class DataDirectoryRefusalTests
         await File.WriteAllTextAsync(blocker, "this is a file, not a directory", Ct);
 
         var refusal = await Assert.ThrowsAsync<DataDirectoryUnusableException>(
-            () => RuntimeHost.StartAsync(new JasonPaths(Path.Combine(blocker, "data")), null, Ct));
+            () => RuntimeHost.StartAsync(new JasonPaths(Path.Combine(blocker, "data"), 1), null, Ct));
 
         Assert.Contains("did not start", refusal.Message, StringComparison.Ordinal);
         Assert.Contains(Path.Combine(blocker, "data"), refusal.Message, StringComparison.Ordinal);
@@ -49,7 +49,7 @@ public class DataDirectoryRefusalTests
     public async Task A_refusal_part_way_through_the_layout_does_not_say_nothing_was_written()
     {
         using var tree = new TempTree();
-        var data = new JasonPaths(Path.Combine(tree.Root, "data"));
+        var data = new JasonPaths(Path.Combine(tree.Root, "data"), 1);
         Directory.CreateDirectory(data.Root);
         await File.WriteAllTextAsync(data.RunDirectory, "a file where the run directory goes", Ct);
 
@@ -58,6 +58,33 @@ public class DataDirectoryRefusalTests
         Assert.True(Directory.Exists(data.StateDirectory), "the test's own premise: the layout was begun before it failed.");
         Assert.DoesNotContain("Nothing was written", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("may have been created", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A data directory a newer Jason laid out, or whose stamp cannot be read, is refused first of all: in the envelope
+    /// <c>jason runtime start</c> refuses it with, on the writer a detached start reads, and with nothing written — no
+    /// folder of the layout this build runs made again, no lock, no log, no database.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"layout":2,"written_by":"0.43.0"}""", "layout_newer", "This data directory was set up by Jason 0.43.0, newer than this jason (")]
+    [InlineData("""{"layout":"two","written_by":"0.43.0"}""", "layout_unreadable", "This data directory's layout stamp at ")]
+    public async Task A_layout_this_build_does_not_run_refuses_the_start_and_writes_nothing(string stamp, string code, string opening)
+    {
+        using var tree = new TempTree();
+        var root = Path.Combine(tree.Root, "data");
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(Path.Combine(root, "layout.json"), stamp, Ct);
+        using var refusals = new StringWriter();
+
+        var exit = await RuntimeHost.RunAsync(new JasonPaths(root), TestRuntimeOptions.Quiet with { Refusals = refusals }, Ct);
+
+        Assert.Equal(1, exit);
+        using var envelope = System.Text.Json.JsonDocument.Parse(refusals.ToString());
+        var error = envelope.RootElement.GetProperty("error");
+        Assert.Equal(code, error.GetProperty("code").GetString());
+        Assert.StartsWith(opening, error.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Exception", error.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal(["layout.json"], Directory.EnumerateFileSystemEntries(root).Select(Path.GetFileName));
     }
 
     /// <summary>

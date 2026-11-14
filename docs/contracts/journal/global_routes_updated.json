@@ -1,0 +1,59 @@
+{
+  "kind": "global_routes_updated",
+  "version": 1,
+  "since": "0.42.0",
+  "summary": "A global route was set or taken away by route.set or route.unset, so an operation, one channel of an operation, or all provider work goes to the plugin it names for every campaign with no route of its own, or no longer does.",
+  "subscribable": false,
+  "entities": {
+    "plugin": { "at": ["/new/plugin", "/old/plugin"], "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Which global route the line is about, in the three forms `routes_updated` keys a campaign's routes by: `default` for the global default route; an operation's id, such as `message.send`, for that operation's own global route; or `<operation>/<channel>`, such as `message.send/linkedin`, for the global route of that operation's calls on one channel."
+      },
+      "old": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["plugin", "binding"],
+        "description": "The global route in force for the key before the write, or null where there was none.",
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1 },
+          "binding": {
+            "type": ["object", "null"],
+            "description": "The binding the route carried, or null. Its shape is the plugin's own; it names an account and never a credential."
+          }
+        }
+      },
+      "new": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["plugin", "binding"],
+        "description": "The global route in force for the key now, as the reload froze it from the settings file, or null where it was taken away.",
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1 },
+          "binding": {
+            "type": ["object", "null"],
+            "description": "The binding the route carries, or null. Its shape is the plugin's own; it names an account and never a credential."
+          }
+        }
+      }
+    },
+    "anyOf": [
+      {
+        "description": "A route set: there may have been one before.",
+        "properties": { "new": { "type": "object" } }
+      },
+      {
+        "description": "A route taken away: there was one, and there is none now.",
+        "properties": { "old": { "type": "object" }, "new": { "type": "null" } }
+      }
+    ]
+  }
+}

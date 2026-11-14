@@ -106,6 +106,8 @@ public class LogInvariantTests
             ["a subscribed line's text"] = SentinelPrefix + "LINE_" + mark,
             ["a chain's envelope"] = SentinelPrefix + "ENVELOPE_" + mark,
             ["a plugin's configured token"] = SentinelPrefix + "CONFIG_" + mark,
+            ["a creator's doubt about its send"] = SentinelPrefix + "ASKNOTE_" + mark,
+            ["a reviewer's doubt about a send"] = SentinelPrefix + "REVIEWNOTE_" + mark,
 
             // A role name is lowercase with hyphens, and is what the message of an attempt the claim refuses quotes.
             ["a role nothing can launch"] = "sentinel-role-" + mark,
@@ -345,6 +347,55 @@ public class LogInvariantTests
             "--reason",
             sentinels["a person's reason for the answer"])));
         Assert.Equal("answered", (string?)answered["status"]);
+
+        // A send its creator doubts, with the sentence beside the code, written waiting on the asker's work so it stays
+        // a send still to go; the asker's running attempt then doubts it too, with a sentence of its own. Neither sentence
+        // is in what a read of the send answers, nor, at the end, in the log or in a bundle.
+        var doubted = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it,
+            "workitem",
+            "create",
+            campaign,
+            "--kind",
+            "provider_op",
+            "--operation",
+            "message.send",
+            "--input",
+            new JsonObject
+            {
+                ["channel"] = "email",
+                ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "sender@example.test" },
+                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Thursday", ["body"] = "Thursday at 10 works." },
+            }.ToJsonString(JasonJson.Options),
+            "--ask-person",
+            "other",
+            "--ask-person-note",
+            sentinels["a creator's doubt about its send"],
+            "--wait-on",
+            asking)))["id"]!;
+        var reviewHash = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "workitem", "get", doubted)))["review_hash"]!;
+        var reviewed = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it,
+            "--actor",
+            "attempt:" + attemptId,
+            "workitem",
+            "review",
+            doubted,
+            "--review-hash",
+            reviewHash,
+            "--result",
+            "doubts",
+            "--code",
+            "off_brief",
+            "--note",
+            sentinels["a reviewer's doubt about a send"])));
+        Assert.Equal("workitem_reviewed", (string?)reviewed["kind"]);
+        var readBack = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "workitem", "get", doubted, "--snapshots"))).ToJsonString()
+            + GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "workitem", "list", "--campaign", campaign))).ToJsonString()
+            + reviewed.ToJsonString();
+        Assert.DoesNotContain(sentinels["a creator's doubt about its send"], readBack, StringComparison.Ordinal);
+        Assert.DoesNotContain(sentinels["a reviewer's doubt about a send"], readBack, StringComparison.Ordinal);
+
         GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "workitem", "cancel", asking, "--reason", sentinels["a cancellation's reason"]));
         Assert.Equal("cancelled", (string?)(await GoldenPath.PollAsync(it, asking, item => GoldenPath.Finished((string?)item["status"])))["status"]);
 
@@ -363,6 +414,15 @@ public class LogInvariantTests
         await LoggedAsync(it, Refusal("Dispatcher"));
 
         await File.WriteAllTextAsync(it.Paths.UserSettingsFile, Settings(workspace, sentinels["a plugin's configured token"]), Ct);
+
+        // A bundle with everything a bundle can be asked to carry, made once both doubts exist: the work-item pages keep
+        // their metadata and drop their values, so neither sentence travels.
+        var doubtsBundle = Path.Combine(it.Root, "bundle-with-doubts.json");
+        Assert.Equal(ExitCodes.Success, (await GoldenPath.JasonAsync(it, "doctor", "--include-journal", "--output", doubtsBundle)).ExitCode);
+        var carried = await File.ReadAllTextAsync(doubtsBundle, Ct);
+        Assert.Contains(doubted, carried, StringComparison.Ordinal);
+        Assert.DoesNotContain(sentinels["a creator's doubt about its send"], carried, StringComparison.Ordinal);
+        Assert.DoesNotContain(sentinels["a reviewer's doubt about a send"], carried, StringComparison.Ordinal);
 
         var stopped = await GoldenPath.JasonAsync(it, "runtime", "stop");
         var events = Events(it.Paths);

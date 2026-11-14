@@ -25,7 +25,7 @@ public class HarnessOptionsTests
 
     private static readonly string Home = Path.Combine(Base, "home");
 
-    private static readonly JasonPaths Data = new(Path.Combine(Home, ".jason"));
+    private static readonly JasonPaths Data = new(Path.Combine(Home, ".jason"), 1);
 
     [Fact]
     public void Absent_the_root_is_Jason_in_the_home_directory()
@@ -143,7 +143,7 @@ public class HarnessOptionsTests
     public void A_folder_that_holds_the_data_directory_is_refused()
     {
         var elsewhere = Path.Combine(Base, "elsewhere");
-        var data = new JasonPaths(Path.Combine(elsewhere, "data"));
+        var data = new JasonPaths(Path.Combine(elsewhere, "data"), 1);
 
         var result = new HarnessOptionsValidator(data, Home).Validate(null, new HarnessOptions { Root = elsewhere });
 
@@ -156,7 +156,7 @@ public class HarnessOptionsTests
     [Fact]
     public void A_default_that_holds_the_data_directory_is_refused_saying_what_to_set()
     {
-        var data = new JasonPaths(Path.Combine(Home, "Jason", "data"));
+        var data = new JasonPaths(Path.Combine(Home, "Jason", "data"), 1);
 
         var result = new HarnessOptionsValidator(data, Home).Validate(null, new HarnessOptions());
 
@@ -249,7 +249,7 @@ public class HarnessOptionsTests
     {
         using var tree = new TempTree();
         var home = Path.Combine(tree.Root, "base", "home");
-        var data = new JasonPaths(Path.Combine(home, ".jason"));
+        var data = new JasonPaths(Path.Combine(home, ".jason"), 1);
         Directory.CreateDirectory(data.Root);
         var (to, refusal) = target switch
         {
@@ -272,7 +272,7 @@ public class HarnessOptionsTests
     [Fact]
     public void A_default_that_lands_on_the_data_directory_is_refused_saying_what_to_set()
     {
-        var data = new JasonPaths(Path.Combine(Home, "Jason"));
+        var data = new JasonPaths(Path.Combine(Home, "Jason"), 1);
 
         var result = new HarnessOptionsValidator(data, Home).Validate(null, new HarnessOptions());
 
@@ -291,7 +291,7 @@ public class HarnessOptionsTests
     {
         using var tree = new TempTree();
         var home = Path.Combine(tree.Root, "home");
-        var data = new JasonPaths(Path.Combine(home, ".jason"));
+        var data = new JasonPaths(Path.Combine(home, ".jason"), 1);
         Directory.CreateDirectory(data.Root);
         var link = Path.Combine(home, HarnessOptions.DefaultFolder);
         Link(link, home);
@@ -313,7 +313,7 @@ public class HarnessOptionsTests
     [Fact]
     public void A_default_that_lands_inside_the_data_directory_is_refused_saying_what_to_set()
     {
-        var data = new JasonPaths(Home);
+        var data = new JasonPaths(Home, 1);
 
         var result = new HarnessOptionsValidator(data, Home).Validate(null, new HarnessOptions());
 

@@ -4,7 +4,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, sy
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { AgentFolderUnowned } from '../src/chat-agent-folder.ts';
-import { loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
+import { LayoutRefused, layoutRefusalIn, loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
 import { SkillsGate } from '../src/skills-gate.ts';
 import type { DesktopSettings } from '../src/settings.ts';
 import { bench, memoryLog, type Bench } from './harness.ts';
@@ -148,6 +148,41 @@ test('a start that fails, or a link that is not the runtime’s UI, stops with w
 
     const foreign = bench(t, { env: { STUB_LINK: 'https://example.com/ui/#pair=x' } });
     await assert.rejects(start(foreign), (error: unknown) => error instanceof StartFailed && error.step === 'ui open');
+});
+
+test('a layout jason runtime start refuses stops the start in the CLI’s own words, by its code, and nothing after the start is run', async (t) => {
+    const cases = [
+        ['layout_newer', 'This data directory was set up by Jason 0.50.0, newer than this jason (0.34.0-rc.1): update this jason, or use the one that set it up.'],
+        ['layout_unreadable', 'This data directory’s layout stamp at /data/layout.json cannot be read (it is not JSON), so this jason cannot tell how the directory is laid out: use the Jason that set it up, or update this jason.'],
+    ] as const;
+    for (const [code, message] of cases) {
+        const b = bench(t, { env: { STUB_START_REFUSES: code, STUB_START_SAYS: message } });
+        const log = memoryLog();
+        await assert.rejects(
+            startInstallation({ cli: loggedCli(b.cli, log), paths: b.paths, log, bundle: join(b.root, 'bundle'), bundleVersion, settings: { feed: null, skillsDeployedFor: null, theme: null }, saveSettings: () => assert.fail('nothing is saved'), programs: b.programs }),
+            (error: unknown) => error instanceof LayoutRefused && error instanceof StartFailed && error.step === 'layout' && error.code === code && error.message === message && error.exit === 1,
+        );
+        const verbs = b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args.slice(0, 2).join(' '));
+        assert.deepEqual(verbs, ['status', 'runtime start'], `${code}: nothing after the start`);
+        assert.equal(existsSync(b.paths.runFile), false);
+        assert.equal(existsSync(b.paths.chat), false, `${code}: the chat folder is not made`);
+        assert.deepEqual(
+            log.lines.filter((line) => line.name === 'layout_refused').map((line) => line.fields),
+            [{ Code: code }],
+        );
+    }
+    // Any other failure stays a failed start in what the CLI said, the same refusal envelope with another code included.
+    const other = bench(t, { env: { STUB_START_REFUSES: 'runtime_not_started', STUB_START_SAYS: 'It did not start.' } });
+    await assert.rejects(start(other), (error: unknown) => error instanceof StartFailed && !(error instanceof LayoutRefused) && error.step === 'runtime start');
+});
+
+test('only a layout code on stdout is a layout refusal', () => {
+    const envelope = (code: unknown, message: unknown) => JSON.stringify({ error: { code, message, retryable: false } });
+    assert.deepEqual(layoutRefusalIn(envelope('layout_newer', 'Newer.')), { code: 'layout_newer', message: 'Newer.' });
+    assert.deepEqual(layoutRefusalIn(envelope('layout_unreadable', 'Unreadable.') + String.fromCharCode(10)), { code: 'layout_unreadable', message: 'Unreadable.' });
+    for (const stdout of ['', 'layout_newer', '{"error":null}', '[]', envelope('layout_newer', ''), envelope('layout_newer', 3), envelope('Layout_Newer', 'x'), envelope('runtime_unreachable', 'x')]) {
+        assert.equal(layoutRefusalIn(stdout), null, stdout);
+    }
 });
 
 test('the desktop’s environment reaches the CLI as it is: the same data directory and harness root a terminal has', async (t) => {

@@ -33,6 +33,7 @@ public static class CampaignCommands
         campaign.Subcommands.Add(Transition("pause", "Pause an active campaign.", Operations.CampaignPause, env, actor));
         campaign.Subcommands.Add(Transition("archive", "Archive a campaign. Archiving is final.", Operations.CampaignArchive, env, actor));
         campaign.Subcommands.Add(UpdateContext(env, actor));
+        campaign.Subcommands.Add(SetSendMode(env, actor));
         campaign.Subcommands.Add(AddContacts(env, actor));
         campaign.Subcommands.Add(RemoveContacts(env, actor));
         campaign.Subcommands.Add(ListContacts(env, actor));
@@ -226,6 +227,75 @@ public static class CampaignCommands
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignUpdate, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
                 .ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    /// <summary>The two kinds of contact a campaign's send mode is set for, as <c>--clear</c> names them.</summary>
+    private static readonly string[] Temperatures = ["cold", "warm"];
+
+    /// <summary>
+    /// A campaign's own send mode, for its cold contacts, its warm ones or both: a person's standing word, so the CLI's
+    /// default actor does not apply, and a run is refused it. The mode words are held to automatic and every_message;
+    /// <c>--clear</c> sends null, which gives that mode back to the installation, and a mode both set and cleared in
+    /// one command is a usage error, because which of the two the person meant is not the CLI's to guess.
+    /// </summary>
+    private static Command SetSendMode(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "set-send-mode",
+            "Set this campaign's own send mode: automatic, and its sends go without being asked, or every_message, and each one waits for a person. "
+                + "Cold is a contact who has not answered in the campaign, warm one who has; a mode the campaign does not set follows the installation's preference. "
+                + "Under automatic a send still goes to a person where it was written in the desktop's chat or is doubted, where its contact has a reply waiting to be judged, "
+                + "where it answers a reply that was not a person's or a conversation marked for the person, where neither the critic nor a person passed its text, "
+                + "or where it would pass the day's ceiling of automatic sends; no send goes to a contact who opted out. "
+                + "Name --cold, --warm or both: naming neither is refused, and so is an archived campaign. "
+                + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
+        var id = CampaignId();
+        var cold = Choice<SendMode>.Only(new Option<string?>("--cold") { Description = "The mode for a contact who has not answered in the campaign: automatic or every_message. Absent leaves it alone." });
+        var warm = Choice<SendMode>.Only(new Option<string?>("--warm") { Description = "The mode for a contact who has answered in the campaign: automatic or every_message. Absent leaves it alone." });
+        var clear = Choices.Hold(
+            VerbOptions.Repeatable(
+                "--clear",
+                "A mode to give back to the installation's preference: cold or warm. Repeat the option for both."),
+            Temperatures,
+            word => Temperatures.Contains(word, StringComparer.Ordinal));
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(cold);
+        command.Options.Add(warm);
+        command.Options.Add(clear);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            var body = RequestBody.Empty()
+                .Set("campaign_id", parseResult.GetValue(id))
+                .Set("cold", parseResult.GetValue(cold))
+                .Set("warm", parseResult.GetValue(warm));
+            foreach (var mode in parseResult.GetValue(clear) ?? [])
+            {
+                if ((mode == "cold" ? parseResult.GetValue(cold) : parseResult.GetValue(warm)) is not null)
+                {
+                    throw new UsageException($"--{mode} and --clear {mode} both name the {mode} mode: set it or give it back, not both.");
+                }
+
+                body.Set(mode, null, onlyIfNotNull: false);
+            }
+
+            if (!body.ContainsKey("cold") && !body.ContainsKey("warm"))
+            {
+                throw new UsageException("campaign set-send-mode needs --cold, --warm or --clear: name the mode to set or to give back.");
+            }
+
+            body.Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "campaign set-send-mode", "a campaign's send mode is set on a person's word");
+
+            return OperationRunner.RunAsync(env, Operations.CampaignSetSendMode, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken);
         });
 
         return command;

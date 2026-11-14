@@ -8,7 +8,7 @@ import { PermissionBroker, type BrokerEvent } from '../src/chat-permission-broke
 import { openEndpoint, serverName, toolName } from '../src/chat-permission-endpoint.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, writeTurnConfig } from '../src/chat-turn-files.ts';
-import { desktopPaths } from '../src/paths.ts';
+import { dataLayout, desktopPaths, settingsFilesOf } from '../src/paths.ts';
 
 const require = createRequire(import.meta.url);
 const client = require('./stubs/mcp-http.cjs') as {
@@ -24,7 +24,7 @@ async function turn(t: { after: (fn: () => void | Promise<void>) => void }) {
     const broker = new PermissionBroker({ emit: (chat, event) => cards.push({ chat, event }) });
     const platform = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
     const id = newTurnId();
-    broker.openTurn('chat_a', id, { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: [paths.installationSettings], denied: ['runtime'], deniedOperations: [], home: root, real: realPathOf });
+    broker.openTurn('chat_a', id, { platform, cwd: paths.chat, chat: paths.chat, added: [], data: root, protectedFiles: settingsFilesOf(paths.data), denied: ['runtime'], deniedOperations: [], home: root, real: realPathOf });
     const secret = newSecret();
     const endpoint = await openEndpoint({ secret, decide: (tool, input) => broker.ask(id, tool, input) });
     const config = writeTurnConfig(paths.turns, id, endpoint.url, secret);
@@ -46,7 +46,7 @@ test('through the HTTP tool, what the model allows comes back allowed with no ca
 
 test('through the HTTP tool, a read of the installation\'s data is refused with no card', async (t) => {
     const { paths, cards, config } = await turn(t);
-    const decision = await client.decide(config, serverName, toolName, 'Read', { file_path: paths.installationSettings });
+    const decision = await client.decide(config, serverName, toolName, 'Read', { file_path: dataLayout(paths.data).userSettingsFile });
     assert.equal(decision.behavior, 'deny');
     assert.deepEqual(cards, []);
 });

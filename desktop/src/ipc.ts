@@ -45,6 +45,7 @@ export const invokeChannels = {
     'openIn.targets': 'jason:openIn.targets',
     'openIn.open': 'jason:openIn.open',
     'openIn.continueChat': 'jason:openIn.continueChat',
+    'openIn.changeJason': 'jason:openIn.changeJason',
     'links.take': 'jason:links.take',
     'pairing.paired': 'jason:pairing.paired',
 } as const;

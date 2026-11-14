@@ -190,6 +190,42 @@ public class OptionsHotReloadTests
     }
 
     /// <summary>
+    /// A file that is valid JSON to the reader but holds an escape no text can be made of — half of a surrogate pair, as
+    /// <c>"\ud800"</c> — is refused by the parser with an exception of another family than the one a syntax error
+    /// throws. It is the same fact about the file: a live edit to it never stops the runtime, the last good settings
+    /// stay in force, the person is told once by the failure's type, and a reload answers the settings problem rather
+    /// than a server error.
+    /// </summary>
+    [Fact]
+    public async Task A_live_edit_to_a_file_holding_an_undecodable_escape_never_stops_the_runtime_and_the_reload_answers_the_settings_problem()
+    {
+        const string sentinel = "SENTINEL_HALF_PAIR";
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false,"TickSeconds":7}}"""));
+
+        var monitor = fixture.Runtime.Services.GetRequiredService<IOptionsMonitor<DispatcherOptions>>();
+        Assert.Equal(7, monitor.CurrentValue.TickSeconds);
+
+        File.WriteAllText(fixture.Paths.UserSettingsFile, "{\"Dispatcher\":{\"Enabled\":false,\"TickSeconds\":1},\"" + sentinel + "\":\"\\ud800\"}");
+
+        var line = Assert.Single(await SettingsFileLinesAsync(fixture.Paths));
+        Assert.Equal(KeptWithoutPosition, (string?)line["@mt"]);
+        Assert.Equal(nameof(InvalidOperationException), (string?)line["ExceptionType"]);
+        Assert.Equal(7, monitor.CurrentValue.TickSeconds);
+        await AssertStillAnswersAsync(fixture);
+
+        var error = await fixture.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("settings_file_unreadable", detail.Code);
+        Assert.DoesNotContain(sentinel, detail.Message, StringComparison.Ordinal);
+        Assert.Equal(7, monitor.CurrentValue.TickSeconds);
+        Assert.DoesNotContain(sentinel, RuntimeLogs(fixture.Paths), StringComparison.Ordinal);
+        await AssertStillAnswersAsync(fixture);
+    }
+
+    /// <summary>
     /// The same unreadable edit met by a plugin reload sent straight after it, with the file's watch stopped so that the
     /// reload's own read is the only one. A reload is an operator asking to make the file true now, and a file that does
     /// not parse says nothing it could be made true from: the reload is rejected, naming the file and where the parser

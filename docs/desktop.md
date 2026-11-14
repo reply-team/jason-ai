@@ -193,7 +193,7 @@ opens a folder in the place you used last, and its arrow lists every place avail
   ([below](#the-chat-in-a-browser-tab)).
 
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
-otherwise the first place of the list. Copy path and Browser are never the default, and a terminal is always there. The desktop keeps the choice
+otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
 your folders.
 
@@ -222,8 +222,18 @@ than shown.
 **What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
 and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
 own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
-refused, as the commands that start a session on your computer. It does not open the data directory; the one folder of it
-a terminal is opened in is the chat's own, to continue a chat.
+refused, as the commands that start a session on your computer. It does not open the data directory; the folders of it a
+terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside
+it, to change Jason itself.
+
+**Changing Jason itself.** In your own installation, never in the demo, **Change Jason itself**, below Copy path and
+above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
+plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
+`jason session open --setup`, which opens the host the preference
+[`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
+host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with a host
+the desktop finds that was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
+changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
 Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs
@@ -479,7 +489,9 @@ Claude Code.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
-  loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder.
+  loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder. In Jason's data directory that is the settings file,
+  `config/settings.json`, and, in an installation that keeps what a person sets up in `setup/`, the roles, the plugins
+  and the settings there and the plugins' secrets in `config/secrets.json`.
   While Codex is the chat's host, on your sign-in or on the OpenAI key, the line under the composer says what a command
   can read, system by system as it was seen. On Windows, where the desktop's check has seen the elevated sandbox keep
   the run file from a command: **A Codex command can read your files, Jason's data and settings among them, a plugin's
@@ -614,19 +626,22 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
   every time, held to the real tree by a test.
-- **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt): everything the CLI
-  reserves for a person (approving and rejecting, answering a decision, a standing approval, a preference, clearing a
-  block, resuming work, a report, rewinding a subscription), everything that changes the installation, follows it
-  without end or carries it off the machine (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`,
-  `update`, `uninstall`, `ui`, `session`, `journal watch`, `export`, `import`), and four more that decide who is reached
-  or what runs (`suppression remove`, `route set`, `route unset`, `role set-profile`). **`role add` and `project link` are
-  typed in a terminal**: a role's entry command is started by the dispatcher, and a project's linked folder becomes a
-  working folder of every chat on its campaigns. A command that names an operation these verbs call is refused too.
-  Also refused: any `reply` command but the two above, any read or write under the data directory outside the chat folder (the
-  settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
-  where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the
-  agent to the chat's own instruction files, to the `.claude`, `.agents` and `.codex` folders of the chat folder and to
-  its `.mcp.json`.
+- **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any letter case:
+  everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
+  preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a
+  subscription), everything that changes the installation, follows it without end or carries it off the machine
+  (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`, `update`, `uninstall`, `ui`, `session`,
+  `journal watch`, `export`, `import`), and six more that decide who is reached or what runs (`suppression remove`,
+  `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`). **`role add` and `project link` are
+  typed in a terminal**: a role's
+  entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
+  its campaigns. A command that names an operation these verbs call is refused too. Also refused: any `reply` command
+  but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
+  file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
+  names that directory, a command that names `JASON_CONFINED`, a command that names `JASON_ATTEMPT_ID` (a chat is never
+  a role's run), a command that changes where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a
+  card to show whole, and a write by the agent to the chat's own instruction files, to the `.claude`, `.agents` and
+  `.codex` folders of the chat folder and to its `.mcp.json`.
 - **A card asks you.** Every other command, `jason doctor` and the `jason` commands no allowed verb begins included; a read outside the chat
   folder and the added folders; a write outside them, or in a campaign's or a project's folder to a file the host loads
   (`.claude`, `.git`, `.jason`, an agent's settings or instruction file, a file named `jason`); a write of a file Claude
@@ -636,7 +651,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
   What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
   input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
-  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, the data directory). Full access
+  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, `JASON_ATTEMPT_ID`, the data directory). Full access
   does not run it. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`
@@ -774,6 +789,10 @@ folder back in the place of the installed application. That puts back the previo
 the data directory stays as the newer version left it. On Linux an AppImage update keeps the AppImage file itself; a deb
 update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`.
 On Windows the system's list of installed programs keeps showing the newer version's number after a folder is put back.
+A data directory that a newer Jason laid out in a way this one does not know, or whose layout stamp `layout.json` cannot
+be read, is refused instead: the starting page says so in `jason runtime start`'s own words, offers no going back, and no
+runtime is started. The Connect cards that write refuse before they sign in, place or write anything, in the sentence
+the CLI gives, without the line and byte it names for a file that is not JSON.
 
 **Not covered.** An update of the desktop from one build to the next through the updater is checked by nothing: a
 candidate is installed by hand and the stable channel offers it nothing. The first run of the macOS login agent and of the

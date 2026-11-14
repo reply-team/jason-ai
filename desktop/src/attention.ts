@@ -7,6 +7,7 @@
 
 import type { Cli } from './cli.ts';
 import type { Logger } from './log.ts';
+import { windowTitle } from './window-title.ts';
 
 export type Attention = { state: 'reading' } | { state: 'up'; approvals: number; questions: number } | { state: 'unreachable' };
 
@@ -70,12 +71,12 @@ export interface TrayView {
 }
 
 export function trayView(attention: Attention): TrayView {
-    if (attention.state === 'reading') return { title: '', tooltip: 'Jason', status: 'Reading what waits on you…' };
-    if (attention.state === 'unreachable') return { title: '!', tooltip: 'Jason: the runtime is not answering', status: 'The runtime is not answering' };
+    if (attention.state === 'reading') return { title: '', tooltip: windowTitle, status: 'Reading what waits on you…' };
+    if (attention.state === 'unreachable') return { title: '!', tooltip: `${windowTitle}: the runtime is not answering`, status: 'The runtime is not answering' };
     const total = attention.approvals + attention.questions;
-    if (total === 0) return { title: '', tooltip: 'Jason: nothing waits on you', status: 'Nothing waits on you' };
+    if (total === 0) return { title: '', tooltip: `${windowTitle}: nothing waits on you`, status: 'Nothing waits on you' };
     const said = counted(attention);
-    return { title: String(total), tooltip: `Jason: ${said}`, status: said.charAt(0).toUpperCase() + said.slice(1) };
+    return { title: String(total), tooltip: `${windowTitle}: ${said}`, status: said.charAt(0).toUpperCase() + said.slice(1) };
 }
 
 /** A system notification's words: a pointer to what waits, by its counts. */

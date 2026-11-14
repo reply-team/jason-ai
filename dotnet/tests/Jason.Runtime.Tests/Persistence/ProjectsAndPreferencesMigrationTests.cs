@@ -164,7 +164,9 @@ public class ProjectsAndPreferencesMigrationTests
                 .Where(key => !key.StartsWith("column projects.", StringComparison.Ordinal) && !key.StartsWith("column preferences.", StringComparison.Ordinal))
 
                 // Later migrations' columns, which the migrator applies in the same run.
-                .Where(key => key is not ("column campaigns.responder_watermark" or "column campaigns.audience_threshold" or "column campaigns.audience_watermark")));
+                .Where(key => key is not ("column campaigns.responder_watermark" or "column campaigns.audience_threshold" or "column campaigns.audience_watermark"
+                    or "column campaigns.send_mode_cold" or "column campaigns.send_mode_cold_set_by" or "column campaigns.send_mode_warm"
+                    or "column campaigns.send_mode_warm_set_by")));
         foreach (var expected in new[]
         {
             "column campaigns.project_id | INTEGER notnull=0 default=none pk=0",

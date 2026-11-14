@@ -570,7 +570,7 @@ public sealed class IdentityRewriterTests
     public void The_names_do_not_print()
     {
         var text = Windows.ToString();
-        var environment = new CliEnvironment(new StringWriter(), new StringWriter(), new JasonPaths("scratch"), Identity: Windows).ToString();
+        var environment = new CliEnvironment(new StringWriter(), new StringWriter(), new JasonPaths("scratch", 1), Identity: Windows).ToString();
 
         foreach (var name in new[] { "Ada", @"C:\Users", "WORKSTATION", "CORP", ThisSid })
         {
@@ -919,7 +919,7 @@ public sealed class IdentityRewriterTests
     public void The_environment_names_this_machine_unless_a_test_hands_it_names_of_its_own()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(tree.Root);
+        var paths = new JasonPaths(tree.Root, 1);
 
         Assert.Null(new CliEnvironment(new StringWriter(), new StringWriter(), paths).Identity);
         Assert.Same(Windows, new CliEnvironment(new StringWriter(), new StringWriter(), paths, Identity: Windows).Identity);

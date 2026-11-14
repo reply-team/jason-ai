@@ -74,6 +74,13 @@ public static partial class JournalKinds
     /// </summary>
     public const string ApprovalStandingApplied = "approval_standing_applied";
 
+    /// <summary>
+    /// The dispatcher released a send under the automatic mode in force for its contact instead of parking it: keyed by the
+    /// temperature, cold or warm, with the approval it wrote, the operation, the subject's hash, where the mode came from and
+    /// the review that released it. Identifiers only, never a text or a name; no program may subscribe to it.
+    /// </summary>
+    public const string ApprovalAutomaticApplied = "approval_automatic_applied";
+
     /// <summary>An expired item was given a future due date and is work again.</summary>
     public const string WorkItemReopened = "workitem_reopened";
 
@@ -90,6 +97,14 @@ public static partial class JournalKinds
     /// trigger.
     /// </summary>
     public const string WorkItemResumed = "workitem_resumed";
+
+    /// <summary>
+    /// A send was reviewed before it went, by <c>workitem.review</c>: keyed by the review hash, with the result, the doubt's
+    /// code where it doubts, the operation and the reviewing run's role. The line names the send as its item and the
+    /// reviewing attempt as its attempt. Never the doubt's sentence and never a reason. Written by that operation only, not
+    /// a default manager trigger, and not subscribable: what it says is the claim's to read.
+    /// </summary>
+    public const string WorkItemReviewed = "workitem_reviewed";
     public const string RoleAdded = "role_added";
 
     /// <summary>A role's own settings changed — which execution profile its work uses, and nothing else yet.</summary>
@@ -119,6 +134,18 @@ public static partial class JournalKinds
 
     /// <summary>Where a campaign sends its provider work changed: the route that was set, moved or removed.</summary>
     public const string RoutesUpdated = "routes_updated";
+
+    /// <summary>
+    /// Where every campaign without a route of its own sends its provider work changed: a global route was set or taken
+    /// away through the settings writer, and the reload that froze it activated.
+    /// </summary>
+    public const string GlobalRoutesUpdated = "global_routes_updated";
+
+    /// <summary>
+    /// What a plugin may use of one capability changed: a grant was given or taken back through the settings writer, and
+    /// the reload that froze it activated.
+    /// </summary>
+    public const string PluginGrantsUpdated = "plugin_grants_updated";
 
     /// <summary>A plugin's own identifier for one of our entities was learned and written down for good.</summary>
     public const string ExternalIdPinned = "external_id_pinned";
@@ -336,9 +363,11 @@ public static partial class JournalKinds
         StandingApprovalSet,
         StandingApprovalUnset,
         ApprovalStandingApplied,
+        ApprovalAutomaticApplied,
         WorkItemReopened,
         WorkItemWaiting,
         WorkItemResumed,
+        WorkItemReviewed,
         RoleAdded,
         RoleUpdated,
         RoleNoteSet,
@@ -348,6 +377,8 @@ public static partial class JournalKinds
         ProfileEnabled,
         PluginsReloaded,
         RoutesUpdated,
+        GlobalRoutesUpdated,
+        PluginGrantsUpdated,
         ExternalIdPinned,
         ExternalIdDiverged,
         ExternalIdOrigin,

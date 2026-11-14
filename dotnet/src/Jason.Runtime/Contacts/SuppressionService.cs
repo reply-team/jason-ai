@@ -46,23 +46,59 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
             return ToDto(existing);
         }
 
+        var suppression = Stage(db, journal, clock.GetUtcNow().UtcDateTime, actor, channel!, value!, request.Reason);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return ToDto(suppression);
+    }
+
+    /// <summary>
+    /// Puts each pair on the register that is not on it yet, in the caller's change set and unsaved, so the entries commit
+    /// with the act that made them or not at all: the same entry and the same <c>suppression_added</c> line as
+    /// <see cref="AddAsync"/> writes, and none for a pair already there. The values are taken as they stand, so they are a
+    /// stored channel's, which the register's rule already keys; each entry is dated <paramref name="at"/>, the act's moment.
+    /// </summary>
+    internal static async Task<int> StageAsync(
+        JasonDbContext db,
+        JournalWriter journal,
+        DateTime at,
+        ActorRef actor,
+        IEnumerable<(string Channel, string Value)> pairs,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var staged = 0;
+        foreach (var (channel, value) in pairs.Distinct())
+        {
+            var held = await db.Suppressions.AnyAsync(s => s.Channel == channel && s.Value == value, cancellationToken).ConfigureAwait(false);
+            if (!held)
+            {
+                Stage(db, journal, at, actor, channel, value, reason);
+                staged++;
+            }
+        }
+
+        return staged;
+    }
+
+    private static Suppression Stage(JasonDbContext db, JournalWriter journal, DateTime at, ActorRef actor, string channel, string value, string? reason)
+    {
         var suppression = new Suppression
         {
             PublicId = PublicId.New("sup"),
-            Channel = channel!,
-            Value = value!,
-            Reason = request.Reason,
-            CreatedAt = clock.GetUtcNow().UtcDateTime,
+            Channel = channel,
+            Value = value,
+            Reason = reason,
+            CreatedAt = at,
         };
 
         db.Suppressions.Add(suppression);
 
         // The chronicle is authoritative domain history a role reads, not a log line: what was suppressed is
         // the whole point of the entry, so the value belongs in it.
-        journal.Append(db, actor, JournalKinds.SuppressionAdded, campaign: null, key: channel, updated: Pair(channel!, value!), reason: request.Reason);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        return ToDto(suppression);
+        journal.Append(db, actor, JournalKinds.SuppressionAdded, campaign: null, key: channel, updated: Pair(channel, value), reason: reason);
+        return suppression;
     }
 
     /// <summary>Lifting a suppression is a deliberate act, so the reason is mandatory; removing nothing is still a 200.</summary>

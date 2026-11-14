@@ -30,6 +30,22 @@ public static class OperationEndpoints
         where TService : notnull
         where TRequest : class
     {
+        ArgumentNullException.ThrowIfNull(handler);
+        return app.MapOperation<TService, TRequest, TResponse>(operation, (service, request, _, cancellationToken) => handler(service, request, cancellationToken));
+    }
+
+    /// <summary>
+    /// As the other overload, with the request itself handed to the handler beside its body, for an operation whose answer
+    /// depends on what a header says — one that refuses a part of itself to a request from inside a run
+    /// (<see cref="InsideARun.AttemptOf"/>), where the part is named in the body the gate before it never reads.
+    /// </summary>
+    public static RouteHandlerBuilder MapOperation<TService, TRequest, TResponse>(
+        this IEndpointRouteBuilder app,
+        string operation,
+        Func<TService, TRequest, HttpRequest, CancellationToken, Task<TResponse>> handler)
+        where TService : notnull
+        where TRequest : class
+    {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(handler);
 
@@ -42,10 +58,16 @@ public static class OperationEndpoints
             // A person's own word from inside a run is refused before the body is read, so before its actor is.
             if (personsWord && InsideARun.AttemptOf(context.Request) is { } attempt)
             {
-                var refusal = DomainErrors.DecidedInsideARun(attempt);
+                var refusal = InsideARun.ChangesJason.Contains(operation) ? DomainErrors.ChangesJasonInsideARun(attempt) : DomainErrors.DecidedInsideARun(attempt);
                 await ErrorResults.WriteAsync(context, refusal.StatusCode, refusal.Code, refusal.Message, refusal.Retryable).ConfigureAwait(false);
                 return;
             }
+
+            // The run the request says it comes from, for whatever reads it to check: a verdict on a reply records it.
+            using var run = InsideARun.AttemptOf(context.Request) is { } named ? RunScope.Open(named) : null;
+
+            // Whether it comes from the desktop's chat, for whatever records it: a work item made, or whose input is edited, under it.
+            using var confined = InsideARun.ConfinedOf(context.Request) ? ConfinedScope.Open() : null;
 
             TRequest request;
             var caller = context.Features.Get<HandlerCaller>();
@@ -82,8 +104,13 @@ public static class OperationEndpoints
             {
                 // A request through a handler's door speaks as that plugin for its whole flow, and only that one.
                 using var scope = caller is null ? null : ActorScope.ForPlugin(caller.Grant.PluginId);
+                if (context.RequestServices.GetService<RequestRun>() is { } requestRun)
+                {
+                    requestRun.AttemptId = InsideARun.AttemptOf(context.Request);
+                }
+
                 var service = context.RequestServices.GetRequiredService<TService>();
-                var response = await handler(service, request, context.RequestAborted).ConfigureAwait(false);
+                var response = await handler(service, request, context.Request, context.RequestAborted).ConfigureAwait(false);
                 await context.Response.WriteAsJsonAsync(response, JasonJson.Options, context.RequestAborted).ConfigureAwait(false);
             }
             catch (DomainException ex)

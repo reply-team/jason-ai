@@ -387,8 +387,8 @@ public sealed class PluginInstallCommandTests : IDisposable
     }
 
     /// <summary>
-    /// With <c>--human</c>, a plugin loaded and granted nothing says, in one sentence, what it asks for, the key that grants
-    /// it, the settings file and the reload, after what was placed and loaded.
+    /// With <c>--human</c>, a plugin loaded and granted nothing says, in one sentence, what it asks for and the command that
+    /// grants it, after what was placed and loaded.
     /// </summary>
     [Fact]
     public async Task Install_says_for_people_how_to_grant_what_the_plugin_is_granted_nothing_of()
@@ -404,7 +404,7 @@ public sealed class PluginInstallCommandTests : IDisposable
         Assert.Equal(2, lines.Length);
         Assert.EndsWith("The runtime has loaded it.", lines[0], StringComparison.Ordinal);
         Assert.Equal(
-            $"example is loaded and granted nothing. It asks to run: vendor. Grant it under Plugins:Grants:example:Exec in {_paths.Paths.UserSettingsFile}, then run `jason plugin reload`.",
+            "example is loaded and granted nothing. It asks to run: vendor. Grant it with `jason plugin grant example --exec <program> --actor human:<Name>`, in force at once.",
             lines[1]);
     }
 
@@ -460,7 +460,7 @@ public sealed class PluginInstallCommandTests : IDisposable
         await CliApp.RunAsync(["plugin", "install", "--help"], new CliEnvironment(output, new StringWriter(), _paths.Paths), Ct);
 
         Assert.Contains(
-            "After a reload that answered, the body also carries the plugin's status, problems and capabilities as the runtime answered them, and the settings file this CLI uses; with --human, each problem is named with the runtime's words and each capability granted nothing of with the key that grants it.",
+            "After a reload that answered, the body also carries the plugin's status, problems and capabilities as the runtime answered them, and the settings file this CLI uses; with --human, each problem is named with the runtime's words and each capability granted nothing of with the jason plugin grant command that grants it.",
             System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " "),
             StringComparison.Ordinal);
     }

@@ -201,6 +201,25 @@ export function keptNotice(said: string, previous: Previous, installed: string, 
 }
 
 /**
+ * What the starting page says when a start failed: what failed, and after an update's first start, where the version it
+ * replaced is. A data directory whose layout `jason runtime start` refused is said in those words alone: the version an
+ * update replaced knows that directory no better, so going back is not offered.
+ */
+export function failedStartNotice(said: string, layoutRefused: boolean, previous: Previous | null, installed: string, platform: NodeJS.Platform): string {
+    return previous === null || layoutRefused ? said : keptNotice(said, previous, installed, platform);
+}
+
+/**
+ * Settles an update's first launch that did not load the window, as `settleStart` does, but for a start `jason runtime
+ * start` refused for the data directory's layout: then the record stays as it is, since the cause is the directory and
+ * not the version, so that version is not refused, and the next start settles the same record. Returns the pending
+ * record where the person is to be told where the previous version is, null otherwise.
+ */
+export function settleFailedStart(rollback: string, currentVersion: string, layoutRefused: boolean, log: Logger): PendingUpdate | null {
+    return layoutRefused ? null : settleStart(rollback, currentVersion, false, log);
+}
+
+/**
  * Settles an update's first launch with whether the window loaded; the copy is kept either way. Returns the pending
  * record, the version it came from and its copy, when that start failed, null otherwise.
  */
