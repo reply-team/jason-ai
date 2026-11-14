@@ -454,9 +454,10 @@ by construction, since no allowance names an audience before the claim of its fi
 
 ### Doubts about a send
 
-A send a person decides each one of — provider work whose operation's `approval` is `confirm_each` — may carry a doubt,
-which goes to the person on the send's approval. A doubt is a code from one closed list, published as data under
-`$defs/code` of the [`workitem_reviewed` kind's document](contracts/journal/workitem_reviewed.json) and read from there
+A **send to a person** — provider work whose operation's `approval` is `confirm_each`, today `message.send`,
+`conversation.reply` and `social_invitation.send` — may carry a doubt, which goes to the person on the send's
+approval. A doubt is a code from one closed list, published as data under `$defs/code` of the
+[`workitem_reviewed` kind's document](contracts/journal/workitem_reviewed.json) and read from there
 (`jason journal kinds` shows it), and may carry one sentence: one line, at most 280 characters.
 
 **The creator's own doubt** is the reserved context key `ask_person`, exactly `{"code": "<code>"}`, given at

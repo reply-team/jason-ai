@@ -135,7 +135,7 @@ public static class DomainErrors
         new("wait_not_allowed", $"Work item '{id}' cannot wait: {why}");
 
     /// <summary>
-    /// A review is for a send before it goes: provider work a person decides each one of, still queued or waiting. Work of
+    /// A review is for a send before it goes: a send to a person, still queued or waiting. Work of
     /// another kind is never reviewed, and a send already parked, claimed or finished has gone past the point a review is for.
     /// </summary>
     public static ConflictException NotReviewable(string id, string why) =>
@@ -312,7 +312,7 @@ public static class DomainErrors
             $"This request comes from inside attempt `{attempt}`. A send to a person has its input written there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
 
     /// <summary>
-    /// A send a person decides each one of, created from inside a run under a name other than that run's: a person, another
+    /// A send to a person, created from inside a run under a name other than that run's: a person, another
     /// attempt, or nobody. The run's own name is what tells a review of the send apart from its author, so the CLI's
     /// default, the attempt itself, is the only actor such a create takes there.
     /// </summary>
