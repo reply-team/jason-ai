@@ -419,6 +419,10 @@ describe('why the send mode held a send, or let one go', () => {
             'approval.get/park-not-reviewed',
             'No review by the critic or by a person passed this text, so it does not go automatically.',
         ],
+        [
+            'approval.get/park-daily-ceiling',
+            "This agent has reached today's limit of automatic messages, so this one waits for you to approve it.",
+        ],
     ] as const)('%s says why it waits', async (name, sentence) => {
         const api = held();
         mount(api, structuredClone(fixtures[name].response) as unknown as Approval);

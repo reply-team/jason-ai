@@ -40,6 +40,7 @@ public class SendModeApprovalExchangesTests
         { SendModeReasons.Escalated, "warm" },
         { SendModeReasons.EditedAfterReview, "cold" },
         { SendModeReasons.NotReviewed, "cold" },
+        { SendModeReasons.DailyCeiling, "cold" },
     };
 
     [Theory]
@@ -63,6 +64,15 @@ public class SendModeApprovalExchangesTests
                 ((string?)doubt["source"], (string?)doubt["role"], (string?)doubt["code"], (string?)doubt["note"]));
             Assert.StartsWith("jrn_", (string?)doubt["line"]);
             Assert.Equal("attempt", (string?)doubt["by"]!["type"]);
+        }
+
+        if (reason == SendModeReasons.DailyCeiling)
+        {
+            // At the ceiling the critic's pass stood and the mode would have let it go: the preview says the limit, the
+            // releases counted and since when, three numbers and no content.
+            Assert.StartsWith("jrn_", (string?)facts["review"]);
+            var ceiling = read.Preview[DailyCeiling.PreviewKey]!.AsObject();
+            Assert.Equal((20, 20, "2026-10-15T00:00:00Z"), ((int)ceiling["limit"]!, (int)ceiling["released"]!, (string?)ceiling["since"]));
         }
 
         if (reason == SendModeReasons.NotReviewed)
@@ -121,7 +131,8 @@ public class SendModeApprovalExchangesTests
 
         // A review of the send's text, by a running attempt of the critic's work, through the verb, while it is still queued.
         string? review = null;
-        if (reason == SendModeReasons.Doubted || reason == ApprovalGate.AutomaticMode)
+        var passes = reason == ApprovalGate.AutomaticMode || reason == SendModeReasons.DailyCeiling;
+        if (reason == SendModeReasons.Doubted || passes)
         {
             var work = WorkItemFactory.NewAiRole(campaign, role: AutomaticRelease.CriticRole, now: Noon);
             work.Status = WorkItemStatus.Processing;
@@ -149,7 +160,11 @@ public class SendModeApprovalExchangesTests
         var preview = ApprovalPreview.Of(Send, subject, campaign, contact, "email");
         var released = reason == ApprovalGate.AutomaticMode;
         Temperature? warmth = temperature switch { "cold" => Temperature.Cold, "warm" => Temperature.Warm, _ => null };
-        preview[AutomaticRelease.PreviewKey] = AutomaticRelease.Facts(warmth is null ? null : Automatic, warmth, released ? review : null);
+        preview[AutomaticRelease.PreviewKey] = AutomaticRelease.Facts(warmth is null ? null : Automatic, warmth, passes ? review : null);
+        if (reason == SendModeReasons.DailyCeiling)
+        {
+            preview[DailyCeiling.PreviewKey] = DailyCeiling.Preview(new DailyCeiling.Limit(20, Noon.Date), 20);
+        }
         if (await Doubts.PreviewAsync(db, item, Ct) is { } standing)
         {
             preview[Doubts.PreviewKey] = standing;

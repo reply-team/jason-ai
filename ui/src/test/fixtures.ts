@@ -75,6 +75,7 @@ import approvalGetModesChosen from '../../../docs/api/fixtures/approval.get/mode
 import approvalGetParkAnswersNoVerdict from '../../../docs/api/fixtures/approval.get/park-answers-no-verdict.json';
 import approvalGetParkAwaitingJudgement from '../../../docs/api/fixtures/approval.get/park-awaiting-judgement.json';
 import approvalGetParkAwaitingNature from '../../../docs/api/fixtures/approval.get/park-awaiting-nature.json';
+import approvalGetParkDailyCeiling from '../../../docs/api/fixtures/approval.get/park-daily-ceiling.json';
 import approvalGetParkDoubted from '../../../docs/api/fixtures/approval.get/park-doubted.json';
 import approvalGetParkEditedAfterReview from '../../../docs/api/fixtures/approval.get/park-edited-after-review.json';
 import approvalGetParkEscalated from '../../../docs/api/fixtures/approval.get/park-escalated.json';
@@ -430,6 +431,10 @@ export const fixtures = {
         Approval
     >,
     'approval.get/park-awaiting-nature': approvalGetParkAwaitingNature satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/park-daily-ceiling': approvalGetParkDailyCeiling satisfies Exchange<
         { approval_id: string },
         Approval
     >,

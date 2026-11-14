@@ -34,6 +34,7 @@ public static class ApiFixtures
         "approval.get/park-answers-no-verdict",
         "approval.get/park-awaiting-judgement",
         "approval.get/park-awaiting-nature",
+        "approval.get/park-daily-ceiling",
         "approval.get/park-doubted",
         "approval.get/park-edited-after-review",
         "approval.get/park-escalated",
