@@ -239,6 +239,7 @@ public static class CliApp
         root.Subcommands.Add(PreferenceCommands.Build(env, actor));
         root.Subcommands.Add(ContactCommands.Build(env, actor));
         root.Subcommands.Add(AudienceCommands.Build(env, actor));
+        root.Subcommands.Add(SenderCommands.Build(env, actor));
         root.Subcommands.Add(WorkItemCommands.Build(env, actor));
         root.Subcommands.Add(RoleCommands.Build(env, actor));
         root.Subcommands.Add(RoleNoteCommands.Build(env, actor));

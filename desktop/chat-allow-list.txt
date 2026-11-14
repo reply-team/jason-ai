@@ -60,6 +60,7 @@ rolenote list
 rolenote set
 route list
 route resolve
+sender list
 status
 subscription list
 subscription runs

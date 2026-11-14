@@ -548,16 +548,23 @@ public partial class InteractiveSkillTests
         Assert.Contains("If you like, add a line about yourself and how you write. You can also do that later.", skill, StringComparison.Ordinal);
         Assert.Contains("End it with exactly: \"Say what to change, or say go.\"", skill, StringComparison.Ordinal);
         Assert.Contains("\"Email goes out through {provider}.\" and \"LinkedIn goes out through {provider}.\"", skill, StringComparison.Ordinal);
-        Assert.Contains("\"Which mailboxes and LinkedIn accounts are connected there I read as soon as you say go.\"", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("I read as soon as you say go", skill, StringComparison.Ordinal);
         Assert.Contains("\"{Channel} is not connected.\"", skill, StringComparison.Ordinal);
-        Assert.Contains("read no accounts and count none before \"go\"", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("count none before", skill, StringComparison.Ordinal);
+        Assert.Contains("so read the accounts of each channel with a route now, before \"go\": a draft campaign's accounts are read on request, and nothing is recorded or started.", skill, StringComparison.Ordinal);
         Assert.Contains("\"{N} mailboxes and {M} LinkedIn accounts are connected; you can add more at any time.\"", skill, StringComparison.Ordinal);
         Assert.Contains("A routed channel that holds no account is said firmly: not one message leaves on it until an account is connected", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing is started before the person's go.", skill, StringComparison.Ordinal);
-        Assert.DoesNotContain("The count never holds the person up", skill, StringComparison.Ordinal);
+        Assert.Contains("The count never holds the person up: a read that fails or is slow leaves the line without numbers, and the message goes on.", skill, StringComparison.Ordinal);
+        Assert.Contains("Count the accounts whose `status` is `active`, and the others apart", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the `plugin_id` of a channel's `sender list` answer is not the provider `route resolve` named for that channel's sends, say only the provider its sends go through, and no number for it.", skill, StringComparison.Ordinal);
         Assert.Contains("no channel is connected, connecting your provider now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
         Assert.Contains("That step is the person's one act, \"connect your provider\". With Reply it is one sign-in only they can do: in a terminal `reply auth login` (on Windows PowerShell, `reply.cmd auth login`), and you do the rest", skill, StringComparison.Ordinal);
-        Assert.Contains("Then you start the campaign and submit `sender.list` for each routed channel", skill, StringComparison.Ordinal);
+        Assert.Contains("This guard governs the first bullet below, the firm \"holds no account\" sentence included", skill, StringComparison.Ordinal);
+        Assert.Contains("say its count as \"{N} or more\"", skill, StringComparison.Ordinal);
+        Assert.Contains("Each channel's read stands alone: a channel whose read fails or does not answer drops only its own number, and the other channel's number is still said.", skill, StringComparison.Ordinal);
+        Assert.Contains("about 90 seconds", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("submit `sender.list`", skill, StringComparison.Ordinal);
         Assert.Contains("`planner-in-session` takes the plan from the campaign that exists: the brief and the goals go into its context, and no second campaign is made.", skill, StringComparison.Ordinal);
         Assert.Contains("Make a project named from what the person sells, or take the one that already holds it, and make the campaign in it, under a name drawn from what the campaign is for", skill, StringComparison.Ordinal);
         Assert.Contains("Say in passing what was made, as a draft: the project and the campaign, and that both names are the person's to change.", skill, StringComparison.Ordinal);
@@ -575,9 +582,12 @@ public partial class InteractiveSkillTests
         Assert.Contains("The message after \"go\" that hands over to the planning ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("--idempotency-key first-campaign ", skill, StringComparison.Ordinal);
 
-        // The sender.list read comes after "go" and never before it: a draft campaign cannot run it.
-        var go = skill.IndexOf("## 5. After \"go\"", StringComparison.Ordinal);
-        var read = skill.IndexOf("--operation sender.list", StringComparison.Ordinal);
-        Assert.True(go >= 0 && read > go, $"The sender.list read is at offset {read}; it belongs after the heading of \"go\" (offset {go}).");
+        // The accounts are read on request in step 2, before the plan message and before "go", and never submitted as work:
+        // the count is in the plan the person answers.
+        var channels = skill.IndexOf("## 2. Read the channels", StringComparison.Ordinal);
+        var plan = skill.IndexOf("## 3. One message, one stop", StringComparison.Ordinal);
+        var read = skill.IndexOf("jason sender list --campaign", StringComparison.Ordinal);
+        Assert.True(channels >= 0 && read > channels && read < plan, $"The account read is at offset {read}; it belongs in step 2, between offsets {channels} and {plan}.");
+        Assert.DoesNotContain("--operation sender.list", skill, StringComparison.Ordinal);
     }
 }

@@ -70,8 +70,8 @@ public class OperationFamiliesTests
     }
 
     /// <summary>
-    /// The installation's and the UI's own doors read nothing a handler needs, a conversation read and a campaign's read of
-    /// an audience each spend a provider call, and a subscription run's record carries the envelopes other plugins'
+    /// The installation's and the UI's own doors read nothing a handler needs, a conversation read, a campaign's read of
+    /// an audience and a read of the provider's accounts each spend a provider call, and a subscription run's record carries the envelopes other plugins'
     /// handlers made, so none of them is a read a grant opens.
     /// </summary>
     [Theory]
@@ -82,6 +82,7 @@ public class OperationFamiliesTests
     [InlineData("audience.preview")]
     [InlineData("audience.filter_values")]
     [InlineData("audience.availability")]
+    [InlineData("sender.list")]
     [InlineData("journal.kinds.extra")]
     [InlineData("subscription.runs")]
     public void Not_every_question_is_a_read_a_grant_opens(string operation)

@@ -115,7 +115,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   provider's own shape, held at the claim to the schema the routed plugin declares, never at create. A binding names
   an account and never a credential. A person's reads on request are routed by the person's pin; a campaign's reads
   (an audience's preview, a filter's values, whether the account may search) by the campaign's route for
-  `audience.search`, the search they serve, held to the route's half of the claim; a read or a stop of a search goes
+  `audience.search`, the search they serve, held to the route's half of the claim, and `sender.list`, a read on request, by its own route on `sender_channel`; a read or a stop of a search goes
   where the search ran. A provider identifier is pinned once and never overwritten — a
   different value is recorded beside it as a divergence and the attempt still succeeds. Provenance
   is written at the claim and completed at the end; nothing rewrites it. `docs/routing.md` is the
