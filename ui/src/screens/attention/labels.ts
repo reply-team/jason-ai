@@ -1,3 +1,5 @@
+import { t } from '../../platform/i18n';
+
 const verbs: Record<string, string> = {
     'campaign.enroll': 'Enroll',
     'campaign.activate': 'Activate',
@@ -40,13 +42,31 @@ export function approvalNote(status: string, decidedBy: string | null | undefine
     return decidedBy ? `decided by ${decidedBy}` : null;
 }
 
+/** The reasons the send mode gives on an approval: why a send waits for the person, or why one went without asking. */
+const sendModeReasons = [
+    'sent_from_chat',
+    'doubted',
+    'awaiting_judgement',
+    'awaiting_nature',
+    'answers_no_verdict',
+    'reply_not_from_a_person',
+    'escalated',
+    'edited_after_review',
+    'not_reviewed',
+    'daily_ceiling',
+    'automatic_mode',
+] as const;
+
+/** Why an approval is here, in a sentence; a reason this build does not know is shown as the runtime sent it. */
 export function reasonLabel(reason: string): string {
     switch (reason) {
         case 'approval_required':
             return 'Approval is required for every operation of this kind for this agent.';
         case 'input_changed':
             return 'The input changed since an earlier approval, so it is asked again.';
-        default:
-            return reason;
+        default: {
+            const known = sendModeReasons.find((each) => each === reason);
+            return known === undefined ? reason : t(`modes.park.${known}`);
+        }
     }
 }

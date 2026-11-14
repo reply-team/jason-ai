@@ -7,11 +7,13 @@ import { renderApp } from '../../test/render-app';
 // the program's parser and build both links from the table the click is read with, to the same text these hold.
 
 function fake() {
+    // An open card's reminder about name and tone reads the preferences; with both set it says nothing.
     return new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('approval.get', 'approval.get/pending-with-preview')
-        .answer('decision.get', 'decision.get/pending-with-options');
+        .answer('decision.get', 'decision.get/pending-with-options')
+        .answer('preference.list', 'preference.list/set');
 }
 
 /** The browser's own word for the machine, the newer reading where the browser has it and the older one where not. */

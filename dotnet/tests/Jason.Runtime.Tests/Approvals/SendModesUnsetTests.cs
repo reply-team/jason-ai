@@ -99,5 +99,30 @@ public class SendModesUnsetTests
         Assert.Empty(chosen.SendModesUnset!);
     }
 
+    /// <summary>
+    /// The doubt a person reads on the card, as a page reads it: the creator's own, written onto the approval's preview the
+    /// way the claim writes it (<see cref="Doubts.PreviewAsync"/>), carrying the code and the sentence.
+    /// </summary>
+    [Fact]
+    public async Task The_api_answers_carry_a_doubt_on_the_preview_as_recorded()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(new DateTimeOffset(ParkedWork.Noon)));
+        string id;
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var (item, approval) = await ParkedWork.WriteAsync(db, Ct);
+            item.Context[Doubts.AskPersonKey] = new JsonObject { [Doubts.CodeMember] = "sensitive_topic" };
+            item.AskPersonNote = "She asks about a price.";
+            approval.Preview[Doubts.PreviewKey] = await Doubts.PreviewAsync(db, item, Ct);
+            await db.SaveChangesAsync(Ct);
+            id = approval.PublicId;
+        }
+
+        var read = await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "with-doubts", new { approval_id = id }, Ct);
+        var doubt = Assert.Single(read.Preview!["doubts"]!.AsArray());
+        Assert.Equal(("ask_person", "sensitive_topic", "She asks about a price."), ((string?)doubt!["source"], (string?)doubt["code"], (string?)doubt["note"]));
+    }
+
     private static JsonObject Mode(string word) => new() { ["mode"] = word };
 }

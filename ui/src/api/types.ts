@@ -19,6 +19,8 @@ export type ApprovalSummary = {
     decided_by: ActorRef | null;
     campaign_name: string;
     contact_name: string | null;
+    /** The send-mode preferences nobody has set yet; absent from a runtime older than the send modes. */
+    send_modes_unset?: string[];
 };
 export type Approval = ApprovalSummary & {
     subject: Record<string, unknown>;
@@ -113,6 +115,8 @@ export type SystemInfo = {
         root_state: string;
     } | null;
     notifications?: NotificationsInfo | null;
+    /** The installation's send mode for a cold and for a warm contact; absent from a runtime older than the send modes. */
+    send_modes?: { cold: ModeInForce; warm: ModeInForce };
 };
 
 /** What `system.info` says of the notification channels: whether they are on, and what each did with the last one. */
@@ -287,6 +291,20 @@ export type Campaign = CampaignSummary & {
     created_at: string;
     updated_at: string;
     archived_at: string | null;
+    /** The campaign's own send modes, each null where it sets none; absent from a runtime older than the send modes. */
+    send_modes?: { cold: string | null; warm: string | null };
+    /** The mode a send to a cold or a warm contact goes under now, and where it comes from. */
+    send_modes_in_force?: { cold: ModeInForce; warm: ModeInForce };
+};
+/** A send mode in force: `automatic` or `every_message`, from the `campaign`, the `preference` or the `default`. */
+export type ModeInForce = { mode: string; source: string };
+/** `campaign.set_send_mode`: a mode word sets the agent's own, null gives it back, an absent member is left alone. */
+export type CampaignSetSendModeRequest = {
+    campaign_id: string;
+    cold?: string | null;
+    warm?: string | null;
+    actor?: ActorRef;
+    reason?: string;
 };
 export type Project = { id: string; name: string; slug: string; default: boolean; folder_path: string | null };
 export type CampaignTransitionRequest = { campaign_id: string; reason?: string; actor?: ActorRef };

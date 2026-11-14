@@ -250,6 +250,10 @@ public class CampaignSendModeTests
         var cleared = await api.RecordAsync<CampaignDto>(Operations.CampaignSetSendMode, "cleared", new { campaign_id = campaign.Id, cold = (string?)null, actor = marta }, Ct);
         Assert.Equal(new SendModesDto(null, null), cleared.SendModes);
 
+        var warm = await api.RecordAsync<CampaignDto>(Operations.CampaignSetSendMode, "warm-automatic", new { campaign_id = campaign.Id, warm = "automatic", actor = marta }, Ct);
+        Assert.Equal(new SendModesDto(null, SendMode.Automatic), warm.SendModes);
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignSetSendMode, new { campaign_id = campaign.Id, warm = (string?)null, actor = marta }, Ct);
+
         var role = await api.RecordErrorAsync(
             Operations.CampaignSetSendMode, "not-human", new { campaign_id = campaign.Id, warm = "automatic", actor = new { type = "role", id = "manager" } }, HttpStatusCode.BadRequest, Ct);
         Assert.Equal("send_mode_not_human", role.Code);

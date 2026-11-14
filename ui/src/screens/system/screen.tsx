@@ -9,6 +9,9 @@ import { can, cannotHere, currentDesktop, earlier, placeKind } from '../../platf
 import * as store from './store';
 import { routeCounts } from './route-counts';
 import { Notice } from '../../layout/notice';
+import { t } from '../../platform/i18n';
+import { modeWords } from '../send-modes/model';
+import { sourceWords } from '../send-modes/agent-modes';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -221,6 +224,25 @@ export function SystemScreen() {
                                 </dd>
                             </dl>
                         </section>
+
+                        {info.send_modes && (
+                            <section className="card">
+                                <h2>{t('modes.system.heading')}</h2>
+                                <dl className="facts">
+                                    <dt>{t('modes.system.cold')}</dt>
+                                    <dd>
+                                        {modeWords(info.send_modes.cold.mode).name} ·{' '}
+                                        {sourceWords(info.send_modes.cold.source)}
+                                    </dd>
+                                    <dt>{t('modes.system.warm')}</dt>
+                                    <dd>
+                                        {modeWords(info.send_modes.warm.mode).name} ·{' '}
+                                        {sourceWords(info.send_modes.warm.source)}
+                                    </dd>
+                                </dl>
+                                <p className="hint">{t('modes.system.note')}</p>
+                            </section>
+                        )}
 
                         <section className="card">
                             <h2>This UI {ui && <span className="badge accent">{ui.source}</span>}</h2>

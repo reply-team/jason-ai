@@ -636,7 +636,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
                 <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
-                <p>Anything that reaches a person waits for your approval.</p>
+                <p>Nothing written here reaches a person without your approval.</p>
             </div>
             <div class="sugs">
                 ${suggestions.map((chip) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`)}
