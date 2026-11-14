@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { commandPrefix, documentationAddressLimit, documentationPages, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
+import { autoEditJudgement, commandPrefix, documentationAddressLimit, documentationPages, fullAccessJudgement, isCompound, judge, type ChatScope, type Judgement, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { denyListFile, parseDenyList } from '../src/chat-deny.ts';
 import { memoryFiles } from '../src/chat-instructions.ts';
@@ -570,6 +570,55 @@ test('linking a project\'s folder is refused in every spelling a denied verb is 
     assert.equal(run(windowsScope, 'JASON.EXE project link prj_01').verdict, 'deny');
     // The other project verbs stay the agent's: listing projects.
     assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason project list').verdict, 'ask');
+});
+
+/** The scopes of the file the desktop carries, on each platform: Windows', macOS' and Linux's semantics. */
+function carriedScopes(): ChatScope[] {
+    const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+    return [windows(), mac(), { ...mac(), platform: 'linux', real: () => null }].map((scope) => ({ ...scope, denied: file.commands, deniedOperations: file.operations }));
+}
+
+/** Refused in Ask first, in Auto-edit and in Full access, as a Bash command; Plan only refuses every command besides. */
+function refusedInEveryMode(scope: ChatScope, command: string): void {
+    const input = { command };
+    assert.equal(judge('Bash', input, scope).verdict, 'deny', `${scope.platform} Ask first: ${command}`);
+    assert.equal(autoEditJudgement('Bash', input, scope).verdict, 'deny', `${scope.platform} Auto-edit: ${command}`);
+    assert.equal(fullAccessJudgement('Bash', input, scope).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+}
+
+test('a campaign\'s send mode and the send-mode preferences are refused in every spelling, in every mode: how messages are sent is the person\'s to set', () => {
+    const spellings = ['jason campaign set-send-mode cmp_A --cold automatic --actor human:Ada', 'jason campaign set-send-mode cmp_A --clear warm --actor human:Ada',
+        'jason preference set send_mode.cold --value \'{"mode":"automatic"}\' --actor human:Ada',
+        'jason preference set send_mode.warm --value \'{"mode":"automatic"}\' --actor human:Ada', 'jason preference unset send_mode.cold --actor human:Ada',
+        'jason --actor human:Ada campaign set-send-mode cmp_A --cold automatic', 'jason -- campaign set-send-mode cmp_A --cold automatic',
+        'jason campaign -- set-send-mode cmp_A --cold automatic', 'jason campaign --human set-send-mode cmp_A --cold automatic',
+        'jason preference --actor human:Ada set send_mode.cold --value x', 'jason campaign "set-send-mode" cmp_A', 'jason campaign set-send-mo\\de cmp_A',
+        "jason campaign set-send-mo''de cmp_A", 'jason campaign set-send-{mode,} cmp_A', 'X=1 jason campaign set-send-mode cmp_A',
+        'env jason preference set send_mode.warm --value x', '/usr/local/bin/jason campaign set-send-mode cmp_A', 'cmd /c jason campaign set-send-mode cmp_A',
+        'cmd.exe /c "jason preference set send_mode.cold --value x"', 'pwsh -c "jason campaign set-send-mode cmp_A"',
+        'powershell -Command "jason preference set send_mode.cold --value x"', "bash -c 'jason campaign set-send-mode cmp_A'",
+        "printf 'jason campaign set-send-mode cmp_A' | sh", `python3 -c "import subprocess; subprocess.run(['jason','campaign','set-send-mode','cmp_A'])"`,
+        "curl -X POST http://127.0.0.1:4011/v1/campaign.set_send_mode -d '{}'", 'curl -X POST http://127.0.0.1:4011/v1/preference.set -d \'{"key":"send_mode.cold"}\'',
+        'pwsh -c "Invoke-WebRequest -Method Post -Uri http://127.0.0.1:4011/v1/campaign.set_send_mode"',
+        "node -e \"fetch('http://127.0.0.1:4011/v1/preference.set',{method:'POST'})\""];
+    for (const scope of carriedScopes()) {
+        for (const command of spellings) refusedInEveryMode(scope, command);
+        // Reading a campaign and the preferences stays the agent's: a card in Ask first, never a refusal.
+        for (const command of ['jason preference list', 'jason campaign get cmp_A']) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
+    }
+    const [windowsScope] = carriedScopes();
+    for (const command of ['"C:\\Program Files\\Jason\\jason.exe" campaign set-send-mode cmp_A', 'JASON.EXE preference set send_mode.warm --value x']) {
+        refusedInEveryMode(windowsScope!, command);
+    }
+});
+
+test('an operation of the send modes escaped by percent is refused in Full access and shown as a card in Ask first, as an escaped approval is', () => {
+    for (const scope of carriedScopes()) {
+        for (const command of ['curl -X POST http://127.0.0.1:4011/v1/campaign%2Eset_send_mode', 'curl -X POST http://127.0.0.1:4011/v1/preference%2eset']) {
+            assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} Ask first: ${command}`);
+            assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `${scope.platform} Full access: ${command}`);
+        }
+    }
 });
 
 test('a jason command that starts with an option is refused, as the host\'s own rule refuses it', () => {
