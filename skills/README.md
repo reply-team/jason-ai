@@ -13,6 +13,8 @@ Business skills are refreshed on their own cadence and are true whether or not J
 all. A single pack would have to move at the faster of the two rates and would carry knowledge that
 goes stale for a reason nobody can see.
 
+To change a role's instruction, add a role or add a plugin, a person asks their own AI; the runtime pack's `customising-jason` skill teaches it how, and [Changing Jason](../docs/customising.md) says the same for a person.
+
 Neither directory depends on the runtime's code, has a build step, or is compiled into anything. They are
 text and they are meant to stay that way.
 

@@ -30,6 +30,22 @@ public static class OperationEndpoints
         where TService : notnull
         where TRequest : class
     {
+        ArgumentNullException.ThrowIfNull(handler);
+        return app.MapOperation<TService, TRequest, TResponse>(operation, (service, request, _, cancellationToken) => handler(service, request, cancellationToken));
+    }
+
+    /// <summary>
+    /// As the other overload, with the request itself handed to the handler beside its body, for an operation whose answer
+    /// depends on what a header says — one that refuses a part of itself to a request from inside a run
+    /// (<see cref="InsideARun.AttemptOf"/>), where the part is named in the body the gate before it never reads.
+    /// </summary>
+    public static RouteHandlerBuilder MapOperation<TService, TRequest, TResponse>(
+        this IEndpointRouteBuilder app,
+        string operation,
+        Func<TService, TRequest, HttpRequest, CancellationToken, Task<TResponse>> handler)
+        where TService : notnull
+        where TRequest : class
+    {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(handler);
 
@@ -42,7 +58,7 @@ public static class OperationEndpoints
             // A person's own word from inside a run is refused before the body is read, so before its actor is.
             if (personsWord && InsideARun.AttemptOf(context.Request) is { } attempt)
             {
-                var refusal = DomainErrors.DecidedInsideARun(attempt);
+                var refusal = InsideARun.ChangesJason.Contains(operation) ? DomainErrors.ChangesJasonInsideARun(attempt) : DomainErrors.DecidedInsideARun(attempt);
                 await ErrorResults.WriteAsync(context, refusal.StatusCode, refusal.Code, refusal.Message, refusal.Retryable).ConfigureAwait(false);
                 return;
             }
@@ -94,7 +110,7 @@ public static class OperationEndpoints
                 }
 
                 var service = context.RequestServices.GetRequiredService<TService>();
-                var response = await handler(service, request, context.RequestAborted).ConfigureAwait(false);
+                var response = await handler(service, request, context.Request, context.RequestAborted).ConfigureAwait(false);
                 await context.Response.WriteAsJsonAsync(response, JasonJson.Options, context.RequestAborted).ConfigureAwait(false);
             }
             catch (DomainException ex)

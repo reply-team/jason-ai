@@ -57,6 +57,31 @@ test('the demo is prepared in one order: the provider with its route, then the f
     assert.deepEqual(settings.Responder, { OnReply: false }, 'the fixed settings were written after the route and kept it');
 });
 
+test('a demo directory whose layout stamp this build refuses is prepared in no part, and the start is the person’s own', (t) => {
+    for (const stamp of ['{"layout":2,"written_by":"0.50.0","at":"2026-12-01T00:00:00Z"}', '{"layout":']) {
+        const person = join(scratch(t), '.jason');
+        mkdirSync(person);
+        const data = demoDirectory(person);
+        mkdirSync(data);
+        writeFileSync(join(data, 'layout.json'), stamp);
+        const calls: string[] = [];
+        assert.throws(() => prepareDemo(data, realDeps(t, person, calls)), /layout this build does not run/);
+        assert.deepEqual(calls, [], 'no harness folder, plugin, route or setting');
+        assert.deepEqual(readdirSync(data), ['layout.json']);
+        const kept: string[] = [];
+        const run = startOn(person, 'demo' as Mode, false, {
+            open: openDirectory,
+            prepare: (directory) => prepareDemo(directory, realDeps(t, person, calls)),
+            keep: (mode) => kept.push(mode),
+        });
+        assert.equal(run.mode, 'live', stamp);
+        assert.equal(run.data, person);
+        assert.deepEqual(kept, ['live']);
+        assert.deepEqual(calls, []);
+        assert.deepEqual(readdirSync(data), ['layout.json']);
+    }
+});
+
 test('the plugin is placed and the route written before a start is made, and the person’s installation gets neither', (t) => {
     const person = join(scratch(t), '.jason');
     mkdirSync(person);
@@ -174,7 +199,7 @@ test('the update, the installer’s stop and the uninstall stop the demo’s run
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),'));
     const flat = main.split(/\s+/).join(' ');
-    assert.ok(flat.includes('prepareLive = (demo) => prepareDemo(demo, { harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))), place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
+    assert.ok(flat.includes('prepareLive = (demo) => prepareDemo(demo, { harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile))), place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
     assert.ok(flat.includes('open: openDemoDirectory,'));
     assert.ok(main.includes('fixedSettings: (data) => writeDemoSettings(data, harnessRoot('));
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');

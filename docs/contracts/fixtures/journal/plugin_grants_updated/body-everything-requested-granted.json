@@ -1,0 +1,7 @@
+{
+  "kind": "plugin_grants_updated",
+  "version": 1,
+  "case": "a star, granting every variable the manifest names",
+  "body": { "key": "example-provider/env", "old": { "plugin": "example-provider", "capability": "env", "granted": ["EXAMPLE_TOKEN"] }, "new": { "plugin": "example-provider", "capability": "env", "granted": ["EXAMPLE_TOKEN", "EXAMPLE_REGION"] } },
+  "expect": "valid"
+}

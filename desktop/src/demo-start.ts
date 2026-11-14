@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 import { claimDemoFolder } from './demo-folders.ts';
 import { mergeSettings } from './demo-settings.ts';
 import { openDirectory } from './mode.ts';
-import { desktopPaths } from './paths.ts';
+import { dataLayout, readLayoutStamp, stampRefuses } from './paths.ts';
 
 export interface DemoStartDeps {
     /** Makes and marks the demo's harness root, or uses it when marked; throws on a folder of that name that is not ours. */
@@ -36,8 +36,8 @@ export interface DemoStartDeps {
     runtimeAlive?(data: string): boolean;
 }
 
-/** The installation's settings file under a data directory: `<data>/config/settings.json`. */
-export const settingsFileOf = (data: string): string => desktopPaths(data).installationSettings;
+/** The settings file a person may change under a data directory, by its layout: `<data>/config/settings.json` in layout 1. */
+export const settingsFileOf = (data: string): string => dataLayout(data).userSettingsFile;
 
 /**
  * `startOn`'s open step for the demo: the data directory is claimed (made and marked, or used when marked; a folder of that
@@ -52,6 +52,9 @@ export function openDemoDirectory(directory: string): void {
 export function prepareDemo(data: string, deps: DemoStartDeps): void {
     // A live demo runtime holds the plugin and the settings it loaded: nothing is removed, copied or written under it.
     if (deps.runtimeAlive?.(data) === true) return;
+    // A demo directory a newer Jason laid out, or whose stamp cannot be read, may keep its parts where this build would
+    // not look: nothing is placed or written in it, and the start is the person's own.
+    if (stampRefuses(readLayoutStamp(data))) throw new Error('The demo’s data directory has a layout this build does not run, so nothing is prepared in it.');
     deps.harnessRoot();
     deps.place(data);
     deps.route(data);
@@ -64,7 +67,7 @@ export function prepareDemo(data: string, deps: DemoStartDeps): void {
  * a route never names a plugin that is absent; and a settings file it cannot read as an object is refused, not replaced.
  */
 export function writeDemoRoute(data: string): void {
-    if (!existsSync(join(data, 'plugins', 'demo', 'plugin.yaml'))) throw new Error('The demo provider is not placed, so no route to it is written.');
+    if (!existsSync(join(dataLayout(data).pluginsDirectory, 'demo', 'plugin.yaml'))) throw new Error('The demo provider is not placed, so no route to it is written.');
     const file = settingsFileOf(data);
     let settings: Record<string, unknown> = {};
     if (existsSync(file)) {

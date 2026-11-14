@@ -1,0 +1,7 @@
+{
+  "kind": "global_routes_updated",
+  "version": 1,
+  "case": "nothing taken away where there was nothing",
+  "body": { "key": "campaign.get", "old": null, "new": null },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

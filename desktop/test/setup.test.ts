@@ -31,6 +31,7 @@ import {
 } from '../src/setup-model.ts';
 import { claudeCodeModels } from '../src/chat-models.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
+import { dataLayout } from '../src/paths.ts';
 
 function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }): SetupDeps {
     return {
@@ -50,11 +51,11 @@ function setupOn(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings 
 }
 
 function writeInstallationSettings(b: Bench, value: unknown): void {
-    mkdirSync(dirname(b.paths.installationSettings), { recursive: true });
-    writeFileSync(b.paths.installationSettings, typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+    mkdirSync(dirname(dataLayout(b.paths.data).userSettingsFile), { recursive: true });
+    writeFileSync(dataLayout(b.paths.data).userSettingsFile, typeof value === 'string' ? value : JSON.stringify(value, null, 2));
 }
 
-const readInstallationSettings = (b: Bench) => JSON.parse(readFileSync(b.paths.installationSettings, 'utf8')) as Record<string, unknown>;
+const readInstallationSettings = (b: Bench) => JSON.parse(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8')) as Record<string, unknown>;
 
 // ---- The settings edit, pure ---------------------------------------------------------------------------------------
 
@@ -279,7 +280,7 @@ function leaves(value: unknown, prefix = ''): Map<string, string> {
 }
 
 function settingsLeaves(b: Bench): Map<string, string> {
-    return existsSync(b.paths.installationSettings) ? leaves(readInstallationSettings(b)) : new Map();
+    return existsSync(dataLayout(b.paths.data).userSettingsFile) ? leaves(readInstallationSettings(b)) : new Map();
 }
 
 /**
@@ -432,7 +433,7 @@ test('each act of the Connect cards and a chat turn writes under <data> what it 
             },
         },
     });
-    assert.equal(readFileSync(b.paths.installationSettings, 'utf8').includes('planted-reply-key'), false, 'the Reply key is the Reply CLI’s alone');
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8').includes('planted-reply-key'), false, 'the Reply key is the Reply CLI’s alone');
     assert.equal(readFileSync(b.paths.providerKeys, 'utf8').includes('sk-planted-provider'), false, 'the key is kept encrypted');
     assert.equal(readFileSync(b.paths.settings, 'utf8').includes('planted'), false);
 
@@ -561,23 +562,23 @@ test('Reload is the call with no values: it writes nothing, and a refusal the re
     const setup = setupOn(b);
     await assert.rejects(setup.configurePlugin('slack', {}), Refused);
     assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload']]);
-    assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), '{"kept": true}');
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), '{"kept": true}');
     assert.match((await setup.status()).settingsRefused ?? '', /^the settings file could not be read \(not valid JSON at line 1, byte 2\)/);
 
     const fine = bench(t);
     const ok = setupOn(fine);
     await ok.configurePlugin('ntfy', {});
     assert.deepEqual(fine.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload'], ['plugin', 'list']]);
-    assert.equal(existsSync(fine.paths.installationSettings), false);
+    assert.equal(existsSync(dataLayout(fine.paths.data).userSettingsFile), false);
     assert.equal((await ok.status()).settingsRefused, null);
 
     // A file there is left byte for byte, its time included, and nothing but the reload and its read-back is run.
     const kept = bench(t);
     writeInstallationSettings(kept, '{ "Dispatcher": { "MaxParallel": 2 } }');
-    const mtime = statSync(kept.paths.installationSettings).mtimeMs;
+    const mtime = statSync(dataLayout(kept.paths.data).userSettingsFile).mtimeMs;
     await setupOn(kept).configurePlugin('journal-forwarder', {});
-    assert.equal(readFileSync(kept.paths.installationSettings, 'utf8'), '{ "Dispatcher": { "MaxParallel": 2 } }');
-    assert.equal(statSync(kept.paths.installationSettings).mtimeMs, mtime);
+    assert.equal(readFileSync(dataLayout(kept.paths.data).userSettingsFile, 'utf8'), '{ "Dispatcher": { "MaxParallel": 2 } }');
+    assert.equal(statSync(dataLayout(kept.paths.data).userSettingsFile).mtimeMs, mtime);
     assert.deepEqual(kept.record().map((entry) => [entry.name, ...entry.args]), [['jason', 'plugin', 'reload'], ['jason', 'plugin', 'list']]);
 
     const unknown = bench(t);
@@ -594,7 +595,7 @@ test('a settings file the desktop cannot parse is refused, said so once, and lef
         setupOn(b, log).configurePlugin('slack', { token: 't', target: 'C1234ABCD' }),
         (error: unknown) => error instanceof Refused && /comments and trailing commas/.test(error.message) && error.message.endsWith('Edit it by hand, then press Reload.'),
     );
-    assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), '{ "Plugins": {}, }');
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), '{ "Plugins": {}, }');
     assert.deepEqual(b.record(), [], 'nothing is installed or reloaded');
     assert.deepEqual(log.lines.map((line) => line.name), ['settings_refused']);
     // The page adds the sentence that says what to do to what this says, so it is not said here as well.
@@ -637,7 +638,7 @@ test('a sign-in wires Jason’s Reply plugin: placed, granted reply, named the g
         Plugins: { Grants: { reply: { Exec: ['reply'] } } },
         Routes: { Default: { Plugin: 'reply', Binding: { profile: 'default' } } },
     });
-    assert.equal(readFileSync(b.paths.installationSettings, 'utf8').includes('planted-reply-key'), false);
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8').includes('planted-reply-key'), false);
     assert.equal(JSON.stringify(log.lines).includes('planted-reply-key'), false);
     assert.deepEqual(log.lines.find((line) => line.name === 'reply_wired')?.fields, { RouteWritten: true, Exit: 0 });
     assert.equal((await setupOn(b).status()).reply.wired, true);
@@ -664,7 +665,7 @@ test('a global default a person set to another plugin is kept, and the Reply car
     const unreadable = bench(t, { programs: ['reply'] });
     writeInstallationSettings(unreadable, '{ /* mine */ }');
     await assert.rejects(setupOn(unreadable).connectReply(), (error: unknown) => error instanceof Refused && /comments/.test(error.message));
-    assert.equal(readFileSync(unreadable.paths.installationSettings, 'utf8'), '{ /* mine */ }');
+    assert.equal(readFileSync(dataLayout(unreadable.paths.data).userSettingsFile, 'utf8'), '{ /* mine */ }');
     assert.equal(unreadable.record().some((entry) => entry.name === 'jason'), false);
     assert.ok(existsSync(join(unreadable.paths.chat, '.claude', 'skills', 'reply-cli', 'SKILL.md')), 'the Reply skills are deployed all the same');
 });

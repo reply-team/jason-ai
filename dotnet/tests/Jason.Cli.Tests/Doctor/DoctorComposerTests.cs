@@ -95,7 +95,7 @@ public sealed class DoctorComposerTests
         Assert.Empty(header["warnings"]!.AsArray());
         Assert.Empty(bundle.Warnings);
         Assert.Contains("the capability token", Strings(header["never_carried"]));
-        Assert.Contains("journal values unless --include-journal: what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link recorded, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed", Strings(header["never_carried"]));
+        Assert.Contains("journal values unless --include-journal: what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link recorded, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes and the global routes bind, the grants people gave plugins: hosts, programs, variable names, API families, directories and journal kinds, the options decisions were answered with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed", Strings(header["never_carried"]));
         Assert.Equal(bundle.NeverCarried, Strings(header["never_carried"]));
 
         // The listing is the sections after the header, each with the size it has in the file.
@@ -127,7 +127,7 @@ public sealed class DoctorComposerTests
 
         var status = Section(await ComposeAsync(dir, Running(dir), programs: programs), "status");
 
-        Assert.Equal(["ready", "checks"], Keys(status));
+        Assert.Equal(["ready", "checks", "setup"], Keys(status));
         Assert.Contains(status["checks"]!.AsArray(), check => Text(check!["name"]) == "runtime" && Text(check["state"]) == "ok");
         Assert.Contains(status["checks"]!.AsArray(), check => Text(check!["name"]) == "provider_cli" && Text(check["state"]) == "absent");
         Assert.Empty(programs.Requested);
@@ -719,7 +719,7 @@ public sealed class DoctorComposerTests
         Assert.True(config["bytes"]!.GetValue<long>() > DoctorComposer.SectionBytes);
         Assert.Equal(DoctorComposer.SectionBytes, config["budget"]!.GetValue<long>());
         Assert.Equal(0, bundle.Contents.Single(entry => entry.Name == "config").Items);
-        Assert.Equal(["ready", "checks"], Keys(Section(bundle, "status")));
+        Assert.Equal(["ready", "checks", "setup"], Keys(Section(bundle, "status")));
         Assert.True(bundle.Serialize().Length < DoctorComposer.MaxBundleBytes);
     }
 
@@ -863,6 +863,31 @@ public sealed class DoctorComposerTests
             Assert.Equal("plugin_configuration", Text(environment[name]["withheld"]));
             Assert.False(environment[name].ContainsKey("shape"));
         }
+    }
+
+    /// <summary>
+    /// A temporary file the runtime's settings writer left beside the settings file — a crash between its write and its
+    /// rename — holds the whole file, secrets and all, and never reaches a bundle: the settings file is read by its own
+    /// name and projected, and the config folder is never listed. Neither the secret nor the temporary file's name is
+    /// carried, with the journal's own entries asked for too.
+    /// </summary>
+    [Fact]
+    public async Task A_temporary_file_the_settings_writer_left_never_reaches_the_bundle()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false}}""");
+        var stray = $"{Path.GetFileName(dir.Paths.UserSettingsFile)}.{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(
+            Path.Combine(dir.Paths.ConfigDirectory, stray),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Config":{"fake-provider":{"token":"SENTINEL_STRAY_SECRET"}}}}""");
+
+        var bundle = await ComposeAsync(dir, Running(dir), includeJournal: true);
+
+        var text = bundle.Document.ToJsonString();
+        Assert.DoesNotContain("SENTINEL_STRAY_SECRET", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(stray, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(".tmp", text, StringComparison.Ordinal);
     }
 
     // ---- the runtime down, a read that fails midway, and one that times out --------------------------------------
@@ -2528,6 +2553,49 @@ public sealed class DoctorComposerTests
         Assert.Equal(Path.Combine("<runtime_data>", "logs"), Text(evt["A"]));
         Assert.Equal(Path.Combine("<data>", "logs"), Text(evt["B"]));
         Assert.Contains(Section(bundle, "status")["checks"]!.AsArray(), check => Text(check!["fact"]).Contains("data directory <runtime_data>", StringComparison.Ordinal));
+        Assert.DoesNotContain(Everything(JsonNode.Parse(bundle.Serialize())!), text => text.Contains(dir.Paths.Root, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Where the parts are travels in two places, the runtime's own report and the status section, and in neither does a
+    /// raw root leave the machine. The status section's parts are this CLI's own, so they read <c>&lt;data&gt;</c>; the
+    /// runtime's are its own, so they read <c>&lt;runtime_data&gt;</c> where it keeps its data in another directory,
+    /// <c>~/.jason</c> where that directory is the default one in home, and <c>&lt;data&gt;</c> where it is this one. Every
+    /// member that is a path is held, one by one, and then the whole bundle.
+    /// </summary>
+    [Theory]
+    [InlineData("here")]
+    [InlineData("elsewhere")]
+    [InlineData("home")]
+    public async Task The_setup_paths_travel_rewritten_in_the_runtime_and_the_status_sections(string runtimeAt)
+    {
+        using var dir = new TempPaths();
+        var home = Path.Combine(Path.GetTempPath(), "jason-cli-tests", Guid.NewGuid().ToString("N"), "home-of-sentinel");
+        var (runtimeRoot, runtimeMark) = runtimeAt switch
+        {
+            "here" => (dir.Paths.Root, "<data>"),
+            "elsewhere" => (Path.Combine(dir.Paths.Root, "other"), "<runtime_data>"),
+            _ => (Path.Combine(home, JasonPaths.DefaultFolder), "~" + Path.DirectorySeparatorChar + JasonPaths.DefaultFolder),
+        };
+        var runtime = Running(dir, dataDir: runtimeRoot);
+        runtime.Info = StubRuntime.EveryField(runtimeRoot) with { Setup = SetupInfo.From(new JasonPaths(runtimeRoot, 1)) };
+
+        var bundle = await ComposeAsync(dir, runtime, identity: MadeUp with { Home = home });
+        Assert.DoesNotContain(Everything(JsonNode.Parse(bundle.Serialize())!), text => text.Contains(home, StringComparison.OrdinalIgnoreCase));
+
+        var ofRuntime = Section(bundle, "runtime")["system_info"]!["setup"]!.AsObject();
+        var ofStatus = Section(bundle, "status")["setup"]!.AsObject();
+        string[] paths = ["role_skills_directory", "plugins_directory", "custom_ui_directory", "settings_file"];
+        foreach (var member in paths)
+        {
+            Assert.StartsWith(runtimeMark + Path.DirectorySeparatorChar, Text(ofRuntime[member]), StringComparison.Ordinal);
+            Assert.StartsWith("<data>" + Path.DirectorySeparatorChar, Text(ofStatus[member]), StringComparison.Ordinal);
+        }
+
+        Assert.Equal(Path.Combine(runtimeMark, "plugins"), Text(ofRuntime["plugins_directory"]));
+        Assert.Equal(Path.Combine("<data>", "config", "settings.json"), Text(ofStatus["settings_file"]));
+        Assert.True(ofRuntime["settings_file_holds_secrets"]!.GetValue<bool>());
+        Assert.True(ofStatus["settings_file_holds_secrets"]!.GetValue<bool>());
         Assert.DoesNotContain(Everything(JsonNode.Parse(bundle.Serialize())!), text => text.Contains(dir.Paths.Root, StringComparison.OrdinalIgnoreCase));
     }
 

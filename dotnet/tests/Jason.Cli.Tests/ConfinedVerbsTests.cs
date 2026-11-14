@@ -42,6 +42,8 @@ public class ConfinedVerbsTests
         ["suppression remove"] = ["suppression", "remove", "--channel", "email", "--value", "someone@example.com", "--reason", "asked again"],
         ["route set"] = ["route", "set", "--campaign", "cmp_A", "--plugin", "fake-provider", "--operation", "campaign.get"],
         ["route unset"] = ["route", "unset", "--campaign", "cmp_A", "--operation", "campaign.get"],
+        ["plugin grant"] = ["plugin", "grant", "fake-provider", "--http", "api.example.com"],
+        ["plugin revoke"] = ["plugin", "revoke", "fake-provider", "--env", "FAKE_TOKEN"],
         ["role set-profile"] = ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
         ["role add"] = ["role", "add", "researcher", "--execution-profile", "local-claude"],
         ["project link"] = ["project", "link", "prj_A", "--path", "."],
@@ -153,6 +155,43 @@ public class ConfinedVerbsTests
     [InlineData("--actor", "human:x", "approval", "set-standing", "cmp_A", "--operation", "audience.search", "--audience", "2", "--max-people", "250")]
     [InlineData("--actor", "human:x", "approval", "unset-standing", "cmp_A", "--operation", "audience.search")]
     public async Task Confined_the_allowance_forms_are_refused_and_nothing_is_sent(params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Empty(run.Requests);
+        Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+    }
+
+    /// <summary>
+    /// A global route is refused as a campaign's is: the entry is the verb, so every scope of it is covered, and the
+    /// desktop's chat, which sets the variable on every turn in every mode, never re-routes every campaign.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "route", "set", "--global", "--plugin", "fake-provider")]
+    [InlineData("--actor", "human:x", "route", "unset", "--global", "--operation", "campaign.get")]
+    public async Task Confined_a_global_route_write_is_refused_and_nothing_is_sent(params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(ExitCodes.ApiError, run.Exit);
+        Assert.Empty(run.Requests);
+        Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+    }
+
+    /// <summary>
+    /// A grant changes what a plugin may reach and run, so it is refused as a route is, by every flag: the desktop's chat,
+    /// which sets the variable on every turn in every mode, never grants a plugin anything or takes a grant back.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--http", "api.example.com")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--exec", "node")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--env", "*")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--api", "campaign")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--files", "/srv/lines")]
+    [InlineData("--actor", "human:x", "plugin", "grant", "fake-provider", "--subscription", "workitem_failed")]
+    [InlineData("--actor", "human:x", "plugin", "revoke", "fake-provider", "--http", "api.example.com")]
+    public async Task Confined_a_plugin_grant_or_revoke_is_refused_and_nothing_is_sent(params string[] args)
     {
         var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
 

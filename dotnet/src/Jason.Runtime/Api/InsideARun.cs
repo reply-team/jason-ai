@@ -6,12 +6,13 @@ namespace Jason.Runtime.Api;
 
 /// <summary>
 /// A request that says it comes from inside a run. The CLI sends <see cref="ExecutionEnvironment.AttemptHeader"/> on every
-/// request when its environment names the attempt it was launched for; the operations that are a person's own word
-/// refuse such a request with <c>decided_inside_a_run</c> before anything reads its body, so before its actor, whatever
-/// actor that is. Every other operation reads past the header, and the fenced ones keep their attempt in the body. One reads
-/// it as a fact about where a verdict came from: <c>reply.record</c> records a person named from inside a run as that
-/// run's verdict, checked to be an attempt of work in the verdict's campaign, so the person's word it would otherwise carry
-/// — the one that lifts an opt-out's lock — is not taken from the run (<see cref="Domain.RunScope"/>).
+/// request when its environment names the attempt it was launched for; the operations that are a person's own word,
+/// and the two that change what a plugin may use, refuse such a request with <c>decided_inside_a_run</c> before anything
+/// reads its body, so before its actor, whatever actor that is: inside a run, nothing changes Jason itself. Every other
+/// operation reads past the header, and the fenced ones keep their attempt in the body. One reads it as a fact about where
+/// a verdict came from: <c>reply.record</c> records a person named from inside a run as that run's verdict, checked to be
+/// an attempt of work in the verdict's campaign, so the person's word it would otherwise carry — the one that lifts an
+/// opt-out's lock — is not taken from the run (<see cref="Domain.RunScope"/>).
 /// </summary>
 /// <remarks>
 /// A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and a run that
@@ -21,11 +22,11 @@ namespace Jason.Runtime.Api;
 public static class InsideARun
 {
     /// <summary>
-    /// The operations that are a person's own word, and refuse a request from inside a run. A preference is one for every
-    /// key: what a named person states, where in a dispatched run no person is there. Refused here by operation, never by
-    /// key, so a key added later is refused before anybody remembers to.
+    /// The operations that are a person's own word. A preference is one for every key: what a named person states, where in
+    /// a dispatched run no person is there. Refused here by operation, never by key, so a key added later is refused before
+    /// anybody remembers to.
     /// </summary>
-    public static IReadOnlySet<string> Refusing { get; } = new HashSet<string>(StringComparer.Ordinal)
+    public static IReadOnlySet<string> PersonsWord { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         Operations.ApprovalApprove,
         Operations.ApprovalReject,
@@ -36,6 +37,16 @@ public static class InsideARun
         Operations.PreferenceUnset,
         Operations.CampaignSetSendMode,
     };
+
+    /// <summary>The operations that change Jason itself: what a plugin may use. A role Jason launches is no person granting it.</summary>
+    public static IReadOnlySet<string> ChangesJason { get; } = new HashSet<string>(StringComparer.Ordinal)
+    {
+        Operations.PluginGrant,
+        Operations.PluginRevoke,
+    };
+
+    /// <summary>Every operation that refuses a request from inside a run.</summary>
+    public static IReadOnlySet<string> Refusing { get; } = new HashSet<string>(PersonsWord.Concat(ChangesJason), StringComparer.Ordinal);
 
     /// <summary>The attempt a request says it comes from, as it said it; null where it names none.</summary>
     public static string? AttemptOf(HttpRequest request)

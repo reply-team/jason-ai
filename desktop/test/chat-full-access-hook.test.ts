@@ -18,7 +18,7 @@ import { openEndpoint, type Endpoint } from '../src/chat-permission-endpoint.ts'
 import { fullAccessJudgement, heldSentence, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId } from '../src/chat-turn-files.ts';
-import { desktopPaths } from '../src/paths.ts';
+import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 import { templates, type Logger } from '../src/log.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -171,7 +171,7 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, tim
         added: [],
         data: root,
         home: root,
-        protectedFiles: [paths.installationSettings, paths.runFile],
+        protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
         denied: fence.commands,
         deniedOperations: fence.operations,
         real: realPathOf,

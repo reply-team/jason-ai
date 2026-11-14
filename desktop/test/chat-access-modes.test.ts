@@ -3,15 +3,15 @@
 // every way the desktop puts a chat back to Ask first.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { cutMark } from '../src/chat-conversations.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { codexWindowsSandbox } from '../src/chat-hosts.ts';
-import { codexAutoEdit, feedAutoEdit, feedFullAccess, fullAccessOffered, fullAccessSentence, planModeMoved, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
+import { codexWindowsSandbox, rulePath } from '../src/chat-hosts.ts';
+import { codexAutoEdit, feedAutoEdit, feedFullAccess, fullAccessOffered, fullAccessSentence, planModeMoved, planRefusal, unguardedSentence, type ChatMode } from '../src/chat-modes.ts';
 import type { Decided } from '../src/chat-permission-broker.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench, type Recorded } from './harness.ts';
 
@@ -946,4 +946,145 @@ test('a plan too long to keep whole is no plan: its end says no plan and nothing
     assert.deepEqual(marked(r.chat.open(id).entries), []);
     assert.deepEqual(marked(recordOf(r, id).entries), []);
     assert.deepEqual(marked(r.again().open(id).entries), [], 'nor after a restart');
+});
+
+// ---- The data directory's fence, under both layouts ----------------------------------------------------------------
+//
+// The places a person sets up move to `setup/` in a later layout, with the stamp `layout.json` beside them, and the
+// settings split in two there: `setup/settings.json` and `config/secrets.json`. A Claude Code chat is refused all of them
+// in every mode, whether they exist yet or not and whatever the stamp says, as it is refused `config/` and `plugins/`.
+
+const dataRefusal = 'That path is the installation\'s own data, outside the chat\'s folder: the chat neither reads nor writes it. Nothing was done.';
+const fenceModes = ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const;
+
+/** The places the fence holds, under the data directory. */
+const fenced = [
+    'setup/settings.json',
+    'setup/roles/copywriter/SKILL.md',
+    'setup/plugins/crm/main.js',
+    'setup',
+    'layout.json',
+    'config/settings.json',
+    'config/secrets.json',
+    'run/runtime.json',
+];
+
+/**
+ * The same places spelled another way: another letter case, a trailing separator, a `..` through a sibling or through the
+ * chat folder, and the other separator.
+ */
+const respelled = (data: string) => [
+    join(data, 'Setup', 'Settings.json'),
+    join(data, 'SETUP', 'roles'),
+    `${join(data, 'setup')}${sep}`,
+    `${join(data, 'config')}${sep}`,
+    [join(data, 'config'), '..', 'setup', 'settings.json'].join(sep),
+    [join(data, 'desktop', 'chat'), '..', '..', 'setup', 'settings.json'].join(sep),
+    [join(data, 'desktop', 'chat'), '..', '..', 'layout.json'].join(sep),
+    `${data}/setup/settings.json`,
+    `${data}/config/secrets.json`,
+];
+
+/** Each path read and written by the file tools, and read by a command. */
+const usesOf = (path: string) => [
+    { tool: 'Read', input: { file_path: path } },
+    { tool: 'Edit', input: { file_path: path, old_string: 'a', new_string: 'b' } },
+    { tool: 'Write', input: { file_path: path, content: '{}' } },
+    { tool: 'Bash', input: { command: `cat "${path}"` } },
+];
+
+/** Full access asks its hook first, as Claude Code does in its default mode; every other mode asks the prompt tool. */
+const stepOf = (mode: ChatMode, use: { tool: string; input: Record<string, unknown> }) => (mode === 'full_access' ? { use } : { ask: use });
+const refusedAs = (mode: ChatMode, message: string) => (mode === 'full_access' ? `tool refused: ${message}` : `decision deny: ${message}`);
+const answersIn = (events: ChatEvent[]) => texts(events).filter((text) => text.startsWith('decision ') || text.startsWith('tool '));
+/** A turn that ended with no error; Plan only's end marks its plan as well. */
+const endedWell = (events: ChatEvent[]) => {
+    const last = done(events);
+    return last?.kind === 'done' && last.error === null;
+};
+const platformOf = () => (process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux');
+
+for (const mode of fenceModes) {
+    test(`in ${mode} a Claude Code turn starts with Read and Edit of setup/ and layout.json refused by the host's own rules, whether they exist or not`, async (t) => {
+        const r = rig(t);
+        const { id } = await r.chat.create();
+        if (mode !== 'ask_first') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        await r.turn(id, 'hello', claude);
+        assert.deepEqual(r.started, [mode]);
+        const args = r.hosts()[0]?.args ?? [];
+        const refused = args.slice(args.indexOf('--disallowedTools'), args.indexOf('--setting-sources'));
+        for (const name of ['setup', 'layout.json', 'config', 'plugins']) {
+            const rule = rulePath(platformOf(), join(r.b.paths.data, name));
+            for (const each of [`Read(${rule})`, `Read(${rule}/**)`, `Edit(${rule})`, `Edit(${rule}/**)`]) assert.ok(refused.includes(each), `${mode}: ${each}`);
+        }
+    });
+
+    test(`in ${mode} both layouts' settings files, the secrets file, setup/, the stamp and the run file are refused with no card, by a file tool or a command, however the path is spelled`, async (t) => {
+        const r = rig(t);
+        const { id } = await r.chat.create();
+        if (mode !== 'ask_first') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        const paths = [...fenced.map((place) => join(r.b.paths.data, ...place.split('/'))), ...respelled(r.b.paths.data)];
+        const uses = paths.flatMap(usesOf);
+        plan(r, uses.map((use) => stepOf(mode, use)));
+        const said = await r.turn(id, 'read the settings', claude);
+        assert.ok(endedWell(said), JSON.stringify(done(said)));
+        assert.equal(said.some((event) => event.kind === 'permission'), false, 'no card for any of them');
+        const answers = answersIn(said);
+        assert.equal(answers.length, uses.length, JSON.stringify(answers));
+        answers.forEach((answer, at) => {
+            const use = uses[at];
+            // Plan only refuses a write before it looks at the path; every other refusal is the data directory's.
+            const message = mode === 'plan_only' && (use?.tool === 'Edit' || use?.tool === 'Write') ? planRefusal : dataRefusal;
+            assert.equal(answer, refusedAs(mode, message), `${mode}: ${use?.tool} ${JSON.stringify(use?.input)}`);
+        });
+    });
+}
+
+test('a settings file whose folder is a link out of the data directory is refused all the same, in every mode, since the fence names every layout\'s settings files themselves', async (t) => {
+    for (const mode of fenceModes) {
+        const r = rig(t);
+        // `setup/` and `config/` made links to folders elsewhere: the path leaves the data directory by its real spelling,
+        // and only the fence's own list of files still knows it.
+        for (const name of ['setup', 'config']) {
+            const elsewhere = join(r.b.root, `elsewhere-${name}`);
+            mkdirSync(elsewhere, { recursive: true });
+            rmSync(join(r.b.paths.data, name), { recursive: true, force: true });
+            symlinkSync(elsewhere, join(r.b.paths.data, name), process.platform === 'win32' ? 'junction' : 'dir');
+        }
+        const { id } = await r.chat.create();
+        if (mode !== 'ask_first') assert.equal((await r.chat.setMode(id, mode, 'claude')).mode, mode);
+        const files = ['setup/settings.json', 'config/settings.json', 'config/secrets.json'].map((file) => join(r.b.paths.data, ...file.split('/')));
+        plan(r, files.map((file) => stepOf(mode, { tool: 'Read', input: { file_path: file } })));
+        const first = r.until(id, (event) => event.kind === 'permission' || event.kind === 'done');
+        await r.chat.send(id, 'read the settings', claude);
+        const ended = await first;
+        if (ended.kind === 'permission') r.chat.stop(id);
+        assert.equal(ended.kind, 'done', `${mode}: a card was shown for a settings file reached through a link`);
+        assert.deepEqual(answersIn(r.events.get(id) ?? []), files.map(() => refusedAs(mode, dataRefusal)), mode);
+    }
+});
+
+// Codex has no fence of the desktop's, and needs none for setup/: every Codex turn runs in Codex's own read-only sandbox,
+// which names no path and so holds every folder alike, the data directory and setup/ in it among them; no mode gives a
+// Codex turn more, since Full access and Auto-edit run on Claude Code only and a chat in either goes back to Ask first
+// when it is sent to Codex. What that sandbox does not do is keep a Codex command from reading: it reads setup/ and the
+// secrets file as it reads config/settings.json today, which docs/desktop.md says, and the line under the composer too.
+test('a Codex turn, from whichever mode the chat was in, runs read-only with no folder added and no way to write: setup/ is held as every folder is', async (t) => {
+    for (const mode of fenceModes) {
+        const r = rig(t);
+        const { id } = await r.chat.create();
+        if (mode !== 'ask_first') await r.chat.setMode(id, mode, 'claude');
+        const said = await r.turn(id, 'change the copywriter', { host: 'codex' });
+        assert.ok(endedWell(said), mode);
+        const args = r.hosts()[0]?.args ?? [];
+        assert.equal(args[0], 'exec', mode);
+        assert.equal(flag(args, '--sandbox'), 'read-only', mode);
+        assert.equal(args.filter((arg) => arg === '--sandbox' || arg.startsWith('--sandbox=') || arg === '-s').length, 1, mode);
+        for (const widening of ['--add-dir', '--full-auto', '--dangerously-bypass-approvals-and-sandbox', '--yolo', 'workspace-write', 'danger-full-access']) {
+            assert.ok(!args.includes(widening), `${mode}: ${widening}`);
+        }
+        assert.ok(!args.some((arg) => /sandbox_workspace_write|writable_roots|sandbox_mode/.test(arg)), `${mode}: no setting widens the sandbox`);
+        assert.ok(!args.some((arg) => arg.includes(r.b.paths.data)), `${mode}: no argument names the data directory`);
+        assert.equal(r.chat.open(id).mode, mode === 'plan_only' ? 'plan_only' : 'ask_first', mode);
+    }
 });

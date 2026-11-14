@@ -341,6 +341,51 @@ jason session open --here --host claude_code --resume <conversation-id>
   `campaign_not_found` or `project_not_found`, printed as it came; no runtime is exit 3; flags that do not go together,
   an empty value, a host word this `jason` does not know or an id `--resume` does not take are a usage error, exit 2.
 
+### On Jason itself, with `--setup`
+
+With `--setup`, the same verb opens your own agent host on Jason itself: at its role skills folder, with the setup brief
+as its first input. It is for changing how this installation works, its roles, its plugins and its settings, rather
+than for campaign work, and it decides and changes nothing by being opened.
+
+```sh
+jason session open --setup
+jason session open --setup --host codex
+```
+
+- **The folders.** The session opens at the role skills folder, and the plugins folder is given to the host as a second
+  folder where the host takes one: Claude Code and Codex after `--add-dir`, the other hosts not at all, as the hosts
+  table of [execution-profiles.md](execution-profiles.md) says. Both are the folders `jason status` names in its `setup`
+  section, read where the CLI reads its data directory. A role skills folder that is not there is refused; a plugins
+  folder that is not there is not given to the host; neither is made.
+- **The program.** `--host` names one of the host words; without it the host is the one the named preference
+  `agent.interactive_host` names (`claude_code` while it is unset), read with `preference.list`. That read is all it asks
+  the runtime, and with `--host` it asks nothing, so it opens with no runtime running. It starts no runtime and writes no
+  file of Jason's; on macOS it writes the one script an item's session writes.
+- **The brief** is short: two lines that say what the session is for, where the parts are read (`jason status`), what is
+  never touched (the settings file while it holds plugins' secrets, anything of Jason's outside the role skills and
+  plugins folders, routes and grants being changed with Jason's own commands, and a secret, which is yours to type),
+  and that the skill `customising-jason` teaches the rest. It is one word of the host's command line, as an item's brief
+  is, and carries no path, id or secret. The skill itself is read where `jason skills install` deployed it; the answer
+  says whether it is deployed for the host it opens, from the record a deployment keeps in that host's skills folder.
+  Where that record does not show it deployed, or cannot be read, the brief's last line says so to the agent too, and
+  asks it to install the skill with `jason skills install --host <host>` on your yes before it changes anything of
+  Jason's.
+- **What it prints.** One object: `kind` (`setup`), `folder` (`level` `role_skills`, and `path`), `plugins_folder`
+  (`path`, `added`, and where it was not added `reason`: `host_takes_no_folder` or `folder_missing`), `host`, `skill`
+  (`name`, `customising-jason`; `deployed`, decided by Jason's receipt, the record `jason skills install` keeps in the
+  host's skills folder: true, false, or null where that record could not be read; and `root`, the host's skills folder
+  that was read), `program`, `terminal` and `started`; with `--dry-run` also `argv`, the brief among it, and on macOS
+  `script`. A skill placed there some other way, without the receipt, counts as not deployed. With `--human`, where the
+  skill is not deployed, a second line says "jason skills install has not deployed the skill customising-jason for
+  <host>: `jason skills install --host <host>` deploys it."; where the receipt could not be read, it says that whether
+  the skill is deployed could not be read, and names the same command. A refusal of its own is the API's error envelope on stdout, said again on
+  stderr, with exit 1: `folder_missing` (the role skills folder is not there), `preference_unreadable`, `host_unknown`,
+  `host_not_found`, `terminal_not_found` and `terminal_start_failed`. The role skills folder is checked before the host
+  is chosen, so with no role skills folder and no runtime the answer is `folder_missing`, exit 1. Otherwise, no runtime
+  to ask for the preference is exit 3;
+  `--setup` with `--approval`, `--question`, `--campaign`, `--project`, `--here`, `--shell` or `--resume` is a usage
+  error, exit 2.
+
 ## Settings and Chat in the browser
 
 **Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the

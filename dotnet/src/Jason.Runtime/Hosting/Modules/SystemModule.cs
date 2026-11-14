@@ -103,7 +103,9 @@ public static class SystemModule
                     ReleasedPlugins: released.Compare(plugins.Snapshot),
                     // The installation's two modes in force, read from the preferences as they stand: the mode and where it
                     // comes from, never who set it, which preference.list says.
-                    SendModes: SendModes.InForce(null, await SendModes.ReadAsync(db, cancellationToken).ConfigureAwait(false)))));
+                    SendModes: SendModes.InForce(null, await SendModes.ReadAsync(db, cancellationToken).ConfigureAwait(false)),
+                    // Where this runtime's parts are, from its own paths alone: nothing is read, so this cannot fail.
+                    Setup: SetupInfo.From(dataPaths))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

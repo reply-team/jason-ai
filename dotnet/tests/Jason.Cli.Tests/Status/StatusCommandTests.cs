@@ -67,6 +67,27 @@ public class StatusCommandTests
         return Assert.Single(Read(output).Checks, check => check.Name == "autostart");
     }
 
+    /// <summary>
+    /// Nothing routed is told with the two commands that route it, every campaign's and one campaign's, and no repair:
+    /// the plugin a route names is the person's to choose, so no command fits as printed.
+    /// </summary>
+    [Fact]
+    public async Task Nothing_routed_names_the_two_commands_that_route_work()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "route");
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.Equal(
+            "Nothing is routed anywhere yet: route every campaign with jason route set --global --plugin <id> --actor human:<Name>, or one campaign with jason route set --campaign <id> --plugin <id> --actor human:<Name>.",
+            check.Fact);
+        Assert.Null(check.Fix);
+    }
+
     /// <summary>No registration is told as what happens at the next sign-in, and the repair stays the same.</summary>
     [Fact]
     public async Task No_registration_says_the_runtime_stays_off_at_the_next_sign_in()
@@ -1342,7 +1363,7 @@ public class StatusCommandTests
     /// <summary>A descriptor on disk and a runtime behind it answering the three operations status asks.</summary>
     /// <summary>A descriptor and a runtime behind it. <paramref name="roles"/> null makes role.list fail.</summary>
     /// <remarks><paramref name="version"/> is the version the runtime says it is, a development one unless a fact names another.</remarks>
-    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null, string version = Version, UiModuleInfo? ui = null, ListeningInfo? listening = null, HarnessInfo? harness = null, IReadOnlyList<ReleasedPluginInfo>? releasedPlugins = null, PluginRegistryDto? registry = null)
+    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null, string version = Version, UiModuleInfo? ui = null, ListeningInfo? listening = null, HarnessInfo? harness = null, IReadOnlyList<ReleasedPluginInfo>? releasedPlugins = null, PluginRegistryDto? registry = null, SetupInfo? setup = null)
     {
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_01J"));
         Answers[dir.Paths.Root] = (
@@ -1355,7 +1376,8 @@ public class StatusCommandTests
             listening,
             harness,
             releasedPlugins,
-            registry);
+            registry,
+            setup);
     }
 
     /// <summary>The installation's send modes the runtime's <c>system.info</c> answers with; without them it says none, as an older runtime does.</summary>
@@ -1428,7 +1450,7 @@ public class StatusCommandTests
     /// <summary>The version the runtime here says it is, and the build the CLI under test goes by, unless a fact names others.</summary>
     internal const string Version = "0.1.0-dev";
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt, string Version, UiModuleInfo? Ui, ListeningInfo? Listening, HarnessInfo? Harness, IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins, PluginRegistryDto? Registry)> Answers = [];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt, string Version, UiModuleInfo? Ui, ListeningInfo? Listening, HarnessInfo? Harness, IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins, PluginRegistryDto? Registry, SetupInfo? Setup)> Answers = [];
 
     /// <summary>
     /// The machine these run against: this test's own data directory, a runtime that exists only in a handler,
@@ -1482,7 +1504,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root) }, JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, Setup = answers.Setup, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root) }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

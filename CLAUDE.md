@@ -110,8 +110,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   default, global operation and channel, global operation override, global default, with exact
   masking and no fallback to another plugin. Routes are frozen
   by the same reload that freezes plugins: the `Routes` section of `settings.json` is read only
-  there and at startup, `route.set`/`route.unset` copy the global half from the active snapshot, and
-  a bad route rejects the whole reload. The claim is fail-closed: twenty-eight checks in one published
+  there and at startup, a campaign's `route.set`/`route.unset` copy the global half from the active snapshot, with
+  scope `global` they write the section through the runtime's one writer of the settings file, which keeps every byte
+  it does not own, and run that reload in the same act, putting the file back when it refuses, and a bad route rejects
+  the whole reload. The claim is fail-closed: twenty-eight checks in one published
   order, one code per reason, decided before a child exists, with the attempt kept; an audience's definition is the
   provider's own shape, held at the claim to the schema the routed plugin declares, never at create. A binding names
   an account and never a credential. A person's reads on request are routed by the person's pin; a campaign's reads
@@ -133,7 +135,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   invocation goes to the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON
   Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3
   rejected, 4 host failure). Declaration is not permission: capabilities are requested by the manifest
-  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load; a manifest's `any_granted_host` lets a person
+  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load; `plugin.grant` and `plugin.revoke` write one
+  list there through the runtime's one writer of the settings file and run that load in the same act, and refuse an entry
+  the manifest does not request, where one written by hand is only a warning; a manifest's `any_granted_host` lets a person
   grant a host it does not declare, and `*` still means the declared hosts alone. Configuration is `Plugins:Config:<id>`:
   text only, frozen at each load, handed on stdin and read with `host.config`, a secret of the invocation, never in a
   package. A failure carries one of
@@ -199,7 +203,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   build, placing a plugin package the release publishes — rather than ask the runtime anything (each is the
   one such verb under a noun whose other verbs are operations, `plugin install` asks only the reload
   `plugin reload` asks and never starts a runtime, and the verb-map tests hold the `ui` group to its three
-  operations and `install` and the `plugin` group to its two and `install`); `jason logs` reads the
+  operations and `install` and the `plugin` group to its four and `install`); `jason logs` reads the
   installation's log files, which the runtime writes and is never asked about; `jason session open` starts the
   person's own agent host — the one the named preference `agent.interactive_host` names — in a new terminal window at
   the campaign's folder with the item's brief as its first input, a terminal being no runtime's to start or know about,
@@ -210,8 +214,10 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   with no first input, and asks the runtime only `campaign.get`, `project.get`, `system.info` and `preference.list`;
   `--here` opens it at the folder the command runs in, reading no marker there, and `--resume <id>` has the host continue
   its own conversation of that id by the host's own words, kept beside its other words in `AgentHosts`, a host with none
-  refused before a terminal is looked for (the verb-map tests hold the `session` noun to `open` alone, and `open` to
-  its options); `jason export`
+  refused before a terminal is looked for; and with `--setup` it opens the same terminal at the installation's role
+  skills folder, its plugins folder beside it where the host takes one, with the setup brief as its first input, asking
+  the runtime only `preference.list` and only when no `--host` is given (the verb-map tests hold the `session` noun to
+  `open` alone, and `open` to its options); `jason export`
   writes this installation's files — the database, the settings, the plugins, the role skills, the custom UI, the logs and
   the harness root's tree — into one archive, which is a true copy only while the runtime is stopped and so no operation of the
   runtime's can stand behind it: of the runtime it asks only to stop and to start, and only under `--stop`;
@@ -230,7 +236,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link
   recorded, campaign and work-item
   contexts as they changed, result formats, the addresses and numbers put on or taken off the
-  do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered
+  do-not-contact register, the accounts a campaign's routes and the global routes bind, the grants people gave plugins: hosts, programs, variable names, API families, directories and journal kinds, the options decisions were answered
   with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions
   whose answers they carry, and the standing approvals
   people set: their categories, reactions, goals and limits, the effect, tool and operation a report

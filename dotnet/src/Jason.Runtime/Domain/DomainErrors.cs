@@ -233,6 +233,80 @@ public static class DomainErrors
 
     public static NotFoundException ApprovalNotFound(string id) => new("approval_not_found", $"No approval with id '{id}'.");
 
+    /// <summary>
+    /// The settings writer met a file the runtime's own parser does not read. The place is said as a person finds it in
+    /// an editor — the line and the byte — and with no exception's type, which the log says; nothing of the file is quoted.
+    /// </summary>
+    public static DomainException SettingsFileUnreadable(Configuration.SettingsFileFailure failure) =>
+        new(
+            StatusCodes.Status409Conflict,
+            Plugins.Manifest.ProblemCodes.SettingsFileUnreadable,
+            failure.Place() is { } place
+                ? $"The settings file could not be read ({place}), so nothing was written; fix it, then run the command again."
+                : "The settings file could not be read, so nothing was written; fix it, then run the command again.",
+            retryable: false);
+
+    /// <summary>
+    /// The settings writer cannot change the setting without touching bytes it does not own (<see cref="Configuration.SettingsDocument"/>).
+    /// The setting is named by its path, each key written as <see cref="Jason.Contracts.Configuration.SettingKey.ShownPath"/> writes it.
+    /// </summary>
+    public static DomainException SettingsFileNotEditable(string setting, Configuration.SettingsRefusal refusal) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_not_editable",
+            $"The settings file says {setting} in a way this writer cannot change without touching what it does not own ({Why(refusal)}), so nothing was written; change it by hand, then run jason plugin reload.",
+            retryable: false);
+
+    private static string Why(Configuration.SettingsRefusal refusal) => refusal switch
+    {
+        Configuration.SettingsRefusal.Twice => "twice",
+        Configuration.SettingsRefusal.NotAnObject => "through a value that is not an object",
+        Configuration.SettingsRefusal.NotUtf8 => "not in UTF-8",
+        Configuration.SettingsRefusal.ColonKey => "with a key that holds a colon, which is the same setting written a second way",
+        Configuration.SettingsRefusal.CheckRefused => "in a form this writer's own check refused",
+        Configuration.SettingsRefusal.Link => "through a link to another file, which a write would replace with a file of its own",
+        _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "a refusal with no words."),
+    };
+
+    /// <summary>Another writer kept changing the settings file between the writer's read and its commit; nothing was written.</summary>
+    public static DomainException SettingsFileChanged() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_changed",
+            "The settings file kept changing while this wrote it, so nothing was written; run the command again.",
+            retryable: true);
+
+    /// <summary>Another program held the settings file open, so it could not be read or replaced; nothing was written.</summary>
+    public static DomainException SettingsFileBusy() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_busy",
+            "Another program holds the settings file open, so nothing was written; close it, then run the command again.",
+            retryable: true);
+
+    /// <summary>
+    /// The settings file or its folder cannot be written, and waiting does not mend that: it is read-only, this user may
+    /// not write it, or the disk is full. Nothing was written.
+    /// </summary>
+    public static DomainException SettingsFileNotWritable() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "settings_file_not_writable",
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then run the command again.",
+            retryable: false);
+
+    /// <summary>
+    /// A <c>JASON_</c> environment variable sets the path the writer would write, and overrides the file: a write would
+    /// answer success for a setting that is not the one in force. Named by the setting and the variable as the environment
+    /// spells it (<see cref="Configuration.SettingsFile.Shadowing"/>), never by what either holds.
+    /// </summary>
+    public static DomainException SettingShadowed(string setting, string variable) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "setting_shadowed",
+            $"{setting} is set by the environment variable {variable}, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.",
+            retryable: false);
+
     /// <summary>No provider block has this id. Nothing deletes a block, so this is a wrong id.</summary>
     public static NotFoundException BlockNotFound(string id) => new("block_not_found", $"No provider block with id '{id}'.");
 
@@ -327,6 +401,25 @@ public static class DomainErrors
         new(
             "created_as_another_inside_a_run",
             $"This request comes from inside attempt `{attempt}`. A send to a person is created there under that attempt's own name, so that a review can tell who wrote it: name attempt:{attempt} as the actor, which the CLI does when --actor is left out.");
+
+    /// <summary>
+    /// A plugin's grant given or taken back from inside a run, refused by the run's header with the code the run gate
+    /// gives, before the body is read. A grant is taken from any actor outside a run; what is refused is a run changing
+    /// Jason itself.
+    /// </summary>
+    public static ForbiddenException ChangesJasonInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and what a plugin may use is part of it: leave it to the person, or raise it as a decision.");
+
+    /// <summary>
+    /// A route for every campaign asked for from inside a run: the global scope of <c>route.set</c> and <c>route.unset</c>,
+    /// refused by the run's header with the code the run gate gives, since nothing inside a run changes Jason itself.
+    /// </summary>
+    public static ForbiddenException GlobalRouteInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and a route for every campaign is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
@@ -624,4 +717,25 @@ public static class DomainErrors
         new("actor_required", "actor.id is required on a preference: what is recorded has to name the person whose word it is.");
 
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
+
+    /// <summary>A grant names a plugin the active snapshot does not hold, so there is no manifest to hold it to.</summary>
+    public static NotFoundException PluginNotFound(string id) =>
+        new(
+            "plugin_not_found",
+            $"No plugin '{id}' is loaded, so nothing was granted; jason plugin list names the ones that are, and a package copied in loads at jason plugin reload.");
+
+    /// <summary>
+    /// <c>plugin.grant</c> asked for what the plugin's manifest does not request: stricter than a grant written by hand,
+    /// which the load keeps as a warning, since a verb that writes what the load ignores misleads whoever ran it.
+    /// </summary>
+    public static ConflictException GrantUnrequested(string message) => new("grant_unrequested", message);
+
+    /// <summary>
+    /// <c>plugin.revoke</c> asked to take back an entry that a <c>*</c> in the same list grants: the verb takes one entry
+    /// out and never rewrites the person's list, so the star is not expanded into the names it stands for.
+    /// </summary>
+    public static ConflictException GrantHeldByStar(string setting, string entry, string id, string flag) =>
+        new(
+            "grant_held_by_star",
+            $"{setting} grants '*', which covers '{entry}', so nothing was taken back: take back '*' with jason plugin revoke {id} --{flag} '*', then grant what it should keep.");
 }

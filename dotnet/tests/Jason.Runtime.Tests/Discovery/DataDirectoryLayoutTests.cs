@@ -12,7 +12,7 @@ public class DataDirectoryLayoutTests
         DataDirectoryLayout.Ensure(dir.Paths);
         DataDirectoryLayout.Ensure(dir.Paths);
 
-        foreach (var expected in dir.Paths.Layout)
+        foreach (var expected in dir.Paths.StartDirectories)
         {
             Assert.True(Directory.Exists(expected), expected);
         }

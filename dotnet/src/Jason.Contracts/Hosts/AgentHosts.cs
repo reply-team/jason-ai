@@ -44,6 +44,12 @@ public enum HomeMarkerKind
 /// (<c>jason session open --resume</c>), an option or a subcommand, or null where Jason knows no such word for the host,
 /// which then cannot be asked to. Read from each host's own <c>--help</c>.
 /// </param>
+/// <param name="InteractiveFolderFlag">
+/// The option a second folder follows when a person's host is started on Jason itself (<c>jason session open --setup</c>,
+/// which adds the plugins folder beside the role skills folder it opens at), or null where Jason knows no such option for
+/// the host, which is then given none. Read from each host's own reference; the table in <c>docs/execution-profiles.md</c>
+/// says which.
+/// </param>
 public sealed record AgentHostFacts(
     AgentHostKind Kind,
     string CommandWord,
@@ -53,7 +59,8 @@ public sealed record AgentHostFacts(
     HostInstructionFile? Instructions,
     HomeMarkerKind MarkerKind = HomeMarkerKind.Directory,
     string? InteractivePromptFlag = null,
-    string? ResumeWord = null);
+    string? ResumeWord = null,
+    string? InteractiveFolderFlag = null);
 
 /// <summary>
 /// The one table of agent hosts: one row per <see cref="AgentHostKind"/>, held to the enum by tests and to the runtime's
@@ -68,12 +75,14 @@ public static partial class AgentHosts
     public static IReadOnlyList<AgentHostFacts> All { get; } =
     [
         // Claude Code continues a conversation by its session id after --resume, and Codex by its thread id after its resume
-        // subcommand; each as its own --help says.
-        new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile), HomeMarkerKind.Directory, ResumeWord: "--resume"),
+        // subcommand; each as its own --help says. Each takes a second folder after --add-dir: Claude Code's --help
+        // ("--add-dir <directories...>", every bare word after it one more folder), and Codex's source at rust-v0.122.0,
+        // the version the desktop's chat needs (codex-rs/tui/src/cli.rs, one folder for each --add-dir).
+        new(AgentHostKind.ClaudeCode, "claude", ".claude", ".claude/skills", ".claude/skills", new("CLAUDE.md", "@" + MemoryFile), HomeMarkerKind.Directory, ResumeWord: "--resume", InteractiveFolderFlag: "--add-dir"),
 
         // Codex keeps its sign-in and settings in ~/.codex and reads skills from ~/.agents/skills and from the
         // .agents/skills folder of the directory it runs in; it reads AGENTS.md itself, so it needs no import file.
-        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory, ResumeWord: "resume"),
+        new(AgentHostKind.Codex, "codex", ".codex", ".agents/skills", ".agents/skills", null, HomeMarkerKind.Directory, ResumeWord: "resume", InteractiveFolderFlag: "--add-dir"),
         new(AgentHostKind.CopilotCli, "copilot", ".copilot/config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File, "-i"),
         new(AgentHostKind.CursorCli, "agent", ".cursor/cli-config.json", ".agents/skills", ".agents/skills", null, HomeMarkerKind.File),
 
@@ -138,6 +147,19 @@ public static partial class AgentHosts
     {
         ArgumentException.ThrowIfNullOrEmpty(prompt);
         return Of(kind).InteractivePromptFlag is { } flag ? [flag, prompt] : [prompt];
+    }
+
+    /// <summary>
+    /// What follows the host's program to start an interactive session with <paramref name="prompt"/> as its first input
+    /// and <paramref name="folder"/> as a second folder it may work in: the prompt's words, then the host's
+    /// <see cref="AgentHostFacts.InteractiveFolderFlag"/> and the folder, each one argument. The folder comes last because
+    /// a flag of many values (Claude Code's) takes every bare word after it as one more folder. Where the folder is null
+    /// or the host has no such flag, only the prompt's words.
+    /// </summary>
+    public static IReadOnlyList<string> InteractiveArguments(AgentHostKind kind, string prompt, string? folder)
+    {
+        var prompted = InteractiveArguments(kind, prompt);
+        return folder is { Length: > 0 } && Of(kind).InteractiveFolderFlag is { } flag ? [.. prompted, flag, folder] : prompted;
     }
 
     /// <summary>

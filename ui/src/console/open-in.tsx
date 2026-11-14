@@ -15,7 +15,10 @@ import { activePanel, chats, currentChat } from './state';
 // default place, the arrow lists every place this computer has. The page names a place and, where a campaign's chat is
 // in front, that campaign; it never holds or sends a path, and the folder's name it shows comes from the desktop. Where
 // a chat is in front and the desktop offers it, the menu's last group continues that chat in a terminal: the page sends
-// the chat's id alone, and the host and the session are the desktop's to read from its own record.
+// the chat's id alone, and the host and the session are the desktop's to read from its own record. Where the desktop
+// offers it, in the person's own installation and never in the demo, the group above that one is "Change Jason itself",
+// which opens the person's own AI on Jason's roles and plugins: the page sends nothing, and names no host, which the
+// person's preference chooses as the entry is chosen.
 
 const editorIds = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
 
@@ -65,6 +68,8 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     // Each read is numbered; an answer that lands after a later read was asked for is dropped, so a slow read for one chat
     // never overwrites the answer for the chat in front now.
     const reads = useRef(0);
+    // True while a Change Jason itself the person chose is being opened: a second choice meanwhile opens nothing.
+    const changing = useRef(false);
 
     const read = useCallback(async () => {
         if (!can('openIn.targets')) return;
@@ -170,6 +175,27 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         setToast(t('openIn.continued', { place: offered.label }) + ' ' + t('openIn.sameData'));
     };
 
+    const changeJason = async () => {
+        setMenu(false);
+        if (changing.current || !can('openIn.changeJason')) return;
+        changing.current = true;
+        const said = await desktop.openIn
+            .changeJason()
+            .then(
+                (result) => (result === null ? null : result.refused),
+                (error: unknown) => (error instanceof Error ? error.message : String(error)),
+            )
+            .finally(() => {
+                changing.current = false;
+            });
+        await read();
+        if (said !== null) {
+            setProblem(said);
+            return;
+        }
+        setToast(t('openIn.changeJasonOpened'));
+    };
+
     useEffect(() => {
         if (toast === null) return;
         const gone = setTimeout(() => setToast(null), 6000);
@@ -256,6 +282,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                         ),
                     )}
                     {mode.value === 'demo' && <div className="open-in-note">{t('openIn.demoNote')}</div>}
+                    {answer.changeJason === true && <ChangeJasonEntry onChoose={() => void changeJason()} />}
                     {continuing !== undefined && (
                         <ContinueEntry
                             offered={continuing}
@@ -265,6 +292,21 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     )}
                 </div>
             )}
+        </div>
+    );
+}
+
+/**
+ * The group above the last: "Change Jason itself", with the line that says what it opens. It is never the default, and it
+ * names no host, which is the person's preference's to choose.
+ */
+function ChangeJasonEntry({ onChoose }: { onChoose: () => void }) {
+    return (
+        <div className="open-in-change" role="group" aria-label={t('openIn.changeJason')}>
+            <button type="button" role="menuitem" onClick={onChoose}>
+                <span>{t('openIn.changeJason')}</span>
+                <small>{t('openIn.changeJasonNote')}</small>
+            </button>
         </div>
     );
 }

@@ -218,7 +218,7 @@ public sealed partial class AudienceReadService(
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,
-                $"No route sends '{SearchLanding.Search}' anywhere for campaign '{campaign.PublicId}', and '{operation}' goes where its searches go. Write one with route.set, or a global one in the settings file.");
+                $"No route sends '{SearchLanding.Search}' anywhere for campaign '{campaign.PublicId}', and '{operation}' goes where its searches go. Write one with route.set, or a global one with route.set and scope global.");
         }
 
         var route = resolution.Route;

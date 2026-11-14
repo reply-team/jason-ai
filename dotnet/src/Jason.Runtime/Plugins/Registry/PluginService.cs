@@ -69,44 +69,8 @@ public sealed class PluginService(
             // runtime of an edit only after a delay of its own, and a reload sent straight after an edit used to resolve
             // what the file held before it. A file that is there and cannot be read rejects the reload, as a refused
             // Plugins section does; one that is not there refuses nothing, and the settings in force are resolved.
-            var unreadable = settingsFile.Read();
-            var load = unreadable is null
-                ? await loader.LoadAsync(SnapshotSource.Reload, cancellationToken).ConfigureAwait(false)
-                : loader.Unreadable(SnapshotSource.Reload, unreadable);
-            if (load.Snapshot is null)
-            {
-                // The previous snapshot stays: a partly working registry would hide the problem, and the fix is
-                // always the same — repair the package and reload again.
-                throw Reject(load.Report);
-            }
-
-            // Every route and the order of every kind's subscribers are checked against the candidate plugin set
-            // before either registry is touched, so a route or an order naming a plugin this load does not have keeps
-            // both snapshots exactly where they were. Both are asked before the answer, which names whatever is wrong.
-            var candidate = await activator.BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken).ConfigureAwait(false);
-            var chains = subscriptions.Build(load.Snapshot);
-            if (candidate.Snapshot is null || chains.Chains is null)
-            {
-                // A route whose binding no pattern could finish measuring is unanswered rather than wrong: alone, nothing
-                // is activated or recorded as rejected and the reload is answered as one to send again; beside a real
-                // problem it is left out of the refusal, which names only what is wrong.
-                throw candidate.Unmeasured && chains.Problems.Count == 0
-                    ? DomainErrors.ValidationTimedOut(candidate.Problems)
-                    : Reject(load.Report with { Activated = false, Routes = candidate.Refusals, Subscriptions = chains.Problems });
-            }
-
-            var snapshot = load.Snapshot with { Subscriptions = chains.Chains };
-
-            // The record first, the swap second: the swap is in memory and cannot fail, the save can. A reload that
-            // could not be written down leaves the previous snapshot active and is simply repeated, instead of a new
-            // snapshot running with no trace of when it began.
-            JournalActivation(journal, db, actor, snapshot, candidate.Snapshot, reason);
-            await SubscriptionCursors.ReconcileAsync(db, chains.Chains, clock.GetUtcNow().UtcDateTime, cancellationToken).ConfigureAwait(false);
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            registry.Replace(snapshot, load.Report);
-            activator.Activate(candidate.Snapshot);
-            Activated(logger, snapshot.Id, snapshot.Plugins.Count, null);
-            return PluginMapper.ToDto(snapshot, candidate.Snapshot.Id, load.Report, activated: true);
+            var (answer, _) = await ReloadHeldAsync(actor, reason, settingsFile.Read(), recordRefusal: true, routeRefusal: null, besides: null, cancellationToken).ConfigureAwait(false);
+            return answer;
         }
         finally
         {
@@ -115,12 +79,88 @@ public sealed class PluginService(
     }
 
     /// <summary>
+    /// The reload itself, for a caller that already holds the reload gate: <see cref="ReloadAsync"/>, and the settings
+    /// writer's callers, whose write has just loaded the settings file under its own lock and so has nothing to read again.
+    /// </summary>
+    /// <param name="unreadable">The failure of a settings file the caller read and could not use, which rejects the reload; null to load.</param>
+    /// <param name="recordRefusal">
+    /// Whether a refusal is kept for <c>plugin.list</c> to say why nothing changed. A writer that puts the file back after
+    /// the refusal does not keep it: the report would describe a file that is no longer there.
+    /// </param>
+    /// <param name="routeRefusal">
+    /// What a refused route set is answered with, where the packages loaded and only the routes stood in the way; null,
+    /// or a null answer, for the rejected reload every other refusal is.
+    /// </param>
+    /// <param name="besides">More lines for the journal, written in the same save as the activation's own, given the new plugins and routes.</param>
+    /// <returns>The registry as it now stands, and the route snapshot the reload activated.</returns>
+    internal async Task<(PluginRegistryDto Answer, RouteSnapshot Routes)> ReloadHeldAsync(
+        ActorRef actor,
+        string? reason,
+        SettingsFileFailure? unreadable,
+        bool recordRefusal,
+        Func<RouteCandidate, DomainException?>? routeRefusal,
+        Action<PluginSnapshot, RouteSnapshot>? besides,
+        CancellationToken cancellationToken)
+    {
+        var load = unreadable is null
+            ? await loader.LoadAsync(SnapshotSource.Reload, cancellationToken).ConfigureAwait(false)
+            : loader.Unreadable(SnapshotSource.Reload, unreadable);
+        if (load.Snapshot is null)
+        {
+            // The previous snapshot stays: a partly working registry would hide the problem, and the fix is
+            // always the same — repair the package and reload again.
+            throw Reject(load.Report, recordRefusal);
+        }
+
+        // Every route and the order of every kind's subscribers are checked against the candidate plugin set
+        // before either registry is touched, so a route or an order naming a plugin this load does not have keeps
+        // both snapshots exactly where they were. Both are asked before the answer, which names whatever is wrong.
+        var candidate = await activator.BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken).ConfigureAwait(false);
+        var chains = subscriptions.Build(load.Snapshot);
+        if (candidate.Snapshot is null || chains.Chains is null)
+        {
+            // A route whose binding no pattern could finish measuring is unanswered rather than wrong: alone, nothing
+            // is activated or recorded as rejected and the reload is answered as one to send again; beside a real
+            // problem it is left out of the refusal, which names only what is wrong.
+            if (candidate.Unmeasured && chains.Problems.Count == 0)
+            {
+                throw DomainErrors.ValidationTimedOut(candidate.Problems);
+            }
+
+            if (candidate.Snapshot is null && chains.Problems.Count == 0 && routeRefusal?.Invoke(candidate) is { } refusedRoutes)
+            {
+                throw refusedRoutes;
+            }
+
+            throw Reject(load.Report with { Activated = false, Routes = candidate.Refusals, Subscriptions = chains.Problems }, recordRefusal);
+        }
+
+        var snapshot = load.Snapshot with { Subscriptions = chains.Chains };
+
+        // The record first, the swap second: the swap is in memory and cannot fail, the save can. A reload that
+        // could not be written down leaves the previous snapshot active and is simply repeated, instead of a new
+        // snapshot running with no trace of when it began.
+        JournalActivation(journal, db, actor, snapshot, candidate.Snapshot, reason);
+        besides?.Invoke(snapshot, candidate.Snapshot);
+        await SubscriptionCursors.ReconcileAsync(db, chains.Chains, clock.GetUtcNow().UtcDateTime, cancellationToken).ConfigureAwait(false);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        registry.Replace(snapshot, load.Report);
+        activator.Activate(candidate.Snapshot);
+        Activated(logger, snapshot.Id, snapshot.Plugins.Count, null);
+        return (PluginMapper.ToDto(snapshot, candidate.Snapshot.Id, load.Report, activated: true), candidate.Snapshot);
+    }
+
+    /// <summary>
     /// A load that will change nothing: the report is kept so that <c>plugin.list</c> can say why, and the
     /// problems are answered to the caller. Both halves of the registry stay exactly as they were.
     /// </summary>
-    private DomainException Reject(ReloadReport report)
+    private DomainException Reject(ReloadReport report, bool record)
     {
-        registry.Record(report);
+        if (record)
+        {
+            registry.Record(report);
+        }
+
         var details = PluginMapper.ToDetails(report);
         Rejected(logger, details.Count, null);
         return DomainErrors.PluginReloadRejected(details);

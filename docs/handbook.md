@@ -309,7 +309,7 @@ account and its identity, the envelopes subscription chains carried, the names o
 `--include-journal` adds what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a
 project link recorded, campaign
 and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
-do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with,
+do-not-contact register, the accounts a campaign's routes and the global routes bind, the grants people gave plugins: hosts, programs, variable names, API families, directories and journal kinds, the options decisions were answered with,
 the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions
 whose answers they carry, and the standing
 approvals people set: their categories, reactions, goals and limits, the effect, tool and operation a report names, the

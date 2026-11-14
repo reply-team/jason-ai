@@ -722,6 +722,9 @@ public sealed class SessionOpenerTests : IDisposable
 
         public bool Descriptor { get; set; } = true;
 
+        /// <summary>Where the hosts' skills roots are, none unless a row names a locator.</summary>
+        public Jason.Cli.Skills.IHarnessLocator? Harnesses { get; set; }
+
         public List<string> Asked { get; } = [];
 
         public List<string> Bodies { get; } = [];
@@ -777,7 +780,8 @@ public sealed class SessionOpenerTests : IDisposable
                 Identity: new IdentityFacts(GivenHome ?? Home, "marta", "DESK-1", null, null),
                 Variables: Variables,
                 Terminals: terminals ? Terminals : null,
-                WorkingDirectory: WorkingDirectory);
+                WorkingDirectory: WorkingDirectory,
+                Harnesses: Harnesses);
         }
 
         private string Preferences()

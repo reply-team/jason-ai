@@ -55,7 +55,7 @@ public class ResearcherRoleTests
     public async Task A_role_reads_its_skill_and_its_note_answers_in_shape_and_remembers_what_it_learned()
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-researcher", Guid.NewGuid().ToString("N"));
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         Directory.CreateDirectory(Path.Combine(root, "config"));
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
 
@@ -147,7 +147,7 @@ public class ResearcherRoleTests
     public async Task A_role_that_answers_with_prose_is_refused_and_what_it_remembered_still_stands()
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-researcher-prose", Guid.NewGuid().ToString("N"));
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         Directory.CreateDirectory(Path.Combine(root, "config"));
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
         var skillDirectory = Path.Combine(paths.RoleSkillsDirectory, "researcher");
@@ -286,7 +286,7 @@ public class ResearcherRoleTests
     /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
     private static Task<CliResult> StartRuntimeAsync(string root) =>
         EndToEnd.PatientStart.RunAsync(
-            new JasonPaths(root),
+            new JasonPaths(root, 1),
             within => JasonAsync(root, within, "runtime", "start"),
             () => JasonAsync(root, "runtime", "status"),
             result => (result.ExitCode, result.Output));

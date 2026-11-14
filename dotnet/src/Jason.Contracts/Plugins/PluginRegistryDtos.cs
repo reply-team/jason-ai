@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Jason.Contracts.Api;
+using Jason.Contracts.Harness;
 
 namespace Jason.Contracts.Plugins;
 
@@ -130,3 +131,53 @@ public sealed record PluginRegistryDto(
 public sealed record PluginListRequest();
 
 public sealed record PluginReloadRequest(ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// The capabilities a person grants a plugin, each the list of that name under <c>Plugins:Grants:&lt;id&gt;</c> in the settings
+/// file: programs, hosts, environment variables by name, Runtime API families, directories to append lines in, and
+/// journal kinds.
+/// </summary>
+public enum PluginGrantCapability
+{
+    Exec,
+    Http,
+    Env,
+    Api,
+    Files,
+    Subscriptions,
+}
+
+/// <summary>
+/// How two entries of one capability's grant list are told apart, written once for the runtime, which edits the list, and
+/// for the CLI, which says what the answer holds: a host without regard to case, a directory with or without a separator
+/// at its end and as the platform's file systems compare names (<see cref="FolderPaths.Comparison"/>), and a program, a
+/// variable, an API family or a journal kind exactly.
+/// </summary>
+public static class PluginGrantEntries
+{
+    public static IEqualityComparer<string> Comparer(PluginGrantCapability capability) => capability switch
+    {
+        PluginGrantCapability.Http => StringComparer.OrdinalIgnoreCase,
+        PluginGrantCapability.Files => Directories.Instance,
+        _ => StringComparer.Ordinal,
+    };
+
+    private sealed class Directories : IEqualityComparer<string>
+    {
+        public static Directories Instance { get; } = new();
+
+        public bool Equals(string? x, string? y) =>
+            x is null || y is null ? ReferenceEquals(x, y) : string.Equals(Path.TrimEndingDirectorySeparator(x), Path.TrimEndingDirectorySeparator(y), FolderPaths.Comparison);
+
+        public int GetHashCode(string obj) => string.GetHashCode(Path.TrimEndingDirectorySeparator(obj), FolderPaths.Comparison);
+    }
+}
+
+/// <summary>
+/// One grant given or taken back by <c>plugin.grant</c> or <c>plugin.revoke</c>: one entry of one capability's list, a
+/// program's name, a host, a variable's name, an API family, a directory or a journal kind, or <c>*</c> for everything the
+/// manifest requests of a capability that names things. Never a secret: a variable is granted by its name, and its value
+/// stays in the runtime's environment. A grant is refused where the manifest does not request the entry; it is written to
+/// the settings file and in force when the request answers, which answers as <c>plugin.reload</c> does.
+/// </summary>
+public sealed record PluginGrantRequest(string? PluginId, PluginGrantCapability? Capability, string? Entry, ActorRef? Actor, string? Reason);

@@ -259,9 +259,10 @@ internal static class StatusChecks
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
             checks.Add(UpdateInFlight(unfinished));
+            checks.Add(Layout(env));
 
             checks.Add(ProviderPlugin(info));
-            checks.Add(PluginPackage(info));
+            checks.Add(PluginPackage(info, env.Paths));
             // One plugin.list answer, read once and passed on: the two checks it serves describe the same snapshot.
             var asked = client is not null && info is not null;
             var registry = asked ? await ReadAsync<PluginRegistryDto>(client!, Operations.PluginList, cancellationToken).ConfigureAwait(false) : null;
@@ -286,7 +287,9 @@ internal static class StatusChecks
             client?.Dispose();
         }
 
-        return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks);
+        // Where the parts are, from this CLI's own paths: nothing is read and nothing is asked, so it is said whatever the
+        // runtime did, and it decides nothing.
+        return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks, SetupInfo.From(env.Paths));
     }
 
     private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
@@ -315,6 +318,36 @@ internal static class StatusChecks
         return info is null
             ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
             : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
+    }
+
+    /// <summary>
+    /// Whether the data directory is laid out as this jason runs it, by its stamp. Required: a stamp naming a later layout,
+    /// or one that cannot be read, refuses the runtime's start and every verb that touches a part that moves, so nothing
+    /// can start work; the fact is that refusal's own sentence. Read from this CLI's paths, which read the stamp once, and
+    /// never refused here: this verb is how such an installation is diagnosed.
+    /// </summary>
+    private static StatusCheck Layout(CliEnvironment env)
+    {
+        var paths = env.Paths;
+        Dictionary<string, string>? written = null;
+        if (paths.Stamp is { State: LayoutStampState.Read } stamp)
+        {
+            written = new Dictionary<string, string>(StringComparer.Ordinal) { ["written_by"] = stamp.WrittenBy! };
+            if (stamp.At is { } at)
+            {
+                written["at"] = at;
+            }
+        }
+
+        if (LayoutStamp.Refusal(paths, SkillsSource.BuildVersion(env)) is { } refusal)
+        {
+            return new StatusCheck("layout", true, CheckState.Failed, refusal.Message, null) with { Details = written };
+        }
+
+        var fact = paths.Stamp is { State: LayoutStampState.Missing }
+            ? "This data directory is laid out as this jason runs it (layout 1, no layout.json)."
+            : string.Create(CultureInfo.InvariantCulture, $"This data directory is laid out as this jason runs it (layout {paths.Layout}).");
+        return new StatusCheck("layout", true, CheckState.Ok, fact, null) with { Details = written };
     }
 
     /// <summary>
@@ -962,7 +995,7 @@ internal static class StatusChecks
     /// passes with a line that says so, a development build compares against its own tree, named in the fact, and the
     /// packages not installed are one sentence.
     /// </summary>
-    private static StatusCheck PluginPackage(SystemInfoResponse? info)
+    private static StatusCheck PluginPackage(SystemInfoResponse? info, JasonPaths paths)
     {
         const string Name = "plugin_package";
         if (info is null)
@@ -983,7 +1016,7 @@ internal static class StatusChecks
         var state = packages.Any(package => package.State == ReleasedPluginState.Behind) ? CheckState.Failed
             : packages.Any(package => package.State is ReleasedPluginState.Current or ReleasedPluginState.Differs) ? CheckState.Ok
             : CheckState.Absent;
-        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages)), null);
+        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages, paths)), null);
     }
 
     /// <summary>
@@ -991,7 +1024,7 @@ internal static class StatusChecks
     /// sentence naming their ids, where the first of them stands, since a release publishes more packages than a person
     /// installs and what there is to do is the same for each.
     /// </summary>
-    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages)
+    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages, JasonPaths paths)
     {
         var missing = packages.Where(package => package.State == ReleasedPluginState.NotInstalled).Select(package => package.Id).ToList();
         var said = false;
@@ -999,7 +1032,7 @@ internal static class StatusChecks
         {
             if (package.State != ReleasedPluginState.NotInstalled || missing.Count == 1)
             {
-                yield return PackageLine(info, package);
+                yield return PackageLine(info, package, paths);
             }
             else if (!said)
             {
@@ -1010,16 +1043,15 @@ internal static class StatusChecks
         }
     }
 
-    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package)
+    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package, JasonPaths paths)
     {
         var runtime = info.RuntimeVersion;
         var released = $"{package.Id} {package.Released.Version}";
         var installed = package.Installed is { } mine ? $"{package.Id} {mine.Version}" : package.Id;
 
-        // The runtime's own data directory, written with the separator it writes, so the line names the folder a person
-        // finds on that machine.
-        var separator = info.DataDir.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
-        var directory = string.Join(separator, info.DataDir.TrimEnd('/', '\\'), "plugins", package.Id);
+        // Where the command this line names places the package: `jason plugin install` writes into this CLI's own plugins
+        // folder, so that is the folder said, whatever the runtime reports.
+        var directory = paths.PluginPackageDirectory(package.Id);
 
         return package.State switch
         {
@@ -1195,8 +1227,8 @@ internal static class StatusChecks
             CheckState.Failed,
             named
                 + " Such a plugin runs without what it is not granted, and nothing else stops, so this check never decides readiness."
-                + $" `{Repair.ListPlugins} --human` says what each asks for, the key that grants it and the settings file, and"
-                + $" `{Repair.ReloadPlugins}` reads the grant.",
+                + $" `{Repair.ListPlugins} --human` says what each asks for and the `jason plugin grant` command that grants it,"
+                + " in force at once.",
             null);
     }
 
@@ -1267,11 +1299,12 @@ internal static class StatusChecks
                 "route",
                 false,
                 CheckState.Absent,
-                // No repair, because there is no command. A global default route is written in the settings
-                // file and frozen by a reload; `route set` needs --campaign and refuses without it, so the
-                // line printed here was itself a usage error -- verbatim the failure the guard beside this
-                // one exists to prevent.
-                "Nothing is routed anywhere yet: set Routes in the settings file, or route one campaign.",
+                // No repair, because no one command fits every installation: the route names a plugin only the
+                // person can choose, and a repair is a command typed as printed. The fact names the two commands
+                // instead, each as a person types it: `route set` with neither --campaign nor --global, or without
+                // --plugin, is itself a usage error, the failure the guard beside this one exists to prevent, and so is
+                // one without --actor typed outside a run, since a change of route has no default actor.
+                "Nothing is routed anywhere yet: route every campaign with jason route set --global --plugin <id> --actor human:<Name>, or one campaign with jason route set --campaign <id> --plugin <id> --actor human:<Name>.",
                 null);
     }
 

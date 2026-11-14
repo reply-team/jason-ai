@@ -135,6 +135,18 @@ public static partial class JournalKinds
     /// <summary>Where a campaign sends its provider work changed: the route that was set, moved or removed.</summary>
     public const string RoutesUpdated = "routes_updated";
 
+    /// <summary>
+    /// Where every campaign without a route of its own sends its provider work changed: a global route was set or taken
+    /// away through the settings writer, and the reload that froze it activated.
+    /// </summary>
+    public const string GlobalRoutesUpdated = "global_routes_updated";
+
+    /// <summary>
+    /// What a plugin may use of one capability changed: a grant was given or taken back through the settings writer, and
+    /// the reload that froze it activated.
+    /// </summary>
+    public const string PluginGrantsUpdated = "plugin_grants_updated";
+
     /// <summary>A plugin's own identifier for one of our entities was learned and written down for good.</summary>
     public const string ExternalIdPinned = "external_id_pinned";
 
@@ -365,6 +377,8 @@ public static partial class JournalKinds
         ProfileEnabled,
         PluginsReloaded,
         RoutesUpdated,
+        GlobalRoutesUpdated,
+        PluginGrantsUpdated,
         ExternalIdPinned,
         ExternalIdDiverged,
         ExternalIdOrigin,

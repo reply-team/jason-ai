@@ -63,7 +63,8 @@ public static class UninstallCommand
         Kept unless --purge-data:  the data directory, the desktop's own files in it included: the transcripts
                                    of the chat's turns on a provider's key are kept there, under
                                    desktop/claude-keyed/ and desktop/codex-keyed/. --purge-data removes what
-                                   Jason keeps there, and the
+                                   Jason keeps there (a setup/ folder only where a layout.json or
+                                   layout-migration.json beside it says Jason made it), and the
                                    directory once nothing else is in it; it prints what will be deleted and
                                    asks before anything at all is removed, unless --yes. A directory holding a
                                    file-system root, your profile, the temporary directory or the installation

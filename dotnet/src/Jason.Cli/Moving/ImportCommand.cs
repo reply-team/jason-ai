@@ -13,6 +13,7 @@ using Jason.Cli.Human;
 using Jason.Cli.Logs;
 using Jason.Cli.Skills;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Harness;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
@@ -561,7 +562,7 @@ public static class ImportCommand
         // log or a shared-memory file the archive did not carry, which SQLite would read as that database's.
         var database = File.Exists(DataPath(env.Paths.Root, ExportCommand.DatabaseFiles[0]));
         string[] state = database ? [StateFolder] : [.. ExportCommand.DatabaseFiles.Skip(1)];
-        var parts = state.Concat(ExportCommand.CarriedTrees)
+        var parts = state.Concat(ExportCommand.CarriedTrees(env.Paths)).Append(LayoutStamp.FileName)
             .Where(part => File.Exists(DataPath(env.Paths.Root, part)) || Directory.Exists(DataPath(env.Paths.Root, part)))
             .ToArray();
         var folder = Directory.Exists(root);
@@ -948,11 +949,14 @@ public static class ImportCommand
         private readonly ZipArchive _zip;
         private readonly string _file;
 
-        private Archive(string file, ZipArchive zip, ExportManifest manifest)
+        private readonly string _settingsName;
+
+        private Archive(string file, ZipArchive zip, ExportManifest manifest, string settingsName)
         {
             _file = file;
             _zip = zip;
             Manifest = manifest;
+            _settingsName = settingsName;
         }
 
         public ExportManifest Manifest { get; }
@@ -962,7 +966,10 @@ public static class ImportCommand
         /// <summary>Opens it and holds every name and every digest to <c>export.json</c>, or refuses saying which.</summary>
         public static Archive Read(string file, CliEnvironment env)
         {
-            _ = env;
+            // The parts of the data directory an archive may carry, by the layout this installation is in; a build that runs
+            // one layout reads archives of that layout alone, and an archive of a later one is refused on its own.
+            var trees = ExportCommand.CarriedTrees(env.Paths);
+            var settingsName = ExportManifest.DataPrefix + ExportCommand.Under(env.Paths, env.Paths.UserSettingsFile);
             ZipArchive zip;
             try
             {
@@ -976,14 +983,56 @@ public static class ImportCommand
             try
             {
                 var manifest = Listing(file, zip);
-                Check(file, zip, manifest);
-                return new Archive(file, zip, manifest);
+                Check(file, zip, manifest, trees);
+                Stamp(file, zip, manifest);
+                return new Archive(file, zip, manifest, settingsName);
             }
             catch
             {
                 zip.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// The layout stamp the archive carries, when it carries one, read by the stamp's own rules and held to the layout
+        /// <c>export.json</c> says: an archive whose stamp cannot be read, or names another layout, would place a data
+        /// directory that refuses at its next start, or one that says it is laid out as it is not.
+        /// </summary>
+        private static void Stamp(string file, ZipArchive zip, ExportManifest manifest)
+        {
+            var name = ExportManifest.DataPrefix + LayoutStamp.FileName;
+            if (zip.GetEntry(name) is not { } entry)
+            {
+                return;
+            }
+
+            // Its size and digest are export.json's and were held to it; a stamp is small, and one that is not is no stamp.
+            var stamp = entry.Length > LayoutStamp.MaxBytes
+                ? null
+                : LayoutStamp.Parse(name, ReadAll(entry));
+            var said = manifest.Layout ?? 1;
+            if (stamp is not { State: LayoutStampState.Read } read)
+            {
+                throw new ImportRefusal(
+                    CliErrors.ImportUnreadable,
+                    $"The archive {file} carries a layout stamp, {name}, that cannot be read ({stamp?.Problem ?? "it is larger than a stamp"}). Nothing was written.");
+            }
+
+            if (read.Layout != said)
+            {
+                throw new ImportRefusal(
+                    CliErrors.ImportUnreadable,
+                    string.Create(CultureInfo.InvariantCulture, $"The archive {file} carries a layout stamp of layout {read.Layout}, and its {ExportManifest.FileName} says layout {said}, so it cannot tell how the data directory it carries is laid out. Nothing was written."));
+            }
+        }
+
+        private static byte[] ReadAll(ZipArchiveEntry entry)
+        {
+            using var stream = entry.Open();
+            using var bytes = new MemoryStream();
+            stream.CopyTo(bytes);
+            return bytes.ToArray();
         }
 
         private static ExportManifest Listing(string file, ZipArchive zip)
@@ -1019,16 +1068,32 @@ public static class ImportCommand
                     $"The {ExportManifest.FileName} in {file} gives jason_version '{manifest.JasonVersion}', which is no version a Jason writes, so this Jason cannot tell whether it can read what the archive holds. Nothing was written.");
             }
 
+            // The layout is held before any name is: a later layout places its parts elsewhere, and its names would
+            // otherwise be refused one by one as parts no export carries, which says nothing of why. None means layout 1.
+            if (manifest.Layout is < 1)
+            {
+                throw new ImportRefusal(
+                    CliErrors.ImportUnreadable,
+                    string.Create(CultureInfo.InvariantCulture, $"The {ExportManifest.FileName} in {file} gives layout {manifest.Layout}, and layouts count from 1. Nothing was written."));
+            }
+
+            if (manifest.Layout is { } layout && layout > LayoutStamp.ThisBuildRuns)
+            {
+                throw new ImportRefusal(
+                    CliErrors.LayoutNewer,
+                    string.Create(CultureInfo.InvariantCulture, $"The archive {file} carries a data directory laid out by Jason {manifest.JasonVersion} (layout {layout}), newer than this jason runs (layout {LayoutStamp.ThisBuildRuns}): update this jason, or import it with the one that wrote it. Nothing was written."));
+            }
+
             return manifest;
         }
 
         /// <summary>Every entry: a plain name in a place an import writes, no link, listed, and with the digest listed.</summary>
-        private static void Check(string file, ZipArchive zip, ExportManifest manifest)
+        private static void Check(string file, ZipArchive zip, ExportManifest manifest, string[] trees)
         {
             var listed = new Dictionary<string, ExportEntry>(StringComparer.Ordinal);
             foreach (var entry in manifest.Entries)
             {
-                Escapes(file, entry.Path, directory: false);
+                Escapes(file, entry.Path, directory: false, trees);
                 if (!listed.TryAdd(entry.Path, entry))
                 {
                     throw new ImportRefusal(CliErrors.ImportRefused, $"{ExportManifest.FileName} in {file} lists {entry.Path} twice. Nothing was written.");
@@ -1037,7 +1102,7 @@ public static class ImportCommand
 
             foreach (var directory in manifest.Directories)
             {
-                Escapes(file, directory, directory: true);
+                Escapes(file, directory, directory: true, trees);
             }
 
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1052,7 +1117,7 @@ public static class ImportCommand
                 }
 
                 var directory = ArchiveNames.IsDirectory(entry);
-                Escapes(file, name, directory);
+                Escapes(file, name, directory, trees);
                 if (ArchiveNames.IsLink(entry))
                 {
                     throw new ImportRefusal(CliErrors.ImportRefused, $"{name} in {file} is a link, and an import places no link. Nothing was written.");
@@ -1110,10 +1175,10 @@ public static class ImportCommand
         /// A name an import would write somewhere it must not: one the shared rules refuse, one outside <c>data/</c> and
         /// <c>harness/</c>, or one under <c>data/</c> outside the parts an export carries.
         /// </summary>
-        private static void Escapes(string file, string name, bool directory)
+        private static void Escapes(string file, string name, bool directory, string[] trees)
         {
             var plain = directory ? name.TrimEnd('/') : name;
-            if (!directory && Places.Contains(plain))
+            if (!directory && Places(trees).Contains(plain))
             {
                 throw new ImportRefusal(CliErrors.ImportRefused, $"The archive {file} names '{name}' as a file, where an import places a folder, so one would stand where the other belongs. Nothing was written.");
             }
@@ -1126,7 +1191,7 @@ public static class ImportCommand
             var refused = name.Length == 0
                 || (directory && !name.EndsWith('/'))
                 || !ArchiveNames.Plain(plain)
-                || !(Carried(plain, directory) || plain == "harness" || plain.StartsWith(ExportManifest.HarnessPrefix, StringComparison.Ordinal));
+                || !(Carried(plain, directory, trees) || plain == "harness" || plain.StartsWith(ExportManifest.HarnessPrefix, StringComparison.Ordinal));
             if (refused)
             {
                 throw new ImportRefusal(CliErrors.ImportRefused, $"The archive {file} names '{name}', which an import never writes: it escapes the data directory and the harness root, or is no part an export carries. Nothing was written.");
@@ -1137,12 +1202,12 @@ public static class ImportCommand
         /// The folders an import places, and every folder on the way to one: <c>harness</c>, <c>data</c>,
         /// <c>data/state</c>, and each carried tree of the data directory with the folders that hold it.
         /// </summary>
-        private static readonly HashSet<string> Places = new(
+        private static HashSet<string> Places(string[] trees) => new(
             new[] { "harness", ExportManifest.DataPrefix.TrimEnd('/'), ExportManifest.DataPrefix + StateFolder }
-                .Concat(ExportCommand.CarriedTrees.SelectMany(tree => tree.Split('/').Select((_, at) => ExportManifest.DataPrefix + string.Join('/', tree.Split('/')[..(at + 1)])))),
+                .Concat(trees.SelectMany(tree => tree.Split('/').Select((_, at) => ExportManifest.DataPrefix + string.Join('/', tree.Split('/')[..(at + 1)])))),
             StringComparer.Ordinal);
 
-        private static bool Carried(string name, bool directory)
+        private static bool Carried(string name, bool directory, string[] trees)
         {
             if (!name.StartsWith(ExportManifest.DataPrefix, StringComparison.Ordinal))
             {
@@ -1151,15 +1216,16 @@ public static class ImportCommand
 
             var relative = name[ExportManifest.DataPrefix.Length..];
             return (!directory && ExportCommand.DatabaseFiles.Contains(relative, StringComparer.Ordinal))
+                || (!directory && relative == LayoutStamp.FileName)
                 || (directory && relative == "state")
-                || ExportCommand.CarriedTrees.Any(tree => relative == tree || relative.StartsWith(tree + "/", StringComparison.Ordinal))
-                || (directory && ExportCommand.CarriedTrees.Any(tree => tree.StartsWith(relative + "/", StringComparison.Ordinal)));
+                || trees.Any(tree => relative == tree || relative.StartsWith(tree + "/", StringComparison.Ordinal))
+                || (directory && trees.Any(tree => tree.StartsWith(relative + "/", StringComparison.Ordinal)));
         }
 
         /// <summary>The settings file the archive carries, as text; null when it carries none.</summary>
         public string? SettingsText()
         {
-            var entry = _zip.GetEntry(ExportManifest.DataPrefix + "config/settings.json");
+            var entry = _zip.GetEntry(_settingsName);
             if (entry is null)
             {
                 return null;
@@ -1173,7 +1239,7 @@ public static class ImportCommand
         public (int Data, int Harness) Place(string dataDirectory, string root, SettingsRewritten settings)
         {
             int data = 0, harness = 0;
-            var settingsName = ExportManifest.DataPrefix + "config/settings.json";
+            var settingsName = _settingsName;
             try
             {
                 Directory.CreateDirectory(dataDirectory);
@@ -1292,7 +1358,9 @@ public static class ImportCommand
             + "segment, a rooted name, a backslash, a link, a name outside data/, harness/ and export.json, a part of the data "
             + "directory no export carries, a file entry named where an import places a folder, or a folder entry named as one "
             + "of the database files); a file whose size or SHA-256 is not the one export.json lists; an archive a newer "
-            + "Jason wrote, naming the version to install first, or a jason_version no Jason writes; an update in flight, "
+            + "Jason wrote, naming the version to install first, or a jason_version no Jason writes; a data directory laid out in a "
+            + "layout newer than this jason runs (layout_newer), or a layout below 1; a layout stamp, data/layout.json, "
+            + "that cannot be read or names a layout export.json does not; an update in flight, "
             + "naming 'jason update apply', or an update ledger that cannot be read, by its path; a harness root the runtime's "
             + "rule refuses, or a --root that JASON_Harness__Root contradicts, naming the variable; a settings file in the "
             + "archive that is not a JSON object, or whose Harness:Root is an object or an array; a command run from the "
@@ -1301,7 +1369,7 @@ public static class ImportCommand
             + "database, or a harness root with a marker in it — named with what it holds." + nl
             + "Nothing is deleted, and nothing is written over: --replace moves the data directory's parts the archive's land on "
             + "into <data>/replaced-<stamp>/ — state/ whole, its sidecars and backups with it, config/, plugins/, skills/roles/, "
-            + "ui/custom/ and logs/ — and the harness root to <root>.replaced-<stamp>; on a machine with no installation the same "
+            + "ui/custom/, logs/ and layout.json — and the harness root to <root>.replaced-<stamp>; on a machine with no installation the same "
             + "parts that stand there, a jason.db-wal or jason.db-shm beside no database among them, and a harness root folder "
             + "with no marker go aside the same way, with no --replace; each is named as yours to remove. The harness root "
             + "moves first, then the data parts; a move that fails takes back every one made before it, the last first, and "

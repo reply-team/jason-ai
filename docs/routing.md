@@ -121,10 +121,11 @@ no route of its own at the global scope. A key under `Channels` that is no chann
 routes, a channel its argument does not allow, and a plugin that reads no events are refused at the reload (§7). A file
 without `Channels` means what it always meant.
 
-**A global route is frozen into the active route snapshot by `jason plugin reload`, and by the load at
-startup — editing the file changes nothing until then.** It is the same discipline plugin grants
-already follow, and for the same reason: what is running should change when somebody says so, not when
-a file is saved. `jason runtime status --human` names the snapshot that is actually active — here on a
+**A global route is frozen into the active route snapshot by `jason plugin reload`, by the load at startup, and by
+`jason route set --global` and `jason route unset --global`, which write this file and run that same reload in one
+act; a load that refuses puts the file back as it was. A hand edit changes nothing until a reload.** It is the same
+discipline plugin grants already follow, and for the same reason: what is running should change when somebody says so,
+not when a file is saved. `jason runtime status --human` names the snapshot that is actually active — here on a
 runtime whose global default is one plugin and which also holds one campaign route:
 
 ```text
@@ -132,6 +133,42 @@ Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY | default fake-provider | 0 
 ```
 
 The override and campaign counts include channel routes; a runtime that holds any adds `| N of them by channel`.
+
+### A global route from the command line
+
+```sh
+jason route set   --global --plugin acme-provider --binding '{"workspace":"eu-team"}' --actor human:you@example.com
+jason route set   --global --operation campaign.get --plugin other-provider --actor human:you@example.com
+jason route unset --global --operation campaign.get --actor human:you@example.com
+```
+
+The runtime writes the route into `settings.json` and freezes it by the plugin reload in the same act, under the
+reload gate, so it is in force when the command answers; the reload journals `plugins_reloaded`, and a route it
+changed is journaled as `global_routes_updated` (§6). The edit keeps every byte of the file it does not own — the
+comments, the layout, the other sections and every secret in them — and the route is checked against the active
+plugins before anything is written, as a campaign's is. A route the file holds already and the routes in force hold
+too writes and activates nothing; one the file holds and no reload froze is put in force. A reload that refuses, over
+the packages as they are now, puts the file back as it was, and the answer's last detail, under the field
+`settings.json`, says whether it did: `settings_file_put_back`, or `settings_file_not_put_back` where another writer
+changed the file in between, which is left as that writer left it, or where another program held the file open or it
+could not be written again, which is left holding what the write left, out of force. No command mends that while loads
+refuse, so the detail says the hand edit that does — a new route taken out, a route the write replaced or took away put
+back, as the file held it before the write — or the reload that makes the file true.
+
+Nothing inside a dispatched run changes Jason itself: a global route set or unset sent from inside a run, which the
+CLI marks with the `Jason-Attempt` header, is refused `403` `decided_inside_a_run`, the code the run gate gives there,
+with a sentence that says so, and a campaign's own route is set from a run as before (§4).
+
+Six refusals write nothing, each naming the setting by its path and never a value the file holds:
+`settings_file_unreadable`, a file the runtime's own parser does not read, named by the line and the byte where it
+stopped; `settings_file_not_editable`, a setting the file says in a way the writer cannot change without touching what
+it does not own, such as one it says twice, or a file that is a link to another file, which the write would
+replace with a file of its own; `settings_file_changed`, a file another program kept changing while the runtime wrote
+it, worth sending again; `settings_file_busy`, a file another program holds open, worth sending again;
+`settings_file_not_writable`, a file or folder that is read-only or that this user may not write, or a full disk, which
+sending again does not mend; and `setting_shadowed`, a setting a `JASON_` environment variable gives a value, named as
+the environment spells it, where a write to the file would never be in force. A binding the file would read back as something else is refused as
+`not_representable_globally` ("What a global binding cannot express", §4).
 
 ## 4. A campaign's own routes
 
@@ -166,16 +203,12 @@ that activates a global edit somebody left in the file, and the operator who edi
 wrote a campaign route will see the *old* global set in the answer. That is not a stale read; it is
 the freeze rule seen from the other side. `jason plugin reload` is what picks the edit up.
 
-**There is no global `route set`.** The API writes campaign routes only, and the CLI refuses the command
-before it sends anything — a usage error, exit 2 — saying where a global route lives instead:
+A write names its scope: `--campaign` or `--global`, exactly one. One that names neither, or both, is refused before
+anything is sent, a usage error, exit 2, so a write that forgot its campaign never re-routes every campaign:
 
 ```text
---campaign is required: only a campaign's routes are written through the API. A global route is
-written under "Routes" in settings.json and activated with 'jason plugin reload'.
+--campaign or --global is required: --campaign routes one campaign's work, --global every campaign's that has no route of its own.
 ```
-
-The reason is worth stating rather than accepting: a reload freezes plugins and routes together, so a
-global route becomes active by the same explicit act as the packages it names.
 
 Five smaller rules, each of which somebody will meet:
 
@@ -263,6 +296,10 @@ characters, and the value reaching the plugin is the number.
 
 The escape hatch is real and is in the same place: set that binding **per campaign** with
 `jason route set --binding`, which carries JSON and never passes through the configuration system.
+
+`jason route set --global` refuses such a binding rather than freeze one the caller did not send, as
+`not_representable_globally`, and with it the other shapes the round trip changes: an empty object or list, keys that
+differ only in case, and a key that holds a colon.
 
 ## 5. The binding handshake
 
@@ -452,6 +489,13 @@ An activated load journals `plugins_reloaded` with the routes it froze beside th
 `routes_updated` against the campaign, keyed by the operation, by `default`, or by `<operation>/<channel>` for a
 channel route — `message.send/linkedin` — with the old and new values. A line keyed by an operation and a channel is
 about that channel's route only, never the operation's own.
+
+A global route write journals `global_routes_updated`, keyed the same three ways and naming no campaign, with the old
+and new routes as the reload froze them, in the same save as that reload's `plugins_reloaded`, which carries the same
+actor and reason; a reload that left the route as it was writes no such line, and a request that finds the route
+already in force in the file and in the snapshot writes nothing and journals neither. A runtime that stops between the
+write and the reload — a crash, a machine switched off — leaves the route in the file and out of force; the next start
+freezes it with the rest of the file, and no `global_routes_updated` line says so.
 
 ## 7. Fail-closed: every reason, and what to change
 

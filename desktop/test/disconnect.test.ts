@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { cliAt } from '../src/cli.ts';
 import { loggedCli } from '../src/installation.ts';
 import type { Logger } from '../src/log.ts';
-import { desktopPaths } from '../src/paths.ts';
+import { dataLayout, desktopPaths } from '../src/paths.ts';
 import { programsOn } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { Setup } from '../src/setup.ts';
@@ -33,11 +33,11 @@ function setupOn(b: Bench, log: Logger = memoryLog()) {
 }
 
 function writeInstallationSettings(b: Bench, value: unknown): void {
-    mkdirSync(dirname(b.paths.installationSettings), { recursive: true });
-    writeFileSync(b.paths.installationSettings, typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+    mkdirSync(dirname(dataLayout(b.paths.data).userSettingsFile), { recursive: true });
+    writeFileSync(dataLayout(b.paths.data).userSettingsFile, typeof value === 'string' ? value : JSON.stringify(value, null, 2));
 }
 
-const readInstallationSettings = (b: Bench) => JSON.parse(readFileSync(b.paths.installationSettings, 'utf8')) as Record<string, unknown>;
+const readInstallationSettings = (b: Bench) => JSON.parse(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8')) as Record<string, unknown>;
 
 const notification = (id: string): BundledPlugin => {
     const plugin = bundledPlugin(id);
@@ -206,7 +206,7 @@ test('Disconnect of the journal forwarder or of anything outside the table is re
         await assert.rejects(setupOn(b, log).disconnectPlugin(id), (error: unknown) => error instanceof Refused && !/settings file/.test(error.message), String(id));
         assert.deepEqual(b.record(), [], String(id));
         assert.deepEqual(log.lines, [], `${String(id)}: the file was not read`);
-        assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), '{ "not": json');
+        assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), '{ "not": json');
     }
 });
 
@@ -218,7 +218,7 @@ test('Disconnect over a settings file the desktop cannot keep is refused, said o
         setupOn(b, log).disconnectPlugin('slack'),
         (error: unknown) => error instanceof Refused && /comments and trailing commas/.test(error.message) && error.message.endsWith('Edit it by hand, then press Reload.'),
     );
-    assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), '{ "Plugins": { "Config": { "slack": { "token": "t" } } }, }');
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), '{ "Plugins": { "Config": { "slack": { "token": "t" } } }, }');
     assert.deepEqual(b.record(), [], 'nothing is reloaded');
     assert.deepEqual(log.lines.map((line) => line.name), ['settings_refused']);
 });
@@ -237,7 +237,7 @@ test('Disconnect with no settings file writes none, and its line says nothing wa
     const b = bench(t);
     const log = memoryLog();
     await setupOn(b, log).disconnectPlugin('ntfy');
-    assert.equal(existsSync(b.paths.installationSettings), false);
+    assert.equal(existsSync(dataLayout(b.paths.data).userSettingsFile), false);
     assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [['plugin', 'reload'], ['plugin', 'list']]);
     assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'ntfy', Written: false, Exit: 0, Valid: false });
 });
@@ -245,12 +245,12 @@ test('Disconnect with no settings file writes none, and its line says nothing wa
 test('Disconnect over a file whose entry for the plugin is not an object is refused with the words of any file the desktop cannot keep', async (t) => {
     const b = bench(t);
     writeInstallationSettings(b, { Notifications: { Plugins: { slack: 'on' } } });
-    const text = readFileSync(b.paths.installationSettings, 'utf8');
+    const text = readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8');
     await assert.rejects(
         setupOn(b).disconnectPlugin('slack'),
         (error: unknown) => error instanceof Refused && /as something other than an object/.test(error.message) && error.message.endsWith('Edit it by hand, then press Reload.'),
     );
-    assert.equal(readFileSync(b.paths.installationSettings, 'utf8'), text);
+    assert.equal(readFileSync(dataLayout(b.paths.data).userSettingsFile, 'utf8'), text);
     assert.deepEqual(b.record(), [], 'nothing is reloaded');
 });
 
@@ -280,9 +280,9 @@ test('against the real executable, the reload after Disconnect activates a snaps
     const package_ = join(data, 'plugins', 'slack');
     cpSync(join(desktopFolder, '..', 'plugins', 'slack'), package_, { recursive: true });
     const paths = desktopPaths(data);
-    mkdirSync(dirname(paths.installationSettings), { recursive: true });
+    mkdirSync(dirname(dataLayout(paths.data).userSettingsFile), { recursive: true });
     writeFileSync(
-        paths.installationSettings,
+        dataLayout(paths.data).userSettingsFile,
         JSON.stringify({
             Plugins: { Config: { slack: { token: 'xoxb-planted-token' } }, Grants: { slack: { Http: ['slack.com'] } } },
             Notifications: { Plugins: { slack: { Enabled: true, Binding: { channel: 'C0123456' } } } },
@@ -311,7 +311,7 @@ test('against the real executable, the reload after Disconnect activates a snaps
             settings: () => ({ feed: null, skillsDeployedFor: null, theme: null }),
         }).disconnectPlugin('slack');
 
-        const kept = JSON.parse(readFileSync(paths.installationSettings, 'utf8')) as Record<string, unknown>;
+        const kept = JSON.parse(readFileSync(dataLayout(paths.data).userSettingsFile, 'utf8')) as Record<string, unknown>;
         assert.deepEqual(kept, { Plugins: { Grants: { slack: { Http: ['slack.com'] } } } });
         assert.deepEqual(log.lines.find((each) => each.name === 'plugin_disconnected')?.fields, { PluginId: 'slack', Written: true, Exit: 0, Valid: true });
         const after = await info();

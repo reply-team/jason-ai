@@ -43,7 +43,7 @@ public sealed partial class InsideARunDocTests
         var bullet = Flat(Regex.Match(Page("runtime-api.md"), @"(?ms)^- \*\*A decision in a person's name\*\*.*?(?=^- )").Value);
 
         var named = Regex.Matches(bullet, @"`(?<operation>[a-z]+\.[a-z_]+)`").Select(match => match.Groups["operation"].Value);
-        Assert.Equal(InsideARun.Refusing.Order(StringComparer.Ordinal), named.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        Assert.Equal(InsideARun.PersonsWord.Order(StringComparer.Ordinal), named.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
         Assert.Contains(
             $"A request to any of them that carries `{ExecutionEnvironment.AttemptHeader}`, as `jason` sends from inside a run, is answered `{Status}` `{Refusal.Code}` whatever person it names, and changes nothing: a person's word is given outside any run.",
             bullet,

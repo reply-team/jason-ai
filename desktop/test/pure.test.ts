@@ -6,7 +6,7 @@ import { nextCheckDelay, updateCheckInterval } from '../src/backoff.ts';
 import { planCommand, windowsShim, wrapperScript } from '../src/command-line.ts';
 import { loopbackOrigin, pairingLink, runtimeOrigin } from '../src/descriptor.ts';
 import { feedArguments, verbOf } from '../src/installation.ts';
-import { dataDirectory, desktopPaths } from '../src/paths.ts';
+import { dataDirectory, dataLayout, desktopPaths } from '../src/paths.ts';
 import { permissionAllowed } from '../src/permissions.ts';
 import { findOnPath, launchOf, npmScript } from '../src/program-path.ts';
 import { pathOf, withPath } from '../src/programs.ts';
@@ -34,7 +34,7 @@ test('the desktop’s own files are under <data>/desktop and its log beside the 
     assert.equal(paths.turns, join(data, 'desktop', 'turns'));
     assert.equal(paths.rollback, join(data, 'desktop', 'rollback'));
     assert.equal(paths.logs, join(data, 'logs'));
-    assert.equal(paths.installationSettings, join(data, 'config', 'settings.json'));
+    assert.equal(dataLayout(paths.data).userSettingsFile, join(data, 'config', 'settings.json'));
     assert.equal(paths.runFile, join(data, 'run', 'runtime.json'));
 });
 

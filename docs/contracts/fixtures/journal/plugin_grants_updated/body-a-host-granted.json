@@ -1,0 +1,7 @@
+{
+  "kind": "plugin_grants_updated",
+  "version": 1,
+  "case": "a host the manifest requests, granted",
+  "body": { "key": "example-provider/http", "old": { "plugin": "example-provider", "capability": "http", "granted": [] }, "new": { "plugin": "example-provider", "capability": "http", "granted": ["api.example.com"] } },
+  "expect": "valid"
+}

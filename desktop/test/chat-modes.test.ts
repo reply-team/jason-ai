@@ -17,7 +17,7 @@ import type { ChatMode } from '../src/chat-modes.ts';
 import { fullAccessJudgement, heldSentence, judge, toolsThatRunNothing, type ChatScope } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from '../src/chat-turn-files.ts';
-import { desktopPaths } from '../src/paths.ts';
+import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
@@ -58,6 +58,7 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
     const denied = values(args, '--disallowedTools');
     assert.ok(denied.includes('ExitPlanMode'));
     for (const rule of values(claudeArguments(base), '--disallowedTools')) assert.ok(denied.includes(rule), `Plan only keeps ${rule}`);
+    for (const verb of ['plugin grant', 'plugin revoke']) assert.ok(denied.includes(`Bash(jason ${verb}:*)`), `Plan only refuses ${verb}`);
 });
 
 test('Full access starts Claude Code in the host\'s default mode, with no permission mode, every deny rule kept and its settings in the turn\'s own file', () => {
@@ -187,7 +188,7 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mod
         added: [],
         data: root,
         home: root,
-        protectedFiles: [paths.installationSettings, paths.runFile],
+        protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
         denied: fence.commands,
         deniedOperations: fence.operations,
         real: realPathOf,
@@ -241,6 +242,10 @@ test('under Full access the hook refuses a deny-list verb in a command, however 
     const w = await wired(t, 'full_access');
     for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason --actor human:me approval reject apr_1']) {
         assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /person's own act/, command);
+    }
+    for (const command of ['jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, w.scope).outcome, 'refused', command);
+        assert.notEqual(await hooked(w, 'Bash', { command }), null, command);
     }
     assert.equal(await hooked(w, 'Bash', { command: 'jason campaign list' }), null, 'an allow-list verb goes on');
     assert.equal(await hooked(w, 'Bash', { command: 'git status' }), null, 'any other command goes on: Full access asks nothing');

@@ -15,6 +15,7 @@ namespace Jason.Contracts.Api;
 /// preference, or the default, which is every message. Two closed words each and never a person's name or a value; a
 /// campaign's own modes are the campaign's to answer. Null on a runtime older than the section.
 /// </param>
+/// <param name="Setup">Where this runtime's parts are (<see cref="SetupInfo"/>); null on a runtime older than the section.</param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -33,7 +34,8 @@ public sealed record SystemInfoResponse(
     UiModuleInfo? Ui = null,
     HarnessInfo? Harness = null,
     IReadOnlyList<ReleasedPluginInfo>? ReleasedPlugins = null,
-    SendModesInForce? SendModes = null);
+    SendModesInForce? SendModes = null,
+    SetupInfo? Setup = null);
 
 /// <summary>
 /// A plugin package this runtime's release publishes beside its archives, and the package of the same id the active

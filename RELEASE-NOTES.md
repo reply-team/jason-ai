@@ -19,16 +19,18 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.42.0-unwritten
+# Jason 0.42.0
 
 ## What is new since 0.41.0
 
-This release is about how much of the sending you keep in your own hands. You say, for people who have not answered and
-for people who have, whether each message waits for your yes or goes on its own. Where it goes on its own, a critic reads
-it first, and a doubt, a text nobody passed, a reply not yet judged, a message written in the desktop's chat and the
-day's limit still bring it to you. Jason now knows which of the two kinds a person is, and waits for a reply to be judged
-before it writes on its own to someone who just wrote; and a person who asks not to be written to is never written to
-again, on any address.
+This release is about two things: how much of the sending you keep in your own hands, and your own AI changing Jason
+itself. You say, for people who have not answered and for people who have, whether each message waits for your yes or
+goes on its own. Where it goes on its own, a critic reads it first, and a doubt, a text nobody passed, a reply not yet
+judged, a message written in the desktop's chat and the day's limit still bring it to you. Jason now knows which of the
+two kinds a person is, and waits for a reply to be judged before it writes on its own to someone who just wrote; and a
+person who asks not to be written to is never written to again, on any address. And your own AI can now change Jason
+itself: its roles, its plugins, a route for every campaign and what a plugin is granted, from the command line or from
+**Open in**, with a skill and a page that say how.
 
 - **Say how sends go, for people who have not answered and for people who have.** Two named preferences,
   [`send_mode.cold`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/preferences/send_mode.cold.md) and
@@ -101,6 +103,61 @@ again, on any address.
 - **The quick-start skill reads your accounts before you say go.** It tells you how many mailboxes and LinkedIn
   accounts are connected through the provider your sends go through, in the same message as the plan, and a read that
   fails or is slow never holds the question up.
+- **Change Jason itself.** A new entry in the desktop's **Open in** menu, below Copy path, opens your own AI in a new
+  terminal at Jason's role skills folder, with the plugins folder beside it where the AI takes a second folder (Claude
+  Code and Codex), and a short first message that sets the session up for changing Jason. The AI is the one your
+  preference `agent.interactive_host` names, else Claude Code, else Codex. It is offered in your own installation only,
+  never in the demo. The desktop's chat still cannot change Jason's roles, plugins or settings, on purpose: asked to, it
+  now says so and points you to this entry. See
+  [Changing Jason](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/customising.md).
+- **`jason session open --setup`.** The same session from a terminal: `jason session open --setup [--host <word>]` opens
+  your agent host at the role skills folder, adds the plugins folder for Claude Code and Codex, and sends the setup
+  brief as its first input. Every folder comes from what `jason status` reports, not from a remembered path. It starts
+  no runtime and writes nothing of Jason's. Where the `customising-jason` skill is not yet deployed for that host, the
+  answer says so, and the brief asks the AI to install it on your yes before it changes anything. `--setup` cannot be
+  combined with an approval, a question, a campaign, a project, `--here`, `--shell` or `--resume`.
+- **A skill and a page for changing Jason.** The runtime pack gains `customising-jason`, and the documentation gains
+  [Changing Jason](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/customising.md). Both tell your AI, or
+  you, where the parts are, read from `jason status`. They say what a role's skill changes: that role, in every
+  campaign. A standing rule for one campaign, one project or all your work goes in the memory file at that level
+  instead; a fact every role of one campaign shares goes in the campaign's context; how you sound goes in the tone of
+  voice preference. So the AI asks which you mean before it edits a role. They also say how a new role, a plugin, its
+  grants, a secret and a global route are added and when each takes effect, what an update keeps, and what is never
+  touched.
+- **A route for every campaign from the command line.** `jason route set --global
+  [--operation <op> [--channel <channel>]] --plugin <id> --actor human:<you>` and `jason route unset --global
+  [--operation <op> [--channel <channel>]] --actor human:<you>` write the global route, the default for every campaign
+  with no route of its own or one operation's, or one channel of it, into `settings.json` and put it in force in the
+  same act, where before it was a hand edit followed by `jason plugin reload`. Every byte of the file the route does not
+  own is kept: comments, layout, line ends, the other sections and every plugin secret. A reload that refuses the new
+  route puts the file back, and the answer says whether it did. A route is never written while another program changes
+  the file, or where a `JASON_` environment variable overrides it (`setting_shadowed`, naming the variable). It is never
+  written from inside a run either: nothing inside a run changes Jason itself. A write now needs exactly one of
+  `--campaign` and `--global`. See [routing](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/routing.md).
+- **A plugin's grants from the command line.** `jason plugin grant <id>` and `jason plugin revoke <id>` name one entry
+  of one capability, with exactly one of `--http`, `--exec`, `--env`, `--api`, `--files` and `--subscription`. The grant
+  is written under `Plugins:Grants:<id>` through the same writer and put in force in the same act. The verb is stricter
+  than the file: it refuses what the plugin's manifest does not ask for (`grant_unrequested`), except a host where the
+  manifest says `any_granted_host`. It refuses a directory the loader would refuse, and revoking one entry that a `*`
+  grant covers (`grant_held_by_star`). Both verbs need `--actor`, and are refused under `JASON_CONFINED`, by the
+  desktop's chat in every access mode, and inside a run. Where a plugin is granted nothing it asks for, `jason plugin
+  install --human`, `plugin list --human`, `plugin reload --human` and `jason status` now name the command that grants
+  it. See [plugins](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/plugins.md).
+- **Where Jason keeps its parts, in `jason status` and `system.info`.** Both gain a `setup` section, the last one: the
+  role skills folder, the plugins folder, the custom UI folder, the settings file, whether the settings file is also
+  where plugin secrets are kept, and the data directory's layout. `jason status --human` prints them under the checks:
+  - `Role skills:`
+  - `Plugins:`
+  - `Custom UI:`
+  - `Settings:`, with "(where plugin secrets are kept)"
+  - `Layout:`
+  `status` composes the section itself, so it is there when the runtime is not running. `jason doctor` carries both
+  records, with their paths rewritten as it rewrites every path.
+- **The data directory's layout stamp.** A data directory may now carry `layout.json`, which says how it is laid out:
+  `{"layout": N, "written_by": "<version>", "at": "<moment>"}`. This release writes none and moves nothing. It reads the
+  stamp so that a later release can move the parts you edit, and a Jason that does not know that layout refuses to touch
+  the directory rather than recreate an empty plugins folder beside the moved one or lose a secret. The desktop reads
+  the stamp by the same rules, and places the settings file, the plugins and the role skills by it.
 
 ## Fixed since 0.41.0
 
@@ -109,6 +166,13 @@ again, on any address.
   `link_refused` with its project, folder, code and message, and keeps the `jason project link` line in `next`.
 - **The install prompt's first line no longer ends in a full stop;** a copy that still has one works as before wherever
   the agent reads the address as an address.
+- **A settings file with an undecodable `\u` escape no longer escapes the parser.** The runtime used to throw on such a
+  file, both when it was edited live and on a reload. It now treats the file like any other that does not parse: it
+  keeps running with the last good settings, and the reload answers `settings_file_unreadable` with the line and byte
+  where the parser stopped.
+- **The `plugin_package` check of `jason status` names the right folder.** It used to build the folder from the
+  runtime's data directory. It now names the folder that the command it suggests, `jason plugin install`, places a
+  package in.
 
 ## Upgrading from 0.41.0
 
@@ -135,7 +199,31 @@ and an index for counting a campaign's automatic sends of the day.
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the
   disk image for your machine from this release, or let an installed desktop offer the update.
 - **Update the desktop and Jason together.** This release's desktop carries the chat's refusals of the send modes, and
-  its console the send modes' card and settings.
+  its console the send modes' card and settings; and **Change Jason itself** runs this release's `jason session open
+  --setup`, which an earlier `jason` refuses as a usage error.
+- **The skills:** after `jason update apply`, `jason skills update` deploys the new `customising-jason` skill to every
+  host the skills were deployed to. Until it runs, `jason session open --setup` says that the skill is not deployed, and
+  the setup brief asks your AI to install it on your yes.
+- **No layout stamp means layout 1, and nothing moves.** Every installation so far has no `layout.json`, and every path
+  is the one it was. `jason status` gains one required check, `layout`, which passes on such a directory, and its
+  `setup` the member `layout`. `export.json` gains `layout`, and an archive without it, as every earlier Jason wrote,
+  imports as before.
+- **A newer layout is refused, not followed.** Where `layout.json` names a layout newer than this `jason` runs, or
+  cannot be read, the runtime's start and these verbs refuse before anything is read or written, as `layout_newer` or
+  `layout_unreadable`, exit 1: `jason runtime start` and `restart`, `plugin install` and `reload`, `skills install` and
+  `update`, `ui install`, `update apply` and `rollback`, `export`, `import`, `uninstall --purge-data` and `session open
+  --setup`. `update apply` and `rollback` say to install that newer Jason by running the install line again. `jason
+  status`, `jason doctor` and `jason logs` never refuse on a stamp, since they are how such an installation is looked
+  at. `uninstall --purge-data` keeps a `setup` folder that no stamp says Jason made.
+- **The runtime now writes its own settings file,** in exactly two places: a global route and a plugin's grants. A hand
+  edit is still read as before. A grant written by hand for something the manifest does not ask for still only warns.
+- **A global route or a grant is refused inside a run** as `decided_inside_a_run`, with a sentence of its own: nothing
+  inside a run changes Jason itself. The sentence for an approval or an answer inside a run is unchanged.
+- **Refusals that found nothing routed** used to say "write a global route in the settings file". `route.resolve`,
+  `operation.describe` and the audience reads now name `jason route set --global` instead, and so does `jason status`.
+- **`jason doctor --include-journal`** now also carries the two new journal lines, `global_routes_updated` and
+  `plugin_grants_updated`: the account a global route binds, and a plugin's granted hosts, programs, variable names, API
+  families, directories and journal kinds before and after, never a value. Neither line can be subscribed to for now.
 - **From 0.40.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
@@ -153,6 +241,18 @@ nor holds a message to them here.
 Under `automatic` for people who have replied, a message that is not an answer, such as a follow-up planned before the
 person wrote, can still go to them on its own after their reply was marked for you. Only an answer in that conversation
 is held.
+
+`route set --global` and `plugin grant` refuse a settings file that is a link to another file
+(`settings_file_not_editable`), since a write would replace the link with a file of its own. Edit such a file by hand
+and run `jason plugin reload`, as before.
+
+The runtime writes the settings file only if it still holds what was read, and makes its edit again from a fresh read
+when another program changed it in between. A program that writes the file in the instant between that check and the
+rename can still lose its change. Editing `settings.json` by hand while a `route set --global` or `plugin grant` runs is
+the case to avoid.
+
+`jason session open --setup` adds the plugins folder only for Claude Code and Codex. Another host opens at the role
+skills folder alone, and reaches the plugins folder by the path `jason status` prints.
 
 The demo has limits: it is email only, with no LinkedIn channel; it raises no question; a person whose message waits for your approval never answers it, because a reply is attributed once, when it is stored; and no AI role runs in the demo's runtime, so no reply there is judged, and Interested, Meetings booked and **Replies by category** have nothing to count. The sample's story began when the release was built, with no past before it, so the Dashboard's 30 days hold it for thirty days after. Where the sample is placed, the replies the story wrote are already in when the demo opens; where it is made at the start instead, its story starts that day and its replies arrive within minutes. After that, a kept demo shows nothing new of the story until **Start the Demo Over**. In a placed demo the Dashboard's daily trends read ±0 at first, since nothing of the story falls in the last 24 hours.
 

@@ -30,6 +30,11 @@ if (args[0] === 'status') {
         process.stderr.write('The runtime did not start.\n');
         process.exit(1);
     }
+    // STUB_START_REFUSES=<code> answers as the real verb does for a layout it refuses: the error on stdout, nothing started.
+    if (process.env.STUB_START_REFUSES) {
+        print({ error: { code: process.env.STUB_START_REFUSES, message: process.env.STUB_START_SAYS || 'The layout is refused.', retryable: false } });
+        process.exit(1);
+    }
     mkdirSync(join(data, 'run'), { recursive: true });
     writeFileSync(runFile, JSON.stringify({ api_version: 'v1', base_url: origin, token: 'planted-run-token-77', pid: 1 }));
     print({ started: true });

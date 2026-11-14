@@ -718,7 +718,8 @@ public static class DoctorCommand
                                its own listing: contents, values_carried, never_carried, projected and warnings.
               versions         the CLI, the runtime and its API, the operating system and .NET.
               status           the report 'jason status' composes, without --provider-cli, so no program is run, and
-                               with the profiles its agent_hosts check reads counted by host, never named.
+                               with the profiles its agent_hosts check reads counted by host, never named, and where
+                               this installation's parts are, as paths rewritten like every other.
               runtime          what the runtime says about itself — system.info, projected as below, the harness
                                root's path and state among it, as the runtime reports them, and nothing under the
                                root — each plugin by its id, version, digest, status, problem codes and the journal kinds
