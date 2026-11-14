@@ -245,6 +245,68 @@ public class GlobalRouteWriteTests
     }
 
     /// <summary>
+    /// Edits that depend on the file are asked for again from each read: a list another writer added to between the read
+    /// and the commit is edited from what that writer left, so its entry is kept beside this one. Edits fixed before the
+    /// first read would have written the list as that read had it, and lost the other writer's entry.
+    /// </summary>
+    [Fact]
+    public async Task Edits_from_the_read_are_made_again_from_each_read_so_another_writer_s_entry_is_kept()
+    {
+        await using var api = await StartAsync();
+        var path = api.Paths.UserSettingsFile;
+        File.WriteAllText(path, Original.Replace("\"Config\"", "\"Grants\": { \"fake-provider\": { \"Http\": [\"a.example.com\"] } }, \"Config\"", StringComparison.Ordinal));
+        var writer = new SettingsWriter(api.Resolve<SettingsFile>(), api.Paths, api.Resolve<ReloadGate>(), NullLogger<SettingsWriter>.Instance, attempt =>
+        {
+            if (attempt == 1)
+            {
+                File.WriteAllText(path, File.ReadAllText(path).Replace("[\"a.example.com\"]", "[\"a.example.com\", \"b.example.com\"]", StringComparison.Ordinal));
+            }
+        });
+        var asked = 0;
+
+        var wrote = await UnderTheGateAsync(api, () => writer.WriteAsync(
+            held =>
+            {
+                asked++;
+                var list = new JsonArray();
+                for (var index = 0; held.TryGetValue($"Plugins:Grants:fake-provider:Http:{index}", out var entry); index++)
+                {
+                    list.Add(entry);
+                }
+
+                list.Add("c.example.com");
+                return [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", list)];
+            },
+            "Plugins",
+            (written, _) => Task.FromResult(written),
+            (refused, _, _) => refused,
+            Ct));
+
+        Assert.True(wrote);
+        Assert.Equal(2, asked);
+        Assert.Contains("[\"a.example.com\",\"b.example.com\",\"c.example.com\"]", File.ReadAllText(path), StringComparison.Ordinal);
+        Assert.Contains(Secret, File.ReadAllText(path), StringComparison.Ordinal);
+    }
+
+    /// <summary>A refusal the edits raise from what they read is the answer, and nothing is written.</summary>
+    [Fact]
+    public async Task A_refusal_the_edits_raise_from_the_read_writes_nothing()
+    {
+        await using var api = await StartAsync();
+        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+
+        var refused = await Assert.ThrowsAsync<DomainException>(() => UnderTheGateAsync(api, () => api.Resolve<SettingsWriter>().WriteAsync<bool>(
+            _ => throw new DomainException(409, "held_by_test", "refused from the read", retryable: false),
+            "Plugins",
+            (written, _) => Task.FromResult(written),
+            (refusal, _, _) => refusal,
+            Ct)));
+
+        Assert.Equal("held_by_test", refused.Code);
+        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+    }
+
+    /// <summary>
     /// Another writer that changes the file after this one wrote it and before the put-back is not overwritten either: the
     /// file is left as that writer left it, and the refusal says so.
     /// </summary>

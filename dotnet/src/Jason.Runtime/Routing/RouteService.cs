@@ -431,7 +431,7 @@ public sealed class RouteService(
                         wrote ? null : settingsFile.Read(),
                         recordRefusal: !wrote,
                         routeRefusal: RouteRefusal,
-                        besides: after =>
+                        besides: (_, after) =>
                         {
                             var old = Recorded(At(before.Global, operation, channel));
                             var now = Recorded(At(after.Global, operation, channel));
