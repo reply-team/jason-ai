@@ -615,8 +615,8 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
   every time, held to the real tree by a test.
 - **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any letter case: everything the CLI
-  reserves for a person (approving and rejecting, answering a decision, a standing approval, a preference, clearing a
-  block, resuming work, a report, rewinding a subscription), everything that changes the installation, follows it
+  reserves for a person (approving and rejecting, answering a decision, a standing approval, a preference, a campaign's send mode, clearing a
+  block, resuming work, reviewing a send, a report, rewinding a subscription), everything that changes the installation, follows it
   without end or carries it off the machine (`runtime`, `plugin install`, `plugin reload`, `profile`, `skills`,
   `update`, `uninstall`, `ui`, `session`, `journal watch`, `export`, `import`), and four more that decide who is reached
   or what runs (`suppression remove`, `route set`, `route unset`, `role set-profile`). **`role add` and `project link` are

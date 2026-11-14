@@ -1108,9 +1108,9 @@ function edited(text: string, edits: readonly unknown[]): string | null {
 
 /**
  * Under Full access, where no card is shown, what a writer tool would write is read as a command is read: a file whose
- * text runs a command of the deny list, names a deny-list operation by its dot, names the confining variable, or names
- * the installation's data is refused, so a script the agent writes to run later is refused where the attempt shows. What
- * a program assembles at run time is not seen here. Null for any other tool, and for text that shows none of these.
+ * text runs a command of the deny list, names a deny-list operation by its dot, names the confining variable or the
+ * attempt's variable (`JASON_ATTEMPT_ID`), or names the installation's data is refused, so a script the agent writes to
+ * run later is refused where the attempt shows. What a program assembles at run time is not seen here. Null for any other tool, and for text that shows none of these.
  */
 export function writtenRefusal(tool: string, input: Record<string, unknown>, scope: ChatScope): string | null {
     const texts = writtenText(tool, input, scope);
@@ -1238,8 +1238,9 @@ function programLaunches(words: readonly string[]): boolean {
 
 /**
  * True when a text, read as a command's text is read, plainly and a second time over its normalised form, runs a
- * deny-list command or names a deny-list operation by its dot, names the confining variable, the data directory's
- * variable or the installation's data in any literal spelling, or clears the environment around a jason.
+ * deny-list command or names a deny-list operation by its dot, names the confining variable, the attempt's variable
+ * (`JASON_ATTEMPT_ID`), the data directory's variable or the installation's data in any literal spelling, or clears the
+ * environment around a jason.
  */
 function textRefused(text: string, scope: ChatScope): boolean {
     if (namesConfinedVariable(text) || namesAttemptVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || namesPersonsOwn(text, scope) || jasonIn(text, scope) === 'deny') return true;
@@ -1397,8 +1398,9 @@ function clearsEnvironment(text: string): boolean {
 
 /**
  * The refusals a text earns read a second time, over its normalised form (`normalised`): a deny-list command or an
- * operation by its dot, the confining variable, the data directory's variable or its spellings; and the environment
- * cleared around a jason. A hit is refused in every mode, as the plain spelling is: a re-spelled verb is never a card.
+ * operation by its dot, the confining variable, the attempt's variable (`JASON_ATTEMPT_ID`), the data directory's
+ * variable or its spellings; and the environment cleared around a jason. A hit is refused in every mode, as the plain
+ * spelling is: a re-spelled verb is never a card.
  */
 function respelledRefusal(text: string, scope: ChatScope): string | null {
     if (clearsEnvironment(text)) return confinedRefusal;
