@@ -5,7 +5,7 @@
 // before anything is placed or written.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -90,19 +90,20 @@ const refused = [
 ];
 
 for (const row of rows) {
-    test(`with a stamp this build refuses, ${row.card} is refused in the refusal's words before any plugin is placed or any file written`, async (t) => {
+    test(`with a stamp this build refuses, ${row.card} is refused in the refusal's words before any program runs, any plugin is placed or any file written`, async (t) => {
         for (const each of refused) {
             const b = bench(t, { programs: ['reply'] });
             mkdirSync(dirname(settingsFile(b)), { recursive: true });
             writeFileSync(settingsFile(b), written);
             writeFileSync(join(b.paths.data, 'layout.json'), each.stamp);
+            const before = readdirSync(b.paths.data);
             const log = memoryLog();
             await assert.rejects(row.act(setupOn(b, log)), (error: unknown) => error instanceof Refused && error.message === each.message(b), `${row.card}: ${each.code}`);
             assert.equal(readFileSync(settingsFile(b), 'utf8'), written, `${row.card}: the settings file is as it was`);
             assert.equal(readFileSync(join(b.paths.data, 'layout.json'), 'utf8'), each.stamp);
-            assert.deepEqual(readdirSync(b.paths.data).filter((name) => !['config', 'desktop', 'logs', 'layout.json'].includes(name)), [], `${row.card}: nothing else is made`);
-            assert.equal(existsSync(join(b.paths.data, 'setup')), false);
-            assert.deepEqual(b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args), [], `${row.card}: jason is not asked to place or reload anything`);
+            assert.deepEqual(readdirSync(b.paths.data).sort(), [...before].sort(), `${row.card}: nothing is made in the data directory, the desktop's own folder included`);
+            assert.deepEqual(readdirSync(join(b.paths.data, 'config')), ['settings.json']);
+            assert.deepEqual(b.record().map((entry) => `${entry.name} ${entry.args.join(' ')}`), [], `${row.card}: no program is run, a sign-in and a skills deploy included`);
             assert.deepEqual(
                 log.lines.filter((line) => line.name === 'settings_layout_refused').map((line) => line.fields),
                 [{ Code: each.code }],

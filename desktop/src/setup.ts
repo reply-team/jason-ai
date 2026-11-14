@@ -16,7 +16,7 @@ import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
-import { dataLayout, layoutRefusal, type DesktopPaths } from './paths.ts';
+import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import type { ProviderKeys } from './providers.ts';
@@ -752,6 +752,8 @@ export class Setup {
 
     connectReply(): Promise<void> {
         return this.#serial(async () => {
+            // Refused before the sign-in, since the sign-in ends in the plugin's wiring and the skills' deploy.
+            this.#writableLayout();
             const result = await this.#run('reply', 'auth login', ['auth', 'login'], { timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'browser', Exit: result.exit });
             if (result.exit !== 0) throw new Refused(words(result, 'Reply did not sign in.'));
@@ -761,6 +763,7 @@ export class Setup {
 
     connectReplyWithKey(key: unknown): Promise<void> {
         return this.#serial(async () => {
+            this.#writableLayout();
             if (typeof key !== 'string' || key.trim() === '') throw new Refused('Enter the key.');
             const result = await this.#run('reply', 'auth login --with-token', ['auth', 'login', '--with-token'], { stdin: key.trim(), timeoutMs: signInLimit });
             this.#deps.log.info('reply_connected', { Method: 'key', Exit: result.exit });
@@ -797,18 +800,24 @@ export class Setup {
     }
 
     /**
-     * The settings file a card edits, placed by the data directory's layout as its stamp says it at this moment. A stamp
-     * this build refuses, a layout newer than it runs or a stamp it cannot read, refuses every card that writes before
-     * anything is placed or written, in the words `jason runtime start` refuses it in, since the parts may already be
-     * where a later layout keeps them.
+     * The data directory's layout as its stamp says it at this moment, for a card that writes. A stamp this build refuses,
+     * a layout newer than it runs or a stamp it cannot read, refuses the card before it runs a program, places a plugin
+     * or writes a file, in the words `jason runtime start` refuses it in, since the parts may already be where a later
+     * layout keeps them.
      */
-    #settingsFile(): string {
+    #writableLayout(): DataLayout {
         const layout = dataLayout(this.#deps.paths.data);
         const refusal = layoutRefusal(layout, this.#deps.bundleVersion);
         if (refusal !== null) {
             this.#deps.log.warn('settings_layout_refused', { Code: refusal.code });
             throw new Refused(refusal.message);
         }
+        return layout;
+    }
+
+    /** The settings file a card edits, placed by the layout `#writableLayout` answers. */
+    #settingsFile(): string {
+        const layout = this.#writableLayout();
         // Every layout this build runs keeps plugins' configuration in this one file; a layout that keeps it apart is
         // newer than this build and refused above, so the cards never write a secret where a later layout keeps none.
         if (!layout.userSettingsFileHoldsSecrets) throw new Error('The Connect cards write one settings file, and this layout keeps two.');
