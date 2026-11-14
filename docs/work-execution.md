@@ -276,6 +276,19 @@ applies at the next scan to work not yet held, while an item already held keeps 
 date and expires by it like any waiting item, and a held manager check-in is still the campaign's one check-in
 ([docs/campaign-manager.md](campaign-manager.md) §1).
 
+**The daily ceiling of automatic sends.** While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends
+a campaign releases in a UTC day without asking a person. Where the automatic mode would release a send, the claim first
+counts, in the same transaction, the sends the mode released from the item's campaign since 00:00Z: the rows born
+approved with the reason `automatic_mode` and decided since then, whatever became of each. A retry runs under the row it
+was released under and is not counted again, and a send a person approves runs under a row of another reason and counts for nothing. At
+the ceiling the send parks for the person instead: its row's reason is `daily_ceiling`, and its preview carries
+`daily_ceiling` with three numbers only, `limit`, `released` and `since`, the moment the count began. The ceiling never
+slips, so a standing approval that covers the send does not let it go either, and the standing approval's answer in the
+preview says `daily_ceiling`. The ceiling is asked only where the mode would release: a send the mode parks for another
+reason keeps that reason, and where no mode is automatic nothing is counted and nothing changes. A send parked at the
+ceiling is one more approval waiting, notified as any is, and it is the person's from then on: a new day does not
+release it automatically.
+
 ## Approvals
 
 An operation's contract says what approval it needs. Most published operations publish `auto`, which is
@@ -405,8 +418,9 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
 `ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
 and a doubt is the person's to answer, so no standing approval releases it; or `sent_from_chat`: the send was written
-in the desktop's chat, which always waits for the person (§The send mode at the claim). A reply or a message that
-names no verdict is not asked about.
+in the desktop's chat, which always waits for the person (§The send mode at the claim); or `daily_ceiling`: the
+automatic mode would have released the send and its campaign has reached `Sending:AutomaticMaxPerDay` for the day,
+which never slips (§The claim rule). A reply or a message that names no verdict is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
@@ -576,17 +590,20 @@ guard as a standing approval, and in this order:
    `edited_after_review`; none at all, `not_reviewed`. Another critic's pass does not count: one somebody queued by
    hand, or the runtime's critic of another send. Nor does a pass by another role, on a line a run wrote in a person's
    name, or naming an attempt other than its own; each is shown on the preview and releases nothing.
-8. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
+8. **The daily ceiling.** The campaign has had fewer sends released by the mode since 00:00Z than
+   `Sending:AutomaticMaxPerDay`; at it, `daily_ceiling`, and the preview carries `daily_ceiling` with the limit, the
+   count and since when (§The claim rule).
+9. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
    `automatic_mode`, requested and decided at the claim's moment, decided by the person who set the mode in force.
 
-A park of steps 3 to 7 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
+A park of steps 3 to 8 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
 above, and its preview carries `send_mode`, the facts and never the code: the `mode`, its `source` (`preference` or
 `campaign`) and the contact's `temperature` (`cold` or `warm`), all three null while the contact waits on a verdict,
 and the `review` line the step read — the pass, the pass under the earlier text, or another role's — or null. Where
 no mode is in force the reason is what it always was. The parks of steps 5 to 7 **fall through to a standing
-approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat
-and a doubted one do not: they park even where a standing approval would have covered it, and its preview's
-`standing_approval` says `sent_from_chat` or `doubted`. A send written in the desktop's chat always waits for the person,
+approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat,
+a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
+its preview's `standing_approval` says `sent_from_chat`, `doubted` or `daily_ceiling`. A send written in the desktop's chat always waits for the person,
 whatever the send mode, `every_message` included.
 
 **A release decides once, but warmth is read again.** A retry of the same subject runs under the row the mode wrote, and
@@ -1422,6 +1439,7 @@ mistyped one.
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 | `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in a UTC day, counted from 00:00Z; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the next 00:00Z (§The claim rule) |
+| `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
 
 `Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds
 it: a start stops and says where the number went, nothing is carried over for you, and a live edit that names it keeps
