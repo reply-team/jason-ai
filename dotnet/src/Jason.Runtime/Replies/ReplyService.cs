@@ -5,6 +5,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -19,6 +20,18 @@ namespace Jason.Runtime.Replies;
 /// and goal are the decision a reader of the line acts on, not something this service does. The nature is a word of a
 /// closed list that <see cref="Warmth"/> reads later; it is never checked against the category or the reaction.
 /// </summary>
+/// <remarks>
+/// One nature is acted on here, in the same act: a verdict that says <c>opt_out</c> puts every channel value the contact
+/// has on the do-not-contact register, by <see cref="Actors.OptOut"/>, with the verdict as the reason, in the one save
+/// that records the verdict; a value already registered gets no second entry, and nothing here lifts one. Nobody is asked.
+/// The verdict's journal line names in its contact column the contact its body names, never the person of the run that
+/// records it, so the claim's lock, which reads a contact's own lines, finds the person who asked.
+/// A verdict a caller records under a <c>human</c> actor from inside a run — the request names its attempt
+/// (<see cref="RunScope"/>), as <c>jason</c> does on every request from there — is that run's line: it carries the run's
+/// work item and attempt, checked to be of work in the same campaign, and is refused where they are not. A human actor
+/// outside a run is the person's own word; inside one it is what the run says, so it lifts no opt-out's lock
+/// (<see cref="OptOuts"/>).
+/// </remarks>
 /// <remarks>
 /// What is checked against the database: the campaign (archived ones included, as the chronicle takes lines on an
 /// archived campaign), the contact when one is named, the goal against the campaign's goals as they stand, an attempt
@@ -87,13 +100,19 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 
         errors.ThrowIfAny();
 
+        // An opt-out reads the contact's values and writes the register: BEGIN IMMEDIATE, so no other writer runs between
+        // the read of what is registered and the commit, and two opt-outs of one person never race to the same entry.
+        var optOut = request.Nature == ReplyNature.OptOut;
+        await using var stop = optOut ? await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false) : null;
+
         var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
 
         Contact? contact = null;
         if (!string.IsNullOrWhiteSpace(request.ContactId))
         {
             var contactId = request.ContactId.Trim();
-            contact = await db.Contacts.SingleOrDefaultAsync(c => c.PublicId == contactId, cancellationToken).ConfigureAwait(false)
+            IQueryable<Contact> contacts = optOut ? db.Contacts.Include(c => c.Channels) : db.Contacts;
+            contact = await contacts.SingleOrDefaultAsync(c => c.PublicId == contactId, cancellationToken).ConfigureAwait(false)
                 ?? throw DomainErrors.ContactNotFound(contactId);
         }
 
@@ -147,9 +166,34 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             workItem: workItem,
             attempt: attempt,
             contact: contact);
+        if (optOut)
+        {
+            await SuppressionService.StageAsync(
+                db,
+                journal,
+                entry.Ts,
+                Actors.OptOut,
+                contact!.Channels.Select(channel => (channel.Channel, channel.Value)),
+                OptOutReason(entry.PublicId, campaign.PublicId),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (stop is not null)
+        {
+            await stop.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         return JournalWriter.ToDto(entry, campaign.PublicId) with { ContactId = contact?.PublicId };
     }
+
+    /// <summary>
+    /// The reason a register entry an opt-out made carries: the verdict that made it, by its id, and its campaign. No word of
+    /// the reply or the verdict's own reason is repeated, and a reader looking for the entries one verdict made finds them by
+    /// its id.
+    /// </summary>
+    internal static string OptOutReason(string verdict, string campaign) =>
+        $"Asked not to be written to: opt-out verdict {verdict} in campaign {campaign}.";
 
     /// <summary>
     /// A category as every verb that takes one reads it: trimmed, one line, at most <see cref="MaxCategoryLength"/>
@@ -270,10 +314,27 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 
     /// <summary>
     /// An attempt claims a verdict as the run that decided it, so the line follows back to its work; the claim is checked
-    /// to be an attempt this runtime holds, of work in the same campaign.
+    /// to be an attempt this runtime holds, of work in the same campaign. A person named from inside a run is that run's
+    /// verdict all the same: the run the request names is checked the same way, and a request that names one the runtime
+    /// cannot place in the campaign is refused rather than recorded as the person's own word.
     /// </summary>
     private async Task<(WorkItem? Item, Attempt? Attempt)> AttemptOfAsync(ActorRef actor, Campaign campaign, CancellationToken cancellationToken)
     {
+        if (actor.Type == ActorType.Human && RunScope.Attempt is { } run)
+        {
+            var named = await db.Attempts.Include(a => a.WorkItem)
+                .SingleOrDefaultAsync(a => a.PublicId == run, cancellationToken).ConfigureAwait(false);
+            if (named?.WorkItem is not { } of || of.CampaignId != campaign.Id)
+            {
+                throw new ValidationException([new ErrorDetail(
+                    "actor",
+                    "invalid",
+                    $"This request comes from inside attempt '{run}', which is no attempt of work in this campaign: a verdict a person is named on from inside a run is recorded as that run's, so it is recorded only in the run's own campaign.")]);
+            }
+
+            return (of, named);
+        }
+
         if (actor.Type != ActorType.Attempt)
         {
             return (null, null);

@@ -22,7 +22,7 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Sixteen of the twenty-seven are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// Seventeen of the twenty-eight are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
 /// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
 /// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead, and so is <c>provider_answer_lost</c>,
 /// which needs an earlier attempt that lost its answer and is met through the real claim in <c>ClaimerTests</c>. The five
@@ -198,6 +198,47 @@ public class PreflightMatrixTests
                 return await ItemAsync(api, campaign, "list_membership.add", ToAList(), ct, contact);
             },
             AttemptErrors.Suppressed,
+            FailureClass.Permanent),
+
+        // A person who asked not to be written to, and gained an address after: the verdict put the value they had on the
+        // register, contact.update gave them a new primary email the register never held, and the lock refuses it by the person.
+        [AttemptErrors.OptedOut] = new(
+            Nothing,
+            ToTheReferenceProvider,
+            async (api, campaign, ct) =>
+            {
+                var contact = await ContactAsync(api, campaign, "phone", "+15555550100", ct);
+                await api.PostOkAsync<JournalEntryDto>(
+                    Operations.ReplyRecord,
+                    new
+                    {
+                        campaign_id = campaign,
+                        plugin_id = "mailbox",
+                        thread_id = "thr-1",
+                        message_id = "msg-1",
+                        message_at = "2026-09-14T11:30:00Z",
+                        category = "unsubscribe",
+                        confidence = 0.95,
+                        reaction = "none",
+                        contact_id = contact,
+                        nature = "opt_out",
+                    },
+                    ct);
+                await api.PostOkAsync<ContactDto>(
+                    Operations.ContactUpdate,
+                    new
+                    {
+                        contact_id = contact,
+                        channels = new object[]
+                        {
+                            new { channel = "phone", value = "+15555550100" },
+                            new { channel = "email", value = "ada@example.test", primary = true },
+                        },
+                    },
+                    ct);
+                return await ItemAsync(api, campaign, "list_membership.add", ToAList(), ct, contact);
+            },
+            AttemptErrors.OptedOut,
             FailureClass.Permanent),
 
         // A delete works by the routed plugin's pin alone, and this person was never pinned by anybody: refused at the

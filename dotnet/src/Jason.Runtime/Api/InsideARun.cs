@@ -8,7 +8,10 @@ namespace Jason.Runtime.Api;
 /// A request that says it comes from inside a run. The CLI sends <see cref="ExecutionEnvironment.AttemptHeader"/> on every
 /// request when its environment names the attempt it was launched for; the operations that are a person's own word
 /// refuse such a request with <c>decided_inside_a_run</c> before anything reads its body, so before its actor, whatever
-/// actor that is. Every other operation reads past the header, and the fenced ones keep their attempt in the body.
+/// actor that is. Every other operation reads past the header, and the fenced ones keep their attempt in the body. One reads
+/// it as a fact about where a verdict came from: <c>reply.record</c> records a person named from inside a run as that
+/// run's verdict, checked to be an attempt of work in the verdict's campaign, so the person's word it would otherwise carry
+/// — the one that lifts an opt-out's lock — is not taken from the run (<see cref="Domain.RunScope"/>).
 /// </summary>
 /// <remarks>
 /// A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and a run that

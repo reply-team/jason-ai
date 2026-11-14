@@ -8,6 +8,7 @@ using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
 using Jason.Runtime.Tests.Approvals;
 using Jason.Runtime.Tests.Harness;
+using static Jason.Runtime.Tests.Replies.ReplyLines;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -1037,76 +1038,6 @@ public class WarmthTests
         Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
         return await QueryPlans.StepsAsync(db, Warmth.Awaiting(db, seed.Campaign.Id, seed.Contact.Id).ToQueryString(), Ct);
     }
-
-    private sealed record Seed(Campaign Campaign, Contact Contact);
-
-    private static async Task<Seed> SeedAsync(JasonDbContext db)
-    {
-        var campaign = await CampaignAsync(db, "Spring");
-        var contact = new Contact { PublicId = "cnt_01K52JR0000000000000000001", FirstName = "Marta", LastName = "Example", CreatedAt = Noon, UpdatedAt = Noon };
-        db.Contacts.Add(contact);
-        await db.SaveChangesAsync(Ct);
-        return new Seed(campaign, contact);
-    }
-
-    private static async Task<Campaign> CampaignAsync(JasonDbContext db, string name)
-    {
-        var campaign = WorkItemFactory.NewCampaign(name, now: Noon);
-        db.Campaigns.Add(campaign);
-        await db.SaveChangesAsync(Ct);
-        return campaign;
-    }
-
-    /// <summary>
-    /// A move of a thread as the inbound read says it, or, with a rule named, as the events store says it; naming the
-    /// contact both in its body and in its column, as both writers do, or nobody.
-    /// </summary>
-    private static async Task ObservedAsync(
-        JasonDbContext db, Campaign campaign, Contact? contact, string thread, string moment, string? attributedBy = null, string channel = "email")
-    {
-        var line = new JsonObject
-        {
-            ["plugin"] = "mailbox",
-            ["thread"] = thread,
-            ["channel"] = channel,
-            ["last_activity_at"] = moment,
-            ["unread"] = true,
-            ["has_meeting_intent"] = null,
-            ["contact_id"] = contact?.PublicId,
-        };
-        if (attributedBy is not null)
-        {
-            line["event_id"] = "evt_01K52JR0000000000000000002";
-            line["attributed_by"] = attributedBy;
-        }
-
-        Writer.Append(
-            db,
-            Actors.Dispatcher,
-            JournalKinds.InboundReplyObserved,
-            campaign,
-            key: InboundSync.ObservationKey("mailbox", thread, moment),
-            updated: line,
-            contactId: contact?.Id);
-        await db.SaveChangesAsync(Ct);
-    }
-
-    private static ReplyRecordRequest Request(Campaign campaign, Contact? contact, string thread, string message, string at, ReplyNature? nature) => new(
-        campaign.PublicId,
-        "mailbox",
-        thread,
-        message,
-        DateTimeOffset.Parse(at, System.Globalization.CultureInfo.InvariantCulture),
-        "interested",
-        0.9,
-        ReplyReaction.Draft,
-        ContactId: contact?.PublicId,
-        Actor: Ada,
-        Nature: nature);
-
-    private static Task<JournalEntryDto> VerdictAsync(
-        JasonDbContext db, Campaign campaign, Contact? contact, string thread, string message, string at, ReplyNature? nature) =>
-        new ReplyService(db, Writer).RecordAsync(Request(campaign, contact, thread, message, at, nature), Ct);
 
     /// <summary>
     /// A responder for the thread as the respond step creates one — the system's, about the person the line names (nobody

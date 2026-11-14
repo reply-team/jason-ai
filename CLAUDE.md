@@ -110,7 +110,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   masking and no fallback to another plugin. Routes are frozen
   by the same reload that freezes plugins: the `Routes` section of `settings.json` is read only
   there and at startup, `route.set`/`route.unset` copy the global half from the active snapshot, and
-  a bad route rejects the whole reload. The claim is fail-closed: twenty-seven checks in one published
+  a bad route rejects the whole reload. The claim is fail-closed: twenty-eight checks in one published
   order, one code per reason, decided before a child exists, with the attempt kept; an audience's definition is the
   provider's own shape, held at the claim to the schema the routed plugin declares, never at create. A binding names
   an account and never a credential. A person's reads on request are routed by the person's pin; a campaign's reads
