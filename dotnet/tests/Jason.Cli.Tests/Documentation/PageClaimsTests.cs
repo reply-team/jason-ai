@@ -1032,31 +1032,61 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// A ready installation is not the end of what the person came for: the agent says it can work, and where it will keep
-    /// the person's files, as the scripts say it to a person who ran them alone, and asks once what comes next — the wiring check, named for what it is, a synthetic walk that is not the real work, or the real work at
-    /// once. A skip is the person's answer and is not asked again, and the real work begins with an invitation to tell
-    /// about the first campaign in their own words. An agent that took the walk for the job, or offered it at every turn,
-    /// would keep the person from the work they came for.
+    /// A ready installation is not the end of what the person came for: the agent says in two lines that Jason is
+    /// installed and where it keeps the person's files, and starts the quick-start skill at once, asking nothing. A host
+    /// that does not see a skill installed a minute ago reads its file at the root the install printed. An agent that
+    /// stopped to ask what comes next would keep the person from the work they came for.
     /// </summary>
     [Fact]
-    public void The_agent_section_asks_once_after_ready_between_the_walk_and_the_real_work()
+    public void The_agent_section_hands_a_ready_installation_to_the_quick_start()
     {
         var agent = Flat(Agent());
 
         Assert.Contains(
-            "When `ready` is true, tell the person Jason is installed and can work and where it will keep their files — the two lines §2 shows, with the folder the `harness_root` check of `jason status` names, which is the one in force — and ask them once what comes next: [the wiring check](golden-path.md) first, in this session, or their real work at once.",
+            "When `ready` is true, say in two lines that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force — then start the `quick-start` skill at once, with no question about what comes next.",
             agent,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Name the wiring check for what it is: a synthetic walk to meet the system, which connects their provider and proves it with their own address, and is not the real work.",
+            "Where your host does not see a skill installed a minute ago, read its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one the `Target:` line of `jason skills install` printed.",
             agent,
             StringComparison.Ordinal);
-        Assert.Contains("A skip is honoured: do not offer the walk again.", agent, StringComparison.Ordinal);
+        Assert.Contains("Starting the runtime at logon is not done now (§6); say at the end that it can be.", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("ask them once what comes next", agent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The install prompt is the person's yes, so an agent given it stops for nothing but an act marked Ask first or a
+    /// check of its own, and the skills install is one of the steps it takes without asking. What it ran is said at the
+    /// end, never as a question.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_takes_the_install_prompt_as_the_person_s_yes()
+    {
+        var agent = Flat(Agent());
+
         Assert.Contains(
-            "The real work, at once or after the walk, begins with an invitation to tell you about their first campaign in their own words — typed, a link, a file or a voice note, or one of a few examples you offer to start from — and goes on as a campaign planned with the `campaign-planning` skill and worked by Jason's roles.",
+            "The person who gave you the install prompt has asked for the install, so do it without stopping to confirm a step. Ask only for an act this page marks **Ask first.**, or where your own checks stop you, and then ask the person directly and say why.",
             agent,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("one word from them runs", agent, StringComparison.Ordinal);
+        Assert.Contains(
+            "The install prompt tells you to start the `quick-start` skill, and that is the person's yes to putting Jason's skills where your agent reads them: run `jason skills install` (§4) as a step of the install, without asking again. That yes covers the skills and no other act this page marks **Ask first.** Where you were not given that prompt, the mark in §4 stands.",
+            agent,
+            StringComparison.Ordinal);
+        Assert.Contains("**At the end,** in two lines and never as a question, say exactly what you ran and what it changed.", agent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The last section of the page is for a person who wants to read before pasting: what the quick start does, and where
+    /// its text is.
+    /// </summary>
+    [Fact]
+    public void The_last_section_of_the_install_page_says_what_the_quick_start_does()
+    {
+        var install = Page("docs", "INSTALL.md");
+        var section = Section(install, "## 9. ");
+
+        Assert.Contains("[`skills/runtime/quick-start/SKILL.md`](../skills/runtime/quick-start/SKILL.md)", section, StringComparison.Ordinal);
+        Assert.True(install.LastIndexOf("\n## ", StringComparison.Ordinal) == install.IndexOf("\n## 9. ", StringComparison.Ordinal),"the quick start's section is no longer the page's last.");
     }
 
     /// <summary>The two sentences of the README that may name TypeScript, as the README says them.</summary>
@@ -1306,7 +1336,7 @@ public partial class PageClaimsTests
         Assert.True(start > 0 && end > start, "docs/INSTALL.md no longer has §2 followed by §7.");
 
         var marks = found.Where(match => match.Index > start && match.Index < end).ToList();
-        Assert.True(marks.Count == 4, $"docs/INSTALL.md marks {marks.Count} acts in §2–§6 \"Ask first.\"; it marks four.");
+        Assert.True(marks.Count == 3, $"docs/INSTALL.md marks {marks.Count} acts in §2–§6 \"Ask first.\"; it marks three.");
         Assert.All(marks, match => Assert.True(
             install.AsSpan(match.Index - 4).StartsWith("\n\n**Ask first.** ", StringComparison.Ordinal),
             $"The mark at offset {match.Index} of docs/INSTALL.md does not open a paragraph as \"**Ask first.**\"."));
@@ -1320,14 +1350,13 @@ public partial class PageClaimsTests
     /// <summary>
     /// Each act that needs the person's word carries the mark where it is described: putting Jason on the PATH by hand
     /// (§2) and by the repair <c>jason status</c> prints (§5), deploying the packs into the agent's own configuration
-    /// (§4), and registering the runtime to start at logon (§6). The mark opens the paragraph before the act's commands,
+    /// (§4). Registering the runtime to start at logon (§6) is not marked: an agent that installs says at the end that it can be done. The mark opens the paragraph before the act's commands,
     /// or the one after the paragraph that introduces it.
     /// </summary>
     [Theory]
     [InlineData("## 2. ", "**Putting it on the PATH yourself.**", 1)]
     [InlineData("## 4. ", "```sh\njason skills install --dry-run\n", -1)]
     [InlineData("## 5. ", "which you type rather than hand back to `jason`.", 1)]
-    [InlineData("## 6. ", "```sh\njason runtime autostart enable\n", -1)]
     public void Each_act_that_needs_the_person_s_word_is_marked(string section, string act, int neighbour)
     {
         var blocks = Section(Page("docs", "INSTALL.md"), section).Split("\n\n");
@@ -2392,7 +2421,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:dfe911f97419b9e6fbf54ffbf641ad338de6ef6b797b905e9059fa5dfd33167c";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:a2d9a1e07b5a0869c3baccc6af1200f03b879ef5f72491eab6614131ee3f4fa5";
+    private const string AgentSectionDigest = "sha256:c56948c2b70b03bddbaa1b0735c3b7b929fcb888cd4f11f2d8e4885ea498d022";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

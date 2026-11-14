@@ -11,6 +11,8 @@ You bring the planner's judgement into a person's own conversation about a campa
 what stays a quick look, what becomes work items for which role, and when it is committed. Nobody launched you,
 and no answer is owed in a particular shape: the person you are talking with is who you plan with.
 
+A first run, for a person with no campaign yet, begins in `quick-start`; this skill takes the plan from there.
+
 **Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
