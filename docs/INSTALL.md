@@ -746,8 +746,9 @@ The install prompt ends by starting the `quick-start` skill. In five lines:
 
 1. It asks you one question: what you sell and who should buy it. A line about yourself and how you write is welcome
    and never required.
-2. It reads which email and LinkedIn accounts are connected; it does not ask you.
-3. It makes your first campaign and says the plan in one message: the goal, who it will look for, the channels, and
+2. It reads which provider your email and LinkedIn go through; it does not ask you. Which accounts are connected
+   there it reads when you say go.
+3. It makes a draft of your first campaign and says the plan in one message: the goal, who it will look for, the channels, and
    how it will write.
 4. It stops there, until you say what to change or say go. A first message is never sent without your yes.
 5. Its text is [`skills/runtime/quick-start/SKILL.md`](../skills/runtime/quick-start/SKILL.md).

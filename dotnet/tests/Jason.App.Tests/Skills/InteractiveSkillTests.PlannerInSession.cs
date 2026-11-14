@@ -556,8 +556,19 @@ public partial class InteractiveSkillTests
         Assert.Contains("Nothing is started before the person's go.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("The count never holds the person up", skill, StringComparison.Ordinal);
         Assert.Contains("no channel is connected, connecting your provider now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
-        Assert.Contains("That step is the person's one act, \"connect your provider\". With Reply it is one sign-in only they can do: in a terminal `reply auth login`, and you do the rest", skill, StringComparison.Ordinal);
-        Assert.Contains("It starts the campaign, and then submits `sender.list` for each routed channel", skill, StringComparison.Ordinal);
+        Assert.Contains("That step is the person's one act, \"connect your provider\". With Reply it is one sign-in only they can do: in a terminal `reply auth login` (on Windows PowerShell, `reply.cmd auth login`), and you do the rest", skill, StringComparison.Ordinal);
+        Assert.Contains("Then you start the campaign and submit `sender.list` for each routed channel", skill, StringComparison.Ordinal);
+        Assert.Contains("`planner-in-session` takes the plan from the campaign that exists: the brief and the goals go into its context, and no second campaign is made.", skill, StringComparison.Ordinal);
+        Assert.Contains("Make a project named from what the person sells, or take the one that already holds it, and make the campaign in it, under a name drawn from what the campaign is for", skill, StringComparison.Ordinal);
+        Assert.Contains("Say in passing what was made, as a draft: the project and the campaign, and that both names are the person's to change.", skill, StringComparison.Ordinal);
+        Assert.Contains("(on Windows PowerShell, `reply.cmd auth login`)", skill, StringComparison.Ordinal);
+        Assert.Contains("Never ask for them: the person is not asked which channels they have.", skill, StringComparison.Ordinal);
+
+        // The campaign goes under a project named from what is sold and carries a name drawn from what it is for: the
+        // default project and a placeholder name would put the first campaign where no later one is looked for.
+        Assert.DoesNotContain("Default", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("First campaign", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("`--project` out", skill, StringComparison.Ordinal);
         Assert.Contains("With one channel routed, name only that channel's accounts.", skill, StringComparison.Ordinal);
         Assert.Contains("\"It can be done later.\"", skill, StringComparison.Ordinal);
         Assert.Contains("Never put the offer in the plan message.", skill, StringComparison.Ordinal);

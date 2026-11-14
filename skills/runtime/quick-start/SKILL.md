@@ -22,11 +22,15 @@ A no, or silence about the second part, is an answer. Do not ask for it again wh
 
 ## 2. Read the channels, never ask for them
 
-Make the campaign in the default project, with the offer and the audience in their own words as its context (leave
-`--project` out), then ask the runtime which provider each channel goes through. Make each idempotency key new per run.
+Make a project named from what the person sells, or take the one that already holds it, and make the campaign in it,
+under a name drawn from what the campaign is for, with the offer and the audience in their own words as its context
+(`managed-campaign-work` says how). Neither is asked about. Then ask the runtime which provider each channel goes
+through. Never ask for them: the person is not asked which channels they have. Make each idempotency key new per run.
 
 ```
-jason campaign create --name "First campaign" --context '{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}' --idempotency-key first-campaign-20261114-1530
+jason project list --query payroll
+jason project create --name "Payroll for Latin America"
+jason campaign create --name "Seed-stage owners in Mexico and Colombia" --project prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}' --idempotency-key payroll-latam-owners-20261114-1530
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel email
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel linkedin
 ```
@@ -39,7 +43,8 @@ and not a letter; or both, and then several channels together. Draft nothing bef
 ## 3. One message, one stop
 
 Send one message that holds the plan: the goal, who Jason will look for, the channel or channels, how it will write
-("short, plain, in your name"), and the state of the channels. End it with exactly: "Say what to change, or say go." It
+("short, plain, in your name"), and the state of the channels. Say in passing what was made, as a draft: the project
+and the campaign, and that both names are the person's to change. End it with exactly: "Say what to change, or say go." It
 carries no list of questions and uses no question tool; only when the person asks to change something do you use the
 question tool, with the recommended choice first.
 
@@ -49,7 +54,7 @@ question tool, with the recommended choice first.
 - **A channel has no route.** Say: "{Channel} is not connected."
 - **Neither has a route.** Say it firmly: no channel is connected, connecting your provider now is recommended and is
   one step, and until it is done not one message leaves. That step is the person's one act, "connect your provider".
-  With Reply it is one sign-in only they can do: in a terminal `reply auth login`, and you do the rest (the CLI, the
+  With Reply it is one sign-in only they can do: in a terminal `reply auth login` (on Windows PowerShell, `reply.cmd auth login`), and you do the rest (the CLI, the
   plugin, its grant and its route: the Reply CLI section and steps 3 to 5 of `docs/golden-path.md`); in the window,
   the Accounts page. Then say: "It can be done later."
 
@@ -62,10 +67,13 @@ it a sample. Nobody who did not ask sees one.
 ## 5. After "go"
 
 Nothing is started before the person's go. From "go" the work goes on through `planner-in-session` for the plan and
-`managed-campaign-work`, which owns starting the campaign, the people and the work. It starts the campaign, and then
-submits `sender.list` for each routed channel (`sender_channel` is `email` or `linkedin`), since a draft cannot run it:
+`managed-campaign-work`, which owns starting the campaign, the people and the work. `planner-in-session` takes the plan
+from the campaign that exists: the brief and the goals go into its context, and no second campaign is made. Then you
+start the campaign and submit `sender.list` for each routed channel (`sender_channel` is `email` or `linkedin`), since
+a draft cannot run it:
 
 ```
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason "the plan agreed with the person"
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation sender.list --input '{"owners":"own","sender_channel":"email","limit":50,"offset":0}' --idempotency-key first-campaign-20261114-1530-senders-email
 ```

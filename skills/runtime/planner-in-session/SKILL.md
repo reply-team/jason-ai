@@ -242,7 +242,9 @@ they sell goes under a project named from it, never under `Default`, and the cam
 context before anyone is added to it, and its goals go in as the `goals` key of that context. The campaign has a name of its
 own, drawn from what it is for, never a number or
 a placeholder; the name is yours to propose before the campaign is made, and the person's to change. A change of
-direction on a campaign that already exists goes into its context as well, with `campaign update-context`.
+direction on a campaign that already exists goes into its context as well, with `campaign update-context`. Where a first
+campaign already exists, made by `quick-start`, you plan from it: its context takes the brief and the goals, and no second
+campaign is made.
 
 ## The first message, before anything is sent
 
