@@ -333,7 +333,7 @@ const takeBack = 'take_back';
 /** The most characters a conversation's name keeps, as the desktop cuts it. */
 const nameLength = 60;
 
-/** Removes the conversation, asked twice: its tab closes and the list follows; a refusal is said in the chat. */
+/** Removes the conversation, asked twice: Start is shown in its place and the list follows; a refusal is said in the chat. */
 export function removeChat(id: string): void {
     if (!can('chat.remove')) return;
     changeChat(id, (chat) => ({ ...chat, removing: false }));
@@ -341,7 +341,7 @@ export function removeChat(id: string): void {
         .desktop.chat.remove(id)
         .then((answer) => {
             if (isRefusal(answer)) return changeChat(id, (chat) => told(chat, answer.refused));
-            here().dock.closeChat(id);
+            here().dock.dropChat(id);
             chats.value = Object.fromEntries(Object.entries(chats.value).filter(([each]) => each !== id));
             void reloadConversations();
         })

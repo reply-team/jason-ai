@@ -6,6 +6,7 @@ import { loadMode, mode, modePreparing, modeRefusal, modeUnopened } from '../pla
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -98,7 +99,7 @@ describe('Demo in the desktop', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'Settings' }));
         expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
         desktop.command('navigate.connect');
-        await waitFor(() => expect(document.querySelector('.dv-tab.dv-active-tab')?.textContent).toMatch(/Connect/));
+        await waitFor(() => expect(inFront()).toBe('Connect'));
         expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
     });
 

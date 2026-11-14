@@ -1,5 +1,4 @@
 import { createRoot } from 'react-dom/client';
-import 'dockview-react/dist/styles/dockview.css';
 import type { JasonDesktop } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { startLocale } from '../platform/i18n';

@@ -6,8 +6,8 @@ import { toApprovalDetail, toApprovalRow, toQuestionRow, type ApprovalRow } from
 import { clock, here } from './state';
 
 // Needs you: the approvals and the questions waiting on a person, read and decided the way the browser's Attention
-// screen reads and decides them, in a holder of the panel's own: the page panel can show that screen beside this one,
-// and neither replaces the other's list.
+// screen reads and decides them, in a holder of the panel's own: the console's area keeps that screen as it was left
+// while this panel is shown, and neither replaces the other's list.
 
 /** The panel's own approvals and questions. */
 export const attention = attentionStore();

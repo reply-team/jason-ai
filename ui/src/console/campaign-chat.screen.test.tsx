@@ -11,7 +11,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
 
-// A campaign's Chat tab, in the page panel of the desktop: it opens the campaign's one conversation the desktop keeps,
+// A campaign's Chat tab, in the desktop's one area: it opens the campaign's one conversation the desktop keeps,
 // made on first use, as the Campaigns list's Chat does.
 
 function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop()): StubDesktop {
@@ -33,7 +33,7 @@ function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop()): Stu
 const creates = (desktop: StubDesktop, campaignId: string) =>
     desktop.calls.filter((each) => each.name === 'chat.create' && each.args[0] === campaignId).length;
 
-/** The console, and Spring opened in the page panel on its Sequence, as the Campaigns panel's Open does. */
+/** The console, and Spring opened in the area on its Sequence, as the Campaigns panel's Open does. */
 function springApi(): FakeApi {
     return new FakeApi()
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
@@ -88,7 +88,8 @@ describe('a campaign’s Chat tab in the desktop', () => {
         await waitFor(() => expect(about('cmp_1')).toHaveLength(1));
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
 
-        fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
+        // The chat took the area; the campaign's page is chosen again, and its Chat brings that one conversation forward.
+        fireEvent.click(within(await openSpring()).getByRole('button', { name: 'Chat' }));
         await waitFor(() => expect(creates(desktop, 'cmp_1')).toBe(2));
         expect(about('cmp_1')).toHaveLength(1);
         expect(Object.keys(chats.value)).toHaveLength(2); // the set-up chat the window opened on, and Spring's

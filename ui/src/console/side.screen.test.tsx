@@ -7,6 +7,7 @@ import { registry } from '../platform/slots';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -40,9 +41,6 @@ function renderConsole(desktop: StubDesktop = stubDesktop()): StubDesktop {
 
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 const menu = () => side().getByRole('navigation', { name: 'Menu' });
-/** The titles of the dock's tabs in front, one a group. */
-const inFront = () =>
-    Array.from(document.querySelectorAll('.dv-tab.dv-active-tab')).map((tab) => tab.textContent?.trim());
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
 const caret = () => side().getByRole('button', { name: 'More to create' });
 const more = () => side().getByRole('button', { name: 'More' });
@@ -95,9 +93,9 @@ describe('the sidebar', () => {
         const desktop = renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
-        await waitFor(() => expect(inFront()).toContain('Agents'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
         fireEvent.click(side().getByRole('button', { name: 'New GTM agent' }));
-        await waitFor(() => expect(inFront()).toContain('Start'));
+        await waitFor(() => expect(inFront()).toBe('Start'));
         expect(calls(desktop, 'chat.create')).toEqual([]);
     });
 
@@ -123,10 +121,10 @@ describe('the sidebar', () => {
         const desktop = renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
-        await waitFor(() => expect(inFront()).toContain('Agents'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
         fireEvent.click(caret());
         fireEvent.click(entries('Create')[0]!);
-        await waitFor(() => expect(inFront()).toContain('Start'));
+        await waitFor(() => expect(inFront()).toBe('Start'));
         expect(calls(desktop, 'chat.create')).toEqual([]);
         expect(side().queryByRole('menu')).toBeNull();
 
@@ -138,7 +136,7 @@ describe('the sidebar', () => {
         fireEvent.click(caret());
         fireEvent.click(entries('Create')[2]!);
         await waitFor(() => expect(route.value.screen).toBe('accounts'));
-        expect(inFront()).toContain('Page');
+        expect(inFront()).toBe('page:accounts');
     });
 
     it('shows no number on Needs you while nothing waits, and the count of approvals and questions when something does', async () => {
@@ -174,22 +172,22 @@ describe('the sidebar', () => {
         for (const each of entries('More')) expect(each.querySelector('.ms')?.textContent?.length).toBeGreaterThan(0);
 
         fireEvent.click(entries('More')[1]!);
-        await waitFor(() => expect(inFront()).toContain('Activity'));
+        await waitFor(() => expect(inFront()).toBe('Activity'));
         expect(side().queryByRole('menu')).toBeNull();
         expect(more().getAttribute('aria-current')).toBe('true');
 
         fireEvent.click(side().getByRole('button', { name: /^Needs you/ }));
-        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
         expect(more().getAttribute('aria-current')).toBeNull();
 
         fireEvent.click(more());
         fireEvent.click(entries('More')[3]!);
-        await waitFor(() => expect(inFront()).toContain('Connect'));
+        await waitFor(() => expect(inFront()).toBe('Connect'));
         expect(more().getAttribute('aria-current')).toBe('true');
 
         // Leaving Connect for another panel makes More inactive again.
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
-        await waitFor(() => expect(inFront()).toContain('Agents'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
         expect(more().getAttribute('aria-current')).toBeNull();
     });
 
@@ -198,17 +196,17 @@ describe('the sidebar', () => {
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         fireEvent.click(more());
         fireEvent.click(entries('More')[1]!);
-        await waitFor(() => expect(inFront()).toContain('Activity'));
+        await waitFor(() => expect(inFront()).toBe('Activity'));
         expect(more().getAttribute('aria-current')).toBe('true');
         fireEvent.click(side().getByRole('button', { name: /^Needs you/ }));
-        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
         expect(more().getAttribute('aria-current')).toBeNull();
         fireEvent.click(more());
         fireEvent.click(entries('More')[3]!);
-        await waitFor(() => expect(inFront()).toContain('Connect'));
+        await waitFor(() => expect(inFront()).toBe('Connect'));
         expect(more().getAttribute('aria-current')).toBe('true');
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
-        await waitFor(() => expect(inFront()).toContain('Agents'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
         expect(more().getAttribute('aria-current')).toBeNull();
     });
 
@@ -237,14 +235,14 @@ describe('the sidebar', () => {
         fireEvent.click(more());
         // The panels of the console's own.
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
-        await waitFor(() => expect(inFront()).toContain('Agents'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
         fireEvent.click(more());
         fireEvent.click(entries('More')[1]!);
-        await waitFor(() => expect(inFront()).toContain('Activity'));
+        await waitFor(() => expect(inFront()).toBe('Activity'));
         fireEvent.click(more());
         fireEvent.click(entries('More')[3]!);
-        await waitFor(() => expect(inFront()).toContain('Connect'));
+        await waitFor(() => expect(inFront()).toBe('Connect'));
         fireEvent.click(side().getByRole('button', { name: /^Needs you/ }));
-        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
     });
 });

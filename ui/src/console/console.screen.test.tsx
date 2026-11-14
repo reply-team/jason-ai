@@ -15,7 +15,7 @@ import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, conversations, lines, setup, setupBusy, streamState } from './state';
+import { chats, clock, conversations, currentChat, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -58,6 +58,17 @@ function show(name: string): void {
 
 const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
 
+/**
+ * Chooses Needs you from the sidebar once what waits was read and the chat the desktop's New chat made is shown, so
+ * neither comes in front of it afterwards; resolves with the panel.
+ */
+async function openNeeds(): Promise<HTMLElement> {
+    await waitFor(() => expect(attention.loaded.value).toBe(true));
+    await waitFor(() => expect(currentChat.value).not.toBeNull());
+    fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }));
+    return waitFor(() => panel('Needs you'));
+}
+
 beforeEach(() => {
     chats.value = {};
     conversations.value = [];
@@ -90,15 +101,13 @@ afterEach(() => {
 });
 
 describe('the console', () => {
-    it('opens a chat, when New chat is chosen, beside what needs the person, the campaigns and the activity, read from the runtime', async () => {
+    it('opens a chat when New chat is chosen, and reads what needs the person and the campaigns from the runtime', async () => {
         const fake = pending(new FakeApi());
         renderConsole(fake);
         // Each read answers when it answers: the approvals, the questions and the campaigns arrive in no fixed order, so the
         // screen is read once every one of them has been asked and has landed.
         await waitFor(() => {
-            expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
             expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
-            expect(screen.getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
             expect(fake.calls.map((each) => each.operation).sort()).toEqual(
                 ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
             );
@@ -108,6 +117,10 @@ describe('the console', () => {
         expect(hero.querySelector('p')?.textContent).toBe(
             'Nothing written here reaches a person without your approval.',
         );
+        // What waits is a page of its own, chosen from the sidebar.
+        const needs = await openNeeds();
+        expect(within(needs).getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+        expect(within(needs).getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
     });
 
     it('approves and rejects with a reason through the runtime, and reads the list again', async () => {
@@ -115,8 +128,8 @@ describe('the console', () => {
             .answer('approval.approve', 'approval.approve/approved')
             .answer('approval.reject', 'approval.reject/rejected');
         renderConsole(fake);
-        await waitFor(() => screen.getAllByText('Grace Hopper'));
-        const needs = panel('Needs you');
+        const needs = await openNeeds();
+        await waitFor(() => within(needs).getAllByText('Grace Hopper'));
         const row = (id: string) => needs.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
         fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(fake.sent('approval.approve')).toEqual({ approval_id: 'apr_1' }));
@@ -134,6 +147,7 @@ describe('the console', () => {
             .answer('decision.get', 'decision.get/pending-with-options')
             .answer('decision.answer', 'decision.answer/answered');
         renderConsole(fake);
+        await openNeeds();
         await waitFor(() => screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
         const row = () => panel('Needs you').querySelector<HTMLElement>('[data-id="dec_1"]')!;
         fireEvent.click(within(row()).getByRole('button', { name: 'Answer' }));
@@ -206,8 +220,12 @@ describe('the console', () => {
         const row = within(panel('Agents')).getByText(hostile).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         await waitFor(() => screen.getByRole('heading', { name: `What should Jason do in ${hostile}?` }));
-        // The only images of the page are the brand's own, at the head of the sidebar.
-        expect(Array.from(document.querySelectorAll('img')).filter((img) => !img.closest('.brand'))).toEqual([]);
+        // The only images of the page are the brand's own: the sidebar's and the start screen's mark.
+        expect(
+            Array.from(document.querySelectorAll('img')).filter(
+                (img) => !img.closest('.brand') && !img.classList.contains('start-mark'),
+            ),
+        ).toEqual([]);
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
@@ -1090,10 +1108,7 @@ describe('the console', () => {
 
     it('draws a hostile question and a hostile contact name in Needs you as text', async () => {
         renderConsole(pending(new FakeApi()));
-        await waitFor(() => expect(attention.loaded.value).toBe(true));
-        // The dock draws its panels in a render of its own once it is ready, which the runtime's answer can come before:
-        // the read having ended says nothing of the panel being there yet.
-        const needs = await waitFor(() => panel('Needs you'));
+        const needs = await openNeeds();
         // A prospect may be called anything, and an agent may ask anything; the next read brings it back.
         flush(() => {
             attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: hostile }));
@@ -1125,7 +1140,7 @@ describe('the console', () => {
         expect(asked(fake, 'campaign.list')).toBe(listed + 1);
     });
 
-    it('keeps the Campaigns page in the page panel at its own table while a journal line re-reads the panel', async () => {
+    it('keeps the Campaigns page in the area at its own table while a journal line re-reads the panel', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
         try {
@@ -1185,6 +1200,7 @@ describe('the console', () => {
     it('keeps the field a person is typing in focused, with its text and caret, through the clock and a journal line', async () => {
         const fake = pending(new FakeApi());
         const { journal } = renderConsole(fake);
+        await openNeeds();
         await waitFor(() => screen.getAllByText('Grace Hopper'));
         const reason = () =>
             within(panel('Needs you').querySelector<HTMLElement>('[data-id="apr_2"]')!).getByRole<HTMLInputElement>(

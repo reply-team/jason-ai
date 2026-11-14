@@ -411,6 +411,10 @@
 .jc-console .newbtn:hover {
     border-color: var(--accent-line);
 }
+.jc-console .newbtn[aria-current='true'] {
+    border-color: var(--accent-line);
+    background: var(--hover);
+}
 .jc-console .menuwrap {
     position: relative;
 }
@@ -1056,10 +1060,22 @@ body,
     flex: none;
     overflow-y: auto;
 }
-.jc-console .dock {
+/* The one area beside the sidebar: it holds what was shown, and only the one shown is in sight. */
+.jc-console .area {
     flex: 1;
     min-width: 0;
     height: 100%;
+}
+.jc-console .area > .pane {
+    height: 100%;
+}
+.jc-console .area > .pane[hidden] {
+    display: none;
+}
+/* Needs you, Agents and Activity were drawn for a narrow column: in the wide area their cards and lists keep a measure. */
+.jc-console .pane.measure .panel-body {
+    max-width: 880px;
+    margin: 0 auto;
 }
 .jc-console .painted,
 .jc-console .chat-panel {

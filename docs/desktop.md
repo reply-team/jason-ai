@@ -67,7 +67,9 @@ The window calls a campaign with its chat an **agent** (**Agents** in the sideba
 campaign and nothing else: the commands, the API and the ids keep `campaign`, and so do the rest of these pages. The AI that
 runs commands is called the AI.
 
-The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, headed
+The desktop wears the console: a sidebar and one area beside it that shows one thing at a time, chosen from the sidebar,
+its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen, and what you leave stays as
+you left it, a chat with its typed words and what arrived meanwhile. The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
 without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
@@ -89,8 +91,8 @@ shows before anything is typed and what you send waits, while the window is open
   follow under **Recent**, and **Settings** stands alone at the foot.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
-  dock. [ui.md](ui.md) describes each.
+- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
+  [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light, in the demo it opens on and again when
 you first choose Live; one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in

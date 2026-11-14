@@ -1,12 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    DockviewReact,
-    themeDark,
-    themeLight,
-    type DockviewApi,
-    type DockviewReadyEvent,
-    type IDockviewPanelProps,
-} from 'dockview-react';
+import { signal } from '@preact/signals-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
@@ -15,7 +8,6 @@ import { can, earlier } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { registry } from '../platform/slots';
-import { resolvedTheme } from '../platform/theme';
 import { navigate, parseRoute, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
@@ -36,7 +28,7 @@ import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
 import { closeMenus, sideView } from './side';
-import { StartPanel, startMaking, startWaiting } from './start';
+import { StartPanel } from './start';
 import {
     activePanel,
     bind,
@@ -54,30 +46,12 @@ import {
     type PanelName,
 } from './state';
 
-// The desktop's shell: a sidebar and a dock. Home is the Live chat; beside it the panels the console draws itself from
-// the Runtime API, and a page panel that shows the browser shell's screens. The dock's layout is not kept: every
-// window opens on the same one.
+// The desktop's shell: a sidebar and one area. The sidebar's menu, its Recent and the palette are the only way about, and
+// the area shows exactly one thing: Start, one chat, one of the panels the console draws itself from the Runtime API, or
+// one of the browser shell's screens. Nothing is closed, only chosen; every window opens on Start.
 
-const titles: Readonly<Record<PanelName, string>> = {
-    start: 'Start',
-    dashboard: 'Dashboard',
-    needs: 'Needs you',
-    campaigns: 'Agents',
-    activity: 'Activity',
-    connect: 'Connect',
-    page: 'Page',
-};
-
-function ChatTab({ params, api }: IDockviewPanelProps<{ chatId: string }>) {
-    const title = chats.value[params.chatId]?.title;
-    useEffect(() => {
-        if (title) api.setTitle(title);
-    }, [api, title]);
-    return <ChatPanel chatId={params.chatId} />;
-}
-
-/** What a campaign's Chat in the page panel does: shows the campaign's one conversation, made on first use; with no
- *  campaign, a new set-up chat. One function for every render, so the pages it is handed to keep it. */
+/** What a campaign's Chat on the browser shell's screens does: shows the campaign's one conversation, made on first
+ *  use; with no campaign, a new set-up chat. One function for every render, so the pages it is handed to keep it. */
 function chatAbout(campaign?: { id: string; name: string }): void {
     here().dock.chat(campaign);
 }
@@ -109,18 +83,67 @@ function DashboardPanel() {
     return <Painted className="painted" view={dashboard.dashboardView} />;
 }
 
-const components = {
-    chat: ChatTab,
-    start: StartPanel,
-    dashboard: DashboardPanel,
+const panels: Readonly<Record<PanelName, () => ReactNode>> = {
+    start: () => <StartPanel />,
+    dashboard: () => <DashboardPanel />,
     needs: () => <Painted className="painted" view={needs.needsView} />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
     connect: () => (
         <Painted className="painted" view={connect.connectView} onGone={() => connect.dropDialogs('connect')} />
     ),
-    page: PagePanel,
+    page: () => <PagePanel />,
 };
+
+/** The panels once drawn for a narrow column, which the wide area gives a measure of their own. */
+const measured = new Set<string>(['needs', 'campaigns', 'activity']);
+
+/**
+ * What the area holds, in the order each was first shown: a panel's name or `chat:<id>`. Only the one shown is in sight;
+ * the others stay as they were left, so a chat or a page chosen again has what it had (what was typed, what arrived
+ * meanwhile, a message that waits, a dialog open, a page's own table), as a tab in the background kept it.
+ */
+const inArea = signal<readonly string[]>([]);
+
+const chatPane = (id: string) => `chat:${id}`;
+
+/** Shows one thing in the area, and marks it for the sidebar. */
+function reveal(pane: string): void {
+    if (!inArea.value.includes(pane)) inArea.value = [...inArea.value, pane];
+    activePanel.value = pane;
+    currentChat.value = pane.startsWith('chat:') ? pane.slice('chat:'.length) : null;
+    if (currentChat.value !== null && currentChat.value === feedId.value) feedUnseen.value = false;
+}
+
+/** One thing the area holds: in sight while it is the one shown, else hidden as it was left. */
+function Pane({ pane }: { pane: string }) {
+    const chatId = pane.startsWith('chat:') ? pane.slice('chat:'.length) : null;
+    const kept = chatId === null || chats.value[chatId] !== undefined;
+    return (
+        <section
+            className={measured.has(pane) ? 'pane measure' : 'pane'}
+            data-pane={pane}
+            hidden={pane !== activePanel.value}
+        >
+            {chatId === null ? <PanelBody name={pane as PanelName} /> : kept && <ChatPanel chatId={chatId} />}
+        </section>
+    );
+}
+
+function PanelBody({ name }: { name: PanelName }) {
+    return panels[name]();
+}
+
+/** The one area: every thing it holds is drawn, and all but the one shown are hidden. */
+function Area() {
+    return (
+        <main className="area">
+            {inArea.value.map((pane) => (
+                <Pane key={pane} pane={pane} />
+            ))}
+        </main>
+    );
+}
 
 // A command names a panel of the console's own, or a screen of the browser shell by its id. A screen's address is the
 // one its registered entry gives, read when the command comes, so each screen's route is defined in one place.
@@ -148,26 +171,13 @@ export function commandTarget(command: DesktopCommand): PanelName | Route | null
 /** How long the console waits after a journal line before it reads what waits and the campaigns again. */
 export const reloadDelay = 400;
 
-function makeDock(get: () => DockviewApi | null): Dock {
-    const chatPanel = (id: string) => `chat:${id}`;
-    const show = (panel: PanelName) => {
-        const dock = get();
-        if (!dock) return;
-        const open = dock.getPanel(panel);
-        if (open) open.api.setActive();
-        else dock.addPanel({ id: panel, component: panel, title: titles[panel] });
-    };
+function makeDock(): Dock {
+    const show = (panel: PanelName) => reveal(panel);
     const showChat = (id: string) => {
-        const dock = get();
-        const chat = chats.value[id];
-        if (!dock || !chat) return;
-        const open = dock.getPanel(chatPanel(id));
-        if (open) open.api.setActive();
-        else dock.addPanel({ id: chatPanel(id), component: 'chat', title: chat.title, params: { chatId: id } });
+        if (chats.value[id]) reveal(chatPane(id));
     };
     return {
         show,
-        close: (panel) => get()?.getPanel(panel)?.api.close(),
         showChat,
         chat: (campaign) => {
             // A place that cannot make a chat shows where the chat is, in the place the window opens on.
@@ -176,9 +186,10 @@ function makeDock(get: () => DockviewApi | null): Dock {
                 if (id !== null) showChat(id);
             });
         },
-        closeChat: (id) => {
-            get()?.getPanel(chatPanel(id))?.api.close();
-            if (currentChat.value === id) currentChat.value = null;
+        dropChat: (id) => {
+            inArea.value = inArea.value.filter((each) => each !== chatPane(id));
+            // The chat shown was taken away: the area shows what the window opens on.
+            if (activePanel.value === chatPane(id)) reveal('start');
         },
         page: (to) => {
             navigate(to);
@@ -189,10 +200,16 @@ function makeDock(get: () => DockviewApi | null): Dock {
 
 function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stream: JournalStream | undefined }) {
     const root = useRef<HTMLDivElement>(null);
-    const dockApi = useRef<DockviewApi | null>(null);
-    const dock = useMemo(() => makeDock(() => dockApi.current), []);
+    const dock = useMemo(() => makeDock(), []);
+    // What the area draws asks the console it is in, so the console is bound before the area is first drawn, and the
+    // window opens on Start, holding nothing else.
+    const unbind = useMemo(() => {
+        const unbound = bind({ api, desktop, dock });
+        inArea.value = [];
+        reveal('start');
+        return unbound;
+    }, [api, desktop, dock]);
     useEffect(() => {
-        const unbind = bind({ api, desktop, dock });
         const onFocus = () => connect.reloadOnFocus();
         window.addEventListener('focus', onFocus);
         const onKey = (event: KeyboardEvent) => {
@@ -303,48 +320,10 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             window.removeEventListener('keydown', onKey);
             // A dialog the Reply card was showing is not kept past the console that showed it.
             connect.resetDialogs();
-            unbind();
         };
     }, [api, desktop, dock, stream]);
-
-    const ready = (event: DockviewReadyEvent) => {
-        dockApi.current = event.api;
-        // The sidebar marks the conversation whose chat came to the front last.
-        event.api.onDidActivePanelChange(({ panel }) => {
-            activePanel.value = panel?.id ?? null;
-            if (panel?.id.startsWith('chat:')) currentChat.value = panel.id.slice('chat:'.length);
-            if (currentChat.value !== null && currentChat.value === feedId.value) feedUnseen.value = false;
-        });
-        event.api.addPanel({ id: 'needs', component: 'needs', title: titles.needs });
-        event.api.addPanel({
-            id: 'campaigns',
-            component: 'campaigns',
-            title: titles.campaigns,
-            position: { referencePanel: 'needs' },
-        });
-        event.api.addPanel({
-            id: 'activity',
-            component: 'activity',
-            title: titles.activity,
-            position: { referencePanel: 'needs' },
-        });
-        event.api.getPanel('needs')?.api.setActive();
-        // The window opens on the start screen, beside what needs the person, the campaigns and the activity.
-        const placeStart = () => {
-            event.api.addPanel({
-                id: 'start',
-                component: 'start',
-                title: titles.start,
-                position: { referencePanel: 'needs', direction: 'left' },
-            });
-            event.api.getPanel('start')?.api.setActive();
-        };
-        placeStart();
-        // A message that waits is never out of sight: the tab cannot be closed while one waits or a chat is being made.
-        event.api.onDidRemovePanel((panel) => {
-            if (panel.id === 'start' && (startWaiting.value !== null || startMaking.value !== null)) placeStart();
-        });
-    };
+    // Declared after the effect above, so its cleanup runs first and the console is unbound last.
+    useEffect(() => unbind, [unbind]);
 
     return (
         <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
@@ -360,14 +339,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     <Painted className="side-body" view={sideView} />
                     <SideFailure />
                 </aside>
-                <main className="dock">
-                    <DockviewReact
-                        components={components}
-                        onReady={ready}
-                        theme={resolvedTheme.value === 'dark' ? themeDark : themeLight}
-                        disableFloatingGroups
-                    />
-                </main>
+                <Area />
             </div>
             <Palette system={desktop.platform} />
         </div>

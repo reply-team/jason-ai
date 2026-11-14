@@ -4,7 +4,7 @@ import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { chatDesktop, stubStream } from '../test/desktop';
+import { stubDesktop, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
@@ -14,7 +14,7 @@ import { chats, lines } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
-function renderConsole(fake: FakeApi) {
+async function renderConsole(fake: FakeApi): Promise<void> {
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -28,7 +28,10 @@ function renderConsole(fake: FakeApi) {
     fake.answer('system.info', 'system.info/with-ui')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    render(<Console api={fake} desktop={chatDesktop()} stream={stubStream().stream} />);
+    render(<Console api={fake} desktop={stubDesktop()} stream={stubStream().stream} />);
+    // Needs you is a page of the sidebar's menu, chosen as a person chooses it once the window has read what waits.
+    await waitFor(() => expect(attention.loaded.value).toBe(true));
+    fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }));
 }
 
 const needs = () => screen.getByRole('heading', { name: 'Needs you', level: 1 }).closest<HTMLElement>('.painted')!;
@@ -61,7 +64,7 @@ describe('Needs you', () => {
             .map((each) => each.textContent?.trim());
 
     it('says so in a card when nothing is waiting', async () => {
-        renderConsole(
+        await renderConsole(
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
@@ -70,7 +73,7 @@ describe('Needs you', () => {
     });
 
     it('offers the campaigns from the card, and its one control opens their panel', async () => {
-        renderConsole(
+        await renderConsole(
             new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
         );
         await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
@@ -90,7 +93,7 @@ describe('Needs you', () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty');
-        renderConsole(fake);
+        await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(pressed()).toEqual(['All']);
         const asked = fake.calls.length;
@@ -110,7 +113,7 @@ describe('Needs you', () => {
     });
 
     it('shows everything again once nothing waited, so an approval that arrives then is drawn', async () => {
-        renderConsole(
+        await renderConsole(
             new FakeApi()
                 .answer('approval.list', 'approval.list/messages-pending')
                 .answer('decision.list', 'decision.list/empty'),
@@ -129,7 +132,7 @@ describe('Needs you', () => {
     });
 
     it('says no approval is waiting under Approvals while a question is open', async () => {
-        renderConsole(
+        await renderConsole(
             new FakeApi()
                 .answer('approval.list', 'approval.list/empty')
                 .answer('decision.list', 'decision.list/pending'),
@@ -146,7 +149,7 @@ describe('Needs you', () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty');
-        renderConsole(fake);
+        await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('to Ines Duarte');
         expect(words(row('apr_2').querySelector('.needs-who')!)).toBe('to Noor Haddad');
@@ -158,7 +161,7 @@ describe('Needs you', () => {
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty')
             .answer('approval.get', 'approval.get/email-message');
-        renderConsole(fake);
+        await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: null }));
         await waitFor(() => expect(needs().querySelector('.needs-who')).toBeNull());
@@ -171,7 +174,7 @@ describe('Needs you', () => {
     });
 
     it('names the person an approval that sends nothing is about, with no word before the name', async () => {
-        renderConsole(
+        await renderConsole(
             new FakeApi()
                 .answer('approval.list', 'approval.list/pending')
                 .answer('decision.list', 'decision.list/empty'),
@@ -188,7 +191,7 @@ describe('Needs you', () => {
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty')
             .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
-        renderConsole(fake);
+        await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
 
         fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Details' }));
@@ -211,7 +214,7 @@ describe('Needs you', () => {
             .answer('approval.list', 'approval.list/pending')
             .answer('decision.list', 'decision.list/empty')
             .answer('approval.get', 'approval.get/pending-with-preview');
-        renderConsole(fake);
+        await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Details' }));
         await waitFor(() => within(row('apr_1')).getByText('Put Ada Lovelace into the campaign at the provider.'));
@@ -224,7 +227,7 @@ describe('Needs you', () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty');
-        renderConsole(fake);
+        await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         const recorded = fixtures['approval.get/email-message'].response;
         attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: hostile }));

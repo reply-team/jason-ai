@@ -456,24 +456,20 @@ describe('the start screen', () => {
         expect(calls(desktop, 'chat.send')).toHaveLength(0);
     });
 
-    it('cannot be closed while a message waits, and can once it is taken back', async () => {
+    it('keeps a message that waits while another page is chosen, and shows it again with Start', async () => {
         const desktop = renderConsole(stubDesktop(noHost));
         await waitFor(() => startForm());
         await ready();
         ask('Founders of seed-stage fintechs');
         await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
-        const closeStart = () =>
-            fireEvent.click(
-                within(
-                    screen.getByText('Start', { selector: '.dv-default-tab-content' }).closest<HTMLElement>('.dv-tab')!,
-                ).getByRole('button', { hidden: true }),
-            );
-        closeStart();
-        await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
-        expect(startWaiting.value).toBe('Founders of seed-stage fintechs');
-        fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
-        closeStart();
+        const side = within(document.querySelector<HTMLElement>('.side')!);
+        fireEvent.click(side.getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(screen.queryByRole('form', { name: 'Start' })).toBeNull());
+        expect(startWaiting.value).toBe('Founders of seed-stage fintechs');
+        fireEvent.click(side.getByRole('button', { name: 'New GTM agent' }));
+        await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
+        expect(box().value).toBe('Founders of seed-stage fintechs');
         expect(calls(desktop, 'chat.send')).toHaveLength(0);
     });
 
