@@ -11,7 +11,10 @@ import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
 import { AccessButton, ModelButton } from './start-menus';
-import { changeChat, chats, here, inTab, messageOf, setup, setupError } from './state';
+import { readPreferences, noneStated } from '../screens/settings/voice-model';
+import { voiceSectionId } from '../screens/settings/voice-id';
+import { voiceKnown } from '../screens/settings/voice-state';
+import { changeChat, chats, conversations, here, inTab, messageOf, setup, setupError } from './state';
 
 // The start screen: the window opens on the question who the person wants to reach. What is sent there starts a set-up
 // chat. With no AI that drives the chat the AI card comes first and the message waits there, to go once one is
@@ -78,6 +81,46 @@ export function closeNote(): void {
     } catch {
         // A browser that keeps nothing shows the note again next time.
     }
+}
+
+/** The key under which this browser keeps that the note about name and tone was closed. */
+export const voiceNoteKey = 'jason.ui.start-voice-note-closed';
+
+/** Whether the note about name and tone was closed, as this browser kept it; false where it keeps nothing. */
+export function voiceNoteWasClosed(): boolean {
+    try {
+        return localStorage.getItem(voiceNoteKey) === '1';
+    } catch {
+        return false;
+    }
+}
+
+export const voiceNoteClosed = signal(voiceNoteWasClosed());
+
+export { voiceKnown };
+
+/** Closes the note about name and tone for good. */
+export function closeVoiceNote(): void {
+    voiceNoteClosed.value = true;
+    try {
+        localStorage.setItem(voiceNoteKey, '1');
+    } catch {
+        // A browser that keeps nothing shows the note again next time.
+    }
+}
+
+/**
+ * Whether a first message was sent: a chat exists. The desktop lists one besides the Feed, or a chat of this window
+ * holds a message the person sent and is not listed yet.
+ */
+const messageWasSent = (): boolean =>
+    conversations.value.some((each) => each.main !== true) ||
+    Object.values(chats.value).some((chat) => chat.entries.some((entry) => entry.kind === 'user'));
+
+/** Opens Settings at the section for name and tone. */
+function openVoice(): void {
+    here().dock.page({ screen: 'settings' });
+    setTimeout(() => document.getElementById(voiceSectionId)?.scrollIntoView?.(), 0);
 }
 
 /** Whether the setup, once read, holds an AI that can drive the chat; null while it is not read. */
@@ -210,6 +253,23 @@ function StartChat() {
     const card = connected === false || (unread && setupError.value !== null);
     const box = useRef<HTMLTextAreaElement>(null);
     const held = waiting !== null || making !== null;
+    // The note about name and tone waits for a first message, in Live only, and for a read that holds neither.
+    const askable = mode.value === 'live' && !voiceNoteClosed.value && messageWasSent();
+    useEffect(() => {
+        if (!askable || voiceKnown.value !== 'unread') return;
+        let current = true;
+        readPreferences(here().api).then(
+            (items) => {
+                if (current) voiceKnown.value = noneStated(items) ? 'none' : 'some';
+            },
+            () => {
+                if (current) voiceKnown.value = 'failed';
+            },
+        );
+        return () => {
+            current = false;
+        };
+    }, [askable]);
     // The box takes the focus when the window opens on Start, and again when a message is taken back into it.
     useEffect(() => {
         if (!held) box.current?.focus();
@@ -306,6 +366,21 @@ function StartChat() {
                     </div>
                     <ChatNotes chat={startChatNow()} modeMenu={modeMenu} />
                 </form>
+                {askable && voiceKnown.value === 'none' && (
+                    <div className="start-note" role="note" aria-label={t('start.voice.name')}>
+                        <span>
+                            <strong>{t('start.voice.lead')}</strong> {t('start.voice.body')}
+                        </span>
+                        <span className="crow start-note-close">
+                            <button className="btn sm" type="button" onClick={openVoice}>
+                                {t('start.voice.now')}
+                            </button>
+                            <button className="btn sm" type="button" onClick={closeVoiceNote}>
+                                {t('start.voice.later')}
+                            </button>
+                        </span>
+                    </div>
+                )}
                 {!notesClosed.value.includes(mode.value) && (
                     <div className="start-note" role="note">
                         <span>

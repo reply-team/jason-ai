@@ -24,6 +24,10 @@ import {
     startPick,
     startWaiting,
     submitStart,
+    voiceKnown,
+    voiceNoteClosed,
+    voiceNoteKey,
+    voiceNoteWasClosed,
 } from './start';
 import { newChat } from './chat-model';
 
@@ -48,7 +52,9 @@ function renderConsole(
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')
-        .answer('campaign.summary', 'campaign.summary/all');
+        .answer('campaign.summary', 'campaign.summary/all')
+        // A person who stated their preferences is never shown the note about them; a test that wants it says otherwise.
+        .answer('preference.list', 'preference.list/set');
     if (routed) fake.answer('route.resolve', routed);
     prepare(fake);
     watch(fake);
@@ -103,6 +109,8 @@ beforeEach(() => {
     startMode.value = null;
     startPick.value = newChat('', null);
     notesClosed.value = [];
+    voiceNoteClosed.value = false;
+    voiceKnown.value = 'unread';
     localStorage.removeItem(noteKey('live'));
     localStorage.removeItem(noteKey('demo'));
     fullAccessStanding.value = null;
@@ -669,5 +677,151 @@ describe('Reply in a chat, by the route of enrolment', () => {
         await openCampaignChat(desktop, 'Spring');
         expect(fake.value!.calls.filter((each) => each.operation === 'route.resolve')).toHaveLength(0);
         expect(card()).toBeNull();
+    });
+});
+
+describe('the note about name and tone', () => {
+    const sent = (): void => {
+        flush(() => {
+            chats.value = {
+                c1: { ...newChat('c1', null), entries: [{ kind: 'user', text: 'We sell payroll software' }] },
+            };
+        });
+    };
+    const voiceNote = () => screen.queryByRole('note', { name: 'Name and tone' });
+    const asked = (fake: FakeApi) => fake.calls.some((each) => each.operation === 'preference.list');
+    let fake: FakeApi;
+    const open = (list: FixtureName | null = 'preference.list/none') =>
+        renderConsole(stubDesktop(), toReply, (each) => {
+            fake = each;
+            if (list) each.answer('preference.list', list);
+        });
+
+    beforeEach(() => {
+        voiceKnown.value = 'unread';
+        voiceNoteClosed.value = false;
+        mode.value = 'live';
+    });
+
+    it('is not there before a first message was sent, and the runtime is not asked', async () => {
+        open();
+        await ready();
+        expect(voiceNote()).toBeNull();
+        expect(asked(fake)).toBe(false);
+    });
+
+    it('comes when the window opens with a chat the desktop lists and none opened', async () => {
+        open();
+        await ready();
+        flush(() => {
+            conversations.value = [
+                {
+                    id: 'conv_1',
+                    campaignId: null,
+                    title: 'Payroll',
+                    updatedAt: '2026-11-13T10:00:00.000Z',
+                    running: false,
+                    mode: 'ask_first',
+                },
+            ];
+        });
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        expect(Object.keys(chats.value)).toEqual([]);
+    });
+
+    it('is not there for the Feed alone, which is no first message', async () => {
+        open();
+        await ready();
+        flush(() => {
+            conversations.value = [
+                {
+                    id: 'conv_f',
+                    campaignId: null,
+                    main: true,
+                    title: 'Feed',
+                    updatedAt: '2026-11-13T10:00:00.000Z',
+                    running: false,
+                    mode: 'ask_first',
+                },
+            ];
+        });
+        expect(voiceNote()).toBeNull();
+        expect(asked(fake)).toBe(false);
+    });
+
+    it('goes when the preferences are saved elsewhere in the session', async () => {
+        open();
+        await ready();
+        sent();
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        flush(() => {
+            voiceKnown.value = 'some';
+        });
+        expect(voiceNote()).toBeNull();
+    });
+
+    it('comes once a message was sent and neither preference is set, in these words', async () => {
+        open();
+        await ready();
+        sent();
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        const note = voiceNote()!;
+        expect(note.querySelector('strong')!.textContent).toBe('Jason writes in your name.');
+        expect(note.textContent).toContain('Tell it who you are and how you write. It is optional and it can wait.');
+        within(note).getByRole('button', { name: 'Set preferences now' });
+        within(note).getByRole('button', { name: 'Not now' });
+        // The note about the interface is still its own note.
+        expect(screen.getAllByRole('note')).toHaveLength(2);
+    });
+
+    it('is not there when either preference is set', async () => {
+        open('preference.list/set');
+        await ready();
+        sent();
+        await waitFor(() => expect(asked(fake)).toBe(true));
+        await waitFor(() => expect(voiceKnown.value).toBe('some'));
+        expect(voiceNote()).toBeNull();
+    });
+
+    it('is not there when the read failed, and the failure shows nothing', async () => {
+        open(null);
+        fake.unreachable('preference.list');
+        await ready();
+        sent();
+        await waitFor(() => expect(voiceKnown.value).toBe('failed'));
+        expect(voiceNote()).toBeNull();
+    });
+
+    it('is not there in the demo, and the runtime is not asked', async () => {
+        open();
+        await ready();
+        flush(() => {
+            mode.value = 'demo';
+        });
+        sent();
+        expect(voiceNote()).toBeNull();
+        expect(asked(fake)).toBe(false);
+    });
+
+    it('closes for good with Not now, under a key of its own, and nothing is told to the runtime', async () => {
+        open();
+        await ready();
+        sent();
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        fireEvent.click(within(voiceNote()!).getByRole('button', { name: 'Not now' }));
+        expect(voiceNote()).toBeNull();
+        expect(voiceNoteWasClosed()).toBe(true);
+        expect(localStorage.getItem(voiceNoteKey)).toBe('1');
+        expect(noteWasClosed('live')).toBe(false);
+        expect(fake.calls.some((each) => each.kind === 'write')).toBe(false);
+    });
+
+    it('opens Settings with Set preferences now', async () => {
+        open();
+        await ready();
+        sent();
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        fireEvent.click(within(voiceNote()!).getByRole('button', { name: 'Set preferences now' }));
+        await waitFor(() => expect(route.value.screen).toBe('settings'));
     });
 });

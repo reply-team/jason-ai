@@ -38,6 +38,7 @@ function springApi(): FakeApi {
     return new FakeApi()
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
         .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
+        .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
         .answer('campaign.get', 'campaign.get/details')

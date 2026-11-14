@@ -39,6 +39,7 @@ function pending(fake: FakeApi): FakeApi {
     return fake
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
+        .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
 }
@@ -1152,6 +1153,7 @@ describe('the console', () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/pending', 'approval.list/decided')
             .answer('decision.list', 'decision.list/pending', 'decision.list/decided')
+            .answer('preference.list', 'preference.list/set')
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all');
         const { journal } = renderConsole(fake);

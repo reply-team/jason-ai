@@ -250,6 +250,10 @@ import routeResolveGlobalDefault from '../../../docs/api/fixtures/route.resolve/
 import routeResolveNoRoute from '../../../docs/api/fixtures/route.resolve/no-route.json';
 import routeResolveOwnRoute from '../../../docs/api/fixtures/route.resolve/own-route.json';
 import routeResolveUnroutedFirst from '../../../docs/api/fixtures/route.resolve/unrouted-first.json';
+import preferenceListNone from '../../../docs/api/fixtures/preference.list/none.json';
+import preferenceListSet from '../../../docs/api/fixtures/preference.list/set.json';
+import preferenceSetSender from '../../../docs/api/fixtures/preference.set/sender.json';
+import preferenceSetTone from '../../../docs/api/fixtures/preference.set/tone.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
 import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
 import systemInfoWithUi from '../../../docs/api/fixtures/system.info/with-ui.json';
@@ -368,6 +372,8 @@ import personWorkitemGetResearcherFinding from '../../../docs/api/fixtures/worki
 import personWorkitemGetResearcherFindingSecond from '../../../docs/api/fixtures/workitem.get/researcher-finding-second.json';
 import personWorkitemListResearcherFindings from '../../../docs/api/fixtures/workitem.list/researcher-findings.json';
 import personWorkitemListResearcherFindingsTwo from '../../../docs/api/fixtures/workitem.list/researcher-findings-two.json';
+
+import type { PreferenceItem, PreferenceSetRequest } from '../screens/settings/voice-model';
 
 export type Exchange<Req, Res> = { operation: string; case: string; request: Req; status: number; response: Res };
 
@@ -842,6 +848,10 @@ export const fixtures = {
     'route.resolve/no-route': routeResolveNoRoute satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
     'route.resolve/own-route': routeResolveOwnRoute satisfies Exchange<RouteResolveRequest, RouteResolution>,
     'route.resolve/unrouted-first': routeResolveUnroutedFirst satisfies Exchange<RouteResolveRequest, ErrorEnvelope>,
+    'preference.list/none': preferenceListNone satisfies Exchange<object, Page<PreferenceItem>>,
+    'preference.list/set': preferenceListSet satisfies Exchange<object, Page<PreferenceItem>>,
+    'preference.set/sender': preferenceSetSender satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
+    'preference.set/tone': preferenceSetTone satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
     'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,
