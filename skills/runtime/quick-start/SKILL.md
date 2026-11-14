@@ -1,16 +1,14 @@
 ---
 name: quick-start
-description: Use when a person has just had Jason installed and wants to be taken to their first campaign, when an install prompt says to start the quick-start skill, or when somebody with no campaign yet asks where to begin. It asks one question, reads which channels are connected instead of asking, and says the plan in one message.
+description: Use when a person has just had Jason installed and wants to be taken to their first campaign, when an install prompt says to start the quick-start skill, or when somebody with no campaign yet asks where to begin. It asks one question, reads which channels are routed instead of asking, and says the plan in one message.
 metadata:
   status: draft
 ---
 
 # Quick start
 
-You take a person from a ready installation to a first campaign in a few minutes. Do not explain Jason first, and
-do not ask what comes next: begin with step 1.
-
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this build.
+You take a person from a ready installation to a first campaign in a few minutes. Do not explain Jason first, and do
+not ask what comes next: begin with step 1. **Status: draft.** Its commands parse against this build.
 
 ## 1. One question
 
@@ -24,58 +22,50 @@ A no, or silence about the second part, is an answer. Do not ask for it again wh
 
 ## 2. Read the channels, never ask for them
 
-When the answer comes, make the campaign in the default project, with the offer and the audience in their own words as
-its context (`managed-campaign-work` says how a campaign is made; leave `--project` out):
+Make the campaign in the default project, with the offer and the audience in their own words as its context (leave
+`--project` out), then ask the runtime which provider each channel goes through. Make every idempotency key new for each
+run, for example the campaign's name with the date and time; never reuse the example's.
 
 ```
 jason campaign create --name "First campaign" --context '{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}' --idempotency-key first-campaign-20261114-1530
-```
-
-Then ask the runtime which channels a send would go through, for each of `email` and `linkedin`:
-
-```
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel email
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel linkedin
 ```
 
-A channel with a route has a provider, which the answer names; a channel with no route is not connected. A route does
-not prove that an account is connected, and a draft campaign cannot read accounts, so read no accounts and count none
-before "go". Never ask which channels they have. Make every idempotency key new for each run, for example the
-campaign's name with the date and time; never reuse the example's.
-
-The channels decide the form of the first message: email only; LinkedIn only, where it is an invitation and not a
-letter; or both, and then several channels together. Draft nothing before they are known.
+A channel with a route has a provider, which the answer names; one with no route is not connected. A route does not
+prove that an account is connected, and a draft campaign cannot read accounts, so read no accounts and count none
+before "go". Never ask which channels they have. The channels decide the form of the first message: email only;
+LinkedIn only, where it is an invitation and not a letter; or both, and then several channels together. Draft nothing
+before they are known.
 
 ## 3. One message, one stop
 
-Send one message that holds the plan: the goal, who Jason will look for, the channel or channels, and how it will
-write ("short, plain, in your name"), and the state of the channels. End it with exactly: "Say what to change, or say
-go." It carries no list of questions and uses no question tool. Only when the person asks to change something do you
-use the question tool, with the recommended choice first.
+Send one message that holds the plan: the goal, who Jason will look for, the channel or channels, how it will write
+("short, plain, in your name"), and the state of the channels. End it with exactly: "Say what to change, or say go." It
+carries no list of questions and uses no question tool; only when the person asks to change something do you use the
+question tool, with the recommended choice first.
 
-- **A channel has a route.** Say it in these words: "Email goes out through {provider}." and "LinkedIn goes out
-  through {provider}.", or one sentence when both go through the same provider. Then: "Which mailboxes and LinkedIn
-  accounts are connected there I read as soon as you say go." Not a question.
+- **A channel has a route.** Say: "Email goes out through {provider}." and "LinkedIn goes out through {provider}.", or
+  one sentence when both go through the same provider. Then: "Which mailboxes and LinkedIn accounts are connected
+  there I read as soon as you say go."
 - **A channel has no route.** Say: "{Channel} is not connected."
-- **Neither has a route.** Say it firmly in this same message: no channel is connected, connecting one now is
-  recommended and is one step, and until it is done not one message leaves. Name the step for where the person is:
-  in a terminal, `reply auth login` (on Windows PowerShell, `reply.cmd auth login`), after which the Reply CLI section
-  and steps 3 to 5 of `docs/golden-path.md` connect the provider; in the window, the Accounts page. Then say: "It can
-  be done later." This is the common first run, and it needs no provider read.
-
-The message still ends with "Say what to change, or say go."
+- **Neither has a route.** Say it firmly: no channel is connected, connecting one now is recommended and is one step,
+  and until it is done not one message leaves. Name the step for where the person is: in a terminal, `reply auth login`
+  (on Windows PowerShell, `reply.cmd auth login`), after which the Reply CLI section and steps 3 to 5 of
+  `docs/golden-path.md` connect the provider; in the window, the Accounts page. Then say: "It can be done later." This
+  is the common first run, and it needs no provider read.
 
 ## 4. A sample only on request
 
-If the person puts the channels off, answer that in a reply of its own and offer, in one sentence, to show what a first
+If the person puts the channels off, answer in a reply of its own and offer, in one sentence, to show what a first
 message would look like. Never put the offer in the plan message. Show a sample only to a person who accepts, and call
 it a sample. Nobody who did not ask sees one.
 
 ## 5. After "go"
 
-Nothing is started before the person's go. From "go" the work goes on through the skills that own it:
-`planner-in-session` for the plan and `managed-campaign-work` for starting the campaign, the people and the work. The
-first item the work submits is `sender.list` for each routed channel (`sender_channel` is `email` or `linkedin`):
+Nothing is started before the person's go. From "go" the work goes on through `planner-in-session` for the plan and
+`managed-campaign-work` for starting the campaign, the people and the work. The first item the work submits is
+`sender.list` for each routed channel (`sender_channel` is `email` or `linkedin`):
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation sender.list --input '{"owners":"own","sender_channel":"email","limit":50,"offset":0}' --idempotency-key first-campaign-20261114-1530-senders-email
