@@ -439,6 +439,76 @@ public class WarmthTests
         Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
+    /// <summary>
+    /// An own line that names nobody, on a thread where a standing verdict names the contact, makes that contact wait: the
+    /// thread bounds it, so it reaches no one the thread's verdicts do not name.
+    /// </summary>
+    [Fact]
+    public async Task An_unnamed_own_line_on_a_thread_a_verdict_names_the_contact_on_makes_them_wait()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        var warm = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
+
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        Assert.Equal(WarmthState.Warm, warm);
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    [Fact]
+    public async Task An_unnamed_own_line_on_another_thread_does_not_touch_a_warm_contact()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-2", "2026-09-14T12:05:00.000Z");
+
+        Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    [Fact]
+    public async Task An_unnamed_own_line_does_not_touch_a_contact_no_verdict_on_its_thread_names()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var stranger = new Contact { PublicId = "cnt_01K52JR0000000000000000009", FirstName = "Ivan", LastName = "Example", CreatedAt = Noon, UpdatedAt = Noon };
+        db.Contacts.Add(stranger);
+        await db.SaveChangesAsync(Ct);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        Assert.Equal(WarmthState.Cold, await Warmth.OfAsync(db, seed.Campaign.Id, stranger.Id, Ct));
+    }
+
+    /// <summary>The unnamed line is judged as any line is: the contact's responder that started after it and succeeded.</summary>
+    [Fact]
+    public async Task An_unnamed_own_line_judged_by_the_responder_arm_makes_the_contact_warm_again()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-1", "2026-09-14T12:05:00.000Z");
+        var waiting = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
+
+        var (item, attempt) = await ResponderAsync(db, seed, "thr-1");
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, waiting);
+        Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
     private sealed record Seed(Campaign Campaign, Contact Contact);
 
     private static async Task<Seed> SeedAsync(JasonDbContext db)

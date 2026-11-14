@@ -47,7 +47,7 @@ public enum WarmthState
 /// line, so the order is the chronicle's own, never a clock. When the only verdicts that would judge a line say no
 /// nature, the contact awaits the nature rather than a judgement. A waiting reply outranks warmth: a warm contact's new
 /// reply may be a request to stop, so it is judged before anything else is sent. A provider event's <c>reply_detected</c>
-/// line is not a reply that waits, and a line that names nobody parks nobody.
+/// line is not a reply that waits. A line that names nobody makes wait only a contact a standing verdict names on its thread.
 /// </para>
 /// <para>
 /// Every read is written SQL that names its index, and a test pins each plan, as the standing approvals' reads are:
@@ -92,11 +92,27 @@ public static class Warmth
     internal static IQueryable<int> Awaiting(JasonDbContext db, int campaignId, int contactId) =>
         db.Database.SqlQuery<int>(FormattableStringFactory.Create(
             $$"""
-            SELECT coalesce(max(CASE WHEN {{Judged("IS NULL")}} THEN {{WaitsForNature}} ELSE {{WaitsForJudgement}} END), 0) AS "Value"
-            FROM journal AS o INDEXED BY ix_journal_contact_id_public_id
-            WHERE o.contact_id = {0} AND o.campaign_id = {1} AND o.kind = 'inbound_reply_observed'
-              AND coalesce(json_extract(o.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin'
-              AND NOT {{Judged("IS NOT NULL")}}
+            SELECT coalesce(max(w), 0) AS "Value" FROM (
+                SELECT CASE WHEN {{Judged("o", "IS NULL", "o.contact_id")}} THEN {{WaitsForNature}} ELSE {{WaitsForJudgement}} END AS w
+                FROM journal AS o INDEXED BY ix_journal_contact_id_public_id
+                WHERE o.contact_id = {0} AND o.campaign_id = {1} AND o.kind = 'inbound_reply_observed'
+                  AND coalesce(json_extract(o.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin'
+                  AND NOT {{Judged("o", "IS NOT NULL", "o.contact_id")}}
+                UNION ALL
+                SELECT CASE WHEN {{Judged("u", "IS NULL", "{0}")}} THEN {{WaitsForNature}} ELSE {{WaitsForJudgement}} END AS w
+                FROM journal AS u INDEXED BY ix_journal_campaign_kind_key
+                WHERE u.campaign_id = {1} AND u.kind = 'inbound_reply_observed' AND u.contact_id IS NULL
+                  AND json_extract(u.new_json, '$.contact_id') IS NULL
+                  AND coalesce(json_extract(u.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin'
+                  AND EXISTS (SELECT 1 FROM journal AS n INDEXED BY ix_journal_campaign_id_id
+                      WHERE n.campaign_id = u.campaign_id AND n.kind = 'reply_classified'
+                        AND json_extract(n.new_json, '$.plugin') = json_extract(u.new_json, '$.plugin')
+                        AND json_extract(n.new_json, '$.thread') = json_extract(u.new_json, '$.thread')
+                        AND json_extract(n.new_json, '$.contact_id') = (SELECT public_id FROM contacts WHERE id = {0})
+                        AND NOT EXISTS (SELECT 1 FROM journal AS nl INDEXED BY ix_journal_campaign_id_id
+                            WHERE nl.kind = 'reply_classified' AND nl.id > n.id
+                              AND nl.campaign_id = n.campaign_id AND nl.key = n.key))
+                  AND NOT {{Judged("u", "IS NOT NULL", "{0}")}})
             """,
             contactId,
             campaignId));
@@ -124,28 +140,28 @@ public static class Warmth
     /// <summary>
     /// Whether a standing verdict on the observed line <c>o</c>'s thread, whose nature passes <paramref name="nature"/>,
     /// judges it: about a message at or after its move, or standing while a responder the runtime
-    /// created for the thread succeeded with an attempt that started after it. Correlated with <c>o</c> alone, so it
-    /// carries no parameter of its own.
+    /// created for the thread succeeded with an attempt that started after it. Correlated with the line <paramref name="line"/> alone and the
+    /// contact the responder is about, <paramref name="contact"/>, an expression.
     /// </summary>
-    private static string Judged(string nature) => $"""
+    private static string Judged(string line, string nature, string contact) => $"""
         EXISTS (SELECT 1 FROM journal AS v INDEXED BY ix_journal_campaign_id_id
-            WHERE v.kind = 'reply_classified' AND v.campaign_id = o.campaign_id
-              AND json_extract(v.new_json, '$.plugin') = json_extract(o.new_json, '$.plugin')
-              AND json_extract(v.new_json, '$.thread') = json_extract(o.new_json, '$.thread')
+            WHERE v.kind = 'reply_classified' AND v.campaign_id = {line}.campaign_id
+              AND json_extract(v.new_json, '$.plugin') = json_extract({line}.new_json, '$.plugin')
+              AND json_extract(v.new_json, '$.thread') = json_extract({line}.new_json, '$.thread')
               AND json_extract(v.new_json, '$.nature') {nature}
               AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_campaign_id_id
                   WHERE later.kind = 'reply_classified' AND later.id > v.id
                     AND later.campaign_id = v.campaign_id AND later.key = v.key)
-              AND (julianday(json_extract(v.new_json, '$.message_at')) >= julianday(json_extract(o.new_json, '$.last_activity_at'))
+              AND (julianday(json_extract(v.new_json, '$.message_at')) >= julianday(json_extract({line}.new_json, '$.last_activity_at'))
                 OR EXISTS (SELECT 1 FROM work_items AS r INDEXED BY ix_work_items_campaign_id_contact_id
-                    WHERE r.campaign_id = o.campaign_id AND r.contact_id = o.contact_id
+                    WHERE r.campaign_id = {line}.campaign_id AND r.contact_id = {contact}
                       AND r.role = 'responder' AND r.created_by_type = 'system' AND r.status = 'succeeded'
-                      AND json_extract(r.context_json, '$.inbound_reply.plugin') = json_extract(o.new_json, '$.plugin')
-                      AND json_extract(r.context_json, '$.inbound_reply.thread') = json_extract(o.new_json, '$.thread')
+                      AND json_extract(r.context_json, '$.inbound_reply.plugin') = json_extract({line}.new_json, '$.plugin')
+                      AND json_extract(r.context_json, '$.inbound_reply.thread') = json_extract({line}.new_json, '$.thread')
                       AND EXISTS (SELECT 1 FROM attempts AS a INDEXED BY ix_attempts_work_item_id_number
                           WHERE a.work_item_id = r.id AND a.status = 'succeeded'
                             AND EXISTS (SELECT 1 FROM journal AS s INDEXED BY ix_journal_work_item_id_public_id
                                 WHERE s.work_item_id = r.public_id AND s.kind = 'workitem_processing'
-                                  AND s.attempt_id = a.public_id AND s.id > o.id)))))
+                                  AND s.attempt_id = a.public_id AND s.id > {line}.id)))))
         """;
 }
