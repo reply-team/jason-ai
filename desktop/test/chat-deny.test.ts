@@ -31,8 +31,8 @@ test('the host is denied every entry of the file in its own rule syntax, and eve
     assert.equal(rules.length, entries.length + 1);
 });
 
-test('the file refuses the installation verbs export and import, the four that take no default actor, and the two the chat refuses beyond the CLI\'s table', () => {
-    for (const verb of ['export', 'import', 'suppression remove', 'route set', 'route unset', 'role set-profile', 'role add', 'project link']) assert.ok(entries.includes(verb), verb);
+test('the file refuses the installation verbs export and import, the six that take no default actor, and the two the chat refuses beyond the CLI\'s table', () => {
+    for (const verb of ['export', 'import', 'suppression remove', 'route set', 'route unset', 'plugin grant', 'plugin revoke', 'role set-profile', 'role add', 'project link']) assert.ok(entries.includes(verb), verb);
     const operations = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8')).operations;
     assert.ok(operations.includes('role.add'));
     assert.ok(operations.includes('project.link'));
@@ -42,7 +42,7 @@ test('the file\'s second section names the operations the denied verbs call, eac
     assert.deepEqual(parseDenyList('ui\n# operations\nsystem.shutdown\njournal.stream\n'), { commands: ['ui'], operations: ['system.shutdown', 'journal.stream'] });
     for (const operation of ['approval.approve', 'approval.reject', 'approval.set_standing', 'approval.unset_standing', 'decision.answer', 'preference.set',
         'preference.unset', 'block.clear', 'workitem.resume', 'report.submit', 'subscription.rewind', 'system.shutdown', 'system.drain', 'system.resume',
-        'plugin.reload', 'journal.stream', 'suppression.remove', 'route.set', 'route.unset', 'role.set_profile']) {
+        'plugin.reload', 'journal.stream', 'suppression.remove', 'route.set', 'route.unset', 'plugin.grant', 'plugin.revoke', 'role.set_profile']) {
         assert.ok(list.operations.includes(operation), operation);
     }
     assert.ok(!list.operations.some((operation) => operation.startsWith('runtime.')));

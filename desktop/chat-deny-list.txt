@@ -9,7 +9,7 @@
 #
 # The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a
 # preference, a block cleared, work resumed, a report and a subscription rewound. The CLI gives them no default actor,
-# and gives none to four verbs further down either.
+# and gives none to six verbs further down either.
 approval approve
 approval reject
 approval set-standing
@@ -37,7 +37,8 @@ export
 import
 #
 # The verbs the CLI gives no default actor that change who is reached or what runs: taking someone off the
-# do-not-contact register, changing which plugin performs an operation, and changing which profile a role runs on.
+# do-not-contact register, changing which plugin performs an operation, granting a plugin something or taking a
+# grant back, and changing which profile a role runs on.
 suppression remove
 route set
 route unset
