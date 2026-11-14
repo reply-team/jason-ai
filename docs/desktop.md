@@ -233,7 +233,7 @@ plugins folder beside it and a first message that tells it how Jason is changed.
 [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
 host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with a host
 the desktop finds that was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
-changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it.
+changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
 Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs

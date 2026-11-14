@@ -1181,8 +1181,8 @@ internal static class StatusChecks
             CheckState.Failed,
             named
                 + " Such a plugin runs without what it is not granted, and nothing else stops, so this check never decides readiness."
-                + $" `{Repair.ListPlugins} --human` says what each asks for, the key that grants it and the settings file, and"
-                + $" `{Repair.ReloadPlugins}` reads the grant.",
+                + $" `{Repair.ListPlugins} --human` says what each asks for and the `jason plugin grant` command that grants it,"
+                + " in force at once.",
             null);
     }
 

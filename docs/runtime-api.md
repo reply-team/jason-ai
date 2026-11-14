@@ -101,10 +101,12 @@ Jason-Attempt: att_...
 
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
-person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
-the code `decided_inside_a_run` before the body is read, and record nothing. `route.set` and `route.unset` refuse the
-same way, with a sentence of their own, the global scope alone, which the body names, since nothing inside a run
-changes Jason itself; they change a campaign's own route from inside a run as before. A program that is not running inside an
+person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)) and the two that change what
+a plugin may use, `plugin.grant` and `plugin.revoke`, which answer it `403` with the code `decided_inside_a_run` before
+the body is read, and record nothing; the two grants say in a sentence of their own that nothing inside a run changes
+Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
+the global scope alone, which the body names, since nothing inside a run changes Jason itself; they change a
+campaign's own route from inside a run as before. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
 so in one line on stderr, naming the variable and never its value.
 
@@ -420,6 +422,24 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
 
 - `plugin.list`: each plugin's status, granted over requested, and digest.
 - `plugin.reload`: reads the plugins again.
+- `plugin.grant`: grants a plugin one thing its manifest requests, written to `settings.json` and in force at once.
+- `plugin.revoke`: takes one grant back, the same way.
+
+  Either takes `plugin_id`, `capability` (`exec`, `http`, `env`, `api`, `files` or `subscriptions`, the list of that
+  name under `Plugins:Grants:<id>`) and one `entry`: a program's name, a host, a variable's name, an API family, an
+  absolute directory or a journal kind, or `*` for everything the manifest requests of a capability that names things.
+  The runtime writes the list into `settings.json`, keeping every byte of the file it does not own, and runs the plugin
+  reload in the same act, so the answer is what `plugin.reload` answers; a reload that refuses is answered as
+  `plugin.reload` answers it, with the file put back and one more detail under the field `settings.json`,
+  `settings_file_put_back` or `settings_file_not_put_back`. A grant already held or covered by a `*`, and a revoke of
+  what is not granted, write nothing, activate nothing and answer success: the body is what `plugin.list` answers, with
+  `activated` false and the snapshot unchanged. `plugin.grant` is refused `409` `grant_unrequested` for an entry the manifest does
+  not request, though a host the manifest does not name is granted where it says `any_granted_host`, and `404`
+  `plugin_not_found` for a plugin the active snapshot does not hold; a directory the load would refuse is refused
+  `validation_failed` on `entry` as `grant_path_refused`. `plugin.revoke` is refused `409` `grant_held_by_star` for an
+  entry a `*` in the same list grants: the star is never rewritten into the names it stands for. Nothing is written,
+  and the answer is `409`, for the settings file's own refusals, as for `route.set` with scope `global`. Each line that
+  changed what a plugin may use is journaled as `plugin_grants_updated` ([docs/plugins.md](plugins.md), §9).
 
 ### `ui`
 

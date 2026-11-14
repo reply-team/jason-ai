@@ -58,6 +58,7 @@ test('Plan only starts Claude Code in plan mode, with the classifier kept out, t
     const denied = values(args, '--disallowedTools');
     assert.ok(denied.includes('ExitPlanMode'));
     for (const rule of values(claudeArguments(base), '--disallowedTools')) assert.ok(denied.includes(rule), `Plan only keeps ${rule}`);
+    for (const verb of ['plugin grant', 'plugin revoke']) assert.ok(denied.includes(`Bash(jason ${verb}:*)`), `Plan only refuses ${verb}`);
 });
 
 test('Full access starts Claude Code in the host\'s default mode, with no permission mode, every deny rule kept and its settings in the turn\'s own file', () => {
@@ -241,6 +242,10 @@ test('under Full access the hook refuses a deny-list verb in a command, however 
     const w = await wired(t, 'full_access');
     for (const command of ['jason approval approve apr_1', 'sh -c "jason decision answer dec_1 --option a"', 'cd x && jason preference set tone short', 'jason --actor human:me approval reject apr_1']) {
         assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /person's own act/, command);
+    }
+    for (const command of ['jason plugin grant reply --http api.example.com', 'jason plugin revoke reply --env REPLY_TOKEN']) {
+        assert.equal(fullAccessJudgement('Bash', { command }, w.scope).outcome, 'refused', command);
+        assert.notEqual(await hooked(w, 'Bash', { command }), null, command);
     }
     assert.equal(await hooked(w, 'Bash', { command: 'jason campaign list' }), null, 'an allow-list verb goes on');
     assert.equal(await hooked(w, 'Bash', { command: 'git status' }), null, 'any other command goes on: Full access asks nothing');

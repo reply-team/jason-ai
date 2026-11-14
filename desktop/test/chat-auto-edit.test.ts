@@ -209,6 +209,8 @@ test('the data directory, its settings file and the standing choice are refused 
         refused(scope, `mkdir -p notes && rm ${slashed(paths.join(scope.data, 'run', 'runtime.json'))}`);
         refused(scope, 'touch a.md && jason approval approve apr_1');
         refused(scope, 'rm JASON_CONFINED');
+        refused(scope, 'jason plugin grant reply --http api.example.com');
+        refused(scope, 'jason plugin revoke reply --env REPLY_TOKEN');
     }
 });
 
