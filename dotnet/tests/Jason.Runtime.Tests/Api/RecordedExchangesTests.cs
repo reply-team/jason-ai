@@ -163,6 +163,8 @@ public class RecordedExchangesTests
         }, configureServices: ReleasedReply(() => OtherBytes));
         var info = await with.RecordAsync<SystemInfoResponse>(Operations.SystemInfo, "with-ui", null, Ct);
         Assert.Equal("default", info.Ui!.Source);
+        Assert.Equal(with.Paths.PluginsDirectory, info.Setup!.PluginsDirectory);
+        Assert.Equal(with.Paths.UserSettingsFile, info.Setup.SettingsFile);
 
         var plugins = await with.RecordAsync<JsonObject>(Operations.PluginList, "none", null, Ct);
         Assert.NotEmpty(plugins);

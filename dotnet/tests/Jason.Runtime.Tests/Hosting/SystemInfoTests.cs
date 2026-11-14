@@ -143,6 +143,27 @@ public class SystemInfoTests
         Assert.Equal(0, info.Dispatcher.Scans);
     }
 
+    /// <summary>
+    /// Where this runtime's parts are, under the data directory it runs on: the folders and the file its own paths name,
+    /// the role skills folder the same one its <c>skills</c> section reads, and the settings file said to hold plugin
+    /// secrets in this layout.
+    /// </summary>
+    [Fact]
+    public async Task System_info_says_where_its_parts_are_under_its_own_data_directory()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        var setup = Assert.IsType<SetupInfo>(info.Setup);
+        Assert.Equal(fixture.Paths.RoleSkillsDirectory, setup.RoleSkillsDirectory);
+        Assert.Equal(fixture.Paths.PluginsDirectory, setup.PluginsDirectory);
+        Assert.Equal(fixture.Paths.UiCustomDirectory, setup.CustomUiDirectory);
+        Assert.Equal(fixture.Paths.UserSettingsFile, setup.SettingsFile);
+        Assert.True(setup.SettingsFileHoldsSecrets);
+        Assert.Equal(info.Skills!.RoleSkillsDirectory, setup.RoleSkillsDirectory);
+    }
+
     [Fact]
     public async Task System_info_reports_the_plugin_registry_from_the_active_snapshot()
     {

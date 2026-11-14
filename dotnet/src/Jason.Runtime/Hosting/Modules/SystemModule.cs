@@ -97,7 +97,9 @@ public static class SystemModule
                     Harness: harness.Report(),
                     // Against the snapshot in force at the moment it is asked, so a reload is said at once; the release's
                     // own packages are hashed once per process, on the first ask.
-                    ReleasedPlugins: released.Compare(plugins.Snapshot))));
+                    ReleasedPlugins: released.Compare(plugins.Snapshot),
+                    // Where this runtime's parts are, from its own paths alone: nothing is read, so this cannot fail.
+                    Setup: SetupInfo.From(dataPaths))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,
