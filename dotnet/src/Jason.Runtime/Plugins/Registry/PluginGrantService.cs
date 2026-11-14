@@ -132,6 +132,7 @@ public sealed class PluginGrantService(
                     inFile = after;
                     return after.SequenceEqual(list, StringComparer.Ordinal) ? [] : Edits(id, path, after);
                 },
+                [path],
                 PluginsOptions.Section,
                 async (wrote, token) =>
                 {

@@ -12,7 +12,8 @@ using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Routing;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Plugins;
@@ -326,23 +327,37 @@ public class PluginGrantWriteTests
         Assert.Equal((PluginLoader.SettingsFileField, code, detail), (last.Field, last.Code, last.Message));
     }
 
-    /// <summary>A list a <c>JASON_</c> variable sets one element of is the variable's: the file's list is not the one in force.</summary>
-    [Fact]
-    public void A_list_an_environment_variable_sets_one_element_of_is_shadowed()
+    /// <summary>
+    /// A list a <c>JASON_</c> variable sets an element of is the variable's, so the file's list is not the one in force:
+    /// both verbs refuse it as shadowed whatever the file holds, including where the file's list would be left as it was
+    /// (a revoke of a host only the variable grants, a grant the file already holds), and nothing is written, loaded or
+    /// journaled. The variable is put into the runtime's own environment provider, so no other runtime in this process
+    /// sees it.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "api.example.com", "receiver.example.org")]
+    [InlineData(true, null, "api.example.com")]
+    public async Task A_list_an_environment_variable_sets_an_element_of_is_refused_as_shadowed_even_where_the_file_is_unchanged(bool revoke, string? inFile, string fromVariable)
     {
-        var prefix = "JASONTEST" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant() + "_";
-        Environment.SetEnvironmentVariable(prefix + "Plugins__Grants__fake-provider__Http__0", "localhost:5555");
-        try
-        {
-            var file = new SettingsFile(new ConfigurationBuilder().AddEnvironmentVariables(prefix).Build(), prefix);
+        var settings = inFile is null
+            ? Original
+            : Original.Replace("\"Config\"", $"\"Grants\": {{ \"{Asker}\": {{ \"Http\": [\"{inFile}\"] }} }}, \"Config\"", StringComparison.Ordinal);
+        await using var api = await StartAsync(settings, new Dictionary<string, string> { [$"Plugins:Grants:{Asker}:Http:0"] = fromVariable });
+        Assert.Equal([fromVariable], api.Resolve<PluginRegistry>().Snapshot.Find(Asker)!.Grants.Http);
+        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+        var reloads = (await ReloadedAsync(api)).Items.Count;
+        var snapshot = api.Resolve<PluginRegistry>().Snapshot.Id;
 
-            Assert.Equal(prefix + "Plugins__Grants__fake-provider__Http__0", file.Shadowing("Plugins:Grants:fake-provider:Http"));
-            Assert.Null(file.Shadowing("Plugins:Grants:fake-provider:Env"));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(prefix + "Plugins__Grants__fake-provider__Http__0", null);
-        }
+        var error = await api.PostErrorAsync(revoke ? Operations.PluginRevoke : Operations.PluginGrant, Body(Asker, "http", revoke ? fromVariable : inFile!), HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("setting_shadowed", error.Code);
+        Assert.Equal(
+            $"Plugins:Grants:{Asker}:Http is set by the environment variable JASON_Plugins__Grants__{Asker}__Http, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.",
+            error.Message);
+        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        Assert.Equal(snapshot, api.Resolve<PluginRegistry>().Snapshot.Id);
+        Assert.Equal(reloads, (await ReloadedAsync(api)).Items.Count);
+        Assert.Empty((await LinesAsync(api)).Items);
     }
 
     private static object Body(string id, string capability, string entry) =>
@@ -384,10 +399,31 @@ public class PluginGrantWriteTests
     }
 
     private static Task<RuntimeApiFixture> StartAsync(string? settings = null) =>
-        RouteActivationTests.StartAsync(prepare: paths =>
-        {
-            TestPlugins.InstallFakeProvider(paths);
-            TestPlugins.Write(paths, Asker, AskerManifest, "export function invoke() {}");
-            File.WriteAllText(paths.UserSettingsFile, settings ?? Original, new UTF8Encoding(false));
-        });
+        RouteActivationTests.StartAsync(prepare: paths => Prepare(paths, settings));
+
+    /// <summary>
+    /// The same runtime with settings its environment provider holds, as <c>JASON_</c> variables would set them: put
+    /// into the provider once the configuration is built, never into this process's environment, which every runtime the
+    /// suite starts reads.
+    /// </summary>
+    private static Task<RuntimeApiFixture> StartAsync(string settings, IReadOnlyDictionary<string, string> environment) =>
+        RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => Prepare(paths, settings),
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath),
+            configurationBuilt: configuration =>
+            {
+                var variables = configuration.Providers.OfType<EnvironmentVariablesConfigurationProvider>().Single();
+                foreach (var (key, value) in environment)
+                {
+                    variables.Set(key, value);
+                }
+            });
+
+    private static void Prepare(JasonPaths paths, string? settings)
+    {
+        TestPlugins.InstallFakeProvider(paths);
+        TestPlugins.Write(paths, Asker, AskerManifest, "export function invoke() {}");
+        File.WriteAllText(paths.UserSettingsFile, settings ?? Original, new UTF8Encoding(false));
+    }
 }
