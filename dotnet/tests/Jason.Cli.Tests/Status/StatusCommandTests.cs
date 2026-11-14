@@ -83,7 +83,7 @@ public class StatusCommandTests
         var check = Assert.Single(Read(output).Checks, check => check.Name == "route");
         Assert.Equal(CheckState.Absent, check.State);
         Assert.Equal(
-            "Nothing is routed anywhere yet: route every campaign with jason route set --global, or one campaign with jason route set --campaign.",
+            "Nothing is routed anywhere yet: route every campaign with jason route set --global --plugin <id> --actor human:<Name>, or one campaign with jason route set --campaign <id> --plugin <id> --actor human:<Name>.",
             check.Fact);
         Assert.Null(check.Fix);
     }

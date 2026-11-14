@@ -1224,9 +1224,10 @@ internal static class StatusChecks
                 CheckState.Absent,
                 // No repair, because no one command fits every installation: the route names a plugin only the
                 // person can choose, and a repair is a command typed as printed. The fact names the two commands
-                // instead; `route set` with neither --campaign nor --global is itself a usage error, the failure
-                // the guard beside this one exists to prevent.
-                "Nothing is routed anywhere yet: route every campaign with jason route set --global, or one campaign with jason route set --campaign.",
+                // instead, each as a person types it: `route set` with neither --campaign nor --global, or without
+                // --plugin, is itself a usage error, the failure the guard beside this one exists to prevent, and so is
+                // one without --actor typed outside a run, since a change of route has no default actor.
+                "Nothing is routed anywhere yet: route every campaign with jason route set --global --plugin <id> --actor human:<Name>, or one campaign with jason route set --campaign <id> --plugin <id> --actor human:<Name>.",
                 null);
     }
 
