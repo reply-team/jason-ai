@@ -13,7 +13,7 @@ import type { SkillsGate } from './skills-gate.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { pairingLink, runtimeOrigin } from './descriptor.ts';
 import type { Logger } from './log.ts';
-import type { DesktopPaths } from './paths.ts';
+import { layoutNewerCode, layoutUnreadableCode, type DesktopPaths } from './paths.ts';
 import type { DesktopSettings } from './settings.ts';
 import { runtimeVersionIn, statusFacts } from './setup-model.ts';
 
@@ -46,6 +46,32 @@ export class StartFailed extends Error {
         this.step = step;
         this.exit = result?.exit ?? -1;
     }
+}
+
+/**
+ * `jason runtime start` refused the data directory's layout before it launched anything: a stamp newer than this build
+ * runs, or one it cannot read. The message is the CLI's own sentence, as it printed it.
+ */
+export class LayoutRefused extends StartFailed {
+    readonly code: typeof layoutNewerCode | typeof layoutUnreadableCode;
+
+    constructor(result: CliResult, code: typeof layoutNewerCode | typeof layoutUnreadableCode, message: string) {
+        super('layout', result, message);
+        this.code = code;
+    }
+}
+
+/** The layout refusal a failed `jason runtime start` printed as its error on stdout, or null for any other failure. */
+export function layoutRefusalIn(stdout: string): { code: typeof layoutNewerCode | typeof layoutUnreadableCode; message: string } | null {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(stdout);
+    } catch {
+        return null;
+    }
+    const error = (parsed as { error?: unknown } | null)?.error as { code?: unknown; message?: unknown } | undefined;
+    if (typeof error !== 'object' || error === null || typeof error.message !== 'string' || error.message === '') return null;
+    return error.code === layoutNewerCode || error.code === layoutUnreadableCode ? { code: error.code, message: error.message } : null;
 }
 
 export interface Started {
@@ -100,6 +126,12 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
         const start = await cli.run(['runtime', 'start'], { timeoutMs: 180_000 });
         if (start.exit !== 0) {
             log.error('runtime_start_failed', { Exit: start.exit });
+            // A layout refusal is branched on by its code, never its words, and said in the CLI's words alone.
+            const layout = layoutRefusalIn(start.stdout);
+            if (layout !== null) {
+                log.error('layout_refused', { Code: layout.code });
+                throw new LayoutRefused(start, layout.code, layout.message);
+            }
             throw new StartFailed('runtime start', start, said(start) || 'jason runtime start did not start a runtime.');
         }
         facts = statusFacts((await cli.run(['status'])).stdout);

@@ -12,6 +12,7 @@ import {
     afterFailedStart,
     afterSuccessfulStart,
     applicationFolder,
+    failedStartNotice,
     isFirstLaunchOfUpdate,
     isRejected,
     keptLine,
@@ -405,6 +406,19 @@ test('the starting page, when an update did not start, names the kept copy and t
     const mac = keptNotice('The runtime did not start.', { copy: '/data/desktop/rollback/0.34.0/Jason.app' }, '/Applications/Jason.app', 'darwin');
     assert.ok(mac.includes('in the place of the installed one, /Applications/Jason.app, by hand'));
     assert.ok(mac.endsWith(ruled), 'only Windows keeps a list of programs with a version number');
+});
+
+test('a start that failed says where the replaced version is only after an update, and a refused layout is said in its own words alone', () => {
+    const said = 'The runtime did not start.';
+    const copy = { copy: '/data/desktop/rollback/0.34.0/Jason.app' };
+    assert.equal(failedStartNotice(said, false, null, '/Applications/Jason.app', 'darwin'), said, 'not an update');
+    assert.equal(failedStartNotice(said, false, copy, '/Applications/Jason.app', 'darwin'), keptNotice(said, copy, '/Applications/Jason.app', 'darwin'));
+    const refused = 'This data directory was set up by Jason 0.50.0, newer than this jason (0.41.0): update this jason, or use the one that set it up.';
+    for (const platform of ['win32', 'darwin', 'linux'] as const) {
+        assert.equal(failedStartNotice(refused, true, copy, '/Applications/Jason.app', platform), refused, `${platform}: the version it was updated from is not offered`);
+        assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', platform), refused);
+        assert.equal(failedStartNotice(refused, true, null, '/opt/Jason', platform), refused);
+    }
 });
 
 test('the new version’s first start settles the record: a start that worked keeps the copy and says so, one that failed keeps it and refuses that version', (t) => {

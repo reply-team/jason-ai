@@ -29,12 +29,12 @@ import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type Linu
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
-import { applicationFolder, keptLine, keptNotice, readRollback, rollbackVersions, settleStart } from './rollback.ts';
+import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
-import { loggedCli, startInstallation, StartFailed } from './installation.ts';
+import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
@@ -810,10 +810,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         log.error('window_load_failed', { Step: step, Exit: exit });
         const kept = settleStart(rollback, app.getVersion(), false, log);
         const said = error instanceof Error ? error.message : String(error);
-        const notice =
-            kept === null
-                ? said
-                : keptNotice(said, kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory }, aside ?? applicationFolder(process.platform, process.execPath), process.platform);
+        const notice = failedStartNotice(
+            said,
+            error instanceof LayoutRefused,
+            kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
+            aside ?? applicationFolder(process.platform, process.execPath),
+            process.platform,
+        );
         if (current !== null) await showStarting(current, notice, true);
     } finally {
         startInFlight = false;

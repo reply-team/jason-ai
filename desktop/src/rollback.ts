@@ -201,6 +201,15 @@ export function keptNotice(said: string, previous: Previous, installed: string, 
 }
 
 /**
+ * What the starting page says when a start failed: what failed, and after an update's first start, where the version it
+ * replaced is. A data directory whose layout `jason runtime start` refused is said in those words alone: the version an
+ * update replaced knows that directory no better, so going back is not offered.
+ */
+export function failedStartNotice(said: string, layoutRefused: boolean, previous: Previous | null, installed: string, platform: NodeJS.Platform): string {
+    return previous === null || layoutRefused ? said : keptNotice(said, previous, installed, platform);
+}
+
+/**
  * Settles an update's first launch with whether the window loaded; the copy is kept either way. Returns the pending
  * record, the version it came from and its copy, when that start failed, null otherwise.
  */
