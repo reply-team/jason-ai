@@ -37,7 +37,7 @@ public sealed class SendingCeilingDocTests
             .Split((char[])[' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries));
 
         Assert.Contains(
-            "While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends that leave a campaign in a day without the person's look.",
+            "While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends a campaign releases in a UTC day without asking a person.",
             page,
             StringComparison.Ordinal);
         Assert.Contains(

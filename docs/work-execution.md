@@ -276,7 +276,7 @@ date and expires by it like any waiting item, and a held manager check-in is sti
 ([docs/campaign-manager.md](campaign-manager.md) §1).
 
 **The daily ceiling of automatic sends.** While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends
-that leave a campaign in a day without the person's look. Where the automatic mode would release a send, the claim first
+a campaign releases in a UTC day without asking a person. Where the automatic mode would release a send, the claim first
 counts, in the same transaction, the sends the mode released from the item's campaign since 00:00Z: the rows born
 approved with the reason `automatic_mode` and decided since then, whatever became of each. A retry runs under the row it
 was released under and is not counted again, and a person's approval writes another reason and counts for nothing. At
