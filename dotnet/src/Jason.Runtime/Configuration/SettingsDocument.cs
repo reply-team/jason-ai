@@ -99,6 +99,13 @@ public sealed record SettingsEditResult(byte[] Bytes, bool Changed);
 /// value's; under each removed path there must be none. An edit that fails this is refused whole and nothing is written:
 /// this is the net under every case the span logic does not foresee.
 /// </para>
+/// <para>
+/// <b>What it lets through.</b> Only what the parser's flattened view cannot see: a comment, whitespace and line ends, the
+/// order of members, and a value's spelling where two spellings flatten to one text — <c>true</c> and <c>"True"</c>, or a
+/// string and the same string with its characters escaped. None of these changes a setting the runtime reads, and none
+/// is a byte this writer touches outside the spans it edits; that the bytes are kept is held by the tests, byte for byte,
+/// and not by this check.
+/// </para>
 /// </remarks>
 public static class SettingsDocument
 {
