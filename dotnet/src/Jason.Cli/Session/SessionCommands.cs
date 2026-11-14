@@ -8,14 +8,14 @@ namespace Jason.Cli.Session;
 
 /// <summary>
 /// The <c>session</c> noun: one verb, <c>open</c>, and no operation behind either. It starts the person's own agent host
-/// in a new terminal window, on one approval or question with its brief as the first input, or at a folder with none (or
-/// the system's plain shell there), which is not the runtime's to start or to know about; <c>CliApp</c> states it with
-/// the other declared exceptions.
+/// in a new terminal window, on one approval or question with its brief as the first input, at a folder with none (or
+/// the system's plain shell there), or with <c>--setup</c> on Jason itself with the setup brief, which is not the
+/// runtime's to start or to know about; <c>CliApp</c> states it with the other declared exceptions.
 /// </summary>
 public static class SessionCommands
 {
     public const string OpenDescription =
-        "Start your own agent host in a new terminal window, in one of two forms. On one approval or question (--approval or "
+        "Start your own agent host in a new terminal window, in one of three forms. On one approval or question (--approval or "
         + "--question): at the campaign's folder (else its project's, else the harness root, else your home folder), running the "
         + "host the preference agent.interactive_host names (default claude_code), with the brief `approval get --prompt` or, for "
         + "a question, `decision get --prompt` prints as its first message. Opening it decides nothing. Jason's brief asks the "
@@ -27,7 +27,10 @@ public static class SessionCommands
         + "With --resume <id> the host continues its own conversation of that id instead of starting a new one (claude_code by "
         + "--resume <id>, codex by resume <id>; another host is refused). Of the runtime this asks only the folder's reads and, "
         + "when no program is named, the preference. "
-        + "Either form starts no runtime, writes no file of Jason's, and on macOS writes one script to the temporary folder that "
+        + "With --setup: at this installation's role skills folder, with its plugins folder beside it where the host can take "
+        + "one, running the host --host names, else the one the preference names, with the setup brief as its first message. "
+        + "Opening it changes nothing. Not with an item, --campaign, --project, --here, --shell or --resume. "
+        + "Every form starts no runtime, writes no file of Jason's, and on macOS writes one script to the temporary folder that "
         + "removes itself when Terminal runs it.";
 
     public static Command Build(CliEnvironment env, Option<string?> actor)
@@ -55,6 +58,10 @@ public static class SessionCommands
             Description = "With no item: the host continues its own conversation of this id, as the host itself named it, instead of starting a new one. "
                 + $"Taken by {AgentHosts.ResumeVocabulary}. Not with --shell.",
         };
+        var setup = new Option<bool>("--setup")
+        {
+            Description = "Open your own agent host on Jason itself, with the setup brief as its first message. Not with an item, --campaign, --project, --here, --shell or --resume.",
+        };
         var dryRun = new Option<bool>("--dry-run")
         {
             Description = "Start nothing and write nothing: print what would start, with the whole command, the brief included where there is one, and on macOS the script.",
@@ -68,6 +75,7 @@ public static class SessionCommands
         command.Options.Add(host);
         command.Options.Add(shell);
         command.Options.Add(resume);
+        command.Options.Add(setup);
         command.Options.Add(dryRun);
         command.Options.Add(human);
         command.SetAction((parseResult, cancellationToken) =>
@@ -81,6 +89,31 @@ public static class SessionCommands
             var plainShell = parseResult.GetValue(shell);
             var atHere = parseResult.GetValue(here);
             var conversation = parseResult.GetValue(resume);
+            if (parseResult.GetValue(setup))
+            {
+                if (approvalId is not null || questionId is not null)
+                {
+                    throw new UsageException("--setup opens a session on Jason itself, with no item; it is not taken with --approval or --question.");
+                }
+
+                if (campaignId is not null || projectName is not null || atHere)
+                {
+                    throw new UsageException("--setup opens at this installation's role skills folder; it is not taken with --campaign, --project or --here.");
+                }
+
+                if (plainShell)
+                {
+                    throw new UsageException("--setup starts an agent host with the setup brief as its first message; it is not taken with --shell.");
+                }
+
+                if (conversation is not null)
+                {
+                    throw new UsageException("--setup starts a new conversation with the setup brief as its first message; it is not taken with --resume.");
+                }
+
+                return SetupSessionOpener.OpenAsync(env, ParseHost(hostWord), parseResult.GetValue(dryRun), parseResult.GetValue(human), cancellationToken);
+            }
+
             if (approvalId is not null && questionId is not null)
             {
                 throw new UsageException("Say which: --approval <id> or --question <id>, one of them.");
@@ -128,21 +161,32 @@ public static class SessionCommands
                 throw new UsageException("--resume takes the id the host named its conversation by: a letter or digit, then at most 199 letters, digits, dots, underscores, colons or hyphens.");
             }
 
-            if (campaignId is { Length: 0 } || projectName is { Length: 0 } || hostWord is { Length: 0 })
+            if (campaignId is { Length: 0 } || projectName is { Length: 0 })
             {
-                throw new UsageException($"{(campaignId is { Length: 0 } ? "--campaign" : projectName is { Length: 0 } ? "--project" : "--host")} was given an empty value.");
+                throw new UsageException($"{(campaignId is { Length: 0 } ? "--campaign" : "--project")} was given an empty value.");
             }
 
-            AgentHostKind? named = null;
-            if (hostWord is not null)
-            {
-                named = AgentHosts.Parse(hostWord)
-                    ?? throw new UsageException($"--host names '{hostWord}', which this jason does not know as a host; it knows {AgentHosts.Vocabulary}.");
-            }
-
+            var named = ParseHost(hostWord);
             var place = new FolderSessionOpener.Request(campaignId, projectName, atHere, named, plainShell, conversation);
             return FolderSessionOpener.OpenAsync(env, place, parseResult.GetValue(dryRun), parseResult.GetValue(human), cancellationToken);
         });
         return command;
+    }
+
+    /// <summary>The host <c>--host</c> names, or null where it names none; an empty or unknown word is a usage error.</summary>
+    private static AgentHostKind? ParseHost(string? hostWord)
+    {
+        if (hostWord is null)
+        {
+            return null;
+        }
+
+        if (hostWord.Length == 0)
+        {
+            throw new UsageException("--host was given an empty value.");
+        }
+
+        return AgentHosts.Parse(hostWord)
+            ?? throw new UsageException($"--host names '{hostWord}', which this jason does not know as a host; it knows {AgentHosts.Vocabulary}.");
     }
 }
