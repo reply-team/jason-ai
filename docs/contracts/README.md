@@ -393,6 +393,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | Kind | Since | Subscribable | Names | What a line records |
 |---|---|---|---|---|
 | [`approval_approved`](journal/approval_approved.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person approved parked work, so it goes back to the queue to run. |
+| [`approval_automatic_applied`](journal/approval_automatic_applied.json) | `0.42.0` | no | campaign, contact, work_item, approval | The automatic mode in force for a send's contact released the send without asking a person, a pass of its text by the critic or by a person standing, and the line names the approval that records the release, where the mode came from, whether the contact was cold or warm, and the review that released it. |
 | [`approval_cancelled`](journal/approval_cancelled.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A decision was ended because the work it was about was cancelled or passed its due date. |
 | [`approval_rejected`](journal/approval_rejected.json) | `0.1.0` | yes | campaign, contact, work_item, approval | A person rejected parked work, so it ends as failed. |
 | [`approval_requested`](journal/approval_requested.json) | `0.1.0` | yes | campaign, contact, work_item, approval | Work was parked to wait for a person's decision, and the line names the approval that asks for it. |
@@ -407,7 +408,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`campaign_created`](journal/campaign_created.json) | `0.1.0` | yes | campaign | A campaign was created as a draft, under the name the line carries. |
 | [`campaign_paused`](journal/campaign_paused.json) | `0.1.0` | yes | campaign | A campaign stopped being active, so none of its work is dispatched until it is started again. |
 | [`campaign_started`](journal/campaign_started.json) | `0.1.0` | yes | campaign | A campaign became active, from a draft or from a pause, so its work can be dispatched. |
-| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold, the project it is in, or its own send mode for cold or for warm contacts; a change of several settings writes one line for each. |
+| [`campaign_updated`](journal/campaign_updated.json) | `0.1.0` | yes | campaign, project | One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold, the project it is in, or its own send mode for cold or for warm contacts; a change of several settings writes one line for each, and a send mode set again by another person writes one whose old and new are the same word, under its new setter. |
 | [`contact_archived`](journal/contact_archived.json) | `0.1.0` | yes | contact | A person was archived in the contact directory, so nothing reaches out to them any more and their open work is cancelled. |
 | [`contact_created`](journal/contact_created.json) | `0.1.0` | yes | contact | A person was added to the contact directory. |
 | [`contact_updated`](journal/contact_updated.json) | `0.1.0` | yes | contact | A person's details in the contact directory changed; the line names the fields that changed and never their values. |

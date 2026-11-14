@@ -88,6 +88,12 @@ public static class StandingApprovals
         /// review of its text — and a doubt is the person's to answer, so no standing approval releases it.
         /// </summary>
         public const string Doubted = "doubted";
+
+        /// <summary>
+        /// Covered in every other respect, but the send was written in the desktop's chat, or its input edited there, and
+        /// such a send waits for the person whatever stands for it, so no standing approval releases it.
+        /// </summary>
+        public const string SentFromChat = "sent_from_chat";
     }
 
     /// <summary>The newest standing-approval line of one campaign for one category, set or unset, through the kind index.</summary>
@@ -581,13 +587,14 @@ public static class StandingApprovals
     }
 
     /// <summary>
-    /// The answer for work <paramref name="cover"/> would release but a doubt stands about: not covered, saying
-    /// <see cref="Why.Doubted"/> beside the facts the cover names — the verdict and its category for a reply.
+    /// The answer for work <paramref name="cover"/> would release but something holds for the person: not covered, saying
+    /// <paramref name="why"/> — <see cref="Why.Doubted"/> or <see cref="Why.SentFromChat"/> — beside the facts the cover
+    /// names, the verdict and its category for a reply.
     /// </summary>
-    internal static Answer Doubted(Cover cover)
+    internal static Answer Held(Cover cover, string why)
     {
         ArgumentNullException.ThrowIfNull(cover);
-        return new(null, new Uncovered(Why.Doubted, cover.Names.DeepClone().AsObject()));
+        return new(null, new Uncovered(why, cover.Names.DeepClone().AsObject()));
     }
 
     /// <summary>

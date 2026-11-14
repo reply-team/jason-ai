@@ -1,0 +1,18 @@
+{
+  "kind": "approval_automatic_applied",
+  "version": 1,
+  "case": "a first message to a cold contact went out under the installation's automatic mode, the critic's pass standing",
+  "body": {
+    "key": "cold",
+    "old": null,
+    "new": {
+      "id": "apr_01JC0000000000000000000006",
+      "operation": "message.send",
+      "subject_hash": "sha256:9f2c4e1a7b3d5f60817263544536271809a1b2c3d4e5f60718293a4b5c6d7e8f",
+      "source": "preference",
+      "temperature": "cold",
+      "review": "jrn_01JC0000000000000000000009"
+    }
+  },
+  "expect": "valid"
+}
