@@ -166,6 +166,35 @@ public sealed class LayoutGateTests : IDisposable
         Assert.Equal(update ? UpdateUnreadableSentence(_root) : UnreadableSentence(_root), envelope.GetProperty("message").GetString());
     }
 
+    /// <summary>
+    /// Where a package manager owns the executable, the install line is not what follows a layout: the update verbs name
+    /// the manager, as <c>update apply</c> names it, under the same two codes.
+    /// </summary>
+    [Theory]
+    [InlineData("update apply", """{"layout":2,"written_by":"0.43.0"}""", "layout_newer")]
+    [InlineData("update rollback", """{"layout":2,"written_by":"0.43.0"}""", "layout_newer")]
+    [InlineData("update apply", """{"layout":0,"written_by":"0.43.0"}""", "layout_unreadable")]
+    [InlineData("update rollback", """{"layout":0,"written_by":"0.43.0"}""", "layout_unreadable")]
+    public async Task Under_a_package_manager_the_update_verbs_name_the_manager(string line, string stamp, string code)
+    {
+        using var layouts = new Installation.ManagedLayouts();
+        var brew = layouts.Homebrew();
+        File.WriteAllText(Path.Combine(_root, "layout.json"), stamp);
+        var output = new StringWriter();
+        var env = Env(output) with { InstallPath = brew.Executable, Managers = new Installation.PlantedRecords() };
+
+        var exit = await CliApp.RunAsync(line.Split(' '), env, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var envelope = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("error");
+        Assert.Equal(code, envelope.GetProperty("code").GetString());
+        Assert.Equal(
+            code == "layout_newer"
+                ? "This data directory was set up by Jason 0.43.0, newer than this jason (0.42.0), and this jason's update cannot follow it: update it with Homebrew, or use the Jason that set it up."
+                : $"This data directory's layout stamp at {Path.Combine(_root, "layout.json")} cannot be read (its layout is 0, and layouts count from 1), so this jason cannot tell how the directory is laid out, and its update cannot either: update it with Homebrew, or use the Jason that set it up.",
+            envelope.GetProperty("message").GetString());
+    }
+
     private static string UnreadableSentence(string root) =>
         $"This data directory's layout stamp at {Path.Combine(root, "layout.json")} cannot be read (its layout is 0, and layouts count from 1), so this jason cannot tell how the directory is laid out: use the Jason that set it up, or update this jason.";
 

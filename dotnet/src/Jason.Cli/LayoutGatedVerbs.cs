@@ -63,25 +63,37 @@ public static class LayoutGatedVerbs
         var refusal = LayoutStamp.Refusal(env.Paths, current);
 
         // "Update this jason" is what these two were asked to do, and they cannot: a build that does not know the layout,
-        // or cannot read the stamp, cannot follow it. They name what does, the install line, and keep the code.
+        // or cannot read the stamp, cannot follow it. They name what does, and keep the code: the install line, or, where
+        // a package manager owns the executable, that manager, as `update apply` itself names it.
         if (refusal is { } refused && verb is "update apply" or "update rollback")
         {
             var stamp = env.Paths.Stamp!;
+            var manager = Installation.PackageOwner.Of(env)?.Manager;
             return refused.Code == LayoutStamp.NewerCode
-                ? (LayoutStamp.NewerCode, UpdateNewerSentence(stamp.WrittenBy!, current))
-                : (LayoutStamp.UnreadableCode, UpdateUnreadableSentence(stamp.Path, stamp.Problem!));
+                ? (LayoutStamp.NewerCode, UpdateNewerSentence(stamp.WrittenBy!, current, manager))
+                : (LayoutStamp.UnreadableCode, UpdateUnreadableSentence(stamp.Path, stamp.Problem!, manager));
         }
 
         return refusal;
     }
 
-    /// <summary>The sentence <c>update apply</c> and <c>update rollback</c> refuse a stamp they cannot read with.</summary>
-    public static string UpdateUnreadableSentence(string path, string problem) =>
-        $"This data directory's layout stamp at {path} cannot be read ({problem}), so this jason cannot tell how the directory is laid out, and its update cannot either: install the newest Jason by running the install line again, or use the Jason that set it up.";
+    /// <summary>
+    /// The sentence <c>update apply</c> and <c>update rollback</c> refuse a stamp they cannot read with; where
+    /// <paramref name="manager"/> owns the executable, it names that manager in place of the install line.
+    /// </summary>
+    public static string UpdateUnreadableSentence(string path, string problem, string? manager = null) =>
+        $"This data directory's layout stamp at {path} cannot be read ({problem}), so this jason cannot tell how the directory is laid out, and its update cannot either: "
+        + (manager is null ? "install the newest Jason by running the install line again, or use the Jason that set it up." : ByManager(manager));
 
-    /// <summary>The sentence <c>update apply</c> and <c>update rollback</c> refuse a newer layout with.</summary>
-    public static string UpdateNewerSentence(string writtenBy, string current) =>
-        $"This data directory was set up by Jason {writtenBy}, newer than this jason ({current}), and this jason's update cannot follow it: install Jason {writtenBy} or newer by running the install line again, or use the one that set it up.";
+    /// <summary>
+    /// The sentence <c>update apply</c> and <c>update rollback</c> refuse a newer layout with; where
+    /// <paramref name="manager"/> owns the executable, it names that manager in place of the install line.
+    /// </summary>
+    public static string UpdateNewerSentence(string writtenBy, string current, string? manager = null) =>
+        $"This data directory was set up by Jason {writtenBy}, newer than this jason ({current}), and this jason's update cannot follow it: "
+        + (manager is null ? $"install Jason {writtenBy} or newer by running the install line again, or use the one that set it up." : ByManager(manager));
+
+    private static string ByManager(string manager) => $"update it with {manager}, or use the Jason that set it up.";
 
     /// <summary>Says the refusal as every local refusal is said: the envelope on stdout, or the sentence on stderr under <c>--human</c>.</summary>
     public static int Refuse(CliEnvironment env, ParseResult parseResult, (string Code, string Message) refusal)
