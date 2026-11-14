@@ -489,6 +489,53 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// The claim's question inside the save is asked of the database as it now stands, never of the entities the review loaded
+    /// first. The send is approved while the person is named Ada, and the approval stops standing for it when the name becomes
+    /// Anna, since the person's name is composed into what the send carries. A person reviews and doubts, and between the
+    /// review's read and its save the name is set back to Ada: the approval stands for the send again, and the claim would run
+    /// it under that approval without reading a review. The question asked inside the save meets the name as it is, and the
+    /// review is refused <c>not_reviewable</c>, naming the approval; nothing is written, and the claim runs the send under it.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_AReviewWhoseSendAnApprovalStandsForAgainDuringItsSave_IsRefused()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        var clock = new FixedClock(Noon);
+        await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        await db.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Anna"), Ct);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+        Assert.Equal(WorkItemStatus.Created, now.Status);
+
+        var meanwhile = new Meanwhile(async () =>
+        {
+            await using var other = database.Open();
+            await other.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Ada"), Ct);
+        });
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => new ReviewService(racing, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "ada")),
+            Ct));
+
+        Assert.True(meanwhile.Fired);
+        Assert.Equal("not_reviewable", refused.Code);
+        Assert.Contains($"approval '{asked.PublicId}' approved it as it now reads", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
+        Assert.Null((await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == now.Id, Ct)).ReviewNote);
+        db.ChangeTracker.Clear();
+        Assert.Single(await ClaimSettledAsync(harness, db));
+    }
+
+    /// <summary>
     /// Another writer between a review's read and its save: the first time the context is about to begin a transaction or to
     /// save with the review's line added, the action runs on a context of its own and commits, before this save takes the
     /// database.

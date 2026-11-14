@@ -3,6 +3,8 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Decisions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Jason.Runtime.Persistence;
 
@@ -131,6 +133,28 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
         Configure(builder, databaseFile, JournalLines.Strict);
         return builder.Options;
+    }
+
+    /// <summary>
+    /// A context of its own on this one's connection, inside this one's transaction where it has one, under the same options
+    /// and interceptors: it has loaded nothing, so every entity it reads is the database's as it stands now, this context's
+    /// own writes in the transaction among them, never one this context loaded earlier and still holds as it was. For reads.
+    /// </summary>
+    internal async Task<JasonDbContext> BesideAsync(CancellationToken cancellationToken)
+    {
+        var options = (DbContextOptions<JasonDbContext>)this.GetService<IDbContextOptions>();
+        var connection = RelationalOptionsExtension.Extract(options)
+            .WithConnectionString(null)
+            .WithConnection(Database.GetDbConnection(), owned: false);
+        var builder = new DbContextOptionsBuilder<JasonDbContext>(options);
+        ((IDbContextOptionsBuilderInfrastructure)builder).AddOrUpdateExtension(connection);
+        var beside = new JasonDbContext(builder.Options);
+        if (Database.CurrentTransaction is { } transaction)
+        {
+            await beside.Database.UseTransactionAsync(transaction.GetDbTransaction(), cancellationToken).ConfigureAwait(false);
+        }
+
+        return beside;
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

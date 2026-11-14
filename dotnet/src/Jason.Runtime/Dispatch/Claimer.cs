@@ -568,14 +568,18 @@ public sealed class Claimer(
             return ClaimReading.Reads;
         }
 
-        // Read as the claim reads it, so an attempt another writer added since the item was first loaded is among its own.
-        var current = await db.WorkItems.WithNavigation().Include(w => w.Attempts)
+        // Read as the claim reads it, on a context that has loaded nothing, as the claim's own scan context has not: the item,
+        // its campaign, its person, their channels and pins, its attempts and the live row are the database's as they stand
+        // now, inside the caller's transaction where it has one, never the entities the caller's context loaded first, which
+        // it would hand back as they were then whatever another writer has changed since.
+        await using var beside = await db.BesideAsync(ct).ConfigureAwait(false);
+        var current = await beside.WorkItems.WithNavigation().Include(w => w.Attempts)
             .FirstAsync(w => w.Id == item.Id, ct)
             .ConfigureAwait(false);
         var routing = routes.Snapshot;
-        var facts = await FactsAsync(db, current, routing, ct).ConfigureAwait(false);
+        var facts = await FactsAsync(beside, current, routing, ct).ConfigureAwait(false);
         var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
-        var live = await ApprovalGate.LiveAsync(db, current.CampaignId, current.Id, ct).ConfigureAwait(false);
+        var live = await ApprovalGate.LiveAsync(beside, current.CampaignId, current.Id, ct).ConfigureAwait(false);
         if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
         {
             return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Unjudged, live) : ClaimReading.Reads;
