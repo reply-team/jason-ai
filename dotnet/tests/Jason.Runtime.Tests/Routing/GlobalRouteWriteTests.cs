@@ -12,6 +12,8 @@ using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Plugins;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -242,6 +244,70 @@ public class GlobalRouteWriteTests
         }
 
         Assert.Empty(TemporaryFiles(api.Paths));
+    }
+
+    /// <summary>
+    /// Edits that depend on the file are asked for again from each read: a list another writer added to between the read
+    /// and the commit is edited from what that writer left, so its entry is kept beside this one. Edits fixed before the
+    /// first read would have written the list as that read had it, and lost the other writer's entry.
+    /// </summary>
+    [Fact]
+    public async Task Edits_from_the_read_are_made_again_from_each_read_so_another_writer_s_entry_is_kept()
+    {
+        await using var api = await StartAsync();
+        var path = api.Paths.UserSettingsFile;
+        File.WriteAllText(path, Original.Replace("\"Config\"", "\"Grants\": { \"fake-provider\": { \"Http\": [\"a.example.com\"] } }, \"Config\"", StringComparison.Ordinal));
+        var writer = new SettingsWriter(api.Resolve<SettingsFile>(), api.Paths, api.Resolve<ReloadGate>(), NullLogger<SettingsWriter>.Instance, attempt =>
+        {
+            if (attempt == 1)
+            {
+                File.WriteAllText(path, File.ReadAllText(path).Replace("[\"a.example.com\"]", "[\"a.example.com\", \"b.example.com\"]", StringComparison.Ordinal));
+            }
+        });
+        var asked = 0;
+
+        var wrote = await UnderTheGateAsync(api, () => writer.WriteAsync(
+            held =>
+            {
+                asked++;
+                var list = new JsonArray();
+                for (var index = 0; held.TryGetValue($"Plugins:Grants:fake-provider:Http:{index}", out var entry); index++)
+                {
+                    list.Add(entry);
+                }
+
+                list.Add("c.example.com");
+                return [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", list)];
+            },
+            ["Plugins:Grants:fake-provider:Http"],
+            "Plugins",
+            (written, _) => Task.FromResult(written),
+            (refused, _, _) => refused,
+            Ct));
+
+        Assert.True(wrote);
+        Assert.Equal(2, asked);
+        Assert.Contains("[\"a.example.com\",\"b.example.com\",\"c.example.com\"]", File.ReadAllText(path), StringComparison.Ordinal);
+        Assert.Contains(Secret, File.ReadAllText(path), StringComparison.Ordinal);
+    }
+
+    /// <summary>A refusal the edits raise from what they read is the answer, and nothing is written.</summary>
+    [Fact]
+    public async Task A_refusal_the_edits_raise_from_the_read_writes_nothing()
+    {
+        await using var api = await StartAsync();
+        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+
+        var refused = await Assert.ThrowsAsync<DomainException>(() => UnderTheGateAsync(api, () => api.Resolve<SettingsWriter>().WriteAsync<bool>(
+            _ => throw new DomainException(409, "held_by_test", "refused from the read", retryable: false),
+            ["Plugins:Grants:fake-provider:Http"],
+            "Plugins",
+            (written, _) => Task.FromResult(written),
+            (refusal, _, _) => refusal,
+            Ct)));
+
+        Assert.Equal("held_by_test", refused.Code);
+        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
     }
 
     /// <summary>
@@ -509,7 +575,7 @@ public class GlobalRouteWriteTests
         Assert.Equal("decided_inside_a_run", error.Code);
         Assert.Equal(403, (int)status);
         Assert.Equal(
-            $"This request comes from inside attempt `{RunAttempt}`. A route for every campaign is a person's own word, given outside any run: leave it to the person, or raise it as a decision.",
+            $"This request comes from inside attempt `{RunAttempt}`. Nothing inside a run changes Jason itself, and a route for every campaign is part of it: leave it to the person, or raise it as a decision.",
             error.Message);
         Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
         Assert.Same(routes, api.Resolve<RouteRegistry>().Snapshot.Global);
@@ -790,6 +856,40 @@ public class GlobalRouteWriteTests
         Assert.Empty(TemporaryFiles(api.Paths));
     }
 
+    /// <summary>
+    /// A route a <c>JASON_</c> variable sets is the variable's. A set and an unset each name the route's own paths in
+    /// their edits whatever the file holds, so either is refused as shadowed before the file is read, including a set the
+    /// file already holds and an unset of a route only the variable sets, where the file would be left as it was. Nothing
+    /// is written, loaded or journaled. The variable is put into the runtime's own environment provider, so no other
+    /// runtime in this process sees it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_route_an_environment_variable_sets_is_refused_as_shadowed_even_where_the_file_is_unchanged(bool unset)
+    {
+        await using var api = await StartAsync(
+            unset ? Original : WithRoute,
+            new Dictionary<string, string>
+            {
+                ["Routes:Operations:campaign.get:Plugin"] = TestPlugins.FakeProviderId,
+                ["Routes:Operations:campaign.get:Binding:workspace"] = "west",
+            });
+        Assert.Equal(TestPlugins.FakeProviderId, api.Resolve<RouteRegistry>().Snapshot.Global.Operations["campaign.get"].PluginId);
+        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+        var reloads = (await ReloadedAsync(api)).Items.Count;
+
+        var error = unset
+            ? await api.PostErrorAsync(Operations.RouteUnset, new { scope = "global", operation = "campaign.get", reason = "taken away for the test" }, HttpStatusCode.Conflict, Ct)
+            : await api.PostErrorAsync(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("setting_shadowed", error.Code);
+        Assert.StartsWith("Routes:Operations:campaign.get:Plugin is set by the environment variable JASON_Routes__Operations__campaign.get__Plugin,", error.Message, StringComparison.Ordinal);
+        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        Assert.Equal(reloads, (await ReloadedAsync(api)).Items.Count);
+        Assert.Empty((await LinesAsync(api)).Items);
+    }
+
     [Theory]
     [InlineData(SettingsRefusal.Twice, "twice")]
     [InlineData(SettingsRefusal.Link, "through a link to another file, which a write would replace with a file of its own")]
@@ -827,4 +927,27 @@ public class GlobalRouteWriteTests
             TestPlugins.InstallFakeProvider(paths);
             File.WriteAllText(paths.UserSettingsFile, Original, new UTF8Encoding(false));
         });
+
+    /// <summary>
+    /// The same runtime with settings its environment provider holds, as <c>JASON_</c> variables would set them: put
+    /// into the provider once the configuration is built, never into this process's environment, which every runtime the
+    /// suite starts reads.
+    /// </summary>
+    private static Task<RuntimeApiFixture> StartAsync(string settings, IReadOnlyDictionary<string, string> environment) =>
+        RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                TestPlugins.InstallFakeProvider(paths);
+                File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false));
+            },
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath),
+            configurationBuilt: configuration =>
+            {
+                var variables = configuration.Providers.OfType<EnvironmentVariablesConfigurationProvider>().Single();
+                foreach (var (key, value) in environment)
+                {
+                    variables.Set(key, value);
+                }
+            });
 }

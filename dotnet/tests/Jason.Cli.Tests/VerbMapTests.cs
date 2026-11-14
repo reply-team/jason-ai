@@ -211,12 +211,12 @@ public class VerbMapTests
     }
 
     /// <summary>
-    /// The <c>plugin</c> group is its two operations and one verb that is none: <c>install</c>, which places the package
+    /// The <c>plugin</c> group is its four operations and one verb that is none: <c>install</c>, which places the package
     /// the release names in the plugins directory, as <c>ui install</c> places the release's UI, and asks the runtime only
     /// the reload <c>plugin reload</c> asks. The eighth exception, made here in the open.
     /// </summary>
     [Fact]
-    public void The_plugin_verb_group_is_its_two_operations_and_install()
+    public void The_plugin_verb_group_is_its_four_operations_and_install()
     {
         using var paths = new TempPaths();
         var group = Jason.Cli.Commands.PluginCommands.Build(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths), new System.CommandLine.Option<string?>("--actor"));
@@ -228,7 +228,7 @@ public class VerbMapTests
             .Where(name => name.StartsWith("plugin.", StringComparison.Ordinal))
             .Select(name => name["plugin.".Length..]);
 
-        Assert.Equal(["install", "list", "reload"], verbs);
+        Assert.Equal(["grant", "install", "list", "reload", "revoke"], verbs);
         Assert.Equal(["install"], verbs.Except(operations, StringComparer.Ordinal));
         Assert.DoesNotContain("install", operations);
     }

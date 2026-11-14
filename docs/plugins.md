@@ -331,7 +331,7 @@ body and the runtime's refusal under `error`. After a reload that answered, the 
 its `problems` with the runtime's messages, its `capabilities` as the reload answered them — requested and granted, per
 capability — and `settings_file`, the settings file this CLI uses; with `--human` the verb prints each problem's code
 with its message and, for each capability the plugin asks for and is granted nothing of, one sentence naming what it
-asks for, the key under `Plugins:Grants:<id>` that grants it, that file and `jason plugin reload`. A
+asks for and the `jason plugin grant` command that grants it, in force at once. A
 `.staging-<id>-…` or `.old-<id>-…` directory beside the
 packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
 the install replaced. Every other package is installed by copying its directory in.
@@ -1446,8 +1446,9 @@ talks to one vendor's API has no use for it.
 A fifth list, `Subscriptions`, grants journal kinds out of those the manifest's `subscriptions`
 declares, by the same rules: `*` admits every declared kind, a kind the manifest does not declare
 admits nothing and is a `grant_unrequested` warning at `grants.subscriptions[i]`, and a declared kind
-nobody granted is simply not admitted. Grants are resolved per plugin at load time and frozen into the snapshot, so a change takes effect at
-the next `jason plugin reload`, and `plugin list` always shows requested next to granted. The reload
+nobody granted is simply not admitted. Grants are resolved per plugin at load time and frozen into the snapshot, so a change written by hand takes effect at
+the next `jason plugin reload`, one made with `jason plugin grant` or `jason plugin revoke` is written and in force at
+once, and `plugin list` always shows requested next to granted. The reload
 reads `settings.json` itself before it resolves anything, and waits for an edit the settings watch is
 still applying. So a reload sent straight after an edit holds it, and after two quick saves it holds
 the later one. A file that is there and cannot be read — not valid JSON, or held open by an
@@ -1457,9 +1458,30 @@ by its line and byte, never by what the file holds; the previous snapshot stays 
 journaled, and `plugin reload` exits 1. A file that is not there rejects nothing: the reload resolves
 the settings in force, and the runtime's log says by the failure's type that the file could not be
 read. Where no setting has come from the file, as on an installation that has never had one, those
-are the defaults and nothing is said. The runtime itself writes this file in one place only: `jason route set --global` and
-`jason route unset --global` edit the `Routes` section, keeping every other byte of it, and run this reload in the same
-act ([docs/routing.md](routing.md), §3).
+are the defaults and nothing is said. The runtime itself writes this file in two places only: `jason route set --global` and
+`jason route unset --global` edit the `Routes` section ([docs/routing.md](routing.md), §3), and `jason plugin grant` and
+`jason plugin revoke` one list under `Plugins:Grants:<id>`, each keeping every other byte of the file and running this
+reload in the same act.
+
+**From the command line.** `jason plugin grant <id>` takes one grant, named by its flag: `--exec <program>`,
+`--http <host>`, `--env <name>`, `--api <family>`, `--files <path>` or `--subscription <kind>`, with `*` for everything
+the manifest requests of a capability that names things; `jason plugin revoke` takes the same flags and takes one back.
+Both name a person with `--actor human:<Name>`, since a grant changes what a plugin may reach and run. The verb is
+stricter than the file, on purpose: an entry the manifest does not request is refused with `grant_unrequested` and
+nothing is written, where the same entry written by hand is the warning above and grants nothing. The rule is the
+load's own, run over the one entry, so a host the manifest does not name is granted where it says `any_granted_host`,
+and `*` still means the declared hosts alone. A directory the load would refuse is refused before anything is written,
+with the same sentence. A grant already held, and a revoke of what is not granted, write nothing and answer success,
+with `activated` false.
+An entry a `*` in the same list grants is not taken back (`grant_held_by_star`): the verb takes one entry out and never
+rewrites the star into the names it stands for today, so take back `*` and grant what it should keep. The verb owns
+the list it edits, so a comment inside its brackets goes when the list is written again; a list a `JASON_` environment
+variable sets an element of is refused with `setting_shadowed`, since the file's list is not the one in force. Work
+already running keeps what it was started with. Each change of what a plugin may use is journaled as
+`plugin_grants_updated`: the plugin, the capability, and what it may use of it before and after, as the reload froze
+them: names and directories, never a variable's value. A grant taken back from a plugin that is not loaded changes
+nothing it may use, so it is journaled only as the reload, `plugins_reloaded`. From inside a run both are refused with
+`decided_inside_a_run`: a role Jason launches never changes Jason itself.
 
 Two consequences worth knowing. A capability the manifest never requested is **absent** from the
 invocation rather than empty, which is a different thing from one that is present and always says no.
@@ -1504,7 +1526,7 @@ family, or in none:
 | `journal.append` | `journal.append` |
 
 No grant opens the rest: the installation's and the UI's own doors (every `system.` and `ui.` operation,
-`plugin.reload`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
+`plugin.reload`, `plugin.grant`, `plugin.revoke`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
 `preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
 `events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
 `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
@@ -1965,7 +1987,8 @@ declares (§9):
 `*` admits every declared kind and nothing more. A kind the manifest does not declare admits nothing and is a
 `grant_unrequested` warning at `grants.subscriptions[i]`; it does not make the plugin unavailable. A declared kind
 nobody granted is simply not admitted, and is no problem. The grant is resolved at the load and frozen with the plugin,
-so a change takes effect at the next `jason plugin reload`.
+so a change written by hand takes effect at the next `jason plugin reload`, and one made with
+`jason plugin grant <id> --subscription <kind>` or `jason plugin revoke` is in force at once (§9).
 
 **The order.** Every kind that at least one plugin is admitted to has one chain: the plugins handed its lines, one
 after another. `Subscriptions:Order:<kind>` says who goes first:

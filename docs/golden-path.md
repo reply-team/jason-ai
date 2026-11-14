@@ -130,7 +130,7 @@ placed, and the verb exits 1 with `load: rejected` in its body and the runtime's
 that answered, the body also says what the runtime made of the package — its `status`, its `problems` with their
 messages, its `capabilities` as the reload answered them, requested and granted, and `settings_file`, the file step 4
 edits — and under `--human` the verb prints each problem with its message and, while the package is granted nothing it
-asks for, the sentence that names the key under `Plugins:Grants:reply`, that file and `jason plugin reload`.
+asks for, the sentence that names the `jason plugin grant` command that grants it, in force at once.
 
 So the package is the one released with your runtime, file for file: it has the content digest of the release's own
 tree, and `jason status` says so in its `plugin_package` check, which fails when the package installed is an earlier

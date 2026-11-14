@@ -50,6 +50,9 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
     /// <summary>How many times the act is made again from a fresh read when another writer changed the file meanwhile.</summary>
     public const int Attempts = 3;
 
+    /// <summary>The flattened view of a file that is not there.</summary>
+    private static readonly IReadOnlyDictionary<string, string?> Empty = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
     private static readonly Action<ILogger, string, Exception?> Wrote = LoggerMessage.Define<string>(
         LogLevel.Information,
         new EventId(1, nameof(Wrote)),
@@ -78,7 +81,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
     /// <c>setting_shadowed</c>, <c>settings_file_unreadable</c>, <c>settings_file_not_editable</c>, <c>settings_file_changed</c>,
     /// <c>settings_file_busy</c> or <c>settings_file_not_writable</c>, each with nothing written.
     /// </exception>
-    public async Task<T> WriteAsync<T>(
+    public Task<T> WriteAsync<T>(
         IReadOnlyList<SettingsEdit> edits,
         string section,
         Func<bool, CancellationToken, Task<T>> inForce,
@@ -86,22 +89,63 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(edits);
+        AssertGate();
+        var owned = Written(edits);
+        if (Shadowing(owned, section) is { } shadowed)
+        {
+            throw shadowed;
+        }
+
+        return CommitAndPutInForceAsync(_ => edits, owned, edits.Count > 0 ? edits[0].Path : section, section, inForce, refused, cancellationToken);
+    }
+
+    /// <summary>
+    /// <see cref="WriteAsync{T}(IReadOnlyList{SettingsEdit}, string, Func{bool, CancellationToken, Task{T}}, Func{DomainException, SettingsPutBack, IReadOnlyDictionary{string, string}, DomainException}, CancellationToken)"/>
+    /// for edits that depend on what the file holds, such as an entry added to a list: <paramref name="edits"/> is asked
+    /// again on every read, with the file as the configuration system flattens it (empty where there is no file), so a
+    /// read made again after another writer changed the file is edited from what that writer left. A
+    /// <see cref="DomainException"/> it throws is the refusal, with nothing written.
+    /// </summary>
+    /// <param name="owned">
+    /// The paths the caller owns, whatever the edits of one read turn out to be: one a <c>JASON_</c> variable sets, or sets
+    /// an element of, is refused as <c>setting_shadowed</c> on every read, before the edits are asked for, so an act whose
+    /// edits come out empty (the file already says what was asked) is refused too, rather than answered as done while the
+    /// variable decides what is in force.
+    /// </param>
+    /// <exception cref="InvalidOperationException">Nobody holds the reload gate: a caller that forgot it.</exception>
+    public async Task<T> WriteAsync<T>(
+        Func<IReadOnlyDictionary<string, string?>, IReadOnlyList<SettingsEdit>> edits,
+        IReadOnlyList<string> owned,
+        string section,
+        Func<bool, CancellationToken, Task<T>> inForce,
+        Func<DomainException, SettingsPutBack, IReadOnlyDictionary<string, string?>, DomainException> refused,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(edits);
+        ArgumentNullException.ThrowIfNull(owned);
+        AssertGate();
+        return await CommitAndPutInForceAsync(
+            bytes => edits(bytes is null ? Empty : SettingsDocument.Flatten(bytes)),
+            owned,
+            section,
+            section,
+            inForce,
+            refused,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<T> CommitAndPutInForceAsync<T>(
+        Func<byte[]?, IReadOnlyList<SettingsEdit>> editsOf,
+        IReadOnlyList<string> owned,
+        string linkSetting,
+        string section,
+        Func<bool, CancellationToken, Task<T>> inForce,
+        Func<DomainException, SettingsPutBack, IReadOnlyDictionary<string, string?>, DomainException> refused,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(inForce);
         ArgumentNullException.ThrowIfNull(refused);
-        if (gate.Semaphore.CurrentCount != 0)
-        {
-            throw new InvalidOperationException("The settings writer runs under the reload gate, which its caller holds through the act.");
-        }
-
-        foreach (var edit in edits.Where(edit => edit is not RemoveIfEmptyEdit))
-        {
-            if (file.Shadowing(edit.Path) is { } variable)
-            {
-                throw Refuse(section, DomainErrors.SettingShadowed(Shown(edit.Path), variable));
-            }
-        }
-
-        var (before, after) = Commit(edits, section);
+        var (before, after) = Commit(editsOf, owned, linkSetting, section);
         try
         {
             return await inForce(after is not null, cancellationToken).ConfigureAwait(false);
@@ -120,7 +164,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
             Restored(logger, section, Code(outcome), null);
             if (failure is DomainException domain)
             {
-                throw refused(domain, outcome, before is null ? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) : SettingsDocument.Flatten(before));
+                throw refused(domain, outcome, before is null ? Empty : SettingsDocument.Flatten(before));
             }
 
             throw;
@@ -133,12 +177,13 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
     /// <summary>
     /// Reads, edits and commits, again from a fresh read while another writer changes the file in between, up to
     /// <see cref="Attempts"/> times. Answers the bytes before and after, with null after where nothing needed writing.
+    /// Every read checks the owned paths for a shadowing variable before it asks for the edits, and the edits after.
     /// </summary>
-    private (byte[]? Before, byte[]? After) Commit(IReadOnlyList<SettingsEdit> edits, string section)
+    private (byte[]? Before, byte[]? After) Commit(Func<byte[]?, IReadOnlyList<SettingsEdit>> editsOf, IReadOnlyList<string> owned, string linkSetting, string section)
     {
         if (new FileInfo(paths.UserSettingsFile).LinkTarget is not null)
         {
-            throw Refuse(section, DomainErrors.SettingsFileNotEditable(Shown(edits[0].Path), SettingsRefusal.Link));
+            throw Refuse(section, DomainErrors.SettingsFileNotEditable(Shown(linkSetting), SettingsRefusal.Link));
         }
 
         for (var attempt = 1; ; attempt++)
@@ -155,16 +200,36 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
                     : DomainErrors.SettingsFileNotWritable());
             }
 
+            if (Shadowing(owned, section) is { } shadowedOwned)
+            {
+                throw shadowedOwned;
+            }
+
+            IReadOnlyList<SettingsEdit> edits = [];
             SettingsEditResult edited;
             try
             {
+                try
+                {
+                    edits = editsOf(before);
+                }
+                catch (DomainException refusal)
+                {
+                    throw Refuse(section, refusal);
+                }
+
+                if (Shadowing(Written(edits), section) is { } shadowed)
+                {
+                    throw shadowed;
+                }
+
                 edited = SettingsDocument.Edit(before, edits);
             }
             catch (SettingsFileRefusedException refusal)
             {
                 throw Refuse(section, refusal.Refusal == SettingsRefusal.Unreadable
                     ? DomainErrors.SettingsFileUnreadable(refusal.Failure ?? new SettingsFileFailure(nameof(System.Text.Json.JsonException), null, null))
-                    : DomainErrors.SettingsFileNotEditable(Shown(refusal.Setting ?? edits[0].Path), refusal.Refusal));
+                    : DomainErrors.SettingsFileNotEditable(Shown(refusal.Setting ?? (edits.Count > 0 ? edits[0].Path : section)), refusal.Refusal));
             }
 
             if (!edited.Changed)
@@ -186,6 +251,32 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.
                     throw Refuse(section, DomainErrors.SettingsFileChanged());
             }
         }
+    }
+
+    private void AssertGate()
+    {
+        if (gate.Semaphore.CurrentCount != 0)
+        {
+            throw new InvalidOperationException("The settings writer runs under the reload gate, which its caller holds through the act.");
+        }
+    }
+
+    /// <summary>The paths edits write, in order; taking an emptied object away writes nothing anybody reads.</summary>
+    private static string[] Written(IReadOnlyList<SettingsEdit> edits) =>
+        [.. edits.Where(edit => edit is not RemoveIfEmptyEdit).Select(edit => edit.Path)];
+
+    /// <summary>The refusal for the first path a JASON_ variable sets, or sets an element of, logged.</summary>
+    private DomainException? Shadowing(IReadOnlyList<string> written, string section)
+    {
+        foreach (var path in written)
+        {
+            if (file.Shadowing(path) is { } variable)
+            {
+                return Refuse(section, DomainErrors.SettingShadowed(Shown(path), variable));
+            }
+        }
+
+        return null;
     }
 
     private DomainException Refuse(string section, DomainException refusal)

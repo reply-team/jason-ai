@@ -58,7 +58,7 @@ public static class OperationEndpoints
             // A person's own word from inside a run is refused before the body is read, so before its actor is.
             if (personsWord && InsideARun.AttemptOf(context.Request) is { } attempt)
             {
-                var refusal = DomainErrors.DecidedInsideARun(attempt);
+                var refusal = InsideARun.ChangesJason.Contains(operation) ? DomainErrors.ChangesJasonInsideARun(attempt) : DomainErrors.DecidedInsideARun(attempt);
                 await ErrorResults.WriteAsync(context, refusal.StatusCode, refusal.Code, refusal.Message, refusal.Retryable).ConfigureAwait(false);
                 return;
             }

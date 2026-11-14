@@ -1,0 +1,7 @@
+{
+  "kind": "plugin_grants_updated",
+  "version": 1,
+  "case": "a directory to append lines in",
+  "body": { "key": "example-forwarder/files", "old": { "plugin": "example-forwarder", "capability": "files", "granted": [] }, "new": { "plugin": "example-forwarder", "capability": "files", "granted": ["/srv/lines"] } },
+  "expect": "valid"
+}

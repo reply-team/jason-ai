@@ -156,8 +156,8 @@ refuse, so the detail says the hand edit that does — a new route taken out, a 
 back, as the file held it before the write — or the reload that makes the file true.
 
 Nothing inside a dispatched run changes Jason itself: a global route set or unset sent from inside a run, which the
-CLI marks with the `Jason-Attempt` header, is refused `403` `decided_inside_a_run`, the code a person's own word gets
-there, and a campaign's own route is set from a run as before (§4).
+CLI marks with the `Jason-Attempt` header, is refused `403` `decided_inside_a_run`, the code the run gate gives there,
+with a sentence that says so, and a campaign's own route is set from a run as before (§4).
 
 Six refusals write nothing, each naming the setting by its path and never a value the file holds:
 `settings_file_unreadable`, a file the runtime's own parser does not read, named by the line and the byte where it

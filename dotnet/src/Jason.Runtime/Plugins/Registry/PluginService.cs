@@ -91,7 +91,7 @@ public sealed class PluginService(
     /// What a refused route set is answered with, where the packages loaded and only the routes stood in the way; null,
     /// or a null answer, for the rejected reload every other refusal is.
     /// </param>
-    /// <param name="besides">More lines for the journal, written in the same save as the activation's own, given the new routes.</param>
+    /// <param name="besides">More lines for the journal, written in the same save as the activation's own, given the new plugins and routes.</param>
     /// <returns>The registry as it now stands, and the route snapshot the reload activated.</returns>
     internal async Task<(PluginRegistryDto Answer, RouteSnapshot Routes)> ReloadHeldAsync(
         ActorRef actor,
@@ -99,7 +99,7 @@ public sealed class PluginService(
         SettingsFileFailure? unreadable,
         bool recordRefusal,
         Func<RouteCandidate, DomainException?>? routeRefusal,
-        Action<RouteSnapshot>? besides,
+        Action<PluginSnapshot, RouteSnapshot>? besides,
         CancellationToken cancellationToken)
     {
         var load = unreadable is null
@@ -141,7 +141,7 @@ public sealed class PluginService(
         // could not be written down leaves the previous snapshot active and is simply repeated, instead of a new
         // snapshot running with no trace of when it began.
         JournalActivation(journal, db, actor, snapshot, candidate.Snapshot, reason);
-        besides?.Invoke(candidate.Snapshot);
+        besides?.Invoke(snapshot, candidate.Snapshot);
         await SubscriptionCursors.ReconcileAsync(db, chains.Chains, clock.GetUtcNow().UtcDateTime, cancellationToken).ConfigureAwait(false);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         registry.Replace(snapshot, load.Report);

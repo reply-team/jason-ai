@@ -30,8 +30,8 @@ public static class ActorOption
     public const string NoDefaultForResume = "The CLI's default actor does not apply here: name who ends it, e.g. --actor human:<Name>.";
 
     /// <summary>
-    /// The help of an act the runtime takes from any caller but the CLI will not put this account's name on by itself:
-    /// lifting a suppression, setting or unsetting a route, and setting a role's execution profile.
+    /// The help of an act the CLI will not put this account's name on by itself: lifting a suppression, setting or
+    /// unsetting a route, granting a plugin something or taking a grant back, and setting a role's execution profile.
     /// </summary>
     public const string NoDefaultForAnAct = "The CLI's default actor does not apply here: it will not put this account's name on this act by itself; name who does it, e.g. --actor human:<Name>.";
 
@@ -44,6 +44,12 @@ public static class ActorOption
     /// </summary>
     public const string RefusedInsideARun = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
 
+    /// <summary>
+    /// The help of the verbs that change Jason itself, granting a plugin something and taking a grant back: the runtime
+    /// takes them from any actor outside a run and refuses them a request that names an attempt.
+    /// </summary>
+    public const string ChangesJasonInsideARun = "From inside a run (the environment names an attempt) this is refused: nothing inside a run changes Jason itself.";
+
     public static Option<string?> Create() => new(Name)
     {
         Description = "Who performs the operation: human, human:<id>, role:<id> or attempt:att_... for a running executor. "
@@ -51,10 +57,12 @@ public static class ActorOption
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
             + "clearing a block, resuming a work item, rewinding a subscription, submitting a report, "
-            + "lifting a suppression, setting or unsetting a route, "
+            + "lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, "
             + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
-            + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there.",
+            + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there, "
+            + "and so are granting or taking back a plugin's grant and setting or unsetting a route for every campaign, "
+            + "since nothing inside a run changes Jason itself.",
         Recursive = true,
     };
 
