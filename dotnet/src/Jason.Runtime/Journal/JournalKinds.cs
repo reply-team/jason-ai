@@ -90,6 +90,14 @@ public static partial class JournalKinds
     /// trigger.
     /// </summary>
     public const string WorkItemResumed = "workitem_resumed";
+
+    /// <summary>
+    /// A send was reviewed before it went, by <c>workitem.review</c>: keyed by the review hash, with the result, the doubt's
+    /// code where it doubts, the operation and the reviewing run's role. The line names the send as its item and the
+    /// reviewing attempt as its attempt. Never the doubt's sentence and never a reason. Written by that operation only, not
+    /// a default manager trigger, and not subscribable: what it says is the claim's to read.
+    /// </summary>
+    public const string WorkItemReviewed = "workitem_reviewed";
     public const string RoleAdded = "role_added";
 
     /// <summary>A role's own settings changed — which execution profile its work uses, and nothing else yet.</summary>
@@ -339,6 +347,7 @@ public static partial class JournalKinds
         WorkItemReopened,
         WorkItemWaiting,
         WorkItemResumed,
+        WorkItemReviewed,
         RoleAdded,
         RoleUpdated,
         RoleNoteSet,

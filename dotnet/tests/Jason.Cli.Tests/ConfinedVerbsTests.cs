@@ -23,6 +23,7 @@ public class ConfinedVerbsTests
         ["preference unset"] = ["preference", "unset", "outreach.tone"],
         ["block clear"] = ["block", "clear", "blk_A"],
         ["workitem resume"] = ["workitem", "resume", "wi_A"],
+        ["workitem review"] = ["workitem", "review", "wi_A", "--review-hash", "sha256:00", "--result", "passed"],
         ["report submit"] = ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription rewind"] = ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
         ["runtime"] = ["runtime", "status"],
@@ -121,6 +122,7 @@ public class ConfinedVerbsTests
     [Theory]
     [InlineData("report submit")]
     [InlineData("workitem resume")]
+    [InlineData("workitem review")]
     public async Task A_role_attempt_s_own_verbs_run_as_before_where_the_variable_is_unset(string entry)
     {
         var run = await DefaultActorTests.RunEachAsync(Samples[entry], new Dictionary<string, string> { ["JASON_ATTEMPT_ID"] = Attempt });

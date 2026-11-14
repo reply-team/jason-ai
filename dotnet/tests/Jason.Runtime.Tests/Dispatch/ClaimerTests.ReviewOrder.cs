@@ -20,7 +20,8 @@ public partial class ClaimerTests
     /// <summary>
     /// Created waiting: the send is not claimable while the review's work is still to run, and the resume step leaves it
     /// waiting. When that work ends — passed, failed or cancelled alike — the send goes back to the queue and the claim
-    /// parks it for the person, under the reason every first park has.
+    /// parks it for the person, under the reason every first park has. Where the review's work ended without recording a
+    /// review, the read the claim makes answers that no review stands for the send.
     /// </summary>
     [Theory]
     [InlineData(WorkItemStatus.Succeeded)]
@@ -56,6 +57,34 @@ public partial class ClaimerTests
         var approval = await fresh.Approvals.AsNoTracking().SingleAsync(a => a.WorkItem!.PublicId == send.Id, Ct);
         Assert.Equal((ApprovalStatus.Pending, ApprovalGate.ApprovalRequired), (approval.Status, approval.Reason));
         Assert.Equal(WorkItemStatus.AwaitingApproval, await StatusAsync(database, send.Id));
+        Assert.Null(await Reviews.StandingAsync(fresh, await WorkItemService.LoadAsync(fresh, send.Id, Ct), Ct));
+    }
+
+    /// <summary>
+    /// The review's run records its pass while the send waits on it; when that run's work ends the send is released, and the
+    /// read the claim makes finds the pass standing for the text the send still carries.
+    /// </summary>
+    [Fact]
+    public async Task ReviewOrder_APassRecordedWhileTheSendWaits_StandsWhenTheSendIsReleased()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var review = await ReviewWorkAsync(db, reading);
+        var send = await ComposeAsync(db, reading, waitOn: [review.PublicId]);
+
+        review.Status = WorkItemStatus.Processing;
+        var run = WorkItemFactory.NewAttempt(review, 1, AttemptStatus.Running, Noon);
+        await db.SaveChangesAsync(Ct);
+        await new ReviewService(db, new JournalWriter(new FixedClock(Noon))).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, Code: null, Note: null, new ActorRef(ActorType.Attempt, run.PublicId)),
+            Ct);
+        await db.WorkItems.Where(w => w.Id == review.Id).ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkItemStatus.Succeeded), Ct);
+        Assert.Equal(1, await Resumer().ResumeAsync(db, Ct));
+
+        await using var fresh = database.Open();
+        var standing = await Reviews.StandingAsync(fresh, await WorkItemService.LoadAsync(fresh, send.Id, Ct), Ct);
+        Assert.Equal((ReviewResult.Passed, run.PublicId), (standing!.Result, standing.By.Id));
     }
 
     /// <summary>A send created with no wait at all is claimed without a review, and parks for the person as every send does.</summary>
@@ -74,6 +103,7 @@ public partial class ClaimerTests
         await using var fresh = database.Open();
         var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal((ApprovalStatus.Pending, ApprovalGate.ApprovalRequired), (approval.Status, approval.Reason));
+        Assert.Null(await Reviews.StandingAsync(fresh, await WorkItemService.LoadAsync(fresh, send.Id, Ct), Ct));
     }
 
     /// <summary>

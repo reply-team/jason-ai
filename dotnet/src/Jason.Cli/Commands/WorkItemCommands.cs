@@ -8,7 +8,8 @@ namespace Jason.Cli.Commands;
 
 /// <summary>
 /// The <c>workitem</c> verb group: the six verbs a planner or a person uses to put work on the queue, read it
-/// back and release it from a wait, and the four an executor uses to report on the attempt it was launched for.
+/// back and release it from a wait, the one that reviews a send before it goes, and the four an executor uses to report
+/// on the attempt it was launched for.
 /// The work-item id is positional, the request body may come from a file or standard input, and the scalar
 /// options are laid over it.
 /// </summary>
@@ -40,6 +41,7 @@ public static class WorkItemCommands
         workItem.Subcommands.Add(Update(env, actor));
         workItem.Subcommands.Add(Cancel(env, actor));
         workItem.Subcommands.Add(Resume(env, actor));
+        workItem.Subcommands.Add(Review(env, actor));
         workItem.Subcommands.Add(Heartbeat(env, actor));
         workItem.Subcommands.Add(SetResult(env, actor));
         workItem.Subcommands.Add(Complete(env, actor));
@@ -378,6 +380,62 @@ public static class WorkItemCommands
 
             return await OperationRunner
                 .RunAsync(env, Operations.WorkItemResume, body, new RunOptions(parseResult.GetValue(human), WorkItemRenderers.WorkItem), cancellationToken)
+                .ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    private static Command Review(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "review",
+            "Review a send before it goes: pass the text you read, or doubt it with a code, which sends it to the person. "
+            + "Give the review_hash workitem get answered; a send edited since is refused, and read again. "
+            + "Nobody reviews a send they made. Inside a run the review is the run's own; outside one, the person who reviews "
+            + "names themselves. There is no --reason: a reason is journaled, and the doubt's sentence never is, so it goes as --note. "
+            + ActorOption.NoDefault);
+        var id = WorkItemId();
+        var reviewHash = new Option<string>("--review-hash")
+        {
+            Description = "The send's review_hash as workitem get answered it: the review is bound to that text.",
+            Required = true,
+        };
+        var result = Choice<ReviewResult>.Only(new Option<string>("--result")
+        {
+            Description = "passed, or doubts, which sends the send to the person.",
+            Required = true,
+        });
+        var code = Choices.Hold(
+            new Option<string?>("--code") { Description = "Why the review doubts, with --result doubts: " + Choices.Spoken(DoubtCodes.All) + "." },
+            DoubtCodes.All,
+            DoubtCodes.Knows);
+        var note = new Option<string?>("--note")
+        {
+            Description = "With --result doubts, one line, at most 280 characters, saying in words what is wrong: shown to the person on "
+                + "the approval, and never in a journal line.",
+        };
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(reviewHash);
+        command.Options.Add(result);
+        command.Options.Add(code);
+        command.Options.Add(note);
+        command.Options.Add(human);
+
+        command.SetAction(async (parseResult, cancellationToken) =>
+        {
+            var body = RequestBody.Empty()
+                .Set("work_item_id", parseResult.GetValue(id))
+                .Set("review_hash", parseResult.GetValue(reviewHash))
+                .Set("result", parseResult.GetValue(result))
+                .Set("code", parseResult.GetValue(code))
+                .Set("note", parseResult.GetValue(note))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "workitem review", "a review is a run's own or a named person's");
+
+            return await OperationRunner
+                .RunAsync(env, Operations.WorkItemReview, body, new RunOptions(parseResult.GetValue(human), JournalRenderers.Entry), cancellationToken)
                 .ConfigureAwait(false);
         });
 

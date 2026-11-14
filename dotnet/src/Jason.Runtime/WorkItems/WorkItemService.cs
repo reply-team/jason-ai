@@ -561,6 +561,12 @@ public sealed class WorkItemService(
             await WithdrawAskAsync(item, actor, now, cancellationToken).ConfigureAwait(false);
         }
 
+        // A doubting review was about the text it read; once the input moves, that review no longer stands, nor its sentence.
+        if (inputChanged)
+        {
+            item.ReviewNote = null;
+        }
+
         if (item.Status == WorkItemStatus.Expired && request.DueAt.IsSet)
         {
             var previous = item.Status;

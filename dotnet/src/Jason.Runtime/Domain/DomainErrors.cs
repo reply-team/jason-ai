@@ -135,6 +135,24 @@ public static class DomainErrors
         new("wait_not_allowed", $"Work item '{id}' cannot wait: {why}");
 
     /// <summary>A resume of an item that holds no wait to end.</summary>
+    /// <summary>
+    /// A review is for a send before it goes: provider work a person decides each one of, still queued or waiting. Work of
+    /// another kind is never reviewed, and a send already parked, claimed or finished has gone past the point a review is for.
+    /// </summary>
+    public static ConflictException NotReviewable(string id, string why) =>
+        new("not_reviewable", $"Work item '{id}' cannot be reviewed: {why}.");
+
+    /// <summary>The send's input moved after the reviewer read it, so the review would be about a text it never read.</summary>
+    public static ConflictException ReviewStale(string id) =>
+        new("review_stale", $"Work item '{id}' has changed since its review_hash was read; read it again with workitem.get and review what it says now.");
+
+    /// <summary>
+    /// The reviewer made the send: an attempt of the work that created it, or the person who created it. A person's own
+    /// send goes to them as an approval, which is their own explicit yes and a different act from a review.
+    /// </summary>
+    public static ForbiddenException ReviewByCreator(string id) =>
+        new("review_by_creator", $"Work item '{id}' was made by the work or the person reviewing it, and nobody reviews their own send; a person's own send is theirs to approve (jason approval list).");
+
     public static ConflictException WorkItemNotWaiting(string id, WorkItemStatus status) =>
         new("workitem_not_waiting", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; only a waiting item can be resumed.");
 

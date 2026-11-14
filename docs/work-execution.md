@@ -455,12 +455,35 @@ set when the work is created and never moved: a `workitem.update` whose `set` or
 field, whoever sends it. Its sentence is the request field `ask_person_note`, beside the context and refused without the
 key; a `note` member inside the key is refused and pointed there. The sentence is part of a keyed create's digest.
 
-**The sentence is kept out of every record that lasts.** It is a person's or an agent's text, so it is stored on the
-item's own row (`work_items.ask_person_note`), outside the context: no journal line, no attempt's snapshot, no read of
+**A review of the send** is `workitem.review`, written as the reserved line
+[`workitem_reviewed`](contracts/journal/workitem_reviewed.json): `passed`, or `doubts` with a code and an optional
+sentence (`note`). It is bound to the text it read by the **review hash**, the canonical hash of the operation, the
+work item and its context's `input` as stored, which `workitem.get` answers as `review_hash` on such a send. Nothing but
+an edit of the input moves the hash — a pin, a rename, the campaign's status or a route leave it as it is — and an edit
+voids every review made before it: the line under the old hash no longer stands, the doubt's sentence is cleared in the
+edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or
+`waiting` is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. Who reviews: a
+running attempt of the same campaign's role work, other than every attempt of the work that created the send (a retry of
+the composer is the same author), or a person by name who did not create it (`review_by_creator`); a person's own send
+goes to them as an approval, their own explicit yes. Inside a run a review speaks as its run: an actor other than the
+attempt the request's header names is refused. The verb takes no `reason`, since a reason is journaled and the line
+never carries the doubt's sentence. Which review stands for the send is read from the send's own lines under its
+current hash: the newest doubt, over any pass of the same text, or else the newest pass, or none. A doubt is answered
+only by the person's decision on the approval, never by a later pass. The order between a send and its review is the
+runtime's: the send is created waiting on the review's work (`wait_on`, §Lifecycle), so it is not claimed before that
+work has ended; whatever way it ended, the claim then decides as ever.
+
+**The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
+item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the
+context: no journal line, no attempt's snapshot, no read of
 the item (`workitem.get`, `workitem.list`) and no log line carries it, and a diagnostic bundle, which reads the item
-pages for their metadata, never sees it. When the claim parks the send, the sentence is moved onto the approval's
-preview, under `doubts`, and cleared from the row in the park's own save; from then on `approval.get` and
-`approval.list` are the reads that return it.
+pages for their metadata, never sees it. When the claim parks the send, both are moved onto the approval's preview and
+cleared from the row in the park's own save; from then on `approval.get` and `approval.list` are the reads that return
+them. The preview's `doubts` is a list, one entry per doubt that stands: `source` (`ask_person` or `review`), `by` (the
+actor that doubted), `role` (the reviewing run's role, or null), `code`, `note` (the sentence, or null) and `line` (the
+`workitem_reviewed` line, or null for `ask_person`). A send parked again after an edit or an expiry carries the
+creator's `ask_person` sentence over from its earlier approval's preview, since the key is never taken back; a review's
+is not carried, because the text it was about no longer stands.
 
 ## Leases and heartbeats
 

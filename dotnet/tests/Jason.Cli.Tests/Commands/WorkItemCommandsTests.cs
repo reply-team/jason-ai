@@ -97,6 +97,37 @@ public class WorkItemCommandsTests
                 + "\"ask_person_note\":\"They asked about the price.\",\"actor\":{\"type\":\"role\",\"id\":\"composer\"}}");
     }
 
+    /// <summary>A review is sent under the API's names, and its sentence as the note, never as a reason.</summary>
+    [Fact]
+    public async Task Review_sends_the_hash_the_result_the_code_and_the_note_under_their_api_names()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "review", "wi_SEND", "--review-hash", "sha256:ab", "--result", "doubts", "--code", "off_brief",
+            "--note", "It promises a discount the brief never offers.", "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemReview,
+            "{\"work_item_id\":\"wi_SEND\",\"review_hash\":\"sha256:ab\",\"result\":\"doubts\",\"code\":\"off_brief\","
+                + "\"note\":\"It promises a discount the brief never offers.\",\"actor\":{\"type\":\"human\",\"id\":\"ada\"}}");
+    }
+
+    [Theory]
+    [InlineData("--reason", "looks fine")]
+    [InlineData("--code", "looks_off")]
+    [InlineData("--result", "maybe")]
+    public async Task A_review_with_a_reason_or_a_word_outside_its_lists_is_a_usage_error_before_any_request(string option, string value)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "review", "wi_SEND", "--review-hash", "sha256:ab", "--result", "passed", option, value, "--actor", "human:ada");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Null(cli.Url);
+    }
+
     [Fact]
     public async Task A_doubt_code_outside_the_list_is_a_usage_error_before_any_request()
     {

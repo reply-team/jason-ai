@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Api;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.WorkItems;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +13,7 @@ public static class WorkItemModule
     public static IServiceCollection AddWorkItemModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        return services.AddScoped<WorkItemService>().AddScoped<WorkItemCanceller>();
+        return services.AddScoped<WorkItemService>().AddScoped<WorkItemCanceller>().AddScoped<ReviewService>().AddScoped<RequestRun>();
     }
 
     public static void MapWorkItemOperations(this IEndpointRouteBuilder app)
@@ -33,5 +34,7 @@ public static class WorkItemModule
             Operations.WorkItemCancel, (service, request, cancellationToken) => service.CancelAsync(request, cancellationToken));
         app.MapOperation<WorkItemService, WorkItemResumeRequest, WorkItemDto>(
             Operations.WorkItemResume, (service, request, cancellationToken) => service.ResumeAsync(request, cancellationToken));
+        app.MapOperation<ReviewService, WorkItemReviewRequest, JournalEntryDto>(
+            Operations.WorkItemReview, (service, request, cancellationToken) => service.ReviewAsync(request, cancellationToken));
     }
 }
