@@ -163,6 +163,17 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             throw DomainErrors.NotReviewable(item.PublicId, "it changed while the review was made; read it again with workitem.get, and while it is still queued or waiting it may be reviewed again");
         }
 
+        // The text too is held to the row as it stands now, not as the review read it: an edit of the input leaves the status
+        // as it was, so the guard above does not see it, and a review of a text that is gone would land with its sentence.
+        await using (var beside = await db.BesideAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var now = await beside.WorkItems.AsNoTracking().FirstAsync(w => w.Id == item.Id, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(ReviewSubject.Hash(now), hash, StringComparison.Ordinal))
+            {
+                throw DomainErrors.ReviewStale(item.PublicId);
+            }
+        }
+
         var reading = await HeardByTheClaimAsync(item, cancellationToken).ConfigureAwait(false);
 
         // A doubt accepted while an approved row is live, which happens only where that row no longer stands for the send as

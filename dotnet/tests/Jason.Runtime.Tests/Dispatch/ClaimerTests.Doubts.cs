@@ -614,6 +614,49 @@ public partial class ClaimerTests
         Assert.Single(await ClaimSettledAsync(harness, db));
     }
 
+    /// <summary>
+    /// The review hash is held to the send's row as it stands inside the review's save, not to the row the review read: an
+    /// edit of the input between the read and the save leaves the status as it was, so only the hash tells the review is of
+    /// a text that is gone. It is refused <c>review_stale</c>, and nothing is written: no line, and no sentence over the row.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_AReviewWhoseSendWasEditedDuringItsSave_IsRefusedStale_AndWritesNothing()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        db.ChangeTracker.Clear();
+        var hash = ReviewSubject.Hash(await WorkItemService.LoadAsync(db, send.Id, Ct));
+
+        var meanwhile = new Meanwhile(async () =>
+        {
+            await using var other = database.Open();
+            await Items(other).UpdateAsync(
+                new WorkItemUpdateRequest(
+                    send.Id,
+                    new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") },
+                    null, default, default, default, default, default, default, default, default,
+                    new ActorRef(ActorType.Human, "operator"),
+                    Reason: null),
+                Ct);
+        });
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => new ReviewService(racing, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, hash, ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "grace")),
+            Ct));
+
+        Assert.True(meanwhile.Fired);
+        Assert.Equal("review_stale", refused.Code);
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == send.Id, Ct);
+        Assert.Null(row.ReviewNote);
+        Assert.NotEqual(hash, ReviewSubject.Hash(row));
+    }
+
     private static Harness TwoProviders() => new(
         plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "campaign.enroll"]),
         route: new Route(Provider, null, null),
