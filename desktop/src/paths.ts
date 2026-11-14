@@ -3,7 +3,7 @@
  * but for the data directory's layout stamp, which `dataLayout` reads at each call to place the parts that move.
  */
 
-import { closeSync, fstatSync, openSync, readSync, statSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, openSync, readSync, statSync, type Stats } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export interface DesktopPaths {
@@ -180,22 +180,48 @@ export type LayoutStamp =
     | { state: 'read'; path: string; layout: number; writtenBy: string; at: string | null }
     | { state: 'unreadable'; path: string; problem: string };
 
+/**
+ * What is at the stamp's name, a link followed, asked before anything is opened: nothing there, a folder, a regular file
+ * of a size, anything else (a pipe, a device, a socket), or a name the system would not answer about.
+ */
+export type StampFound = { kind: 'none' } | { kind: 'folder' } | { kind: 'file'; size: number } | { kind: 'other' } | { kind: 'unaskable' };
+
 /** How the stamp is found on disk; a test gives its own. */
 export interface StampDisk {
-    /** What is at the path, following links; anything that cannot be asked is nothing, as `File.Exists` answers. */
-    kind(path: string): 'file' | 'folder' | 'none';
-    /** The file's bytes, or `larger` when it holds more than `limit`; throws when it cannot be read. */
+    find(path: string): StampFound;
+    /** The regular file's bytes, or `larger` when it holds more than `limit`; throws when it cannot be read. */
     read(path: string, limit: number): Uint8Array | 'larger';
 }
 
-const onDisk: StampDisk = {
-    kind(path) {
+/** Only "no such entry" means nothing is there; anything else the system answers is a name that cannot be asked about. */
+const nothingThere = (error: unknown) => {
+    const code = (error as { code?: unknown } | null)?.code;
+    return code === 'ENOENT' || code === 'ENOTDIR';
+};
+
+/**
+ * What is at `path`, as `LayoutStamp.Read` asks it: the entry a link names, and where that is not there, whether the name
+ * itself is, since a link or a junction whose target is gone is a stamp that cannot be read, never the absence of one.
+ */
+export function findStamp(path: string, fs: { stat(path: string): Stats; lstat(path: string): Stats } = { stat: statSync, lstat: lstatSync }): StampFound {
+    let found: Stats;
+    try {
+        found = fs.stat(path);
+    } catch (error) {
+        if (!nothingThere(error)) return { kind: 'unaskable' };
         try {
-            return statSync(path).isDirectory() ? 'folder' : 'file';
-        } catch {
-            return 'none';
+            fs.lstat(path);
+            return { kind: 'unaskable' };
+        } catch (again) {
+            return nothingThere(again) ? { kind: 'none' } : { kind: 'unaskable' };
         }
-    },
+    }
+    if (found.isDirectory()) return { kind: 'folder' };
+    return found.isFile() ? { kind: 'file', size: found.size } : { kind: 'other' };
+}
+
+const onDisk: StampDisk = {
+    find: (path) => findStamp(path),
     read(path, limit) {
         const descriptor = openSync(path, 'r');
         try {
@@ -218,9 +244,14 @@ const onDisk: StampDisk = {
 /** The stamp of the data directory at `data`, as found. Never throws on what is there: what it finds is recorded. */
 export function readLayoutStamp(data: string, disk: StampDisk = onDisk): LayoutStamp {
     const path = join(data, layoutTable.stamp);
-    const kind = disk.kind(path);
-    if (kind === 'folder') return { state: 'unreadable', path, problem: 'it is a folder' };
-    if (kind === 'none') return { state: 'missing', path };
+    const found = disk.find(path);
+    if (found.kind === 'none') return { state: 'missing', path };
+    if (found.kind === 'folder') return { state: 'unreadable', path, problem: 'it is a folder' };
+    if (found.kind === 'unaskable') return { state: 'unreadable', path, problem: 'it could not be read' };
+    // A pipe's open would wait for a writer and a device's would reach the device: neither is opened, and an empty file
+    // is said the same way, as the runtime says both.
+    if (found.kind === 'other' || found.size === 0) return { state: 'unreadable', path, problem: 'it is empty, or not a file' };
+    if (found.size > stampMaxBytes) return { state: 'unreadable', path, problem: 'it is larger than a stamp' };
     let bytes: Uint8Array | 'larger';
     try {
         bytes = disk.read(path, stampMaxBytes);
@@ -243,15 +274,13 @@ export function parseLayoutStamp(path: string, bytes: Uint8Array): LayoutStamp {
     try {
         // A byte-order mark is dropped, as the runtime drops it; bytes that are not UTF-8 are not JSON.
         text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        // An escape that is half a surrogate pair, in any name or string at any depth, is not JSON either, as the runtime
-        // reads it.
-        root = JSON.parse(text, (name, value: unknown) => {
-            if (!wellFormed(name) || (typeof value === 'string' && !wellFormed(value))) throw new Error('half a surrogate pair');
-            return value;
-        });
+        root = JSON.parse(text);
     } catch {
         return unreadable('it is not JSON');
     }
+    // Deeper than the runtime's reader reads, or an escape that is half a surrogate pair in any string or name, one a later
+    // duplicate overwrites included, is not JSON either, as the runtime reads it.
+    if (depthOf(text) > maxDepth || !stringTokens(text).every((token) => wellFormed(JSON.parse(token) as string))) return unreadable('it is not JSON');
     if (typeof root !== 'object' || root === null || Array.isArray(root)) return unreadable('it is not a JSON object');
     const members = topLevelMembers(text);
     if (new Set(members.map((member) => member.name)).size !== members.length) return unreadable('it names a member twice');
@@ -265,8 +294,10 @@ export function parseLayoutStamp(path: string, bytes: Uint8Array): LayoutStamp {
     // `-0` reads as 0, and says so.
     if (layout < 1) return unreadable(`its layout is ${layout}, and layouts count from 1`);
 
-    const writtenBy = read.written_by;
-    if (typeof writtenBy !== 'string' || !isVersion(writtenBy)) return unreadable('it names no version that wrote it');
+    // The version alone, as it would be written: space around it and build metadata after a '+' never reach a refusal, so a
+    // stamp cannot put text of its own on a screen.
+    const writtenBy = typeof read.written_by === 'string' ? canonicalVersion(read.written_by) : null;
+    if (writtenBy === null) return unreadable('it names no version that wrote it');
 
     let at: string | null = null;
     if (Object.hasOwn(read, 'at')) {
@@ -274,6 +305,25 @@ export function parseLayoutStamp(path: string, bytes: Uint8Array): LayoutStamp {
         at = read.at;
     }
     return { state: 'read', path, layout, writtenBy, at };
+}
+
+/** The deepest the runtime's JSON reader reads, `JsonDocument`'s own limit: the stamp's object is the first level. */
+const maxDepth = 64;
+
+/** Every string and member name of JSON `text`, as written, quotes included. */
+function stringTokens(text: string): string[] {
+    return text.match(/"(?:[^"\\]|\\.)*"/g) ?? [];
+}
+
+/** How deep JSON `text` nests objects and arrays. */
+function depthOf(text: string): number {
+    let depth = 0;
+    let deepest = 0;
+    for (const piece of text.replace(/"(?:[^"\\]|\\.)*"/g, '""')) {
+        if (piece === '{' || piece === '[') deepest = Math.max(deepest, ++depth);
+        else if (piece === '}' || piece === ']') depth--;
+    }
+    return deepest;
 }
 
 /** Whether every surrogate in `text` is half of a pair that is whole. */
@@ -330,19 +380,28 @@ function topLevelMembers(text: string): { name: string; raw: string }[] {
     }
 }
 
-/** A version as the runtime's `SemanticVersion` reads one: major.minor.patch with an optional pre-release and build. */
-function isVersion(text: string): boolean {
-    let span = text.trim();
-    if (span === '') return false;
+/** The characters .NET's `char.IsWhiteSpace` names, which `SemanticVersion` trims: next line among them, a byte-order mark not. */
+const space = '[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]';
+const around = new RegExp(`^${space}+|${space}+$`, 'g');
+
+/**
+ * A version as the runtime's `SemanticVersion` reads one, major.minor.patch with an optional pre-release and build, said
+ * as it says it: major.minor.patch and the pre-release, nothing it read past. Null for text that is no version.
+ */
+function canonicalVersion(text: string): string | null {
+    let span = text.replace(around, '');
+    if (span === '') return null;
     const plus = span.indexOf('+');
     if (plus >= 0) span = span.slice(0, plus);
     const dash = span.indexOf('-');
+    let preRelease = '';
     if (dash >= 0) {
-        const identifiers = span.slice(dash + 1).split('.');
-        if (!identifiers.every((identifier) => /^[0-9A-Za-z-]+$/.test(identifier) && !/^0[0-9]+$/.test(identifier))) return false;
+        preRelease = span.slice(dash + 1);
+        if (!preRelease.split('.').every((identifier) => /^[0-9A-Za-z-]+$/.test(identifier) && !/^0[0-9]+$/.test(identifier))) return null;
         span = span.slice(0, dash);
     }
-    return /^(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})$/.test(span);
+    if (!/^(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})$/.test(span)) return null;
+    return dash >= 0 ? `${span}-${preRelease}` : span;
 }
 
 /** Whether a build that runs `layoutTable.thisBuildRuns` refuses this stamp: a later layout, or a stamp it cannot read. */

@@ -12,7 +12,7 @@ namespace Jason.Cli.Tests;
 public sealed class DesktopLayoutStampsTests
 {
     [Fact]
-    public void Every_desktop_stamp_fixture_is_read_by_LayoutStamp_as_its_case_says_and_refused_in_the_same_words()
+    public async Task Every_desktop_stamp_fixture_is_read_by_LayoutStamp_as_its_case_says_and_refused_in_the_same_words()
     {
         using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "test", "fixtures", "layout-stamps.json")));
         var root = fixture.RootElement;
@@ -32,10 +32,15 @@ public sealed class DesktopLayoutStampsTests
         foreach (var @case in cases)
         {
             var name = @case.GetProperty("name").GetString()!;
+            if (!Applies(Text(@case, "only")))
+            {
+                continue;
+            }
+
             var data = Directory.CreateTempSubdirectory("jason-layout-stamp-").FullName;
             try
             {
-                var stamp = Read(data, @case);
+                var stamp = await Read(data, @case);
                 Check(@case.GetProperty("state").GetString() == State(stamp.State), $"{name}: {stamp}");
                 Check(Text(@case, "problem") == stamp.Problem, $"{name}: the problem is '{stamp.Problem}'");
                 Check(Number(@case, "layout") == stamp.Layout, $"{name}: the layout is {stamp.Layout}");
@@ -66,10 +71,24 @@ public sealed class DesktopLayoutStampsTests
         Assert.True(parted.Count == 0, string.Join(Environment.NewLine, parted));
     }
 
-    /// <summary>The stamp of a data directory holding the case: on disk as it names, or a file of its text or bytes.</summary>
-    private static LayoutStamp Read(string data, JsonElement @case)
+    /// <summary>Whether a case the fixture keeps to some systems is one this run can make: a pipe, a device or a folder's mode.</summary>
+    private static bool Applies(string? only) => only switch
     {
+        null => true,
+        "posix" => !OperatingSystem.IsWindows(),
+        "posix_unprivileged" => !OperatingSystem.IsWindows() && !Environment.IsPrivilegedProcess,
+        _ => throw new InvalidOperationException($"No case is kept to '{only}'."),
+    };
+
+    /// <summary>
+    /// The stamp of a data directory holding the case: on disk as it names, or a file of its text or bytes. Read off the
+    /// test's thread and given thirty seconds, so a read that waits on what is at the name fails rather than hangs.
+    /// </summary>
+    private static async Task<LayoutStamp> Read(string data, JsonElement @case)
+    {
+        var ct = TestContext.Current.CancellationToken;
         var file = Path.Combine(data, LayoutStamp.FileName);
+        var from = data;
         switch (Text(@case, "on_disk"))
         {
             case "missing":
@@ -80,6 +99,42 @@ public sealed class DesktopLayoutStampsTests
             case "oversized":
                 File.WriteAllBytes(file, Encoding.UTF8.GetBytes("{\"layout\":1,\"written_by\":\"0.42.0\",\"x\":\"" + new string('x', LayoutStamp.MaxBytes) + "\"}"));
                 break;
+            case "under_a_file":
+                from = Path.Combine(data, "inner");
+                File.WriteAllBytes(from, []);
+                break;
+            case "dangling_link":
+                File.CreateSymbolicLink(file, Path.Combine(data, "gone.json"));
+                break;
+            case "device_link":
+                File.CreateSymbolicLink(file, "/dev/null");
+                break;
+            case "fifo":
+                using (var make = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("mkfifo") { ArgumentList = { file } })!)
+                {
+                    await make.WaitForExitAsync(ct);
+                    Assert.Equal(0, make.ExitCode);
+                }
+
+                break;
+            case "unaskable":
+                if (!OperatingSystem.IsWindows())
+                {
+                    from = Path.Combine(data, "shut");
+                    Directory.CreateDirectory(from);
+                    File.WriteAllText(Path.Combine(from, LayoutStamp.FileName), """{"layout":1,"written_by":"0.42.0"}""");
+                    File.SetUnixFileMode(from, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    try
+                    {
+                        return await Task.Run(() => LayoutStamp.Read(from), ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
+                    }
+                    finally
+                    {
+                        File.SetUnixFileMode(from, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    }
+                }
+
+                throw new InvalidOperationException("A folder's mode is how macOS and Linux refuse the look.");
             case null:
                 File.WriteAllBytes(file, Text(@case, "base64") is { } encoded ? Convert.FromBase64String(encoded) : Encoding.UTF8.GetBytes(Text(@case, "text")!));
                 break;
@@ -87,7 +142,7 @@ public sealed class DesktopLayoutStampsTests
                 throw new InvalidOperationException($"No case is on disk as '{other}'.");
         }
 
-        return LayoutStamp.Read(data);
+        return await Task.Run(() => LayoutStamp.Read(from), ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
     }
 
     private static string State(LayoutStampState state) => state switch

@@ -2,7 +2,8 @@
 // cases the runtime's reader is held to, and the paths that move answered by it.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -14,10 +15,12 @@ import {
     layoutTable,
     layoutUnreadableCode,
     newestLayout,
+    findStamp,
     readLayoutStamp,
     stampMaxBytes,
     type LayoutParts,
     type StampDisk,
+    type StampFound,
 } from '../src/paths.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -79,7 +82,9 @@ interface StampCase {
     name: string;
     text?: string;
     base64?: string;
-    on_disk?: 'missing' | 'folder' | 'oversized';
+    on_disk?: 'missing' | 'folder' | 'oversized' | 'under_a_file' | 'dangling_link' | 'fifo' | 'device_link' | 'unaskable';
+    /** The systems a case can be made on: a pipe, a device and a folder's mode are macOS's and Linux's, and root is refused no look. */
+    only?: 'posix' | 'posix_unprivileged';
     state: 'missing' | 'read' | 'unreadable';
     layout?: number;
     written_by?: string;
@@ -96,19 +101,58 @@ const fixture = JSON.parse(readFileSync(join(here, 'fixtures', 'layout-stamps.js
     cases: StampCase[];
 };
 
-/** A data directory holding the case, as the runtime's test makes it. */
+/** Whether this run can make the case. */
+function applies(stamp: StampCase): boolean {
+    if (stamp.only === undefined) return true;
+    if (process.platform === 'win32') return false;
+    return stamp.only === 'posix' || process.getuid?.() !== 0;
+}
+
+/** The cases this run makes: every one but those kept to systems it is not on. */
+const made = fixture.cases.filter(applies);
+
+/** A data directory holding the case, as the runtime's test makes it; the directory the stamp is read from. */
 function holding(t: { after(fn: () => void): void }, stamp: StampCase): string {
     const data = scratch(t);
     const file = join(data, 'layout.json');
-    if (stamp.on_disk === 'folder') mkdirSync(file);
-    else if (stamp.on_disk === 'oversized') writeFileSync(file, `{"layout":1,"written_by":"0.42.0","x":"${'x'.repeat(stampMaxBytes)}"}`);
-    else if (stamp.on_disk === undefined) writeFileSync(file, stamp.base64 !== undefined ? Buffer.from(stamp.base64, 'base64') : (stamp.text ?? ''));
-    return data;
+    switch (stamp.on_disk) {
+        case 'missing':
+            return data;
+        case 'folder':
+            mkdirSync(file);
+            return data;
+        case 'oversized':
+            writeFileSync(file, `{"layout":1,"written_by":"0.42.0","x":"${'x'.repeat(stampMaxBytes)}"}`);
+            return data;
+        case 'under_a_file':
+            writeFileSync(join(data, 'inner'), '');
+            return join(data, 'inner');
+        case 'dangling_link':
+            symlinkSync(join(data, 'gone.json'), file);
+            return data;
+        case 'device_link':
+            symlinkSync('/dev/null', file);
+            return data;
+        case 'fifo':
+            execFileSync('mkfifo', [file]);
+            return data;
+        case 'unaskable': {
+            const shut = join(data, 'shut');
+            mkdirSync(shut);
+            writeFileSync(join(shut, 'layout.json'), '{"layout":1,"written_by":"0.42.0"}');
+            chmodSync(shut, 0o600);
+            t.after(() => chmodSync(shut, 0o700));
+            return shut;
+        }
+        case undefined:
+            writeFileSync(file, stamp.base64 !== undefined ? Buffer.from(stamp.base64, 'base64') : (stamp.text ?? ''));
+            return data;
+    }
 }
 
 test('a stamp is read as the shared cases say: its state, layout, writer, moment and problem, and the layout it is answered by', (t) => {
-    assert.ok(fixture.cases.length > 30);
-    for (const stamp of fixture.cases) {
+    assert.ok(made.length > 30);
+    for (const stamp of made) {
         const data = holding(t, stamp);
         const read = readLayoutStamp(data);
         const path = join(data, 'layout.json');
@@ -124,7 +168,7 @@ test('a stamp is read as the shared cases say: its state, layout, writer, moment
 });
 
 test('a stamp naming a later layout refuses with layout_newer in its exact sentence, said for this desktop’s version, and one that cannot be read with layout_unreadable', (t) => {
-    for (const stamp of fixture.cases) {
+    for (const stamp of made) {
         const data = holding(t, stamp);
         const refusal = layoutRefusal(dataLayout(data), fixture.current);
         if (stamp.refusal === null) {
@@ -158,22 +202,42 @@ test('every layout above the one this build runs refuses, so no part is ever pla
     }
 });
 
-test('a stamp that cannot be read is recorded, never thrown: a folder, a file larger than a stamp, a file the system will not open', (t) => {
-    const data = scratch(t);
-    mkdirSync(join(data, 'layout.json'));
-    assert.deepEqual(readLayoutStamp(data), { state: 'unreadable', path: join(data, 'layout.json'), problem: 'it is a folder' });
-    const closed: StampDisk = {
-        kind: () => 'file',
-        read: () => {
-            throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
-        },
+test('what is at the name is asked before anything is opened, and only nothing there is no stamp', (t) => {
+    const path = join(resolve('/d'), 'layout.json');
+    const never = () => assert.fail('nothing is opened');
+    const at = (found: StampFound, read: StampDisk['read'] = never) => readLayoutStamp(resolve('/d'), { find: () => found, read });
+    assert.deepEqual(at({ kind: 'none' }), { state: 'missing', path });
+    assert.deepEqual(at({ kind: 'folder' }), { state: 'unreadable', path, problem: 'it is a folder' });
+    assert.deepEqual(at({ kind: 'unaskable' }), { state: 'unreadable', path, problem: 'it could not be read' }, 'a name that cannot be asked about is never taken for none');
+    assert.deepEqual(at({ kind: 'other' }), { state: 'unreadable', path, problem: 'it is empty, or not a file' }, 'a pipe or a device is never opened');
+    assert.deepEqual(at({ kind: 'file', size: 0 }), { state: 'unreadable', path, problem: 'it is empty, or not a file' });
+    assert.deepEqual(at({ kind: 'file', size: stampMaxBytes + 1 }), { state: 'unreadable', path, problem: 'it is larger than a stamp' });
+    const closed = () => {
+        throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
     };
-    assert.deepEqual(readLayoutStamp(resolve('/d'), closed), { state: 'unreadable', path: join(resolve('/d'), 'layout.json'), problem: 'it could not be read' });
-    assert.deepEqual(dataLayout(resolve('/d'), undefined, closed).layout, 1);
-    const larger: StampDisk = { kind: () => 'file', read: () => 'larger' };
-    assert.deepEqual(readLayoutStamp(resolve('/d'), larger), { state: 'unreadable', path: join(resolve('/d'), 'layout.json'), problem: 'it is larger than a stamp' });
-    const unaskable: StampDisk = { kind: () => 'none', read: () => assert.fail('nothing is read where nothing is') };
-    assert.deepEqual(readLayoutStamp(resolve('/d'), unaskable), { state: 'missing', path: join(resolve('/d'), 'layout.json') });
+    assert.deepEqual(at({ kind: 'file', size: 10 }, closed), { state: 'unreadable', path, problem: 'it could not be read' });
+    assert.deepEqual(at({ kind: 'file', size: 10 }, () => 'larger'), { state: 'unreadable', path, problem: 'it is larger than a stamp' }, 'a file that grew after it was asked');
+    assert.equal(dataLayout(resolve('/d'), undefined, { find: () => ({ kind: 'unaskable' }), read: never }).layout, 1);
+
+    // On disk: a stat that fails for any reason but "nothing there" is a stamp that cannot be read; a link or a junction
+    // whose target is gone is one too, never none.
+    const data = scratch(t);
+    symlinkSync(join(data, 'gone'), join(data, 'layout.json'), 'junction');
+    assert.deepEqual(readLayoutStamp(data), { state: 'unreadable', path: join(data, 'layout.json'), problem: 'it could not be read' });
+    const asked: string[] = [];
+    const errors: Record<string, string> = { ENOENT: 'none', ENOTDIR: 'none', EACCES: 'unaskable', ELOOP: 'unaskable', ENAMETOOLONG: 'unaskable', EPERM: 'unaskable' };
+    for (const [code, kind] of Object.entries(errors)) {
+        const found = findStamp(join(data, 'x'), {
+            stat: () => {
+                throw Object.assign(new Error(code), { code });
+            },
+            lstat: (path) => {
+                asked.push(path);
+                throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+            },
+        });
+        assert.deepEqual(found, { kind }, code);
+    }
 });
 
 test('the stamp is read at every call, never kept: a stamp written after a first answer is the next answer', (t) => {
@@ -188,7 +252,7 @@ test('the stamp is read at every call, never kept: a stamp written after a first
 test('a layout given reads no stamp and refuses nothing, as JasonPaths given its layout', (t) => {
     const data = scratch(t);
     writeFileSync(join(data, 'layout.json'), '{"layout":3,"written_by":"9.0.0"}');
-    const given = dataLayout(data, 2, { kind: () => assert.fail('a given layout reads no stamp'), read: () => assert.fail('a given layout reads no stamp') });
+    const given = dataLayout(data, 2, { find: () => assert.fail('a given layout reads no stamp'), read: () => assert.fail('a given layout reads no stamp') });
     assert.equal(given.stamp, null);
     assert.equal(layoutRefusal(given, '0.41.0'), null);
     assert.equal(given.userSettingsFile, join(data, 'setup', 'settings.json'));
