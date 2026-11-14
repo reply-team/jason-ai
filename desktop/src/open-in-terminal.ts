@@ -1,4 +1,4 @@
-import type { ContinueFlags, TerminalFlags } from './open-in.ts';
+import type { ChangeJasonFlags, ContinueFlags, TerminalFlags } from './open-in.ts';
 
 /**
  * The arguments of `jason session open` for the three terminal entries of "Open in": the one place the form of that verb
@@ -15,3 +15,10 @@ export const terminalFlags: TerminalFlags = (kind, campaignId) => [
  * desktop starts the CLI in, `--host` names the agent host, and `--resume` the id of that host's own conversation.
  */
 export const continueFlags: ContinueFlags = (host, session) => ['--here', '--host', host === 'claude' ? 'claude_code' : host, '--resume', session];
+
+/**
+ * The arguments of `jason session open` for "Change Jason itself": `--setup` opens at the installation's role skills
+ * folder with its setup brief, and with no host the command line chooses one by its own rule, the preference first.
+ * `--host` names one only when that rule could not choose.
+ */
+export const changeJasonFlags: ChangeJasonFlags = (host) => ['--setup', ...(host === null ? [] : ['--host', host === 'claude' ? 'claude_code' : host])];
