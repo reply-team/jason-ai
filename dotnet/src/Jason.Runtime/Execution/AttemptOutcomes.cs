@@ -458,7 +458,9 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     /// verdict. <see cref="BlockAnswer.GotPast"/> — it succeeded, or the provider judged the work itself — clears every
     /// open block that covers it and every block it was the trial of. <see cref="BlockAnswer.Blocked"/> opens the block <paramref name="said"/> names or sees
     /// it again, and parks the item on it: a trial of the account that met a sender's block has got past the account,
-    /// so the account clears and the item parks on the sender. <see cref="BlockAnswer.Undecided"/> says nothing, and a
+    /// so the account clears and the item parks on the sender, and so has a trial of a sender's block on every channel that
+    /// met the same sender's block on one channel (<see cref="ProviderBlocks.Wider"/>). A sender's block covers the call
+    /// where it names the call's sender and is on the call's channel or on every channel. <see cref="BlockAnswer.Undecided"/> says nothing, and a
     /// trial it was puts the block's next trial a cadence off. Every block it cleared is said to have cleared.
     /// <para>
     /// Only work that reaches a person is the block's judge. A held control got past nothing that does: its success, or
@@ -497,9 +499,10 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
         {
             case BlockAnswer.GotPast:
                 var sender = ProviderBlocks.Sender(input);
+                var channel = ProviderBlocks.Channel(input);
                 foreach (var block in open.Where(block => block.Scope == ProviderBlockScope.Account
                     || block.TrialWorkItemId == item.Id
-                    || (sender is not null && string.Equals(block.SenderExternalId, sender, StringComparison.Ordinal))))
+                    || (sender is not null && string.Equals(block.SenderExternalId, sender, StringComparison.Ordinal) && ProviderBlocks.OnChannel(block, channel))))
                 {
                     ProviderBlocks.Clear(block, attempt, now);
                     cleared.Add(block);
@@ -513,12 +516,12 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
                 var met = ProviderBlocks.Meet(db, open, pluginId, identity, said, attempt, now, trialSeconds);
                 foreach (var trial in open.Where(block => block.TrialWorkItemId == item.Id && !ReferenceEquals(block, met)))
                 {
-                    if (trial.Scope == ProviderBlockScope.Account && met.Scope == ProviderBlockScope.Sender && decides)
+                    if (ProviderBlocks.Wider(trial, met) && decides)
                     {
                         ProviderBlocks.Clear(trial, attempt, now);
                         cleared.Add(trial);
                     }
-                    else if (trial.Scope == ProviderBlockScope.Account && met.Scope == ProviderBlockScope.Sender)
+                    else if (ProviderBlocks.Wider(trial, met))
                     {
                         ProviderBlocks.Undecided(trial, now, trialSeconds);
                     }

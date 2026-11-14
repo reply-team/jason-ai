@@ -22,7 +22,8 @@ internal static class BlockRows
         ProviderBlockScope scope = ProviderBlockScope.Account,
         string? sender = null,
         string binding = Binding,
-        string reason = "billing")
+        string reason = "billing",
+        string? channel = null)
     {
         ArgumentNullException.ThrowIfNull(opener);
         var attempt = WorkItemFactory.NewAttempt(opener, opener.Attempts.Count + 1, AttemptStatus.Failed, now);
@@ -34,6 +35,7 @@ internal static class BlockRows
             BindingIdentity = binding,
             Scope = scope,
             SenderExternalId = sender,
+            Channel = channel,
             Reason = reason,
             OpenedAt = now,
             OpenedByAttempt = attempt,

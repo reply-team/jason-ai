@@ -1332,7 +1332,8 @@ learned later, never from this item.
 A `blocked` failure is the provider saying no to the account, or to one sending account under it, rather than to
 the work: its money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or
 paused. The provider did nothing, and nothing the item says would change its answer, so the runtime keeps the block —
-per plugin and binding identity, the account's or one sender's — and holds the work it concerns until it clears.
+per plugin and binding identity, the account's or one sender's, a sender's on the channel the block names or on every
+channel — and holds the work it concerns until it clears.
 
 **What a block holds.** A block holds the work of every operation whose document says
 `dispatch.under_provider_block: waits` ([the contracts](contracts/README.md)): every `reach: act` operation, which a
@@ -1342,8 +1343,12 @@ about what the provider refuses to let reach a person or protect them, a control
 read tells the truth. A take-back of a send, `message.cancel`, is one of them: the moment of the send it takes back passes
 while it would wait for a trial, so it runs, and its `blocked` answer ends it, final and never repeated behind the
 block, a protective action that failed ([notifications.md](notifications.md)). An account's block covers every sending account under it. A sender's block holds the work whose
-composed input names that sender at `/args/sender/external_id`; an item that met a sender's block and names no
-sender parks alone, on that block.
+composed input names that sender at `/args/sender/external_id` and, where the block names a channel, that channel at
+`/args/channel`: a provider may number its mailboxes apart from its social accounts, so that one identifier names a
+mailbox and a LinkedIn account at once, and a block of one is not a block of the other. A sender's block that names no
+channel holds the sender on every channel — every block opened before 0.43.0 is one — and is the block that holds
+work where it and the sender's block on that work's channel are both open, as the account's is over a sender's. An
+item that met a sender's block and names no sender parks alone, on that block.
 
 **Two ways in, one wait.** An attempt of held work that answers `blocked` ends `blocked` — over, and never counted
 toward `max_attempts` — and its item waits on the block the answer names, which that attempt opens where none of its
@@ -1374,10 +1379,14 @@ of `reach: act` work answers decides the block:
 
 - **it succeeded, or failed `permanent` or `validation`** — the provider judged the work, so the call got past the
   block: the block is cleared by that attempt, and the next resume step releases every wait on it with
-  `block_cleared`. Any call of held `act` work the provider judged on the work clears its open block, a trial or not,
-  and a trial clears the block that let it through whether or not its input names a sender;
+  `block_cleared`. Any call of held `act` work the provider judged on the work clears its open block, a trial or not —
+  the account's, and its sender's on its own channel and on every channel, never the same identifier's on another
+  channel — and a trial clears the block that let it through whether or not its input names a sender;
 - **it answered `blocked` again** — the trial parks once more on the block, which is seen again and its next trial
-  put off; nobody is told twice;
+  put off; nobody is told twice. A trial that answers with a narrower block than the one that let it through — the
+  account's trial meeting a sender's block, or the trial of a sender's block on every channel meeting that sender's
+  block on one channel — has got past the wider block where the trial was held `act` work, and the wider block clears;
+  where it was a control, the wider block's next trial is a cadence off. Either way the item parks on the narrower one;
 - **anything else** — `transient`, `ambiguous`, an answer outside the contract, the host's own ending, or a code
   reserved beside every operation, which no provider judgment of the work stands behind (`provider_input_invalid`, which
   a package answers before any call, [the input a plugin receives](contracts/README.md#the-input-a-plugin-receives);
@@ -1398,7 +1407,7 @@ told about that block.
 
 **What is said.** The campaign is told once per block: `provider_blocked`, keyed by the block's id, written when the
 first of its items parks on that block — the block's id, scope, reason and `clears_at`, the item that parked, and for
-a sender's block the sender's identifier. It is a default manager trigger ([campaign manager](campaign-manager.md)):
+a sender's block the sender's identifier and the channel it holds the sender on, null where it holds every channel. It is a default manager trigger ([campaign manager](campaign-manager.md)):
 what reaches people has stopped, and whether to tell somebody or change course is the manager's. When the block
 clears, every campaign that was told is told so, once, `provider_block_cleared`, naming the attempt that got past it —
 the first, where two got past it at once — or, where a person cleared it, written as theirs, with their reason and no
@@ -1429,7 +1438,7 @@ open before a person's clear and writes after it writes nothing, and the person'
 | `block.get` | `block_id` | the block, or `block_not_found` |
 | `block.clear` | `block_id`, `actor`, `reason?` | the block, `cleared`, or `block_not_found`, `block_not_open`, `block_not_human` or `actor_required` |
 
-A block answers its id, `plugin_id`, `binding_identity`, `scope`, `sender_external_id`, `reason`, `link`, `clears_at`,
+A block answers its id, `plugin_id`, `binding_identity`, `scope`, `sender_external_id`, `channel`, `reason`, `link`, `clears_at`,
 `status`, `opened_at`, `last_seen_at`, `seen_count`, `next_trial_at`, `trial_work_item_id`, `opened_by_attempt_id`,
 `held_count` — the open waits parked on this block itself; an account's count leaves out what its senders' blocks
 hold — and `cleared_at` with `cleared_by_attempt_id` or `cleared_by_actor`.

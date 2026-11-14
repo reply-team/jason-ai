@@ -1,0 +1,11 @@
+{
+  "kind": "provider_blocked",
+  "version": 1,
+  "case": "one LinkedIn account reached its weekly allowance, its number shared with a mailbox the block does not hold",
+  "body": {
+    "key": "blk_01JC0000000000000000000008",
+    "old": null,
+    "new": { "provider_block_id": "blk_01JC0000000000000000000008", "plugin_id": "example-mail", "scope": "sender", "sender_external_id": "301", "channel": "linkedin", "reason": "limit", "clears_at": null, "work_item_id": "wi_01JC0000000000000000000002" }
+  },
+  "expect": "valid"
+}

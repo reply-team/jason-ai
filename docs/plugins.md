@@ -1329,7 +1329,9 @@ you cannot read as a block. The block is kept on the attempt and on the item's `
 to clear. Where the operation is one a block holds — its contract says `dispatch.under_provider_block: waits` — the attempt
 ends `blocked`, never counted, and the item waits on the block until it clears or a trial gets past it; any other
 operation ends there, final. So report `blocked` only for a refusal that concerns the account or the sender rather
-than the call: work waits on it. A block outside that page is recorded `permanent`, with what is wrong with it named
+than the call: work waits on it. A sender's block names the channel the sender is blocked on wherever the provider
+numbers its accounts on one channel apart from those on another, as Reply numbers its mailboxes apart from its
+LinkedIn accounts: without it, one identifier's block holds and clears that identifier's work on every channel. A block outside that page is recorded `permanent`, with what is wrong with it named
 beside the failure. The events and delivery families declare no
 block, so a `blocked` answer there is an answer outside the contract, `result_invalid`.
 

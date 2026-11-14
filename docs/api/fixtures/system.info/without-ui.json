@@ -49,7 +49,8 @@
         "20261114031653_JournalVerdictsByThread",
         "20261114050917_CampaignSendModes",
         "20261114064450_WorkItemDoubtNotes",
-        "20261114084851_ApprovalsAutomaticByDay"
+        "20261114084851_ApprovalsAutomaticByDay",
+        "20261114190252_ProviderBlockChannels"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -89,7 +90,8 @@
         "20261114031653_JournalVerdictsByThread",
         "20261114050917_CampaignSendModes",
         "20261114064450_WorkItemDoubtNotes",
-        "20261114084851_ApprovalsAutomaticByDay"
+        "20261114084851_ApprovalsAutomaticByDay",
+        "20261114190252_ProviderBlockChannels"
       ],
       "backup_file": null
     },

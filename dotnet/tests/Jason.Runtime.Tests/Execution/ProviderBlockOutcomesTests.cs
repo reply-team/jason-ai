@@ -317,6 +317,127 @@ public class ProviderBlockOutcomesTests
         Assert.Null(ProviderBlocks.Sender(new JsonObject { ["args"] = new JsonObject { ["sender"] = "snd_marta" } }));
     }
 
+    /// <summary>
+    /// A sender's block on one channel holds only the work that names that sender on that channel: a provider that numbers
+    /// its mailboxes apart from its LinkedIn accounts has a mailbox 12 and a LinkedIn account 12, and a block of one is not
+    /// a block of the other. A sender's block on every channel holds the sender's work on any channel, and is the one that
+    /// holds where both are open, as the account's block is where it and a sender's are.
+    /// </summary>
+    [Fact]
+    public void A_senders_block_on_one_channel_covers_only_that_channel_and_one_on_every_channel_covers_any()
+    {
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var mailbox = BlockRows.Block(opener, Noon, Noon, ProviderBlockScope.Sender, "12", channel: "email");
+        var everywhere = BlockRows.Block(opener, Noon, Noon, ProviderBlockScope.Sender, "12");
+
+        Assert.Same(mailbox, ProviderBlocks.Covering([mailbox], Input("12", "email")));
+        Assert.Null(ProviderBlocks.Covering([mailbox], Input("12", "linkedin")));
+        Assert.Null(ProviderBlocks.Covering([mailbox], Input("12")));
+        Assert.Same(everywhere, ProviderBlocks.Covering([everywhere], Input("12", "linkedin")));
+        Assert.Same(everywhere, ProviderBlocks.Covering([everywhere], Input("12")));
+        Assert.Same(everywhere, ProviderBlocks.Covering([mailbox, everywhere], Input("12", "email")));
+        Assert.Equal("email", ProviderBlocks.Channel(Input("12", "email")));
+        Assert.Null(ProviderBlocks.Channel(Input("12")));
+    }
+
+    /// <summary>
+    /// A blocked answer that names a channel opens the sender's block on that channel, and another channel's answer for the
+    /// same identifier opens a block of its own; an answer for a channel already blocked sees that block again. The line
+    /// that tells the campaign names the channel, as a fact of the block; a block on every channel names none.
+    /// </summary>
+    [Fact]
+    public async Task A_senders_block_is_opened_per_channel_and_the_line_names_the_channel()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var outcomes = NewOutcomes();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+
+        var (a, attemptA) = await RunningAsync(db, campaign);
+        var (b, attemptB) = await RunningAsync(db, campaign);
+        await outcomes.AnsweredAsync(db, a, attemptA, BlockRows.Plugin, Input("12", "email"), BlockAnswer.Blocked, Said("sender", "limit", "12", channel: "email"), null, Ct);
+        await outcomes.AnsweredAsync(db, b, attemptB, BlockRows.Plugin, Input("12", "linkedin"), BlockAnswer.Blocked, Said("sender", "limit", "12", channel: "linkedin"), null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var (c, attemptC) = await RunningAsync(db, campaign);
+        var (d, attemptD) = await RunningAsync(db, campaign);
+        await outcomes.AnsweredAsync(db, c, attemptC, BlockRows.Plugin, Input("12", "email"), BlockAnswer.Blocked, Said("sender", "limit", "12", channel: "email"), null, Ct);
+        await outcomes.AnsweredAsync(db, d, attemptD, BlockRows.Plugin, Input("12", "email"), BlockAnswer.Blocked, Said("sender", "channel", "12"), null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
+        Assert.Equal(["12/email/2", "12/linkedin/1", "12/-/1"], blocks.Select(x => $"{x.SenderExternalId}/{x.Channel ?? "-"}/{x.SeenCount}"));
+
+        var lines = await db.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ProviderBlocked).OrderBy(e => e.Id).ToListAsync(Ct);
+        Assert.Equal(["email", "linkedin", null], lines.Select(line => (string?)line.New!["channel"]));
+        Assert.True(lines[2].New!.AsObject().ContainsKey("channel"), "The line of a block on every channel says so, with a null channel, rather than leaving the channel out.");
+        Assert.Equal("email", (string?)ProviderBlocks.Said(blocks[0])["channel"]);
+        Assert.False(ProviderBlocks.Said(blocks[2]).ContainsKey("channel"), "A block on every channel is said with no channel, as a provider says one.");
+    }
+
+    /// <summary>
+    /// A send that gets past on one channel clears the sender's block on that channel and the sender's block on every
+    /// channel, and leaves the same identifier's block on another channel open: that is another account.
+    /// </summary>
+    [Fact]
+    public async Task A_call_that_gets_past_clears_its_senders_block_on_its_channel_and_on_every_channel_and_no_other()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var outcomes = NewOutcomes();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var mailbox = BlockRows.Block(opener, Noon, Noon.AddMinutes(15), ProviderBlockScope.Sender, "12", channel: "email");
+        var linkedin = BlockRows.Block(opener, Noon, Noon.AddMinutes(15), ProviderBlockScope.Sender, "12", channel: "linkedin");
+        var everywhere = BlockRows.Block(opener, Noon, Noon.AddMinutes(15), ProviderBlockScope.Sender, "12");
+        db.AddRange(opener, mailbox, linkedin, everywhere);
+        await db.SaveChangesAsync(Ct);
+
+        var (item, attempt) = await RunningAsync(db, campaign);
+        outcomes.Succeed(db, item, attempt, null, Actors.Dispatcher);
+        await outcomes.AnsweredAsync(db, item, attempt, BlockRows.Plugin, Input("12", "email"), BlockAnswer.GotPast, null, null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
+        Assert.Equal(
+            ["email/cleared", "linkedin/open", "-/cleared"],
+            blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status.ToString().ToLowerInvariant()}"));
+    }
+
+    /// <summary>
+    /// A trial of the sender's block on every channel that meets the sender's block on one channel has got past the block on
+    /// every channel, as an account's trial that meets a sender's block has got past the account: the provider now names the
+    /// channel, so the block on every channel clears and the item parks on the block of its channel. A block left open
+    /// at the upgrade, which names no channel, so gives way at its first trial to the block the provider names.
+    /// </summary>
+    [Fact]
+    public async Task A_trial_of_a_senders_block_on_every_channel_that_meets_its_block_on_one_channel_clears_the_first()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var outcomes = NewOutcomes();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var everywhere = BlockRows.Block(opener, Noon.AddHours(-1), Noon, ProviderBlockScope.Sender, "12", reason: "limit");
+        db.AddRange(opener, everywhere);
+        await db.SaveChangesAsync(Ct);
+        var (trial, attempt) = await RunningAsync(db, campaign);
+        everywhere.TrialWorkItemId = trial.Id;
+        await db.SaveChangesAsync(Ct);
+
+        await outcomes.AnsweredAsync(db, trial, attempt, BlockRows.Plugin, Input("12", "linkedin"), BlockAnswer.Blocked, Said("sender", "limit", "12", channel: "linkedin"), null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
+        Assert.True(
+            blocks.Count == 2 && blocks[0] is { Status: ProviderBlockStatus.Cleared, Channel: null, TrialWorkItemId: null } && blocks[0].ClearedByAttemptId == attempt.Id
+            && blocks[1] is { Status: ProviderBlockStatus.Open, Channel: "linkedin", TrialWorkItemId: null },
+            $"The blocks are {string.Join(", ", blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status}/trial {x.TrialWorkItemId}"))}.");
+        var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == trial.Id, Ct);
+        Assert.Equal(blocks[1].Id, wait.ProviderBlockId);
+    }
+
     private static AttemptOutcomes NewOutcomes()
     {
         var clock = new FixedClock(Noon);
@@ -336,9 +457,14 @@ public class ProviderBlockOutcomesTests
         return (item, attempt);
     }
 
-    private static JsonObject Input(string? sender)
+    private static JsonObject Input(string? sender, string? channel = null)
     {
         var args = new JsonObject { ["body"] = "Hello Marta" };
+        if (channel is not null)
+        {
+            args["channel"] = channel;
+        }
+
         if (sender is not null)
         {
             args["sender"] = new JsonObject { ["external_id"] = sender };
@@ -347,12 +473,17 @@ public class ProviderBlockOutcomesTests
         return new JsonObject { ["args"] = args };
     }
 
-    private static JsonObject Said(string scope, string reason = "billing", string? sender = null, string? link = null, string? clearsAt = null)
+    private static JsonObject Said(string scope, string reason = "billing", string? sender = null, string? link = null, string? clearsAt = null, string? channel = null)
     {
         var said = new JsonObject { ["scope"] = scope, ["reason"] = reason };
         if (sender is not null)
         {
             said["sender_external_id"] = sender;
+        }
+
+        if (channel is not null)
+        {
+            said["channel"] = channel;
         }
 
         if (link is not null)

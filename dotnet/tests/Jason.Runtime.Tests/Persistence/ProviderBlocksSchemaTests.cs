@@ -16,6 +16,9 @@ public class ProviderBlocksSchemaTests
 {
     private const string PreviousMigration = "20261024123426_WorkItemWaits";
 
+    /// <summary>The last migration before a sender's block named the channel it holds the sender on.</summary>
+    private const string BeforeChannels = "20261114084851_ApprovalsAutomaticByDay";
+
     /// <summary>
     /// An installation that upgrades keeps its waits as they were, each waiting on no block, and has the block table empty
     /// with every column a block needs.
@@ -54,7 +57,7 @@ public class ProviderBlocksSchemaTests
             [
                 "public_id|1", "plugin_id|1", "binding_identity|1", "scope|1", "sender_external_id|0", "reason|1", "link|0", "clears_at|0",
                 "status|1", "opened_at|1", "opened_by_attempt_id|1", "last_seen_at|1", "seen_count|1", "next_trial_at|1",
-                "trial_work_item_id|0", "cleared_at|0", "cleared_by_attempt_id|0", "cleared_by_id|0", "cleared_by_type|0",
+                "trial_work_item_id|0", "cleared_at|0", "cleared_by_attempt_id|0", "cleared_by_id|0", "cleared_by_type|0", "channel|0",
             ],
             Rows(dir.Paths.DatabaseFile, "SELECT name, \"notnull\" FROM pragma_table_info('provider_blocks') WHERE name <> 'id' ORDER BY cid"));
         Assert.Equal(["0"], Rows(dir.Paths.DatabaseFile, "SELECT COUNT(*) FROM provider_blocks"));
@@ -102,7 +105,8 @@ public class ProviderBlocksSchemaTests
             db.Database.Migrate();
         }
 
-        Assert.Equal(before, Rows(dir.Paths.DatabaseFile, Everything));
+        // As they were, with the channel a later release added at the end, null on every one of them.
+        Assert.Equal(before.Select(row => row + "|"), Rows(dir.Paths.DatabaseFile, Everything));
         Assert.Contains("ix_provider_blocks_status_opened_at_public_id|0|status,opened_at,public_id", Rows(dir.Paths.DatabaseFile, IndexList("provider_blocks")));
         Assert.Equal(
             ["blk_3", "blk_2"],
@@ -124,7 +128,8 @@ public class ProviderBlocksSchemaTests
             [
                 "ix_provider_blocks_cleared_by_attempt_id|0|cleared_by_attempt_id",
                 "ix_provider_blocks_one_open_per_account|1|plugin_id,binding_identity",
-                "ix_provider_blocks_one_open_per_sender|1|plugin_id,binding_identity,sender_external_id",
+                "ix_provider_blocks_one_open_per_sender|1|plugin_id,binding_identity,sender_external_id,channel",
+                "ix_provider_blocks_one_open_per_sender_on_every_channel|1|plugin_id,binding_identity,sender_external_id",
                 "ix_provider_blocks_opened_by_attempt_id|0|opened_by_attempt_id",
                 "ix_provider_blocks_public_id|1|public_id",
                 "ix_provider_blocks_status_next_trial_at|0|status,next_trial_at",
@@ -147,6 +152,95 @@ public class ProviderBlocksSchemaTests
             "WHERE status = 'open' AND scope = 'sender'",
             Assert.Single(Rows(database.File, "SELECT sql FROM sqlite_master WHERE name = 'ix_provider_blocks_one_open_per_sender'")),
             StringComparison.Ordinal);
+        Assert.EndsWith(
+            "WHERE status = 'open' AND scope = 'sender' AND channel IS NULL",
+            Assert.Single(Rows(database.File, "SELECT sql FROM sqlite_master WHERE name = 'ix_provider_blocks_one_open_per_sender_on_every_channel'")),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A sender's block is kept per channel: one sender identifier may name a mailbox and a social account at once, so a
+    /// block of the sender on email and one on LinkedIn stand side by side, and beside them one on every channel, which
+    /// names none. A second open block of the same sender on the same channel is refused, and so is a second on every
+    /// channel, though SQLite holds nulls distinct: that half of the rule is an index of its own.
+    /// </summary>
+    [Fact]
+    public void One_block_is_open_per_sender_and_channel_and_one_per_sender_on_every_channel()
+    {
+        using var database = new TestDatabase();
+        Execute(database.File, Seed);
+        Execute(
+            database.File,
+            """
+            INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, channel, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at) VALUES
+              ('blk_1', 'fake', 'sha256:a', 'sender', '12', 'email', 'limit', 'open', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00'),
+              ('blk_2', 'fake', 'sha256:a', 'sender', '12', 'linkedin', 'limit', 'open', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00'),
+              ('blk_3', 'fake', 'sha256:a', 'sender', '12', NULL, 'channel', 'open', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00');
+            """);
+
+        foreach (var channel in new[] { "'email'", "NULL" })
+        {
+            var twice = Assert.Throws<SqliteException>(() => Execute(
+                database.File,
+                "INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, channel, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at) "
+                + $"VALUES ('blk_4', 'fake', 'sha256:a', 'sender', '12', {channel}, 'limit', 'open', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00');"));
+            Assert.Contains("UNIQUE constraint failed: provider_blocks.plugin_id", twice.Message, StringComparison.Ordinal);
+        }
+
+        Execute(
+            database.File,
+            """
+            UPDATE provider_blocks SET status = 'cleared', cleared_at = '2026-10-01 01:00:00', cleared_by_attempt_id = 1 WHERE public_id IN ('blk_1', 'blk_3');
+            INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, channel, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at) VALUES
+              ('blk_4', 'fake', 'sha256:a', 'sender', '12', 'email', 'limit', 'open', '2026-10-02 00:00:00', 1, '2026-10-02 00:00:00', 1, '2026-10-02 00:15:00'),
+              ('blk_5', 'fake', 'sha256:a', 'sender', '12', NULL, 'channel', 'open', '2026-10-02 00:00:00', 1, '2026-10-02 00:00:00', 1, '2026-10-02 00:15:00');
+            """);
+        Assert.Equal(
+            ["blk_2|linkedin", "blk_4|email", "blk_5|"],
+            Rows(database.File, "SELECT public_id, channel FROM provider_blocks WHERE status = 'open' ORDER BY public_id"));
+    }
+
+    /// <summary>
+    /// An installation that upgrades from the release before blocks were kept per channel keeps every block as it was, and
+    /// each one names no channel, which is what it meant: the sender on every channel. The open ones stay held to the
+    /// one-open rule, now in its every-channel half. Nothing is rewritten: the migration adds a column that may be null and
+    /// makes the sender's half of the rule again.
+    /// </summary>
+    [Fact]
+    public void An_upgraded_database_keeps_its_blocks_each_on_every_channel()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.StateDirectory);
+        var options = JasonDbContext.CreateOptions(dir.Paths.DatabaseFile);
+        using (var db = new JasonDbContext(options))
+        {
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(BeforeChannels);
+        }
+
+        Execute(dir.Paths.DatabaseFile, Seed);
+        Execute(
+            dir.Paths.DatabaseFile,
+            """
+            INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at, cleared_at, cleared_by_type, cleared_by_id) VALUES
+              ('blk_1', 'fake', 'sha256:a', 'account', NULL, 'billing', 'cleared', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00', '2026-10-01 01:00:00', 'human', 'person_1'),
+              ('blk_2', 'fake', 'sha256:a', 'sender', '12', 'limit', 'open', '2026-10-01 02:00:00', 1, '2026-10-01 02:00:00', 3, '2026-10-01 02:15:00', NULL, NULL, NULL);
+            INSERT INTO work_item_waits (work_item_id, status, opened_at, provider_block_id) VALUES (1, 'open', '2026-10-01 02:00:00', 2);
+            """);
+        var before = Rows(dir.Paths.DatabaseFile, "SELECT * FROM provider_blocks ORDER BY id");
+
+        using (var db = new JasonDbContext(options))
+        {
+            db.Database.Migrate();
+        }
+
+        Assert.Equal(before.Select(row => row + "|"), Rows(dir.Paths.DatabaseFile, "SELECT * FROM provider_blocks ORDER BY id"));
+        var again = Assert.Throws<SqliteException>(() => Execute(
+            dir.Paths.DatabaseFile,
+            "INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at) "
+            + "VALUES ('blk_3', 'fake', 'sha256:a', 'sender', '12', 'limit', 'open', '2026-10-02 00:00:00', 1, '2026-10-02 00:00:00', 1, '2026-10-02 00:15:00');"));
+        Assert.Contains("UNIQUE", again.Message, StringComparison.Ordinal);
+        Assert.Equal(["1|open|2"], Rows(dir.Paths.DatabaseFile, "SELECT work_item_id, status, provider_block_id FROM work_item_waits"));
+        Assert.Equal(["ok"], Rows(dir.Paths.DatabaseFile, "PRAGMA integrity_check"));
     }
 
     /// <summary>

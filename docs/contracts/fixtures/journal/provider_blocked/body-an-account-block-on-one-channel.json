@@ -1,0 +1,11 @@
+{
+  "kind": "provider_blocked",
+  "version": 1,
+  "case": "a block of the whole account names a channel, as if the account held only one",
+  "body": {
+    "key": "blk_01JC0000000000000000000008",
+    "old": null,
+    "new": { "provider_block_id": "blk_01JC0000000000000000000008", "plugin_id": "example-mail", "scope": "account", "sender_external_id": null, "channel": "email", "reason": "billing", "clears_at": null, "work_item_id": "wi_01JC0000000000000000000002" }
+  },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

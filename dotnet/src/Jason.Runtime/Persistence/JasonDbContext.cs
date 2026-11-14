@@ -618,20 +618,27 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             block.Property(b => b.PluginId).HasMaxLength(64);
             block.Property(b => b.BindingIdentity).HasMaxLength(71);
             block.Property(b => b.SenderExternalId).HasMaxLength(256);
+            block.Property(b => b.Channel).HasMaxLength(32);
             block.Property(b => b.Reason).HasMaxLength(32);
             block.Property(b => b.Link).HasMaxLength(2048);
             block.Property(b => b.ClearedById).HasMaxLength(100);
 
-            // The two halves of one rule, one open block per binding, scope and sender: SQLite holds nulls distinct, so
-            // an account block, which names no sender, is held unique by an index of its own.
+            // The three parts of one rule, one open block per binding, scope, sender and channel, a block on every channel
+            // being one value of the channel: SQLite holds nulls distinct, so an account block, which names no sender, and
+            // a sender's block on every channel, which names no channel, are each held unique by an index of their own. The
+            // sender's index keeps the plugin and the binding first, so the trial query reads an account's senders by it.
             block.HasIndex(b => new { b.PluginId, b.BindingIdentity })
                 .IsUnique()
                 .HasFilter("status = 'open' AND scope = 'account'")
                 .HasDatabaseName("ix_provider_blocks_one_open_per_account");
-            block.HasIndex(b => new { b.PluginId, b.BindingIdentity, b.SenderExternalId })
+            block.HasIndex(b => new { b.PluginId, b.BindingIdentity, b.SenderExternalId, b.Channel })
                 .IsUnique()
                 .HasFilter("status = 'open' AND scope = 'sender'")
                 .HasDatabaseName("ix_provider_blocks_one_open_per_sender");
+            block.HasIndex(b => new { b.PluginId, b.BindingIdentity, b.SenderExternalId })
+                .IsUnique()
+                .HasFilter("status = 'open' AND scope = 'sender' AND channel IS NULL")
+                .HasDatabaseName("ix_provider_blocks_one_open_per_sender_on_every_channel");
 
             // The blocks whose trial is due, by how they stand and when: the resume step's trial query reads them here.
             block.HasIndex(b => new { b.Status, b.NextTrialAt });
