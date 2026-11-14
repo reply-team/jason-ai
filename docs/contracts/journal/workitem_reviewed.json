@@ -44,7 +44,8 @@
             "description": "Why the review doubts the send; null for a pass."
           },
           "operation": { "type": "string", "minLength": 1, "maxLength": 200, "description": "The operation the send performs." },
-          "role": { "type": ["null", "string"], "minLength": 1, "maxLength": 64, "description": "The role whose run reviewed it, or null for a person's review." }
+          "role": { "type": ["null", "string"], "minLength": 1, "maxLength": 64, "description": "The role whose run reviewed it, or null for a person's review." },
+          "confined": { "const": true, "description": "Only where it is so: the review was made under the desktop's chat marker, the Jason-Confined header the CLI sends whenever JASON_CONFINED is set. A pass so marked is the chat's, never a person's own, and releases nothing under an automatic mode." }
         }
       }
     },

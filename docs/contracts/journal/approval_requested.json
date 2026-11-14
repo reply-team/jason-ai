@@ -2,7 +2,7 @@
   "kind": "approval_requested",
   "version": 1,
   "since": "0.1.0",
-  "summary": "Work was parked to wait for a person's decision, and the line names the approval that asks for it.",
+  "summary": "Work was parked to wait for a person's decision, and the line names the approval that asks for it; its reason is the approval's, which says why the work waits, a send mode's code among them.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },

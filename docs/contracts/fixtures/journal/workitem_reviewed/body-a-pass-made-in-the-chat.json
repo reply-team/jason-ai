@@ -1,0 +1,11 @@
+{
+  "kind": "workitem_reviewed",
+  "version": 1,
+  "case": "a person's pass made under the desktop's chat marker says so, and is the chat's",
+  "body": {
+    "key": "sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "old": null,
+    "new": { "result": "passed", "code": null, "operation": "message.send", "role": null, "confined": true }
+  },
+  "expect": "valid"
+}

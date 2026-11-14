@@ -54,7 +54,9 @@ public sealed class Approval
 
     /// <summary>
     /// Why the work was parked: <c>approval_required</c> the first time, and <c>input_changed</c> when a decision
-    /// had already been made about a subject this one no longer matches.
+    /// had already been made about a subject this one no longer matches; where a send mode of <c>automatic</c> is in
+    /// force and held the send, the code it held it by (<see cref="Jason.Contracts.Api.SendModeReasons"/>). A row born
+    /// approved says what released it: <c>standing_approval</c> or <c>automatic_mode</c>.
     /// </summary>
     public required string Reason { get; set; }
 

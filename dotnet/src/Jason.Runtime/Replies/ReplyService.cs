@@ -154,6 +154,7 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
                 : JsonSerializer.SerializeToNode(new ActorRef(answered.AnsweredByType!.Value, answered.AnsweredById), JasonJson.Options),
             ["nature"] = request.Nature is { } nature ? JsonSerializer.SerializeToNode(nature, JasonJson.Options) : null,
         };
+        ConfinedScope.Mark(line);
 
         var entry = journal.Append(
             db,

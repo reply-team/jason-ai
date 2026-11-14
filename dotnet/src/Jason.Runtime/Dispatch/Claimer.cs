@@ -620,6 +620,18 @@ public sealed class Claimer(
 
         if (ApprovalGate.Authorizes(live, subject))
         {
+            // A retry under an automatic release goes under the mode's reading of facts, and a reply that landed since the
+            // failure is one of them: where the contact now waits on a verdict, the send parks for the person and the row is
+            // superseded as any park supersedes one. Nothing else about the row is decided again, its reviews included.
+            if (string.Equals(live!.Reason, ApprovalGate.AutomaticMode, StringComparison.Ordinal)
+                && await AutomaticRelease.RetryAsync(db, item, ct).ConfigureAwait(false) is { } waits)
+            {
+                var again = await PreviewAsync(db, item, plan, subject, ct).ConfigureAwait(false);
+                again[AutomaticRelease.PreviewKey] = waits.Facts;
+                ApprovalGate.Park(db, journal, item, plan, subject, again, live, waits.Why, now);
+                return null;
+            }
+
             return live;
         }
 
@@ -637,30 +649,46 @@ public sealed class Claimer(
             return null;
         }
 
-        var preview = ApprovalPreview.Of(
-            plan.Contract,
-            subject,
-            item.Campaign!,
-            item.Contact,
-            CanonicalInput.ConsumedChannel(plan.Contract, item));
-
         // Who doubted and why, where the person deciding reads it; the park clears the sentences from the row.
-        var doubts = await Doubts.PreviewAsync(db, item, ct).ConfigureAwait(false);
-        if (doubts is not null)
-        {
-            preview[Doubts.PreviewKey] = doubts;
-        }
+        var preview = await PreviewAsync(db, item, plan, subject, ct).ConfigureAwait(false);
+        var doubted = preview.ContainsKey(Doubts.PreviewKey);
 
         // Only about work nobody was ever asked about: a decision a person made, or a question already put to them, is
-        // theirs, and a later standing approval never answers it — not even once the question is gone, cancelled by an
-        // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
-        // retry of the same subject as a person's would. A doubt that stands parks the send for the person ahead of it: a
-        // role asked a person to look, and no standing word answers that.
-        if (live is null
-            && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false)
-            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } covered)
+        // theirs, and neither the automatic mode nor a later standing approval ever answers it — not even once the question
+        // is gone, cancelled by an expiry the item was then reopened from. Both decide once, here, and the row either writes
+        // then authorises a retry of the same subject as a person's would. The one answer guards both, so they cannot drift.
+        var neverAsked = live is null
+            && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false);
+
+        // The automatic mode first, in its own published order; where it parks the send, the reason is the row's and the
+        // facts are the preview's. A doubt and a send from the chat park for the person ahead of any standing approval; every
+        // other park of the mode leaves the standing approval to decide by its own conditions, as it did before the modes.
+        var automatic = neverAsked
+            ? await AutomaticRelease.DecideAsync(db, item, plan, doubted, ct).ConfigureAwait(false)
+            : null;
+        if (automatic is AutomaticDecision.Release release)
         {
-            var answer = doubts is not null && covered.Cover is { } doubted ? StandingApprovals.Doubted(doubted) : covered;
+            return ApprovalGate.ReleaseUnderMode(db, journal, item, plan, subject, preview, release, now);
+        }
+
+        if (automatic is AutomaticDecision.Park parked)
+        {
+            preview[AutomaticRelease.PreviewKey] = parked.Facts;
+        }
+
+        var held = automatic switch
+        {
+            AutomaticDecision.Park { FallsThrough: false, Why: var why } => why,
+            AutomaticDecision.NotInForce { Chat: true } => StandingApprovals.Why.SentFromChat,
+            _ when doubted => StandingApprovals.Why.Doubted,
+            _ => null,
+        };
+
+        // A standing approval decides once, here. A doubt that stands parks the send for the person ahead of it — a role
+        // asked a person to look, and no standing word answers that — and so does a send written in the chat.
+        if (neverAsked && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } covered)
+        {
+            var answer = held is not null && covered.Cover is { } holding ? StandingApprovals.Held(holding, held) : covered;
             if (answer.Cover is { } cover)
             {
                 return ApprovalGate.ReleaseUnderStanding(db, journal, item, plan, subject, preview, cover, now);
@@ -671,17 +699,31 @@ public sealed class Claimer(
             preview["standing_approval"] = answer.Uncovered!.ToJson();
         }
 
-        ApprovalGate.Park(
-            db,
-            journal,
-            item,
-            plan,
-            subject,
-            preview,
-            live,
-            live is null ? ApprovalGate.ApprovalRequired : ApprovalGate.InputChanged,
-            now);
+        var reason = automatic is AutomaticDecision.Park { Why: var because } ? because
+            : live is null ? ApprovalGate.ApprovalRequired
+            : ApprovalGate.InputChanged;
+        ApprovalGate.Park(db, journal, item, plan, subject, preview, live, reason, now);
         return null;
+    }
+
+    /// <summary>
+    /// What the person deciding reads about the send, assembled from what the claim holds: the operation's own preview and
+    /// the doubts that stand about it.
+    /// </summary>
+    private static async Task<JsonObject> PreviewAsync(JasonDbContext db, WorkItem item, ProviderOpPlan plan, ApprovalSubject subject, CancellationToken ct)
+    {
+        var preview = ApprovalPreview.Of(
+            plan.Contract,
+            subject,
+            item.Campaign!,
+            item.Contact,
+            CanonicalInput.ConsumedChannel(plan.Contract, item));
+        if (await Doubts.PreviewAsync(db, item, ct).ConfigureAwait(false) is { } doubts)
+        {
+            preview[Doubts.PreviewKey] = doubts;
+        }
+
+        return preview;
     }
 
     /// <summary>
