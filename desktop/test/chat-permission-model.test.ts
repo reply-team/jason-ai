@@ -575,7 +575,8 @@ test('linking a project\'s folder is refused in every spelling a denied verb is 
 /** The scopes of the file the desktop carries, on each platform: Windows', macOS' and Linux's semantics. */
 function carriedScopes(): ChatScope[] {
     const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
-    return [windows(), mac(), { ...mac(), platform: 'linux', real: () => null }].map((scope) => ({ ...scope, denied: file.commands, deniedOperations: file.operations }));
+    const linux: ChatScope = { ...mac(), platform: 'linux', real: () => null };
+    return [windows(), mac(), linux].map((scope) => ({ ...scope, denied: file.commands, deniedOperations: file.operations }));
 }
 
 /** Refused in Ask first, in Auto-edit and in Full access, as a Bash command; Plan only refuses every command besides. */
