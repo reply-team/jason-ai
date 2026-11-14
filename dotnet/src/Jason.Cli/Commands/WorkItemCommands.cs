@@ -78,8 +78,8 @@ public static class WorkItemCommands
             new Option<string?>("--ask-person")
             {
                 Description = "Send this to the person whatever the send mode, saying why with one code: "
-                    + Choices.Spoken(DoubtCodes.All) + ". Written into the context as ask_person; only on a send a person "
-                    + "decides each one of, and never changed or taken back once the item exists.",
+                    + Choices.Spoken(DoubtCodes.All) + ". Written into the context as ask_person; only on a send to a person, "
+                    + "and never changed or taken back once the item exists.",
             },
             DoubtCodes.All,
             DoubtCodes.Knows);

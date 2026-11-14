@@ -97,7 +97,7 @@ public static class Doubts
             var operation = request.Operation?.Trim();
             if (request.Kind != WorkItemKind.ProviderOp || !ReviewSubject.IsReviewable(operation))
             {
-                errors.Add(field, "not_applicable", "ask_person is for a send a person decides each one of: provider_op work whose operation's approval is confirm_each.");
+                errors.Add(field, "not_applicable", "ask_person is for a send to a person: provider_op work whose operation's approval is confirm_each.");
             }
             else
             {

@@ -96,7 +96,7 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
         var item = await WorkItemService.LoadAsync(db, request.WorkItemId, cancellationToken).ConfigureAwait(false);
         if (!ReviewSubject.IsReviewable(item))
         {
-            throw DomainErrors.NotReviewable(item.PublicId, "it is not a send a person decides each one of");
+            throw DomainErrors.NotReviewable(item.PublicId, "it is not a send to a person");
         }
 
         if (item.Status is not (WorkItemStatus.Created or WorkItemStatus.Waiting))
