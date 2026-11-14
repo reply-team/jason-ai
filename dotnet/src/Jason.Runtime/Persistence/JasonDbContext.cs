@@ -375,6 +375,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             approval.HasIndex(a => a.WorkItemId).IsUnique().HasFilter("status = 'pending'").HasDatabaseName("ix_approvals_one_pending_per_item");
             approval.HasIndex(a => new { a.Status, a.RequestedAt });
             approval.HasIndex(a => a.CampaignId);
+
+            // The daily ceiling of automatic sends counts a campaign's releases of the day at the claim of every send the
+            // mode would release, inside the claim's write transaction. A partial index holds those rows alone, by campaign
+            // and moment, so the count visits one campaign's releases of the day and none of the table's other rows.
+            approval.HasIndex(a => new { a.CampaignId, a.DecidedAt })
+                .HasFilter("reason = 'automatic_mode'")
+                .HasDatabaseName("ix_approvals_automatic_campaign_decided_at");
             approval.HasOne(a => a.WorkItem).WithMany().HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
