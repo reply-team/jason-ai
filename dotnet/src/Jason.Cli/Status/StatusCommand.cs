@@ -129,7 +129,8 @@ public static class StatusCommand
 
         Below the checks, --human prints where this installation's parts are: its role skills, plugins and
         custom UI folders, and its settings file, saying whether that file is also where plugin secrets are
-        kept. The JSON carries the same under setup, composed by this CLI from its own data directory, so it
+        kept and, while it is, that jason route set --global and jason plugin grant change its routes and
+        grants. The JSON carries the same under setup, composed by this CLI from its own data directory, so it
         is there whether or not the runtime answers, and it never decides ready.
 
         Exit codes: 0 when every required check passed, 1 when one did not. Never 3: "the runtime did not
@@ -224,7 +225,7 @@ public static class StatusCommand
             ("Plugins:", setup.PluginsDirectory),
             ("Custom UI:", setup.CustomUiDirectory),
             setup.SettingsFileHoldsSecrets
-                ? ("Settings:", $"{setup.SettingsFile} (where plugin secrets are kept)")
+                ? ("Settings:", $"{setup.SettingsFile} (where plugin secrets are kept: change routes and grants with `jason route set --global` and `jason plugin grant`)")
                 : ("Settings you may change:", setup.SettingsFile),
         ];
 
