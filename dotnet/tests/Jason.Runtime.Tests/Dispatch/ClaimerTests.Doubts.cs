@@ -2,7 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
@@ -238,6 +240,65 @@ public partial class ClaimerTests
         Assert.Equal((ApprovalStatus.Approved, ApprovalGate.StandingApproval), (approval.Status, approval.Reason));
         Assert.False(approval.Preview.ContainsKey(Doubts.PreviewKey));
         Assert.Single(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ApprovalStandingApplied).ToListAsync(Ct));
+    }
+
+    /// <summary>
+    /// A review is made before the send is first decided about. Released under a standing approval and then failed for a
+    /// reason that is retried, the send is queued again and its retry runs under its approved row; approved by a person, it
+    /// goes under their decision. Neither reads a review, so a doubt recorded then would be accepted and never heard: it is
+    /// refused <c>not_reviewable</c>, naming the approval by its id and no sentence, and nothing is written.
+    /// </summary>
+    [Theory]
+    [InlineData("a standing release, then a transient failure", "a standing approval released it as approval")]
+    [InlineData("a person's approval", "a person approved it as approval")]
+    public async Task Doubts_AReviewAfterTheSendWasDecidedAbout_IsRefused_AndWritesNothing(string path, string why)
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var verdict = await VerdictAsync(db, reading, RunOf(reading));
+        var standing = path.StartsWith("a standing", StringComparison.Ordinal);
+        if (standing)
+        {
+            await StandAsync(db, reading.Campaign);
+        }
+
+        var item = Drafted(db, reading, verdict);
+        await db.SaveChangesAsync(Ct);
+        var hash = ReviewSubject.Hash(item);
+        if (standing)
+        {
+            Assert.Single(await ClaimSettledAsync(harness, db));
+            var run = await db.Attempts.SingleAsync(a => a.WorkItemId == item.Id, Ct);
+            run.Status = AttemptStatus.Failed;
+            run.FinishedAt = Noon;
+            run.Error = new AttemptErrorDto("provider_unavailable", "The provider did not answer in time.", Retriable: true, Class: FailureClass.Transient);
+            item.Status = WorkItemStatus.Created;
+            await db.SaveChangesAsync(Ct);
+        }
+        else
+        {
+            Assert.Empty(await ClaimSettledAsync(harness, db));
+            var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+            var clock = new FixedClock(Noon);
+            await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        }
+
+        db.ChangeTracker.Clear();
+        db.Attach(reading.Campaign);
+        Assert.Equal(WorkItemStatus.Created, (await db.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).Status);
+        var approval = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(ApprovalStatus.Approved, approval.Status);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => ReviewAsync(db, reading, item.PublicId, hash, ReviewResult.Doubts, "off_brief", ReviewSentence));
+
+        Assert.Equal("not_reviewable", refused.Code);
+        Assert.Contains($"{why} '{approval.PublicId}'", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
+        Assert.Null((await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).ReviewNote);
     }
 
     /// <summary>Both columns are empty after the park, and no line — the park's own or any other — says either sentence.</summary>

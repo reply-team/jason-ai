@@ -104,6 +104,8 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
             throw DomainErrors.NotReviewable(item.PublicId, $"it is {SnakeCaseEnumConverter<WorkItemStatus>.Format(item.Status)}, and a review is made while the send is still queued or waiting");
         }
 
+        await BeforeTheFirstDecisionAsync(item, cancellationToken).ConfigureAwait(false);
+
         var hash = ReviewSubject.Hash(item);
         if (!string.Equals(hash, request.ReviewHash!.Trim(), StringComparison.Ordinal))
         {
@@ -149,6 +151,39 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
         }
 
         return JournalWriter.ToDto(entry, item.Campaign!.PublicId) with { ContactId = item.Contact?.PublicId };
+    }
+
+    /// <summary>
+    /// A review is made before the send is first decided about. Once a question was put to a person about it, a standing
+    /// approval released it, a person approved it, or it ran, a retry goes under that decision and no review is read
+    /// again, so a review then would be accepted and never heard. Refused naming the approval or the run by its id alone.
+    /// </summary>
+    private async Task BeforeTheFirstDecisionAsync(WorkItem item, CancellationToken cancellationToken)
+    {
+        var approval = await db.Approvals.AsNoTracking()
+            .Where(a => a.CampaignId == item.CampaignId && a.WorkItemId == item.Id)
+            .OrderByDescending(a => a.Id)
+            .Select(a => new { a.PublicId, a.Status, a.Reason })
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (approval is not null)
+        {
+            var decided = string.Equals(approval.Reason, ApprovalGate.StandingApproval, StringComparison.Ordinal)
+                ? $"a standing approval released it as approval '{approval.PublicId}'"
+                : approval.Status == ApprovalStatus.Approved
+                    ? $"a person approved it as approval '{approval.PublicId}'"
+                    : $"it was put to a person as approval '{approval.PublicId}'";
+            throw DomainErrors.NotReviewable(item.PublicId, $"{decided}, and a review is made before the send is put to a person, approved or run");
+        }
+
+        var ran = await db.Attempts.AsNoTracking()
+            .Where(a => a.WorkItemId == item.Id)
+            .OrderByDescending(a => a.Id)
+            .Select(a => a.PublicId)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (ran is not null)
+        {
+            throw DomainErrors.NotReviewable(item.PublicId, $"it already ran as attempt '{ran}', and a review is made before the send is put to a person, approved or run");
+        }
     }
 
     /// <summary>A review is made by an attempt or by a person who names themselves; a role's name, a plugin or nobody is refused.</summary>

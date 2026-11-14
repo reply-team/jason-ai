@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Api;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Domain;
@@ -264,6 +265,63 @@ public class ReviewServiceTests
         var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(db).ReviewAsync(Pass(seed) with { WorkItemId = target.PublicId, ReviewHash = ReviewSubject.Hash(target) }, Ct));
 
         Assert.Equal("not_reviewable", refused.Code);
+    }
+
+    /// <summary>
+    /// A review is made before the send is first decided about. Queued again after a run that ended, or after a question
+    /// put to a person that was then withdrawn, the send is refused <c>not_reviewable</c>, the refusal naming the run or the
+    /// approval by its id, and nothing is written.
+    /// </summary>
+    [Theory]
+    [InlineData("a send that ran")]
+    [InlineData("a send that was put to a person")]
+    public async Task A_send_queued_again_after_it_was_decided_about_or_run_is_not_reviewable(string what)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        string named;
+        if (what == "a send that ran")
+        {
+            var run = WorkItemFactory.NewAttempt(seed.Send, 1, AttemptStatus.Failed, Noon);
+            run.FinishedAt = Noon;
+            run.Error = new AttemptErrorDto("provider_unavailable", "The provider did not answer in time.", Retriable: true, Class: FailureClass.Transient);
+            seed.Send.AttemptCount = 1;
+            named = $"it already ran as attempt '{run.PublicId}'";
+        }
+        else
+        {
+            var asked = new Approval
+            {
+                PublicId = PublicId.New(ApprovalGate.IdPrefix),
+                WorkItemId = seed.Send.Id,
+                CampaignId = seed.Send.CampaignId,
+                Operation = "message.send",
+                OperationVersion = 1,
+                Subject = new JsonObject { ["operation"] = "message.send", ["work_item"] = seed.Send.PublicId },
+                SubjectHash = "sha256:subject",
+                Preview = new JsonObject(),
+                PluginId = "stand-in-provider",
+                PluginSnapshotId = "snp_one",
+                RoutingSnapshotId = "rts_one",
+                Status = ApprovalStatus.Cancelled,
+                Reason = ApprovalGate.ApprovalRequired,
+                RequestedAt = Noon,
+            };
+            db.Approvals.Add(asked);
+            named = $"it was put to a person as approval '{asked.PublicId}'";
+        }
+
+        await db.SaveChangesAsync(Ct);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(db).ReviewAsync(Doubt(seed, "off_brief") with { Note = Sentence }, Ct));
+
+        Assert.Equal("not_reviewable", refused.Code);
+        Assert.Contains(named, refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(Sentence, refused.Message, StringComparison.Ordinal);
+        await using var fresh = database.Open();
+        Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct));
+        Assert.Null((await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct)).ReviewNote);
     }
 
     [Fact]
