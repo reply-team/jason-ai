@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,8 @@ namespace Jason.Runtime.Tests.Approvals;
 /// <summary>
 /// Each read a standing approval makes of the chronicle names the index it is answered from, and SQLite answers it from
 /// that index, bounded as the reason in <see cref="StandingApprovals"/> says: by the kind, and for a count, the people
-/// an allowance's searches asked for or a later verdict by the kind and the line's own place in the chronicle. Its one
+/// an allowance's searches asked for by the kind and the line's own place in the chronicle, and a later verdict by the
+/// campaign, the reply's thread and its key through the verdicts' thread index. Its one
 /// read of the approvals is bounded by the campaign. The plans are read from the very queries the claim and the verbs run.
 /// </summary>
 public class StandingApprovalPlanTests
@@ -19,20 +21,21 @@ public class StandingApprovalPlanTests
     [InlineData("the campaign's standing approvals", "ix_journal_kind (kind=?)")]
     [InlineData("the releases since the set", "ix_journal_kind (kind=? AND rowid>?)")]
     [InlineData("the people asked for since the allowance was set", "ix_journal_kind (kind=? AND rowid>?)")]
-    [InlineData("a later verdict on the same reply", "ix_journal_kind (kind=? AND rowid>?)")]
+    [InlineData("a later verdict on the same reply", "ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=? AND key=? AND rowid>?)")]
     [InlineData("a change to the draft's context", "ix_journal_work_item_id_public_id (work_item_id=?)")]
     public async Task StandingApprovals_EachRead_UsesTheIndexItNames(string read, string search)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
         var line = new JournalEntry { Id = 41, PublicId = "jrn_01K52JR0000000000000000041", CampaignId = 3, Key = "interested", Kind = "standing_approval_set" };
+        var verdict = new JournalEntry { Id = 42, PublicId = "jrn_01K52JR0000000000000000042", CampaignId = 3, Key = "sha256:verdict", Kind = "reply_classified", New = new JsonObject { ["thread"] = "501" } };
         IQueryable query = read switch
         {
             "the standing approval in force" => StandingApprovals.Newest(db, 3, "interested").Take(1),
             "the campaign's standing approvals" => StandingApprovals.Lines(db, 3),
             "the releases since the set" => StandingApprovals.Released(db, line),
             "the people asked for since the allowance was set" => StandingApprovals.People(db, line),
-            "a later verdict on the same reply" => StandingApprovals.Later(db, line),
+            "a later verdict on the same reply" => StandingApprovals.Later(db, verdict),
             "a change to the draft's context" => StandingApprovals.ContextChanges(db, "wi_01K52JR0000000000000000007"),
             _ => throw new ArgumentOutOfRangeException(nameof(read), read, "no such read"),
         };
