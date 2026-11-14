@@ -30,8 +30,8 @@ public static class ActorOption
     public const string NoDefaultForResume = "The CLI's default actor does not apply here: name who ends it, e.g. --actor human:<Name>.";
 
     /// <summary>
-    /// The help of an act the runtime takes from any caller but the CLI will not put this account's name on by itself:
-    /// lifting a suppression, setting or unsetting a route, and setting a role's execution profile.
+    /// The help of an act the CLI will not put this account's name on by itself: lifting a suppression, setting or
+    /// unsetting a route, granting a plugin something or taking a grant back, and setting a role's execution profile.
     /// </summary>
     public const string NoDefaultForAnAct = "The CLI's default actor does not apply here: it will not put this account's name on this act by itself; name who does it, e.g. --actor human:<Name>.";
 
@@ -52,10 +52,11 @@ public static class ActorOption
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
             + "clearing a block, resuming a work item, rewinding a subscription, submitting a report, "
-            + "lifting a suppression, setting or unsetting a route, "
+            + "lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, "
             + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
-            + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there.",
+            + "and approving, rejecting, setting or unsetting a standing approval, answering, "
+            + "and granting or taking back a plugin's grant are refused there.",
         Recursive = true,
     };
 
