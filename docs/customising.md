@@ -8,13 +8,14 @@ changed.
 ## How to ask
 
 - **In the desktop**, choose **Open in › Change Jason itself** ([the desktop guide](desktop.md#open-in)). It opens your
-  own AI, Claude Code or Codex, on Jason's roles and plugins. The desktop's chat cannot do this: it is kept from changing
+  own AI (the one your preference names, else Claude Code, else Codex) on Jason's roles and plugins. The desktop's chat cannot do this: it is kept from changing
   them on purpose (on Codex it can read those files but not change them), so that it can never rewrite the instructions Jason's own agents work by.
 - **From a terminal**, run `jason session open --setup`. It opens the same session, and opening it changes nothing.
 
-Then say what you want. The AI is given the instructions of the `customising-jason` skill
-([`skills/runtime/customising-jason`](../skills/runtime/customising-jason/SKILL.md)); this page is the same content for
-a person.
+Then say what you want. The session's first message points the AI to the `customising-jason` skill
+([`skills/runtime/customising-jason`](../skills/runtime/customising-jason/SKILL.md)); where that skill is not installed
+for your AI yet, it asks you before it installs it with `jason skills install`. This page is the same content for a
+person.
 
 ## Where the parts are
 
@@ -36,8 +37,9 @@ plugins, its custom UI and its settings file, and says whether the settings file
 ### A role's instruction
 
 A role's skill teaches that role for every campaign. If what you want is for one campaign, for one project, or is how you
-yourself write, that is not a change to Jason: it is kept where Jason keeps it, in that campaign's context, in the
-project's or your own memory file, or in the tone of voice preference. Your AI asks which you mean before it edits a
+yourself write, that is not a change to Jason: a standing rule is kept in the memory file of that campaign, that
+project or your own, a fact the campaign's roles share in its context, and how you sound in the tone of voice
+preference. Your AI asks which you mean before it edits a
 role's file.
 
 Each role is taught by one skill file in its own folder. Your AI edits that file and the change applies to the role's
@@ -51,7 +53,8 @@ first what the change removes.
 on a particular agent host, names its execution profile with `jason role set-profile` ([profiles](execution-profiles.md)).
 A role nobody's work names is never launched: it runs when the manager is told to use it, which is a line in the
 manager's own skill, or when someone creates work for it with `jason workitem create --kind ai_role --role <name>`.
-A role cannot be edited or removed after `role add`, so your AI asks you before it registers one. It may offer to create
+A role's description and entry command cannot be changed after `role add`, and the role cannot be removed, so your AI
+asks you before it registers one. It may offer to create
 one piece of work for the new role to see it run; it says what that work will do, and creates it only if you say yes.
 
 ### A plugin
@@ -66,7 +69,7 @@ contract. For an example, read a package already in your plugins folder: the sma
 A new plugin is given nothing. It asks, in its manifest, for the hosts, programs, variables, Runtime API families, folders and
 journal subscriptions it needs, and you decide what it gets:
 
-`jason plugin grant <id> --http <host>`, `--exec <program>`, `--env <name>`, `--api <family>`, `--files <path>` or
+`jason plugin grant <id> --http <host>`, `--exec <program>`, `--env <name>`, `--api <family>`, `--files <directory>` or
 `--subscription <kind>`, and `jason plugin revoke` to take one back. A grant is in force at once, and a grant the
 plugin's manifest does not ask for is refused. Work already running keeps what it was started with.
 
