@@ -36,9 +36,16 @@ jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation messag
 ```
 
 A channel with a route has a provider, which the answer names; one with no route is not connected. A route does not
-prove that an account is connected, and a draft campaign cannot read accounts, so read no accounts and count none
-before "go". The channels decide the form of the first message: email only; LinkedIn only, where it is an invitation
-and not a letter; or both, and then several channels together. Draft nothing before they are known.
+prove that an account is connected, so read the accounts of each channel with a route now, before "go": a draft
+campaign's accounts are read on request, and nothing is recorded or started.
+
+```
+jason sender list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --channel email --owners own --limit 100
+jason sender list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --channel linkedin --owners own --limit 100
+```
+
+The channels decide the form of the first message: email only; LinkedIn only, where it is an invitation and not a
+letter; or both, and then several channels together. Draft nothing before they are known.
 
 ## 3. One message, one stop
 
@@ -49,8 +56,16 @@ carries no list of questions and uses no question tool; only when the person ask
 question tool, with the recommended choice first.
 
 - **A channel has a route.** Say: "Email goes out through {provider}." and "LinkedIn goes out through {provider}.", or
-  one sentence when both go through the same provider. Then: "Which mailboxes and LinkedIn accounts are connected
-  there I read as soon as you say go."
+  one sentence when both go through the same provider. Then say what the read found, in one line: "{N} mailboxes and
+  {M} LinkedIn accounts are connected; you can add more at any time." With one channel routed, name only that
+  channel's accounts. Count the accounts whose `status` is `active`, and the others apart. A routed channel that holds
+  no account is said firmly: not one message leaves on it until an account is connected, and name the one step as the
+  last item of this list does.
+- **A channel's accounts were read at another provider.** Where the `plugin_id` of a channel's `sender list` answer is
+  not the provider `route resolve` named for that channel's sends, say only the provider its sends go through, and no
+  number for it.
+- **A read that fails or is slow.** The count never holds the person up: a read that fails or is slow leaves the line
+  without numbers, and the message goes on.
 - **A channel has no route.** Say: "{Channel} is not connected."
 - **Neither has a route.** Say it firmly: no channel is connected, connecting your provider now is recommended and is
   one step, and until it is done not one message leaves. That step is the person's one act, "connect your provider".
@@ -69,20 +84,14 @@ it a sample. Nobody who did not ask sees one.
 Nothing is started before the person's go. From "go" the work goes on through `planner-in-session` for the plan and
 `managed-campaign-work`, which owns starting the campaign, the people and the work. `planner-in-session` takes the plan
 from the campaign that exists: the brief and the goals go into its context, and no second campaign is made. Then you
-start the campaign and submit `sender.list` for each routed channel (`sender_channel` is `email` or `linkedin`), since
-a draft cannot run it:
+start the campaign:
 
 ```
 jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"id":"demo","kind":"demo","title":"A demo with the operations lead","reached_when":"a demo is on their calendar","order":1}]}' --reason "the plan agreed with the person"
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation sender.list --input '{"owners":"own","sender_channel":"email","limit":50,"offset":0}' --idempotency-key first-campaign-20261114-1530-senders-email
 ```
 
-Say its answer in one line before anything else: "{N} mailboxes and {M} LinkedIn accounts are connected; you can add
-more at any time." With one channel routed, name only that channel's accounts. Count the accounts whose `status` is
-`active`, and the others apart. A routed channel that holds no account is said firmly: not one message leaves on it
-until an account is connected, and name the one step as in step 3. Every first message still waits for the person's
-yes (`approval-boundaries`). The message after "go" that hands over to the planning ends with one line: "There is a
+Every first message still waits for the person's yes (`approval-boundaries`). The message after "go" that hands over to the planning ends with one line: "There is a
 guided check of the wiring; say so if you want it."
 
 ## Rules
