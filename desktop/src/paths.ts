@@ -243,7 +243,12 @@ export function parseLayoutStamp(path: string, bytes: Uint8Array): LayoutStamp {
     try {
         // A byte-order mark is dropped, as the runtime drops it; bytes that are not UTF-8 are not JSON.
         text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        root = JSON.parse(text);
+        // An escape that is half a surrogate pair, in any name or string at any depth, is not JSON either, as the runtime
+        // reads it.
+        root = JSON.parse(text, (name, value: unknown) => {
+            if (!wellFormed(name) || (typeof value === 'string' && !wellFormed(value))) throw new Error('half a surrogate pair');
+            return value;
+        });
     } catch {
         return unreadable('it is not JSON');
     }
@@ -269,6 +274,11 @@ export function parseLayoutStamp(path: string, bytes: Uint8Array): LayoutStamp {
         at = read.at;
     }
     return { state: 'read', path, layout, writtenBy, at };
+}
+
+/** Whether every surrogate in `text` is half of a pair that is whole. */
+function wellFormed(text: string): boolean {
+    return !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text);
 }
 
 /** The names of a JSON object's own members, each with its value's text as written: the text is JSON already. */
