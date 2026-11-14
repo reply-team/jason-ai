@@ -11,7 +11,9 @@
     "plugin": { "at": "/new/plugin_id", "presence": "always" },
     "provider_block": { "at": "/key", "presence": "always" }
   },
-  "field_since": {},
+  "field_since": {
+    "/new/channel": "0.43.0"
+  },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -28,6 +30,7 @@
           "plugin_id": { "type": "string", "minLength": 1, "description": "The plugin whose provider refused." },
           "scope": { "type": "string", "enum": ["account", "sender"], "description": "Every call through the binding, or one sending account under it." },
           "sender_external_id": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier of the blocked sending account; null for a block of the whole account." },
+          "channel": { "type": ["null", "string"], "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "The channel a sending account's block holds it on; null where it holds the sender on every channel, and for a block of the whole account." },
           "reason": { "type": "string", "enum": ["billing", "limit", "credential", "channel", "other"], "description": "Why, in the words of the provider block contract." },
           "clears_at": { "type": ["null", "string"], "format": "date-time", "description": "When the provider says the block clears by itself, or null where it did not say." },
           "work_item_id": { "type": "string", "pattern": "^wi_", "description": "The work item that met the block first in this campaign." }
@@ -41,7 +44,8 @@
           "new": {
             "properties": {
               "scope": { "const": "account" },
-              "sender_external_id": { "type": "null" }
+              "sender_external_id": { "type": "null" },
+              "channel": { "type": "null" }
             }
           }
         }

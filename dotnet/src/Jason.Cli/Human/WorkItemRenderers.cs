@@ -340,7 +340,8 @@ public static class WorkItemRenderers
         error?.Code is null ? null : error.Message is null ? error.Code : error.Code + " — " + error.Message;
 
     /// <summary>
-    /// The provider block as one line: what is blocked — the account, or one sender by the provider's identifier —,
+    /// The provider block as one line: what is blocked — the account, or one sender by the provider's identifier and, where
+    /// the block names one, the channel it holds the sender on —,
     /// why, where a person clears it, and when the provider said it clears by itself. A moment that does not read
     /// as one is printed as it came rather than dropped.
     /// </summary>
@@ -353,9 +354,10 @@ public static class WorkItemRenderers
 
         var scope = Text(block, "scope");
         var sender = Text(block, "sender_external_id");
+        var channel = Text(block, "channel");
         var clearsAt = Text(block, "clears_at");
         return Parts(
-            sender is null ? scope : scope + " " + sender,
+            sender is null ? scope : channel is null ? scope + " " + sender : scope + " " + sender + " on " + channel,
             Text(block, "reason"),
             Text(block, "link"),
             clearsAt is null

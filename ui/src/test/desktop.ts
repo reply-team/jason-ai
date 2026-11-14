@@ -52,6 +52,7 @@ export const setupFound: DesktopSetup = {
             ],
             typedModel: true,
             modelsUnread: null,
+            ownServers: [],
         },
         {
             id: 'codex',
@@ -68,6 +69,7 @@ export const setupFound: DesktopSetup = {
             models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', efforts: ['low', 'high'] }],
             typedModel: false,
             modelsUnread: null,
+            ownServers: [],
         },
         {
             id: 'gemini',
@@ -83,6 +85,7 @@ export const setupFound: DesktopSetup = {
             models: [],
             typedModel: false,
             modelsUnread: null,
+            ownServers: [],
         },
         {
             id: 'deepseek',
@@ -101,6 +104,7 @@ export const setupFound: DesktopSetup = {
             ],
             typedModel: false,
             modelsUnread: null,
+            ownServers: [],
         },
     ],
     reply: {

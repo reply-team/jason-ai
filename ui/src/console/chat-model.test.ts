@@ -407,6 +407,7 @@ describe('the model and the effort a chat is sent with', () => {
         ],
         typedModel: true,
         modelsUnread: null,
+        ownServers: [],
     };
     const codex: DesktopHost = {
         ...claude,

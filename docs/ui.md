@@ -421,11 +421,11 @@ asking your AI, whose `operating-the-installation` skill covers it. The page wri
 ## Inside Jason Desktop
 
 [Jason Desktop](desktop.md) mounts the same build with a second shell, the console, chosen once as the page loads by the
-object the desktop puts on the page, `window.jasonDesktop`. In it the chat is home, in a dock with panels beside it:
-**Needs you** (this page's Attention), **Agents** and **Activity**, which follow the journal as it is written, and
+object the desktop puts on the page, `window.jasonDesktop`. In it a sidebar chooses what one area beside it shows: Start,
+a chat, **Needs you** (this page's Attention), **Agents** and **Activity**, which follow the journal as it is written, and
 **Connect**, where the agent hosts found on the machine, the model keys, the Reply connection and the notification
 channels are set up. An empty Needs you card says you are caught up and offers **Open your agents**. The browser's
-other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same dock, and every
+other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area, and every
 screen's facts are the Runtime API's, so anything the console shows is a verb you could type. The console reaches the
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
 (`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on

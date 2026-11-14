@@ -1114,6 +1114,127 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// A sender's block that names a channel says the block is that channel's alone, so one that names another channel
+    /// than the call was asked to send on, or names one for a call that names none, is a broken answer: refused as a block
+    /// outside its contract is, recorded permanent with what is wrong named beside it, and kept nowhere. The same block on
+    /// the call's own channel is kept, and the item waits on it.
+    /// </summary>
+    [Theory]
+    [InlineData("email", "email", true)]
+    [InlineData("linkedin", "email", false)]
+    [InlineData("email", null, false)]
+    public async Task A_senders_block_on_another_channel_than_the_call_was_asked_to_send_on_is_refused(string said, string? asked, bool kept)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Send.Id);
+        var block = new JsonObject { ["scope"] = "sender", ["sender_external_id"] = "12", ["channel"] = said, ["reason"] = "limit" };
+        var args = new JsonObject { ["sender"] = new JsonObject { ["external_id"] = "12" } };
+        if (asked is not null)
+        {
+            args["channel"] = asked;
+        }
+
+        var input = new JsonObject { ["args"] = args };
+
+        await scene.Recorder.RecordAsync(
+            db,
+            scene.Item,
+            scene.Attempt,
+            Send,
+            TestPlugins.FakeProviderId,
+            false,
+            Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "the sender is at its limit", null, null, block)),
+            Ct,
+            input);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().ToListAsync(Ct);
+        if (kept)
+        {
+            Assert.Equal((WorkItemStatus.Waiting, AttemptStatus.Blocked), (scene.Item.Status, scene.Attempt.Status));
+            Assert.Equal("email", Assert.Single(blocks).Channel);
+            return;
+        }
+
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+        Assert.Equal(("provider_blocked", (FailureClass?)FailureClass.Permanent, false), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class, scene.Attempt.Error.Retriable));
+        Assert.Null(scene.Attempt.Error.Block);
+        Assert.Empty(blocks);
+        var detail = Assert.Single(scene.Attempt.Error.Details!);
+        Assert.Equal(("/error/block/channel", "const"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
+    /// The same refused block with the sender's block on every channel and its email block both open, the call the trial
+    /// of the one that covers it: the refusal is no answer of the provider's about the work, so the attempt the contract
+    /// recorded permanent has got past nothing. Both blocks stay open and nobody is said to have cleared one; the trial's
+    /// block only has its next trial a cadence off, as any trial that decided nothing, and the other is as it was.
+    /// </summary>
+    [Theory]
+    [InlineData("linkedin", "email")]
+    [InlineData("email", null)]
+    public async Task A_senders_block_on_another_channel_than_the_call_names_clears_none_of_the_senders_open_blocks(string said, string? asked)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Send.Id);
+        var everywhere = OpenSendersBlock(db, scene.Campaign, channel: null);
+        var mailbox = OpenSendersBlock(db, scene.Campaign, channel: "email");
+        await db.SaveChangesAsync(Ct);
+        var trial = asked is null ? everywhere : mailbox;
+        trial.TrialWorkItemId = scene.Item.Id;
+        await db.SaveChangesAsync(Ct);
+        var block = new JsonObject { ["scope"] = "sender", ["sender_external_id"] = "12", ["channel"] = said, ["reason"] = "limit" };
+        var args = new JsonObject { ["sender"] = new JsonObject { ["external_id"] = "12" } };
+        if (asked is not null)
+        {
+            args["channel"] = asked;
+        }
+
+        await scene.Recorder.RecordAsync(
+            db,
+            scene.Item,
+            scene.Attempt,
+            Send,
+            TestPlugins.FakeProviderId,
+            false,
+            Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "the sender is at its limit", null, null, block)),
+            Ct,
+            new JsonObject { ["args"] = args });
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal((WorkItemStatus.Failed, (FailureClass?)FailureClass.Permanent), (scene.Item.Status, scene.Attempt.Error!.Class));
+        var rows = await db.ProviderBlocks.AsNoTracking().ToDictionaryAsync(b => b.Id, Ct);
+        Assert.Equal(2, rows.Count);
+        foreach (var row in rows.Values)
+        {
+            Assert.True(
+                row is { Status: ProviderBlockStatus.Open, ClearedByAttemptId: null, ClearedAt: null, TrialWorkItemId: null },
+                $"The block on {row.Channel ?? "every channel"} is {row.Status}, cleared by {row.ClearedByAttemptId}, trial {row.TrialWorkItemId}.");
+        }
+
+        var other = trial == mailbox ? everywhere : mailbox;
+        Assert.Equal(
+            (Noon.AddSeconds(TestOptions.Settings().Current.Blocks.TrialSeconds), Noon),
+            (rows[trial.Id].NextTrialAt, rows[other.Id].NextTrialAt));
+        Assert.False(await db.Journal.AsNoTracking().AnyAsync(e => e.Kind == JournalKinds.ProviderBlockCleared, Ct));
+        Assert.False(await db.WorkItemWaits.AsNoTracking().AnyAsync(w => w.WorkItemId == scene.Item.Id, Ct));
+    }
+
+    /// <summary>An open block of sender <c>12</c> under the fake provider's binding, due at noon, on <paramref name="channel"/>.</summary>
+    private static ProviderBlock OpenSendersBlock(JasonDbContext db, Campaign campaign, string? channel)
+    {
+        var opener = WorkItemFactory.NewProviderOp(campaign, Send.Id, Noon);
+        opener.Status = WorkItemStatus.Failed;
+        db.WorkItems.Add(opener);
+        var block = BlockRows.Block(opener, Noon.AddHours(-1), Noon, ProviderBlockScope.Sender, "12", "sha256:1", "limit", channel);
+        block.PluginId = TestPlugins.FakeProviderId;
+        db.ProviderBlocks.Add(block);
+        return block;
+    }
+
+    /// <summary>
     /// What the attempt kept says it kept the identifiers "as it returned them", and an undeclared kind is the
     /// one case where that matters: nothing else in Jason will ever mention that key again. A provider that
     /// spells its kind `contactId` has to be readable beside the pointer that refuses it, which names that same

@@ -18,7 +18,7 @@ public class PersonTextShownTests
     private static readonly Dictionary<string, (Func<string, string?> Render, string Body)> Views = new(StringComparer.Ordinal)
     {
         ["block get"] = (BlockRenderers.Block, """
-            {"id":"blk_1","plugin_id":"reply","binding_identity":"sha256:b","scope":"sender","sender_external_id":"H","reason":"H",
+            {"id":"blk_1","plugin_id":"reply","binding_identity":"sha256:b","scope":"sender","sender_external_id":"H","channel":"H","reason":"H",
              "link":"H","status":"cleared","opened_at":"T","last_seen_at":"T","seen_count":1,"next_trial_at":"T",
              "opened_by_attempt_id":"att_1","held_count":0,"cleared_at":"T","cleared_by_actor":{"type":"human","id":"H"}}
             """),
@@ -80,7 +80,7 @@ public class PersonTextShownTests
             {"id":"wi_1","campaign_id":"cmp_1","kind":"ai_role","role":"H","status":"waiting","eligible":false,"priority":0,
              "created_by":{"type":"human","id":"a"},"context":{"H":1,"input":{"H":1}},"attempt_count":1,
              "last_error":{"code":"provider_blocked","message":"H","retriable":true,
-             "block":{"scope":"sender","sender_external_id":"H","reason":"H","link":"H"}},
+             "block":{"scope":"sender","sender_external_id":"H","channel":"H","reason":"H","link":"H"}},
              "created_at":"T","updated_at":"T","lineage":{"state":"root","profile_name":"H"},"idempotency_key":"H",
              "wait":{"on":[],"opened_at":"T","blocked_by":{"provider_block_id":"blk_1","scope":"sender","reason":"H"}}}
             """),
@@ -139,7 +139,7 @@ public class PersonTextShownTests
 
     public static TheoryData<string, int> Places => new()
     {
-        { "block get", 4 },
+        { "block get", 5 },
         { "decision get", 7 },
         { "events backfill", 2 },
         { "journal get", 3 },
@@ -153,7 +153,7 @@ public class PersonTextShownTests
         { "route resolve", 2 },
         { "suppression get", 2 },
         { "suppression remove", 1 },
-        { "workitem get", 10 },
+        { "workitem get", 11 },
         { "campaign get", 4 },
         { "campaign add-contacts", 1 },
         { "contact get", 5 },

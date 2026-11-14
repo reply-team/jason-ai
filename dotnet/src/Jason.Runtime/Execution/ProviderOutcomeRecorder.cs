@@ -187,6 +187,15 @@ public sealed class ProviderOutcomeRecorder(
                 // plugin reported stands, recorded permanent, with what is wrong with the block named beside it, and
                 // the block itself is not kept, so nothing that later reads a block reads one the contract refuses.
                 var recorded = OutcomeContract.Recorded(failed.Error, out var blockProblems);
+
+                // And a sender's block that names another channel than the call was asked to send on, the same way: the
+                // channel a block names is the plugin's word that the block is that channel's alone, so a block of another
+                // channel is a broken answer, never one to move onto the channel the call named.
+                if (recorded == FailureClass.Blocked && ProviderBlocks.OffChannel(failed.Error.Block, input) is { } offChannel)
+                {
+                    blockProblems = [offChannel];
+                    recorded = FailureClass.Permanent;
+                }
                 if (held && recorded == FailureClass.Blocked)
                 {
                     // The provider refused for a reason outside the work and did nothing: the work has not been tried,

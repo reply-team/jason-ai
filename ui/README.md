@@ -28,10 +28,14 @@ The words of the page: an **agent** is the harness's campaign with its chat, and
 API fields, file names, test ids and fixtures keep `campaign`. The AI that runs commands is "the AI", never "the agent".
 
 The page mounts the console, in one of three places that differ by what each can do (`src/main.tsx`, chosen by
-`src/start.ts` once as the page loads). The console (`src/console/`) has the chat as home, in a dock (dockview) with
-panels beside it: what needs the person (approvals and questions), the agents, the journal's activity, and Connect, which
-shows the AI hosts found on the computer, the model keys, the Reply connection and the notification channels. The screens
-under `src/screens/` open in a page panel of the same dock. The console reaches the desktop only through the seam typed in
+`src/start.ts` once as the page loads). The console (`src/console/`) is a sidebar and one area that shows exactly one
+thing at a time, chosen from the sidebar's menu, its Recent or the palette: Start, one chat, what needs the person
+(approvals and questions), the agents, the journal's activity, Connect, which shows the AI hosts found on the computer,
+the model keys, the Reply connection and the notification channels, or one of the screens under `src/screens/`. Nothing
+in it is closed, only chosen. A chat chosen again has the words typed and not sent, what arrived meanwhile and the
+message that waits: they are held in the chat's record (`chats` in `src/console/state.ts`), not by keeping it drawn, and
+only the chat shown and the two shown before it stay drawn out of sight.
+The console reaches the desktop only through the seam typed in
 `src/platform/desktop.d.ts`, and the runtime only through the API client and the journal stream
 (`src/platform/journal-stream.ts`, a WebSocket at `GET /v1/journal.stream` under the page's own pairing).
 
@@ -53,8 +57,8 @@ or to that question, and the members' list is `desktop.d.ts` itself. The browser
 sidebar and Chat screen) is started by nothing now; its code stays until it is taken out.
 
 The console's live panels read the same facts as the Attention and Agents screens, with the same operations, and for now
-duplicate them. Each panel keeps its lists apart from the screen's, so the page panel can show that screen at a table or a
-filter of its own while a journal line re-reads the panel.
+duplicate them. Each panel keeps its lists apart from the screen's, so the area keeps that screen at a table or a filter
+of its own while a journal line re-reads the panel.
 
 **How the console draws.** A panel is markup from one tagged template, `html` in `src/console/html.ts`, which escapes
 every value it interpolates unless the tag itself made it, and is written into the page by one painter, `paint`. A
@@ -63,7 +67,7 @@ control in that markup carries `data-action` and its arguments, answered by one 
 an inline handler, a style attribute or a style element, which the runtime's policy (`default-src 'self'`) refuses; and
 the tag refuses text inside a tag, where it could add an attribute of its own. A repaint keeps the control a person is
 in focused, with its selection. The
-classic screens in the page panel take the browser's stylesheet, scoped under `.harness` when the build runs
+classic screens in the area take the browser's stylesheet, scoped under `.harness` when the build runs
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
 **Words and theme.** The page's words are in `src/locale/en.ts`, one table read through `t()`. The theme

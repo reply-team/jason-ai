@@ -1760,6 +1760,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("binding_identity");
 
+                    b.Property<string>("Channel")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("channel");
+
                     b.Property<DateTime?>("ClearedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("cleared_at");
@@ -1873,11 +1878,16 @@ namespace Jason.Runtime.Persistence.Migrations
 
                     b.HasIndex("PluginId", "BindingIdentity", "SenderExternalId")
                         .IsUnique()
-                        .HasDatabaseName("ix_provider_blocks_one_open_per_sender")
-                        .HasFilter("status = 'open' AND scope = 'sender'");
+                        .HasDatabaseName("ix_provider_blocks_one_open_per_sender_on_every_channel")
+                        .HasFilter("status = 'open' AND scope = 'sender' AND channel IS NULL");
 
                     b.HasIndex("Status", "OpenedAt", "PublicId")
                         .HasDatabaseName("ix_provider_blocks_status_opened_at_public_id");
+
+                    b.HasIndex("PluginId", "BindingIdentity", "SenderExternalId", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_blocks_one_open_per_sender")
+                        .HasFilter("status = 'open' AND scope = 'sender'");
 
                     b.ToTable("provider_blocks", t =>
                         {

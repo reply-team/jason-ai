@@ -213,9 +213,10 @@ handler pins nothing. Its fixtures live beside the others' under
 A failure of the class `blocked` says the provider refused the call for a reason outside the work item — the account's
 money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did
 nothing for it. Every published operation declares it under one code, `provider_blocked`, and the failure carries a
-block: what is blocked, the account or one sender; why, from a closed list; where a person clears it; and, where the
-provider says, when it clears by itself; an open block is cleared only by the provider's judgment of the work. The
-block is written once, for every operation, in [`block/provider_block.json`](block/provider_block.json), explained on
+block: what is blocked, the account or one sender, on one channel or on every channel; why, from a closed list; where
+a person clears it; and, where the provider says, when it clears by itself; an open block is cleared only by the
+provider's judgment of the work. The block is written once, for every operation, in
+[`block/provider_block.json`](block/provider_block.json), explained on
 [its page](block/provider_block.md), embedded into the runtime the same way, and its value fixtures under
 [`fixtures/block/`](fixtures/block) are run by the same tests. The events and delivery families declare no block.
 

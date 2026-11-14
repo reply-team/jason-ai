@@ -316,8 +316,10 @@ function ended(answer, request) {
   const operation = request.operation;
   const lost = typeof request.lost === "string" ? request.lost : lostAnswerRow(command);
   const observed = failIfUnread(answer, command, operation, request.learned, lost);
-  // The sending account a send went from, which a block the command meets is said for.
+  // The sending account a send went from, which a block the command meets is said for, and the channel it went on: Reply
+  // numbers its mailboxes apart from its LinkedIn accounts, so the number alone may name two accounts.
   observed.sender = request.sender;
+  observed.channel = request.channel;
 
   if (answer.exit_code === DONE) {
     const result = resultOf(answer.stdout);

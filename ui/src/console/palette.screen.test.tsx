@@ -6,6 +6,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -68,8 +69,6 @@ const rows = () => {
 const labels = () => rows().map((each) => each.querySelector('.palette-label')?.textContent);
 const kinds = () => rows().map((each) => each.querySelector('.palette-kind')?.textContent);
 const picked = () => rows().findIndex((each) => each.getAttribute('aria-selected') === 'true');
-const inFront = () =>
-    Array.from(document.querySelectorAll('.dv-tab.dv-active-tab')).map((tab) => tab.textContent?.trim());
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
 const type = (text: string) => fireEvent.change(input(), { target: { value: text } });
 const opened = async () => {
@@ -304,7 +303,7 @@ describe('the palette', () => {
         expect(picked()).toBe(0);
         fireEvent.keyDown(input(), { key: 'Enter' });
         await waitFor(() => expect(box()).toBeNull());
-        await waitFor(() => expect(inFront()).toContain('Activity'));
+        await waitFor(() => expect(inFront()).toBe('Activity'));
     });
 });
 
@@ -338,7 +337,7 @@ describe('the box as a modal', () => {
         await waitFor(() => expect(box()).not.toBeNull());
         type('activity');
         fireEvent.click(rows()[0]!);
-        await waitFor(() => expect(inFront()).toContain('Activity'));
+        await waitFor(() => expect(inFront()).toBe('Activity'));
         expect(box()).toBeNull();
         expect(document.activeElement).not.toBe(composer());
     });
@@ -390,7 +389,7 @@ describe('where each kind goes', () => {
         await opened();
         type('needs');
         fireEvent.click(rows()[0]!);
-        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
         expect(box()).toBeNull();
 
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
@@ -409,19 +408,19 @@ describe('where each kind goes', () => {
         await waitFor(() => expect(box()).not.toBeNull());
         type('connect');
         fireEvent.click(rows()[0]!);
-        await waitFor(() => expect(inFront()).toContain('Connect'));
+        await waitFor(() => expect(inFront()).toBe('Connect'));
     });
 
     it('opens the actions as the button and the caret do: Start, and a new chat', async () => {
         const { desktop } = renderConsole();
         await opened();
         fireEvent.click(side().getByRole('button', { name: 'Agents' }));
-        await waitFor(() => expect(inFront()).toContain('Agents'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
         await waitFor(() => expect(box()).not.toBeNull());
         type('new gtm');
         fireEvent.click(rows()[0]!);
-        await waitFor(() => expect(inFront()).toContain('Start'));
+        await waitFor(() => expect(inFront()).toBe('Start'));
         expect(calls(desktop, 'chat.create')).toEqual([]);
 
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
@@ -437,13 +436,13 @@ describe('where each kind goes', () => {
         await waitFor(() => expect(conversations.value.length).toBe(3));
         type('autumn');
         fireEvent.click(rows()[0]!);
-        await waitFor(() => expect(inFront()).toContain('Autumn outreach'));
+        await waitFor(() => expect(inFront()).toBe('Autumn outreach'));
 
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
         await waitFor(() => expect(box()).not.toBeNull());
         type('pricing');
         fireEvent.click(rows()[0]!);
-        await waitFor(() => expect(inFront()).toContain('Pricing questions'));
+        await waitFor(() => expect(inFront()).toBe('Pricing questions'));
 
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
         await waitFor(() => expect(box()).not.toBeNull());

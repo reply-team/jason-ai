@@ -10,6 +10,16 @@ absorbed by a release of this package alone.
   refusal of the message are `soft`; a kind Reply does not name, or one this package does not know, is none. Each of
   the four is null where the installed reply-cli does not print them, which says nothing either way.
 
+## 0.15.2
+
+- Every sender's block the package reports names the `channel` the send went on, `email` or `linkedin`, beside the
+  sender's number: a mailbox turned off or disconnected, and a LinkedIn account turned off, disconnected or at its
+  daily or weekly allowance. Reply numbers its mailboxes apart from its LinkedIn accounts, so mailbox 12 and LinkedIn
+  account 12 are two accounts; without the channel, a block of one held the other's sends too, and a send of one that
+  got past cleared the other's block.
+- Needs Jason 0.43.0 or newer, the release that keeps a sender's block per channel: an older one refuses a block that
+  names a channel, and the send it met ends `permanent` instead of waiting on the block.
+
 ## 0.15.1
 
 - The README says the two names this package gives a search never change from one version of the package to the next:

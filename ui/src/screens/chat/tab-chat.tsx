@@ -19,8 +19,8 @@ import './tab-chat.css';
 
 const noop = () => undefined;
 
-/** There is no dock in a tab: the chat is the whole of it. */
-const tabDock: Dock = { show: noop, close: noop, chat: noop, showChat: noop, closeChat: noop, page: noop };
+/** There is no console's area in a tab: the chat is the whole of it. */
+const tabDock: Dock = { show: noop, chat: noop, showChat: noop, dropChat: noop, page: noop };
 
 /** The kinds of event after which the desktop's list of conversations has changed. */
 const listChanged = new Set(['attached', 'renamed', 'done']);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { scopePlugin, scopeSelector } from './scope';
 
-describe('the shell stylesheet, scoped to the page panel', () => {
+describe('the shell stylesheet, scoped to the screens of the area', () => {
     it('makes the document selectors the scope, and keeps a state of the document on the document', () => {
         expect(scopeSelector(':root', '.harness')).toBe('.harness');
         expect(scopeSelector('html', '.harness')).toBe('.harness');

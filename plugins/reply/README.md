@@ -878,7 +878,10 @@ them on. `idempotency_key.in_use` (409) is the one where the key is still held: 
 Reply answers so until that request completes or releases the key. A 429 (`rate_limited`) is refused before the guard
 runs, so nothing was taken and no key was touched. The LinkedIn account's own refusals in that range, its 409s
 (`linkedin.account_inactive`, `linkedin.invalid_cookie`) and its spent allowance at 429 (`linkedin.limit_reached`), are
-about the sender: the work is held on the sender's block and repeated once it clears. Only an ending with no answer of
+about the sender: the work is held on the sender's block and repeated once it clears. Every sender's block this package
+reports names the channel the send went on, `email` or `linkedin`, beside the sender's number: Reply numbers its
+mailboxes apart from its LinkedIn accounts, so mailbox 12 and LinkedIn account 12 are two accounts, and a block of one
+holds and clears nothing of the other. Only an ending with no answer of
 Reply's about the send — a timeout, a lost connection, a CLI that died, an answer cut off or unreadable, or one at 500
 or above — is the lost answer, repeated under the key. A direct send that failed with Reply's own 500 was not recorded,
 since Reply records the effect as the send's last step, so the repeat under the key it released is the send that did
