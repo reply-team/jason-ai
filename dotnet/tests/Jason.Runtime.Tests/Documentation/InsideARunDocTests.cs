@@ -8,7 +8,7 @@ namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
 /// A request from inside a run, as the pages a reader meets it on say it, held to the runtime: the header the CLI sends,
-/// the five operations that refuse it, the status and code they refuse it with, and that the rule is a higher bar rather
+/// the operations that refuse it, the status and code they refuse it with, and that the rule is a higher bar rather
 /// than a boundary. A program of one's own reads the first page, a role's author the second, a person answering a
 /// question the third.
 /// </summary>
@@ -36,7 +36,7 @@ public sealed partial class InsideARunDocTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>The bullet that lists a person's decisions lists exactly the five that refuse, the rule, and what it is worth.</summary>
+    /// <summary>The bullet that lists a person's decisions lists exactly the ones that refuse, the rule, and what it is worth.</summary>
     [Fact]
     public void The_runtime_api_page_says_a_persons_decision_is_refused_from_inside_a_run_as_a_higher_bar()
     {
@@ -45,7 +45,7 @@ public sealed partial class InsideARunDocTests
         var named = Regex.Matches(bullet, @"`(?<operation>[a-z]+\.[a-z_]+)`").Select(match => match.Groups["operation"].Value);
         Assert.Equal(InsideARun.Refusing.Order(StringComparer.Ordinal), named.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
         Assert.Contains(
-            $"A request to any of the five that carries `{ExecutionEnvironment.AttemptHeader}`, as `jason` sends from inside a run, is answered `{Status}` `{Refusal.Code}` whatever person it names, and changes nothing: a person's word is given outside the run that asked.",
+            $"A request to any of them that carries `{ExecutionEnvironment.AttemptHeader}`, as `jason` sends from inside a run, is answered `{Status}` `{Refusal.Code}` whatever person it names, and changes nothing: a person's word is given outside any run.",
             bullet,
             StringComparison.Ordinal);
         Assert.Contains("That is a higher bar, not a boundary: a run that dropped the header and named a person would not be told apart.", bullet, StringComparison.Ordinal);
@@ -58,11 +58,11 @@ public sealed partial class InsideARunDocTests
         var page = Flat(Page("work-execution.md"));
 
         Assert.Contains(
-            $"and the CLI names the attempt to the runtime on every request in the `{ExecutionEnvironment.AttemptHeader}` header, whatever actor it claims, so the five verbs that are a person's own word refuse it (`{Refusal.Code}`);",
+            $"and the CLI names the attempt to the runtime on every request in the `{ExecutionEnvironment.AttemptHeader}` header, whatever actor it claims, so the verbs that are a person's own word refuse it (`{Refusal.Code}`);",
             page,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"An approval or an answer sent from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
+            $"An approval, an answer, a preference or a campaign's send mode sent from inside a run is refused with `{Refusal.Code}` whoever it names, since the CLI names its attempt on every request it sends from there: a higher bar against a role deciding its own work, not a boundary.",
             page,
             StringComparison.Ordinal);
     }

@@ -306,9 +306,9 @@ provenance, the coded failure, and one against the budget.
 with a name; a role or an attempt is refused with `approval_not_human`, and an absent actor with
 `actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
-approve anything, and that every decision names who made it. An approval or an answer sent from inside a run is
-refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on every request it sends from
-there: a higher bar against a role deciding its own work, not a boundary.
+approve anything, and that every decision names who made it. An approval, an answer, a preference or a campaign's send
+mode sent from inside a run is refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on
+every request it sends from there: a higher bar against a role deciding its own work, not a boundary.
 
 An approval is about one operation on one work item, and it is not the only thing a person is asked. A
 role that cannot decide *what to do next* raises a question instead — a decision, which outlives the
@@ -339,6 +339,12 @@ Journal: `workitem_awaiting_approval`, `approval_requested`, `approval_approved`
 work item, the campaign, the operation, the subject hash, the actor and the reason. The subject and the
 preview live on the row and in what `approval.get` answers, which is where somebody entitled to read
 them reads them.
+
+Every approval answer — `approval.get`, each item of `approval.list`, and what `approval.approve` and `approval.reject`
+answer — also carries `send_modes_unset`: the keys of the two send-mode preferences, `send_mode.cold` and
+`send_mode.warm`, that nobody has set yet, in key order, and an empty list once both are. It is the installation's open
+question, read when the answer is made, the same on every approval whatever it is about and however it stands: nothing is
+stored about having asked it, and a key unset again is back in the list. While a key is unset, its mode is every message.
 
 ### Standing approvals
 
@@ -678,7 +684,7 @@ Its environment is the runtime's own, less the runtime's configuration, plus the
 - `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so
   that an agent reporting through the CLI is its attempt without having to say so; and the CLI names
   the attempt to the runtime on every request in the `Jason-Attempt` header, whatever actor it claims,
-  so the five verbs that are a person's own word refuse it (`decided_inside_a_run`);
+  so the verbs that are a person's own word refuse it (`decided_inside_a_run`);
 - the directory this build of Jason runs from, at the front of `PATH`, so the bare command word in
   `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
 

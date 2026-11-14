@@ -65,6 +65,10 @@
     },
     "decision_reason": "Not this person.",
     "campaign_name": "Autumn outreach",
-    "contact_name": "Grace Hopper"
+    "contact_name": "Grace Hopper",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
   }
 }

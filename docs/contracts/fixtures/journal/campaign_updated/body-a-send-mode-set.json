@@ -1,0 +1,7 @@
+{
+  "kind": "campaign_updated",
+  "version": 1,
+  "case": "a person gave the campaign its own mode for its cold contacts",
+  "body": { "key": "send_mode_cold", "old": null, "new": "automatic" },
+  "expect": "valid"
+}

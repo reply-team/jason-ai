@@ -18,7 +18,11 @@
         "decided_at": null,
         "decided_by": null,
         "campaign_name": "Spring launch",
-        "contact_name": "Ines Duarte"
+        "contact_name": "Ines Duarte",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
       },
       {
         "id": "apr_2",
@@ -33,7 +37,11 @@
         "decided_at": null,
         "decided_by": null,
         "campaign_name": "Spring launch",
-        "contact_name": "Noor Haddad"
+        "contact_name": "Noor Haddad",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
       }
     ],
     "next_cursor": null

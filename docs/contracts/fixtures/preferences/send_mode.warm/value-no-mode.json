@@ -1,0 +1,7 @@
+{
+  "key": "send_mode.warm",
+  "version": 1,
+  "case": "an object that names no mode",
+  "value": {},
+  "expect": { "invalid": [{ "pointer": "/mode", "reason": "required" }] }
+}

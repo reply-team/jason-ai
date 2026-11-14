@@ -1,0 +1,14 @@
+{
+  "key": "send_mode.cold",
+  "version": 1,
+  "summary": "How what Jason sends to a contact who has not answered in the campaign goes: automatic, released without asking, or every_message, each one to a person first. Unset means every_message.",
+  "value_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["mode"],
+    "additionalProperties": false,
+    "properties": {
+      "mode": { "enum": ["automatic", "every_message"] }
+    }
+  }
+}

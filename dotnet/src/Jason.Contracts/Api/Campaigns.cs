@@ -27,6 +27,9 @@ public sealed record CampaignSummaryDto(
 /// <c>project_slug</c> name the project it is in. <c>folder_path</c> is the full path of its folder under the harness root,
 /// null where none is recorded — a campaign made before folders were. <c>audience_threshold</c> is how few untouched
 /// members the campaign keeps before its manager is told the reserve is low; absent, nobody counts them.
+/// <c>send_modes</c> is the campaign's own mode for its cold contacts and its warm ones, each null where it sets none;
+/// <c>send_modes_in_force</c> is the mode a send to each would go under now, with where it comes from: the campaign, the
+/// installation's preference, or the default, which is every message.
 /// </summary>
 public sealed record CampaignDto(
     string Id,
@@ -45,7 +48,9 @@ public sealed record CampaignDto(
     /// <summary>The key the campaign was created with, when its creator gave one; absent otherwise.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null,
     string? FolderPath = null,
-    int? AudienceThreshold = null);
+    int? AudienceThreshold = null,
+    SendModesDto? SendModes = null,
+    SendModesInForce? SendModesInForce = null);
 
 /// <summary>
 /// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign

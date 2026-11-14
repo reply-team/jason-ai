@@ -2,6 +2,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Skills;
 using Jason.Runtime.Api;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Dispatch;
@@ -40,7 +41,7 @@ public static class SystemModule
 
         app.MapPost(
             Operations.Route(Operations.SystemInfo),
-            (RuntimeInfo runtimeInfo,
+            async (RuntimeInfo runtimeInfo,
              MigrationReport report,
              JasonPaths dataPaths,
              DispatcherStatus dispatcher,
@@ -56,7 +57,9 @@ public static class SystemModule
              ListeningEndpoint listening,
              UiModule ui,
              HarnessFolders harness,
-             ReleasedPlugins released) =>
+             ReleasedPlugins released,
+             JasonDbContext db,
+             CancellationToken cancellationToken) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -97,7 +100,10 @@ public static class SystemModule
                     Harness: harness.Report(),
                     // Against the snapshot in force at the moment it is asked, so a reload is said at once; the release's
                     // own packages are hashed once per process, on the first ask.
-                    ReleasedPlugins: released.Compare(plugins.Snapshot))));
+                    ReleasedPlugins: released.Compare(plugins.Snapshot),
+                    // The installation's two modes in force, read from the preferences as they stand: the mode and where it
+                    // comes from, never who set it, which preference.list says.
+                    SendModes: SendModes.InForce(null, await SendModes.ReadAsync(db, cancellationToken).ConfigureAwait(false)))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

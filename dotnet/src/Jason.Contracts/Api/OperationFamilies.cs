@@ -73,7 +73,7 @@ public static class OperationFamilies
         Operations.SystemInfo, Operations.SystemShutdown, Operations.SystemDrain, Operations.SystemResume,
         Operations.UiOpen, Operations.UiTokens, Operations.UiRevoke,
         Operations.ProjectCreate, Operations.ProjectUpdate, Operations.ProjectLink,
-        Operations.PreferenceSet, Operations.PreferenceUnset,
+        Operations.PreferenceSet, Operations.PreferenceUnset, Operations.CampaignSetSendMode,
         Operations.ContactThreads, Operations.ContactThread,
         Operations.AudiencePreview, Operations.AudienceFilterValues, Operations.AudienceAvailability,
         Operations.SenderList,

@@ -22,7 +22,7 @@ public class PreferenceEndpointTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
 
         var none = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "none", new { }, Ct);
-        Assert.Equal(["agent.interactive_host", "sender.identity", "tone_of_voice"], none.Items.Select(item => item.Key));
+        Assert.Equal(["agent.interactive_host", "send_mode.cold", "send_mode.warm", "sender.identity", "tone_of_voice"], none.Items.Select(item => item.Key));
         Assert.All(none.Items, item => Assert.True(item.Value is null && item.UpdatedAt is null, $"{item.Key} is set on a new installation: {item}"));
 
         var sender = new
@@ -39,6 +39,10 @@ public class PreferenceEndpointTests
         var tone = await api.RecordAsync<PreferenceDto>(
             Operations.PreferenceSet, "tone", new { key = "tone_of_voice", value = new { summary = "Plain and warm; no exclamation marks.", formality = "informal" }, actor = Marta }, Ct);
         Assert.Equal("informal", (string?)tone.Value!["formality"]);
+
+        var cold = await api.RecordAsync<PreferenceDto>(
+            Operations.PreferenceSet, "send-mode-cold", new { key = "send_mode.cold", value = new { mode = "automatic" }, actor = Marta, reason = "the person's answer" }, Ct);
+        Assert.Equal(("send_mode.cold", "automatic"), (cold.Key, (string?)cold.Value!["mode"]));
 
         var unknown = await api.RecordErrorAsync(
             Operations.PreferenceSet, "unknown-key", new { key = "tone", value = new { summary = "Plain." }, actor = Marta }, HttpStatusCode.BadRequest, Ct);
@@ -57,7 +61,7 @@ public class PreferenceEndpointTests
         Assert.Equal("actor_required", anonymous.Code);
 
         var both = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "set", new { }, Ct);
-        Assert.Equal([null, set.ValueHash, tone.ValueHash], both.Items.Select(item => item.ValueHash));
+        Assert.Equal([null, cold.ValueHash, null, set.ValueHash, tone.ValueHash], both.Items.Select(item => item.ValueHash));
 
         var unset = await api.RecordAsync<PreferenceDto>(Operations.PreferenceUnset, "removed", new { key = "sender.identity", actor = Marta, reason = "taken back" }, Ct);
         Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), unset);

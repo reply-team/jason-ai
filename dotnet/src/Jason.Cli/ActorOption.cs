@@ -39,8 +39,9 @@ public static class ActorOption
     public const string NoDefaultForReport = "The CLI's default actor does not apply here: name who reports it with --actor human:<Name> or --actor role:<id>.";
 
     /// <summary>
-    /// The help of the five verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or
-    /// taking back a standing approval, and answering. The runtime refuses them a request that names an attempt.
+    /// The help of the verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or taking
+    /// back a standing approval, answering, setting or taking back a preference, and setting a campaign's send mode. The
+    /// runtime refuses them a request that names an attempt.
     /// </summary>
     public const string RefusedInsideARun = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
 
@@ -50,11 +51,13 @@ public static class ActorOption
             + "Without it, a running executor is its attempt, and anything else is written as human:<this account's name>, "
             + "the name the paired browser writes as; where that name cannot be read, as a person who gave no name. "
             + "Approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference, "
+            + "setting a campaign's send mode, "
             + "clearing a block, resuming a work item, rewinding a subscription, submitting a report, "
             + "lifting a suppression, setting or unsetting a route, "
             + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
-            + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there.",
+            + "and approving, rejecting, setting or unsetting a standing approval, answering, setting or unsetting a preference "
+            + "and setting a campaign's send mode are refused there.",
         Recursive = true,
     };
 
