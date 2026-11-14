@@ -5,6 +5,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -19,6 +20,13 @@ namespace Jason.Runtime.Replies;
 /// and goal are the decision a reader of the line acts on, not something this service does. The nature is a word of a
 /// closed list that <see cref="Warmth"/> reads later; it is never checked against the category or the reaction.
 /// </summary>
+/// <remarks>
+/// One nature is acted on here, in the same act: a verdict that says <c>opt_out</c> puts every channel value the contact
+/// has on the do-not-contact register, by <see cref="Actors.OptOut"/>, with the verdict as the reason, in the one save
+/// that records the verdict; a value already registered gets no second entry, and nothing here lifts one. Nobody is asked.
+/// The verdict's journal line names in its contact column the contact its body names, never the person of the run that
+/// records it, so the claim's lock, which reads a contact's own lines, finds the person who asked.
+/// </remarks>
 /// <remarks>
 /// What is checked against the database: the campaign (archived ones included, as the chronicle takes lines on an
 /// archived campaign), the contact when one is named, the goal against the campaign's goals as they stand, an attempt
@@ -87,13 +95,19 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 
         errors.ThrowIfAny();
 
+        // An opt-out reads the contact's values and writes the register: BEGIN IMMEDIATE, so no other writer runs between
+        // the read of what is registered and the commit, and two opt-outs of one person never race to the same entry.
+        var optOut = request.Nature == ReplyNature.OptOut;
+        await using var stop = optOut ? await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false) : null;
+
         var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
 
         Contact? contact = null;
         if (!string.IsNullOrWhiteSpace(request.ContactId))
         {
             var contactId = request.ContactId.Trim();
-            contact = await db.Contacts.SingleOrDefaultAsync(c => c.PublicId == contactId, cancellationToken).ConfigureAwait(false)
+            IQueryable<Contact> contacts = optOut ? db.Contacts.Include(c => c.Channels) : db.Contacts;
+            contact = await contacts.SingleOrDefaultAsync(c => c.PublicId == contactId, cancellationToken).ConfigureAwait(false)
                 ?? throw DomainErrors.ContactNotFound(contactId);
         }
 
@@ -147,9 +161,34 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
             workItem: workItem,
             attempt: attempt,
             contact: contact);
+        if (optOut)
+        {
+            await SuppressionService.StageAsync(
+                db,
+                journal,
+                entry.Ts,
+                Actors.OptOut,
+                contact!.Channels.Select(channel => (channel.Channel, channel.Value)),
+                OptOutReason(entry.PublicId, campaign.PublicId),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (stop is not null)
+        {
+            await stop.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         return JournalWriter.ToDto(entry, campaign.PublicId) with { ContactId = contact?.PublicId };
     }
+
+    /// <summary>
+    /// The reason a register entry an opt-out made carries: the verdict that made it, by its id, and its campaign. No word of
+    /// the reply or the verdict's own reason is repeated, and a reader looking for the entries one verdict made finds them by
+    /// its id.
+    /// </summary>
+    internal static string OptOutReason(string verdict, string campaign) =>
+        $"Asked not to be written to: opt-out verdict {verdict} in campaign {campaign}.";
 
     /// <summary>
     /// A category as every verb that takes one reads it: trimmed, one line, at most <see cref="MaxCategoryLength"/>
