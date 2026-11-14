@@ -1808,6 +1808,15 @@ body,
     color: var(--faint);
     font-size: 12px;
 }
+.jc-console .palette-off {
+    color: var(--faint);
+    font-size: 12px;
+    margin-left: auto;
+    padding-right: 10px;
+}
+.jc-console [role='option'][aria-disabled='true'] .palette-label {
+    color: var(--faint);
+}
 .jc-console .palette-none {
     padding: 18px 16px;
     color: var(--mute);

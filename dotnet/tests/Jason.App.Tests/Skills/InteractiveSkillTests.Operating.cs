@@ -131,7 +131,7 @@ public partial class InteractiveSkillTests
             ParagraphAt(text, Opening));
 
         var skill = Flattened("operating-the-installation");
-        var ready = skill.IndexOf("When `jason status` says `ready`, ask the person once what comes next", StringComparison.Ordinal);
+        var ready = skill.IndexOf("When `jason status` says `ready` after an install you made", StringComparison.Ordinal);
         var app = skill.IndexOf(Opening, StringComparison.Ordinal);
         var off = skill.IndexOf("## Taking it off again", StringComparison.Ordinal);
         Assert.True(
@@ -271,40 +271,39 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// A ready installation is followed by one question, asked once: the wiring check — named for what it is, a synthetic
-    /// walk that is not the real work — or the real work at once. A skip is the person's answer and the walk is not offered
-    /// again, and the real work begins with an invitation to tell about the first campaign in their own words, which
-    /// becomes the campaign's context. A session that took the walk for the job, or offered it at every turn, would keep
-    /// the person from the work they came for.
+    /// A ready installation made by the agent is handed to `quick-start` at once, with no question about what comes next.
+    /// The wiring check — a synthetic walk that is not the real work — is taken only when the person says so. A session
+    /// that stopped to ask, or took the walk for the job, would keep the person from the work they came for.
     /// </summary>
     [Fact]
-    public void The_operating_skill_asks_once_after_ready_and_honours_a_skip()
+    public void The_operating_skill_hands_a_ready_installation_to_quick_start()
     {
         var skill = Flattened("operating-the-installation");
 
         Assert.Contains(
-            "When `jason status` says `ready`, ask the person once what comes next: the wiring check, `docs/golden-path.md`, in the same session, or their real work at once.",
+            "When `jason status` says `ready` after an install you made, tell the person where Jason keeps their files and what you ran, in the lines the install guide's section for agents gives, then start the `quick-start` skill at once; do not ask what comes next.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Name the wiring check for what it is: a synthetic walk to meet the system, which connects their provider and proves it with their own address, and is not the real work.",
+            "A host that does not see a skill installed a minute ago reads its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one on the `Target:` line of `jason skills install` that names the `jason-runtime-skills` pack and the host.",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains("A skip is honoured: do not offer the walk again.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("ask the person once what comes next", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("ask them once what comes next", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "The wiring check, `docs/golden-path.md`, is a synthetic walk to meet the system, which connects their provider and proves it with their own address, and is not the real work;",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("you take it only when the person says so.", skill, StringComparison.Ordinal);
 
         // A skip connects no provider, and `ready` needs none, so the session that skipped meets `no_route` later with
-        // nowhere to turn unless this paragraph says where a provider is connected: the wiring check's own steps, without
-        // its enrolment.
+        // nowhere to turn unless this paragraph says where a provider is connected.
         Assert.Contains(
-            "A skip leaves no provider connected: when the work first needs one, the Reply CLI section and steps 3 to 5 of `docs/golden-path.md` connect it, without the walk's enrolment.",
+            "A person who skips it has no provider connected: when the work first needs one, the Reply CLI section and steps 3 to 5 of `docs/golden-path.md` connect it, without the walk's enrolment.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "The real work, at once or after the walk, begins with an invitation to tell you about their first campaign in their own words — typed, a link, a file or a voice note, or one of a few examples you offer to start from.",
-            skill,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "What they tell you becomes the campaign's context when the campaign is created (`managed-campaign-work`), and the work is planned with the `campaign-planning` skill and worked by Jason's roles.",
+            "What the person tells you about their first campaign becomes the campaign's context when the campaign is created (`managed-campaign-work`), and the work is planned with the `campaign-planning` skill and worked by Jason's roles.",
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("one word from the person starts it", skill, StringComparison.Ordinal);

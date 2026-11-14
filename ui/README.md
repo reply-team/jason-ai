@@ -22,28 +22,39 @@ The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` an
 `ui/` at its tag and publishes `jason-ui.zip` beside its archives). To try a build against a real Jason: unzip
 `jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open`; `jason status` says which build is served. Delete `custom/` to go back.
 
-## Two shells, one build
+## One console, three places
 
 The words of the page: an **agent** is the harness's campaign with its chat, and only on the screen. Identifiers, routes,
 API fields, file names, test ids and fixtures keep `campaign`. The AI that runs commands is "the AI", never "the agent".
 
-The same build mounts one of two shells, chosen once as the page loads (`src/main.tsx`):
+The page mounts the console, in one of three places that differ by what each can do (`src/main.tsx`, chosen by
+`src/start.ts` once as the page loads). The console (`src/console/`) has the chat as home, in a dock (dockview) with
+panels beside it: what needs the person (approvals and questions), the agents, the journal's activity, and Connect, which
+shows the AI hosts found on the computer, the model keys, the Reply connection and the notification channels. The screens
+under `src/screens/` open in a page panel of the same dock. The console reaches the desktop only through the seam typed in
+`src/platform/desktop.d.ts`, and the runtime only through the API client and the journal stream
+(`src/platform/journal-stream.ts`, a WebSocket at `GET /v1/journal.stream` under the page's own pairing).
 
-- **In a browser, the classic shell**: the sidebar and the screens under `src/screens/`, and a Chat screen that says
-  the chat with the AI is part of the desktop application, where a page can start the AI on the computer and ask
-  the person before it acts.
-- **Inside Jason Desktop, the console** (`src/console/`). The desktop puts `window.jasonDesktop` on the page before the
-  page runs; with it there, the chat is home, in a dock (dockview) with panels beside it: what needs the person
-  (approvals and questions), the agents, the journal's activity, and Connect, which shows the AI hosts found on
-  the computer, the model keys, the Reply connection and the notification channels. The browser's other screens open in a page panel
-  of the same dock. The console reaches the desktop only through the seam typed in `src/platform/desktop.d.ts`, and the
-  runtime only through the API client and the journal stream (`src/platform/journal-stream.ts`, a WebSocket at
-  `GET /v1/journal.stream` under the page's own pairing).
+**Three places, one console.** The console is always handed an object of the desktop's whole shape, built in
+`src/platform/places.ts`:
 
-The console's live panels read the same facts as the classic Attention and Agents screens, with the same
-operations, and for now duplicate them: the classic screens stay for the browser. Each panel keeps its lists apart
-from the screen's, so the page panel can show that screen at a table or a filter of its own while a journal line
-re-reads the panel.
+- **Jason Desktop's own window**: the desktop puts `window.jasonDesktop` on the page before the page runs; it can do
+  everything, and the console starts at once.
+- **A tab the desktop opened, with a bridge**: the object is built over the bridge, which carries one table of members
+  (`src/platform/bridge.ts`); every other member is present and answers the refusal its own type has, and `platform` is the
+  browser's own.
+- **A tab with no desktop**: every act refuses, and a read says what a page with no desktop can truthfully say. Where the
+  chat would be, the page says where the chat is and where to get Jason Desktop.
+
+The page asks one question before it draws or does anything a place may not, `can(member)`, and draws what the place
+cannot do off, in its place, with one sentence. In a browser the pairing is read first, to learn whether the tab holds a
+bridge. `tests/guards/desktop-calls.test.ts` reads the page's source and holds every use of a member to the bridge's table
+or to that question, and the members' list is `desktop.d.ts` itself. The browser's older shell (`src/classic.tsx`, its
+sidebar and Chat screen) is started by nothing now; its code stays until it is taken out.
+
+The console's live panels read the same facts as the Attention and Agents screens, with the same operations, and for now
+duplicate them. Each panel keeps its lists apart from the screen's, so the page panel can show that screen at a table or a
+filter of its own while a journal line re-reads the panel.
 
 **How the console draws.** A panel is markup from one tagged template, `html` in `src/console/html.ts`, which escapes
 every value it interpolates unless the tag itself made it, and is written into the page by one painter, `paint`. A
@@ -55,10 +66,10 @@ in focused, with its selection. The
 classic screens in the page panel take the browser's stylesheet, scoped under `.harness` when the build runs
 (`src/console/scope.ts`), so the two stylesheets do not meet.
 
-**Words and theme.** The browser shell's words are in `src/locale/en.ts`, one table read through `t()`. The theme
+**Words and theme.** The page's words are in `src/locale/en.ts`, one table read through `t()`. The theme
 (light, dark, or the system's) is chosen under Settings; light is what an installation that has chosen nothing meets.
 The choice is kept in this browser and never sent to the runtime; inside the desktop it is also told to the desktop, which
-keeps it so its window and starting page open in the same theme before the page loads. The document's `lang` is `en`. The console's own words are English in this release: the table serves the browser shell's.
+keeps it so its window and starting page open in the same theme before the page loads. The document's `lang` is `en`. The console's own words are English in this release: the table serves the page's.
 
 ## Dev loop
 
@@ -122,7 +133,7 @@ only with a recording whose request equals the one sent, and a request a test re
 even when the screen caught the error; the console's source makes markup only with its tag, writes it into the page
 only through its painter, and carries no inline handler or style attribute in markup or JSX
 (`tests/guards/console-templates.test.ts`, which reads the source as TypeScript); the desktop seam's members are
-named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build; only
+named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build, and every use of one is held to the bridge's table or to the one question (`tests/guards/desktop-calls.test.ts`); only
 `tests/e2e/harness.ts` may start a process, and it gives each runtime a data directory and a harness root of its own;
 the CI job runs all of it on every push.
 

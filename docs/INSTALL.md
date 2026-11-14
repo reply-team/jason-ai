@@ -44,9 +44,27 @@ shells, `command(regex:jason .*)`) and `read_file(<harness folder>)`; the
 
 ### If an agent installs it
 
+If the person gave you these three lines:
+
+```text
+Install Jason by following https://get.jasonharness.ai/install.
+When it reports Ready, start its quick-start skill and take me to my first campaign.
+If anything stops you, ask me directly and tell me why.
+```
+
+they have asked for the install, so do it without stopping to confirm a step. Ask only for an act this page marks
+**Ask first.**, or where your own checks stop you, and then ask the person directly and say why. Given only the link,
+you do not have that yes: ask before the install and before each act this page marks **Ask first.**
+
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their
 yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
 ask.
+
+If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own
+agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of
+[the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again.
+That yes covers your own host and nothing else this page marks **Ask first.** Where this machine has other agent hosts, skills for them
+are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands.
 
 This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
 
@@ -64,7 +82,7 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
   Jason's data directory, which is where the role skills go; the system's temporary directory, which the download
   goes into; and the directory the executable unpacks its native libraries into when it first runs — under
   the temporary directory on Windows, under `~/.net` in this home directory on macOS and Linux. Nothing in your
-  own agent's configuration unless the person says so (§4). A package manager's own PATH change is part of the
+  own agent's configuration unless the person says so (§4), except the skills that the install prompt's yes covers. A package manager's own PATH change is part of the
   install you were asked for, and so is the one-liner's when the person types it; a PATH edit of your own, by hand
   (§2) or by the repair (§5), is marked **Ask first.**
 - With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
@@ -81,17 +99,16 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
   your agent's configuration or into what starts at logon, which is the person's to allow.
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
-- Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
-  exactly what you ran, and what it changed.
-- **The hand-over.** When `ready` is true, tell the person Jason is installed and can work
-  and where it will keep their files — the two lines §2 shows, with the folder the `harness_root` check of
-  `jason status` names, which is the one in force — and ask them once what comes next:
-  [the wiring check](golden-path.md) first, in this session, or their real work at once. Name the wiring check for
-  what it is: a synthetic walk to meet the system, which connects their provider and proves it with their own
-  address, and is not the real work. A skip is honoured: do not offer the walk again. The real work, at once or after
-  the walk, begins with an invitation to tell you about their first campaign in their own words — typed, a link, a
-  file or a voice note, or one of a few examples you offer to start from — and goes on as a campaign planned with the
-  `campaign-planning` skill and worked by Jason's roles.
+- The install is done when `ready` is true. If a required check still fails after its repair, stop and report which
+  checks failed.
+- **The hand-over.** The install prompt's "Ready" is `jason status` answering with `ready` true in its body. When it
+  is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's
+  files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying
+  exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now: starting the runtime at logon (§6) and,
+  where this machine has other agent hosts, skills for them (§4). Then start the `quick-start` skill at once, with no question
+  about what comes next: its question goes in a message of its own. Where your host does not see a skill installed a
+  minute ago, read its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one on the `Target:` line of
+  `jason skills install` that names the `jason-runtime-skills` pack and your host.
 
 ---
 
@@ -525,7 +542,9 @@ after a backup.
 
 Nothing is registered until you ask.
 
-**Ask first.** To have the runtime start when you log on:
+**Not done at install.** An agent that installs Jason does not register this: it says at the end that the runtime can
+start when the person logs on, gives the command, and runs it only on the person's word. To have the runtime start
+when you log on:
 
 ```sh
 jason runtime autostart enable
@@ -540,13 +559,13 @@ when you sign out. On Windows that is a logon task named for this account; on ma
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
 
-That is the installation. What comes next is yours to choose, and an agent that installed Jason asks you once:
-[the wiring check](golden-path.md) — a page of its own, a synthetic walk to meet the system, your provider connected
-and proven with your own address, and not the real work — or the real work at once. Skip the walk and it is not
-offered again. The real work, at once or after the walk, begins with you telling your agent about your first campaign
-in your own words — typed, a link, a file or a voice note, or an example to start from — and becomes a campaign
-planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and
-worked by Jason's roles.
+That is the installation. An agent that installed Jason tells you where it keeps your files and what it ran, then starts
+the [`quick-start`](../skills/runtime/quick-start/SKILL.md) skill, which asks you one question and takes you to your
+first campaign. [The wiring check](golden-path.md) — a page of its own, a synthetic walk to meet the system, your
+provider connected and proven with your own address, and not the real work — is mentioned in the skill's last line and
+taken only if you say so. The first campaign is the real work: you tell your agent about it in your own words — typed,
+a link, a file or a voice note — and it becomes a campaign planned with the business skills,
+[`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.
 
 ---
 
@@ -718,3 +737,18 @@ exits 0 when everything was placed and the runtime answered, 1 when it refused (
 did not start (the files are in place; start it with `jason runtime start`), and 2 on a usage error. Three
 things are left to you, in this order: `jason skills install`, `jason runtime autostart enable` if the runtime
 should start at logon here and the import did not register it, and `jason status`.
+
+---
+
+## 9. What the quick start does
+
+The install prompt ends by starting the `quick-start` skill. In five lines:
+
+1. It asks you one question: what you sell and who should buy it. A line about yourself and how you write is welcome
+   and never required.
+2. It reads which provider your email and LinkedIn go through; it does not ask you. Which accounts are connected
+   there it reads when you say go.
+3. It makes a draft of your first campaign and says the plan in one message: the goal, who it will look for, the channels, and
+   how it will write.
+4. It stops there, until you say what to change or say go. A first message is never sent without your yes.
+5. Its text is [`skills/runtime/quick-start/SKILL.md`](../skills/runtime/quick-start/SKILL.md).

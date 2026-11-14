@@ -3,6 +3,7 @@ import type { Api } from '../api/client';
 import { ApiError } from '../api/client';
 import type { JournalEntry } from '../api/types';
 import type { DesktopConversation, DesktopSetup, JasonDesktop } from '../platform/desktop';
+import { currentDesktop, placeKind, setPlace } from '../platform/places';
 import type { StreamState } from '../platform/journal-stream';
 import type { Route } from '../router';
 import type { Chat } from './chat-model';
@@ -84,8 +85,13 @@ let current: Console | null = null;
 /** The console mounted; the function it returns unmounts it. */
 export function bind(console: Console): () => void {
     current = console;
+    // A console bound as a tab's is a tab's whatever the page said before.
+    const before = console.tab === true ? placeKind() : null;
+    const heldBefore = currentDesktop();
+    if (before !== null) setPlace('tab', console.desktop);
     return () => {
         if (current === console) current = null;
+        if (before !== null) setPlace(before, heldBefore);
     };
 }
 
@@ -96,5 +102,5 @@ export function here(): Console {
 
 /** Whether the console was bound in a browser tab. The one fact every control a tab may not use is hidden by. */
 export function inTab(): boolean {
-    return current?.tab === true;
+    return current?.tab === true || placeKind() === 'tab';
 }

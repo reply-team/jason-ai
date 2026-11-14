@@ -364,7 +364,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("The first campaign of what they sell goes under a project named from it, never under `Default`, and the campaign is made with the brief as its context before anyone is added to it", skill, StringComparison.Ordinal);
         Assert.Contains("The wiring check is no step of this opening.", skill, StringComparison.Ordinal);
         Assert.Contains("a person who skipped it plans exactly as one who took it", skill, StringComparison.Ordinal);
-        Assert.Contains("Offered once and skipped, it stays skipped", skill, StringComparison.Ordinal);
+        Assert.Contains("Mentioned at the end of the quick start and not taken, it stays untaken", skill, StringComparison.Ordinal);
         Assert.Contains("a provider is connected when the work first reaches for one, as `operating-the-installation` says", skill, StringComparison.Ordinal);
 
         // A second campaign of a product that has its project: that project's file is the person's guidance for it, and it
@@ -532,5 +532,52 @@ public partial class InteractiveSkillTests
         Assert.Contains("and its goals go in as the `goals` key of that context.", skill, StringComparison.Ordinal);
         Assert.Contains("`managed-campaign-work` prints how, including how a change of mind on an existing campaign replaces the list whole.", skill, StringComparison.Ordinal);
         Assert.Contains("is made with the brief as its context before anyone is added to it", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The quick start is what a person meets first, so the words the person sees are held exactly: the one question and
+    /// its invitation, the plan message's last line, the line of fact about connected channels, the firm line when none is
+    /// connected, and the wiring line in the message after "go". A paraphrase would change what the first minutes say.
+    /// </summary>
+    [Fact]
+    public void The_quick_start_says_its_words_exactly()
+    {
+        var skill = Flattened("quick-start");
+
+        Assert.Contains("What do you sell, and who should buy it? One sentence is enough, and a link to your site works too.", skill, StringComparison.Ordinal);
+        Assert.Contains("If you like, add a line about yourself and how you write. You can also do that later.", skill, StringComparison.Ordinal);
+        Assert.Contains("End it with exactly: \"Say what to change, or say go.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"Email goes out through {provider}.\" and \"LinkedIn goes out through {provider}.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"Which mailboxes and LinkedIn accounts are connected there I read as soon as you say go.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"{Channel} is not connected.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("read no accounts and count none before \"go\"", skill, StringComparison.Ordinal);
+        Assert.Contains("\"{N} mailboxes and {M} LinkedIn accounts are connected; you can add more at any time.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("A routed channel that holds no account is said firmly: not one message leaves on it until an account is connected", skill, StringComparison.Ordinal);
+        Assert.Contains("Nothing is started before the person's go.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("The count never holds the person up", skill, StringComparison.Ordinal);
+        Assert.Contains("no channel is connected, connecting your provider now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
+        Assert.Contains("That step is the person's one act, \"connect your provider\". With Reply it is one sign-in only they can do: in a terminal `reply auth login` (on Windows PowerShell, `reply.cmd auth login`), and you do the rest", skill, StringComparison.Ordinal);
+        Assert.Contains("Then you start the campaign and submit `sender.list` for each routed channel", skill, StringComparison.Ordinal);
+        Assert.Contains("`planner-in-session` takes the plan from the campaign that exists: the brief and the goals go into its context, and no second campaign is made.", skill, StringComparison.Ordinal);
+        Assert.Contains("Make a project named from what the person sells, or take the one that already holds it, and make the campaign in it, under a name drawn from what the campaign is for", skill, StringComparison.Ordinal);
+        Assert.Contains("Say in passing what was made, as a draft: the project and the campaign, and that both names are the person's to change.", skill, StringComparison.Ordinal);
+        Assert.Contains("(on Windows PowerShell, `reply.cmd auth login`)", skill, StringComparison.Ordinal);
+        Assert.Contains("Never ask for them: the person is not asked which channels they have.", skill, StringComparison.Ordinal);
+
+        // The campaign goes under a project named from what is sold and carries a name drawn from what it is for: the
+        // default project and a placeholder name would put the first campaign where no later one is looked for.
+        Assert.DoesNotContain("Default", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("First campaign", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("`--project` out", skill, StringComparison.Ordinal);
+        Assert.Contains("With one channel routed, name only that channel's accounts.", skill, StringComparison.Ordinal);
+        Assert.Contains("\"It can be done later.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("Never put the offer in the plan message.", skill, StringComparison.Ordinal);
+        Assert.Contains("The message after \"go\" that hands over to the planning ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--idempotency-key first-campaign ", skill, StringComparison.Ordinal);
+
+        // The sender.list read comes after "go" and never before it: a draft campaign cannot run it.
+        var go = skill.IndexOf("## 5. After \"go\"", StringComparison.Ordinal);
+        var read = skill.IndexOf("--operation sender.list", StringComparison.Ordinal);
+        Assert.True(go >= 0 && read > go, $"The sender.list read is at offset {read}; it belongs after the heading of \"go\" (offset {go}).");
     }
 }

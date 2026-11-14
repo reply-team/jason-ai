@@ -3,6 +3,7 @@ import type { CampaignSummary, CampaignSummaryResponse, CampaignSummaryRow, Page
 import { parseRoute } from '../router';
 import * as store from '../screens/campaigns/store';
 import { act, define } from './actions';
+import { offUnless } from './off';
 import { html, type Html } from './html';
 import { toCampaignRow } from './live';
 import { here } from './state';
@@ -75,7 +76,9 @@ export function campaignsView(): Html {
                             No agents yet. An agent is set up in a chat with Jason: say who you want to reach, and the
                             AI sets it up with you.
                         </p>
-                        <button class="btn sm p" type="button" ${act('campaigns.start')}>New chat</button>
+                        <button class="btn sm p" type="button" ${act('campaigns.start')} ${offUnless('chat.create')}>
+                            New chat
+                        </button>
                     </div>`
                   : html`<table class="t">
                         <thead>
@@ -101,7 +104,12 @@ export function campaignsView(): Html {
                                             <button class="btn sm" type="button" ${act('campaigns.open', row.id)}>
                                                 Open
                                             </button>
-                                            <button class="btn sm" type="button" ${act('campaigns.chat', row.id)}>
+                                            <button
+                                                class="btn sm"
+                                                type="button"
+                                                ${act('campaigns.chat', row.id)}
+                                                ${offUnless('chat.create')}
+                                            >
                                                 Chat
                                             </button>
                                         </td>

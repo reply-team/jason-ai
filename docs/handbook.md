@@ -142,7 +142,7 @@ your own address approved by you and performed against the provider, and the his
 [docs/golden-path.md](golden-path.md), and every command on that page is executed by a test. It proves the
 wiring and is not the real work, which begins with a campaign planned with the business skills
 ([`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles. It is optional:
-a synthetic walk, offered once when an installation is ready, which you may skip for the real work at once — and that
+a synthetic walk, mentioned at the end of the quick start and taken only when you say so, which you may skip for the real work at once — and that
 begins with you telling your agent about your first campaign in your own words. Releases arrive one self-contained
 increment at a time; no dates, no roadmap promises.
 

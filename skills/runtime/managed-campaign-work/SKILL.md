@@ -52,8 +52,8 @@ jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campai
 Setting one up is `operating-the-installation`, which is where plugins, routes, profiles and updates live.
 
 The wiring check, `docs/golden-path.md`, connects a provider and proves it with the person's own address; it is
-not campaign work. It is a synthetic walk the person takes or skips when the installation becomes ready, and asking
-them once is `operating-the-installation`'s. The real work begins with the person's brief — what they tell you about
+not campaign work. It is a synthetic walk the person takes only when they say so, and `quick-start` is what
+mentions it. The real work begins with the person's brief — what they tell you about
 their first campaign, in their own words — and a campaign planned with the business pack's `campaign-planning` skill,
 and this skill is how the brief and that plan become work the runtime and Jason's roles perform.
 
