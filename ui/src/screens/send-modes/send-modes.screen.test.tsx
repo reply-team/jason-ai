@@ -329,9 +329,15 @@ describe('the send modes in Settings', () => {
             .answer('preference.list', 'preference.list/set')
             .answer('preference.set', 'preference.set/send-mode-cold-every-message', 'preference.set/send-mode-warm')
             .answer('preference.unset', 'preference.unset/send-mode-cold');
+        const release = api.hold('preference.list');
         mountSettings(api);
 
-        expect(await screen.findByRole('heading', { name: 'How messages go', level: 2 })).toBeTruthy();
+        // The heading stands before the read answers, so it says nothing of what was read: the choices come with the read.
+        expect(screen.getByRole('heading', { name: 'How messages go', level: 2 })).toBeTruthy();
+        expect(screen.getByText('Reading what is set.')).toBeTruthy();
+        expect(screen.queryByRole('group', { name: cold })).toBeNull();
+        release();
+        await screen.findByRole('group', { name: cold });
         expect(radio(cold, 'Goes automatically').checked).toBe(true);
         expect(inGroup(warm).getByText(unsetLine)).toBeTruthy();
         expect(checkedIn(warm)).toBe(false);
