@@ -185,6 +185,7 @@ public partial class ClaimerTests
     [InlineData("a critic a person queued by hand", "not_reviewed")]
     [InlineData("the critic the runtime made for another send", "not_reviewed")]
     [InlineData("the runtime's critic, its context patched by a person", "not_reviewed")]
+    [InlineData("the runtime's critic, its context patched by its own attempt", "not_reviewed")]
     [Critical(Family.S2, "the automatic mode: only the critic's or a person's pass releases")]
     public async Task SendMode_WhosePassReleases(string who, string? parks)
     {
@@ -201,6 +202,7 @@ public partial class ClaimerTests
             "a critic a person queued by hand" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.QueuedByHand),
             "the critic the runtime made for another send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.AnotherSends),
             "the runtime's critic, its context patched by a person" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.Patched),
+            "the runtime's critic, its context patched by its own attempt" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.PatchedByItself),
             "a person by name in the desktop's chat" => await InTheChatAsync(() => PersonPassAsync(db, send.Id, send.ReviewHash)),
             "a person by name" => (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
                 new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id,
@@ -1025,6 +1027,7 @@ public partial class ClaimerTests
         QueuedByHand,
         AnotherSends,
         Patched,
+        PatchedByItself,
     }
 
     /// <summary>
@@ -1078,6 +1081,10 @@ public partial class ClaimerTests
         if (critic == Critic.Patched)
         {
             journal.Append(db, Operator, JournalKinds.WorkItemContextUpdated, campaign, key: "brief", old: null, updated: "Look at the tone.", workItem: work);
+        }
+        else if (critic == Critic.PatchedByItself)
+        {
+            journal.Append(db, Actors.ForAttempt(run), JournalKinds.WorkItemContextUpdated, campaign, key: "brief", old: null, updated: "Look at the tone.", workItem: work, attempt: run);
         }
 
         await db.SaveChangesAsync(Ct);

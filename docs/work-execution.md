@@ -519,7 +519,7 @@ preview, since the key is never taken back; a review's is not carried, because t
 
 ### The send mode at the claim
 
-A send a person decides each one of may go without being asked where a person said so for the kind of contact it
+A send to a person may go without being asked where a person said so for the kind of contact it
 reaches: the send mode, `automatic` or `every_message`, for a cold contact and for a warm one, set for the installation
 by the named preferences `send_mode.cold` and `send_mode.warm`, and for one campaign by `campaign.set_send_mode`, whose
 own mode is the one in force where it sets one. Unset, a mode is `every_message`, and every such send parks as above. A
@@ -531,7 +531,7 @@ what kind of reply it is, they are neither, and nothing goes to them automatical
 **It is asked at the claim, where nothing has been decided about the work yet**, in the same place and on the same
 guard as a standing approval, and in this order:
 
-1. **Is a mode in force?** The send is one a person decides each one of and names a contact, and a mode of `automatic`
+1. **Is a mode in force?** The send is a send to a person and names a contact, and a mode of `automatic`
    set by a named person stands for its campaign, for cold or for warm. Where none does, nothing below is asked, warmth
    is not read, and the send parks as it always did.
 2. **The contact's warmth**, read from the campaign's chronicle. Where the mode for the contact's warmth is
@@ -549,13 +549,14 @@ guard as a standing approval, and in this order:
    that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
    or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
 7. **A review that passed the text as it now reads.** A pass under the send's review hash counts where a person by name
-   wrote it, outside a run and outside the desktop's chat, or where the runtime's own critic did: a running attempt of the `critic` work the runtime
-   makes for a send created under an automatic mode, which it creates under its own actor, names the send and its
-   operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`), and whose context nobody but
-   the runtime changed since. Any such pass counts, whatever was reviewed after it, since a doubt was asked before. A
-   counting pass only under an earlier hash is `edited_after_review`; none at all, `not_reviewed`. A pass by a critic
-   somebody queued by hand, by the runtime's critic of another send, by another role, on a line a run wrote in a person's
-   name, or naming an attempt other than its own, is shown on the preview and releases nothing.
+   wrote it, outside a run and outside the desktop's chat, or where the critic the runtime created for this send did:
+   the `critic` work the runtime makes for a send created under an automatic mode, which it creates under its own
+   actor, names the send and its operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`),
+   and whose context nobody but the runtime changed since, its own attempt included. Any such pass counts, whatever was
+   reviewed after it, since a doubt was asked before. A counting pass only under an earlier hash is
+   `edited_after_review`; none at all, `not_reviewed`. Another critic's pass does not count: one somebody queued by
+   hand, or the runtime's critic of another send. Nor does a pass by another role, on a line a run wrote in a person's
+   name, or naming an attempt other than its own; each is shown on the preview and releases nothing.
 8. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
    `automatic_mode`, requested and decided at the claim's moment, decided by the person who set the mode in force.
 
