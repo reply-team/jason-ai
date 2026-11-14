@@ -285,7 +285,9 @@ internal static class StatusChecks
             client?.Dispose();
         }
 
-        return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks);
+        // Where the parts are, from this CLI's own paths: nothing is read and nothing is asked, so it is said whatever the
+        // runtime did, and it decides nothing.
+        return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks, SetupInfo.From(env.Paths));
     }
 
     private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
@@ -964,16 +966,30 @@ internal static class StatusChecks
         }
     }
 
+    /// <summary>
+    /// The plugins folder of a runtime older than <c>system.info</c>'s setup section, which names none: every such runtime
+    /// keeps its plugins in the plugins folder of its data directory, the one layout there was before the section. Never
+    /// used for a runtime that says where its plugins are.
+    /// </summary>
+    private static string OlderRuntimesPluginsDirectory(string dataDirectory)
+    {
+        var separator = dataDirectory.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
+        return string.Join(separator, dataDirectory.TrimEnd('/', '\\'), "plugins");
+    }
+
     private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package)
     {
         var runtime = info.RuntimeVersion;
         var released = $"{package.Id} {package.Released.Version}";
         var installed = package.Installed is { } mine ? $"{package.Id} {mine.Version}" : package.Id;
 
-        // The runtime's own data directory, written with the separator it writes, so the line names the folder a person
-        // finds on that machine.
-        var separator = info.DataDir.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
-        var directory = string.Join(separator, info.DataDir.TrimEnd('/', '\\'), "plugins", package.Id);
+        // The runtime's own plugins folder, as its setup section names it, written with the separator it writes, so the line
+        // names the folder a person finds on that machine and this CLI spells no part of the layout. Only a runtime older
+        // than that section says nothing of it, and such a runtime keeps its plugins where every runtime before the
+        // section did: the plugins folder of its data directory.
+        var plugins = info.Setup?.PluginsDirectory ?? OlderRuntimesPluginsDirectory(info.DataDir);
+        var separator = plugins.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
+        var directory = string.Join(separator, plugins.TrimEnd('/', '\\'), package.Id);
 
         return package.State switch
         {

@@ -308,13 +308,33 @@ public class PluginPackageCheckTests
         Assert.Contains(line, cli.Text, StringComparison.Ordinal);
     }
 
-    private static async Task<StatusCheck> CheckAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1") =>
-        Assert.Single((await ReportAsync(released, version)).Checks, c => c.Name == "plugin_package");
+    /// <summary>
+    /// The folder a package is placed in is the one the runtime says its plugins are in, joined with the id — never one
+    /// composed here. Only a runtime older than that section, which says no <c>setup</c> at all, is answered as the layout
+    /// it is certain to have: its data directory's <c>plugins</c> folder. Both are held side by side, with a data directory
+    /// whose <c>plugins</c> folder is not the one the section names, so the two cannot be mistaken for each other.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "`jason plugin install reply --replace` places it in /elsewhere/my-plugins/reply in place of the one there")]
+    [InlineData(false, "`jason plugin install reply --replace` places it in /data/plugins/reply in place of the one there")]
+    public async Task The_package_line_names_the_plugins_directory_the_runtime_reports_and_falls_back_only_without_the_section(bool section, string said)
+    {
+        var setup = section ? new SetupInfo("/elsewhere/roles", "/elsewhere/my-plugins", "/elsewhere/ui", "/elsewhere/settings.json", true) : null;
 
-    private static async Task<StatusReport> ReportAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1")
+        var check = await CheckAsync(released: [Reply(ReleasedPluginState.Behind, new PluginPackageInfo("0.6.1", "sha256:earlier"))], setup: setup);
+
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Contains(said, check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain(section ? "/data/plugins" : "/elsewhere", check.Fact, StringComparison.Ordinal);
+    }
+
+    private static async Task<StatusCheck> CheckAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1", SetupInfo? setup = null) =>
+        Assert.Single((await ReportAsync(released, version, setup)).Checks, c => c.Name == "plugin_package");
+
+    private static async Task<StatusReport> ReportAsync(IReadOnlyList<ReleasedPluginInfo>? released, string version = "0.7.1", SetupInfo? setup = null)
     {
         using var dir = new TempPaths();
-        StatusCommandTests.Running(dir, version: version, releasedPlugins: released);
+        StatusCommandTests.Running(dir, version: version, releasedPlugins: released, setup: setup);
         var output = new StringWriter();
         await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, build: version), Ct);
 

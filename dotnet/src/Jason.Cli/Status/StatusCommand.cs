@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using Jason.Cli.Commands;
 using Jason.Cli.Human;
+using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Status;
@@ -126,6 +127,11 @@ public static class StatusCommand
         role root. With no record, or one that cannot be read, there are no details. No other check
         carries any. --human prints the facts alone.
 
+        Below the checks, --human prints where this installation's parts are: its role skills, plugins and
+        custom UI folders, and its settings file, saying when that file holds plugin secrets too. The JSON
+        carries the same under setup, composed by this CLI from its own data directory, so it is there whether
+        or not the runtime answers, and it never decides ready.
+
         Exit codes: 0 when every required check passed, 1 when one did not. Never 3: "the runtime did not
         answer" is this command's answer rather than a reason it has none.
         """;
@@ -181,6 +187,8 @@ public static class StatusCommand
         }
 
         output.WriteLine(table.Render());
+        output.WriteLine();
+        RenderSetup(output, report.Setup);
 
         // Each line once, in the order it was first called for. Four checks that all want the runtime
         // started want it started once, and a list that printed `jason runtime start` four times was the
@@ -201,6 +209,29 @@ public static class StatusCommand
         foreach (var repair in repairs)
         {
             output.WriteLine($"  {repair}");
+        }
+    }
+
+    /// <summary>
+    /// Where the parts are, one line each, the labels in one column. While the settings file holds plugin secrets too the
+    /// line says so; where it holds none, it is the person's to change.
+    /// </summary>
+    private static void RenderSetup(TextWriter output, SetupInfo setup)
+    {
+        (string Label, string Value)[] lines =
+        [
+            ("Role skills:", setup.RoleSkillsDirectory),
+            ("Plugins:", setup.PluginsDirectory),
+            ("Custom UI:", setup.CustomUiDirectory),
+            setup.SettingsFileHoldsSecrets
+                ? ("Settings:", $"{setup.SettingsFile} (holds plugin secrets)")
+                : ("Settings you may change:", setup.SettingsFile),
+        ];
+
+        var width = lines.Max(line => line.Label.Length) + 1;
+        foreach (var (label, value) in lines)
+        {
+            output.WriteLine(label.PadRight(width) + value);
         }
     }
 
