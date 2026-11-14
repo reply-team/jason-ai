@@ -28,7 +28,7 @@ namespace Jason.Contracts.Api;
 /// <param name="Layout">
 /// The layout the data directory is in, as its stamp says: 1 where there is none, the layout a readable stamp names, and
 /// null where it cannot be read — never a layout guessed for it. A runtime is only ever on a layout it runs, so in
-/// <c>system.info</c> it is always a number; null is said by <c>jason status</c> alone, of a stamp it found unreadable.
+/// <c>system.info</c> it is always a number; null is said by <c>jason status</c>, and the doctor's copy of its report, of a stamp it found unreadable.
 /// </param>
 public sealed record SetupInfo(
     string RoleSkillsDirectory,
