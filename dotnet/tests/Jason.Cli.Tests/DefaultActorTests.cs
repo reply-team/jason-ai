@@ -154,10 +154,7 @@ public class DefaultActorTests
 
     /// <summary>
     /// The acts the runtime takes from any caller say what is true of them: the CLI will not put the account's name on them
-    /// by itself. Their help and their refusal never say that the runtime refuses them, or that only a person can. The one
-    /// sentence a grant's help adds about a run (<see cref="ActorOption.RefusedInsideARun"/>) is true of it: the runtime
-    /// takes a grant from any caller outside a run and refuses one from inside it, so that sentence alone is set aside, and
-    /// it must be there.
+    /// by itself. Their help and their refusal never say that the runtime refuses them, or that only a person can.
     /// </summary>
     [Theory]
     [MemberData(nameof(TheRuntimeTakesFromAnyone))]
@@ -168,12 +165,6 @@ public class DefaultActorTests
 
         Assert.Equal(ExitCodes.Usage, exit);
         var said = Find(verb).Description + Environment.NewLine + cli.Error;
-        if (RefusedInsideARun.Contains(VerbOf(verb)))
-        {
-            Assert.Contains(ActorOption.RefusedInsideARun, said, StringComparison.Ordinal);
-            said = said.Replace(ActorOption.RefusedInsideARun, string.Empty, StringComparison.Ordinal);
-        }
-
         Assert.Contains("will not put this account's name on", said, StringComparison.Ordinal);
         foreach (var claim in new[] { "runtime refuses", "person's word", "person's own word", "only a person" })
         {
@@ -333,9 +324,6 @@ public class DefaultActorTests
     /// campaign, and changing which agent host runs a role. The CLI alone asks who does them.
     /// </summary>
     internal static readonly string[] RuntimeTakesFromAnyone = ["suppression remove", "route set", "route unset", "role set-profile", "plugin grant", "plugin revoke"];
-
-    /// <summary>Of those, the acts the runtime refuses from inside a run as a person's word, which their help says.</summary>
-    internal static readonly string[] RefusedInsideARun = ["plugin grant", "plugin revoke"];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
     internal static readonly string[][] Runs =

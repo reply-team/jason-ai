@@ -39,11 +39,16 @@ public static class ActorOption
     public const string NoDefaultForReport = "The CLI's default actor does not apply here: name who reports it with --actor human:<Name> or --actor role:<id>.";
 
     /// <summary>
-    /// The help of the verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or taking
-    /// back a standing approval, answering, and granting a plugin something or taking a grant back. The runtime refuses
-    /// them a request that names an attempt.
+    /// The help of the five verbs that are a person's own word in the runtime's eyes: approving, rejecting, setting or
+    /// taking back a standing approval, and answering. The runtime refuses them a request that names an attempt.
     /// </summary>
     public const string RefusedInsideARun = "From inside a run (the environment names an attempt) this is refused: it is a person's word.";
+
+    /// <summary>
+    /// The help of the verbs that change Jason itself, granting a plugin something and taking a grant back: the runtime
+    /// takes them from any actor outside a run and refuses them a request that names an attempt.
+    /// </summary>
+    public const string ChangesJasonInsideARun = "From inside a run (the environment names an attempt) this is refused: nothing inside a run changes Jason itself.";
 
     public static Option<string?> Create() => new(Name)
     {

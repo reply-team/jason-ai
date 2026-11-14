@@ -434,8 +434,9 @@ public class PluginCommandsTests
     }
 
     /// <summary>
-    /// Both helps say the verb is refused from inside a run, as the verbs of a person's own word say it; the grant's help
-    /// names what --api grants as a family, and the help of --files says every place the load refuses.
+    /// Both helps say the verb is refused from inside a run because nothing inside a run changes Jason itself, never that
+    /// it is a person's word; the grant's help names what --api grants as a family, and the help of --files says every
+    /// place the load refuses.
     /// </summary>
     [Theory]
     [InlineData("grant")]
@@ -447,7 +448,9 @@ public class PluginCommandsTests
         await cli.RunAsync("plugin", verb, "--help");
 
         var text = System.Text.RegularExpressions.Regex.Replace(cli.Text, @"\s+", " ");
-        Assert.Contains(ActorOption.NoDefaultForAnAct + " " + ActorOption.RefusedInsideARun, text, StringComparison.Ordinal);
+        Assert.Contains(ActorOption.NoDefaultForAnAct + " " + ActorOption.ChangesJasonInsideARun, text, StringComparison.Ordinal);
+        Assert.Equal("From inside a run (the environment names an attempt) this is refused: nothing inside a run changes Jason itself.", ActorOption.ChangesJasonInsideARun);
+        Assert.DoesNotContain(ActorOption.RefusedInsideARun, text, StringComparison.Ordinal);
         if (verb == "grant")
         {
             Assert.Contains("Grant a plugin something its manifest asks for: a host, a program, a variable, an API family, a folder or a subscription.", text, StringComparison.Ordinal);
