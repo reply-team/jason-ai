@@ -3,6 +3,13 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
+## 1.4.0
+
+The manifest declares `message_bounce_observed`, which Jason 0.43.0 writes when a read of a send finds the message came
+back as a bounce, so a person can grant it. Nothing else changes.
+
+Jason 0.43.0 or newer: an earlier runtime rejects the reload, as every package problem does, over a kind it does not write.
+
 ## 1.3.0
 
 The manifest declares the five kinds Jason 0.36.0 writes about a campaign's audience: `audience_reserve_low` and
