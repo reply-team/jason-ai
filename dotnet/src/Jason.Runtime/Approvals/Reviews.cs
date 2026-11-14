@@ -139,8 +139,11 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
 
         // The row is written on every review, whatever it changes, so the save is guarded by the status the review read: a
         // claim that parked or took the send meanwhile wins, and the review, with its line, is refused rather than landing
-        // after the person was asked.
+        // after the person was asked. A claim that came and went meanwhile — released, run, failed and queued again — leaves
+        // the status as it was read, so the send's decisions and runs are read once more inside the save's own transaction,
+        // after its first write, when no other writer can add one before the commit.
         db.Entry(item).Property(w => w.Status).IsModified = true;
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -149,6 +152,9 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
         {
             throw DomainErrors.NotReviewable(item.PublicId, "it changed while the review was made; read it again with workitem.get, and while it is still queued or waiting it may be reviewed again");
         }
+
+        await BeforeTheFirstDecisionAsync(item, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return JournalWriter.ToDto(entry, item.Campaign!.PublicId) with { ContactId = item.Contact?.PublicId };
     }

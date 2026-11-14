@@ -470,6 +470,41 @@ public class ReviewServiceTests
     }
 
     /// <summary>
+    /// A claim that comes and goes between the review's read and its save — a standing approval releases the send, its run
+    /// fails for a reason that is retried, and the send is queued again — leaves the status as the review read it, so the
+    /// guard on the status alone would let the doubt land after the decision it can no longer stop. The save meets the
+    /// approval and the attempt that claim wrote and is refused <c>not_reviewable</c>, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task A_review_whose_send_was_released_and_retried_meanwhile_is_refused_not_reviewable()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var meanwhile = new CompetingInsert(
+            database.File,
+            context => context.ChangeTracker.Entries<JournalEntry>().Any(e => e.State == EntityState.Added)
+                ? $"""
+                    INSERT INTO approvals (public_id, work_item_id, campaign_id, operation, operation_version, subject_json, subject_hash, preview_json, plugin_id, route_scope, plugin_snapshot_id, routing_snapshot_id, status, reason, requested_at, decided_at, decided_by_type, decided_by_id)
+                    VALUES ('apr_01K52JR00000000000000000AB', {seed.Send.Id}, {seed.Campaign.Id}, 'message.send', 1, '{"{}"}', 'sha256:subject', '{"{}"}', 'stand-in-provider', 'global_default', 'snp_one', 'rts_one', 'approved', '{ApprovalGate.StandingApproval}', '2026-10-05 12:00:00', '2026-10-05 12:00:00', 'human', 'operator');
+                    INSERT INTO attempts (public_id, work_item_id, number, status, command, context_snapshot_json, claimed_at, lock_until, finished_at)
+                    VALUES ('att_01K52JR00000000000000000AB', {seed.Send.Id}, 1, 'failed', 'stand-in-provider', '{"{}"}', '2026-10-05 12:00:00', '2026-10-05 12:05:00', '2026-10-05 12:00:00');
+                    UPDATE work_items SET attempt_count = 1 WHERE id = {seed.Send.Id};
+                    """
+                : null);
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(racing).ReviewAsync(Doubt(seed, "off_brief") with { Note = Sentence }, Ct));
+
+        Assert.True(meanwhile.Fired);
+        Assert.Equal("not_reviewable", refused.Code);
+        Assert.Contains("a standing approval released it as approval 'apr_01K52JR00000000000000000AB'", refused.Message, StringComparison.Ordinal);
+        await NothingWrittenAsync(database, seed);
+        await using var fresh = database.Open();
+        Assert.Equal(WorkItemStatus.Created, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct)).Status);
+    }
+
+    /// <summary>
     /// A review of a waiting send that saves after the wait's ceiling or a resume put it back in the queue is refused, and
     /// writes nothing; the send is still one a review may be made of, and the refusal says so rather than that it moved on.
     /// </summary>
