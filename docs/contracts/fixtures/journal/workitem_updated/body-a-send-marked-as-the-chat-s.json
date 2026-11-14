@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_updated",
+  "version": 1,
+  "case": "a send's input was edited in the desktop's chat for the first time, which marks it as the chat's",
+  "body": { "key": "confined", "old": false, "new": true },
+  "expect": "valid"
+}

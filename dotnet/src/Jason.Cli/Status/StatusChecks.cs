@@ -247,7 +247,7 @@ internal static class StatusChecks
         {
             if (descriptor is not null)
             {
-                client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler, env.Clock);
+                client = new RuntimeClient(descriptor, env.AttemptFromEnvironment(), env.Error, env.HttpHandler, env.Clock, confined: env.Confined());
                 info = await ReadAsync<SystemInfoResponse>(client, Operations.SystemInfo, cancellationToken).ConfigureAwait(false);
             }
 

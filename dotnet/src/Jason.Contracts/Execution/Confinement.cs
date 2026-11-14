@@ -20,4 +20,15 @@ public static class Confinement
     /// Whether <paramref name="value"/>, read from the variable, confines the call: any value but none and empty.
     /// </summary>
     public static bool Confines(string? value) => !string.IsNullOrEmpty(value);
+
+    /// <summary>
+    /// The header the CLI sends on every request while the call is confined, valued <see cref="HeaderValue"/>: the desktop's
+    /// chat marker as the runtime reads it. The runtime records it on a work item made, or whose input is edited, under it, so
+    /// a send written in the chat waits for the person whatever the send mode. A higher bar, not a boundary: the runtime
+    /// cannot tell a person from a program that holds the token, and a request made around the CLI carries no header.
+    /// </summary>
+    public const string Header = "Jason-Confined";
+
+    /// <summary>The one value <see cref="Header"/> is sent with.</summary>
+    public const string HeaderValue = "1";
 }

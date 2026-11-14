@@ -83,6 +83,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.ApprovalRejected,
         JournalKinds.ApprovalSuperseded,
         JournalKinds.ApprovalCancelled,
+        JournalKinds.ApprovalAutomaticApplied,
         JournalKinds.WorkItemReopened,
         JournalKinds.WorkItemWaiting,
         JournalKinds.WorkItemResumed,
