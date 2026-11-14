@@ -395,9 +395,11 @@ that is not that attempt does not call them.
   `suppressed`, and a value it never held — one the contact gains later, or any value of a contact who had none — as
   `opted_out` ([routing](routing.md) §7). Sends already parked for a person's approval stay parked and are refused
   when they are claimed. The runtime never takes an entry off the register, and the provider's own sequence is not
-  stopped here. **Only a person's later verdict on the same reply lifts the lock**: one recorded under a `human` actor
-  outside a run, or one that carries a `decision_id` the runtime checked as above. A role's or an attempt's own verdict
-  never lifts it, and `suppression.remove` takes an entry off the register and leaves the lock. A request from inside a
+  stopped here. **Only a person's own later verdict on the same reply lifts the lock**: one recorded under a `human`
+  actor that names the person (`human:<Name>`), outside any run, that states a `nature` other than `opt_out`. A role's or
+  an attempt's own verdict never lifts it, nor does a `human` actor with no name, a verdict that states no nature, or one
+  that carries a `decision_id` by that alone — a run may carry an answer given the other way, before the opt-out, or
+  about another reply, and `suppression.remove` takes an entry off the register and leaves the lock. A request from inside a
   run — one that carries `Jason-Attempt`, as `jason` sends from there — that names a `human` actor is recorded as that
   run's verdict: the line names the run's work item and attempt, the run is checked to be of work in the same campaign
   (a 400 at `actor` where it is not), and it lifts no lock.

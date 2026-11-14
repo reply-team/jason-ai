@@ -265,7 +265,7 @@ public static class ProviderOpPreflight
                 return Refused(
                     resolution,
                     AttemptErrors.OptedOut,
-                    $"The contact asked not to be written to (opt-out verdict {verdict}), so nothing reaches them on any channel, in any campaign. Only a person's later verdict on that reply lifts this; taking a value off the suppression list does not.");
+                    $"The contact asked not to be written to (opt-out verdict {verdict}), so nothing reaches them on any channel, in any campaign. Only the person's own later verdict on that reply lifts this: recorded under their name, outside any run, saying what the reply is; taking a value off the suppression list does not.");
             }
         }
 

@@ -134,7 +134,7 @@ public static class AttemptErrors
 
     /// <summary>
     /// A verdict that stands says the person asked not to be written to: nothing reaches them on any channel, in any
-    /// campaign, whatever value the work would use. Lifted only by a person's later verdict on that reply.
+    /// campaign, whatever value the work would use. Lifted only by a person's own later verdict on that reply: a named human, outside any run, stating a nature other than opt_out.
     /// </summary>
     public const string OptedOut = "opted_out";
 

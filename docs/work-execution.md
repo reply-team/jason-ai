@@ -996,8 +996,9 @@ operations: the register is by value, and this lock is by the person, refusing w
 verdict stands in any campaign, whatever value the work would reach them at — one they gained after the verdict
 included. It is asked only where the register found no entry, so the register answers first wherever it can. The
 verdict itself registers every value the contact had, in the same save, by the runtime's reserved actor
-`system:opt_out`, with the verdict as the reason; the lock is lifted only by a person's later verdict on that reply,
-never by a role's, never by a person named from inside a run, and never by `suppression.remove`
+`system:opt_out`, with the verdict as the reason; the lock is lifted only by a person's own later verdict on that reply,
+under their name, outside any run, stating a nature other than `opt_out` — never by a role's or a run's, never by a
+person named from inside a run, never by a carried answer alone, and never by `suppression.remove`
 ([runtime API](runtime-api.md), `reply.record`).
 The twenty-fourth is not a refusal: `search_unfinished` keeps a search
 waiting behind another search of its campaign that has not ended, with no attempt, and asks again a search cadence

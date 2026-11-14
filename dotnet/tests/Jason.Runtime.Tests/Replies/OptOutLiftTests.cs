@@ -13,9 +13,9 @@ namespace Jason.Runtime.Tests.Replies;
 /// <summary>
 /// Who lifts an opt-out's lock: only a person's later verdict on the same reply. Outside a run a <c>human</c> actor is the
 /// person's own level of trust and counts. Inside a run — the request names its attempt, as <c>jason</c> does on every
-/// request from there — a human actor is what the run says, and lifts nothing: the line records the run it came from. There a
-/// verdict lifts the lock only by carrying the answer a named person gave to the campaign's question about that reply,
-/// which the runtime checks and does not take on the caller's word.
+/// request from there — a human actor is what the run says, and lifts nothing: the line records the run it came from. A
+/// verdict that carries a person's answer to the campaign's question lifts nothing by that alone. The one shape that lifts
+/// is a later verdict on the same reply by a named human outside any run that states a nature other than opt_out.
 /// </summary>
 public class OptOutLiftTests
 {
@@ -58,31 +58,147 @@ public class OptOutLiftTests
     }
 
     /// <summary>
-    /// A run that carries the answer a named person gave to the campaign's question about that reply lifts the lock, since the
-    /// runtime checked the answer; the same run's verdict without it lifts nothing, whatever it says.
+    /// The one shape that lifts: a named person, outside any run, later, on the same reply, saying what the reply is — any
+    /// nature but an opt-out.
     /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Inside_a_run_only_a_person_s_checked_answer_lifts_the_lock(bool carriesTheAnswer)
+    [InlineData(ReplyNature.Person)]
+    [InlineData(ReplyNature.Automatic)]
+    [InlineData(ReplyNature.Bounce)]
+    public async Task A_named_person_outside_a_run_who_says_what_the_reply_is_lifts_the_lock(ReplyNature nature)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (campaign, contact, _) = await OptedOutAsync(db);
+
+        await OptOutRegisterTests.Service(db).RecordAsync(OptOutRegisterTests.Request(campaign, contact, nature), Ct);
+
+        await using var fresh = database.Open();
+        Assert.Null(await OptOuts.StandingAsync(fresh, contact.Id, Ct));
+        Assert.True(await fresh.Suppressions.AnyAsync(s => s.Channel == "phone", Ct));
+    }
+
+    /// <summary>
+    /// A person's verdict lifts only when it is theirs and says something: one by a human who gave no name, or by a named
+    /// person who left the nature out, or one that says opt_out again, leaves the lock where it is.
+    /// </summary>
+    [Theory]
+    [InlineData("a nameless human, nature person")]
+    [InlineData("a named human, no nature")]
+    [InlineData("a named human, opt_out again")]
+    public async Task A_person_s_verdict_that_names_nobody_or_says_no_nature_lifts_nothing(string shape)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (campaign, contact, _) = await OptedOutAsync(db);
+        var request = shape switch
+        {
+            "a nameless human, nature person" => OptOutRegisterTests.Request(campaign, contact, ReplyNature.Person) with { Actor = new ActorRef(ActorType.Human) },
+            "a named human, no nature" => OptOutRegisterTests.Request(campaign, contact, null),
+            _ => OptOutRegisterTests.Request(campaign, contact, ReplyNature.OptOut),
+        };
+
+        await OptOutRegisterTests.Service(db).RecordAsync(request, Ct);
+
+        await using var fresh = database.Open();
+        Assert.NotNull(await OptOuts.StandingAsync(fresh, contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// A verdict that carries a person's answer lifts nothing by that alone. The run that recorded the opt-out asked the
+    /// person, who answered <c>unsubscribe</c>: the run records that answer with the nature person, and with none. The lock
+    /// holds either way; it is a run's verdict, not the person's own.
+    /// </summary>
+    [Theory]
+    [InlineData(ReplyNature.Person)]
+    [InlineData(null)]
+    public async Task The_opposite_answer_carried_by_the_run_lifts_nothing(ReplyNature? nature)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
         var (campaign, contact, attempt) = await OptedOutAsync(db);
-        var decision = await AnsweredAsync(db, campaign, attempt);
-        var request = OptOutRegisterTests.Request(campaign, contact, ReplyNature.Person) with
-        {
-            Actor = new ActorRef(ActorType.Attempt, attempt.PublicId),
-            DecisionId = carriesTheAnswer ? decision.PublicId : null,
-        };
+        var decision = await AnsweredAsync(db, campaign, attempt, chosen: "unsubscribe");
 
         using (RunScope.Open(attempt.PublicId))
         {
-            await OptOutRegisterTests.Service(db).RecordAsync(request, Ct);
+            await OptOutRegisterTests.Service(db).RecordAsync(
+                OptOutRegisterTests.Request(campaign, contact, nature) with
+                {
+                    Category = "unsubscribe",
+                    Actor = new ActorRef(ActorType.Attempt, attempt.PublicId),
+                    DecisionId = decision.PublicId,
+                },
+                Ct);
         }
 
         await using var fresh = database.Open();
-        Assert.Equal(carriesTheAnswer, await OptOuts.StandingAsync(fresh, contact.Id, Ct) is null);
+        Assert.NotNull(await OptOuts.StandingAsync(fresh, contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// An answer given before the opt-out landed: the run guessed on the reply, asked, the person answered
+    /// <c>interested</c>, and then the opt-out was recorded. Re-recording that old answer, by the run, by a role or by a named
+    /// person outside a run who leaves the nature out, lifts nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("the run")]
+    [InlineData("a role")]
+    [InlineData("a named person outside a run")]
+    public async Task An_answer_given_before_the_opt_out_lifts_nothing_when_recorded_again(string caller)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = await OptOutRegisterTests.CampaignAsync(db);
+        var contact = await OptOutRegisterTests.ContactAsync(db, "cnt_01K52JR0000000000000000001", ("phone", "+15555550100"));
+        var (_, attempt) = await OptOutRegisterTests.RunAsync(db, campaign, contact);
+        var byTheRun = new ActorRef(ActorType.Attempt, attempt.PublicId);
+        await OptOutRegisterTests.Service(db).RecordAsync(OptOutRegisterTests.Request(campaign, contact, null) with { Actor = byTheRun }, Ct);
+        var decision = await AnsweredAsync(db, campaign, attempt);
+        await OptOutRegisterTests.Service(db).RecordAsync(OptOutRegisterTests.Request(campaign, contact, ReplyNature.OptOut) with { Actor = byTheRun }, Ct);
+        var again = OptOutRegisterTests.Request(campaign, contact, null) with { DecisionId = decision.PublicId };
+
+        if (caller == "the run")
+        {
+            using (RunScope.Open(attempt.PublicId))
+            {
+                await OptOutRegisterTests.Service(db).RecordAsync(again with { Actor = byTheRun }, Ct);
+            }
+        }
+        else
+        {
+            await OptOutRegisterTests.Service(db).RecordAsync(caller == "a role" ? again with { Actor = new ActorRef(ActorType.Role, "manager") } : again, Ct);
+        }
+
+        await using var fresh = database.Open();
+        Assert.NotNull(await OptOuts.StandingAsync(fresh, contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// A transplant: a decision a person answered about another reply, asked by another run of the campaign, carried onto
+    /// this reply by that run after it recorded a verdict here. The runtime's checks on the decision pass, and the lock
+    /// still holds: the answer is not the person's own verdict on this reply.
+    /// </summary>
+    [Fact]
+    public async Task An_answer_transplanted_from_another_reply_lifts_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (campaign, contact, _) = await OptedOutAsync(db);
+        var (_, other) = await OptOutRegisterTests.RunAsync(db, campaign, contact);
+        var byOther = new ActorRef(ActorType.Attempt, other.PublicId);
+        await OptOutRegisterTests.Service(db).RecordAsync(OptOutRegisterTests.Request(campaign, contact, null) with { Actor = byOther, MessageId = "msg-90" }, Ct);
+        var decision = await AnsweredAsync(db, campaign, other);
+
+        using (RunScope.Open(other.PublicId))
+        {
+            await OptOutRegisterTests.Service(db).RecordAsync(OptOutRegisterTests.Request(campaign, contact, null) with { Actor = byOther }, Ct);
+            await OptOutRegisterTests.Service(db).RecordAsync(
+                OptOutRegisterTests.Request(campaign, contact, ReplyNature.Person) with { Actor = byOther, DecisionId = decision.PublicId },
+                Ct);
+        }
+
+        await using var fresh = database.Open();
+        Assert.NotNull(await OptOuts.StandingAsync(fresh, contact.Id, Ct));
     }
 
     /// <summary>
@@ -165,8 +281,8 @@ public class OptOutLiftTests
         return (campaign, contact, attempt);
     }
 
-    /// <summary>The question the run raised about the reply, answered by a named person who chose <c>interested</c>.</summary>
-    internal static async Task<Decision> AnsweredAsync(JasonDbContext db, Campaign campaign, Attempt attempt)
+    /// <summary>The question the run raised about the reply, answered by a named person who chose <paramref name="chosen"/>.</summary>
+    internal static async Task<Decision> AnsweredAsync(JasonDbContext db, Campaign campaign, Attempt attempt, string chosen = "interested")
     {
         var decision = new Decision
         {
@@ -181,7 +297,7 @@ public class OptOutLiftTests
             Status = DecisionStatus.Answered,
             RaisedAt = Noon.AddMinutes(-20),
             Answer = "They asked for the pricing, not to be left alone.",
-            ChosenOption = "interested",
+            ChosenOption = chosen,
             AnsweredAt = Noon.AddMinutes(-10),
             AnsweredByType = ActorType.Human,
             AnsweredById = "operator",

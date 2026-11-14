@@ -151,14 +151,14 @@ public partial class ClaimerTests
     /// Who lifts the lock: only a person's later verdict on the same reply. A role's corrected verdict leaves it; a person's,
     /// recorded outside any run, lifts it, and leaves the register's entries where they are; taking an entry off the
     /// register lifts that entry and not the lock; a verdict on another reply lifts nothing. Inside a run a person the run
-    /// names lifts nothing, and the run lifts it only by carrying the answer a named person gave, which the runtime checks.
+    /// names lifts nothing, and neither does a run that carries the answer a named person gave: only the person's own verdict lifts it.
     /// </summary>
     [Theory]
     [InlineData("a role corrects it", AttemptErrors.OptedOut)]
     [InlineData("a person corrects it outside a run", null)]
     [InlineData("a person corrects another reply", AttemptErrors.OptedOut)]
     [InlineData("a run names a person who corrects it", AttemptErrors.OptedOut)]
-    [InlineData("a run carries a person's checked answer", null)]
+    [InlineData("a run carries a person's checked answer", AttemptErrors.OptedOut)]
     [InlineData("the entry is taken off the register", AttemptErrors.OptedOut)]
     public async Task Only_a_person_s_later_verdict_on_that_reply_lifts_the_lock(string after, string? refused)
     {
