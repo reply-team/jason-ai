@@ -640,7 +640,10 @@ describe('Change Jason itself', () => {
         });
         desktop.openInContinue.set(id, { host: 'claude', label: 'Claude Code', running: false });
         fireEvent.click(arrow());
-        await waitFor(() => expect(entry()).not.toBeNull());
+        // The entry may be drawn from the answer read before; Continue only from the read the arrow asks for.
+        await waitFor(() =>
+            expect(within(menu()).getByRole('menuitem', { name: /^Continue this chat in/ })).not.toBeNull(),
+        );
         const all = within(menu()).getAllByRole('menuitem');
         expect(all.at(-2)).toBe(entry());
         expect(all.at(-1)?.querySelector('span')?.textContent).toBe('Continue this chat in Claude Code');
