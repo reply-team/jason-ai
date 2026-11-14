@@ -345,6 +345,7 @@ public static class ApiFixtures
         "system.info/released-plugin-current",
         "system.info/released-plugin-differs",
         "system.info/released-plugin-not-installed",
+        "system.info/send-modes-set",
         "system.info/with-ui",
         "system.info/without-ui",
         "ui.revoke/never-used",

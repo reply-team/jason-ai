@@ -190,7 +190,10 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `system.info`: what `jason runtime status` shows. Its `routes` section counts the global overrides and the campaign
   routes, the routes that name a channel among them, and says in `channel_route_count` how many name one. A runtime older
   than channel routes has no such member, which is how `jason route set` and `jason route unset` know that `--channel`
-  would be ignored there and decline to send it.
+  would be ignored there and decline to send it. Its `send_modes` section is the installation's send mode in force
+  for a cold contact and for a warm one, each `{mode, source}`, the source `preference` or `default`: never who set
+  one, which `preference.list` answers, and never a campaign's own, which `campaign.get` answers. `jason status` says
+  it in its `send_modes` check.
 - `system.shutdown`: `jason runtime stop` sends it.
 - `system.drain`: stop claiming; `jason update apply` sends it.
 - `system.resume`: claim again. No command sends it.
