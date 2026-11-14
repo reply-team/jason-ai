@@ -334,7 +334,8 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   approval stands for the send as it would now go, since the claim would run it under that approval without reading a
   review. Where the runtime cannot yet tell whether the claim would read the review, because an approval is live and
   the send cannot be claimed right now, the review is refused too, and may be made again once the send can be claimed.
-  `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document publishes, and
+  A doubt accepted while an approval is live supersedes that approval in the same save, since it no longer stands for
+  the send as it would now go, so the send is decided anew; a pass changes no approval. `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document publishes, and
   may carry one `note`, a line of at most 280 characters that the line never carries and the person reads on the
   approval. The `actor` is a running attempt of the same campaign's role work or a person by name, and never the send's
   creator: no attempt of the work that made it, and not the person who made it, whose own send is theirs to approve

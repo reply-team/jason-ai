@@ -557,7 +557,7 @@ public sealed class Claimer(
 
     /// <summary>
     /// Whether the claim would read <paramref name="item"/>'s reviews if it claimed it now: not where it would run it under
-    /// a live approval that stands for it as it reads, and not known where the pre-flight refuses it while such a row is
+    /// a live approval that stands for it as it would now go, and not known where the pre-flight refuses it while such a row is
     /// live, since no subject can be composed to hold the row to; read everywhere else. The same facts, the same pre-flight
     /// against the same two snapshots, and the same test (<see cref="ApprovalGate.Authorizes"/>) as the claim's own
     /// decision, so a review asks the claim's question rather than a description of it. Reads only.
@@ -588,9 +588,13 @@ public sealed class Claimer(
             return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Unjudged, live) : ClaimReading.Reads;
         }
 
-        return ApprovalGate.Authorizes(live, ApprovalSubject.Of(plan, current))
-            ? new ClaimReading(ReviewHearing.NotRead, live)
-            : ClaimReading.Reads;
+        if (ApprovalGate.Authorizes(live, ApprovalSubject.Of(plan, current)))
+        {
+            return new ClaimReading(ReviewHearing.NotRead, live);
+        }
+
+        // Decided anew, so the reviews are read; a live approved row that no longer stands is named, for a doubt to end it.
+        return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Read, live) : ClaimReading.Reads;
     }
 
     /// <summary>

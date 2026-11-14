@@ -539,6 +539,124 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// A doubt is accepted while an approved row is live only where the row no longer stands for the send as it would now
+    /// go, and it supersedes that row in its own save: a standing doubt leaves the send with no approval to run under. So
+    /// when the facts come back (the person's name set back, or the route set away and back) the row does not stand again:
+    /// the next claim parks the send with the doubt on the preview, and no row authorises it.
+    /// </summary>
+    [Theory]
+    [InlineData("the person's name set back")]
+    [InlineData("the route set away and back")]
+    public async Task Doubts_ADoubtAcceptedUnderAnApprovalThatNoLongerStands_SupersedesIt_SoTheFactsComingBackPark(string path)
+    {
+        using var harness = TwoProviders();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var (send, approved) = await ApprovedAsync(harness, db, reading);
+        var name = path == "the person's name set back";
+        await AwayAsync(harness, db, reading, name);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+
+        var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "grace")),
+            Ct);
+
+        await using (var after = database.Open())
+        {
+            Assert.Equal(ApprovalStatus.Superseded, (await after.Approvals.AsNoTracking().SingleAsync(a => a.PublicId == approved, Ct)).Status);
+            var superseded = await after.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.ApprovalSuperseded, Ct);
+            Assert.Equal((ActorType.Human, "grace", approved), (superseded.ActorType, superseded.ActorId, (string?)superseded.New!["id"]));
+        }
+
+        await BackAsync(harness, db, reading, name);
+        db.ChangeTracker.Clear();
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        var rows = await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).ToListAsync(Ct);
+        Assert.DoesNotContain(rows, row => row.Status == ApprovalStatus.Approved);
+        var parked = rows[^1];
+        Assert.Equal((ApprovalStatus.Pending, Provider), (parked.Status, parked.PluginId));
+        var doubt = Assert.Single(parked.Preview[Doubts.PreviewKey]!.AsArray())!;
+        Assert.Equal(("review", line.Id, ReviewSentence), ((string?)doubt["source"], (string?)doubt["line"], (string?)doubt["note"]));
+    }
+
+    /// <summary>
+    /// A pass accepted in the same window changes no row: the person's approval is left as it was, and when the facts come
+    /// back it stands for the send again and the claim runs the send under it.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_APassAcceptedUnderAnApprovalThatNoLongerStands_LeavesThePersonsApproval()
+    {
+        using var harness = TwoProviders();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var (send, approved) = await ApprovedAsync(harness, db, reading);
+        await AwayAsync(harness, db, reading, name: true);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+
+        await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "grace")),
+            Ct);
+
+        await using (var after = database.Open())
+        {
+            Assert.Equal(ApprovalStatus.Approved, (await after.Approvals.AsNoTracking().SingleAsync(a => a.PublicId == approved, Ct)).Status);
+            Assert.Empty(await after.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ApprovalSuperseded).ToListAsync(Ct));
+        }
+
+        await BackAsync(harness, db, reading, name: true);
+        db.ChangeTracker.Clear();
+        Assert.Single(await ClaimSettledAsync(harness, db));
+    }
+
+    private static Harness TwoProviders() => new(
+        plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "campaign.enroll"]),
+        route: new Route(Provider, null, null),
+        others: [TestPlugins.Loaded(Social, ["message.send"])]);
+
+    /// <summary>The send composed, parked by the claim and approved by a person while the person is named Ada; the row's id.</summary>
+    private static async Task<(WorkItemDto Send, string Approval)> ApprovedAsync(Harness harness, JasonDbContext db, Reading reading)
+    {
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        var clock = new FixedClock(Noon);
+        await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        return (send, asked.PublicId);
+    }
+
+    /// <summary>A fact the approval's subject composes moved away: the person renamed Anna, or the route set to another provider.</summary>
+    private static async Task AwayAsync(Harness harness, JasonDbContext db, Reading reading, bool name)
+    {
+        if (name)
+        {
+            await db.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Anna"), Ct);
+        }
+        else
+        {
+            harness.Reroute(new Route(Social, null, null));
+        }
+    }
+
+    /// <summary>The same fact back as the approval was made under.</summary>
+    private static async Task BackAsync(Harness harness, JasonDbContext db, Reading reading, bool name)
+    {
+        if (name)
+        {
+            await db.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Ada"), Ct);
+        }
+        else
+        {
+            harness.Reroute(new Route(Provider, null, null));
+        }
+    }
+
+    /// <summary>
     /// The claim decides against the route and plugin snapshots it reads once it holds the database, so a review that held it
     /// first was asked the claim's question against the same routes or older ones. The send is approved under one provider;
     /// as the claim is about to begin, the route is set to another, under which the approval no longer stands, and a person's

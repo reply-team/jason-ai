@@ -33,7 +33,9 @@ public sealed record ReviewStanding(ReviewResult Result, string? Code, string Li
 /// whenever it decides about the send, and runs it without reading them only under a live approved row whose subject is
 /// the send as it now stands (<see cref="ApprovalGate.Authorizes"/>), so a review is refused there, asked of the claim
 /// itself (<see cref="IClaimReading.RunsUnderAsync"/>), and accepted everywhere else: after a park and an edit, after an expiry
-/// and a reopen, after an approval whose text was edited since, after an attempt that failed before any decision.
+/// and a reopen, after an approval whose text was edited since, after an attempt that failed before any decision. A doubt
+/// accepted while an approved row is live supersedes that row in its own save, so a standing doubt always leaves the send
+/// with no approval to run under; a pass changes no row.
 /// </remarks>
 /// <param name="claim">The claim whose question a review asks; required, so no composition reviews without the rule.</param>
 /// <param name="run">The attempt the request says it comes from; null outside a request and for a request that names none.</param>
@@ -161,7 +163,18 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             throw DomainErrors.NotReviewable(item.PublicId, "it changed while the review was made; read it again with workitem.get, and while it is still queued or waiting it may be reviewed again");
         }
 
-        await HeardByTheClaimAsync(item, cancellationToken).ConfigureAwait(false);
+        var reading = await HeardByTheClaimAsync(item, cancellationToken).ConfigureAwait(false);
+
+        // A doubt accepted while an approved row is live, which happens only where that row no longer stands for the send as
+        // it would now go, supersedes the row in this save, as a park supersedes one: the facts drifting back must not leave
+        // the send an approval to run under past the doubt. A pass changes no row, so it never takes a person's approval away.
+        if (request.Result == ReviewResult.Doubts && reading.Approval is { } outgrown)
+        {
+            var approval = await db.Approvals.SingleAsync(a => a.Id == outgrown.Id, cancellationToken).ConfigureAwait(false);
+            ApprovalGate.Resolve(db, journal, item, approval, ApprovalStatus.Superseded, actor, reason: null, entry.Ts);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return JournalWriter.ToDto(entry, item.Campaign!.PublicId) with { ContactId = item.Contact?.PublicId };
@@ -171,9 +184,10 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
     /// Refuses a review the claim would never read: where the claim would run the send now under an approval that stands
     /// for it as it would now go, it runs under that approval and no review is heard. Where the claim cannot say, because
     /// the send cannot be claimed right now while an approved row is live, the review is refused too, failing closed.
-    /// Named by the approval's id alone.
+    /// Named by the approval's id alone. Otherwise it answers the claim's reading, which names a live approved row that no
+    /// longer stands for the send, where there is one.
     /// </summary>
-    private async Task HeardByTheClaimAsync(WorkItem item, CancellationToken cancellationToken)
+    private async Task<ClaimReading> HeardByTheClaimAsync(WorkItem item, CancellationToken cancellationToken)
     {
         var reading = await claim.RunsUnderAsync(db, item, cancellationToken).ConfigureAwait(false);
         switch (reading.Hearing)
@@ -183,6 +197,8 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             case ReviewHearing.Unjudged:
                 throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' is live and the send cannot be claimed right now, so whether the claim would read a review cannot be told yet; once the send can be claimed it may be reviewed again, and is refused then too while that approval stands for the send as it would go");
         }
+
+        return reading;
     }
 
     /// <summary>A review is made by an attempt or by a person who names themselves; a role's name, a plugin or nobody is refused.</summary>
