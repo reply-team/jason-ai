@@ -9,6 +9,8 @@ absorbed by a release of this package alone.
   kind. Only a dead address is a `hard` bounce; a full mailbox, a limit of the sender's own and the receiving server's
   refusal of the message are `soft`; a kind Reply does not name, or one this package does not know, is none. Each of
   the four is null where the installed reply-cli does not print them, which says nothing either way.
+- The README says a global route can be set with `jason route set --global`, which writes the settings file and reloads
+  in one act, as it can since Jason 0.42.0; it said the CLI refused a global route.
 
 ## 0.15.2
 

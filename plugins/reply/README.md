@@ -192,9 +192,13 @@ jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outboun
 jason route resolve --campaign cmp_… --operation list_membership.add --human
 ```
 
-**There is deliberately no global `route set`.** A global route is a setting, frozen by the same explicit
-act that freezes the plugins it names, so the only way to write one is to edit `settings.json` and
-reload; the CLI refuses `route set` without `--campaign` and says where a global route lives instead.
+**A global route can be set from the command line too**, on a running runtime. The command writes the
+same `Routes` section of `settings.json` and freezes it by the reload in the same act, so steps 4 and 5
+become one, and every other byte of the file is kept ([routing](../../docs/routing.md)):
+
+```sh
+jason route set --global --plugin reply --binding '{"profile":"outbound"}' --actor human:you@example.com
+```
 
 **And two things that are not true yet.** There is **no signing and no publisher identity**: the
 digest in `plugin list` says what the files are, never who wrote them, so a package is exactly as trusted

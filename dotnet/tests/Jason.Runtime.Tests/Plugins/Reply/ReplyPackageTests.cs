@@ -1432,6 +1432,21 @@ public class ReplyPackageTests
         Assert.All(
             ["`message.status`", "Only a dead address is a `hard` bounce", "`soft`", "null where the installed reply-cli does not print them"],
             word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.Contains("`jason route set --global`", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The README says a global route can be set from the command line, as it can since Jason 0.42.0, beside the settings
+    /// file and the reload, and no longer that the CLI refuses one.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_a_global_route_is_set_from_the_command_line_too()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.Contains("jason route set --global --plugin reply --binding", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("deliberately no global", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("refuses `route set` without `--campaign`", readme, StringComparison.Ordinal);
     }
 
     /// <summary>
