@@ -407,6 +407,8 @@ its setting, `Subscriptions:Order:<kind>[<index>]`, with its code and message. `
 a plugin declares against the kinds it is granted, `null` when it declares none. `capabilities.files`, there only where
 the manifest asks to write, is `{ "append": true, "granted": ["<directory>"] }`, each directory as the person wrote it.
 
+Your own AI can write, load and grant a plugin for you: choose Open in › Change Jason itself in the desktop, or run `jason session open --setup`; [Changing Jason](customising.md) says what it does and when each change takes effect.
+
 ### Two kinds of problem
 
 **Package problems** — anything about the files: YAML, fields, ids, versions, contracts, operations,
