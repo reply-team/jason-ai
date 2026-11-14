@@ -27,6 +27,8 @@ public class CampaignSendModeTests
 
     private static readonly ActorRef Marta = new(ActorType.Human, "Marta");
 
+    private static readonly ActorRef Ivo = new(ActorType.Human, "Ivo");
+
     /// <summary>A campaign made sets none, and says so with both members present and null.</summary>
     [Fact]
     public async Task A_new_campaign_sets_no_send_mode_of_its_own_and_says_null_for_both()
@@ -125,6 +127,52 @@ public class CampaignSendModeTests
             await db.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.CampaignUpdated).OrderBy(e => e.Id).Select(e => e.Key!).ToListAsync(Ct));
     }
 
+    /// <summary>
+    /// A second person who sets the mode a campaign already holds takes it over: the claim releases in the name beside
+    /// the mode, so that name moves to theirs and one line says so, its old and new the same word under the new setter;
+    /// what is in force does not move.
+    /// </summary>
+    [Fact]
+    public async Task A_second_person_setting_the_same_mode_becomes_its_setter_with_one_line()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var service = NewService(db);
+        var created = await service.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct);
+        var first = await service.SetSendModeAsync(Set(created.Id, cold: Optional<SendMode?>.Of(SendMode.Automatic)), Ct);
+
+        var second = await service.SetSendModeAsync(Set(created.Id, cold: Optional<SendMode?>.Of(SendMode.Automatic), actor: Ivo, reason: "Ivo answers for it now"), Ct);
+
+        Assert.Equal(first.SendModesInForce, second.SendModesInForce);
+        Assert.Equal(new SendModesDto(SendMode.Automatic, null), second.SendModes);
+        var row = db.Campaigns.AsNoTracking().Single();
+        Assert.Equal((SendMode.Automatic, "Ivo"), (row.SendModeCold, row.SendModeColdSetBy));
+        var lines = await db.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.CampaignUpdated).OrderBy(e => e.Id).ToListAsync(Ct);
+        Assert.Equal(2, lines.Count);
+        var line = lines[1];
+        Assert.Equal(
+            ("send_mode_cold", (string?)"automatic", (string?)"automatic", (string?)"Ivo answers for it now", ActorType.Human, (string?)"Ivo"),
+            (line.Key!, (string?)line.Old, (string?)line.New, line.Reason, line.ActorType, line.ActorId));
+    }
+
+    /// <summary>The same person setting the mode they already set writes nothing, and keeps the campaign as it was.</summary>
+    [Fact]
+    public async Task The_same_person_setting_the_same_mode_again_writes_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var service = NewService(db);
+        var created = await service.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct);
+        await service.SetSendModeAsync(Set(created.Id, cold: Optional<SendMode?>.Of(SendMode.Automatic)), Ct);
+        var before = db.Campaigns.AsNoTracking().Single().UpdatedAt;
+
+        await service.SetSendModeAsync(Set(created.Id, cold: Optional<SendMode?>.Of(SendMode.Automatic)), Ct);
+
+        var row = db.Campaigns.AsNoTracking().Single();
+        Assert.Equal((SendMode.Automatic, "Marta", before), (row.SendModeCold, row.SendModeColdSetBy, row.UpdatedAt));
+        Assert.Equal(1, await db.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.CampaignUpdated, Ct));
+    }
+
     public static TheoryData<ActorRef?, string> NotAPerson => new()
     {
         { new ActorRef(ActorType.Role, "manager"), "send_mode_not_human" },
@@ -220,8 +268,9 @@ public class CampaignSendModeTests
         string campaignId,
         Optional<SendMode?> cold = default,
         Optional<SendMode?> warm = default,
-        string? reason = null) =>
-        new(campaignId, cold, warm, Marta, reason);
+        string? reason = null,
+        ActorRef? actor = null) =>
+        new(campaignId, cold, warm, actor ?? Marta, reason);
 
     private static CampaignService NewService(JasonDbContext db)
     {

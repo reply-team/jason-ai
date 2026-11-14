@@ -2,7 +2,7 @@
   "kind": "campaign_updated",
   "version": 1,
   "since": "0.1.0",
-  "summary": "One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold, the project it is in, or its own send mode for cold or for warm contacts; a change of several settings writes one line for each.",
+  "summary": "One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold, the project it is in, or its own send mode for cold or for warm contacts; a change of several settings writes one line for each, and a send mode set again by another person writes one whose old and new are the same word, under its new setter.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },

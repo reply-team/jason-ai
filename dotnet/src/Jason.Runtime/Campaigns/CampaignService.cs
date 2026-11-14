@@ -378,7 +378,8 @@ public sealed class CampaignService(
     /// A campaign's own send mode for its cold contacts, its warm ones, or both: a person's standing word about how this
     /// campaign's sends go, so only a person who gives their name sets it, and the name is kept beside the mode, since the
     /// claim releases a send in that person's name. An absent mode is left alone, null gives it back to the installation,
-    /// and a mode the campaign already holds writes nothing. Each mode that moved is one <c>campaign_updated</c> line.
+    /// and a mode the campaign already holds under the same person writes nothing; set again by another person, it becomes
+    /// theirs. Each mode that moved, or changed hands, is one <c>campaign_updated</c> line.
     /// </summary>
     public async Task<CampaignDto> SetSendModeAsync(CampaignSetSendModeRequest request, CancellationToken cancellationToken)
     {
@@ -401,14 +402,14 @@ public sealed class CampaignService(
         }
 
         var changes = new List<FieldChange>();
-        if (request.Cold.IsSet && campaign.SendModeCold != request.Cold.Value)
+        if (request.Cold.IsSet && Moves(campaign.SendModeCold, campaign.SendModeColdSetBy, request.Cold.Value, actor))
         {
             changes.Add(new FieldChange("send_mode_cold", ModeWord(campaign.SendModeCold), ModeWord(request.Cold.Value)));
             campaign.SendModeCold = request.Cold.Value;
             campaign.SendModeColdSetBy = request.Cold.Value is null ? null : actor.Id;
         }
 
-        if (request.Warm.IsSet && campaign.SendModeWarm != request.Warm.Value)
+        if (request.Warm.IsSet && Moves(campaign.SendModeWarm, campaign.SendModeWarmSetBy, request.Warm.Value, actor))
         {
             changes.Add(new FieldChange("send_mode_warm", ModeWord(campaign.SendModeWarm), ModeWord(request.Warm.Value)));
             campaign.SendModeWarm = request.Warm.Value;
@@ -453,6 +454,13 @@ public sealed class CampaignService(
 
         return string.IsNullOrWhiteSpace(actor.Id) ? throw DomainErrors.SendModeActorRequired() : actor;
     }
+
+    /// <summary>
+    /// Whether a request moves a mode: to another word, or to the same word under another person, because the claim
+    /// releases a send in the name beside the mode. A null asked of a null moves nothing, whoever asks.
+    /// </summary>
+    private static bool Moves(SendMode? held, string? heldBy, SendMode? asked, ActorRef actor) =>
+        held != asked || (asked is not null && !string.Equals(heldBy, actor.Id, StringComparison.Ordinal));
 
     private static JsonNode? ModeWord(SendMode? mode) =>
         mode is { } word ? JsonValue.Create(SnakeCaseEnumConverter<SendMode>.Format(word)) : null;
