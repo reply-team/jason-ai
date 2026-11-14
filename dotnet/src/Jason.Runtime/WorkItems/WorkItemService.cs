@@ -505,6 +505,7 @@ public sealed class WorkItemService(
 
         ValidateContextKeys(request.Set, request.Unset, errors);
         Doubts.RefuseInPatch(request.Set, request.Unset, errors);
+        SendReview.RefuseInPatch(request.Set, request.Unset, errors);
         ValidateProviderInput(item, request.Set, request.Unset, _timing, errors);
         CampaignAudiences.RefuseWritten(
             item.Operation,

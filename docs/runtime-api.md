@@ -312,7 +312,9 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   `ask_person`, `{"code": …}`, with its one sentence in `ask_person_note`, which no line and no read of the item carries
   ([`docs/work-execution.md`](work-execution.md), "Doubts about a send"). Inside a run such a send is created under the
   run's own name: one that names a person, another attempt or nobody is refused `created_as_another_inside_a_run`
-  (403), so a review can tell its author apart.
+  (403), so a review can tell its author apart. The context key `send_review` is the runtime's, the brief of the
+  critic it creates for a send under an automatic send mode: a create or a patch that names it is refused `not_allowed`
+  at that field, on every item, whoever sends it.
 - `workitem.get`
 - `workitem.list`
 - `workitem.count`
