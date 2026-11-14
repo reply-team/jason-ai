@@ -364,12 +364,12 @@ public class ResponderTests
     /// carries neither the rule nor the mark.
     /// </summary>
     [Fact]
-    public async Task Responder_ContactPinLine_OfTheSoleSender_CreatesPair()
+    public async Task Responder_ContactPinLine_MarkedTheCampaignsOwn_CreatesPair()
     {
         using var harness = new DispatchHarness(Noon);
         var campaign = await CampaignAsync(harness);
         RoutedTo(harness, Reader);
-        var line = await LineAsync(harness, campaign, "th-9", Noon.AddMinutes(-3), attributedBy: "contact_pin", events: true, soleSender: true);
+        var line = await LineAsync(harness, campaign, "th-9", Noon.AddMinutes(-3), attributedBy: "contact_pin", events: true, campaignOwn: true);
 
         Assert.Equal(1, await harness.RespondAsync(Ct));
 
@@ -381,7 +381,7 @@ public class ResponderTests
             responder.Context.ToJsonString());
         foreach (var item in new[] { responder, get })
         {
-            Assert.DoesNotContain("\"sole_sender\"", item.Context.ToJsonString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("\"campaign_own\"", item.Context.ToJsonString(), StringComparison.Ordinal);
         }
 
         Assert.Equal(await IdOfAsync(harness, line), await WatermarkAsync(harness, campaign));
@@ -467,7 +467,7 @@ public class ResponderTests
         {
             var text = item.Context.ToJsonString();
             Assert.DoesNotContain(Sentinel, text, StringComparison.Ordinal);
-            foreach (var word in new[] { "subject", "preview", "name", "unread", "has_meeting_intent", "event_id", "attributed_by", "sole_sender" })
+            foreach (var word in new[] { "subject", "preview", "name", "unread", "has_meeting_intent", "event_id", "attributed_by", "campaign_own" })
             {
                 Assert.DoesNotContain($"\"{word}\"", text, StringComparison.Ordinal);
             }
@@ -818,7 +818,7 @@ public class ResponderTests
 
     /// <summary>
     /// One line saying a thread moved, as the inbound read says it or, with <paramref name="events"/>, as the events store
-    /// does: the same fields under the same key, and the store's two more, and its mark where <paramref name="soleSender"/>
+    /// does: the same fields under the same key, and the store's two more, and its mark where <paramref name="campaignOwn"/>
     /// says so. Answers the line's public id.
     /// </summary>
     private static async Task<string> LineAsync(
@@ -829,7 +829,7 @@ public class ResponderTests
         string? contact = null,
         string? attributedBy = null,
         bool events = false,
-        bool soleSender = false)
+        bool campaignOwn = false)
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.Id == campaignId, Ct);
@@ -848,9 +848,9 @@ public class ResponderTests
         {
             said["event_id"] = PublicId.New("evt");
             said["attributed_by"] = attributedBy;
-            if (soleSender)
+            if (campaignOwn)
             {
-                said["sole_sender"] = true;
+                said["campaign_own"] = true;
             }
         }
 

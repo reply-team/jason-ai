@@ -135,16 +135,16 @@ public class WarmthTests
     }
 
     /// <summary>
-    /// A line found by the contact's pin and marked as the sole sender's is the campaign's own: unjudged, it makes the
+    /// A line found by the contact's pin and marked <c>campaign_own</c> is the campaign's own: unjudged, it makes the
     /// contact wait, and a standing person verdict on its thread warms them.
     /// </summary>
     [Fact]
-    public async Task A_contact_pin_line_of_the_sole_sender_waits_and_warms_as_the_campaigns_own()
+    public async Task A_contact_pin_line_marked_the_campaigns_own_waits_and_warms_as_one()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
         var seed = await SeedAsync(db);
-        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z", attributedBy: "contact_pin", soleSender: true);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z", attributedBy: "contact_pin", campaignOwn: true);
 
         var waiting = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
@@ -163,7 +163,7 @@ public class WarmthTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var seed = await SeedAsync(db);
-        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z", attributedBy: "contact_pin", soleSender: true);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z", attributedBy: "contact_pin", campaignOwn: true);
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Automatic);
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-2", "2026-09-14T11:40:00.000Z", attributedBy: "contact_pin");
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-2", "msg-2", "2026-09-14T11:40:00.000Z", ReplyNature.Person);

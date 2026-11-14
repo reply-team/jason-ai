@@ -44,11 +44,11 @@ internal static class ReplyLines
 
     /// <summary>
     /// A move of a thread as the inbound read says it, or, with a rule named, as the events store says it, marked as the
-    /// sole sender's where <paramref name="soleSender"/> says so; naming the contact both in its body and in its column, as
+    /// campaign's own where <paramref name="campaignOwn"/> says so; naming the contact both in its body and in its column, as
     /// both writers do, or nobody.
     /// </summary>
     internal static async Task ObservedAsync(
-        JasonDbContext db, Campaign campaign, Contact? contact, string thread, string moment, string? attributedBy = null, string channel = "email", bool soleSender = false)
+        JasonDbContext db, Campaign campaign, Contact? contact, string thread, string moment, string? attributedBy = null, string channel = "email", bool campaignOwn = false)
     {
         var line = new JsonObject
         {
@@ -64,9 +64,9 @@ internal static class ReplyLines
         {
             line["event_id"] = "evt_01K52JR0000000000000000002";
             line["attributed_by"] = attributedBy;
-            if (soleSender)
+            if (campaignOwn)
             {
-                line["sole_sender"] = true;
+                line["campaign_own"] = true;
             }
         }
 

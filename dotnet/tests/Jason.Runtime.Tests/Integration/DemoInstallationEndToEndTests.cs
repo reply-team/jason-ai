@@ -163,7 +163,7 @@ public class DemoInstallationEndToEndTests
         var seen = Assert.Single(await SeenAsync(host, campaign));
         Assert.Equal(
             (Demo, writtenThread, "email", "contact_pin", contact, (bool?)true),
-            ((string)seen["plugin"]!, (string)seen["thread"]!, (string)seen["channel"]!, (string)seen["attributed_by"]!, (string?)seen["contact_id"], (bool?)seen["sole_sender"]));
+            ((string)seen["plugin"]!, (string)seen["thread"]!, (string)seen["channel"]!, (string)seen["attributed_by"]!, (string?)seen["contact_id"], (bool?)seen["campaign_own"]));
         var reply = await StoredEventAsync(host, writtenThread);
         Assert.Equal((string)seen["event_id"]!, reply.PublicId);
         Assert.Equal(storyStart.AddSeconds(Offset(written)).UtcDateTime, reply.OccurredAt);

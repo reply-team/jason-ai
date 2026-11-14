@@ -33,10 +33,11 @@ namespace Jason.Runtime.Dispatch;
 /// </summary>
 /// <remarks>
 /// Nothing here reads meaning. It reads a kind, identifiers, a moment, which rule found the campaign and whether the line
-/// was marked as the sole sender's; what the reply says, and what to do about it, is the responder's. A thread is the
-/// campaign's own when the line was found by the campaign's pin, or by the person's pin in the one campaign that had
-/// written to them through the plugin (<c>sole_sender</c>). A thread the campaign holds only through a person it may share
-/// with other campaigns, unmarked, is left to the manager, which reads across them before anyone answers.
+/// was marked as the campaign's own; what the reply says, and what to do about it, is the responder's. A thread is the
+/// campaign's own when the line was found by the campaign's pin, or by the person's pin and marked <c>campaign_own</c>:
+/// the thread was already the campaign's own, or, where no campaign held it yet, the campaign was the one that had
+/// written to the person through the plugin. A thread the campaign holds only through a person it may share with other
+/// campaigns, unmarked, is left to the manager, which reads across them before anyone answers.
 /// </remarks>
 public sealed class Responder(
     WorkItemService items,
@@ -560,7 +561,7 @@ public sealed class Responder(
 
     /// <summary>
     /// What a line says about a reply, in the runtime's own fields: identifiers, a moment, which rule found the campaign,
-    /// and whether the store marked the campaign as the one that wrote to the person.
+    /// and whether the store marked the thread as the campaign's own.
     /// </summary>
     private sealed record Reply(
         string Plugin,
@@ -570,17 +571,17 @@ public sealed class Responder(
         DateTime LastActivityAt,
         string LastActivityAtText,
         string? AttributedBy,
-        bool SoleSender)
+        bool CampaignOwn)
     {
         /// <summary>
         /// Whether the thread is the campaign's own: a line the inbound read said, one the events store found by the
-        /// campaign's pin, or one it found by the person's pin and marked as the sole sender's.
+        /// campaign's pin, or one it found by the person's pin and marked <c>campaign_own</c>.
         /// </summary>
         public bool IsCampaignOwn => AttributedBy switch
         {
             null => true,
             EventAttributionRules.CampaignPin => true,
-            EventAttributionRules.ContactPin => SoleSender,
+            EventAttributionRules.ContactPin => CampaignOwn,
             _ => false,
         };
 
@@ -604,7 +605,7 @@ public sealed class Responder(
                 at,
                 moment,
                 Text(said, "attributed_by"),
-                said["sole_sender"] is JsonValue marked && marked.TryGetValue<bool>(out var sole) && sole);
+                said["campaign_own"] is JsonValue marked && marked.TryGetValue<bool>(out var own) && own);
         }
 
         private static string? Text(JsonObject said, string key) =>
@@ -619,8 +620,8 @@ public static class ResponderSkipCodes
     public const string NotConfigured = "responder_not_configured";
 
     /// <summary>
-    /// The campaign holds the thread only through a person it may share with other campaigns, and was not the one campaign
-    /// that had written to them through the plugin when the line was written: the manager's.
+    /// The campaign holds the thread only through a person it may share with other campaigns, and the line was not marked
+    /// <c>campaign_own</c> when it was written: the manager's.
     /// </summary>
     public const string ThreadNotCampaignOwn = "thread_not_campaign_own";
 

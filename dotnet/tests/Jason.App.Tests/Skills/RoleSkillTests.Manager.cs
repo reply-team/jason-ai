@@ -145,7 +145,7 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// A line found by the person and marked as the sole sender's is the campaign's own, and the runtime raises its
+    /// A line found by the person and marked <c>campaign_own</c> is the campaign's own, and the runtime raises its
     /// responder; one without the mark is the manager's, as before. The skill says both plainly.
     /// </summary>
     [Fact]
@@ -153,10 +153,11 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("manager");
 
-        Assert.Contains("and for a line found by the person's pin that says `sole_sender` `true`, the runtime queues the read of the thread and the responder by itself", skill, StringComparison.Ordinal);
-        Assert.Contains("A line found by the person's pin without `sole_sender` is yours, as below: the runtime raises nothing for it.", skill, StringComparison.Ordinal);
-        Assert.Contains("Without `sole_sender`, the thread is yours: queue the read alone", skill, StringComparison.Ordinal);
-        Assert.Contains("a provider event's line never says `sole_sender`", skill, StringComparison.Ordinal);
+        Assert.Contains("and for a line found by the person's pin that says `campaign_own` `true`, the runtime queues the read of the thread and the responder by itself", skill, StringComparison.Ordinal);
+        Assert.Contains("A line found by the person's pin without `campaign_own` is yours, as below: the runtime raises nothing for it.", skill, StringComparison.Ordinal);
+        Assert.Contains("Without `campaign_own`, the thread is yours: queue the read alone", skill, StringComparison.Ordinal);
+        Assert.Contains("a provider event's line never says `campaign_own`", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the line also says `campaign_own` `true`, the thread is this campaign's own: when the line was written, it already was, or no campaign held it yet and this campaign was the only one", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -168,7 +169,7 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("manager");
 
-        Assert.Contains("Without `sole_sender`, the thread is yours: queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
+        Assert.Contains("Without `campaign_own`, the thread is yours: queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
         Assert.Contains("jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get", skill, StringComparison.Ordinal);
         Assert.Contains("Where it names another plugin, or none, queue nothing, say so in your note and raise one question instead.", skill, StringComparison.Ordinal);
     }

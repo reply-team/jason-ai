@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Jason.Runtime.Dispatch;
+using Jason.Runtime.Events;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
@@ -35,8 +36,9 @@ public enum WarmthState
 /// <para>
 /// WARM: a verdict that stands in the campaign (no later verdict under its key), whose nature is <c>person</c>, which
 /// names the contact itself in its body, on a thread the campaign's own read saw move: a line the inbound read wrote, one
-/// the events store said by the campaign's own pin, or one it said by the contact's pin and marked <c>sole_sender</c>,
-/// because this campaign was the only one that had written to the person through the plugin. A verdict on a thread the
+/// the events store said by the campaign's own pin, or one it said by the contact's pin and marked <c>campaign_own</c>,
+/// because the thread was already the campaign's own or, where no campaign held it yet, this campaign was the only one
+/// that had written to the person through the plugin (<see cref="CampaignOwnThreads"/>). A verdict on a thread the
 /// campaign heard of only through the contact's pin, unmarked, or of no observed thread at all (a verdict recorded by hand
 /// included), warms nobody; nor does a verdict whose body names nobody or another person, whatever the journal's contact
 /// column holds: the body must name this very contact. Once warm, always warm: no moment is read. Channels are one
@@ -169,15 +171,10 @@ public static class Warmth
             campaignId));
 
     /// <summary>
-    /// Whether the observed line <paramref name="line"/> is about a thread the campaign's own read saw move: a line the
-    /// inbound read wrote (no rule), one the events store found by the campaign's pin, or one it found by the contact's pin
-    /// and marked as the sole sender's — the one campaign, of those not archived, that had written to the person through the
-    /// plugin when the line was written. The mark was decided then and is read as the line carries it.
+    /// Whether the observed line <paramref name="line"/> is about a thread the campaign's own read saw move, as the events
+    /// store reads it when it marks a line (<see cref="CampaignOwnThreads.Own"/>).
     /// </summary>
-    private static string Own(string line) => $"""
-        (coalesce(json_extract({line}.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin'
-          OR (json_extract({line}.new_json, '$.attributed_by') = 'contact_pin' AND json_extract({line}.new_json, '$.sole_sender') = 1))
-        """;
+    private static string Own(string line) => CampaignOwnThreads.Own(line);
 
     /// <summary>
     /// Whether the verdict <paramref name="verdict"/> stands: no later verdict of its campaign under its key, read by the

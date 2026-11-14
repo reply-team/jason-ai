@@ -95,7 +95,7 @@ public class ChannelRoutesEndToEndTests
         var seen = await SeenAsync(host, campaign);
         Assert.Equal(
             [(Mailer, MailerThread, "email", "contact_pin", (bool?)true), (Social, SocialThread, "linkedin", "contact_pin", (bool?)true)],
-            seen.Select(line => ((string)line["plugin"]!, (string)line["thread"]!, (string)line["channel"]!, (string)line["attributed_by"]!, (bool?)line["sole_sender"]))
+            seen.Select(line => ((string)line["plugin"]!, (string)line["thread"]!, (string)line["channel"]!, (string)line["attributed_by"]!, (bool?)line["campaign_own"]))
                 .OrderBy(line => line.Item1, StringComparer.Ordinal));
         Assert.All(seen, line => Assert.Equal(contact, (string?)line["contact_id"]));
 

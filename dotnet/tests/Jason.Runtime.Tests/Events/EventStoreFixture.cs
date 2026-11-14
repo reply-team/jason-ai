@@ -2,6 +2,8 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Dispatch;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -19,27 +21,42 @@ internal sealed class EventStoreFixture : IDisposable
 
     public static readonly DateTime Noon = new(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly TestDatabase _database = new();
+    private readonly TestDatabase? _database;
+
+    private readonly Func<JasonDbContext> _open;
 
     public EventStoreFixture(IEventAttribution? attribution = null)
     {
+        _database = new TestDatabase();
+        _open = _database.Open;
         Clock = new FixedClock(Noon);
         Store = new EventStore(new JournalWriter(Clock), Clock, attribution ?? EventAttributionSequence.OfThisVersion());
+    }
+
+    /// <summary>
+    /// The same over another's database and clock — the dispatch harness's — so the lines the store says are the ones the
+    /// dispatcher's own steps read. The database stays its owner's to dispose.
+    /// </summary>
+    public EventStoreFixture(Func<JasonDbContext> open, FixedClock clock)
+    {
+        _open = open;
+        Clock = clock;
+        Store = new EventStore(new JournalWriter(Clock), Clock, EventAttributionSequence.OfThisVersion());
     }
 
     public FixedClock Clock { get; }
 
     public EventStore Store { get; }
 
-    public string File => _database.File;
+    public string File => (_database ?? throw new InvalidOperationException("The store runs over another's database.")).File;
 
-    public JasonDbContext Open() => _database.Open();
+    public JasonDbContext Open() => _open();
 
     /// <summary>A context over the same database with interceptors of the test's beside the runtime's own.</summary>
     public JasonDbContext Open(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, _database.File, JournalLines.Strict);
+        JasonDbContext.Configure(builder, File, JournalLines.Strict);
         builder.AddInterceptors(interceptors);
         return new JasonDbContext(builder.Options);
     }
@@ -157,6 +174,35 @@ internal sealed class EventStoreFixture : IDisposable
         return item;
     }
 
+    /// <summary>
+    /// A line the campaign's own read says of a thread, as inbound sync writes it: no event, no rule, and the inbound read's
+    /// key. Answers the line.
+    /// </summary>
+    public async Task<JournalEntry> ObservedByTheCampaignAsync(Campaign campaign, string thread, DateTime moved, string plugin = Reader)
+    {
+        await using var db = Open();
+        var tracked = await db.Campaigns.SingleAsync(row => row.Id == campaign.Id);
+        var moment = InboundSync.Instant(new DateTimeOffset(moved));
+        var entry = new JournalWriter(Clock).Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.InboundReplyObserved,
+            tracked,
+            key: InboundSync.ObservationKey(plugin, thread, moment),
+            updated: new JsonObject
+            {
+                ["plugin"] = plugin,
+                ["thread"] = thread,
+                ["channel"] = "email",
+                ["last_activity_at"] = moment,
+                ["unread"] = true,
+                ["has_meeting_intent"] = null,
+                ["contact_id"] = null,
+            });
+        await db.SaveChangesAsync();
+        return entry;
+    }
+
     /// <summary>Stores a page through a context of its own, as the reader will.</summary>
     public async Task<EventStoreResult> StoreAsync(EventSource source, string? heldCursor, EventPage page, string readId = "evr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD")
     {
@@ -268,5 +314,5 @@ internal sealed class EventStoreFixture : IDisposable
             .ToListAsync();
     }
 
-    public void Dispose() => _database.Dispose();
+    public void Dispose() => _database?.Dispose();
 }

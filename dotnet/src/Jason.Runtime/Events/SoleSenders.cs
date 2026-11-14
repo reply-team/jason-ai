@@ -8,9 +8,10 @@ namespace Jason.Runtime.Events;
 
 /// <summary>
 /// Which one campaign, if exactly one, has written to a person through a plugin: the fact the events store marks a reply
-/// found by the contact's pin with, <c>sole_sender</c>, so that the thread is that campaign's own. Read once per page, for
-/// the people the page's replies name, inside the page's transaction, beside the members the contact rule reads; decided
-/// then, carried by the line, and never worked out again at a read.
+/// found by the contact's pin with, <c>campaign_own</c>, on a thread no campaign it found holds as its own yet, so that the
+/// thread becomes that campaign's own (<see cref="CampaignOwnThreads"/> is asked first). Read once per page, for the people
+/// the page's replies name, inside the page's transaction, beside the members the contact rule reads; decided then,
+/// carried by the line, and never worked out again at a read.
 /// </summary>
 /// <remarks>
 /// <para>
