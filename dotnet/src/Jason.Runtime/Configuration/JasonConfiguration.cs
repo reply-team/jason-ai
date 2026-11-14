@@ -316,7 +316,7 @@ public static class JasonConfiguration
                     {
                         Load(stream);
                     }
-                    catch (Exception unparsed) when (unparsed is FormatException or IOException)
+                    catch (Exception unparsed) when (Unparsed(unparsed) || unparsed is IOException)
                     {
                         // The keys are replaced only once the whole file has parsed, so the ones held stay where they were.
                         return Refuse(unparsed);
@@ -367,7 +367,7 @@ public static class JasonConfiguration
                     {
                         Load(stream);
                     }
-                    catch (Exception unparsed) when (unparsed is FormatException or IOException or UnauthorizedAccessException)
+                    catch (Exception unparsed) when (Unparsed(unparsed) || unparsed is IOException or UnauthorizedAccessException)
                     {
                         // The keys are dropped and the failure is said, as the loader does; the rest escape to the
                         // watcher with the keys kept.
@@ -397,6 +397,16 @@ public static class JasonConfiguration
             {
             }
         }
+
+        /// <summary>
+        /// Whether the parser refused the file's text. A syntax error comes as a <see cref="FormatException"/>, which the
+        /// provider wraps around the reader's own exception; an escape no text can be made of, half of a surrogate pair
+        /// written as a backslash, a <c>u</c> and <c>d800</c>, comes from the reader unwrapped as an
+        /// <see cref="InvalidOperationException"/>. Both are a file that does not parse. Escaping as the second did, the
+        /// watch's edit went unsaid and a reload's read answered a server error. A load runs nothing but the parse, so no
+        /// other invalid operation can come out of one.
+        /// </summary>
+        internal static bool Unparsed(Exception failure) => failure is FormatException or InvalidOperationException;
 
         /// <summary>A file this provider cannot use, put through the handling the loader gives an edit it cannot read.</summary>
         private SettingsFileFailure Refuse(Exception failure)
