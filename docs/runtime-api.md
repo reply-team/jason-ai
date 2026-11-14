@@ -146,12 +146,12 @@ so in one line on stderr, naming the variable and never its value.
   `system` is refused because it is the runtime's own. The type `plugin` is refused the same way to every caller but a
   handler capability, which must name its own plugin as the id. Some operations ask for more: `approval.approve`,
   `approval.reject`, `approval.set_standing`, `approval.unset_standing`, `decision.answer`, `block.clear`,
-  `preference.set` and `preference.unset` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
+  `preference.set`, `preference.unset` and `campaign.set_send_mode` need an actor of type `human` that names the person, and `report.submit` needs a named reporter of any type but `system`. The runtime
   records the actor as the caller claims it and cannot verify it, `plugin` aside: a token knows no caller. The CLI
   claims one where its caller does not: without `--actor`, a launched executor's command is its attempt, and any other
   write is `human:<this account's name>`, the name the paired browser writes as — or, where the operating system gives
   no name, absent as before. The operations above that need a person, `workitem.resume` and `report.submit` take no
-  such default: given no actor, the CLI refuses all ten itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
+  such default: given no actor, the CLI refuses all eleven itself, and `subscription.rewind` the same way, before any request, in one sentence that names the
   form — `--actor human:<Name>`, whoever ends the wait for a resume, and a person or a role for a report. Nor do
   `suppression.remove`, `route.set`, `route.unset` and `role.set_profile`: the runtime takes them from any caller, but
   the CLI will not put this account's name on them by itself and refuses them the same way, naming who does it.

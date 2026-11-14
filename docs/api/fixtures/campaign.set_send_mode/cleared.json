@@ -27,6 +27,16 @@
     "send_modes": {
       "cold": null,
       "warm": null
+    },
+    "send_modes_in_force": {
+      "cold": {
+        "mode": "every_message",
+        "source": "default"
+      },
+      "warm": {
+        "mode": "every_message",
+        "source": "default"
+      }
     }
   }
 }

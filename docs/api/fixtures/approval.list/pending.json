@@ -18,7 +18,11 @@
         "decided_at": null,
         "decided_by": null,
         "campaign_name": "Autumn outreach",
-        "contact_name": "Ada Lovelace"
+        "contact_name": "Ada Lovelace",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
       },
       {
         "id": "apr_2",
@@ -33,7 +37,11 @@
         "decided_at": null,
         "decided_by": null,
         "campaign_name": "Autumn outreach",
-        "contact_name": "Grace Hopper"
+        "contact_name": "Grace Hopper",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
       }
     ],
     "next_cursor": null

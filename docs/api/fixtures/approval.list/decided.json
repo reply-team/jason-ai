@@ -28,7 +28,11 @@
           "id": "ada"
         },
         "campaign_name": "Autumn outreach",
-        "contact_name": "Edsger Dijkstra"
+        "contact_name": "Edsger Dijkstra",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
       },
       {
         "id": "apr_4",
@@ -46,7 +50,11 @@
           "id": "dispatcher"
         },
         "campaign_name": "Autumn outreach",
-        "contact_name": "Barbara Liskov"
+        "contact_name": "Barbara Liskov",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
       }
     ],
     "next_cursor": null

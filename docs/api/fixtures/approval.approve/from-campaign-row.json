@@ -38,6 +38,10 @@
     },
     "decision_reason": null,
     "campaign_name": "Spring",
-    "contact_name": "Ada Example"
+    "contact_name": "Ada Example",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
   }
 }
