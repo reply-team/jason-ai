@@ -396,12 +396,12 @@ approval row of its own is covered when, in this order: its operation is one a s
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
 (its `inbound_reply`; a responder a manager queued by hand carries none, so its verdicts fail `verdict_not_authentic`
-and its drafts are asked), or by a person who gave their name, or carries a person's answer — a verdict whose
+and its drafts are asked), or by a person who gave their name outside the desktop's chat, or carries a person's answer — a verdict whose
 `reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
 covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
 whoever drafted it; the draft's context was not changed after it was created; the
 verdict's plugin is the one the route resolved, and its thread the one the reply answers in (for a message, its person
-the work's person); the newest standing-approval line for the campaign and the verdict's category is a set; it names
+the work's person); the newest standing-approval line for the campaign and the verdict's category is a set, made outside the chat; it names
 the operation; it has not expired; and fewer drafts were let go under it since it was set than its ceiling. A category
 is the verdict's word exactly: `interested` covers neither `very_interested` nor `Interested`. The decision behind
 `answered_by` was checked when the line was written — answered, by a named person, choosing the verdict's category,
@@ -533,7 +533,7 @@ preview, since the key is never taken back; a review's is not carried, because t
 
 ### The send mode at the claim
 
-A send a person decides each one of may go without being asked where a person said so for the kind of contact it
+A send to a person may go without being asked where a person said so for the kind of contact it
 reaches: the send mode, `automatic` or `every_message`, for a cold contact and for a warm one, set for the installation
 by the named preferences `send_mode.cold` and `send_mode.warm`, and for one campaign by `campaign.set_send_mode`, whose
 own mode is the one in force where it sets one. Unset, a mode is `every_message`, and every such send parks as above. A
@@ -545,7 +545,7 @@ what kind of reply it is, they are neither, and nothing goes to them automatical
 **It is asked at the claim, where nothing has been decided about the work yet**, in the same place and on the same
 guard as a standing approval, and in this order:
 
-1. **Is a mode in force?** The send is one a person decides each one of and names a contact, and a mode of `automatic`
+1. **Is a mode in force?** The send is a send to a person and names a contact, and a mode of `automatic`
    set by a named person stands for its campaign, for cold or for warm. Where none does, nothing below is asked, warmth
    is not read, and the send parks as it always did.
 2. **The contact's warmth**, read from the campaign's chronicle. Where the mode for the contact's warmth is
@@ -563,13 +563,15 @@ guard as a standing approval, and in this order:
    that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
    or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
 7. **A review that passed the text as it now reads.** A pass under the send's review hash counts where a person by name
-   wrote it, outside a run, or where the runtime's own critic did: a running attempt of the `critic` work the runtime
-   makes for a send created under an automatic mode, which it creates under its own actor, names the send and its
-   operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`), and whose context nobody but
-   the runtime changed since. Any such pass counts, whatever was reviewed after it, since a doubt was asked before. A
-   counting pass only under an earlier hash is `edited_after_review`; none at all, `not_reviewed`. A pass by a critic
-   somebody queued by hand, by the runtime's critic of another send, by another role, on a line a run wrote in a person's
-   name, or naming an attempt other than its own, is shown on the preview and releases nothing.
+   wrote it, outside a run and outside the desktop's chat, or where the critic the runtime created for this send did:
+   the `critic` work the runtime makes for a send created under an automatic mode, which it creates under its own
+   actor, names the send and its operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`),
+   and whose context was changed since by nobody but the runtime's own actors: a change by a person, a role or the
+   critic's own attempt disqualifies it. Any such pass counts, whatever was reviewed after it, since a doubt was asked
+   before. A counting pass only under an earlier hash is
+   `edited_after_review`; none at all, `not_reviewed`. Another critic's pass does not count: one somebody queued by
+   hand, or the runtime's critic of another send. Nor does a pass by another role, on a line a run wrote in a person's
+   name, or naming an attempt other than its own; each is shown on the preview and releases nothing.
 8. **The daily ceiling.** The campaign has had fewer sends released by the mode since 00:00Z than
    `Sending:AutomaticMaxPerDay`; at it, `daily_ceiling`, and the preview carries `daily_ceiling` with the limit, the
    count and since when (§The claim rule).
@@ -599,6 +601,13 @@ every turn) carries the header `Jason-Confined`. The runtime records it on the w
 `workitem_updated` line keyed `confined`; the claim reads the mark through the item's own lines, and nothing takes it
 back. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, so a program
 that leaves the header off is not marked.
+
+**A line written under the mark is the chat's, never a person's own word**, as a line that carries an attempt is the
+run's. Besides a send's lines, the mark is recorded, as `confined: true`, on a verdict (`reply_classified`), on a
+review (`workitem_reviewed`) and on a standing approval's set line (`standing_approval_set`) written under the header.
+A verdict so marked lifts no opt-out, and under a standing approval it vouches for no draft as a person's verdict
+(`verdict_not_authentic`) unless it carries a person's answered decision, which is read as the decision records it; a
+review so marked is no person's pass, and a set line so marked sets nothing (`no_standing_approval`).
 
 Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperature (`cold` or `warm`), names the row, the
 operation, the subject hash, the mode's source, the temperature and the review line, and carries no text. Nobody is

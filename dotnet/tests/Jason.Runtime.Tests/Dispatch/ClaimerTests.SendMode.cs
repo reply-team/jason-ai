@@ -177,6 +177,7 @@ public partial class ClaimerTests
     [InlineData("the critic the runtime made for the send", null)]
     [InlineData("the runtime's critic, then a copywriter's pass", null)]
     [InlineData("a person by name", null)]
+    [InlineData("a person by name in the desktop's chat", "not_reviewed")]
     [InlineData("nobody", "not_reviewed")]
     [InlineData("a copywriter's run", "not_reviewed")]
     [InlineData("a person named on a run's line", "not_reviewed")]
@@ -184,6 +185,9 @@ public partial class ClaimerTests
     [InlineData("a critic a person queued by hand", "not_reviewed")]
     [InlineData("the critic the runtime made for another send", "not_reviewed")]
     [InlineData("the runtime's critic, its context patched by a person", "not_reviewed")]
+    [InlineData("the runtime's critic, its context patched by its own attempt", "not_reviewed")]
+    [InlineData("a critic another system actor made for the send", "not_reviewed")]
+    [InlineData("the runtime's critic naming the send with another operation", "not_reviewed")]
     [Critical(Family.S2, "the automatic mode: only the critic's or a person's pass releases")]
     public async Task SendMode_WhosePassReleases(string who, string? parks)
     {
@@ -200,6 +204,10 @@ public partial class ClaimerTests
             "a critic a person queued by hand" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.QueuedByHand),
             "the critic the runtime made for another send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.AnotherSends),
             "the runtime's critic, its context patched by a person" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.Patched),
+            "the runtime's critic, its context patched by its own attempt" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.PatchedByItself),
+            "a critic another system actor made for the send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.MadeByAnotherSystemActor),
+            "the runtime's critic naming the send with another operation" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.ForAnotherOperation),
+            "a person by name in the desktop's chat" => await InTheChatAsync(() => PersonPassAsync(db, send.Id, send.ReviewHash)),
             "a person by name" => (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
                 new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id,
             "the runtime's critic, then a copywriter's pass" => await ThenAsync(await CriticPassAsync(db, reading, send.Id, send.ReviewHash), CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter")),
@@ -1023,6 +1031,9 @@ public partial class ClaimerTests
         QueuedByHand,
         AnotherSends,
         Patched,
+        PatchedByItself,
+        MadeByAnotherSystemActor,
+        ForAnotherOperation,
     }
 
     /// <summary>
@@ -1040,7 +1051,12 @@ public partial class ClaimerTests
         }
 
         var operation = await db.WorkItems.AsNoTracking().Where(w => w.PublicId == sendId).Select(w => w.Operation).SingleAsync(Ct);
-        var creator = critic == Critic.QueuedByHand ? Operator : Actors.Runtime;
+        var creator = critic switch
+        {
+            Critic.QueuedByHand => Operator,
+            Critic.MadeByAnotherSystemActor => Actors.Dispatcher,
+            _ => Actors.Runtime,
+        };
         var work = WorkItemFactory.NewAiRole(campaign, role: AutomaticRelease.CriticRole, now: Noon);
         work.CreatedByType = creator.Type;
         work.CreatedById = creator.Id;
@@ -1049,7 +1065,7 @@ public partial class ClaimerTests
             [SendReview.Key] = new JsonObject
             {
                 [SendReview.WorkItemIdMember] = critic == Critic.AnotherSends ? "wi_01K52JR0000000000000000055" : sendId,
-                [SendReview.OperationMember] = operation,
+                [SendReview.OperationMember] = critic == Critic.ForAnotherOperation ? "social_invitation.send" : operation,
             },
         };
         work.Status = WorkItemStatus.Processing;
@@ -1077,9 +1093,25 @@ public partial class ClaimerTests
         {
             journal.Append(db, Operator, JournalKinds.WorkItemContextUpdated, campaign, key: "brief", old: null, updated: "Look at the tone.", workItem: work);
         }
+        else if (critic == Critic.PatchedByItself)
+        {
+            journal.Append(db, Actors.ForAttempt(run), JournalKinds.WorkItemContextUpdated, campaign, key: "brief", old: null, updated: "Look at the tone.", workItem: work, attempt: run);
+        }
 
         await db.SaveChangesAsync(Ct);
         return run;
+    }
+
+    /// <summary>A named person's pass of the send's text, through the verb; its line's id.</summary>
+    private static async Task<string> PersonPassAsync(JasonDbContext db, string sendId, string? hash) =>
+        (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
+            new WorkItemReviewRequest(sendId, hash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id;
+
+    /// <summary>What <paramref name="act"/> answers, done under the desktop's chat marker, as the door opens it.</summary>
+    private static async Task<T> InTheChatAsync<T>(Func<Task<T>> act)
+    {
+        using var confined = ConfinedScope.Open();
+        return await act();
     }
 
     /// <summary>The first line's id, once the review that follows it is written too.</summary>
