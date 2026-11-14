@@ -49,6 +49,38 @@ public sealed class SenderPointerTests
         Assert.True(taking > 0, "No operation takes a sender, so the pointer would be held over nothing.");
     }
 
+    /// <summary>
+    /// A sender's block may name the channel it holds the sender on, since a provider may number its mailboxes and its
+    /// social accounts apart, and an item meets such a block only on the channel its own input names. So every operation
+    /// that takes a sender names the channel it consumes at the one channel pointer, as a required string argument the
+    /// operation consumes (<c>preflight.channel</c> is <c>from_args</c>): the channel read beside the sender is the one the
+    /// claim projects the person's address on.
+    /// </summary>
+    [Fact]
+    public void Every_operation_that_takes_a_sender_names_the_channel_it_consumes_at_the_one_channel_pointer()
+    {
+        Assert.Equal("/args/channel", ProviderBlockContract.ChannelPointer);
+        var taking = 0;
+        foreach (var file in Directory.EnumerateFiles(ContractFiles.Operations, "*.json").Order(StringComparer.Ordinal))
+        {
+            var document = JsonNode.Parse(File.ReadAllText(file))!;
+            var input = document["input_schema"]!.AsObject();
+            if (References(input, "").ToList() is not { Count: > 0 })
+            {
+                continue;
+            }
+
+            taking++;
+            var name = ContractFiles.Relative(file);
+            var args = input["properties"]!["args"]!;
+            Assert.True((string?)document["preflight"]!["channel"] == "from_args", $"{name} takes a sender and consumes no channel its arguments name.");
+            Assert.Contains("channel", args["required"]!.AsArray().Select(required => (string?)required));
+            Assert.Equal("string", (string?)args["properties"]!["channel"]!["type"]);
+        }
+
+        Assert.True(taking > 0, "No operation takes a sender, so the channel pointer would be held over nothing.");
+    }
+
     /// <summary>Where in an instance each reference to the sender sits, read through the schema's properties.</summary>
     private static IEnumerable<string> References(JsonObject schema, string at)
     {
