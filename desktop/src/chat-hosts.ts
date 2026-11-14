@@ -321,9 +321,12 @@ export function rulePath(platform: Platform, path: string): string {
 
 /**
  * The data directory's own entries, which the runtime, the command line and the desktop make: named by the data rules
- * whether they exist yet or not, so one made while a turn runs is refused as well.
+ * whether they exist yet or not, so one made while a turn runs is refused as well. `setup` is where a later layout keeps
+ * the roles, the plugins and the settings a person sets up, and `layout.json` the stamp that says so: both are refused
+ * before any build makes them. A test holds this list to `JasonPaths.OwnEntries` as `desktop/data-layouts.json` carries
+ * it, with `doctor` added and `desktop` taken out.
  */
-export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart'];
+export const knownDataEntries: readonly string[] = ['config', 'run', 'state', 'logs', 'plugins', 'ui', 'work', 'skills', 'update', 'doctor', 'autostart', 'setup', 'layout.json'];
 
 /**
  * The desktop folder's own entries but the chat folder, named the same way; `turns` holds every turn's configuration,

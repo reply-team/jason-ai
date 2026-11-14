@@ -380,6 +380,16 @@ export function dataLayout(data: string, layout?: LayoutNumber, disk: StampDisk 
     };
 }
 
+/**
+ * Every settings file of every layout under `data`: the settings file a person may change and the secrets file, of layout
+ * 1 (`config/settings.json`, one file) and of layout 2 (`setup/settings.json` and `config/secrets.json`). For the chat's
+ * fence, which protects them whatever the stamp says, so a stamp written while a turn runs changes nothing it holds.
+ */
+export function settingsFilesOf(data: string): string[] {
+    const relative = Object.values(layoutTable.layouts).flatMap((parts) => [parts.userSettingsFile, parts.secretsFile]);
+    return [...new Set(relative)].map((file) => join(data, ...file.split('/')));
+}
+
 /** The sentence of a data directory a newer Jason set up, as `LayoutStamp.NewerSentence` says it. */
 export function layoutNewerSentence(writtenBy: string, current: string): string {
     return `This data directory was set up by Jason ${writtenBy}, newer than this jason (${current}): update this jason, or use the one that set it up.`;

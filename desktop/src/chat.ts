@@ -96,7 +96,7 @@ import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
-import { desktopPaths, type DesktopPaths } from './paths.ts';
+import { desktopPaths, settingsFilesOf, type DesktopPaths } from './paths.ts';
 import type { PersonsOwn } from './mode.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
@@ -1817,7 +1817,8 @@ export class Chat {
                     // a Full access turn names it to the host explicitly (`turnHome`), so the two cannot differ.
                     shellHome: turnHome,
                     ...(persons === undefined ? {} : { personsOwn: [persons.data, persons.harnessRoot] }),
-                    protectedFiles: [paths.installationSettings, paths.runFile, ...(persons === undefined ? [] : [desktopPaths(persons.data).installationSettings, desktopPaths(persons.data).runFile])],
+                    // Every layout's settings files and the run file, whatever the stamp says, by every route a path can take.
+                    protectedFiles: [...settingsFilesOf(paths.data), paths.runFile, ...(persons === undefined ? [] : [...settingsFilesOf(persons.data), desktopPaths(persons.data).runFile])],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     real: realPathOf,
