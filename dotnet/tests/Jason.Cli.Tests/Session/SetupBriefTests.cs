@@ -7,8 +7,8 @@ namespace Jason.Cli.Tests.Session;
 /// <summary>
 /// The first message of a session on Jason itself: two lines, then a short core that names the skill teaching the rest.
 /// It reaches the host as one word of its command line, the only way a first message reaches an interactive session, so
-/// it is held short enough for any launch, Windows' command interpreter's included. Its last line follows the host's
-/// skills receipt, in one of two forms.
+/// it is held short: how long a first message may be and still survive every launch is not measured. Its last line follows
+/// the host's skills receipt, in one of two forms.
 /// </summary>
 public sealed class SetupBriefTests
 {
@@ -65,10 +65,9 @@ public sealed class SetupBriefTests
     }
 
     /// <summary>
-    /// A host installed as a script shim is started through Windows' command interpreter, whose command line holds about
-    /// 8,000 units, and a long first message is not known to survive the hand-off to Windows Terminal; so the core is at
-    /// most 6,000 units in either form for every host, counting the growth a quote or a backslash takes when the argument is
-    /// escaped.
+    /// How long a first message may be and still survive every launch, the hand-off from the console host to Windows
+    /// Terminal among them, is not measured; so the core is held short, at most 6,000 units in either form for every host,
+    /// counting the growth a quote or a backslash takes when the argument is escaped.
     /// </summary>
     [Theory]
     [MemberData(nameof(Forms))]
