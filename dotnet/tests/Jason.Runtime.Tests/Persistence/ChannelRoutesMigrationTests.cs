@@ -204,22 +204,20 @@ public class ChannelRoutesMigrationTests
             db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(PreviousMigration);
         }
 
-        // Campaigns through the entity, which this migration leaves as it was, and the routes as raw rows.
-        string[] campaigns;
-        using (var db = new JasonDbContext(JasonDbContext.CreateOptions(paths.DatabaseFile)))
-        {
-            var first = WorkItemFactory.NewCampaign("Upgraded");
-            var second = WorkItemFactory.NewCampaign("Upgraded too");
-            db.Campaigns.AddRange(first, second);
-            db.SaveChanges();
-            campaigns = [first.PublicId, second.PublicId];
-        }
-
+        // Campaigns and routes as raw rows, as the installation held them then: the entity has since gained columns a
+        // database at the migration before does not have.
+        string[] campaigns = ["cmp_01K7QN0000000000000000000A", "cmp_01K7QN0000000000000000000B"];
         using (var connection = Open(paths.DatabaseFile))
         {
             Execute(
                 connection,
                 """
+                INSERT INTO campaigns (id, public_id, name, project_id, status, context_json, created_at, updated_at)
+                SELECT 1, 'cmp_01K7QN0000000000000000000A', 'Upgraded', id, 'active', '{}', '2026-11-01 09:00:00', '2026-11-01 09:00:00'
+                FROM projects ORDER BY id LIMIT 1;
+                INSERT INTO campaigns (id, public_id, name, project_id, status, context_json, created_at, updated_at)
+                SELECT 2, 'cmp_01K7QN0000000000000000000B', 'Upgraded too', id, 'active', '{}', '2026-11-01 09:00:00', '2026-11-01 09:00:00'
+                FROM projects ORDER BY id LIMIT 1;
                 INSERT INTO campaign_routes (id, campaign_id, operation, plugin_id, binding_json, updated_at) VALUES
                   (1, 1, NULL, 'fake-provider', '{"workspace":"west"}', '2026-11-01 09:00:00'),
                   (2, 1, 'campaign.get', 'other-provider', NULL, '2026-11-01 09:00:00'),

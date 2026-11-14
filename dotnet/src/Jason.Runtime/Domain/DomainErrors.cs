@@ -267,14 +267,15 @@ public static class DomainErrors
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot answer a decision; a question raised for a person is a person's to answer.");
 
     /// <summary>
-    /// A person's own word — an approval, a rejection, a standing approval set or taken back, an answer — sent by a CLI that
+    /// A person's own word — an approval, a rejection, a standing approval set or taken back, an answer, a preference set or
+    /// taken back, a campaign's send mode — sent by a CLI that
     /// says it runs inside an attempt, whatever actor the body claims. The attempt is quoted as the request named it and
     /// never looked up: presence is the fact. The message carries the remedy, for the agent that reads it.
     /// </summary>
     public static ForbiddenException DecidedInsideARun(string attempt) =>
         new(
             "decided_inside_a_run",
-            $"This request comes from inside attempt `{attempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
+            $"This request comes from inside attempt `{attempt}`. An approval, an answer, a preference or a campaign's send mode is a person's own word, given outside any run: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
 
     /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
@@ -333,6 +334,18 @@ public static class DomainErrors
         new(
             "approval_not_human",
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot set or unset a standing approval; it is a person's decision, made in advance.");
+
+    /// <summary>
+    /// A campaign's send mode is a person's standing word about how its sends go, so it is refused to whoever may not
+    /// decide one: no role and no run sets it.
+    /// </summary>
+    public static InvalidRequestException SendModeNotHuman(ActorType type) =>
+        new(
+            "send_mode_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot set a campaign's send mode; it is a person's standing word about how the campaign's sends go.");
+
+    public static InvalidRequestException SendModeActorRequired() =>
+        new("actor_required", "actor.id is required on a campaign's send mode: the sends it releases go in the name of the person who set it.");
 
     public static InvalidRequestException StandingApprovalActorRequired() =>
         new("actor_required", "actor.id is required on a standing approval: what is recorded has to name the person whose decision it is.");

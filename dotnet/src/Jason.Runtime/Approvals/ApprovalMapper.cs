@@ -3,10 +3,13 @@ using Jason.Runtime.Persistence;
 
 namespace Jason.Runtime.Approvals;
 
-/// <summary>One decision as a caller reads it. Nothing is assembled here: every field was written at the park.</summary>
+/// <summary>
+/// One decision as a caller reads it. Nothing is assembled here: every field was written at the park, but for the
+/// installation's open question, the send-mode keys nobody has set, which the caller read as it answers.
+/// </summary>
 public static class ApprovalMapper
 {
-    public static ApprovalDto ToDto(Approval approval, string workItemId, string campaignId, string campaignName, string? contactName)
+    public static ApprovalDto ToDto(Approval approval, string workItemId, string campaignId, string campaignName, string? contactName, IReadOnlyList<string> sendModesUnset)
     {
         ArgumentNullException.ThrowIfNull(approval);
         return new ApprovalDto(
@@ -30,10 +33,11 @@ public static class ApprovalMapper
             DecidedBy(approval),
             approval.DecisionReason,
             campaignName,
-            contactName);
+            contactName,
+            sendModesUnset);
     }
 
-    public static ApprovalSummaryDto ToSummary(Approval approval, string workItemId, string campaignId, string campaignName, string? contactName)
+    public static ApprovalSummaryDto ToSummary(Approval approval, string workItemId, string campaignId, string campaignName, string? contactName, IReadOnlyList<string> sendModesUnset)
     {
         ArgumentNullException.ThrowIfNull(approval);
         return new ApprovalSummaryDto(
@@ -49,7 +53,8 @@ public static class ApprovalMapper
             approval.DecidedAt is { } decided ? Utc(decided) : null,
             DecidedBy(approval),
             campaignName,
-            contactName);
+            contactName,
+            sendModesUnset);
     }
 
     private static ActorRef? DecidedBy(Approval approval) =>

@@ -306,6 +306,7 @@ public class DefaultActorTests
         ["decision", "answer", "dec_A", "--answer", "Yes, go ahead."],
         ["preference", "set", "outreach.tone", "--value", "{\"tone\":\"plain\"}"],
         ["preference", "unset", "outreach.tone"],
+        ["campaign", "set-send-mode", "cmp_A", "--cold", "automatic"],
         ["block", "clear", "blk_A"],
         ["workitem", "resume", "wi_A"],
         ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],

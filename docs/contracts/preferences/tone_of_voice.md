@@ -42,7 +42,7 @@ English and at most about 29 KB in Cyrillic.
 ## Setting it
 
 A preference is the person's word, so only a person sets it, and the request names them as its actor. An agent working
-for the person in their own session sets it on their answer, under their name; a role Jason launches is refused when it sets or unsets one (`preference_not_human`).
+for the person in their own session sets it on their answer, under their name; a role Jason launches is refused when it sets or unsets one, from inside its run whatever actor it names (`decided_inside_a_run`).
 
 ```sh
 jason preference set tone_of_voice --value '{"summary":"Plain and warm; no exclamation marks.","formality":"informal"}' --actor human:Marta

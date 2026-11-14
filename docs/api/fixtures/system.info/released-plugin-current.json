@@ -45,7 +45,9 @@
         "20261105002401_SubscriptionRunner",
         "20261111143412_Audience",
         "20261113000729_ChannelRoutes",
-        "20261113021003_JournalByThread"
+        "20261113021003_JournalByThread",
+        "20261114031653_JournalVerdictsByThread",
+        "20261114050917_CampaignSendModes"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -81,7 +83,9 @@
         "20261105002401_SubscriptionRunner",
         "20261111143412_Audience",
         "20261113000729_ChannelRoutes",
-        "20261113021003_JournalByThread"
+        "20261113021003_JournalByThread",
+        "20261114031653_JournalVerdictsByThread",
+        "20261114050917_CampaignSendModes"
       ],
       "backup_file": null
     },
@@ -159,6 +163,16 @@
           "digest": "sha256:recorded-1"
         }
       }
-    ]
+    ],
+    "send_modes": {
+      "cold": {
+        "mode": "every_message",
+        "source": "default"
+      },
+      "warm": {
+        "mode": "every_message",
+        "source": "default"
+      }
+    }
   }
 }

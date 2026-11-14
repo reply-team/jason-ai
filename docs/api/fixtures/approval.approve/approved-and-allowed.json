@@ -53,6 +53,10 @@
     },
     "decision_reason": "the logistics heads answer",
     "campaign_name": "Spring outreach",
-    "contact_name": null
+    "contact_name": null,
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
   }
 }

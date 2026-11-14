@@ -1,0 +1,7 @@
+{
+  "key": "send_mode.cold",
+  "version": 1,
+  "case": "a word that names no mode: a setting of its own is a mode no claim reads",
+  "value": { "mode": "default" },
+  "expect": { "invalid": [{ "pointer": "/mode", "reason": "enum" }] }
+}

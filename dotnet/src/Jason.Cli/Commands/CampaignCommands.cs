@@ -33,6 +33,7 @@ public static class CampaignCommands
         campaign.Subcommands.Add(Transition("pause", "Pause an active campaign.", Operations.CampaignPause, env, actor));
         campaign.Subcommands.Add(Transition("archive", "Archive a campaign. Archiving is final.", Operations.CampaignArchive, env, actor));
         campaign.Subcommands.Add(UpdateContext(env, actor));
+        campaign.Subcommands.Add(SetSendMode(env, actor));
         campaign.Subcommands.Add(AddContacts(env, actor));
         campaign.Subcommands.Add(RemoveContacts(env, actor));
         campaign.Subcommands.Add(ListContacts(env, actor));
@@ -226,6 +227,70 @@ public static class CampaignCommands
             return await OperationRunner
                 .RunAsync(env, Operations.CampaignUpdate, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken)
                 .ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// A campaign's own send mode, for its cold contacts, its warm ones or both: a person's standing word, so the CLI's
+    /// default actor does not apply, and a run is refused it. The mode words are sent as typed, and the runtime refuses any
+    /// other; <c>--clear</c> sends null, which gives that mode back to the installation, and a mode both set and cleared in
+    /// one command is a usage error, because which of the two the person meant is not the CLI's to guess.
+    /// </summary>
+    private static Command SetSendMode(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "set-send-mode",
+            "Set this campaign's own send mode: automatic, and its sends go without being asked, or every_message, and each one waits for a person. "
+                + "Cold is a contact who has not answered in the campaign, warm one who has; a mode the campaign does not set follows the installation's preference. "
+                + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
+        var id = CampaignId();
+        var cold = new Option<string?>("--cold") { Description = "The mode for a contact who has not answered in the campaign: automatic or every_message. Absent leaves it alone." };
+        var warm = new Option<string?>("--warm") { Description = "The mode for a contact who has answered in the campaign: automatic or every_message. Absent leaves it alone." };
+        var clear = VerbOptions.Repeatable(
+            "--clear",
+            "A mode to give back to the installation's preference: cold or warm. Repeat the option for both.");
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(id);
+        command.Options.Add(cold);
+        command.Options.Add(warm);
+        command.Options.Add(clear);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            var body = RequestBody.Empty()
+                .Set("campaign_id", parseResult.GetValue(id))
+                .Set("cold", parseResult.GetValue(cold))
+                .Set("warm", parseResult.GetValue(warm));
+            foreach (var mode in parseResult.GetValue(clear) ?? [])
+            {
+                if (mode is not ("cold" or "warm"))
+                {
+                    throw new UsageException("--clear names cold or warm.");
+                }
+
+                if ((mode == "cold" ? parseResult.GetValue(cold) : parseResult.GetValue(warm)) is not null)
+                {
+                    throw new UsageException($"--{mode} and --clear {mode} both name the {mode} mode: set it or give it back, not both.");
+                }
+
+                body.Set(mode, null, onlyIfNotNull: false);
+            }
+
+            if (!body.ContainsKey("cold") && !body.ContainsKey("warm"))
+            {
+                throw new UsageException("campaign set-send-mode needs --cold, --warm or --clear: name the mode to set or to give back.");
+            }
+
+            body.Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(body, "campaign set-send-mode", "a campaign's send mode is set on a person's word");
+
+            return OperationRunner.RunAsync(env, Operations.CampaignSetSendMode, body, new RunOptions(parseResult.GetValue(human), CampaignRenderers.Campaign), cancellationToken);
         });
 
         return command;
