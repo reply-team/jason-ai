@@ -312,7 +312,9 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   `ask_person`, `{"code": …}`, with its one sentence in `ask_person_note`, which no line and no read of the item carries
   ([`docs/work-execution.md`](work-execution.md), "Doubts about a send"). Inside a run such a send is created under the
   run's own name: one that names a person, another attempt or nobody is refused `created_as_another_inside_a_run`
-  (403), so a review can tell its author apart.
+  (403), so a review can tell its author apart. The context key `send_review` is the runtime's, the brief of the
+  critic it creates for a send under an automatic send mode: a create or a patch that names it is refused `not_allowed`
+  at that field, on every item, whoever sends it.
 - `workitem.get`
 - `workitem.list`
 - `workitem.count`
@@ -426,8 +428,12 @@ that is not that attempt does not call them.
   when they are claimed. The runtime never takes an entry off the register, and the provider's own sequence is not
   stopped here. **Only a person's own later verdict on the same reply in that verdict's campaign lifts the
   lock**: one recorded under a `human` actor that names the person (`human:<Name>`), outside any run, that states a
-  `nature` other than `opt_out`. A role's or an attempt's own verdict never lifts it, nor does a `human` actor with no
-  name, a verdict that states no nature, or one that carries a `decision_id` by that alone — a run may carry an answer
+  `nature` other than `opt_out`, and not in the desktop's chat: a verdict recorded under the `Jason-Confined` header the
+  CLI sends from there says `confined` on its line and is the chat's, not the person's own, so it lifts nothing, and
+  a standing approval takes it for no person's verdict unless it carries a person's answered decision, which is read
+  as the decision records it. A role's or an attempt's own verdict never lifts it, nor does a
+  `human` actor with no name, a verdict that states no nature, or one that carries a `decision_id` by that alone — a
+  run may carry an answer
   given the other way, before the opt-out, or about another reply. `suppression.remove` takes an entry off the register
   and leaves the lock. A request from inside a
   run — one that carries `Jason-Attempt`, as `jason` sends from there — that names a `human` actor is recorded as that

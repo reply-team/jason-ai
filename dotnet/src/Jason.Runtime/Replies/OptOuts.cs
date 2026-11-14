@@ -15,7 +15,8 @@ namespace Jason.Runtime.Replies;
 /// STANDING: a <c>reply_classified</c> line, in any campaign, whose nature is <c>opt_out</c> and whose body names the
 /// contact, with no later verdict under its key in its campaign that lifts it. Only a person's own verdict lifts it: one
 /// recorded by a <c>human</c> actor who gave a name, outside any run — its line names no attempt — that states a nature
-/// other than <c>opt_out</c>. A nameless human, a verdict that states no nature, a human named from inside a run (such a
+/// other than <c>opt_out</c>, and not under the desktop's chat marker. A nameless human, a verdict that states no nature, a
+/// human named in the chat (such a line carries the chat's mark, <c>confined</c>), a human named from inside a run (such a
 /// line carries the run's attempt), a role's or an attempt's own verdict lift nothing; nor does a verdict that carries a
 /// person's answer to the campaign's question (<c>answered_by</c>) by that alone, since a run may carry an answer the person
 /// gave the other way, before the opt-out, or about another reply. A verdict on another reply, whatever it says, lifts
@@ -50,6 +51,7 @@ public static class OptOuts
                     AND json_extract(lift.new_json, '$.thread') = json_extract(v.new_json, '$.thread')
                     AND lift.key = v.key AND lift.id > v.id
                     AND lift.actor_type = 'human' AND trim(coalesce(lift.actor_id, '')) <> '' AND lift.attempt_id IS NULL
+                    AND json_extract(lift.new_json, '$.confined') IS NULL
                     AND json_extract(lift.new_json, '$.nature') IS NOT NULL AND json_extract(lift.new_json, '$.nature') <> 'opt_out')
             ORDER BY v.public_id
             LIMIT 1

@@ -210,6 +210,17 @@ jason approval list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status approved
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied
 ```
 
+**A send the send mode let go, or held.** Where the person set a send mode of `automatic`, a send that went without
+them is an `approved` approval whose reason is `automatic_mode`, decided under the name of the person who set the mode,
+with a line `approval_automatic_applied` in the campaign's chronicle. A send the mode held waits as any approval does,
+and its reason says why: `approval get --human` gives it as a sentence on its `Why:` line, and the facts on its
+`Send mode:` line. Give the person that sentence with the send. A send written in Jason's chat always waits for the
+person, whatever the send mode or a standing approval says.
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_automatic_applied
+```
+
 ### A search, and the allowance for the ones after it
 
 A search spends the provider's money, so the first search under an audience, its probe, always waits for the person.

@@ -38,6 +38,14 @@ public static class ApprovalGate
     public const string StandingApproval = "standing_approval";
 
     /// <summary>
+    /// Why a send was let go without being parked: the automatic mode in force for its contact released it, a pass of its
+    /// text by the critic or a person standing. The row records the decision of the person who set that mode, and is never a
+    /// question anybody is asked. Its decided moment is the claim's, and a retry writes no other row, so one row is one
+    /// automatic release.
+    /// </summary>
+    public const string AutomaticMode = "automatic_mode";
+
+    /// <summary>
     /// Whether <paramref name="live"/> lets the work run as it now stands without asking anybody: approved, and about
     /// exactly <paramref name="subject"/>. The claim runs work under such a row and reads nothing else about it, its
     /// reviews included, so a review asks this same question of the same row to know whether the claim would hear it.
@@ -206,6 +214,76 @@ public static class ApprovalGate
             JournalKinds.ApprovalStandingApplied,
             campaign: null,
             key: cover.Standing.PublicId,
+            updated: names,
+            workItem: item);
+
+        return approval;
+    }
+
+    /// <summary>
+    /// Writes the decision the automatic mode made for a send: a row born approved, decided at the claim's moment by the
+    /// person who set the mode in force, about the subject the claim would otherwise have parked, with the preview a person
+    /// reading it later sees. One line says the release by identifiers only: the approval, where the mode came from, the
+    /// contact's temperature and the review that released it. No question is asked, so no line says one was, the item never
+    /// waits and nothing is notified.
+    /// </summary>
+    internal static Approval ReleaseUnderMode(
+        JasonDbContext db,
+        JournalWriter journal,
+        WorkItem item,
+        ProviderOpPlan plan,
+        ApprovalSubject subject,
+        JsonObject preview,
+        AutomaticDecision.Release release,
+        DateTime now)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(journal);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentNullException.ThrowIfNull(release);
+        var setBy = release.Mode.SetBy ?? throw new InvalidOperationException("An automatic release names the person who set the mode.");
+        preview[AutomaticRelease.PreviewKey] = release.Facts.DeepClone();
+
+        var approval = new Approval
+        {
+            PublicId = PublicId.New(IdPrefix),
+            WorkItem = item,
+            CampaignId = item.CampaignId,
+            Operation = plan.Contract.Id,
+            OperationVersion = plan.Contract.Version,
+            Subject = subject.Document.DeepClone().AsObject(),
+            SubjectHash = subject.Hash,
+            Preview = preview,
+            PluginId = plan.Plugin.Manifest.Id,
+            BindingIdentity = plan.BindingIdentity,
+            RouteScope = plan.Scope,
+            PluginSnapshotId = plan.PluginSnapshotId,
+            RoutingSnapshotId = plan.RoutingSnapshotId,
+            Status = ApprovalStatus.Approved,
+            Reason = AutomaticMode,
+            RequestedAt = now,
+            DecidedAt = now,
+            DecidedByType = setBy.Type,
+            DecidedById = setBy.Id,
+        };
+
+        db.Approvals.Add(approval);
+
+        // As at a park: no sentence is kept on the row past this write.
+        Doubts.ClearAtPark(item);
+        var names = Names(approval);
+        names["source"] = release.Facts["source"]?.DeepClone();
+        names["temperature"] = AutomaticRelease.Word(release.Temperature);
+        names["review"] = release.Review;
+        journal.Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.ApprovalAutomaticApplied,
+            campaign: null,
+            key: AutomaticRelease.Word(release.Temperature),
             updated: names,
             workItem: item);
 

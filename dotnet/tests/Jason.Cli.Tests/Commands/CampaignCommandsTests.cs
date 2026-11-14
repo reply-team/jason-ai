@@ -183,7 +183,7 @@ public class CampaignCommandsTests
     }
 
     [Theory]
-    [InlineData(new[] { "--clear", "both" }, "--clear names cold or warm.")]
+    [InlineData(new[] { "--clear", "both" }, "--clear takes cold or warm; 'both' is not one of them.")]
     [InlineData(new string[0], "campaign set-send-mode needs --cold, --warm or --clear")]
     [InlineData(new[] { "--clear", "cold", "--cold", "every_message" }, "--cold and --clear cold both name the cold mode: set it or give it back, not both.")]
     [InlineData(new[] { "--warm", "automatic", "--clear", "warm" }, "--warm and --clear warm both name the warm mode: set it or give it back, not both.")]

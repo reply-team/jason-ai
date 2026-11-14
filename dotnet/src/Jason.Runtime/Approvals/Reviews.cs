@@ -130,13 +130,13 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             JournalKinds.WorkItemReviewed,
             item.Campaign,
             key: hash,
-            updated: new JsonObject
+            updated: ConfinedScope.Mark(new JsonObject
             {
                 ["result"] = JsonSerializer.SerializeToNode(request.Result!.Value, JasonJson.Options),
                 ["code"] = request.Result == ReviewResult.Doubts ? request.Code : null,
                 ["operation"] = item.Operation,
                 ["role"] = role,
-            },
+            }),
             workItem: item,
             attempt: attempt);
 

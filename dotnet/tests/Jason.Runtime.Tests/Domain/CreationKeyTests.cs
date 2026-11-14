@@ -301,6 +301,7 @@ public class CreationKeyTests
         [typeof(JsonObject)] = (null, null),
         [typeof(JsonNode)] = (null, null),
         [typeof(ActorRef)] = (new ActorRef(ActorType.Human, "ada"), new ActorRef(ActorType.Human, "grace")),
+        [typeof(IReadOnlyList<string>)] = (new[] { "wi_01K000000000000000000000AA" }, new[] { "wi_01K000000000000000000000AB" }),
     };
 
     private static void AssertEveryMemberDecides<T>(Func<T, string> digest)
