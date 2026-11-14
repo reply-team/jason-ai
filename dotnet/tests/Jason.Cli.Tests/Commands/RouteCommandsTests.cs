@@ -10,6 +10,21 @@ namespace Jason.Cli.Tests.Commands;
 
 public class RouteCommandsTests
 {
+    /// <summary>The help of route unset names its global form, as route set's does.</summary>
+    [Fact]
+    public void Unset_says_its_global_form_in_its_help()
+    {
+        using var paths = new TempPaths();
+        var unset = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths))
+            .Subcommands.Single(command => command.Name == "route")
+            .Subcommands.Single(command => command.Name == "unset");
+
+        Assert.StartsWith(
+            "Take one campaign route away, and with it whatever it was hiding, or with --global the route every campaign follows that has none of its own. ",
+            unset.Description,
+            System.StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Resolve_sends_the_campaign_and_the_operation()
     {

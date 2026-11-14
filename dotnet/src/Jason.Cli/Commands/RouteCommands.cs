@@ -157,7 +157,7 @@ public static class RouteCommands
 
     private static Command Unset(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("unset", "Take one campaign route away, and with it whatever it was hiding, or with --global the route of every campaign's that has none of its own. " + ActorOption.NoDefaultForAnAct);
+        var command = new Command("unset", "Take one campaign route away, and with it whatever it was hiding, or with --global the route every campaign follows that has none of its own. " + ActorOption.NoDefaultForAnAct);
         var campaign = Campaign("The campaign whose route is being removed.", required: false);
         var global = Global("Take one global route away. Written and in force at once, as `route set --global`.");
         var operation = Operation("The operation override to remove; leave it out for the campaign's default route.", required: false);

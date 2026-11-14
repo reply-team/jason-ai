@@ -732,7 +732,7 @@ public class GlobalRouteWriteTests
         Assert.Equal("settings_file_not_writable", error.Code);
         Assert.False(error.Retryable);
         Assert.Equal(
-            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; make it writable, then run the command again.",
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then run the command again.",
             error.Message);
         Assert.Equal(Original, File.ReadAllText(path));
         Assert.Empty(TemporaryFiles(api.Paths));
