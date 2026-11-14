@@ -153,7 +153,7 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
         }
         catch (JsonException malformed)
         {
-            return Unreadable(path, string.Create(CultureInfo.InvariantCulture, $"it is not JSON at line {malformed.LineNumber}, byte {malformed.BytePositionInLine}"));
+            return Unreadable(path, string.Create(CultureInfo.InvariantCulture, $"it is not JSON at line {malformed.LineNumber + 1}, byte {malformed.BytePositionInLine + 1}"));
         }
 
         if (FirstUntextableString(bytes) is { } untextable)
@@ -237,12 +237,12 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
         return null;
     }
 
-    /// <summary>The reason for a stamp that is not JSON at <paramref name="index"/>, counted as the parser counts: lines and bytes from 0.</summary>
+    /// <summary>The reason for a stamp that is not JSON at <paramref name="index"/>, counted from 1 as an editor does and as the settings file's refusal counts: the parser counts from 0.</summary>
     private static string NotJsonAt(ReadOnlySpan<byte> bytes, long index)
     {
         var before = bytes[..(int)index];
         var line = before.Count((byte)'\n');
         var start = before.LastIndexOf((byte)'\n') + 1;
-        return string.Create(CultureInfo.InvariantCulture, $"it is not JSON at line {line}, byte {index - start}");
+        return string.Create(CultureInfo.InvariantCulture, $"it is not JSON at line {line + 1}, byte {index - start + 1}");
     }
 }

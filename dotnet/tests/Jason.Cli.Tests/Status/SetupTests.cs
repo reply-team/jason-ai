@@ -170,7 +170,7 @@ public class SetupTests
         var report = StatusCommandTests.Read(output);
         var layout = Assert.Single(report.Checks, check => check.Name == "layout");
         Assert.Equal(CheckState.Failed, layout.State);
-        Assert.Contains("cannot be read (it is not JSON at line 0, byte 10)", layout.Fact, StringComparison.Ordinal);
+        Assert.Contains("cannot be read (it is not JSON at line 1, byte 11)", layout.Fact, StringComparison.Ordinal);
         Assert.Null(layout.Details);
         Assert.Contains(human.ToString().Split(Environment.NewLine), line => line.StartsWith("Layout:", StringComparison.Ordinal) && line.EndsWith(" unreadable", StringComparison.Ordinal));
     }
