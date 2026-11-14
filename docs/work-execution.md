@@ -1347,7 +1347,7 @@ composed input names that sender at `/args/sender/external_id` and, where the bl
 `/args/channel`: a provider may number its mailboxes apart from its social accounts, so that one identifier names a
 mailbox and a LinkedIn account at once, and a block of one is not a block of the other. A sender's block that names a
 channel governs that channel; the sender's block that names none governs every channel that has no open block of its
-own — every block opened before 0.43.0 is one. Work on a channel whose block is open is held by that block, then, and
+own — every block opened before 0.43.0 is one. So work on a channel whose block is open is held by that block, and
 the sender's other work by the block that names no channel. An item that met a sender's block and names no sender
 parks alone, on that block.
 
@@ -1377,7 +1377,9 @@ work let through as a trial asks the person again where the attempt the block re
 pin is a change to the input the person approved (§Approvals, what is approved is a subject). A block that is due but
 holds nothing that could run now lets the next held item the claim meets through as its trial instead. The trial of a
 sender's block that names no channel is drawn among the items it holds whose channel has no open block of that
-sender, since that channel's block governs them; such a block may sit open with nothing it may draw, and it still
+sender, since that channel's block governs them: the trial of a sender's block on one channel is drawn from the items
+the block that names no channel holds on that channel as well as from its own, as an account's is drawn from the items
+its senders' blocks hold. A block that names no channel may therefore sit open with nothing it may draw; it still
 holds every channel that has no block of its own until a send of any channel gets past it. A sender's block on one
 channel has its trials whether or not the block that names none is open: neither waits for the other, unlike a
 sender's block, which holds no trial of its own while its account's block is open. An item let through as the trial
@@ -1390,13 +1392,15 @@ block:
   `block_cleared`. Any call of held `act` work the provider judged on the work clears its open block, a trial or not —
   the account's, and its sender's on its own channel and on every channel, never the same identifier's on another
   channel — and a trial clears the block that let it through whether or not its input names a sender. Nothing else
-  clears a block but a person: a block that opens on one channel clears nothing;
+  clears a sender's block but a person: a block that opens on one channel clears nothing;
 - **it answered `blocked` again** — the trial parks once more on the block, which is seen again and its next trial
   put off; nobody is told twice. The account's trial that meets a sender's block has got past the account where the
   trial was held `act` work, and the account's block clears; where it was a control, the account's next trial is a
   cadence off. The trial of a sender's block that names no channel that meets that sender's block on one channel has
-  got past nothing, an act or a control: that channel's block opens, or is seen again, and the block that names no
-  channel stays open, undecided, its next trial a cadence off. Either way the item parks on the block it met;
+  got past nothing, whether the trial was held `act` work or a control: that channel's block opens, or is seen again,
+  and the block that names no channel stays open, undecided, its next trial a cadence off. The trial of a sender's
+  block on one channel that meets that sender's block that names no channel has got past nothing either: the block on
+  the channel stays open, undecided, its next trial a cadence off. Either way the item parks on the block it met;
 - **anything else** — `transient`, `ambiguous`, an answer outside the contract, the host's own ending, or a code
   reserved beside every operation, which no provider judgment of the work stands behind (`provider_input_invalid`, which
   a package answers before any call, [the input a plugin receives](contracts/README.md#the-input-a-plugin-receives);

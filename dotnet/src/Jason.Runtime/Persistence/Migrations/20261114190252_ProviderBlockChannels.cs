@@ -44,8 +44,9 @@ namespace Jason.Runtime.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Down cannot make the old index again once one sender has two blocks open on two channels, a mailbox and a
-            // LinkedIn account of one identifier say: the old index holds one open block a sender, and the create fails.
+            // Down cannot make the old index again once one sender has two blocks open, on two channels or on one and on
+            // every channel, a mailbox and a LinkedIn account of one identifier say: the old index holds one open block a
+            // sender, and the create fails.
             migrationBuilder.DropIndex(
                 name: "ix_provider_blocks_one_open_per_sender",
                 table: "provider_blocks");
