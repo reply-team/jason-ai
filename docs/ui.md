@@ -340,7 +340,7 @@ jason session open --setup --host codex
   file of Jason's; on macOS it writes the one script an item's session writes.
 - **The brief** is short: two lines that say what the session is for, where the parts are read (`jason status`), what is
   never touched (the settings file while it holds plugins' secrets, anything of Jason's outside the role skills and
-  plugins folders, routes and grants being changed with `jason`'s own commands, and a secret, which is yours to type),
+  plugins folders, routes and grants being changed with Jason's own commands, and a secret, which is yours to type),
   and that the skill `customising-jason` teaches the rest. It is one word of the host's command line, as an item's brief
   is, and carries no path, id or secret. The skill itself is read where `jason skills install` deployed it; the answer
   says whether it is deployed for the host it opens, from the record a deployment keeps in that host's skills folder.
