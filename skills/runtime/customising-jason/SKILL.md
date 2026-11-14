@@ -21,12 +21,13 @@ Run this, and read the `setup` section of what it prints:
 jason status
 ```
 
-It names the role skills folder, the plugins folder, the custom UI folder and the settings file. Read every folder
-there; never assume one.
+It names the role skills folder, the plugins folder, the custom UI folder and the settings file. Take every path
+from there; never assume one.
 
 ## 2. What you never touch
 
 - The settings file, while `settings_file_holds_secrets` is true in that section: plugins' secrets are kept in it.
   Never open it.
-- Anything of Jason's outside the role skills folder and the plugins folder.
+- Any file of Jason's outside the role skills folder and the plugins folder: routes and grants are changed with
+  jason's own commands, as above.
 - A secret: it is the person's own to type. Never ask them to give one to you.

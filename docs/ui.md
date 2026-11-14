@@ -340,10 +340,13 @@ jason session open --setup --host codex
   file of Jason's; on macOS it writes the one script an item's session writes.
 - **The brief** is short: two lines that say what the session is for, where the parts are read (`jason status`), what is
   never touched (the settings file while it holds plugins' secrets, anything of Jason's outside the role skills and
-  plugins folders, and a secret, which is yours to type), and that the skill `customising-jason` teaches the rest. It is
-  one word of the host's command line, as an item's brief is, and carries no path, id or secret. The skill itself is
-  read where `jason skills install` deployed it; the answer says whether it is deployed for the host it opens, from the
-  record a deployment keeps in that host's skills folder.
+  plugins folders, routes and grants being changed with `jason`'s own commands, and a secret, which is yours to type),
+  and that the skill `customising-jason` teaches the rest. It is one word of the host's command line, as an item's brief
+  is, and carries no path, id or secret. The skill itself is read where `jason skills install` deployed it; the answer
+  says whether it is deployed for the host it opens, from the record a deployment keeps in that host's skills folder.
+  Where that record does not show it deployed, or cannot be read, the brief's last line says so to the agent too, and
+  asks it to install the skill with `jason skills install --host <host>` on your yes before it changes anything of
+  Jason's.
 - **What it prints.** One object: `kind` (`setup`), `folder` (`level` `role_skills`, and `path`), `plugins_folder`
   (`path`, `added`, and where it was not added `reason`: `host_takes_no_folder` or `folder_missing`), `host`, `skill`
   (`name`, `customising-jason`; `deployed`, true, false, or null where the record could not be read; and `root`, the

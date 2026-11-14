@@ -66,7 +66,7 @@ public sealed class SetupSessionTests : IDisposable
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(["preference.list"], _run.Asked);
         var launch = Assert.Single(_run.Terminals.Launches);
-        Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.Text, "--add-dir", _setup.PluginsDirectory], launch.Argv);
+        Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.For("claude_code", deployed: true), "--add-dir", _setup.PluginsDirectory], launch.Argv);
         Assert.Equal(_setup.RoleSkillsDirectory, launch.WorkingDirectory);
         var answer = Answer();
         Assert.Equal(["kind", "folder", "plugins_folder", "host", "skill", "program", "terminal", "started"], answer.Select(field => field.Key).ToArray());
@@ -109,7 +109,7 @@ public sealed class SetupSessionTests : IDisposable
         var exit = await _run.Cli("session", "open", "--setup");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal([_run.ConsoleHost, "--", codex, SetupBrief.Text, "--add-dir", _setup.PluginsDirectory], Assert.Single(_run.Terminals.Launches).Argv);
+        Assert.Equal([_run.ConsoleHost, "--", codex, SetupBrief.For("codex", deployed: false), "--add-dir", _setup.PluginsDirectory], Assert.Single(_run.Terminals.Launches).Argv);
         Assert.Equal(SkillsRoot(AgentHostKind.Codex), (string?)Answer()["skill"]!["root"]);
     }
 
@@ -122,7 +122,7 @@ public sealed class SetupSessionTests : IDisposable
         var exit = await _run.Cli("session", "open", "--setup", "--host", "copilot_cli");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal([_run.ConsoleHost, "--", copilot, "-i", SetupBrief.Text], Assert.Single(_run.Terminals.Launches).Argv);
+        Assert.Equal([_run.ConsoleHost, "--", copilot, "-i", SetupBrief.For("copilot_cli", deployed: false)], Assert.Single(_run.Terminals.Launches).Argv);
         var folder = Answer()["plugins_folder"]!.AsObject();
         Assert.Equal(["path", "added", "reason"], folder.Select(field => field.Key).ToArray());
         Assert.False((bool)folder["added"]!);
@@ -139,7 +139,7 @@ public sealed class SetupSessionTests : IDisposable
         var exit = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.Text], Assert.Single(_run.Terminals.Launches).Argv);
+        Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.For("claude_code", deployed: false)], Assert.Single(_run.Terminals.Launches).Argv);
         Assert.False((bool)Answer()["plugins_folder"]!["added"]!);
         Assert.Equal("folder_missing", (string?)Answer()["plugins_folder"]!["reason"]);
         Assert.False(Directory.Exists(_setup.PluginsDirectory));
@@ -228,7 +228,7 @@ public sealed class SetupSessionTests : IDisposable
         var answer = Answer();
         Assert.False((bool)answer["started"]!);
         Assert.Equal(
-            [_run.ConsoleHost, "--", claude, SetupBrief.Text, "--add-dir", _setup.PluginsDirectory],
+            [_run.ConsoleHost, "--", claude, SetupBrief.For("claude_code", deployed: false), "--add-dir", _setup.PluginsDirectory],
             answer["argv"]!.AsArray().Select(word => word!.GetValue<string>()));
     }
 
@@ -247,7 +247,7 @@ public sealed class SetupSessionTests : IDisposable
         var script = answer["script"]!.GetValue<string>().Split('\n');
         Assert.Contains("cd -- " + TerminalPlan.ShellQuote(_setup.RoleSkillsDirectory) + " || exit 1", script);
         Assert.Contains(
-            "exec " + string.Join(' ', new[] { claude, SetupBrief.Text, "--add-dir", _setup.PluginsDirectory }.Select(TerminalPlan.ShellQuote)),
+            "exec " + string.Join(' ', new[] { claude, SetupBrief.For("claude_code", deployed: false), "--add-dir", _setup.PluginsDirectory }.Select(TerminalPlan.ShellQuote)),
             answer["script"]!.GetValue<string>(),
             StringComparison.Ordinal);
     }
@@ -312,6 +312,31 @@ public sealed class SetupSessionTests : IDisposable
                 "The skill customising-jason, which teaches this session the job, is not deployed for claude_code: `jason skills install --host claude_code` deploys it.",
             ],
             _run.Output.ToString().TrimEnd().Split('\n').Select(line => line.TrimEnd('\r')));
+    }
+
+    /// <summary>
+    /// The agent never sees the line a person is shown under <c>--human</c>, so the brief itself says what the receipt said:
+    /// use the skill where it is deployed, and where it is not, or the receipt cannot be read, have it installed on the
+    /// person's yes before anything of Jason's is changed. Unknown is never taken for deployed.
+    /// </summary>
+    [Fact]
+    public async Task Setup_brief_follows_what_the_receipt_said()
+    {
+        _run.Programs.AddProgram("claude");
+        string Brief() => Assert.Single(_run.Terminals.Launches).Argv[3];
+
+        _ = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+        Assert.Equal(SetupBrief.For("claude_code", deployed: false), Brief());
+
+        _run.Terminals.Launches.Clear();
+        DeploySkill(AgentHostKind.ClaudeCode);
+        _ = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+        Assert.Equal(SetupBrief.For("claude_code", deployed: true), Brief());
+
+        _run.Terminals.Launches.Clear();
+        File.WriteAllText(Path.Combine(SkillsRoot(AgentHostKind.ClaudeCode), SkillsRecord.FileName), "not a record");
+        _ = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+        Assert.Equal(SetupBrief.For("claude_code", deployed: false), Brief());
     }
 
     /// <summary>A skill deployed for another host's root is not deployed for this one: the receipt is read per host.</summary>

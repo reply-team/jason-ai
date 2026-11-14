@@ -87,7 +87,7 @@ public static class SetupSessionOpener
                 $"No terminal was found to start {hostWord} in, so nothing was started; `jason session open --setup --dry-run` prints the command and its brief, to run in a terminal of your own.");
         }
 
-        IReadOnlyList<string> program = [.. chosen.Program, .. AgentHosts.InteractiveArguments(host, SetupBrief.Text, notAdded is null ? plugins : null)];
+        IReadOnlyList<string> program = [.. chosen.Program, .. AgentHosts.InteractiveArguments(host, SetupBrief.For(hostWord, skill.Deployed == true), notAdded is null ? plugins : null)];
         var launch = TerminalPlan.Compose(terminals.Platform, terminal, folder, program, "setup", SessionOpener.DataDirectory(env));
         if (!dryRun && !terminals.Start(launch, out var problem))
         {
