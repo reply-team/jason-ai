@@ -100,12 +100,18 @@ shows. Approving, rejecting and answering are the person's, here as on the comma
 brief an agent on one item, [Copy prompt](#copy-prompt) and [Open an AI session](#open-an-ai-session).
 
 **The send modes.** A pending approval's card carries the installation's open question, `send_modes_unset` on every
-approval answer: for people who have not replied yet and for people who have, whether every message waits for you or goes
-automatically. Nothing is chosen for you; **Remember this** sets `send_mode.cold` or `send_mode.warm` as you
-(`jason preference set`), and the question is gone once both are set. Approve and Reject never wait on it. A send that
-was doubted shows, above the message, who doubted it and why, with the sentence they wrote drawn as text
-(`preview.doubts`). Once the modes are answered, a quiet line points to Settings, "Your name and tone", while either is
-unset, and **Hide for 7 days** keeps it away for a week in this browser's own storage, nothing sent to the runtime. An
+approval answer: for people who have not replied yet and for people who have, whether every message waits for you or
+goes automatically. Nothing is chosen for you; **Remember this** sets `send_mode.cold` or `send_mode.warm` as you
+(`jason preference set`), and the question is gone once both are set. Approve and Reject never wait on it. Once a kind
+is remembered as going automatically, the mode is on, and the card recommends, with **Open Settings** beside it and
+nothing to answer, saying who writes and how under "Your name and tone", which makes those messages err less. A send
+that was doubted shows, above the message, who doubted it and why, with the sentence they wrote drawn as text
+(`preview.doubts`). While a mode in force goes automatically, the installation's own or that of the card's agent
+(`send_modes_in_force` of `campaign.get`), and the name or the tone is unset, a quiet line points to Settings, "Your
+name and tone"; while every mode waits for you it never shows, and it goes once both are set. **Hide for 7 days** keeps
+it away for a week in this browser's own storage, nothing sent to the runtime. **How messages go** in Settings sets the
+two for every agent, each kind on its own press as you (`jason preference set`), and **Forget my answer** gives one back
+(`jason preference unset`): a kind nobody has answered waits for you on every message, and the cards ask again. An
 agent's **Settings** tab says what each kind goes under for that agent and from where (`send_modes_in_force`), and sets
 the agent's own or gives it back to the choice for every agent (`jason campaign set-send-mode`); System says the
 installation's (`send_modes` of `system.info`).
