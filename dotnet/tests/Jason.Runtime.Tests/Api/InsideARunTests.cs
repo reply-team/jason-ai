@@ -61,7 +61,7 @@ public class InsideARunTests
         Assert.Equal("decided_inside_a_run", error.Code);
         Assert.False(error.Retryable);
         Assert.Equal(
-            $"This request comes from inside attempt `{HeaderAttempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
+            $"This request comes from inside attempt `{HeaderAttempt}`. An approval, an answer or a plugin's grant is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
             error.Message);
         Assert.Equal(before, await StateAsync(api));
 
@@ -136,7 +136,12 @@ public class InsideARunTests
         var (unread, unreadText) = await api.PostRawAsync(operation, "{not json", Inside, Ct);
 
         Assert.True(status == HttpStatusCode.Forbidden, $"{operation} answered {(int)status}: {text}");
-        Assert.Equal("decided_inside_a_run", JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error.Code);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
+        Assert.Equal("decided_inside_a_run", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Equal(
+            $"This request comes from inside attempt `{HeaderAttempt}`. An approval, an answer or a plugin's grant is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.",
+            error.Message);
         Assert.True(unread == HttpStatusCode.Forbidden, $"{operation} answered {(int)unread}: {unreadText}");
         Assert.Equal(before, File.ReadAllBytes(api.Paths.UserSettingsFile));
         Assert.Equal(
