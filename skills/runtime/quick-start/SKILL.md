@@ -28,7 +28,7 @@ When the answer comes, make the campaign in the default project, with the offer 
 its context (`managed-campaign-work` says how a campaign is made; leave `--project` out):
 
 ```
-jason campaign create --name "First campaign" --context '{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia"}' --idempotency-key first-campaign
+jason campaign create --name "First campaign" --context '{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}' --idempotency-key first-campaign
 ```
 
 Then ask the runtime which channels a send would go through, for each of `email` and `linkedin`:
