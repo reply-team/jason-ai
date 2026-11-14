@@ -45,7 +45,7 @@ for changing Jason.
 Paste this into your AI (Claude Code, Codex or another agent). It installs Jason and takes you to your first campaign.
 
 ```text
-Install Jason by following https://get.jasonharness.ai/install.
+Install Jason by following https://get.jasonharness.ai/install
 When it reports Ready, start its quick-start skill and take me to my first campaign.
 If anything stops you, ask me directly and tell me why.
 ```
