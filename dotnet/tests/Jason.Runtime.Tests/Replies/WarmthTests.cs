@@ -578,6 +578,76 @@ public class WarmthTests
     }
 
     /// <summary>
+    /// A read proves the transcript only when its page was the whole thread: a result whose <c>has_more</c> says more
+    /// follow, or that says nothing readable about it (the member absent, null, not a boolean, or no result at all),
+    /// proves nothing, so the responder that waited on it judges nothing, and the contact waits.
+    /// </summary>
+    [Theory]
+    [InlineData("more to come")]
+    [InlineData("no has_more")]
+    [InlineData("has_more null")]
+    [InlineData("has_more a number")]
+    [InlineData("has_more a string")]
+    [InlineData("no result")]
+    public async Task A_responder_whose_read_was_not_the_whole_thread_judges_nothing(string which)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var item = await CreatedResponderAsync(db, seed, seed.Contact, "thr-1", readEnds: null);
+        var read = await ReadOfAsync(db, item);
+        var result = PageOf(read, hasMore: which == "more to come");
+        switch (which)
+        {
+            case "no has_more":
+                result.Remove("has_more");
+                break;
+            case "has_more null":
+                result["has_more"] = null;
+                break;
+            case "has_more a number":
+                result["has_more"] = 0;
+                break;
+            case "has_more a string":
+                result["has_more"] = "false";
+                break;
+        }
+
+        await EndReadAsync(db, read, WorkItemStatus.Succeeded, result: result, noResult: which == "no result");
+        var attempt = await StartAsync(db, item);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// The twin of the rows above: a read whose page was the whole thread, <c>has_more</c> false, proves the transcript,
+    /// and the responder that ran after it succeeded judges the line with a person verdict standing.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_whose_read_was_the_whole_thread_judges_the_line()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var item = await CreatedResponderAsync(db, seed, seed.Contact, "thr-1", readEnds: null);
+        var read = await ReadOfAsync(db, item);
+        await EndReadAsync(db, read, WorkItemStatus.Succeeded, result: PageOf(read, hasMore: false));
+        var attempt = await StartAsync(db, item);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
     /// A responder created after the line whose pointer names an older read of the same thread, one that succeeded before
     /// the line was written, judges nothing: that read cannot have seen the message that moved the thread.
     /// </summary>
@@ -1128,9 +1198,11 @@ public class WarmthTests
 
     /// <summary>
     /// The read ends now as <paramref name="status"/> says: one that ran has an attempt whose provenance names the plugin
-    /// it ran at; its transition's line is written here.
+    /// it ran at; its transition's line is written here. One that succeeded carries <paramref name="result"/>, by default
+    /// the whole thread as one page, nothing more to come; <paramref name="noResult"/> leaves it with none.
     /// </summary>
-    private static async Task EndReadAsync(JasonDbContext db, WorkItem read, WorkItemStatus status, string plugin = "mailbox")
+    private static async Task EndReadAsync(
+        JasonDbContext db, WorkItem read, WorkItemStatus status, string plugin = "mailbox", JsonNode? result = null, bool noResult = false)
     {
         Attempt? attempt = null;
         if (status is WorkItemStatus.Succeeded or WorkItemStatus.Failed)
@@ -1146,10 +1218,15 @@ public class WarmthTests
         var from = read.Status;
         read.Status = status;
         read.FinishedAt = Noon;
+        if (status == WorkItemStatus.Succeeded && !noResult)
+        {
+            read.Result = result ?? PageOf(read, hasMore: false);
+        }
+
         await db.SaveChangesAsync(Ct);
         var (key, old, updated) = status switch
         {
-            WorkItemStatus.Succeeded => ("result_present", (JsonNode?)null, (JsonNode?)JsonValue.Create(false)),
+            WorkItemStatus.Succeeded => ("result_present", (JsonNode?)null, (JsonNode?)JsonValue.Create(read.Result is not null)),
             WorkItemStatus.Failed => (attempt!.PublicId, null, new JsonObject { ["code"] = "provider_unavailable", ["message"] = "The read failed.", ["retriable"] = false }),
             WorkItemStatus.Cancelled => ("status", JsonValue.Create("scheduled"), JsonValue.Create("cancelled")),
             _ => ("due_at", JsonValue.Create("2026-09-14T12:00:00.000Z"), null),
@@ -1183,8 +1260,9 @@ public class WarmthTests
             attempt.Status = AttemptStatus.Succeeded;
             read.Status = WorkItemStatus.Succeeded;
             read.FinishedAt = Noon;
+            read.Result = PageOf(read, hasMore: false);
             await db.SaveChangesAsync(Ct);
-            Writer.Append(db, Actors.Dispatcher, JournalKinds.WorkItemSucceeded, campaign: null, key: "result_present", updated: JsonValue.Create(false), workItem: read, attempt: attempt);
+            Writer.Append(db, Actors.Dispatcher, JournalKinds.WorkItemSucceeded, campaign: null, key: "result_present", updated: JsonValue.Create(true), workItem: read, attempt: attempt);
         }
         else
         {
@@ -1205,6 +1283,27 @@ public class WarmthTests
 
         await db.SaveChangesAsync(Ct);
     }
+
+    /// <summary>
+    /// A <c>conversation.get</c> result in the shape the contract publishes, for the thread the read's input names: one
+    /// message, and <c>has_more</c> as <paramref name="hasMore"/> says.
+    /// </summary>
+    private static JsonObject PageOf(WorkItem read, bool hasMore) => new()
+    {
+        ["thread"] = new JsonObject
+        {
+            ["external_id"] = read.Context["input"]!["thread"]!["external_id"]!.DeepClone(),
+            ["channel"] = "email",
+            ["subject"] = "Spring",
+            ["contact"] = null,
+            ["campaign_external_id"] = null,
+            ["unread"] = true,
+            ["vendor"] = new JsonObject { ["category"] = null, ["has_ai_draft"] = false },
+        },
+        ["messages"] = new JsonArray(new JsonObject { ["external_id"] = "msg-2" }),
+        ["has_more"] = hasMore,
+        ["vendor"] = new JsonObject { ["ordering"] = "oldest_first" },
+    };
 
     /// <summary>The read the responder names in its <c>inbound_reply.read</c>.</summary>
     private static Task<WorkItem> ReadOfAsync(JasonDbContext db, WorkItem responder)

@@ -46,13 +46,16 @@ public enum WarmthState
 /// judged. A verdict judges a line when it stands, says a nature, and is about a message
 /// at or after the line's move, or by the responder's arm (our own send into a replied thread moves it, and the
 /// responder that wakes on it finds the verdict standing and records nothing). The responder's arm, in one sentence: a
-/// verdict with a nature stands while a real <c>conversation.get</c> of the line's own thread was made after the line,
-/// that read succeeded, and the responder that waited on it ran after it succeeded and succeeded itself.
+/// verdict with a nature stands while a real <c>conversation.get</c> of the line's own thread, whose page was the whole
+/// thread, was made after the line, that read succeeded, and the responder that waited on it ran after it succeeded and
+/// succeeded itself.
 /// Each is a fact of the chronicle. The read is the one row the responder's <c>inbound_reply.read</c> names: a
 /// provider operation the system created in the campaign, its input naming the thread, with an attempt that succeeded
-/// at the line's plugin; the responder is the system's too, about the contact, on the same plugin and thread, and
-/// created after the line. "Made after" is the read's <c>workitem_created</c> line above the line's; "ran after" is a
-/// <c>workitem_processing</c> line of the responder above the read's <c>workitem_succeeded</c> line. A responder with
+/// at the line's plugin, and its frozen result saying <c>has_more</c> false, nothing more to come; a result that says
+/// more, or says nothing readable of it, proves nothing; the responder is the system's too, about the contact, on the
+/// same plugin and thread, and created after the line. "Made after" is the read's <c>workitem_created</c> line above
+/// the line's; "ran after" is a <c>workitem_processing</c> line of the responder above the read's
+/// <c>workitem_succeeded</c> line. A responder with
 /// no read (no route named the plugin that saw the thread, or the read refused its identifier), over a read that
 /// failed, was cancelled or expired, or released at its wait's ceiling while the read was still open, saw no
 /// transcript and judges no line. A responder or a read whose context anyone but the system patched judges nothing:
@@ -179,12 +182,12 @@ public static class Warmth
     /// <summary>
     /// Whether a standing verdict on the observed line <c>o</c>'s thread, whose nature passes <paramref name="nature"/>,
     /// judges it: about a message at or after its move, or by the responder's arm, whose rule in one sentence is: a real
-    /// <c>conversation.get</c> of the line's own thread was made after the line, that read succeeded, and the responder
-    /// that waited on it ran after it succeeded and succeeded itself. Neither the responder nor the read may carry a patch
-    /// of its context by anyone but the system; the dispatcher's own patch of a further move is the system's and counts
-    /// for nothing against it. Correlated with the line <paramref name="line"/> alone and the contact the responder is
-    /// about, <paramref name="contact"/>, an expression. The verdicts are read by the line's thread, through the verdicts'
-    /// thread index.
+    /// <c>conversation.get</c> of the line's own thread, whose page was the whole thread, was made after the line, that
+    /// read succeeded, and the responder that waited on it ran after it succeeded and succeeded itself. Neither the
+    /// responder nor the read may carry a patch of its context by anyone but the system; the dispatcher's own patch of a
+    /// further move is the system's and counts for nothing against it. Correlated with the line <paramref name="line"/>
+    /// alone and the contact the responder is about, <paramref name="contact"/>, an expression. The verdicts are read by
+    /// the line's thread, through the verdicts' thread index.
     /// </summary>
     private static string Judged(string line, string nature, string contact) => $"""
         EXISTS (SELECT 1 FROM journal AS v INDEXED BY ix_journal_campaign_verdict_thread
@@ -209,7 +212,9 @@ public static class Warmth
     /// Whether the read the responder <paramref name="responder"/> names in its <c>inbound_reply.read</c> is a real
     /// <c>conversation.get</c> of the line <paramref name="line"/>'s thread, made after the line, that succeeded before the
     /// responder ran: one row by its public id, the system's, of the line's campaign, its input naming the thread, an
-    /// attempt of it that succeeded at the line's plugin; its own <c>workitem_created</c> line above the line's; and a
+    /// attempt of it that succeeded at the line's plugin; its frozen result's <c>has_more</c>, the member the operation's
+    /// contract publishes, false: the page was the whole thread, and a result that says more, or whose member is absent,
+    /// null or not a boolean, proves nothing; its own <c>workitem_created</c> line above the line's; and a
     /// <c>workitem_processing</c> line of the responder above the read's <c>workitem_succeeded</c> line. The wait from
     /// creation is released at its ceiling too, with the read still open, so a responder may run before its read ended;
     /// one that did saw no transcript. A read whose context anyone but the system patched counts for nothing. The item's
@@ -220,6 +225,7 @@ public static class Warmth
             WHERE g.public_id = json_extract({responder}.context_json, '$.inbound_reply.read')
               AND g.campaign_id = {responder}.campaign_id AND g.kind = 'provider_op' AND g.operation = '{Responder.ReadOperation}'
               AND g.created_by_type = 'system' AND g.status = 'succeeded'
+              AND CASE WHEN json_valid(g.result_json) THEN json_type(g.result_json, '$.has_more') END = 'false'
               AND json_extract(g.context_json, '$.{WorkItemService.InputKey}.thread.external_id') = json_extract({line}.new_json, '$.thread')
               AND EXISTS (SELECT 1 FROM attempts AS ga INDEXED BY ix_attempts_work_item_id_number
                   WHERE ga.work_item_id = g.id AND ga.status = 'succeeded'
