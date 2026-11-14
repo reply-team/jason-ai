@@ -31,6 +31,13 @@ public sealed class JasonPaths
     public string DatabaseFile => Path.Combine(StateDirectory, "jason.db");
     public string ConfigDirectory => Path.Combine(Root, "config");
     public string UserSettingsFile => Path.Combine(ConfigDirectory, "settings.json");
+
+    /// <summary>
+    /// Whether this layout keeps plugins' configuration (<c>Plugins:Config</c>), their secrets among it, in
+    /// <see cref="UserSettingsFile"/> as well: in this layout there is one settings file, and it does. A fact of the layout,
+    /// never of the file's content, so it holds for a file with no such key and for no file at all.
+    /// </summary>
+    public bool UserSettingsFileHoldsSecrets => true;
     public string PluginsDirectory => Path.Combine(Root, "plugins");
     public string UiDirectory => Path.Combine(Root, "ui");
     public string UiDefaultDirectory => Path.Combine(UiDirectory, "default");
