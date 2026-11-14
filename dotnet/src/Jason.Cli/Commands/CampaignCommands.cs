@@ -244,6 +244,7 @@ public static class CampaignCommands
             "set-send-mode",
             "Set this campaign's own send mode: automatic, and its sends go without being asked, or every_message, and each one waits for a person. "
                 + "Cold is a contact who has not answered in the campaign, warm one who has; a mode the campaign does not set follows the installation's preference. "
+                + "Name --cold, --warm or both: naming neither is refused, and so is an archived campaign. "
                 + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = CampaignId();
         var cold = new Option<string?>("--cold") { Description = "The mode for a contact who has not answered in the campaign: automatic or every_message. Absent leaves it alone." };
