@@ -146,7 +146,9 @@ export function sideView(): Html {
         </div>
         <div class="menuwrap create">
             <div class="newrow">
-                <button class="newbtn" type="button" ${act('side.start')}>${svg('plusc', 15)}New GTM agent</button>
+                <button class="newbtn" type="button" ${act('side.start')} ${offUnless('chat.create')}>
+                    ${svg('plusc', 15)}New GTM agent
+                </button>
                 <button
                     class="caret"
                     type="button"
@@ -162,7 +164,7 @@ export function sideView(): Html {
             ${
                 menu === 'create'
                     ? html`<div class="menu" role="menu" aria-label="Create">
-                          ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus')}
+                          ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus', offUnless('chat.create'))}
                           ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat', offUnless('chat.create'))}
                           ${
                               accounts === null

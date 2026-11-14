@@ -8,6 +8,8 @@ test('jason ui open pairs a browser once; the ticket leaves the address bar; the
     await page.goto(url);
     await expect(page.locator('.jc-console .side')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Needs you', level: 1 })).toBeVisible();
+    // A fresh runtime has nothing waiting, and the panel says so once it has read.
+    await expect(page.getByText("You're all caught up")).toBeVisible();
     expect(page.url()).not.toContain('t=');
 
     await page.goto(url);

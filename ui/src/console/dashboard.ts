@@ -31,6 +31,7 @@ import {
 } from './dashboard-model';
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
 import { html, type Html } from './html';
+import { offUnless } from './off';
 import { svg } from './icons';
 import { toActivity, toApprovalRow, toCampaignRow, toQuestionRow } from './live';
 import * as needs from './needs';
@@ -328,7 +329,7 @@ function header(waiting: number): Html {
                       </button>`
                     : null
             }
-            <button class="btn ${waiting > 0 ? '' : 'p'}" type="button" ${act('dash.new')}>
+            <button class="btn ${waiting > 0 ? '' : 'p'}" type="button" ${act('dash.new')} ${offUnless('chat.create')}>
                 ${svg('plus', 14)}${t('dash.new')}
             </button>
         </div>
@@ -586,7 +587,9 @@ export function dashboardView(): Html {
                 <div class="hd"><h3>${t('dash.empty.title')}</h3></div>
                 <div class="bd">
                     <p>${t('dash.empty.body')}</p>
-                    <button class="btn p" type="button" ${act('dash.new')}>${svg('plus', 14)}${t('dash.new')}</button>
+                    <button class="btn p" type="button" ${act('dash.new')} ${offUnless('chat.create')}>
+                        ${svg('plus', 14)}${t('dash.new')}
+                    </button>
                 </div>
             </div>
         </div>`;
