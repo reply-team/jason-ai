@@ -267,7 +267,7 @@ public static class PluginCommands
         ("--exec", "exec", "program", "program", "A program it may run, by the name its manifest gives it. * grants every program it names."),
         ("--env", "env", "name", "variable", "An environment variable it may read, by name. The value stays in the runtime's environment and is never written here. * grants every variable it names."),
         ("--api", "api", "family", "API family", "A family of Runtime API operations its handler may call (read, campaign, contact, workitem, suppression, report, journal.append), out of those its manifest asks for. * grants every family it asks for."),
-        ("--files", "files", "path", "directory", "An absolute directory it may append lines in, where its manifest asks to write files. Never the home or data directory, the harness root, a folder holding one, or the top of a drive."),
+        ("--files", "files", "path", "directory", "An absolute directory it may append lines in, where its manifest asks to write files. Never the home directory, the data directory or the harness root, a folder inside or holding one of them, or the top of a drive."),
         ("--subscription", "subscriptions", "kind", "journal kind", "A journal kind it is handed lines of, out of those its manifest subscribes to. * admits every kind it declares."),
     ];
 
@@ -285,7 +285,7 @@ public static class PluginCommands
             (revoke
                 ? "Take a grant back. Written and in force at once; work already running keeps what it was started with. "
                 : "Grant a plugin something its manifest asks for: a host, a program, a variable, an operation, a folder or a subscription. Written to the settings file and in force at once; a grant the manifest does not ask for is refused. ")
-            + ActorOption.NoDefaultForAnAct);
+            + ActorOption.NoDefaultForAnAct + " " + ActorOption.RefusedInsideARun);
         var id = new Argument<string>("id") { Description = "The plugin's id." };
         var flags = Grants.Select(grant => new Option<string?>(grant.Flag)
         {

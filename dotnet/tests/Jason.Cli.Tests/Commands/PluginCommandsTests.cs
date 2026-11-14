@@ -433,6 +433,30 @@ public class PluginCommandsTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Both helps say the verb is refused from inside a run, as the verbs of a person's own word say it, and the help of
+    /// --files says every place the load refuses.
+    /// </summary>
+    [Theory]
+    [InlineData("grant")]
+    [InlineData("revoke")]
+    public async Task The_grant_helps_say_they_are_refused_inside_a_run_and_where_a_directory_may_not_be(string verb)
+    {
+        using var cli = new CliRun();
+
+        await cli.RunAsync("plugin", verb, "--help");
+
+        var text = System.Text.RegularExpressions.Regex.Replace(cli.Text, @"\s+", " ");
+        Assert.Contains(ActorOption.NoDefaultForAnAct + " " + ActorOption.RefusedInsideARun, text, StringComparison.Ordinal);
+        if (verb == "grant")
+        {
+            Assert.Contains(
+                "Never the home directory, the data directory or the harness root, a folder inside or holding one of them, or the top of a drive.",
+                text,
+                StringComparison.Ordinal);
+        }
+    }
+
     private static string Serialize(PluginRegistryDto registry) => JsonSerializer.Serialize(registry, JasonJson.Options);
 
     private static string[] Lines(string text) => text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
