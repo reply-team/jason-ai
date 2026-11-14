@@ -1,6 +1,7 @@
 /**
- * The name a person sees on the desktop's window, and so on its taskbar button, and on the desktop's own dialogs. The
- * application's product name, its executable and its shortcut stay "Jason"; this is the name of the window alone.
+ * The name a person sees on the desktop's window, and so on its taskbar button, on the desktop's own dialogs and on the
+ * tray's tooltip. The application's product name, its executable and its shortcut stay "Jason"; this is the name of
+ * what the window and the tray show alone.
  */
 export const windowTitle = 'Jason AI Harness';
 

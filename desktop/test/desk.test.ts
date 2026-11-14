@@ -78,11 +78,11 @@ test('a runtime that does not answer, or an answer that is not a list, is the un
 });
 
 test('the tray says what waits, or that the runtime is not answering, by counts alone', () => {
-    assert.deepEqual(trayView({ state: 'up', approvals: 0, questions: 0 }), { title: '', tooltip: 'Jason: nothing waits on you', status: 'Nothing waits on you' });
-    assert.deepEqual(trayView({ state: 'up', approvals: 2, questions: 1 }), { title: '3', tooltip: 'Jason: 2 approvals and 1 question wait on you', status: '2 approvals and 1 question wait on you' });
-    assert.deepEqual(trayView({ state: 'up', approvals: 1, questions: 0 }), { title: '1', tooltip: 'Jason: 1 approval waits on you', status: '1 approval waits on you' });
-    assert.deepEqual(trayView({ state: 'unreachable' }), { title: '!', tooltip: 'Jason: the runtime is not answering', status: 'The runtime is not answering' });
-    assert.deepEqual(trayView({ state: 'reading' }), { title: '', tooltip: 'Jason', status: 'Reading what waits on you…' });
+    assert.deepEqual(trayView({ state: 'up', approvals: 0, questions: 0 }), { title: '', tooltip: 'Jason AI Harness: nothing waits on you', status: 'Nothing waits on you' });
+    assert.deepEqual(trayView({ state: 'up', approvals: 2, questions: 1 }), { title: '3', tooltip: 'Jason AI Harness: 2 approvals and 1 question wait on you', status: '2 approvals and 1 question wait on you' });
+    assert.deepEqual(trayView({ state: 'up', approvals: 1, questions: 0 }), { title: '1', tooltip: 'Jason AI Harness: 1 approval waits on you', status: '1 approval waits on you' });
+    assert.deepEqual(trayView({ state: 'unreachable' }), { title: '!', tooltip: 'Jason AI Harness: the runtime is not answering', status: 'The runtime is not answering' });
+    assert.deepEqual(trayView({ state: 'reading' }), { title: '', tooltip: 'Jason AI Harness', status: 'Reading what waits on you…' });
 });
 
 test('a notification carries counts only, never a campaign’s name, a person’s name or a question’s text', () => {
