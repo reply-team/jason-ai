@@ -161,6 +161,49 @@ public class ConfinedVerbsTests
         Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
     }
 
+    /// <summary>
+    /// A verb of the table in another letter case is no verb of the CLI: it is a usage error, with the variable set or
+    /// not, and nothing is sent. The desktop's chat refuses the mis-cased form itself and does not lean on this.
+    /// </summary>
+    [Theory]
+    [InlineData("--actor", "human:x", "Campaign", "Set-Send-Mode", "cmp_A", "--cold", "automatic")]
+    [InlineData("--actor", "human:x", "CAMPAIGN", "SET-SEND-MODE", "cmp_A", "--cold", "automatic")]
+    [InlineData("--actor", "human:x", "PREFERENCE", "SET", "send_mode.cold", "--value", "{}")]
+    [InlineData("--actor", "human:x", "Preference", "Unset", "send_mode.warm")]
+    [InlineData("--actor", "human:x", "campaign", "Set-Send-Mode", "cmp_A", "--cold", "automatic")]
+    [InlineData("--actor", "human:x", "Approval", "approve", "apr_A")]
+    public async Task A_table_verb_in_another_letter_case_is_a_usage_error_and_nothing_is_sent(params string[] args)
+    {
+        foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string>() })
+        {
+            var run = await DefaultActorTests.RunEachAsync(args, variables);
+
+            Assert.Equal(ExitCodes.Usage, run.Exit);
+            Assert.Empty(run.Requests);
+        }
+    }
+
+    /// <summary>
+    /// The bar reads the verb and never the key: a send mode's preferences are refused confined as any preference is, with
+    /// an attempt named or not, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("preference", "set", "send_mode.cold", "--value", "{\"mode\":\"automatic\"}")]
+    [InlineData("preference", "set", "send_mode.warm", "--value", "{\"mode\":\"every_message\"}")]
+    [InlineData("preference", "unset", "send_mode.cold")]
+    [InlineData("preference", "unset", "send_mode.warm")]
+    public async Task Confined_a_send_mode_preference_is_refused_whatever_its_key_and_nothing_is_sent(params string[] args)
+    {
+        foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string> { [Variable] = "1", ["JASON_ATTEMPT_ID"] = Attempt } })
+        {
+            var run = await DefaultActorTests.RunEachAsync(["--actor", "human:x", .. args], variables);
+
+            Assert.Equal(ExitCodes.ApiError, run.Exit);
+            Assert.Empty(run.Requests);
+            Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+        }
+    }
+
     /// <summary>The verbs a role attempt and a chat's agent keep are untouched with the variable set.</summary>
     [Theory]
     [InlineData("workitem", "get", "wi_A")]

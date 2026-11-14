@@ -306,6 +306,20 @@ public class DesktopDenyListTests
     }
 
     /// <summary>
+    /// The desktop spells the attempt's variable once, in its permission model, and refuses a command that names it by that
+    /// declaration; it is the name the CLI reads the attempt from, so the name the chat may not claim is the one that counts.
+    /// </summary>
+    [Fact]
+    public void The_desktop_s_attempt_variable_is_the_cli_s()
+    {
+        var model = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "src", "chat-permission-model.ts"));
+
+        var declared = Regex.Matches(model, @"^export const attemptVariable = '(?<name>[^']*)';\r?$", RegexOptions.Multiline);
+
+        Assert.Equal(ExecutionEnvironment.AttemptIdVariable, Assert.Single(declared).Groups["name"].Value);
+    }
+
+    /// <summary>
     /// The files a host in <see cref="AgentHosts.All"/> reads in the folder it runs in that the table of hosts has no
     /// column for: Cursor's rules file and Copilot's instruction file.
     /// </summary>

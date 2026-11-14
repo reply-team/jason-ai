@@ -47,7 +47,8 @@
         "20261113000729_ChannelRoutes",
         "20261113021003_JournalByThread",
         "20261114031653_JournalVerdictsByThread",
-        "20261114050917_CampaignSendModes"
+        "20261114050917_CampaignSendModes",
+        "20261114064450_WorkItemDoubtNotes"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -85,7 +86,8 @@
         "20261113000729_ChannelRoutes",
         "20261113021003_JournalByThread",
         "20261114031653_JournalVerdictsByThread",
-        "20261114050917_CampaignSendModes"
+        "20261114050917_CampaignSendModes",
+        "20261114064450_WorkItemDoubtNotes"
       ],
       "backup_file": null
     },

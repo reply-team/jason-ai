@@ -10,7 +10,8 @@ namespace Jason.Runtime.Approvals;
 /// runtime creates as itself, in the send's own save, whose context is the reserved key <see cref="Key"/> naming the send,
 /// <c>{"work_item_id": "wi_…", "operation": "…"}</c>. The key is the runtime's alone: a create or a patch that names it is
 /// refused at that field, on every item and whoever sends it, so an item that carries it was made by the runtime and its
-/// brief was never changed.
+/// brief was never changed. The automatic mode counts a critic's pass only where the pass comes from such an item naming
+/// the send it passed, and nobody but the runtime changed the item's context since.
 /// </summary>
 public static class SendReview
 {
@@ -32,12 +33,11 @@ public static class SendReview
     private const string RefusedInPatch =
         "send_review is written by the runtime when it creates a critic, and is never changed or taken back.";
 
-    /// <summary>
-    /// The send a critic's context names under <see cref="Key"/>, by its public id; null where the context carries no such
-    /// key, or one of another shape.
-    /// </summary>
-    public static string? Named(JsonObject? context) =>
-        context?[Key] is JsonObject review && review[WorkItemIdMember] is JsonValue id && id.TryGetValue(out string? text) ? text : null;
+    /// <summary>The send <paramref name="context"/>'s key names, by its public id; null where it names none.</summary>
+    public static string? Named(JsonObject? context) => Member(context, WorkItemIdMember);
+
+    /// <summary>The operation <paramref name="context"/>'s key names; null where it names none.</summary>
+    public static string? Operation(JsonObject? context) => Member(context, OperationMember);
 
     /// <summary>The context of the critic the runtime creates for <paramref name="sendId"/>: the key, and nothing else.</summary>
     internal static JsonObject Context(string sendId, string operation) => new()
@@ -76,4 +76,7 @@ public static class SendReview
             }
         }
     }
+
+    private static string? Member(JsonObject? context, string member) =>
+        context?[Key] is JsonObject named && named[member] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 }
