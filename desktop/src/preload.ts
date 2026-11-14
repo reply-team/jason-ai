@@ -58,6 +58,7 @@ const desktop = {
         targets: (campaignId?: string, chatId?: string) => ipcRenderer.invoke('jason:openIn.targets', campaignId, chatId),
         open: (target: string, campaignId?: string) => ipcRenderer.invoke('jason:openIn.open', target, campaignId),
         continueChat: (chatId: string) => ipcRenderer.invoke('jason:openIn.continueChat', chatId),
+        changeJason: () => ipcRenderer.invoke('jason:openIn.changeJason'),
     },
     pairing: {
         paired: (tokenId: string) => ipcRenderer.invoke('jason:pairing.paired', tokenId),

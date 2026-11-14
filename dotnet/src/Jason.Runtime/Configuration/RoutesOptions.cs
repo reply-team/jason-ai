@@ -190,6 +190,28 @@ public sealed partial class RoutesOptions
         return members;
     }
 
+    /// <summary>
+    /// Whether the settings file can carry this binding as it is: written under a route and read back the way a reload
+    /// reads it (<see cref="Json"/>), it is the same binding. It is not for a string spelled like a number or a boolean,
+    /// an empty object or list, keys that differ only in case, or a key holding a colon — the settings writer refuses
+    /// those rather than freeze a binding the caller did not send.
+    /// </summary>
+    internal static bool Carries(JsonObject binding)
+    {
+        ArgumentNullException.ThrowIfNull(binding);
+        try
+        {
+            var document = new JsonObject { [nameof(RouteEntry.Binding)] = binding.DeepClone() }.ToJsonString();
+            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(document), writable: false);
+            var read = new ConfigurationBuilder().Add(new Microsoft.Extensions.Configuration.Json.JsonStreamConfigurationSource { Stream = stream }).Build();
+            return JsonNode.DeepEquals(Json(read.GetSection(nameof(RouteEntry.Binding))), binding);
+        }
+        catch (Exception unread) when (unread is FormatException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static bool IsArray(List<IConfigurationSection> children)
     {
         for (var index = 0; index < children.Count; index++)

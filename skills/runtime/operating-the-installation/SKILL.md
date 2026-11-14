@@ -255,7 +255,9 @@ A provider on a fresh installation is connected by four acts, in this order, and
 
 1. Install the package: `jason plugin install reply`, the release's own, placed and loaded and granted nothing yet.
 2. Grant it what it asks for, under `Plugins:Grants:<id>` in the settings file (`~/.jason/config/settings.json`).
-3. Route its work, under `Routes` in the same file: the plugin, and the account its work goes through.
+3. Route its work, under `Routes` in the same file: the plugin, and the account its work goes through. On a running
+   installation `jason route set --global --plugin <id> --binding '<account>' --actor human:<Name>` writes the same
+   route there and puts it in force at once, as `docs/routing.md` says.
 4. Reload: `jason plugin reload`, which reads the grant and the route together.
 
 `jason plugin install --human` and `jason plugin list --human` name each capability a plugin asks for and is granted
