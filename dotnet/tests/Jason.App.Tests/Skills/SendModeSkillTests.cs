@@ -163,6 +163,23 @@ public partial class SendModeSkillTests
             "the rule the review points at is further down");
     }
 
+    /// <summary>
+    /// Under an automatic mode the runtime creates the critic for a send and names it in <c>send_review</c>; the critic
+    /// reads that send, its pass is what lets it go unread, and a critic whose work anyone but the runtime changed
+    /// releases nothing.
+    /// </summary>
+    [Fact]
+    public void The_critic_reviews_the_send_the_runtime_named_in_its_context()
+    {
+        var skill = RoleSkillTests.Flattened("critic");
+        const string named = "When the runtime created your work for a send, `context.send_review.work_item_id` names it. Read it with `jason workitem get`, judge its `context.input` against the brief and the guardrails, and record your judgement with `jason workitem review` and the send's `review_hash`: `--result passed`, or `--result doubts` with a `--code` and a one-line `--note`. The send is not claimed until your run ends, and under an automatic send mode your pass is what lets it go without the person reading it.";
+        const string untouched = "Do not change your own work item's context; a critic whose work was changed by anyone but the runtime releases nothing.";
+
+        Assert.Contains(named + " " + untouched, skill, StringComparison.Ordinal);
+        Assert.Contains("A pass counts only from that work: the runtime alone creates it, nobody else briefs it, and a pass from a critic somebody queued by hand, or from the critic of another send, is shown to the person and releases nothing.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("the send was created waiting on your item", skill, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_composing_roles_say_when_to_ask_the_person_and_to_read_memory_first()
     {

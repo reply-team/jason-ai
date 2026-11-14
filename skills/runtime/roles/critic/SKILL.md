@@ -30,10 +30,15 @@ quote the part that fails, and say what would fix it. The role that asked for th
 ## Where the draft is a send, record the review
 
 A send is a `message.send`, a `social_invitation.send` or a `conversation.reply` item, a work item that reaches a real
-person. Where your brief names one that is still `created` or `waiting`, you may be the one who reads it before it goes:
-the send was created waiting on your item, so it is not claimed until you have ended. Read it with
-`jason workitem get`, and read the person's memory files and the campaign's brief as the section below says. The answer
-carries a `review_hash`: the hash of the text you read. Your review is bound to it, so an edit of the text after you read
+person. When the runtime created your work for a send, `context.send_review.work_item_id` names it. Read it with
+`jason workitem get`, judge its `context.input` against the brief and the guardrails, and record your judgement with
+`jason workitem review` and the send's `review_hash`: `--result passed`, or `--result doubts` with a `--code` and a
+one-line `--note`. The send is not claimed until your run ends, and under an automatic send mode your pass is what lets
+it go without the person reading it. Do not change your own work item's context; a critic whose work was changed by
+anyone but the runtime releases nothing. A pass counts only from that work: the runtime alone creates it, nobody else
+briefs it, and a pass from a critic somebody queued by hand, or from the critic of another send, is shown to the person
+and releases nothing. Read the person's memory files and the campaign's brief as the section below says. The send's
+answer carries a `review_hash`: the hash of the text you read. Your review is bound to it, so an edit of the text after you read
 it voids the review rather than letting it stand for words you never saw.
 
 ```
