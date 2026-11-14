@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -506,14 +507,19 @@ public class WarmthTests
     }
 
     /// <summary>
-    /// The read a responder names must be a real <c>conversation.get</c> of the thread the system created: an id no item
-    /// holds, a read of another thread, a read of the thread at another plugin, or a read a person created judges nothing.
+    /// The read a responder names must be a real <c>conversation.get</c> of the thread the system created in the campaign:
+    /// an id no item holds, a read of another thread, a read of the thread at another plugin, a read a person created, a
+    /// read in another campaign, a provider operation other than <c>conversation.get</c>, or an item of another kind whose
+    /// operation column holds the read's name judges nothing.
     /// </summary>
     [Theory]
     [InlineData("no such item")]
     [InlineData("of another thread")]
     [InlineData("at another plugin")]
     [InlineData("created by a person")]
+    [InlineData("in another campaign")]
+    [InlineData("of another operation")]
+    [InlineData("of another kind")]
     public async Task A_responder_naming_a_read_that_is_not_the_systems_read_of_the_thread_judges_nothing(string which)
     {
         using var database = new TestDatabase();
@@ -540,6 +546,28 @@ public class WarmthTests
         {
             var read = await ReadOfAsync(db, item);
             read.CreatedByType = ActorType.Human;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        if (which == "in another campaign")
+        {
+            var read = await ReadOfAsync(db, item);
+            read.Campaign = await CampaignAsync(db, "Autumn");
+            await db.SaveChangesAsync(Ct);
+        }
+
+        if (which == "of another operation")
+        {
+            var read = await ReadOfAsync(db, item);
+            read.Operation = InboundSync.Operation;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        if (which == "of another kind")
+        {
+            var read = await ReadOfAsync(db, item);
+            read.Kind = WorkItemKind.AiRole;
+            read.Role = Responder.Role;
             await db.SaveChangesAsync(Ct);
         }
 
@@ -572,6 +600,32 @@ public class WarmthTests
     }
 
     /// <summary>
+    /// A read whose first attempt ran at the line's plugin and failed transiently, and whose second, claimed after a route
+    /// reload, succeeded at another plugin: an attempt at the plugin that saw the thread ran, but none succeeded there, so
+    /// the responder that waited on the read judges nothing, and the contact waits.
+    /// </summary>
+    [Fact]
+    public async Task A_responder_whose_read_succeeded_only_at_another_plugin_after_failing_at_the_lines_judges_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var item = await CreatedResponderAsync(db, seed, seed.Contact, "thr-1", readEnds: null);
+        var read = await ReadOfAsync(db, item);
+        await RunReadAsync(db, read, "mailbox", "snp_01K5B7Q2WE5X3M9T0YH4C6RDNC", succeeded: false);
+        await RunReadAsync(db, read, "other-mailbox", "snp_01K5B7Q2WE5X3M9T0YH4C6RDNE", succeeded: true);
+        var attempt = await StartAsync(db, item);
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal([1, 2], read.Attempts.OrderBy(a => a.Number).Select(a => a.Number));
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
     /// <c>workitem.update</c> may patch any key of an open item's context, the read the responder names, its plugin and
     /// its thread included, and the read's own input. A responder or a read whose context anyone but the system patched
     /// judges nothing, whatever the patch said, and the contact waits.
@@ -580,6 +634,7 @@ public class WarmthTests
     [InlineData("responder", "human")]
     [InlineData("responder", "role")]
     [InlineData("read", "human")]
+    [InlineData("read", "role")]
     public async Task A_responder_or_a_read_whose_context_someone_else_patched_judges_nothing(string patched, string by)
     {
         using var database = new TestDatabase();
@@ -843,6 +898,49 @@ public class WarmthTests
         Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
+    /// <summary>
+    /// The responder's arm visits each of the contact's items in the campaign once for the line that waits, and each
+    /// responder's read and lines by their own indexes: responders on the line's thread, each with its own read and its own
+    /// lines, each of which ran before its read succeeded and so judges nothing, add the same number of steps apiece,
+    /// so twenty cost nineteen times what the second one cost over the first and nothing more — the cost grows linearly
+    /// with the responders, never by a multiplier of the lines each carries — and no step is a full scan's. The steps are
+    /// counted, not timed.
+    /// </summary>
+    [Fact]
+    public async Task The_wait_read_pays_each_responder_on_the_thread_once()
+    {
+        var one = await StepsWithRespondersAsync(1);
+        var two = await StepsWithRespondersAsync(2);
+        var twenty = await StepsWithRespondersAsync(20);
+
+        Assert.True(two.Steps > one.Steps);
+        Assert.Equal(19 * (two.Steps - one.Steps), twenty.Steps - one.Steps);
+        Assert.Equal(0, twenty.FullScanSteps);
+    }
+
+    /// <summary>
+    /// The steps the wait read takes over one waiting line of the contact's thread after <paramref name="count"/>
+    /// responders, each created after the line with its own read, started before its read succeeded and succeeded after it.
+    /// </summary>
+    private static async Task<(int Steps, int FullScanSteps)> StepsWithRespondersAsync(int count)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
+        for (var n = 0; n < count; n++)
+        {
+            var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1", readEnds: null);
+            await EndReadAsync(db, await ReadOfAsync(db, item), WorkItemStatus.Succeeded);
+            await FinishAsync(db, item, attempt, succeeded: true);
+        }
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+        return await QueryPlans.StepsAsync(db, Warmth.Awaiting(db, seed.Campaign.Id, seed.Contact.Id).ToQueryString(), Ct);
+    }
+
     private sealed record Seed(Campaign Campaign, Contact Contact);
 
     private static async Task<Seed> SeedAsync(JasonDbContext db)
@@ -1057,6 +1155,54 @@ public class WarmthTests
             _ => ("due_at", JsonValue.Create("2026-09-14T12:00:00.000Z"), null),
         };
         Writer.Append(db, Actors.Dispatcher, WorkItemTransitions.JournalKind(from, status), campaign: null, key: key, old: old, updated: updated, workItem: read, attempt: attempt);
+        await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>
+    /// One attempt of the read, claimed and run as the claim and the attempt's end write it: numbered after the read's
+    /// attempts, its provenance naming the plugin and the plugin snapshot the route resolved at its claim, its
+    /// <c>workitem_processing</c> line, then either its success and the read's <c>workitem_succeeded</c> line, or a
+    /// transient failure that releases the read for another attempt, its <c>workitem_released</c> line keyed by the attempt.
+    /// </summary>
+    private static async Task RunReadAsync(JasonDbContext db, WorkItem read, string plugin, string snapshot, bool succeeded)
+    {
+        var attempt = WorkItemFactory.NewAttempt(read, read.Attempts.Count + 1, AttemptStatus.Running, Noon);
+        attempt.Provenance = new AttemptProvenanceDto(
+            plugin, "1.0.0", "sha256:0", 1, 1, Responder.ReadOperation, 1, snapshot, "rts_01K5B7Q2WE5X3M9T0YH4C6RDND", RouteScope.GlobalDefault, "sha256:1");
+        db.Attempts.Add(attempt);
+        var from = read.Status;
+        read.Status = WorkItemStatus.Processing;
+        await db.SaveChangesAsync(Ct);
+        Writer.Append(db, Actors.Dispatcher, WorkItemTransitions.JournalKind(from, WorkItemStatus.Processing), campaign: null, key: "attempt", updated: JsonValue.Create(attempt.Number), workItem: read, attempt: attempt);
+        await db.SaveChangesAsync(Ct);
+
+        attempt.FinishedAt = Noon;
+        read.AttemptCount = attempt.Number;
+        if (succeeded)
+        {
+            attempt.Status = AttemptStatus.Succeeded;
+            read.Status = WorkItemStatus.Succeeded;
+            read.FinishedAt = Noon;
+            await db.SaveChangesAsync(Ct);
+            Writer.Append(db, Actors.Dispatcher, JournalKinds.WorkItemSucceeded, campaign: null, key: "result_present", updated: JsonValue.Create(false), workItem: read, attempt: attempt);
+        }
+        else
+        {
+            attempt.Status = AttemptStatus.Failed;
+            attempt.Error = new AttemptErrorDto("provider_unavailable", "The read failed.", Retriable: true, Class: FailureClass.Transient);
+            read.Status = WorkItemStatus.Created;
+            await db.SaveChangesAsync(Ct);
+            Writer.Append(
+                db,
+                Actors.Dispatcher,
+                WorkItemTransitions.JournalKind(WorkItemStatus.Processing, WorkItemStatus.Created),
+                campaign: null,
+                key: attempt.PublicId,
+                updated: new JsonObject { ["code"] = "provider_unavailable", ["retry_after"] = null },
+                workItem: read,
+                attempt: attempt);
+        }
+
         await db.SaveChangesAsync(Ct);
     }
 
