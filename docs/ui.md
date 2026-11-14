@@ -114,7 +114,13 @@ two for every agent, each kind on its own press as you (`jason preference set`),
 (`jason preference unset`): a kind nobody has answered waits for you on every message, and the cards ask again. An
 agent's **Settings** tab says what each kind goes under for that agent and from where (`send_modes_in_force`), and sets
 the agent's own or gives it back to the choice for every agent (`jason campaign set-send-mode`); System says the
-installation's (`send_modes` of `system.info`).
+installation's (`send_modes` of `system.info`). A send the mode held says why on its card, under "Why it's here", in one
+sentence for each of the claim's reasons: written in Jason's chat, doubted, a reply not judged yet or judged without its
+kind, an answer that names no judged reply, a reply that was not a person's, a reply marked for you, a text edited after
+its review, a text no review passed, and the campaign's limit of automatic sends for the day. A send the mode let go
+(`automatic_mode`) says so on its card, **Sent without asking you**, with the kind's mode and where it comes from, that
+a review passed its text first, and where to change it: Settings, or the agent's own Settings tab where the agent sets
+its own.
 
 ## Agents
 
