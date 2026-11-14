@@ -1479,7 +1479,8 @@ the list it edits, so a comment inside its brackets goes when the list is writte
 variable sets an element of is refused with `setting_shadowed`, since the file's list is not the one in force. Work
 already running keeps what it was started with. Each change of what a plugin may use is journaled as
 `plugin_grants_updated`: the plugin, the capability, and what it may use of it before and after, as the reload froze
-them: names and directories, never a variable's value. From inside a run both are refused with
+them: names and directories, never a variable's value. A grant taken back from a plugin that is not loaded changes
+nothing it may use, so it is journaled only as the reload, `plugins_reloaded`. From inside a run both are refused with
 `decided_inside_a_run`: a role Jason launches never changes Jason itself.
 
 Two consequences worth knowing. A capability the manifest never requested is **absent** from the
