@@ -1421,8 +1421,9 @@ public class ReplyPackageTests
 
     /// <summary>
     /// The changelog opens with 0.16.0, a bounce notice read as a <c>bounce</c> and not as the other side's move: the flag it
-    /// is read from, the event's members, the moment that keeps it one event, the line it no longer says, the thread with
-    /// both flags that stays a moved thread, and the feed with no flag that reads as before. The README says the same.
+    /// is read from, the event's members, the moment that keeps it one event, the line the events read no longer says and
+    /// the read of the threads that is unchanged, the thread with a bounce and another flag that stays a moved thread, the
+    /// line a bounce with no contact says, and the feed with no flag that reads as before. The README says the same.
     /// </summary>
     [Fact]
     public void The_changelog_opens_with_0_16_0_a_bounce_notice_read_as_a_bounce_and_the_readme_says_so()
@@ -1434,11 +1435,14 @@ public class ReplyPackageTests
         Assert.All(
             [
                 "`flags.hasBounce`", "one `bounce` event", "`message` and `bounce` null", "the notice's own moment", "stored once",
-                "no longer says `inbound_reply_observed` for a bounce", "stays a moved thread", "never sets the flag reads as before",
+                "the events read no longer says `inbound_reply_observed` for a bounce", "`conversation.list`, is unchanged",
+                "none of a reply, an automatic reply or an absence", "stays a moved thread", "one line on stderr by the thread's and the sequence's identifiers",
+                "never sets the flag reads as before",
             ],
             word => Assert.Contains(word, section, StringComparison.Ordinal));
         Assert.Contains("A bounce notice is read as a `bounce`, never as the other side's move.", readme, StringComparison.Ordinal);
         Assert.Contains("A Reply whose feed never sets the flag reads exactly as before.", readme, StringComparison.Ordinal);
+        Assert.Contains("An item is a bounce only where the bounce is the one of Reply's four reply flags that is set:", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("and `bounce` — are never produced", readme, StringComparison.Ordinal);
         Assert.StartsWith(" ## 0.15.1 ", Flat(ChangelogSection(1)), StringComparison.Ordinal);
     }

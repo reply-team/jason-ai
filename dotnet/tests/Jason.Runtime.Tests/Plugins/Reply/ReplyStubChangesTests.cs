@@ -184,6 +184,24 @@ public class ReplyStubChangesTests
     }
 
     /// <summary>
+    /// Read whole, a thread with a bounce notice on it holds the notice as the inbound message it is, and nothing in it says
+    /// it is a notice: the stand-in's mark never travels, since no message Reply sends carries one.
+    /// </summary>
+    [Fact]
+    public async Task A_bounce_notice_read_with_its_thread_carries_no_mark_of_being_one()
+    {
+        using var account = new ReplyAccount().WithThread(Bounced(ReplyConversationListTests.Thread(501, Ago(5), inbound: false), Ago(3)));
+
+        var (exit, stdout, _) = await account.RunAsync(Line("inbox", "get", "501"), Ct);
+
+        Assert.Equal(0, exit);
+        var notice = JsonNode.Parse(stdout)!["messages"]!["items"]!.AsArray().OfType<JsonObject>()
+            .Single(message => (string?)message["messageId"] == "<b501@mailer.example.com>");
+        Assert.Equal((false, Ago(3)), ((bool)notice["isOutbound"]!, (string?)notice["date"]));
+        Assert.DoesNotContain("_bounce", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The thread with a bounce notice landed on it at a moment: an inbound message with an id and a moment of its own,
     /// marked for the stand-in alone, and the thread's last activity moved to it.
     /// </summary>

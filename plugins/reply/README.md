@@ -327,7 +327,7 @@ moved, and Reply's judgement that it asks for a meeting. Its moment is the threa
 `conversation.list` writes `last_activity_at`, to the millisecond, so a move both reads find is said once. Who moved it
 is read from the thread's last message and Reply's flag that the thread holds a reply (`flags.hasReply`):
 
-- `other_side` — the last message is the other side's, whatever the flag says;
+- `other_side` — the last message is the other side's, whatever the reply flag says;
 - `account` — the last message was sent as the account, by Jason, by a sequence or by a person in Reply's own screens,
   on a thread Reply does not flag as holding a reply;
 - `null` — the last message was sent as the account on a thread that holds a reply; or Reply gave no last message, or
@@ -363,12 +363,15 @@ Reply flags as holding a bounce and no reply, and whose last message is inbound,
 - `occurred_at` — the notice's own moment, which stays the same however often the thread comes back into the feed, so a
   bounce read twice is one event.
 
-Jason records it as `provider_event_observed` with `kind: bounce` in the campaigns it reaches, which wakes their manager;
-it says no `inbound_reply_observed`, so no responder is raised for it. A thread Reply flags as holding both a reply and a
-bounce stays a moved thread, read as above: the flags are permanent and the feed cannot say whether the reply or the
-notice came last, so reading the thread decides. A flag on a thread whose last message is the account's, or where Reply
-gave no last message, changes nothing. A bounce on a thread Reply names no contact for is left out of the page, as the
-account's moves are. A Reply whose feed never sets the flag reads exactly as before.
+Jason records it as `provider_event_observed` with `kind: bounce` in the campaigns it reaches, which wakes their
+manager; it says no `inbound_reply_observed`, so no responder is raised for it. An item is a bounce only where the
+bounce is the one of Reply's four reply flags that is set: a thread flagged as holding a reply, an automatic reply or an
+absence as well stays a moved thread, read as above, since the flags are permanent and the feed cannot say which message
+came last, so reading the thread decides. A flag on a thread whose last message is the account's, or where Reply gave no
+last message, changes nothing. A bounce on a thread Reply names no contact for is left out of the page, as the account's
+moves are, and the package writes one line on stderr saying so, which carries the thread's and the sequence's
+identifiers and the thread's last activity, and nothing anybody wrote. A Reply whose feed never sets the flag reads
+exactly as before.
 
 The other two kinds the contract names, `reply_detected` and `invitation_accepted`, are never produced, and Reply's
 flags for an automatic reply and an absence are not carried. Nothing anybody wrote travels: no subject, no preview, no

@@ -3,7 +3,6 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
-using Jason.Runtime.Events;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Tests.Plugins.Invocation;
 
@@ -151,7 +150,7 @@ public class ReplyEventsReadTests
     /// thread as holding a bounce and no reply: that is a bounce, never the other side's move. It is one <c>bounce</c>
     /// event — the thread's contact and sequence, no message and no kind, since the feed names neither, and the notice's
     /// own moment — and no <c>thread_moved</c> for that thread. Read again, as the hour a read after a finished one reads
-    /// again brings it back, it is the same event to the store's key, so the runtime keeps it once.
+    /// again brings it back, it is the same event, so the runtime keeps it once.
     /// </summary>
     [Fact]
     public async Task A_bounce_notice_on_top_of_a_thread_is_one_bounce_event_and_no_move_and_reads_the_same_twice()
@@ -173,15 +172,16 @@ public class ReplyEventsReadTests
                 """)!.ToJsonString(),
             first["events"]!.ToJsonString());
         Assert.Equal(first["events"]!.ToJsonString(), again["events"]!.ToJsonString());
-        Assert.Equal(StoreKey(first["events"]![0]), StoreKey(again["events"]![0]));
         Assert.DoesNotContain("Undelivered", first.ToJsonString(), StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// What Reply's item says decides it. A bounce is the flag of a bounce, no flag of a reply, and an inbound last message;
+    /// What Reply's item says decides it. A bounce is the flag of a bounce and no other of Reply's reply flags — no reply,
+    /// no automatic reply, no absence — and an inbound last message;
     /// its moment is that message's own, not the thread's last activity, and its campaign the item's sequence or none.
-    /// A thread flagged with both is a moved thread as it was: the flags hold for good and the feed cannot say which came
-    /// last, so the reader of the thread says what it is. A flag on a thread whose last message is the account's, or where
+    /// A thread flagged with a bounce and any other of them is a moved thread as it was, an automatic reply or an absence
+    /// landing on a thread that once bounced among them: the flags hold for good and the feed cannot say which came last,
+    /// so the reader of the thread says what it is. A flag on a thread whose last message is the account's, or where
     /// Reply gave none, changes nothing either; nor does a flag that is not a boolean true, or a feed that never sets one.
     /// A bounce Reply names no person for has nobody to name and is left out, as the account's moves are.
     /// </summary>
@@ -190,7 +190,10 @@ public class ReplyEventsReadTests
     [InlineData("""{"hasBounce":true}""", "in", "bounce")]
     [InlineData("""{"hasBounce":true,"hasReply":false}""", "in, no sequence", "bounce")]
     [InlineData("""{"hasBounce":true,"hasReply":false}""", "in, no date", "bounce")]
+    [InlineData("""{"hasBounce":true,"hasReply":false,"hasAutoReply":false,"hasOutOfOffice":false}""", "in", "bounce")]
     [InlineData("""{"hasBounce":true,"hasReply":true}""", "in", "other_side")]
+    [InlineData("""{"hasBounce":true,"hasReply":false,"hasAutoReply":true}""", "in", "other_side")]
+    [InlineData("""{"hasBounce":true,"hasReply":false,"hasOutOfOffice":true}""", "in", "other_side")]
     [InlineData("""{"hasBounce":true,"hasReply":false}""", "out", "kept out")]
     [InlineData("""{"hasBounce":true,"hasReply":true}""", "out", null)]
     [InlineData("""{"hasBounce":true,"hasReply":false}""", "none", null)]
@@ -258,17 +261,20 @@ public class ReplyEventsReadTests
     }
 
     /// <summary>
-    /// A bounce is held to the end of a span by the thread's place in the feed, its last activity, as every item is: the
-    /// notice's own moment, which may be earlier, neither ends a span early nor lets one run past its end.
+    /// A bounce is held to the end of a span by the thread's place in the feed, its last activity, as every item is, and
+    /// never by the notice's own moment, in either direction: a notice before the end on a thread whose last activity is
+    /// past it ends the span, and a notice Reply dates past the end on a thread whose last activity is before it does not.
     /// </summary>
-    [Fact]
-    public async Task A_bounce_past_the_end_of_a_span_ends_it_by_the_thread_s_last_activity()
+    [Theory]
+    [InlineData(30, 10, true)]
+    [InlineData(10, 30, false)]
+    public async Task A_bounce_ends_a_span_by_the_thread_s_last_activity_and_never_by_the_notice_s_moment(int notice, int activity, bool ends)
     {
         var item = new JsonObject
         {
-            ["threadId"] = 501, ["contactId"] = 1001, ["channel"] = "email", ["lastActivityDate"] = Ago(10),
+            ["threadId"] = 501, ["contactId"] = 1001, ["channel"] = "email", ["lastActivityDate"] = Ago(activity),
             ["flags"] = new JsonObject { ["hasBounce"] = true, ["hasReply"] = false },
-            ["lastMessage"] = new JsonObject { ["messageId"] = "<b501@mailer.example.com>", ["isOutbound"] = false, ["date"] = Ago(30) },
+            ["lastMessage"] = new JsonObject { ["messageId"] = "<b501@mailer.example.com>", ["isOutbound"] = false, ["date"] = Ago(notice) },
         };
         using var account = new ReplyAccount().Returns(Feed, new JsonObject { ["items"] = new JsonArray(item), ["has_more"] = true, ["cursor"] = "AAAA" });
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -277,9 +283,76 @@ public class ReplyEventsReadTests
 
         var page = Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1)), until: until), Ct));
 
-        Assert.Empty(page["events"]!.AsArray());
-        Assert.False((bool)page["has_more"]!);
-        Assert.Equal("u|" + until + "|", (string)page["cursor"]!);
+        var read = page["events"]!.AsArray().Select(found => ((string?)found!["kind"], (string?)found["occurred_at"])).ToList();
+        Assert.Equal(ends ? [] : [("bounce", Utc(Ago(notice)))], read);
+        Assert.Equal(!ends, (bool)page["has_more"]!);
+        Assert.Equal("u|" + until + "|" + (ends ? "" : "AAAA"), (string)page["cursor"]!);
+    }
+
+    /// <summary>
+    /// A bounce Reply names no contact for is left out of the page: no bounce, since there is nobody to say it of, and no
+    /// moved thread, which is the false reply a bounce is read to avoid. The package says so in one line of its own on
+    /// stderr, carrying the thread's and the sequence's identifiers and the item's moment and nothing anybody wrote: no
+    /// subject, no preview, no address, no name. No other item of the page, a bounce with its contact or a move by either
+    /// side, writes a line.
+    /// </summary>
+    [Fact]
+    public async Task A_bounce_that_names_no_contact_is_left_out_and_says_so_by_the_thread_s_identifier_alone()
+    {
+        var item = new JsonObject
+        {
+            ["threadId"] = 501, ["channel"] = "email", ["lastActivityDate"] = Ago(10), ["sequenceId"] = 7,
+            ["flags"] = new JsonObject { ["hasBounce"] = true, ["hasReply"] = false },
+            ["lastMessage"] = new JsonObject
+            {
+                ["messageId"] = "<b501@mailer.example.com>", ["isOutbound"] = false, ["date"] = Ago(12),
+                ["subject"] = "Undelivered Mail Returned to Sender", ["preview"] = "The address was not found.",
+                ["fromAddress"] = "mailer-daemon@mailer.example.com", ["fromName"] = "Mail Delivery System",
+            },
+        };
+        JsonObject Other(int thread, int? contact, bool outbound, JsonObject? flags, int minutes)
+        {
+            var other = new JsonObject
+            {
+                ["threadId"] = thread, ["channel"] = "email", ["lastActivityDate"] = Ago(minutes), ["sequenceId"] = 7,
+                ["lastMessage"] = new JsonObject { ["isOutbound"] = outbound, ["date"] = Ago(minutes) },
+            };
+            if (contact is not null)
+            {
+                other["contactId"] = contact;
+            }
+
+            if (flags is not null)
+            {
+                other["flags"] = flags;
+            }
+
+            return other;
+        }
+
+        var items = new JsonArray(
+            item,
+            Other(502, 1002, outbound: false, new JsonObject { ["hasBounce"] = true, ["hasReply"] = false }, 9),
+            Other(503, 1003, outbound: true, null, 8),
+            Other(504, 1004, outbound: false, null, 7));
+        using var account = new ReplyAccount().Returns(Feed, new JsonObject { ["items"] = items, ["has_more"] = false, ["cursor"] = "AAAA" });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct);
+
+        Assert.Equal(
+            [("bounce", "1002"), ("thread_moved", "1004")],
+            Page(result)["events"]!.AsArray().Select(read => ((string?)read!["kind"], (string?)read["contact"])));
+        var line = Assert.Single(PluginLines(result));
+        Assert.Equal(
+            ("info", "Reply flags a bounce on a thread it names no contact for, so no event was read from it."),
+            ((string?)line["level"], (string?)line["message"]));
+        Assert.Equal($$"""{"thread":"501","campaign":"7","at":"{{Utc(Ago(10))}}"}""", line["data"]!.ToJsonString());
+        var stderr = Stderr(result);
+        Assert.All(
+            ["Undelivered", "The address was not found", "mailer-daemon", "mailer.example.com", "Mail Delivery System"],
+            written => Assert.DoesNotContain(written, stderr, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -842,8 +915,19 @@ public class ReplyEventsReadTests
         return failed;
     }
 
-    /// <summary>The key the runtime's store keeps an event under, which says whether two reads are one event.</summary>
-    private static string StoreKey(JsonNode? read) => EventKeys.Store(ReplyPlugins.PluginId, ReadEvent.Read(read)!);
+    /// <summary>The lines the package itself wrote with host.log, from the invocation's own stderr.log.</summary>
+    private static IReadOnlyList<JsonObject> PluginLines(PluginInvocationResult result) =>
+        [.. Stderr(result).Split('\n')
+            .Where(line => line.TrimStart().StartsWith('{'))
+            .Select(line => JsonNode.Parse(line)!.AsObject())
+            .Where(line => (string?)line["source"] == "plugin")];
+
+    /// <summary>The invocation's whole stderr, the host's lines and the package's alike.</summary>
+    private static string Stderr(PluginInvocationResult result)
+    {
+        var log = Path.Combine(result.Launch!.WorkDir, "stderr.log");
+        return File.Exists(log) ? File.ReadAllText(log) : string.Empty;
+    }
 
     private static string[] Threads(JsonObject page) => [.. page["events"]!.AsArray().Select(item => (string)item!["thread"]!)];
 }
