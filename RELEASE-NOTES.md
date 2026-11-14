@@ -23,14 +23,14 @@ replaces the title and the body together.
 
 ## What is new since 0.41.0
 
-This release is about how much of the sending you keep in your own hands. Your own AI can now also change Jason itself:
-its roles, its plugins, a route for every campaign and what a plugin is granted, from the command line or from
-**Open in**, with a skill and a page that say how. You say, for people who have not answered and for people who have,
-whether each message waits for your yes or goes on its own. Where it goes on its own, a critic reads it first, and a
-doubt, a text nobody passed, a reply not yet judged, a message written in the desktop's chat and the day's limit still
-bring it to you. Jason now knows which of the two kinds a person is, and waits for a reply to be judged before it writes
-on its own to someone who just wrote; and a person who asks not to be written to is never written to again, on any
-address.
+This release is about two things: how much of the sending you keep in your own hands, and your own AI changing Jason
+itself. You say, for people who have not answered and for people who have, whether each message waits for your yes or
+goes on its own. Where it goes on its own, a critic reads it first, and a doubt, a text nobody passed, a reply not yet
+judged, a message written in the desktop's chat and the day's limit still bring it to you. Jason now knows which of the
+two kinds a person is, and waits for a reply to be judged before it writes on its own to someone who just wrote; and a
+person who asks not to be written to is never written to again, on any address. And your own AI can now change Jason
+itself: its roles, its plugins, a route for every campaign and what a plugin is granted, from the command line or from
+**Open in**, with a skill and a page that say how.
 
 - **Say how sends go, for people who have not answered and for people who have.** Two named preferences,
   [`send_mode.cold`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/preferences/send_mode.cold.md) and
