@@ -834,7 +834,9 @@ public class CampaignCommandsTests
     public async Task Human_mode_renders_one_campaign()
     {
         var campaign = JsonSerializer.Serialize(
-            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null, AudienceThreshold: 50),
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, "prj_A", "default", new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null, AudienceThreshold: 50,
+                SendModes: new SendModesDto(SendMode.Automatic, null),
+                SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default))),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -853,6 +855,10 @@ public class CampaignCommandsTests
 
         // So is the reserve it keeps, since the dispatcher counts against it.
         Assert.Matches("(?m)^Reserve: +threshold 50 untouched\\r?$", cli.Text);
+
+        // And how a send to each kind of contact goes now, with where that comes from.
+        Assert.Matches("(?m)^Cold sends: +automatic, this campaign's own\\r?$", cli.Text);
+        Assert.Matches("(?m)^Warm sends: +every_message, as nobody has chosen one\\r?$", cli.Text);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 

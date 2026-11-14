@@ -80,6 +80,34 @@ public class CampaignSendModeTests
         Assert.All(lines, line => Assert.Equal((ActorType.Human, "Marta"), (line.ActorType, line.ActorId)));
     }
 
+    /// <summary>
+    /// The modes in force on the campaign's answer: by default every message, the installation's preference where the
+    /// campaign sets none, and the campaign's own over it; each says where it comes from, and never who set it.
+    /// </summary>
+    [Fact]
+    public async Task The_answer_says_the_modes_in_force_and_where_each_comes_from()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var service = NewService(db);
+        var created = await service.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct);
+        Assert.Equal(InForce((SendMode.EveryMessage, SendModeSource.Default), (SendMode.EveryMessage, SendModeSource.Default)), created.SendModesInForce);
+
+        var clock = new FixedClock(Noon);
+        await new Jason.Runtime.Preferences.PreferenceService(db, new JournalWriter(clock), clock)
+            .SetAsync(new PreferenceSetRequest("send_mode.warm", new System.Text.Json.Nodes.JsonObject { ["mode"] = "automatic" }, Marta, null), Ct);
+        var own = await service.SetSendModeAsync(Set(created.Id, cold: Optional<SendMode?>.Of(SendMode.Automatic)), Ct);
+
+        Assert.Equal(InForce((SendMode.Automatic, SendModeSource.Campaign), (SendMode.Automatic, SendModeSource.Preference)), own.SendModesInForce);
+        var json = JsonSerializer.Serialize(own, JasonJson.Options);
+        Assert.Contains(
+            "\"send_modes_in_force\":{\"cold\":{\"mode\":\"automatic\",\"source\":\"campaign\"},\"warm\":{\"mode\":\"automatic\",\"source\":\"preference\"}}",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Marta", json, StringComparison.Ordinal);
+        Assert.Equal(own.SendModesInForce, (await service.GetAsync(new CampaignGetRequest(created.Id), Ct)).SendModesInForce);
+    }
+
     /// <summary>Both in one request are two lines, one per mode, in the same act.</summary>
     [Fact]
     public async Task Both_modes_at_once_are_one_line_each()
@@ -184,6 +212,9 @@ public class CampaignSendModeTests
         await api.PostAsync(Operations.CampaignUpdate, new { campaign_id = campaign.Id, send_modes = new { cold = "automatic" }, cold = "automatic" }, Ct);
         Assert.Equal(new SendModesDto(null, null), (await api.PostOkAsync<CampaignDto>(Operations.CampaignGet, new { campaign_id = campaign.Id }, Ct)).SendModes);
     }
+
+    private static SendModesInForce InForce((SendMode Mode, SendModeSource Source) cold, (SendMode Mode, SendModeSource Source) warm) =>
+        new(new SendModeInForce(cold.Mode, cold.Source), new SendModeInForce(warm.Mode, warm.Source));
 
     private static CampaignSetSendModeRequest Set(
         string campaignId,

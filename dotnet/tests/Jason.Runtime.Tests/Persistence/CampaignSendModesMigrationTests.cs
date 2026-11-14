@@ -1,3 +1,5 @@
+using Jason.Contracts.Api;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +19,7 @@ public class CampaignSendModesMigrationTests
     private const string PreviousMigration = "20261113021003_JournalByThread";
 
     [Fact]
-    public void An_upgraded_campaign_holds_no_mode_of_its_own()
+    public async Task An_upgraded_campaign_holds_no_mode_of_its_own_and_every_send_waits_for_a_person()
     {
         using var dir = new TempDataDir();
         Directory.CreateDirectory(dir.Paths.StateDirectory);
@@ -42,9 +44,13 @@ public class CampaignSendModesMigrationTests
         SqliteConnection.ClearAllPools();
         new DatabaseMigrator(dir.Paths).Migrate();
 
-        using var after = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        await using var after = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
         var campaign = after.Campaigns.AsNoTracking().Single();
         Assert.Equal((null, null, null, null), (campaign.SendModeCold, campaign.SendModeColdSetBy, campaign.SendModeWarm, campaign.SendModeWarmSetBy));
+
+        var installation = await SendModes.ReadAsync(after, TestContext.Current.CancellationToken);
+        Assert.Equal(new ModeInForce(SendMode.EveryMessage, SendModeSource.Default, null), SendModes.Resolve(campaign, installation, Temperature.Cold));
+        Assert.Equal(new ModeInForce(SendMode.EveryMessage, SendModeSource.Default, null), SendModes.Resolve(campaign, installation, Temperature.Warm));
 
         SqliteConnection.ClearAllPools();
     }

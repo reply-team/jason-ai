@@ -57,12 +57,14 @@ public class ContractsShapeTests
     public void Campaign_dto_serializes_with_inline_context_and_snake_case_status()
     {
         var dto = new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, "prj_A", "default", new JsonObject { ["icp"] = "founders" }, [], "local-claude", 900, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null,
-            SendModes: new SendModesDto(SendMode.Automatic, null));
+            SendModes: new SendModesDto(SendMode.Automatic, null),
+            SendModesInForce: new SendModesInForce(new SendModeInForce(SendMode.Automatic, SendModeSource.Campaign), new SendModeInForce(SendMode.EveryMessage, SendModeSource.Default)));
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);
         Assert.Equal(
             "{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"project_id\":\"prj_A\",\"project_slug\":\"default\",\"context\":{\"icp\":\"founders\"},\"external_ids\":[],\"execution_profile\":\"local-claude\",\"review_seconds\":900,"
                 + "\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null,\"folder_path\":null,\"audience_threshold\":null,"
-                + "\"send_modes\":{\"cold\":\"automatic\",\"warm\":null}}",
+                + "\"send_modes\":{\"cold\":\"automatic\",\"warm\":null},"
+                + "\"send_modes_in_force\":{\"cold\":{\"mode\":\"automatic\",\"source\":\"campaign\"},\"warm\":{\"mode\":\"every_message\",\"source\":\"default\"}}}",
             json);
     }
 

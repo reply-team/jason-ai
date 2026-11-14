@@ -5,6 +5,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Decisions;
@@ -126,7 +127,7 @@ public sealed class CampaignService(
         // key exists for. Cancellation lands only before anything is on the disk.
         await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
         await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -142,7 +143,7 @@ public sealed class CampaignService(
             .ConfigureAwait(false);
 
         return made is null ? null
-            : string.Equals(made.IdempotencyDigest, digest, StringComparison.Ordinal) ? CampaignMapper.ToDto(made)
+            : string.Equals(made.IdempotencyDigest, digest, StringComparison.Ordinal) ? await AnswerAsync(made).ConfigureAwait(false)
             : throw DomainErrors.IdempotencyKeyReused(made.PublicId);
     }
 
@@ -155,7 +156,7 @@ public sealed class CampaignService(
             .Include(c => c.Project)
             .FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
             ?? throw DomainErrors.CampaignNotFound(id);
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     public async Task<Page<CampaignSummaryDto>> ListAsync(CampaignListRequest request, CancellationToken cancellationToken)
@@ -335,7 +336,7 @@ public sealed class CampaignService(
 
         if (changes.Count == 0)
         {
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         campaign.UpdatedAt = clock.GetUtcNow().UtcDateTime;
@@ -348,7 +349,7 @@ public sealed class CampaignService(
         if (move is not { } taking)
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         // The update is written and held uncommitted, the folder moves by one rename into the new project's, and only then
@@ -370,7 +371,7 @@ public sealed class CampaignService(
             throw;
         }
 
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -416,7 +417,7 @@ public sealed class CampaignService(
 
         if (changes.Count == 0)
         {
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         campaign.UpdatedAt = clock.GetUtcNow().UtcDateTime;
@@ -427,8 +428,16 @@ public sealed class CampaignService(
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// The campaign as an answer says it, with the send modes in force for it, read from the installation's two
+    /// preferences as they stand now. The read is not cancelled: it follows writes that are finished whether or not their
+    /// caller is still there.
+    /// </summary>
+    private async Task<CampaignDto> AnswerAsync(Campaign campaign) =>
+        CampaignMapper.ToDto(campaign, await SendModes.ReadAsync(db, CancellationToken.None).ConfigureAwait(false));
 
     /// <summary>
     /// Who sets a campaign's send mode: a person who gives their name. An absent actor is an anonymous person, which is
@@ -528,7 +537,7 @@ public sealed class CampaignService(
         ContextRules.EnsureWithinLimits(context);
         if (changes.Count == 0)
         {
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         campaign.Context = context;
@@ -540,7 +549,7 @@ public sealed class CampaignService(
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -574,7 +583,7 @@ public sealed class CampaignService(
         // with the campaign and write nothing, so repeating a call is never a second event in the chronicle.
         if (campaign.Status == target)
         {
-            return CampaignMapper.ToDto(campaign);
+            return await AnswerAsync(campaign).ConfigureAwait(false);
         }
 
         if (campaign.Status == CampaignStatus.Archived)
@@ -633,7 +642,7 @@ public sealed class CampaignService(
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         canceller.StopCancelled();
-        return CampaignMapper.ToDto(campaign);
+        return await AnswerAsync(campaign).ConfigureAwait(false);
     }
 
     /// <summary>draft → active, paused → active (a resume), active → paused, and anything at all → archived.</summary>
