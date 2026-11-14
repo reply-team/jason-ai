@@ -1050,6 +1050,54 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// A sender's block that names a channel says the block is that channel's alone, so one that names another channel
+    /// than the call was asked to send on is a broken answer: refused as a block outside its contract is, recorded
+    /// permanent with what is wrong named beside it, and kept nowhere. The same block on the call's own channel is kept,
+    /// and the item waits on it.
+    /// </summary>
+    [Theory]
+    [InlineData("email", true)]
+    [InlineData("linkedin", false)]
+    public async Task A_senders_block_on_another_channel_than_the_call_was_asked_to_send_on_is_refused(string said, bool kept)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: Send.Id);
+        var block = new JsonObject { ["scope"] = "sender", ["sender_external_id"] = "12", ["channel"] = said, ["reason"] = "limit" };
+        var input = new JsonObject
+        {
+            ["args"] = new JsonObject { ["channel"] = "email", ["sender"] = new JsonObject { ["external_id"] = "12" } },
+        };
+
+        await scene.Recorder.RecordAsync(
+            db,
+            scene.Item,
+            scene.Attempt,
+            Send,
+            TestPlugins.FakeProviderId,
+            false,
+            Failed(new OutcomeError(FailureClass.Blocked, "provider_blocked", "the sender is at its limit", null, null, block)),
+            Ct,
+            input);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().ToListAsync(Ct);
+        if (kept)
+        {
+            Assert.Equal((WorkItemStatus.Waiting, AttemptStatus.Blocked), (scene.Item.Status, scene.Attempt.Status));
+            Assert.Equal("email", Assert.Single(blocks).Channel);
+            return;
+        }
+
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+        Assert.Equal(("provider_blocked", (FailureClass?)FailureClass.Permanent, false), (scene.Attempt.Error!.Code, scene.Attempt.Error.Class, scene.Attempt.Error.Retriable));
+        Assert.Null(scene.Attempt.Error.Block);
+        Assert.Empty(blocks);
+        var detail = Assert.Single(scene.Attempt.Error.Details!);
+        Assert.Equal(("/error/block/channel", "const"), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
     /// What the attempt kept says it kept the identifiers "as it returned them", and an undeclared kind is the
     /// one case where that matters: nothing else in Jason will ever mention that key again. A provider that
     /// spells its kind `contactId` has to be readable beside the pointer that refuses it, which names that same

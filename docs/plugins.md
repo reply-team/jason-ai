@@ -1331,7 +1331,9 @@ ends `blocked`, never counted, and the item waits on the block until it clears o
 operation ends there, final. So report `blocked` only for a refusal that concerns the account or the sender rather
 than the call: work waits on it. A sender's block names the channel the sender is blocked on wherever the provider
 numbers its accounts on one channel apart from those on another, as Reply numbers its mailboxes apart from its
-LinkedIn accounts: without it, one identifier's block holds and clears that identifier's work on every channel. A block outside that page is recorded `permanent`, with what is wrong with it named
+LinkedIn accounts: without it, one identifier's block holds and clears that identifier's work on every channel. Name
+the channel the call was asked to send on, never another: a block naming another channel is refused as one outside
+the page is. A block outside that page is recorded `permanent`, with what is wrong with it named
 beside the failure. The events and delivery families declare no
 block, so a `blocked` answer there is an answer outside the contract, `result_invalid`.
 
