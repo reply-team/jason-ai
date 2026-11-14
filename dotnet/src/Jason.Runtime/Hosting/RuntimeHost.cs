@@ -49,6 +49,14 @@ public static class RuntimeHost
         ArgumentNullException.ThrowIfNull(paths);
         options ??= new RuntimeHostOptions();
 
+        // First of all, before the data directory is prepared: a directory a newer Jason laid out keeps its parts where this
+        // build does not look, and preparing it would make the folders a later layout moved away again. Nothing is written,
+        // not even a log, since there is none yet; `jason status` says why.
+        if (LayoutStamp.Refusal(paths, Contracts.JasonVersion.Current) is { } layout)
+        {
+            throw new LayoutRefusalException(layout.Code, layout.Message);
+        }
+
         // Before anything is written: a process that does not compose text would key one profile two ways.
         TextComposition.EnsureThisProcessComposes();
 
@@ -413,16 +421,16 @@ public static class RuntimeHost
         // back from.
         catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or InvalidSettingsException
             or DescriptorUnpublishableException or TextCompositionUnavailableException or MigrationFailedException
-            or UnfinishedUpdateRefusalException
+            or UnfinishedUpdateRefusalException or LayoutRefusalException
             || UnreadableStoredValueException.In(refused) is not null)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null
             // device by now, and the reason it will not start used to go there. An update's refusal is said in the
-            // envelope `jason runtime start` says it in, with its code.
+            // envelope `jason runtime start` says it in, with its code, and so is a layout stamp's.
             try
             {
                 await refusals.WriteLineAsync(
-                    refused is UnfinishedUpdateRefusalException update ? update.Envelope : UnreadableStoredValueException.In(refused)?.Message ?? refused.Message).ConfigureAwait(false);
+                    refused is UnfinishedUpdateRefusalException update ? update.Envelope : refused is LayoutRefusalException layout ? layout.Envelope : UnreadableStoredValueException.In(refused)?.Message ?? refused.Message).ConfigureAwait(false);
                 await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (IOException)

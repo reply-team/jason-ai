@@ -140,6 +140,13 @@ public static class CliApp
             return ExitCodes.ApiError;
         }
 
+        // A data directory a newer Jason laid out, or whose stamp cannot be read, once for every verb that touches a part
+        // that moves: before anything is read, written, stopped or asked.
+        if (LayoutGatedVerbs.Refusal(env, parseResult) is { } layout)
+        {
+            return LayoutGatedVerbs.Refuse(env, parseResult, layout);
+        }
+
         // The default handler would swallow everything an action throws and report it as one unhandled
         // failure; a bad argument the action discovers while composing its request body has to reach the
         // usage exit code instead.
@@ -216,7 +223,7 @@ public static class CliApp
     }
 
     /// <summary>The verb as it was typed, from the root's subcommand down: <c>campaign list-contacts</c>.</summary>
-    private static string Verb(ParseResult parseResult)
+    internal static string Verb(ParseResult parseResult)
     {
         var names = new List<string>();
         for (var command = parseResult.CommandResult; command.Parent is CommandResult parent; command = parent)
@@ -267,6 +274,7 @@ public static class CliApp
         root.Subcommands.Add(ImportCommand.Build(env));
 
         ConfinedVerbs.Describe(root);
+        LayoutGatedVerbs.Describe(root);
         return root;
     }
 }
