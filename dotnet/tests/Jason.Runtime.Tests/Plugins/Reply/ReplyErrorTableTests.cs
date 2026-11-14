@@ -163,7 +163,10 @@ public partial class ReplyErrorTableTests
 
         Assert.Contains("about the send it took or refused is final, since Reply's guard released the key", readme, StringComparison.Ordinal);
         Assert.Contains("`idempotency_key.in_use` (409) is the one where the key is still held", readme, StringComparison.Ordinal);
-        Assert.Contains("A 429 (`rate_limited`) is refused before the guard runs, so nothing was taken and no key was touched", readme, StringComparison.Ordinal);
+        Assert.Contains(
+            "A 429 (`rate_limited`) under any code of Reply's but its two limits on a direct email is refused before the guard runs, so nothing was taken and no key was touched",
+            readme,
+            StringComparison.Ordinal);
         var held = lines.Where(line => line.StartsWith('|') && line.Contains("(`idempotency_key.in_use`)", StringComparison.Ordinal)).ToList();
         Assert.Equal(2, held.Count);
         Assert.All(held, line => Assert.Equal(" transient ", line.Split('|')[3]));
