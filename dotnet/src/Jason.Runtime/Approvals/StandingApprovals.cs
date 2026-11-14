@@ -214,7 +214,7 @@ public static class StandingApprovals
     /// The record an allowance's set line writes: no category, the one operation, the expiry and no count of releases as a
     /// reply's has, then the audience by id and number, the ceiling in people and the cap per search.
     /// </summary>
-    internal static JsonObject AllowanceLine(AudienceRef audience, int maxPeople, int? maxPerSearch, DateTimeOffset? expiresAt) => new()
+    internal static JsonObject AllowanceLine(AudienceRef audience, int maxPeople, int? maxPerSearch, DateTimeOffset? expiresAt) => ConfinedScope.Mark(new()
     {
         ["category"] = null,
         ["operations"] = new JsonArray(Searches),
@@ -223,7 +223,7 @@ public static class StandingApprovals
         ["audience"] = new JsonObject { ["id"] = audience.Id, ["number"] = audience.Number },
         ["max_people"] = maxPeople,
         ["max_per_search"] = maxPerSearch,
-    };
+    });
 
     /// <summary>
     /// Writes an allowance, retiring the one it replaces: an unset of the newest set where there is one, then the set, both
@@ -278,13 +278,13 @@ public static class StandingApprovals
     }
 
     /// <summary>The record a set line writes: the category, the operations, the expiry and the ceiling, nothing else.</summary>
-    internal static JsonObject Line(string category, IReadOnlyList<string> operations, DateTimeOffset? expiresAt, int? maxReleases) => new()
+    internal static JsonObject Line(string category, IReadOnlyList<string> operations, DateTimeOffset? expiresAt, int? maxReleases) => ConfinedScope.Mark(new()
     {
         ["category"] = category,
         ["operations"] = new JsonArray([.. operations.Select(operation => (JsonNode?)JsonValue.Create(operation))]),
         ["expires_at"] = expiresAt is { } moment ? InboundSync.Instant(moment) : null,
         ["max_releases"] = maxReleases,
-    };
+    });
 
     /// <summary>
     /// Whether a standing approval covers this work, asked by the claim where no decision about the work is live yet: the
@@ -461,6 +461,12 @@ public static class StandingApprovals
             return new Author(null);
         }
 
+        // A verdict recorded under the desktop's chat marker is the chat's: neither a person's own word nor a run's.
+        if (ConfinedScope.Marked(said))
+        {
+            return null;
+        }
+
         if (verdict.ActorType == ActorType.Human && verdict.AttemptId is null)
         {
             return string.IsNullOrWhiteSpace(verdict.ActorId) ? null : new Author(null);
@@ -603,7 +609,7 @@ public static class StandingApprovals
     /// nothing.
     /// </summary>
     private static bool Sets([NotNullWhen(true)] JournalEntry? line) =>
-        line is { Kind: JournalKinds.StandingApprovalSet, AttemptId: null };
+        line is { Kind: JournalKinds.StandingApprovalSet, AttemptId: null } && !ConfinedScope.Marked(line.New);
 
     private static Answer Miss(string why, string? verdict, string? category) =>
         new(null, new Uncovered(why, new JsonObject { ["verdict"] = verdict, ["category"] = category }));

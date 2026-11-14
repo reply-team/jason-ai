@@ -241,7 +241,7 @@ public static class AutomaticRelease
 
         return line.ActorType switch
         {
-            ActorType.Human => !string.IsNullOrWhiteSpace(line.ActorId) && line.AttemptId is null,
+            ActorType.Human => !string.IsNullOrWhiteSpace(line.ActorId) && line.AttemptId is null && !ConfinedScope.Marked(line.New),
             ActorType.Attempt => line.AttemptId is { } attempt
                 && string.Equals(line.ActorId, attempt, StringComparison.Ordinal)
                 && string.Equals(Text(line.New?["role"]), CriticRole, StringComparison.Ordinal)

@@ -428,8 +428,11 @@ that is not that attempt does not call them.
   when they are claimed. The runtime never takes an entry off the register, and the provider's own sequence is not
   stopped here. **Only a person's own later verdict on the same reply in that verdict's campaign lifts the
   lock**: one recorded under a `human` actor that names the person (`human:<Name>`), outside any run, that states a
-  `nature` other than `opt_out`. A role's or an attempt's own verdict never lifts it, nor does a `human` actor with no
-  name, a verdict that states no nature, or one that carries a `decision_id` by that alone — a run may carry an answer
+  `nature` other than `opt_out`, and not in the desktop's chat: a verdict recorded under the `Jason-Confined` header the
+  CLI sends from there says `confined` on its line and is the chat's, not the person's own, so it lifts nothing, and
+  no standing approval takes it for a person's. A role's or an attempt's own verdict never lifts it, nor does a
+  `human` actor with no name, a verdict that states no nature, or one that carries a `decision_id` by that alone — a
+  run may carry an answer
   given the other way, before the opt-out, or about another reply. `suppression.remove` takes an entry off the register
   and leaves the lock. A request from inside a
   run — one that carries `Jason-Attempt`, as `jason` sends from there — that names a `human` actor is recorded as that

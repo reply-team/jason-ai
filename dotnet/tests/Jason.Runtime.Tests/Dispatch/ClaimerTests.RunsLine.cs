@@ -73,4 +73,62 @@ public partial class ClaimerTests
 
         await AssertReleasedOrParkedAsync(database, claimed, StandingApprovals.Why.NoStandingApproval);
     }
+
+    /// <summary>
+    /// A line recorded under the desktop's chat marker is the chat's, not the person's own, as a line that carries an attempt
+    /// is the run's. A verdict a person is named on in the chat vouches for nobody: the reply drafted under it waits for a
+    /// person, its preview saying the verdict is not authentic; the same verdict from a terminal releases it.
+    /// </summary>
+    [Theory]
+    [InlineData(true, StandingApprovals.Why.VerdictNotAuthentic)]
+    [InlineData(false, null)]
+    [Critical(Family.S2, "a standing approval: a person named in the desktop's chat vouches for nobody")]
+    public async Task Standing_AVerdictNamingAPersonInTheChat_VouchesForNobody(bool inTheChat, string? parks)
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        string verdict;
+        using (inTheChat ? ConfinedScope.Open() : null)
+        {
+            verdict = await VerdictAsync(db, reading, Operator);
+        }
+
+        await StandAsync(db, reading.Campaign);
+        Drafted(db, reading, verdict, by: Operator);
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        await AssertReleasedOrParkedAsync(database, claimed, parks);
+    }
+
+    /// <summary>
+    /// A standing approval set in the desktop's chat is the chat's, and sets nothing: its set line carries the marker, and
+    /// the draft it would have covered waits for a person.
+    /// </summary>
+    [Theory]
+    [InlineData(true, StandingApprovals.Why.NoStandingApproval)]
+    [InlineData(false, null)]
+    [Critical(Family.S2, "a standing approval: one set in the desktop's chat sets nothing")]
+    public async Task Standing_ASetInTheChat_CoversNothing(bool inTheChat, string? parks)
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var verdict = await VerdictAsync(db, reading, Operator);
+        using (inTheChat ? ConfinedScope.Open() : null)
+        {
+            await StandAsync(db, reading.Campaign);
+        }
+
+        Drafted(db, reading, verdict, by: Operator);
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        await AssertReleasedOrParkedAsync(database, claimed, parks);
+    }
 }

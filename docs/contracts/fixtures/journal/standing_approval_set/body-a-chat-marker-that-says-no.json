@@ -1,0 +1,11 @@
+{
+  "kind": "standing_approval_set",
+  "version": 1,
+  "case": "the marker is written only where it is so; a standing approval set outside the chat carries no member at all",
+  "body": {
+    "key": "interested",
+    "old": null,
+    "new": { "category": "interested", "operations": ["conversation.reply"], "expires_at": null, "max_releases": null, "confined": false }
+  },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }, { "pointer": "/new", "reason": "any_of" }] }
+}
