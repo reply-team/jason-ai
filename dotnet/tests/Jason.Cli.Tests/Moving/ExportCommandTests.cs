@@ -733,6 +733,146 @@ public sealed class ExportCommandTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
     }
 
+    // ---- layout 1, as it was -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The archive of an installation in the layout every Jason before the layout stamp kept is the one such a Jason
+    /// wrote: name for name and digest for digest, every file and folder it carries, and the same listing in
+    /// <c>export.json</c>. Recorded from the export as it stood before the layout stamp was known; a path that moved, a
+    /// tree carried that was not, or one left behind that was carried, changes a line.
+    /// </summary>
+    [Fact]
+    public async Task A_layout_one_installation_travels_as_it_did_before_the_layout_stamp()
+    {
+        using var machine = new MovingMachine();
+        string[] planted =
+        [
+            "state/jason.db", "state/jason.db-wal", "state/jason.db-shm", "state/backups/jason-20261101T000000Z.db",
+            "config/settings.json", "plugins/reply/plugin.yaml", "plugins/reply/main.js", "plugins/reply/lib/util.js",
+            "skills/roles/.jason-skills.json", "skills/roles/manager/SKILL.md", "skills/roles/copywriter/SKILL.md",
+            "skills/.staging/pack/SKILL.md", "skills/staged/pack/SKILL.md", "ui/custom/index.html", "ui/custom/assets/app.js",
+            "ui/default/index.html", "logs/jason-20261108.log", "logs/doctor/jason-doctor-20261108T000000Z.json",
+            "run/runtime.lock", "work/wi_01/att_01/input.json", "update/ledger.json", "autostart/jason-logon.xml",
+            "desktop/settings.json", "setup/plugins/other/plugin.yaml", "elsewhere/notes.txt",
+        ];
+        foreach (var file in planted)
+        {
+            machine.PlantData(file, "the file at " + file);
+        }
+
+        Directory.CreateDirectory(Path.Combine(machine.Data, "plugins", "empty"));
+        machine.Mark(string.Empty, HarnessMarker.Root, null);
+        machine.Mark("projects/acme", HarnessMarker.Project, "prj_01ACME");
+        machine.PlantHarness("projects/acme/AGENTS.md", "# Acme");
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var archivePath = Path.Combine(machine.Here, DefaultName);
+        var listing = new List<string>();
+        using (var archive = ZipFile.OpenRead(archivePath))
+        {
+            foreach (var entry in archive.Entries.Where(entry => entry.FullName != ExportManifest.FileName).OrderBy(entry => entry.FullName, StringComparer.Ordinal))
+            {
+                if (entry.FullName.EndsWith('/'))
+                {
+                    listing.Add(entry.FullName);
+                    continue;
+                }
+
+                using var stream = entry.Open();
+                listing.Add(entry.FullName + " " + Convert.ToHexStringLower(SHA256.HashData(stream)));
+            }
+        }
+
+        using var manifest = Manifest(archivePath);
+        foreach (var entry in manifest.RootElement.GetProperty("entries").EnumerateArray())
+        {
+            listing.Add("listed " + entry.GetProperty("path").GetString() + " " + entry.GetProperty("bytes").GetInt64() + " " + entry.GetProperty("sha256").GetString());
+        }
+
+        foreach (var directory in manifest.RootElement.GetProperty("directories").EnumerateArray())
+        {
+            listing.Add("listed " + directory.GetString());
+        }
+
+        Assert.Equal(LayoutOneListing, listing);
+    }
+
+    private static readonly string[] LayoutOneListing =
+    [
+        "data/config/",
+        "data/config/settings.json 866bd2b827be0ec02272edcb6463db81ac47c9a813a8287d66e3b63aad25455f",
+        "data/logs/",
+        "data/logs/doctor/",
+        "data/logs/doctor/jason-doctor-20261108T000000Z.json d6b850fdbc25d9098e88ede4a3fcb9ccd1d4940e01c379fbdb00c826ca8212a5",
+        "data/logs/jason-20261108.log e53e2c1a0ae9ea326a5d0134b78bef6ce000010afa9f375587db1543f8ad2716",
+        "data/plugins/",
+        "data/plugins/empty/",
+        "data/plugins/reply/",
+        "data/plugins/reply/lib/",
+        "data/plugins/reply/lib/util.js 90a2ab3e5f3f14c8f5b3592423f8c6a9b87f32d9ccf5de9326ae9b664490259a",
+        "data/plugins/reply/main.js 456a675e0ebfcc9c87c21b30e34e18d18cec438055b2a2a43bfa039e0177e940",
+        "data/plugins/reply/plugin.yaml 962d3a1dedd17a5fe711c529114f2b8797172a59808754e536a4aecc0a28d1dd",
+        "data/skills/roles/",
+        "data/skills/roles/.jason-skills.json 33b0dec015d13d4d237d6e76a1d6b43fe2fb05b8d8dadc90f6243a1f60ba261d",
+        "data/skills/roles/copywriter/",
+        "data/skills/roles/copywriter/SKILL.md 2520af6853bf30e045b57985768f66018957f6220f313a293ec6c3da7b50fd92",
+        "data/skills/roles/manager/",
+        "data/skills/roles/manager/SKILL.md 64c82e3284b70e0ffd02461dbfc473c6371884b98020bfbee6ccd2ae6612ab6e",
+        "data/state/",
+        "data/state/jason.db 50620d46425285d864bb55b4956eff599b5dbd7058363afface50cdbdc7815d6",
+        "data/state/jason.db-shm 5740610519da5fe974f7898df57a714460e2a8137c38874c6e4a93fc231cef09",
+        "data/state/jason.db-wal f671301a2fc53eefe7c44b151e176e2497a8e1d009b186c3996836d644e36881",
+        "data/ui/custom/",
+        "data/ui/custom/assets/",
+        "data/ui/custom/assets/app.js 8c676f03c004464d5e3829ee372f17ed4b76a32e767f1a3833810955c3592a60",
+        "data/ui/custom/index.html aacbf298cd2a202be70cb7982daa653eeee41865094bcee12d040a5cb1f35e33",
+        "harness/",
+        "harness/.jason/",
+        "harness/.jason/marker.json 754f3c46a3138b7b0e6599dfd71dd8dfa3e72fcda8323bc6c8e615b343f81037",
+        "harness/projects/",
+        "harness/projects/acme/",
+        "harness/projects/acme/.jason/",
+        "harness/projects/acme/.jason/marker.json e754f32711208ae98089716a6f0a0f0026066372723c707c5e210f06cb5dbeef",
+        "harness/projects/acme/AGENTS.md 7f0d13a03183536903e3e2e7c0a5f42dd8e93e5d46e3b21545bd4901bafdeb32",
+        "listed data/state/jason.db 26 50620d46425285d864bb55b4956eff599b5dbd7058363afface50cdbdc7815d6",
+        "listed data/state/jason.db-wal 30 f671301a2fc53eefe7c44b151e176e2497a8e1d009b186c3996836d644e36881",
+        "listed data/state/jason.db-shm 30 5740610519da5fe974f7898df57a714460e2a8137c38874c6e4a93fc231cef09",
+        "listed data/config/settings.json 32 866bd2b827be0ec02272edcb6463db81ac47c9a813a8287d66e3b63aad25455f",
+        "listed data/plugins/reply/lib/util.js 37 90a2ab3e5f3f14c8f5b3592423f8c6a9b87f32d9ccf5de9326ae9b664490259a",
+        "listed data/plugins/reply/main.js 33 456a675e0ebfcc9c87c21b30e34e18d18cec438055b2a2a43bfa039e0177e940",
+        "listed data/plugins/reply/plugin.yaml 37 962d3a1dedd17a5fe711c529114f2b8797172a59808754e536a4aecc0a28d1dd",
+        "listed data/skills/roles/.jason-skills.json 43 33b0dec015d13d4d237d6e76a1d6b43fe2fb05b8d8dadc90f6243a1f60ba261d",
+        "listed data/skills/roles/copywriter/SKILL.md 44 2520af6853bf30e045b57985768f66018957f6220f313a293ec6c3da7b50fd92",
+        "listed data/skills/roles/manager/SKILL.md 41 64c82e3284b70e0ffd02461dbfc473c6371884b98020bfbee6ccd2ae6612ab6e",
+        "listed data/ui/custom/assets/app.js 35 8c676f03c004464d5e3829ee372f17ed4b76a32e767f1a3833810955c3592a60",
+        "listed data/ui/custom/index.html 32 aacbf298cd2a202be70cb7982daa653eeee41865094bcee12d040a5cb1f35e33",
+        "listed data/logs/doctor/jason-doctor-20261108T000000Z.json 58 d6b850fdbc25d9098e88ede4a3fcb9ccd1d4940e01c379fbdb00c826ca8212a5",
+        "listed data/logs/jason-20261108.log 35 e53e2c1a0ae9ea326a5d0134b78bef6ce000010afa9f375587db1543f8ad2716",
+        "listed harness/.jason/marker.json 34 754f3c46a3138b7b0e6599dfd71dd8dfa3e72fcda8323bc6c8e615b343f81037",
+        "listed harness/projects/acme/.jason/marker.json 55 e754f32711208ae98089716a6f0a0f0026066372723c707c5e210f06cb5dbeef",
+        "listed harness/projects/acme/AGENTS.md 6 7f0d13a03183536903e3e2e7c0a5f42dd8e93e5d46e3b21545bd4901bafdeb32",
+        "listed data/state/",
+        "listed data/config/",
+        "listed data/plugins/",
+        "listed data/plugins/empty/",
+        "listed data/plugins/reply/",
+        "listed data/plugins/reply/lib/",
+        "listed data/skills/roles/",
+        "listed data/skills/roles/copywriter/",
+        "listed data/skills/roles/manager/",
+        "listed data/ui/custom/",
+        "listed data/ui/custom/assets/",
+        "listed data/logs/",
+        "listed data/logs/doctor/",
+        "listed harness/",
+        "listed harness/.jason/",
+        "listed harness/projects/",
+        "listed harness/projects/acme/",
+        "listed harness/projects/acme/.jason/",
+    ];
+
     private static bool CanTake(string lockFile)
     {
         try
