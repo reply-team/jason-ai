@@ -25,8 +25,8 @@ replaces the title and the body together.
 
 This release is about how much of the sending you keep in your own hands, and what Jason holds to whatever you say: you
 state how the messages to people who have not answered, and to people who have, are to go; Jason now knows which of the
-two a person is, and waits for a reply to be judged before it writes to someone who just wrote; a doubt about a message
-goes to you before anything can release it; and a person who asks not to be written to is never written to again, on
+two a person is, and knows when a reply of theirs has not been judged yet; a doubt about a message goes to you before a
+standing approval can release it; and a person who asks not to be written to is never written to again, on
 any address.
 
 - **Say how sends go, for people who have not answered and for people who have.** Two named preferences,
