@@ -335,17 +335,17 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   review. Where the runtime cannot yet tell whether the claim would read the review, because an approval is live and the
   pre-flight stops the send at a check before the approval's (its plugin unavailable, say), so no subject can be
   composed to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send
-  reach the approval. Both hold at the moment of the review: a doubt accepted then leaves the send with no approval to
-  run under, whatever changes after, and a pass leaves a person's approval as it stood, so the claim may run the send
-  under that approval without reading the pass. `result` is `passed` or `doubts`; a doubt carries its `code`, from the
-  closed list the kind's document publishes, and may carry one `note`, a line of at most 280 characters that the line
-  never carries and the person reads on the approval. The `actor` is a running attempt of the same campaign's role work
-  or a person by name, and never the send's creator: no attempt of the work that made it, and not the person who made
-  it, whose own send is theirs to approve (`review_by_creator`, 403); and never one who wrote its `input` since, a
-  person by name or any attempt of a work that did (`review_by_editor`, 403). Once its `input` was written by an actor
-  the runtime cannot hold to anybody, under no name or as a role outside a run, only a person by name reviews it, and a
-  run is refused `review_by_editor` too. Inside a run the actor is the attempt the request comes from. It takes no
-  `reason`. [`docs/work-execution.md`](work-execution.md), "Doubts about a send".
+  reach the approval. A doubt accepted then leaves the send with no approval to run under, whatever changes after; a
+  pass leaves a person's approval as it stood, and the claim may run the send under that approval without reading the
+  pass. `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document
+  publishes, and may carry one `note`, a line of at most 280 characters that the line never carries and the person reads
+  on the approval. The `actor` is a running attempt of the same campaign's role work or a person by name, and never the
+  send's creator: no attempt of the work that made it, and not the person who made it, whose own send is theirs to
+  approve (`review_by_creator`, 403); and never one who wrote its `input` since, a person by name or any attempt of a
+  work that did (`review_by_editor`, 403). Once its `input` was written by an actor the runtime cannot hold to anybody,
+  under no name or as a role outside a run, only a person by name reviews it, and a run is refused `review_by_editor`
+  too. Inside a run the actor is the attempt the request comes from. It takes no `reason`.
+  [`docs/work-execution.md`](work-execution.md), "Doubts about a send".
 
 `workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait` and `decision.raise` belong to the
 attempt the runtime started for a work item: each takes that attempt's id and is refused for any other, so a program

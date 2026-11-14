@@ -478,15 +478,15 @@ since the claim would run it under the decision already made and read no review.
 the runtime cannot yet tell whether the claim would read the review, because an approval is live and the pre-flight
 stops the send at a check that comes before the approval's (its plugin unavailable, say), so no subject can be composed
 to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send reach the
-approval; a provider block, the one check after the approval's, does not stop a review from being judged. Both hold at
-the moment of the review: a doubt accepted then leaves the send with no approval to run under, whatever changes after,
-since it supersedes in its own save an approved row still live, which no longer stands for the send as it would now go
-(`approval_superseded`, under the reviewer's name), and a pass leaves a person's approval as it stood, so the claim may
-run the send under that approval without reading the pass. Who reviews: a running attempt of the same campaign's role
-work, other than every attempt of the work that created the send (a retry of the composer is the same author), or a
-person by name who did not create it (`review_by_creator`); a person's own send goes to them as an approval, their own
-explicit yes. Whoever wrote the send's input since it was made is one of its authors and does not review it either, read
-from the send's own `workitem_context_updated` lines for `input`: a person by name, or any attempt of a work that did
+approval; a provider block, the one check after the approval's, does not stop a review from being judged. A doubt
+accepted then leaves the send with no approval to run under, whatever changes after; a pass leaves a person's approval
+as it stood, and the claim may run the send under that approval without reading the pass. The doubt does so by
+superseding, in the review's own save, the approved row still live, which no longer stands for the send as it would now
+go (`approval_superseded`, under the reviewer's name). Who reviews: a running attempt of the same campaign's role work,
+other than every attempt of the work that created the send (a retry of the composer is the same author), or a person by
+name who did not create it (`review_by_creator`); a person's own send goes to them as an approval, their own explicit
+yes. Whoever wrote the send's input since it was made is one of its authors and does not review it either, read from the
+send's own `workitem_context_updated` lines for `input`: a person by name, or any attempt of a work that did
 (`review_by_editor`). An edit by an actor the runtime cannot hold to anybody, under no name or as a role outside a run,
 has an author no run can be told apart from, so from then on only a person by name reviews the send, and a run is
 refused `review_by_editor`. Inside a run a review speaks as its run: an actor other than the attempt the request's
