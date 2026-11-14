@@ -49,8 +49,11 @@ names leave them, each made one line, its unseen characters taken out and drawn 
 `setup.status()`'s host, which a paired browser tab reads too. A file that is not there lists nothing; one that cannot be
 read or parsed lists nothing either and is logged as `own_servers_unread` with the program and the kind alone. No file
 can fail or hang the listing: only a regular file is opened, none over 64 MiB is read, and one nested more than 64 deep
-or naming more than 1,000 servers lists nothing. No host command is run to list them: `claude mcp list` connects to the
-servers, and `codex mcp list` can reach the network.
+or naming more than 1,000 servers lists nothing. Each file's last answer, its names or its kind and never its text, is
+remembered in the main process by the size and modification time `stat` gave before it was opened; while both are
+unchanged a listing opens nothing, a file gone lists nothing at once, and the log line is written when a program's kind
+changes, not at every listing. No host command is run to list them: `claude mcp list` connects to the servers, and
+`codex mcp list` can reach the network.
 
 On Windows every Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own choice of
 sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
