@@ -169,7 +169,7 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
 
     /// <summary>
     /// Refuses a review the claim would never read: where the claim would run the send now under an approval that stands
-    /// for it as it reads, a retry goes under that approval and no review is heard. Where the claim cannot say, because
+    /// for it as it would now go, it runs under that approval and no review is heard. Where the claim cannot say, because
     /// the send cannot be claimed right now while an approved row is live, the review is refused too, failing closed.
     /// Named by the approval's id alone.
     /// </summary>
@@ -179,9 +179,9 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
         switch (reading.Hearing)
         {
             case ReviewHearing.NotRead:
-                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' approved it as it now reads, and a retry goes under that approval without reading a review");
+                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' stands for the send as it would now go, and the claim would run it under that approval without reading a review");
             case ReviewHearing.Unjudged:
-                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' cannot be checked against the send's text right now; review it again once the send can be claimed");
+                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' is live and the send cannot be claimed right now, so whether the claim would read a review cannot be told yet; once the send can be claimed it may be reviewed again, and is refused then too while that approval stands for the send as it would go");
         }
     }
 

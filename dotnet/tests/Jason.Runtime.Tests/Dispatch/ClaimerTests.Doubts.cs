@@ -297,7 +297,8 @@ public partial class ClaimerTests
         var refused = await Assert.ThrowsAsync<ConflictException>(() => ReviewAsync(db, reading, item.PublicId, hash, ReviewResult.Doubts, "off_brief", ReviewSentence, harness.Claimer));
 
         Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads, and a retry goes under that approval", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{approval.PublicId}' stands for the send as it would now go, and the claim would run it under that approval without reading a review", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("retry", refused.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
         await using var fresh = database.Open();
         Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
@@ -438,7 +439,7 @@ public partial class ClaimerTests
         var approval = await db.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal("not_reviewable", refused.Code);
         Assert.Contains(
-            $"approval '{approval.PublicId}' cannot be checked against the send's text right now; review it again once the send can be claimed",
+            $"approval '{approval.PublicId}' is live and the send cannot be claimed right now, so whether the claim would read a review cannot be told yet; once the send can be claimed it may be reviewed again, and is refused then too while that approval stands for the send as it would go",
             refused.Message,
             StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
@@ -484,7 +485,7 @@ public partial class ClaimerTests
         await using var fresh = database.Open();
         var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal((ApprovalStatus.Approved, ApprovalGate.StandingApproval), (approval.Status, approval.Reason));
-        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{approval.PublicId}' stands for the send as it would now go", refused.Message, StringComparison.Ordinal);
         Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
         var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct);
         Assert.Equal((WorkItemStatus.Created, (string?)null), (row.Status, row.ReviewNote));
@@ -528,7 +529,7 @@ public partial class ClaimerTests
 
         Assert.True(meanwhile.Fired);
         Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains($"approval '{asked.PublicId}' approved it as it now reads", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{asked.PublicId}' stands for the send as it would now go", refused.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
         await using var fresh = database.Open();
         Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
