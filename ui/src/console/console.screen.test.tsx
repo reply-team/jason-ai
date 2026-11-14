@@ -103,6 +103,11 @@ describe('the console', () => {
                 ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
             );
         });
+        // What the empty chat promises holds whatever the send mode: what is written here waits for the person.
+        const hero = screen.getByRole('heading', { name: 'What should Jason work on?' }).closest('.hero')!;
+        expect(hero.querySelector('p')?.textContent).toBe(
+            'Nothing written here reaches a person without your approval.',
+        );
     });
 
     it('approves and rejects with a reason through the runtime, and reads the list again', async () => {
