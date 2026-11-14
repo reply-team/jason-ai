@@ -69,7 +69,11 @@ public sealed class RuntimeClient : IDisposable
     /// <see cref="ConnectTimeout"/>: a runtime that cannot be reached is told apart from one that took the request.
     /// </param>
     /// <param name="clock">What a request's budget is counted on; the system's clock where none is given.</param>
-    public RuntimeClient(RuntimeDescriptor descriptor, string? attempt, TextWriter error, HttpMessageHandler? handler = null, TimeProvider? clock = null)
+    /// <param name="confined">
+    /// Whether the call is confined (<see cref="Confinement"/>): where it is, every request carries
+    /// <see cref="Confinement.Header"/>, which the runtime records on a work item made, or whose input is edited, under it.
+    /// </param>
+    public RuntimeClient(RuntimeDescriptor descriptor, string? attempt, TextWriter error, HttpMessageHandler? handler = null, TimeProvider? clock = null, bool confined = false)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(error);
@@ -80,6 +84,11 @@ public sealed class RuntimeClient : IDisposable
         // Each request is bounded by its own operation's budget, below; the client's one bound would cut them all alike.
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", descriptor.Token);
+        if (confined)
+        {
+            _http.DefaultRequestHeaders.TryAddWithoutValidation(Confinement.Header, Confinement.HeaderValue);
+        }
+
         if (string.IsNullOrWhiteSpace(attempt))
         {
             return;

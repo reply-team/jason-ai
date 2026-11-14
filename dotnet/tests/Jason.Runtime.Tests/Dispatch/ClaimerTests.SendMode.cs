@@ -167,18 +167,23 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// Whose pass releases: the critic's run, or a person by name outside any run. A pass by another role is shown and
-    /// releases nothing; a line that names a person but carries an attempt is the run's, and a run's line that names another
+    /// Whose pass releases: the critic the runtime made for this send, or a person by name outside any run. A critic queued
+    /// by hand, one the runtime made for another send, or one whose context anybody but the runtime patched is shown and
+    /// releases nothing, as another role's pass; a line that names a person but carries an attempt is the run's, and a run's line that names another
     /// attempt than the one it carries is nobody's pass. None that counts parks the send <c>not_reviewed</c>, the newest pass
     /// of its text on the preview where one stands.
     /// </summary>
     [Theory]
-    [InlineData("the critic's run", null)]
+    [InlineData("the critic the runtime made for the send", null)]
+    [InlineData("the runtime's critic, then a copywriter's pass", null)]
     [InlineData("a person by name", null)]
     [InlineData("nobody", "not_reviewed")]
     [InlineData("a copywriter's run", "not_reviewed")]
     [InlineData("a person named on a run's line", "not_reviewed")]
     [InlineData("a critic's line naming another attempt", "not_reviewed")]
+    [InlineData("a critic a person queued by hand", "not_reviewed")]
+    [InlineData("the critic the runtime made for another send", "not_reviewed")]
+    [InlineData("the runtime's critic, its context patched by a person", "not_reviewed")]
     [Critical(Family.S2, "the automatic mode: only the critic's or a person's pass releases")]
     public async Task SendMode_WhosePassReleases(string who, string? parks)
     {
@@ -191,9 +196,13 @@ public partial class ClaimerTests
         var item = await db.WorkItems.Include(w => w.Campaign).SingleAsync(w => w.PublicId == send.Id, Ct);
         string? shown = who switch
         {
-            "the critic's run" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash),
+            "the critic the runtime made for the send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash),
+            "a critic a person queued by hand" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.QueuedByHand),
+            "the critic the runtime made for another send" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.AnotherSends),
+            "the runtime's critic, its context patched by a person" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, critic: Critic.Patched),
             "a person by name" => (await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
                 new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "ada")), Ct)).Id,
+            "the runtime's critic, then a copywriter's pass" => await ThenAsync(await CriticPassAsync(db, reading, send.Id, send.ReviewHash), CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter")),
             "a copywriter's run" => await CriticPassAsync(db, reading, send.Id, send.ReviewHash, role: "copywriter"),
             "a person named on a run's line" => await PassLineAsync(db, item, new ActorRef(ActorType.Human, "ada"), await RunningAsync(db, reading, "critic"), "critic"),
             "a critic's line naming another attempt" => await PassLineAsync(db, item, new ActorRef(ActorType.Attempt, "att_01K52JR0000000000000000099"), await RunningAsync(db, reading, "critic"), "critic"),
@@ -358,6 +367,75 @@ public partial class ClaimerTests
         var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal(outcome, approval.Reason);
         Assert.Equal(outcome == "automatic_mode" ? 1 : 0, claimed.Count);
+    }
+
+    /// <summary>
+    /// An escalation is read across the conversation, not only on the reply answered. An answer to a person's reply waits
+    /// for the person, <c>escalated</c>, where a verdict that stands on the same thread, about a reply at or after the one
+    /// answered, says escalate; an escalation of an earlier reply holds nothing, nor does one a later verdict on the same
+    /// reply replaced.
+    /// </summary>
+    [Theory]
+    [InlineData("a later reply judged escalate", "escalated")]
+    [InlineData("an earlier reply judged escalate", "automatic_mode")]
+    [InlineData("a later escalation judged again as a draft", "automatic_mode")]
+    public async Task SendMode_AnEscalationInTheConversation_HoldsTheAnswer(string meanwhile, string outcome)
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, "automatic");
+        await ModeAsync(db, WarmMode, "automatic");
+        var answered = await NatureVerdictAsync(db, reading, ReplyNature.Person, message: "msg-1", minutesBefore: 30);
+        switch (meanwhile)
+        {
+            case "a later reply judged escalate":
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-2", minutesBefore: 10);
+                break;
+            case "an earlier reply judged escalate":
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-0", minutesBefore: 50);
+                break;
+            case "a later escalation judged again as a draft":
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-2", minutesBefore: 10);
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Draft, message: "msg-2", minutesBefore: 10);
+                break;
+        }
+
+        var item = Drafted(db, reading, answered);
+        await db.SaveChangesAsync(Ct);
+        await CriticPassAsync(db, reading, item.PublicId, ReviewSubject.Hash(item));
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(outcome, approval.Reason);
+        Assert.Equal(outcome == "automatic_mode" ? 1 : 0, claimed.Count);
+    }
+
+    /// <summary>
+    /// A moment that is not known holds: an earlier reply's escalation holds nothing against an answer whose moment is
+    /// known, and holds it where the answered verdict carries none, since nothing tells which came first. The store refuses
+    /// a verdict line without its moment, so the read is asked directly with the answered verdict's body.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task SendMode_AnEscalationWhoseOrderIsNotKnown_Holds(bool momentKnown, bool holds)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var answered = await NatureVerdictAsync(db, reading, ReplyNature.Person, message: "msg-1", minutesBefore: 30);
+        await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-0", minutesBefore: 50);
+        var body = (JsonObject)(await db.Journal.AsNoTracking().SingleAsync(e => e.PublicId == answered, Ct)).New!.DeepClone();
+        if (!momentKnown)
+        {
+            body.Remove("message_at");
+        }
+
+        Assert.Equal(holds, await AutomaticRelease.EscalatedSinceAsync(db, reading.Campaign.Id, body, Ct));
     }
 
     /// <summary>
@@ -589,6 +667,60 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// Only the automatic mode's row reads warmth again at a retry. A retry under a person's own approval, or under a
+    /// standing approval's row, goes under that decision even where a reply of the contact's landed since and waits for a
+    /// verdict, with the automatic mode in force all the while.
+    /// </summary>
+    [Theory]
+    [InlineData("a person's approval")]
+    [InlineData("a standing approval")]
+    public async Task SendMode_ARetryUnderAnotherRow_ReadsNoWarmthAgain(string under)
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        string sendId;
+        if (under == "a person's approval")
+        {
+            sendId = (await ComposeAsync(db, reading, waitOn: null)).Id;
+            Assert.Empty(await ClaimSettledAsync(harness, db));
+            var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+            var clock = new FixedClock(Noon);
+            await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+            db.ChangeTracker.Clear();
+            db.Attach(reading.Campaign);
+        }
+        else
+        {
+            var verdict = await NatureVerdictAsync(db, reading, ReplyNature.Person, by: Operator);
+            await StandAsync(db, reading.Campaign);
+            sendId = (await Items(db).CreateAsync(
+                new WorkItemCreateRequest(
+                    reading.Campaign.PublicId, WorkItemKind.ProviderOp, null, "conversation.reply", reading.Contact.PublicId,
+                    null, null, null, null, null, null, null,
+                    new JsonObject { [WorkItemService.InputKey] = ReplyingIn(InThread), [StandingApprovals.VerdictKey] = verdict },
+                    null, Operator, null),
+                Ct)).Id;
+        }
+
+        Assert.Single(await ClaimSettledAsync(harness, db));
+        var decided = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(under == "a person's approval" ? "approval_required" : "standing_approval", decided.Reason);
+        await ModeAsync(db, ColdMode, "automatic");
+        await ModeAsync(db, WarmMode, "automatic");
+        await FailRetriablyAsync(db, sendId);
+        await ObservedAsync(db, reading, "2026-09-14T11:55:00.000Z");
+        db.ChangeTracker.Clear();
+
+        Assert.Single(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        var row = Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal((ApprovalStatus.Approved, decided.Reason), (row.Status, row.Reason));
+    }
+
+    /// <summary>
     /// A review is refused exactly where the claim would not read it. Released automatically and then failed for a reason
     /// that is retried, the send's retry goes under its automatic row and reads no review, so a doubt sent then is refused
     /// <c>not_reviewable</c>, naming the row, and nothing is written.
@@ -612,7 +744,7 @@ public partial class ClaimerTests
         var refused = await Assert.ThrowsAsync<ConflictException>(() => ReviewAsync(db, reading, send.Id, send.ReviewHash, ReviewResult.Doubts, "off_brief", ReviewSentence, harness.Claimer));
 
         Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{approval.PublicId}' stands for the send as it would now go", refused.Message, StringComparison.Ordinal);
         await using var fresh = database.Open();
         Assert.Equal(pass, (await fresh.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct)).PublicId);
     }
@@ -663,6 +795,134 @@ public partial class ClaimerTests
         Assert.Equal(blocked ? 1 : 0, await fresh.Journal.CountAsync(e => e.Kind == "approval_automatic_applied", Ct));
     }
 
+    /// <summary>
+    /// A send written in the desktop's chat waits for the person in every mode, ahead of any standing approval. Under the
+    /// automatic mode, its text passed by the critic, it parks <c>sent_from_chat</c>; under every message it parks under the
+    /// reason every first park has, and a standing approval that would have released it says <c>sent_from_chat</c>; under the
+    /// automatic mode with such a standing approval it parks <c>sent_from_chat</c> too. The same send written outside the
+    /// chat goes, automatically or under the standing approval.
+    /// </summary>
+    [Theory]
+    [InlineData("automatic", false, true, "sent_from_chat")]
+    [InlineData("every_message", true, true, "approval_required")]
+    [InlineData("automatic", true, true, "sent_from_chat")]
+    [InlineData("automatic", false, false, "automatic_mode")]
+    [InlineData("every_message", true, false, "standing_approval")]
+    [Critical(Family.S2, "a send written in the chat always waits for the person")]
+    public async Task SendMode_ASendWrittenInTheChat_AlwaysWaitsForThePerson(string mode, bool standing, bool chat, string reason)
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, mode);
+        var verdict = await NatureVerdictAsync(db, reading, ReplyNature.Person, by: Operator);
+        if (standing)
+        {
+            await StandAsync(db, reading.Campaign);
+        }
+
+        WorkItemDto draft;
+        using (chat ? ConfinedScope.Open() : null)
+        {
+            draft = await Items(db).CreateAsync(
+                new WorkItemCreateRequest(
+                    reading.Campaign.PublicId, WorkItemKind.ProviderOp, null, "conversation.reply", reading.Contact.PublicId,
+                    null, null, null, null, null, null, null,
+                    new JsonObject { [WorkItemService.InputKey] = ReplyingIn(InThread), [StandingApprovals.VerdictKey] = verdict },
+                    null, Operator, null),
+                Ct);
+        }
+
+        await CriticPassAsync(db, reading, draft.Id, draft.ReviewHash);
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(reason, approval.Reason);
+        Assert.Equal(reason is "automatic_mode" or "standing_approval" ? 1 : 0, claimed.Count);
+        if (chat && standing)
+        {
+            Assert.Equal(StandingApprovals.Why.SentFromChat, (string?)approval.Preview["standing_approval"]!["why"]);
+        }
+
+        if (chat)
+        {
+            Assert.False(await fresh.Journal.AnyAsync(e => e.Kind == "approval_automatic_applied" || e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
+        }
+    }
+
+    /// <summary>
+    /// The gate never meets a send that names no contact: each send acts on a contact, so the pre-flight refuses one that
+    /// names none, <c>contact_required</c>, before the approval is asked, a chat send's under a standing approval that
+    /// would cover its verdict included. The step reads the chat's mark before it asks for the contact all the same.
+    /// </summary>
+    [Fact]
+    public async Task SendMode_ASendNamingNoContact_IsRefusedBeforeTheGate()
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var verdict = await NatureVerdictAsync(db, reading, ReplyNature.Person, by: Operator);
+        await StandAsync(db, reading.Campaign);
+        WorkItemDto draft;
+        using (ConfinedScope.Open())
+        {
+            draft = await Items(db).CreateAsync(
+                new WorkItemCreateRequest(
+                    reading.Campaign.PublicId, WorkItemKind.ProviderOp, null, "conversation.reply", null,
+                    null, null, null, null, null, null, null,
+                    new JsonObject { [WorkItemService.InputKey] = ReplyingIn(InThread), [StandingApprovals.VerdictKey] = verdict },
+                    null, Operator, null),
+                Ct);
+        }
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        var item = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == draft.Id, Ct);
+        Assert.Equal((WorkItemStatus.Failed, "contact_required"), (item.Status, item.LastError!.Code));
+        Assert.Empty(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+    }
+
+    /// <summary>
+    /// An edit of a send's input in the chat makes it the chat's: a send written outside the chat, its text then edited
+    /// there and passed again by the critic, parks <c>sent_from_chat</c> under the automatic mode.
+    /// </summary>
+    [Fact]
+    public async Task SendMode_AnEditInTheChat_MakesTheSendTheChats()
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, "automatic");
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        db.ChangeTracker.Clear();
+        WorkItemDto edited;
+        using (ConfinedScope.Open())
+        {
+            edited = await Items(db).UpdateAsync(
+                new WorkItemUpdateRequest(
+                    send.Id,
+                    new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") },
+                    null, default, default, default, default, default, default, default, default,
+                    new ActorRef(ActorType.Human, "operator"),
+                    Reason: null),
+                Ct);
+        }
+
+        await CriticPassAsync(db, reading, send.Id, edited.ReviewHash);
+        db.ChangeTracker.Clear();
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        Assert.Equal("sent_from_chat", (await fresh.Approvals.AsNoTracking().SingleAsync(Ct)).Reason);
+    }
+
     private static Harness ModeHarness() => new(
         plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "social_invitation.send"]),
         route: new Route(Provider, null, null));
@@ -708,20 +968,22 @@ public partial class ClaimerTests
     }
 
     /// <summary>A verdict of the reading's run on the reply, saying the nature given; its line's id.</summary>
-    private static async Task<string> NatureVerdictAsync(JasonDbContext db, Reading reading, ReplyNature? nature, ReplyReaction reaction = ReplyReaction.Draft)
+    private static async Task<string> NatureVerdictAsync(
+        JasonDbContext db, Reading reading, ReplyNature? nature, ReplyReaction reaction = ReplyReaction.Draft, ActorRef? by = null,
+        string message = "msg-1", int minutesBefore = 30)
     {
         var line = await new ReplyService(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon)))).RecordAsync(
             new ReplyRecordRequest(
                 reading.Campaign.PublicId,
                 Provider,
                 InThread,
-                "msg-1",
-                new DateTimeOffset(Noon.AddMinutes(-30)),
+                message,
+                new DateTimeOffset(Noon.AddMinutes(-minutesBefore)),
                 "interested",
                 0.9,
                 reaction,
                 ContactId: reading.Contact.PublicId,
-                Actor: RunOf(reading),
+                Actor: by ?? RunOf(reading),
                 Nature: nature),
             Ct);
         return line.Id;
@@ -754,10 +1016,84 @@ public partial class ClaimerTests
         return run;
     }
 
-    /// <summary>A pass of the send's text by a running attempt of the critic's work, through the verb; its line's id.</summary>
-    private static async Task<string> CriticPassAsync(JasonDbContext db, Reading reading, string sendId, string? hash, string role = "critic")
+    /// <summary>Which critic reviews a send: the one the runtime made for it, or one of the three that release nothing.</summary>
+    internal enum Critic
     {
-        var run = await RunningAsync(db, reading, role);
+        TheRuntimes,
+        QueuedByHand,
+        AnotherSends,
+        Patched,
+    }
+
+    /// <summary>
+    /// A running attempt of a critic's work, made as the runtime will make it for a send: created by the runtime's own actor,
+    /// its created line saying so, and its context's <c>send_review</c> naming the send; or queued by a person, naming another
+    /// send, or with its context patched by a person afterwards.
+    /// </summary>
+    private static async Task<Attempt> CriticRunAsync(JasonDbContext db, Reading reading, string sendId, Critic critic)
+    {
+        var campaign = db.Campaigns.Local.FirstOrDefault(c => c.Id == reading.Campaign.Id);
+        if (campaign is null)
+        {
+            db.Attach(reading.Campaign);
+            campaign = reading.Campaign;
+        }
+
+        var operation = await db.WorkItems.AsNoTracking().Where(w => w.PublicId == sendId).Select(w => w.Operation).SingleAsync(Ct);
+        var creator = critic == Critic.QueuedByHand ? Operator : Actors.Runtime;
+        var work = WorkItemFactory.NewAiRole(campaign, role: AutomaticRelease.CriticRole, now: Noon);
+        work.CreatedByType = creator.Type;
+        work.CreatedById = creator.Id;
+        work.Context = new JsonObject
+        {
+            [SendReview.Key] = new JsonObject
+            {
+                [SendReview.WorkItemIdMember] = critic == Critic.AnotherSends ? "wi_01K52JR0000000000000000055" : sendId,
+                [SendReview.OperationMember] = operation,
+            },
+        };
+        work.Status = WorkItemStatus.Processing;
+        var run = WorkItemFactory.NewAttempt(work, 1, AttemptStatus.Running, Noon);
+        db.WorkItems.Add(work);
+        var journal = new JournalWriter(new FixedClock(Noon));
+        journal.Append(
+            db,
+            creator,
+            JournalKinds.WorkItemCreated,
+            campaign,
+            key: "kind",
+            updated: new JsonObject
+            {
+                ["kind"] = "ai_role",
+                ["role"] = AutomaticRelease.CriticRole,
+                ["operation"] = null,
+                ["contact_id"] = null,
+                ["priority"] = work.Priority,
+                ["not_before"] = null,
+                ["due_at"] = null,
+            },
+            workItem: work);
+        if (critic == Critic.Patched)
+        {
+            journal.Append(db, Operator, JournalKinds.WorkItemContextUpdated, campaign, key: "brief", old: null, updated: "Look at the tone.", workItem: work);
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return run;
+    }
+
+    /// <summary>The first line's id, once the review that follows it is written too.</summary>
+    private static async Task<string> ThenAsync(string first, Task<string> then)
+    {
+        await then;
+        return first;
+    }
+
+    /// <summary>A pass of the send's text by a running attempt of the critic's work, through the verb; its line's id.</summary>
+    private static async Task<string> CriticPassAsync(
+        JasonDbContext db, Reading reading, string sendId, string? hash, string role = "critic", Critic critic = Critic.TheRuntimes)
+    {
+        var run = role == AutomaticRelease.CriticRole ? await CriticRunAsync(db, reading, sendId, critic) : await RunningAsync(db, reading, role);
         var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
             new WorkItemReviewRequest(sendId, hash, ReviewResult.Passed, null, null, new ActorRef(ActorType.Attempt, run.PublicId)),
             Ct);
