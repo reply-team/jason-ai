@@ -154,6 +154,7 @@ public sealed class SettingsAllowlist
         new("Responder:MaxAttempts", Kind.Integer32),
         new("Responder:MaxAgeSeconds", Kind.Integer32),
         .. ShippedRoles.Names.Select(role => new Entry($"Launches:MaxPerDay:{role}", Kind.Integer32)),
+        new("Sending:AutomaticMaxPerDay", Kind.Integer32),
         new("Subscriptions:RunRecordsPerKind", Kind.Integer32),
         new("Subscriptions:EnvelopeBytes", Kind.Integer32),
         new("Subscriptions:TransientRetries", Kind.Integer32),

@@ -94,6 +94,12 @@ public static class StandingApprovals
         /// such a send waits for the person whatever stands for it, so no standing approval releases it.
         /// </summary>
         public const string SentFromChat = "sent_from_chat";
+
+        /// <summary>
+        /// Covered in every other respect, but the automatic mode would have released the send and the campaign has reached
+        /// <c>Sending:AutomaticMaxPerDay</c> for the UTC day, which never slips, so no standing approval releases it either.
+        /// </summary>
+        public const string DailyCeiling = "daily_ceiling";
     }
 
     /// <summary>The newest standing-approval line of one campaign for one category, set or unset, through the kind index.</summary>
@@ -594,7 +600,8 @@ public static class StandingApprovals
 
     /// <summary>
     /// The answer for work <paramref name="cover"/> would release but something holds for the person: not covered, saying
-    /// <paramref name="why"/> — <see cref="Why.Doubted"/> or <see cref="Why.SentFromChat"/> — beside the facts the cover
+    /// <paramref name="why"/> — <see cref="Why.Doubted"/>, <see cref="Why.SentFromChat"/> or <see cref="Why.DailyCeiling"/> —
+    /// beside the facts the cover
     /// names, the verdict and its category for a reply.
     /// </summary>
     internal static Answer Held(Cover cover, string why)

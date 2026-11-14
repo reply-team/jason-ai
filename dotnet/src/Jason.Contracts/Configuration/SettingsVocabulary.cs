@@ -20,7 +20,7 @@ public static class SettingsVocabulary
     {
         // The sections.
         "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound", "Responder", "Launches", "Harness",
-        "Subscriptions",
+        "Subscriptions", "Sending",
 
         // Runtime and Logging.
         "Port",
@@ -66,6 +66,9 @@ public static class SettingsVocabulary
 
         // Launches: the daily limits, under a key that is a role; the roles Jason ships are joined below.
         "MaxPerDay",
+
+        // Sending: the daily ceiling of automatic sends.
+        "AutomaticMaxPerDay",
 
         // Harness.
         "Root",

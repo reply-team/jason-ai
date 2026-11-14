@@ -43,6 +43,7 @@ public sealed class Claimer(
     ISuppressionCheck suppression,
     LiveSettings<DispatcherOptions> settings,
     LiveSettings<LaunchesOptions> launches,
+    LiveSettings<SendingOptions> sending,
     JasonPaths paths,
     ILogger<Claimer> logger,
     PatternTiming? timing = null) : IClaimReading
@@ -110,6 +111,9 @@ public sealed class Claimer(
         // day is UTC, since a campaign has no time zone of its own.
         var limits = launches.Current.MaxPerDay;
         var today = now.Date;
+
+        // And the daily ceiling of automatic sends, for the same reason and over the same UTC day.
+        var ceiling = new DailyCeiling.Limit(sending.Current.AutomaticMaxPerDay, today);
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
 
@@ -179,7 +183,7 @@ public sealed class Claimer(
 
             var asks = verdict is { Parks: true, Code: AttemptErrors.ApprovalRequired };
             var released = asks
-                ? await DecideAsync(db, item, verdict!, now, ct).ConfigureAwait(false)
+                ? await DecideAsync(db, item, verdict!, now, ceiling, ct).ConfigureAwait(false)
                 : null;
             if (asks && released is null)
             {
@@ -612,7 +616,7 @@ public sealed class Claimer(
     /// that sent nothing performs the one act the person approved, and an end that may have sent is never repeated
     /// by an operation that says so.
     /// </remarks>
-    private async Task<Approval?> DecideAsync(JasonDbContext db, WorkItem item, PreflightVerdict verdict, DateTime now, CancellationToken ct)
+    private async Task<Approval?> DecideAsync(JasonDbContext db, WorkItem item, PreflightVerdict verdict, DateTime now, DailyCeiling.Limit ceiling, CancellationToken ct)
     {
         var plan = verdict.Plan!;
         var subject = ApprovalSubject.Of(plan, item);
@@ -661,10 +665,11 @@ public sealed class Claimer(
             && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false);
 
         // The automatic mode first, in its own published order; where it parks the send, the reason is the row's and the
-        // facts are the preview's. A doubt and a send from the chat park for the person ahead of any standing approval; every
-        // other park of the mode leaves the standing approval to decide by its own conditions, as it did before the modes.
+        // facts are the preview's. A doubt, a send from the chat and a send at the daily ceiling park for the person ahead of
+        // any standing approval; every other park of the mode leaves the standing approval to decide by its own conditions, as
+        // it did before the modes.
         var automatic = neverAsked
-            ? await AutomaticRelease.DecideAsync(db, item, plan, doubted, ct).ConfigureAwait(false)
+            ? await AutomaticRelease.DecideAsync(db, item, plan, doubted, ceiling, ct).ConfigureAwait(false)
             : null;
         if (automatic is AutomaticDecision.Release release)
         {
@@ -674,6 +679,10 @@ public sealed class Claimer(
         if (automatic is AutomaticDecision.Park parked)
         {
             preview[AutomaticRelease.PreviewKey] = parked.Facts;
+            if (parked.Ceiling is { } ceilingSaid)
+            {
+                preview[DailyCeiling.PreviewKey] = ceilingSaid;
+            }
         }
 
         var held = automatic switch
