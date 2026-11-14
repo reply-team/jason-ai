@@ -163,13 +163,12 @@ public class CampaignCommandsTests
 
     /// <summary>
     /// A campaign's own send mode: a word sets one, <c>--clear</c> sends null for one, which gives it back to the
-    /// installation, and wins over a word given for the same mode; a mode not named is not sent at all.
+    /// installation; a mode not named is not sent at all.
     /// </summary>
     [Theory]
     [InlineData(new[] { "--cold", "automatic" }, "\"cold\":\"automatic\"")]
     [InlineData(new[] { "--warm", "every_message" }, "\"warm\":\"every_message\"")]
     [InlineData(new[] { "--cold", "automatic", "--clear", "warm" }, "\"cold\":\"automatic\",\"warm\":null")]
-    [InlineData(new[] { "--cold", "automatic", "--clear", "cold" }, "\"cold\":null")]
     [InlineData(new[] { "--clear", "cold", "--clear", "warm" }, "\"cold\":null,\"warm\":null")]
     public async Task Set_send_mode_sends_the_modes_named_and_null_for_a_mode_cleared(string[] options, string modes)
     {
@@ -186,6 +185,8 @@ public class CampaignCommandsTests
     [Theory]
     [InlineData(new[] { "--clear", "both" }, "--clear names cold or warm.")]
     [InlineData(new string[0], "campaign set-send-mode needs --cold, --warm or --clear")]
+    [InlineData(new[] { "--clear", "cold", "--cold", "every_message" }, "--cold and --clear cold both name the cold mode: set it or give it back, not both.")]
+    [InlineData(new[] { "--warm", "automatic", "--clear", "warm" }, "--warm and --clear warm both name the warm mode: set it or give it back, not both.")]
     public async Task Set_send_mode_refuses_a_request_that_names_no_mode_it_knows(string[] options, string said)
     {
         using var cli = new CliRun();
