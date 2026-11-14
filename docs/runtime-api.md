@@ -216,7 +216,8 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.set_send_mode`: the campaign's own send mode for its cold contacts, its warm ones or both, `automatic` or
   `every_message`; null gives a mode back to the installation's `send_mode.cold` or `send_mode.warm`, and an absent
   one is left alone. A person's word: only a named `human` sets it (`send_mode_not_human`, `actor_required`), and a
-  request from inside a run is refused. Each mode that moves is one `campaign_updated` line, and so is a mode set again by
+  request from inside a run is refused. Naming neither mode is a validation error at `cold`, and an archived campaign is
+  refused (`campaign_archived`). Each mode that moves is one `campaign_updated` line, and so is a mode set again by
   another person, which becomes theirs: its old and its new are the same word, under the new setter; the same person
   asking again writes nothing. Every answer that carries a campaign whole says the campaign's own in `send_modes`, each
   null where it sets none, and the mode a send to a cold or a warm contact goes under now in `send_modes_in_force`,
