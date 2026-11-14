@@ -175,6 +175,49 @@ public class JasonPathsTests
         }
     }
 
+    /// <summary>
+    /// Production code outside the contracts makes its paths from a root alone, so that they read the stamp: a layout given
+    /// skips it, and with it every refusal, so it is a test's or the code that moves the parts, which lives beside
+    /// <see cref="JasonPaths"/>. Read from the sources; a target-typed <c>new(...)</c> is beyond what this reads.
+    /// </summary>
+    [Fact]
+    public void Production_code_outside_the_contracts_never_gives_the_paths_a_layout()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        {
+            root = root.Parent;
+        }
+
+        Assert.NotNull(root);
+        var sources = Path.Combine(root.FullName, "dotnet", "src");
+        var found = new List<string>();
+        var read = 0;
+        foreach (var file in Directory.EnumerateFiles(sources, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !Path.GetRelativePath(sources, file).StartsWith("Jason.Contracts" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
+        {
+            read++;
+            var text = File.ReadAllText(file);
+            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(text, @"new\s+(?:[\w.]+\.)?JasonPaths\s*\("))
+            {
+                var depth = 1;
+                for (var at = match.Index + match.Length; at < text.Length && depth > 0; at++)
+                {
+                    depth += text[at] switch { '(' => 1, ')' => -1, _ => 0 };
+                    if (depth == 1 && text[at] == ',')
+                    {
+                        found.Add(Path.GetRelativePath(sources, file));
+                        break;
+                    }
+                }
+            }
+        }
+
+        Assert.True(read > 100, "the sources were not found, so this asserts nothing.");
+        Assert.Empty(found);
+    }
+
     /// <summary>Every string member but the root, by name, as the paths answer it.</summary>
     internal static IEnumerable<(string Member, string Path)> Members(JasonPaths paths) =>
         typeof(JasonPaths).GetProperties()
