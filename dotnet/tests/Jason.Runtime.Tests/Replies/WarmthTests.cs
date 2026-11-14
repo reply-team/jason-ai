@@ -988,11 +988,33 @@ public class WarmthTests
         Assert.Equal(0, twenty.FullScanSteps);
     }
 
+    /// <summary>The steps the row below measured for twenty moves, each with its own responder, after the whole-thread rule.</summary>
+    private const int MeasuredTwentyMoves = 50847;
+
+    /// <summary>
+    /// The cost is lines times responders on one thread, bounded by the thread and never by the campaign; the repair is that
+    /// only the thread's latest own line needs the walk, since a responder that judges it judges every earlier one.
+    /// Twenty moves of the contact's thread, each with a responder of its own created after it, with its own read, started
+    /// before its read succeeded, so that none judges anything, are pinned loosely at half as much again as the steps
+    /// measured today, and no step is a full scan's: a change that makes the walk worse turns this row red. The steps are
+    /// counted, not timed.
+    /// </summary>
+    [Fact]
+    public async Task The_wait_read_over_a_move_and_a_responder_apiece_stays_within_todays_steps()
+    {
+        var twenty = await StepsWithRespondersAsync(20, movePerResponder: true);
+
+        Assert.InRange(twenty.Steps, 1, MeasuredTwentyMoves * 3 / 2);
+        Assert.Equal(0, twenty.FullScanSteps);
+    }
+
     /// <summary>
     /// The steps the wait read takes over one waiting line of the contact's thread after <paramref name="count"/>
     /// responders, each created after the line with its own read, started before its read succeeded and succeeded after it.
+    /// With <paramref name="movePerResponder"/>, every responder after the first comes after a further move of the thread,
+    /// a line of its own that names the contact, so each line waits.
     /// </summary>
-    private static async Task<(int Steps, int FullScanSteps)> StepsWithRespondersAsync(int count)
+    private static async Task<(int Steps, int FullScanSteps)> StepsWithRespondersAsync(int count, bool movePerResponder = false)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -1002,6 +1024,11 @@ public class WarmthTests
         await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T12:05:00.000Z");
         for (var n = 0; n < count; n++)
         {
+            if (movePerResponder && n > 0)
+            {
+                await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", $"2026-09-14T12:{10 + n:00}:00.000Z");
+            }
+
             var (item, attempt) = await ResponderAsync(db, seed, seed.Contact, "thr-1", readEnds: null);
             await EndReadAsync(db, await ReadOfAsync(db, item), WorkItemStatus.Succeeded);
             await FinishAsync(db, item, attempt, succeeded: true);
