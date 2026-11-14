@@ -152,6 +152,13 @@ public static class DomainErrors
     public static ForbiddenException ReviewByCreator(string id) =>
         new("review_by_creator", $"Work item '{id}' was made by the work or the person reviewing it, and nobody reviews their own send; a person's own send is theirs to approve (jason approval list).");
 
+    /// <summary>
+    /// The reviewer wrote the send's input after it was made: a person by their name, or an attempt of the work that did.
+    /// Whoever writes the text is one of its authors, and nobody reviews their own send.
+    /// </summary>
+    public static ForbiddenException ReviewByEditor(string id) =>
+        new("review_by_editor", $"Work item '{id}' had its input written by the work or the person reviewing it, and nobody reviews a send they wrote; a person's own text is theirs to approve (jason approval list).");
+
     /// <summary>A resume of an item that holds no wait to end.</summary>
     public static ConflictException WorkItemNotWaiting(string id, WorkItemStatus status) =>
         new("workitem_not_waiting", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; only a waiting item can be resumed.");

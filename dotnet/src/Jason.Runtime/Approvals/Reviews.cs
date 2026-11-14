@@ -207,15 +207,27 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
 
     /// <summary>
     /// The reviewing attempt and its role, checked: running, of role work in the send's campaign, and not of the work that
-    /// created the send; or, for a person, one who did not create it.
+    /// created the send or wrote its input since; or, for a person, one who did neither.
     /// </summary>
     private async Task<(Attempt? Attempt, string? Role)> ReviewerAsync(WorkItem item, ActorRef actor, CancellationToken cancellationToken)
     {
+        // Whoever wrote the input since the send was made is one of its authors, as its creator is.
+        var editors = (await Reviews.InputWrites(db, item.PublicId).AsNoTracking()
+                .Select(line => new { line.ActorType, line.ActorId })
+                .ToListAsync(cancellationToken).ConfigureAwait(false))
+            .Select(line => new ActorRef(line.ActorType, line.ActorId))
+            .Distinct()
+            .ToList();
         if (actor.Type == ActorType.Human)
         {
             if (item.CreatedByType == ActorType.Human && string.Equals(item.CreatedById?.Trim(), actor.Id!.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 throw DomainErrors.ReviewByCreator(item.PublicId);
+            }
+
+            if (editors.Any(editor => editor.Type == ActorType.Human && string.Equals(editor.Id?.Trim(), actor.Id!.Trim(), StringComparison.OrdinalIgnoreCase)))
+            {
+                throw DomainErrors.ReviewByEditor(item.PublicId);
             }
 
             return (null, null);
@@ -245,6 +257,13 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
             {
                 throw DomainErrors.ReviewByCreator(item.PublicId);
             }
+        }
+
+        var editing = editors.Where(editor => editor.Type == ActorType.Attempt && editor.Id is not null).Select(editor => editor.Id!).ToList();
+        if (editing.Count > 0
+            && await db.Attempts.AsNoTracking().AnyAsync(a => editing.Contains(a.PublicId) && a.WorkItemId == work.Id, cancellationToken).ConfigureAwait(false))
+        {
+            throw DomainErrors.ReviewByEditor(item.PublicId);
         }
 
         return (attempt, work.Role);
@@ -284,6 +303,16 @@ public static class Reviews
             SELECT * FROM journal INDEXED BY ix_journal_work_item_id_public_id
             WHERE work_item_id = {workItemId} AND kind = 'workitem_reviewed' AND key = {hash}
             ORDER BY id
+            """);
+
+    /// <summary>
+    /// The edits of one item's input since it was made — its <c>workitem_context_updated</c> lines keyed by the input —
+    /// through the index of the journal by work item, so the read is bounded by the item's own lines.
+    /// </summary>
+    internal static IQueryable<JournalEntry> InputWrites(JasonDbContext db, string workItemId) =>
+        db.Journal.FromSqlInterpolated($"""
+            SELECT * FROM journal INDEXED BY ix_journal_work_item_id_public_id
+            WHERE work_item_id = {workItemId} AND kind = 'workitem_context_updated' AND key = {WorkItemService.InputKey}
             """);
 
     private const string Doubted = "doubts";

@@ -220,6 +220,58 @@ public class ReviewServiceTests
         await NothingWrittenAsync(database, seed);
     }
 
+    /// <summary>
+    /// The editor is an author: whoever wrote the send's input after it was made does not review it, a person by their
+    /// name and a run by its whole work, as the creator does not; anybody else still may, under the hash of the text as
+    /// edited. Refused <c>review_by_editor</c>, and nothing is written.
+    /// </summary>
+    [Theory]
+    [InlineData("a person edits, then reviews", false)]
+    [InlineData("a run edits, then reviews", false)]
+    [InlineData("a run edits, then another run of its work reviews", false)]
+    [InlineData("another reviews after an edit", true)]
+    public async Task Whoever_wrote_the_send_s_input_does_not_review_it(string path, bool accepted)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var editor = path switch
+        {
+            "a person edits, then reviews" => Ada,
+            "another reviews after an edit" => new ActorRef(ActorType.Human, "grace"),
+            _ => Run(seed.ReviewRun),
+        };
+        await Items(db).UpdateAsync(Patch(seed.Send.PublicId, new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") }) with { Actor = editor }, Ct);
+        var reviewer = path switch
+        {
+            "a person edits, then reviews" => new ActorRef(ActorType.Human, " ADA "),
+            "a run edits, then another run of its work reviews" => Run(await AgainAsync(db, seed.ReviewRun)),
+            _ => Run(seed.ReviewRun),
+        };
+
+        if (accepted)
+        {
+            await Service(db).ReviewAsync(Pass(seed) with { Actor = reviewer }, Ct);
+            Assert.Equal((ReviewResult.Passed, (string?)null), await StandsAsync(db, seed));
+            return;
+        }
+
+        var refused = await Assert.ThrowsAsync<ForbiddenException>(() => Service(db).ReviewAsync(Doubt(seed, "off_brief") with { Actor = reviewer, Note = Sentence }, Ct));
+
+        Assert.Equal("review_by_editor", refused.Code);
+        Assert.DoesNotContain(Sentence, refused.Message, StringComparison.Ordinal);
+        await NothingWrittenAsync(database, seed);
+
+        static async Task<Attempt> AgainAsync(JasonDbContext db, Attempt run)
+        {
+            run.Status = AttemptStatus.Failed;
+            run.FinishedAt = Noon;
+            var again = WorkItemFactory.NewAttempt(run.WorkItem!, 2, AttemptStatus.Running, Noon);
+            await db.SaveChangesAsync(Ct);
+            return again;
+        }
+    }
+
     /// <summary>A person by name, from outside a run, reviews a send somebody else made, a run or another person.</summary>
     [Theory]
     [InlineData("a run")]
@@ -455,6 +507,21 @@ public class ReviewServiceTests
         await using var db = database.Open();
 
         var plan = await QueryPlans.PlanAsync(db, Reviews.Lines(db, "wi_01K52JR0000000000000000007", "sha256:00").ToQueryString(), Ct);
+
+        Assert.True(
+            plan.Any(detail => detail.Contains("SEARCH journal USING INDEX ix_journal_work_item_id_public_id (work_item_id=?)", StringComparison.Ordinal)),
+            $"The plan is: {string.Join(" | ", plan)}");
+        Assert.DoesNotContain(plan, detail => detail.StartsWith("SCAN journal", StringComparison.Ordinal));
+    }
+
+    /// <summary>The read of who wrote a send's input is bounded by the send's own lines, through the same index.</summary>
+    [Fact]
+    public async Task The_read_of_who_wrote_a_send_s_input_uses_the_index_of_the_journal_by_work_item()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+
+        var plan = await QueryPlans.PlanAsync(db, Reviews.InputWrites(db, "wi_01K52JR0000000000000000007").ToQueryString(), Ct);
 
         Assert.True(
             plan.Any(detail => detail.Contains("SEARCH journal USING INDEX ix_journal_work_item_id_public_id (work_item_id=?)", StringComparison.Ordinal)),
