@@ -190,7 +190,10 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `system.info`: what `jason runtime status` shows. Its `routes` section counts the global overrides and the campaign
   routes, the routes that name a channel among them, and says in `channel_route_count` how many name one. A runtime older
   than channel routes has no such member, which is how `jason route set` and `jason route unset` know that `--channel`
-  would be ignored there and decline to send it.
+  would be ignored there and decline to send it. Its `setup` section says where this Jason's parts are:
+  `role_skills_directory` (the same folder as `skills.role_skills_directory`), `plugins_directory`,
+  `custom_ui_directory`, `settings_file`, and `settings_file_holds_secrets`, true while the settings file also keeps
+  plugins' configuration (`Plugins:Config`), their secrets among it. A runtime older than the section answers `null`.
 - `system.shutdown`: `jason runtime stop` sends it.
 - `system.drain`: stop claiming; `jason update apply` sends it.
 - `system.resume`: claim again. No command sends it.
