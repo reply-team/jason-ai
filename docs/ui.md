@@ -151,8 +151,8 @@ next message there, as records. One whose turn still runs opens running, with St
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. **Start afresh** begins the AI's next turn without its memory
 of the conversation and keeps what is shown; **Remove** asks first, then takes the conversation off this computer, and
-the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. In the browser a campaign has no Chat
-tab; the browser's own Chat screen shows the desktop's chat only in a tab the desktop opened
+the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. In a browser the console is the same, and a campaign's Chat
+and the Start screen work only in a tab the desktop opened; any other tab says where the chat is
 ([below](#settings-and-chat-in-the-browser)).
 
 ## Performance
@@ -325,15 +325,18 @@ system's, in the order Light, Dark, System. A new installation meets Light; a br
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
 follows it.
 
-**Chat**, in a tab Jason Desktop opened (its **Open in** menu, then **Browser**), shows the desktop's chat: the list of
-conversations, a conversation and the box, while the desktop runs. The tab is a view onto the desktop's chats and sends
-through the desktop: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it is
-answered in Jason Desktop, shows the chat's mode as a label, and draws no Start afresh, Remove, Open folder, attach
-buttons, Reply card or Connect button; the desktop's window stays the only place that approves
-([desktop.md](desktop.md#the-chat-in-a-browser-tab)). In any other tab, **Chat** says that the chat with the AI is part
-of Jason Desktop, that it can be opened in this tab from Jason Desktop through Open in, then the browser, and links to the
-releases page where the desktop is downloaded, and says that everything here also works from a session with your AI in a
-terminal, with the skills Jason deployed. The runtime starts no AI and no process for a screen, in either case.
+**The console in a browser.** A browser shows the same console as the desktop's window, in one of two ways. A tab Jason
+Desktop opened (its **Open in** menu, then **Browser**) is a view onto the desktop's chats and sends through the desktop,
+while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
+is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
+Demo | Live switch, the account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's
+own window."; the desktop's window stays the only place that approves
+([desktop.md](desktop.md#the-chat-in-a-browser-tab)). Any other tab, as `jason ui open` opens it, shows the same console
+with everything that reads the runtime, and where the chat would be it says that the chat with the AI is part of Jason
+Desktop, that it can be opened in this tab from Jason Desktop through Open in, then the browser, links to the releases page
+where the desktop is downloaded, and says that everything here also works from a session with your AI in a terminal, with
+the skills Jason deployed; what only the desktop does is drawn off with the sentence "This needs Jason Desktop." The
+runtime starts no AI and no process for a screen, in either case.
 
 ## Accounts
 

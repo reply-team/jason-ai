@@ -1,8 +1,8 @@
 import { expect, test } from './fixtures';
 
 // What the screen tests cannot see is where a screen is drawn. These rows measure the boxes in a real browser at a wide
-// window: a screen in the console's Page tab fills the panel, and the browser shell keeps its sidebar and gives the
-// rest of the width to its content.
+// window: a screen in the console's Page tab fills the panel, and the console in a browser keeps its sidebar and gives the
+// rest of the width to its dock.
 const WIDE = { width: 2000, height: 900 };
 // A screen is drawn across the panel, not in a column of it: at least this share of the panel's width.
 const FILLS = 0.9;
@@ -98,18 +98,21 @@ test('in the console a screen opened in the Page tab fills the panel, whichever 
     }
 });
 
-test('in the browser shell the sidebar keeps its width and the content takes the rest', async ({ page, jason }) => {
+test('in a browser tab with no desktop the sidebar keeps its width and the dock takes the rest', async ({
+    page,
+    jason,
+}) => {
     await page.setViewportSize(WIDE);
     const { url } = await jason.uiOpen();
     await page.goto(url);
-    await expect(page.getByRole('navigation')).toBeVisible();
+    await expect(page.locator('.dv-dockview')).toBeVisible();
 
-    const sidebar = await page.locator('.app > .sidebar').boundingBox();
-    const content = await page.locator('.app > .content').boundingBox();
+    const sidebar = await page.locator('.jc-console .side').boundingBox();
+    const dock = await page.locator('.dv-dockview').first().boundingBox();
     expect(sidebar).not.toBeNull();
-    expect(content).not.toBeNull();
-    expect(sidebar!.width).toBe(220);
-    // The content starts where the sidebar ends and runs to the window's edge.
-    expect(content!.x).toBeCloseTo(sidebar!.x + sidebar!.width, 0);
-    expect(content!.width).toBeCloseTo(WIDE.width - 220, 0);
+    expect(dock).not.toBeNull();
+    expect(sidebar!.width).toBe(232);
+    // The dock starts where the sidebar ends and takes most of the rest of the window.
+    expect(dock!.x).toBeGreaterThanOrEqual(sidebar!.x + sidebar!.width - 1);
+    expect(dock!.width).toBeGreaterThan((WIDE.width - 232) * 0.8);
 });

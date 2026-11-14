@@ -12,6 +12,7 @@ import {
     canIn,
     currentDesktop,
     gated,
+    noDesktop,
     placeKind,
     setPlace,
     tabDesktop,
@@ -175,5 +176,52 @@ describe('the object of a tab with a bridge', () => {
         vi.stubGlobal('navigator', { platform: 'Linux x86_64', userAgent: 'Mozilla/5.0 (X11; Linux)' });
         expect(browserPlatform()).toBe('linux');
         expect(['darwin', 'win32', 'linux']).toContain(desktop.platform);
+    });
+});
+
+describe('the object of a tab with no desktop', () => {
+    it('has every member of the desktop, the whole shape', () => {
+        const desktop = noDesktop();
+        for (const member of everyMember) expect(typeof at(desktop, member), member).toBe('function');
+        expect(Object.keys(desktop).sort()).toEqual(['platform', ...members.top, ...members.parts.keys()].sort());
+    });
+
+    it('answers what a page with no desktop can say: the own installation, no chats, nothing standing, no link', async () => {
+        const desktop = noDesktop();
+        expect(await desktop.mode.get()).toEqual({ mode: 'live', unopened: null, preparing: false });
+        expect(await desktop.chat.list()).toEqual([]);
+        expect(await desktop.fullAccess.standing()).toBeNull();
+        expect(await desktop.theme.get()).toBeNull();
+        expect(await desktop.links.take()).toBeNull();
+        expect(await desktop.dailyTrends.get()).toBeNull();
+    });
+
+    it('refuses every act in the one sentence, and says nothing of what only the desktop knows', async () => {
+        const desktop = noDesktop();
+        const reads = ['mode.get', 'chat.list', 'fullAccess.standing', 'theme.get', 'links.take', 'dailyTrends.get'];
+        const subscriptions = [
+            'onCommand',
+            'mode.onPreparing',
+            'links.onOpen',
+            'chat.onEvent',
+            'setup.onChanged',
+            'fullAccess.onChanged',
+        ];
+        const acts = everyMember.filter((member) => !reads.includes(member) && !subscriptions.includes(member));
+        expect(acts.length).toBeGreaterThan(30);
+        for (const member of acts) {
+            const said = await Promise.resolve(at(desktop, member)('a', 'b', 'c')).then(
+                (answer) => (answer as { refused: string }).refused,
+                (error: Error) => error.message,
+            );
+            expect(said, member).toBe('This needs Jason Desktop.');
+        }
+        for (const member of subscriptions)
+            expect(typeof at(desktop, member)(() => undefined), member).toBe('function');
+    });
+
+    it('can do nothing: the place named none asks no member of the desktop', () => {
+        setPlace('none', noDesktop());
+        for (const member of everyMember) expect(can(member), member).toBe(false);
     });
 });

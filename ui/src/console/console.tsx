@@ -169,10 +169,13 @@ function makeDock(get: () => DockviewApi | null): Dock {
         show,
         close: (panel) => get()?.getPanel(panel)?.api.close(),
         showChat,
-        chat: (campaign) =>
+        chat: (campaign) => {
+            // A place that cannot make a chat shows where the chat is, in the place the window opens on.
+            if (!can('chat.create')) return show('start');
             void startChat(campaign).then((id) => {
                 if (id !== null) showChat(id);
-            }),
+            });
+        },
         closeChat: (id) => {
             get()?.getPanel(chatPanel(id))?.api.close();
             if (currentChat.value === id) currentChat.value = null;

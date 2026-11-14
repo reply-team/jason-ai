@@ -4,6 +4,7 @@ import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { html, type Html } from './html';
+import { offUnless } from './off';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
 import { attention } from './needs';
@@ -107,8 +108,8 @@ define('side.page', ([hash]) => {
 /** Where the build's own files are served from: the runtime serves the build under /ui/. */
 const assets = import.meta.env.BASE_URL;
 
-const entry = (title: string, hint: string, action: Html, icon: IconName): Html =>
-    html`<button class="menuitem" type="button" role="menuitem" ${action}>
+const entry = (title: string, hint: string, action: Html, icon: IconName, off: Html | null = null): Html =>
+    html`<button class="menuitem" type="button" role="menuitem" ${action} ${off}>
         ${svg(icon, 15)}<span class="mt">${title}</span><span class="ms">${hint}</span>
     </button>`;
 
@@ -162,7 +163,7 @@ export function sideView(): Html {
                 menu === 'create'
                     ? html`<div class="menu" role="menu" aria-label="Create">
                           ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus')}
-                          ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat')}
+                          ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat', offUnless('chat.create'))}
                           ${
                               accounts === null
                                   ? null

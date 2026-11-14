@@ -1,6 +1,6 @@
 import { session } from './api/session';
 import type { JasonDesktop } from './platform/desktop';
-import { setPlace, tabDesktop } from './platform/places';
+import { noDesktop, setPlace, tabDesktop } from './platform/places';
 import { windowDesktop } from './platform/window-desktop';
 import { start } from './start';
 
@@ -20,9 +20,4 @@ async function startConsole(desktop: JasonDesktop, bootstrapped: boolean): Promi
     await shell.mount(element, desktop, bootstrapped);
 }
 
-async function startClassic(): Promise<void> {
-    const shell = await import('./classic');
-    shell.mount(element);
-}
-
-void start({ windowDesktop, session, tabDesktop, setPlace, startConsole, startClassic });
+void start({ windowDesktop, session, tabDesktop, noDesktop, setPlace, startConsole });
