@@ -287,7 +287,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     window.on('closed', () => {
         current = null;
     });
-    // The console's own <title> is the browser tab's: the window keeps its name.
+    // The console's own <title> is the browser tab's, and an older console's says "Jason": the window keeps its name.
     keepWindowTitle(window);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
     window.setMenuBarVisibility(conduct.menuBar);

@@ -1,5 +1,5 @@
-// The name a person sees on the desktop's window, and so on its taskbar button: "Jason AI Harness", kept after the
-// console loads, whose own <title> is the browser tab's.
+// The name a person sees on the desktop's window, and so on its taskbar button: "Jason AI Harness", the console's own
+// <title> too, and kept after a console older than the desktop, which calls itself "Jason", loads.
 
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -24,8 +24,10 @@ class LoadingWindow extends EventEmitter {
     }
 }
 
-test('the window is called Jason AI Harness and keeps that title after the console, whose own title is Jason, loads', () => {
+test('the window is called Jason AI Harness and keeps that title after an older console, whose own title is Jason, loads', () => {
     assert.equal(windowTitle, 'Jason AI Harness');
+    const console = readFileSync(join(import.meta.dirname, '..', '..', 'ui', 'index.html'), 'utf8');
+    assert.ok(console.includes(`<title>${windowTitle}</title>`), 'the console’s own title, the browser tab’s, is the same name');
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
     const made = main.indexOf('new BrowserWindow({');
     assert.ok(made > 0, 'main.ts makes the window');

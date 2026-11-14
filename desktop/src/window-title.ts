@@ -10,8 +10,9 @@ export interface TitledWindow {
 }
 
 /**
- * Keeps the window's title when a page sets its own: the console's `<title>` is the browser tab's, and would otherwise
- * replace the window's name once it loads.
+ * Keeps the window's title when a page sets its own: the console's `<title>` is the browser tab's, and a console older
+ * than this desktop, which an installation may still serve, calls itself "Jason"; it would otherwise replace the
+ * window's name once it loads.
  */
 export function keepWindowTitle(window: TitledWindow): void {
     window.on('page-title-updated', (event) => event.preventDefault());
