@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Unicode;
 using Jason.Contracts.Update;
 
 namespace Jason.Contracts.Discovery;
@@ -136,6 +138,14 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
             bytes = bytes[bom.Length..];
         }
 
+        // The parser takes bytes no text can be made of, and an escape that is half of a surrogate pair, and only reading the
+        // string throws; both are found before it is read, where they stand, so nothing below can throw on what is there.
+        var chars = new char[bytes.Length];
+        if (Utf8.ToUtf16(bytes, chars, out var decoded, out _, replaceInvalidSequences: false) == OperationStatus.InvalidData)
+        {
+            return Unreadable(path, NotJsonAt(bytes, decoded));
+        }
+
         JsonDocument document;
         try
         {
@@ -144,6 +154,12 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
         catch (JsonException malformed)
         {
             return Unreadable(path, string.Create(CultureInfo.InvariantCulture, $"it is not JSON at line {malformed.LineNumber}, byte {malformed.BytePositionInLine}"));
+        }
+
+        if (FirstUntextableString(bytes) is { } untextable)
+        {
+            document.Dispose();
+            return Unreadable(path, NotJsonAt(bytes, untextable));
         }
 
         using (document)
@@ -195,4 +211,38 @@ public sealed record LayoutStamp(LayoutStampState State, string Path, int? Layou
     }
 
     private static LayoutStamp Unreadable(string path, string problem) => new(LayoutStampState.Unreadable, path, null, null, null, problem);
+
+    /// <summary>
+    /// Where the first string or member name no text can be made of starts — its opening quote — or null when every one
+    /// can. The bytes are known to be UTF-8 and JSON by then, so what is left is an escape that is half of a surrogate pair.
+    /// </summary>
+    private static long? FirstUntextableString(ReadOnlySpan<byte> bytes)
+    {
+        var reader = new Utf8JsonReader(bytes);
+        while (reader.Read())
+        {
+            if (reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName)
+            {
+                try
+                {
+                    _ = reader.GetString();
+                }
+                catch (InvalidOperationException)
+                {
+                    return reader.TokenStartIndex;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The reason for a stamp that is not JSON at <paramref name="index"/>, counted as the parser counts: lines and bytes from 0.</summary>
+    private static string NotJsonAt(ReadOnlySpan<byte> bytes, long index)
+    {
+        var before = bytes[..(int)index];
+        var line = before.Count((byte)'\n');
+        var start = before.LastIndexOf((byte)'\n') + 1;
+        return string.Create(CultureInfo.InvariantCulture, $"it is not JSON at line {line}, byte {index - start}");
+    }
 }

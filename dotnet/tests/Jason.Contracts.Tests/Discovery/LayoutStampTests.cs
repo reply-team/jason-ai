@@ -107,6 +107,46 @@ public sealed class LayoutStampTests : IDisposable
             LayoutStamp.Refusal(paths, "0.42.0"));
     }
 
+    /// <summary>
+    /// Bytes no text can be made of, and an escape no text can be made of — half of a surrogate pair — are a stamp that is
+    /// not JSON, at the place they stand: the parser takes both, and only reading the string would throw.
+    /// </summary>
+    [Theory]
+    [InlineData(new byte[] { 0x7B, 0x22, 0x6C, 0x61, 0x79, 0x6F, 0x75, 0x74, 0x22, 0x3A, 0x31, 0x2C, 0x22, 0x77, 0x72, 0x69, 0x74, 0x74, 0x65, 0x6E, 0x5F, 0x62, 0x79, 0x22, 0x3A, 0x22, 0x30, 0x2E, 0x34, 0x32, 0x2E, 0x30, 0xFF, 0x22, 0x7D }, "it is not JSON at line 0, byte 32")]
+    [InlineData(new byte[] { 0x7B, 0x0A, 0x22, 0x6C, 0xC3, 0x22, 0x3A, 0x31, 0x7D }, "it is not JSON at line 1, byte 2")]
+    [InlineData(new byte[] { 0xEF, 0xBB, 0xBF, 0x7B, 0x22, 0xED, 0xA0, 0x80, 0x22, 0x3A, 0x31, 0x7D }, "it is not JSON at line 0, byte 2")]
+    public void Bytes_that_are_not_UTF_8_are_not_JSON_where_they_stand(byte[] bytes, string reason)
+    {
+        File.WriteAllBytes(StampPath, bytes);
+
+        var stamp = new JasonPaths(_root).Stamp!;
+
+        Assert.Equal(new LayoutStamp(LayoutStampState.Unreadable, StampPath, null, null, null, reason), stamp);
+    }
+
+    [Theory]
+    [InlineData("""{"layout":1,"written_by":"0.42.0\uD800"}""", "it is not JSON at line 0, byte 25")]
+    [InlineData("""{"layout":1,"written_by":"0.42.0","at":"\uDC00"}""", "it is not JSON at line 0, byte 39")]
+    [InlineData("""{"layout":1,"\uD800x":2,"written_by":"0.42.0"}""", "it is not JSON at line 0, byte 12")]
+    [InlineData("{\"layout\":1,\n  \"written_by\":\"\\uD83D\"}", "it is not JSON at line 1, byte 15")]
+    public void An_escape_that_is_half_a_surrogate_pair_is_not_JSON_where_its_string_starts(string text, string reason)
+    {
+        Write(text);
+
+        Assert.Equal(reason, new JasonPaths(_root).Stamp!.Problem);
+    }
+
+    [Fact]
+    public void A_whole_surrogate_pair_escaped_reads()
+    {
+        Write("""{"layout":1,"written_by":"0.42.0","at":"\uD83D\uDE00"}""");
+
+        var stamp = new JasonPaths(_root).Stamp!;
+
+        Assert.Equal(LayoutStampState.Read, stamp.State);
+        Assert.Equal("\U0001F600", stamp.At);
+    }
+
     [Fact]
     public void A_folder_at_the_name_is_unreadable()
     {
