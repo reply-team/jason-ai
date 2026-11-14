@@ -1438,7 +1438,8 @@ public class ReplyPackageTests
     /// <summary>
     /// 0.16.0 also reads Reply's two limits on a direct email by Reply's code as the mailbox's block, the daily one until the
     /// next midnight UTC, and keeps nothing of the dead record a refusal names. The README says, in one sentence, what the
-    /// active-contacts block holds: every email from that mailbox, to people already in conversation too.
+    /// active-contacts block holds: every email from that mailbox, to people already in conversation too. Both say that Reply
+    /// gives the daily code to an email held for later while the mailbox already holds as many held emails as its limit.
     /// </summary>
     [Fact]
     public void The_changelog_and_the_readme_say_what_reply_s_limits_on_a_direct_email_hold()
@@ -1448,10 +1449,17 @@ public class ReplyPackageTests
 
         Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
         Assert.All(
-            ["`contact.dailyLimitReached`", "`contact.activeContactsLimitReached`", "midnight UTC", "dead one"],
+            [
+                "`contact.dailyLimitReached`", "`contact.activeContactsLimitReached`", "midnight UTC", "dead one",
+                "already holds as many held emails as its daily limit",
+            ],
             word => Assert.Contains(word, section, StringComparison.Ordinal));
         Assert.Contains(
             "While the active-contacts block stands, every email send from that mailbox waits, people already in conversation included.",
+            readme,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Reply gives the same code to an email held for later that it takes while the mailbox already holds as many held emails as its daily limit;",
             readme,
             StringComparison.Ordinal);
     }

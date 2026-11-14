@@ -212,9 +212,10 @@ export const COMMANDS = {
 // exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
 // the mark decides it — which is why `inbox reply` being marked a write is what keeps a lost reply from being sent again.
 //
-// `reply_code:<code>` is a refusal read by Reply's own code alone, before any other key, whatever the status and whatever
-// code the CLI gave it: under `message.send`, Reply's two limits on a direct email, which reply-cli from 0.20.0 prints as
-// `rate_limited` and may give a word of its own later. The two are named nowhere else.
+// `reply_code:<code>` is a refusal read by Reply's own code alone, before any other key, on every refusal the CLI explains,
+// whatever its status and whatever code the CLI gave it: under `message.send`, Reply's two limits on a direct email, which
+// reply-cli from 0.20.0 prints as `rate_limited` and may give a word of its own later. An answer at 500 or above is the
+// lost answer whatever code it carries, read by `cli.js` before any row is. The two are named nowhere else.
 //
 // `inbox.category_not_found` under `conversation.classify` is kept as a defence and is not reached against a live
 // account: Reply answers a filing under a category it does not hold, on a thread it does, as a missing thread. The
@@ -1516,7 +1517,7 @@ export const ROWS = {
         "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. Propose the message again once the allowance renews."
       },
       "mailbox_daily_limit": {
-        "when": "The send answered Reply's code `contact.dailyLimitReached`, whatever the status and whatever code reply-cli gave it (`rate_limited` at 429 today): the mailbox has sent as many direct emails today as Reply allows it, naming a record of the send in the state `failed` or not. Reply counts the mailbox's day in UTC, so the block clears at the next midnight UTC, or as long after the answer as the CLI said to wait (`retry_after`) where it said. The record a refusal names is dead and is not kept.",
+        "when": "The send answered Reply's code `contact.dailyLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`rate_limited` at 429 today): the mailbox has sent as many direct emails today as Reply allows it, or, for an email held for later, already holds as many held emails as its daily limit, naming a record of the send in the state `failed` or not. Reply counts the mailbox's day in UTC, so the block clears at the next midnight UTC, or as long after the answer as the CLI said to wait (`retry_after`) where it said. The record a refusal names is dead and is not kept.",
         "code": "provider_blocked",
         "class": "blocked",
         "block": { "scope": "sender", "reason": "limit" },
@@ -1526,7 +1527,7 @@ export const ROWS = {
         "note": "The mailbox has sent as many direct emails today as Reply allows it, so nothing was sent. The message waits on the mailbox's block and goes once Reply's day turns, at midnight UTC, and a trial gets past it."
       },
       "mailbox_active_contacts_limit": {
-        "when": "The send answered Reply's code `contact.activeContactsLimitReached`, whatever the status and whatever code reply-cli gave it (`rate_limited` at 429 today): the account has emailed as many contacts in its billing period as its plan allows, naming a record of the send in the state `failed` or not. The block clears as long after the answer as the CLI said to wait (`retry_after`) where it said, and is otherwise tried at the runtime's cadence. The record a refusal names is dead and is not kept.",
+        "when": "The send answered Reply's code `contact.activeContactsLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`rate_limited` at 429 today): the account has emailed as many contacts in its billing period as its plan allows, naming a record of the send in the state `failed` or not. The block clears as long after the answer as the CLI said to wait (`retry_after`) where it said, and is otherwise tried at the runtime's cadence. The record a refusal names is dead and is not kept.",
         "code": "provider_blocked",
         "class": "blocked",
         "block": { "scope": "sender", "reason": "limit" },
@@ -2030,8 +2031,8 @@ export function rowOf(operation, error, variant, repeat) {
   const details = error.details !== null && typeof error.details === "object" ? error.details : {};
   const fields = Array.isArray(details.fields) ? details.fields : [];
 
-  // A refusal the operation reads by Reply's own code, before anything else: whatever the status, and whatever code this
-  // CLI or a later one gives it.
+  // A refusal the operation reads by Reply's own code, before anything else: whatever the status of a refusal the CLI
+  // explains, and whatever code this CLI or a later one gives it.
   if (typeof error.reply_code === "string" && has(own, "reply_code:" + error.reply_code)) {
     return own["reply_code:" + error.reply_code];
   }
@@ -2257,8 +2258,8 @@ function blockOf(row, observed) {
   });
 }
 
-// The first midnight UTC after the moment `now` names, in milliseconds: the start of the next day as Reply counts a
-// mailbox's day.
+// The first midnight UTC after `now`, a moment in milliseconds, as an ISO-8601 string: the start of the next day as Reply
+// counts a mailbox's day.
 function nextUtcDay(now) {
   const today = new Date(now);
   return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1)).toISOString();
