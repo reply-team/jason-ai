@@ -63,6 +63,10 @@ public class PreferenceEndpointTests
         var both = await api.RecordAsync<Page<PreferenceDto>>(Operations.PreferenceList, "set", new { }, Ct);
         Assert.Equal([null, cold.ValueHash, null, set.ValueHash, tone.ValueHash], both.Items.Select(item => item.ValueHash));
 
+        var warm = await api.RecordAsync<PreferenceDto>(
+            Operations.PreferenceSet, "send-mode-warm", new { key = "send_mode.warm", value = new { mode = "every_message" }, actor = Marta, reason = "the person's answer" }, Ct);
+        Assert.Equal(("send_mode.warm", "every_message"), (warm.Key, (string?)warm.Value!["mode"]));
+
         var unset = await api.RecordAsync<PreferenceDto>(Operations.PreferenceUnset, "removed", new { key = "sender.identity", actor = Marta, reason = "taken back" }, Ct);
         Assert.Equal(new PreferenceDto("sender.identity", null, null, null, null, null, null), unset);
     }
