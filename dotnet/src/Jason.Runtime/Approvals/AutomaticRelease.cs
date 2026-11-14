@@ -54,7 +54,8 @@ internal abstract record AutomaticDecision
 /// A mode in force releases in the name of the person who set it, so a mode whose setter is not a named person releases
 /// nothing. The critic whose pass releases is the one the runtime made for the send (<see cref="CriticsAsync"/>): its
 /// work created under the runtime's own actor, its <see cref="SendReview.Key"/> naming the send, its context changed by
-/// nobody but Jason itself, a system actor; a critic somebody queued by hand, the runtime's critic of another send, or another role is
+/// nobody but the runtime's own actors since, a change by a person, a role or the critic's own attempt disqualifying it;
+/// a critic somebody queued by hand, the runtime's critic of another send, or another role is
 /// shown and releases nothing. A person's pass counts
 /// where the line names a person and carries no attempt: a line that carries an attempt is the run's, whatever actor it
 /// names, and a run's pass is the critic's only where the line's actor is the attempt it carries.

@@ -6,8 +6,8 @@ namespace Jason.Runtime.Approvals;
 /// The reserved context key of the critic's work the runtime makes for a send created under an automatic mode:
 /// <c>send_review</c>, exactly <c>{"work_item_id": "&lt;the send&gt;", "operation": "&lt;its operation&gt;"}</c>. Only the
 /// runtime writes it, on a work item it creates itself; the automatic mode counts a critic's pass only where the pass
-/// comes from such an item naming the send it passed, and nobody but Jason itself, a system actor, changed the item's
-/// context since.
+/// comes from such an item naming the send it passed, whose context was changed since by nobody but the runtime's own
+/// actors: a change by a person, a role or the critic's own attempt disqualifies it.
 /// </summary>
 public static class SendReview
 {
