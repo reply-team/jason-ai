@@ -479,7 +479,9 @@ Claude Code.
 - **Codex only reads and advises.** A Codex turn runs `exec --json --sandbox read-only` and asks for
   nothing, so no card and no rule of the desktop applies to it. It reads the chat folder, the folders added to it and its
   skills in `.agents/skills`, and answers. It searches the web through its cached index. Its sandbox may keep `jason` from the runtime's
-  loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder.
+  loopback address, and, being read-only, it can read any file you can read, with no card: wider than the chat folder. In Jason's data directory that is the settings file,
+  `config/settings.json`, and, in an installation that keeps what a person sets up in `setup/`, the roles, the plugins
+  and the settings there and the plugins' secrets in `config/secrets.json`.
   While Codex is the chat's host, on your sign-in or on the OpenAI key, the line under the composer says what a command
   can read, system by system as it was seen. On Windows, where the desktop's check has seen the elevated sandbox keep
   the run file from a command: **A Codex command can read your files, Jason's data and settings among them, a plugin's
@@ -623,7 +625,8 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   typed in a terminal**: a role's entry command is started by the dispatcher, and a project's linked folder becomes a
   working folder of every chat on its campaigns. A command that names an operation these verbs call is refused too.
   Also refused: any `reply` command but the two above, any read or write under the data directory outside the chat folder (the
-  settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
+  settings file, the run file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they
+  exist), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
   where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the
   agent to the chat's own instruction files, to the `.claude`, `.agents` and `.codex` folders of the chat folder and to
   its `.mcp.json`.
@@ -774,6 +777,9 @@ folder back in the place of the installed application. That puts back the previo
 the data directory stays as the newer version left it. On Linux an AppImage update keeps the AppImage file itself; a deb
 update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`.
 On Windows the system's list of installed programs keeps showing the newer version's number after a folder is put back.
+A data directory that a newer Jason laid out in a way this one does not know, or whose layout stamp `layout.json` cannot
+be read, is refused instead: the starting page says so in `jason runtime start`'s own words, offers no going back, and no
+runtime is started. The Connect cards that write refuse in the same words and write nothing.
 
 **Not covered.** An update of the desktop from one build to the next through the updater is checked by nothing: a
 candidate is installed by hand and the stable channel offers it nothing. The first run of the macOS login agent and of the
