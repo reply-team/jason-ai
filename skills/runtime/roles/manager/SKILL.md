@@ -185,11 +185,13 @@ nothing; acting on the answer is yours, at the answered question's line, and is 
    `categories.json` gives. A person's word is no guess, so its confidence is 1. Name the answered question with
    `--decision`, so that the line carries the person's answer: the runtime refuses it unless the question is the
    campaign's, answered by a named person, the option they chose is the category you record, word for word, and the
-   question was raised by the run that recorded the verdict on this reply. State `--nature` by the category you record,
-   never by the first line: the guess's nature was part of the guess, and the person's answer says what the reply is.
-   `opt_out` is `--nature opt_out`; `out_of_office` and `auto_reply` are `--nature automatic`; `bounce` is
-   `--nature bounce`; every other category is `--nature person`, and a refinement takes its base category's. A line
-   that states none leaves the contact waiting for a verdict that says what the reply is. Where the guess was `opt_out`
+   question was raised by the run that recorded the verdict on this reply. State `--nature` from what the person's
+   answer says the reply is, never from the first line: the guess's nature was part of the guess. A request to stop is
+   `--nature opt_out`, a notice a machine sent is `--nature automatic`, a failed delivery is `--nature bounce`, and a
+   person writing for themselves is `--nature person`. The usual words are examples of these, not the rule: `opt_out` is
+   a request to stop, `out_of_office` and `auto_reply` are notices a machine sent, `bounce` is a failed delivery, and
+   `interested`, `question` or `not_now` are a person writing for themselves; a category of the campaign's own words is
+   read by what it says the reply is. A line that states none leaves the contact waiting for a verdict that says what the reply is. Where the guess was `opt_out`
    and the person's answer names another category, say in your summary that the lock the guess made stays: your verdict
    is a run's and never lifts it, so only the person's own verdict on the reply, recorded under their name outside any
    run with a nature other than `opt_out`, does:

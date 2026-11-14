@@ -151,8 +151,8 @@ leave it standing, and the manager's summary says so. Only the person's own verd
 under their name, from outside any run, with a nature other than `opt_out`, and you record it only when they have said,
 in their own words, that the reply was not a request to stop and what it was. Take the reply's `plugin`, `thread`,
 `message_id`, `message_at` and `contact_id` from the opt-out's line, the category they name with the reaction its row in
-the responder's `categories.json` gives, and the nature that category says: `automatic` for `out_of_office` and
-`auto_reply`, `bounce` for `bounce`, and `person` for every other.
+the responder's `categories.json` gives, and the nature from what they say the reply is: `person` for a person writing
+for themselves, `automatic` for a notice a machine sent, `bounce` for a failed delivery.
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified

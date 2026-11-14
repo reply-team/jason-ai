@@ -24,9 +24,9 @@ public partial class SendModeSkillTests
             .ToList();
 
     /// <summary>
-    /// The nature a verdict recorded from a category states, as the manager and a person's session are taught it: the
-    /// category says what the reply is once a person has named it, so the nature is read from it and never copied from a
-    /// guess.
+    /// The nature the printed examples state for the usual category words: what the answer says the reply is, a request
+    /// to stop, a notice a machine sent, a failed delivery or a person writing for themselves. The skills teach the four
+    /// by what the reply is; this reading of the usual words only checks the examples they print.
     /// </summary>
     private static string NatureOf(string category) => category switch
     {
@@ -88,13 +88,17 @@ public partial class SendModeSkillTests
     /// category gives: a person who picks <c>opt_out</c> after another guess gets the register and the lock from it.
     /// </summary>
     [Fact]
-    public void The_manager_states_the_nature_the_answered_category_gives_never_the_guesss()
+    public void The_manager_states_the_nature_the_answer_says_the_reply_is_never_the_guesss()
     {
         var skill = RoleSkillTests.Flattened("manager");
         var records = Records("manager");
 
-        Assert.Contains("State `--nature` by the category you record, never by the first line", skill, StringComparison.Ordinal);
-        Assert.Contains("`opt_out` is `--nature opt_out`; `out_of_office` and `auto_reply` are `--nature automatic`; `bounce` is `--nature bounce`; every other category is `--nature person`, and a refinement takes its base category's.", skill, StringComparison.Ordinal);
+        Assert.Contains("State `--nature` from what the person's answer says the reply is, never from the first line", skill, StringComparison.Ordinal);
+        Assert.Contains("A request to stop is `--nature opt_out`, a notice a machine sent is `--nature automatic`, a failed delivery is `--nature bounce`, and a person writing for themselves is `--nature person`.", skill, StringComparison.Ordinal);
+
+        // The categories are a campaign's own words: the usual ids are examples of the four, never a table to look up.
+        Assert.Contains("The usual words are examples of these, not the rule", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("every other category is `--nature person`", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("Copy the first line's `nature`", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("as cold as it was", skill, StringComparison.Ordinal);
         Assert.Contains("only the person's own verdict on the reply, recorded under their name outside any run with a nature other than `opt_out`, does", skill, StringComparison.Ordinal);
@@ -243,6 +247,7 @@ public partial class SendModeSkillTests
 
         Assert.Contains("## An opt-out the person says was not one", skill, StringComparison.Ordinal);
         Assert.Contains("you record it only when they have said, in their own words, that the reply was not a request to stop and what it was", skill, StringComparison.Ordinal);
+        Assert.Contains("and the nature from what they say the reply is: `person` for a person writing for themselves, `automatic` for a notice a machine sent, `bounce` for a failed delivery.", skill, StringComparison.Ordinal);
         var lift = Assert.Single(records);
         Assert.Contains("--actor human:", lift, StringComparison.Ordinal);
         Assert.DoesNotContain("--nature opt_out", lift, StringComparison.Ordinal);
