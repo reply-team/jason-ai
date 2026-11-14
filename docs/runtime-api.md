@@ -103,7 +103,8 @@ The header says where a request comes from; it is not a credential, it opens not
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)) and the two that change what
 a plugin may use, `plugin.grant` and `plugin.revoke`, which answer it `403` with the code `decided_inside_a_run` before
-the body is read, and record nothing. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
+the body is read, and record nothing; the two grants say in a sentence of their own that nothing inside a run changes
+Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
 the global scope alone, which the body names, since nothing inside a run changes Jason itself; they change a
 campaign's own route from inside a run as before. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
