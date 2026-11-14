@@ -710,6 +710,56 @@ describe('the note about name and tone', () => {
         expect(asked(fake)).toBe(false);
     });
 
+    it('comes when the window opens with a chat the desktop lists and none opened', async () => {
+        open();
+        await ready();
+        flush(() => {
+            conversations.value = [
+                {
+                    id: 'conv_1',
+                    campaignId: null,
+                    title: 'Payroll',
+                    updatedAt: '2026-11-13T10:00:00.000Z',
+                    running: false,
+                    mode: 'ask_first',
+                },
+            ];
+        });
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        expect(Object.keys(chats.value)).toEqual([]);
+    });
+
+    it('is not there for the Feed alone, which is no first message', async () => {
+        open();
+        await ready();
+        flush(() => {
+            conversations.value = [
+                {
+                    id: 'conv_f',
+                    campaignId: null,
+                    main: true,
+                    title: 'Feed',
+                    updatedAt: '2026-11-13T10:00:00.000Z',
+                    running: false,
+                    mode: 'ask_first',
+                },
+            ];
+        });
+        expect(voiceNote()).toBeNull();
+        expect(asked(fake)).toBe(false);
+    });
+
+    it('goes when the preferences are saved elsewhere in the session', async () => {
+        open();
+        await ready();
+        sent();
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        flush(() => {
+            voiceKnown.value = 'some';
+        });
+        expect(voiceNote()).toBeNull();
+    });
+
     it('comes once a message was sent and neither preference is set, in these words', async () => {
         open();
         await ready();

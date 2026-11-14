@@ -84,40 +84,52 @@ export function toneForm(value: unknown): ToneForm {
     return { summary: text(value['summary']), formality: formality ?? '' };
 }
 
-/** Sets a text member, or takes it away when it is empty, since the schema allows no empty one of these. */
-function put(into: Record<string, unknown>, key: string, content: string): void {
-    const trimmed = content.trim();
+/**
+ * Sets a text member only where the person changed it: a field equal to what the form painted is left as the stored
+ * value holds it, so a member set elsewhere since is never taken away. A field changed to nothing takes the member away.
+ */
+function put(into: Record<string, unknown>, key: string, now: string, painted: string): void {
+    if (now === painted) return;
+    const trimmed = now.trim();
     if (trimmed === '') delete into[key];
     else into[key] = trimmed;
 }
 
 /**
- * The whole value to write for the sender part: the stored value with only the first sender's name, title, company and
- * grammar forms replaced. Every other member of that sender, every further sender and every other member of the value
- * stays as it was read. Null when the name is empty, which has nothing to save.
+ * The whole value to write for the sender part: the stored value with only what the person changed in the first
+ * sender's name, title, company and grammar forms replaced; what the schema requires and the value lacks (the name, the
+ * grammar forms) is written either way. Every other member of that sender, every further sender and every other member
+ * of the value stays as it was read. Null when there is no name to write: nothing is saved.
  */
-export function mergeSender(current: unknown, form: SenderForm): object | null {
+export function mergeSender(current: unknown, form: SenderForm, painted: SenderForm = emptySender): object | null {
     const senders = sendersOf(current);
+    // A name is required, so an emptied one has nothing to save, whatever is stored.
     if (form.name.trim() === '') return null;
     const first: Record<string, unknown> = { ...(senders[0] ?? {}) };
-    first['name'] = form.name.trim();
-    put(first, 'title', form.title);
-    put(first, 'company', form.company);
-    first['gender_forms'] = form.gender;
+    if (form.name !== painted.name || text(first['name']) === '') first['name'] = form.name.trim();
+    put(first, 'title', form.title, painted.title);
+    put(first, 'company', form.company, painted.company);
+    if (form.gender !== painted.gender || !genderForms.some((each) => each === first['gender_forms'])) {
+        first['gender_forms'] = form.gender;
+    }
     return { ...(isObject(current) ? current : {}), senders: [first, ...senders.slice(1)] };
 }
 
 /**
- * The whole value to write for the tone part: the stored value with only the summary and the formality replaced; the
- * greeting, the sign-off and the examples stay. Null when the summary is empty: a summary is never made up.
+ * The whole value to write for the tone part: the stored value with only what the person changed in the summary and the
+ * formality replaced; the greeting, the sign-off and the examples stay. Null when there is no summary to write: a summary
+ * is never made up.
  */
-export function mergeTone(current: unknown, form: ToneForm): object | null {
+export function mergeTone(current: unknown, form: ToneForm, painted: ToneForm = emptyTone): object | null {
     if (current !== null && current !== undefined && !isObject(current)) throw new Unreadable();
+    // A summary is required and never made up, so an emptied one has nothing to save, whatever is stored.
     if (form.summary.trim() === '') return null;
     const value: Record<string, unknown> = { ...(isObject(current) ? current : {}) };
-    value['summary'] = form.summary.trim();
-    if (form.formality === '') delete value['formality'];
-    else value['formality'] = form.formality;
+    if (form.summary !== painted.summary || text(value['summary']) === '') value['summary'] = form.summary.trim();
+    if (form.formality !== painted.formality) {
+        if (form.formality === '') delete value['formality'];
+        else value['formality'] = form.formality;
+    }
     return value;
 }
 
@@ -144,22 +156,23 @@ export const noneStated = (items: readonly PreferenceItem[]): boolean =>
     valueOf(items, senderKey) === null && valueOf(items, toneKey) === null;
 
 /**
- * Saves one part: reads the preferences again, changes only what the form shows, and writes the whole value back.
- * Resolves to false when the form holds nothing to save (an empty name or summary); it never writes then.
+ * Saves one part: reads the preferences again, changes only what the person changed from what the form painted, and
+ * writes the whole value back. Resolves to the value written, or null when the form holds nothing to save (no name or no
+ * summary to write); it never writes then.
  */
-export async function saveSender(api: Api, form: SenderForm): Promise<boolean> {
+export async function saveSender(api: Api, form: SenderForm, painted: SenderForm): Promise<object | null> {
     const items = await readPreferences(api);
-    const value = mergeSender(valueOf(items, senderKey), form);
-    if (value === null) return false;
+    const value = mergeSender(valueOf(items, senderKey), form, painted);
+    if (value === null) return null;
     await api.call<PreferenceItem>('preference.set', { key: senderKey, value } satisfies PreferenceSetRequest, 'write');
-    return true;
+    return value;
 }
 
 /** Saves the tone part, as `saveSender` saves the other. */
-export async function saveTone(api: Api, form: ToneForm): Promise<boolean> {
+export async function saveTone(api: Api, form: ToneForm, painted: ToneForm): Promise<object | null> {
     const items = await readPreferences(api);
-    const value = mergeTone(valueOf(items, toneKey), form);
-    if (value === null) return false;
+    const value = mergeTone(valueOf(items, toneKey), form, painted);
+    if (value === null) return null;
     await api.call<PreferenceItem>('preference.set', { key: toneKey, value } satisfies PreferenceSetRequest, 'write');
-    return true;
+    return value;
 }

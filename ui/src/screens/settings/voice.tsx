@@ -24,6 +24,7 @@ import {
 } from './voice-model';
 
 import { voiceSectionId } from './voice-id';
+import { voiceKnown } from './voice-state';
 
 type Said = { kind: 'saved' | 'empty' | 'refused'; text: string } | null;
 
@@ -36,6 +37,9 @@ export function VoiceSection() {
     const [read, setRead] = useState<'reading' | 'ready' | 'unreadable'>('reading');
     const [sender, setSender] = useState<SenderForm>(emptySender);
     const [tone, setTone] = useState<ToneForm>(emptyTone);
+    // What each part last painted: a save writes only what the person changed from it.
+    const [paintedSender, setPaintedSender] = useState<SenderForm>(emptySender);
+    const [paintedTone, setPaintedTone] = useState<ToneForm>(emptyTone);
     const [senders, setSenders] = useState(0);
     const [said, setSaid] = useState<{ sender: Said; tone: Said }>({ sender: null, tone: null });
 
@@ -45,9 +49,13 @@ export function VoiceSection() {
         readPreferences(api).then(
             (items) => {
                 if (!current) return;
-                setSender(senderForm(valueOf(items, senderKey)));
+                const who = senderForm(valueOf(items, senderKey));
+                const how = toneForm(valueOf(items, toneKey));
+                setSender(who);
+                setPaintedSender(who);
+                setTone(how);
+                setPaintedTone(how);
                 setSenders(senderCount(valueOf(items, senderKey)));
-                setTone(toneForm(valueOf(items, toneKey)));
                 setRead('ready');
             },
             () => current && setRead('unreadable'),
@@ -63,7 +71,14 @@ export function VoiceSection() {
         event.preventDefault();
         tell('sender', null);
         try {
-            const wrote = await saveSender(api, sender);
+            const wrote = await saveSender(api, sender, paintedSender);
+            if (wrote) {
+                const again = senderForm(wrote);
+                setSender(again);
+                setPaintedSender(again);
+                setSenders(senderCount(wrote));
+                voiceKnown.value = 'some';
+            }
             tell(
                 'sender',
                 wrote ? { kind: 'saved', text: t('voice.saved') } : { kind: 'empty', text: t('voice.sender.empty') },
@@ -76,7 +91,13 @@ export function VoiceSection() {
         event.preventDefault();
         tell('tone', null);
         try {
-            const wrote = await saveTone(api, tone);
+            const wrote = await saveTone(api, tone, paintedTone);
+            if (wrote) {
+                const again = toneForm(wrote);
+                setTone(again);
+                setPaintedTone(again);
+                voiceKnown.value = 'some';
+            }
             tell(
                 'tone',
                 wrote ? { kind: 'saved', text: t('voice.saved') } : { kind: 'empty', text: t('voice.tone.empty') },

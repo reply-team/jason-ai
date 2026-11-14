@@ -13,7 +13,8 @@ import { Painted } from './painted';
 import { AccessButton, ModelButton } from './start-menus';
 import { readPreferences, noneStated } from '../screens/settings/voice-model';
 import { voiceSectionId } from '../screens/settings/voice-id';
-import { changeChat, chats, here, inTab, messageOf, setup, setupError } from './state';
+import { voiceKnown } from '../screens/settings/voice-state';
+import { changeChat, chats, conversations, here, inTab, messageOf, setup, setupError } from './state';
 
 // The start screen: the window opens on the question who the person wants to reach. What is sent there starts a set-up
 // chat. With no AI that drives the chat the AI card comes first and the message waits there, to go once one is
@@ -96,8 +97,7 @@ export function voiceNoteWasClosed(): boolean {
 
 export const voiceNoteClosed = signal(voiceNoteWasClosed());
 
-/** What the runtime said of the two preferences: not read yet, neither set, one set, or unreadable. */
-export const voiceKnown = signal<'unread' | 'none' | 'some' | 'failed'>('unread');
+export { voiceKnown };
 
 /** Closes the note about name and tone for good. */
 export function closeVoiceNote(): void {
@@ -109,8 +109,12 @@ export function closeVoiceNote(): void {
     }
 }
 
-/** Whether a chat holds a message the person sent: the one fact that a first message was sent. */
+/**
+ * Whether a first message was sent: a chat exists. The desktop lists one besides the Feed, or a chat of this window
+ * holds a message the person sent and is not listed yet.
+ */
 const messageWasSent = (): boolean =>
+    conversations.value.some((each) => each.main !== true) ||
     Object.values(chats.value).some((chat) => chat.entries.some((entry) => entry.kind === 'user'));
 
 /** Opens Settings at the section for name and tone. */
