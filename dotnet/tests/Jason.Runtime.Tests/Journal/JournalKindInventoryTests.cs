@@ -44,6 +44,7 @@ public sealed class JournalKindInventoryTests
         [JournalKinds.StandingApprovalUnset] = "the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits",
         [JournalKinds.ApprovalStandingApplied] = "the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits",
         [JournalKinds.MessageSentObserved] = "provider identifiers",
+        [JournalKinds.MessageBounceObserved] = "provider identifiers",
         [JournalKinds.ProviderBlocked] = "provider identifiers",
         [JournalKinds.ExternalEffectReported] = "the effect, tool and operation a report names",
         [JournalKinds.NotificationSent] = "the failure text and receipts notification channels reported",

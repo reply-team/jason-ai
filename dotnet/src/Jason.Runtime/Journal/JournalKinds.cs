@@ -214,6 +214,15 @@ public static partial class JournalKinds
     public const string MessageSentObserved = "message_sent_observed";
 
     /// <summary>
+    /// A read of a send that says the message came back as a bounce, whoever made the read: keyed by the work item that
+    /// made the send, with the plugin, the provider's reference, the channel, the message's identifier, the kind of bounce,
+    /// the provider's own word for it and its moment, and the read that saw it. Never a subject, a body, an address or a
+    /// name. Said once per send. A hard bounce, or one with no kind, puts the contact's primary email on the register in
+    /// the same change set. Not a default manager trigger: the provider's own bounce event already woke it.
+    /// </summary>
+    public const string MessageBounceObserved = "message_bounce_observed";
+
+    /// <summary>
     /// A read of an account's events that stored something, failed, or read by date: the source, the plugin, how it read,
     /// how many pages and events, how it ended, and which package and snapshots it ran under. Never a cursor, a binding or
     /// anything an event holds. It names no campaign, so it never wakes a manager; a read of a cursor that found nothing
@@ -391,6 +400,7 @@ public static partial class JournalKinds
         ProviderEventObserved,
         ReplyClassified,
         MessageSentObserved,
+        MessageBounceObserved,
         EventsRead,
         EventsGapObserved,
         EventsBackfillRequested,

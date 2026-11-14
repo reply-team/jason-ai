@@ -1,0 +1,38 @@
+{
+  "kind": "message_bounce_observed",
+  "version": 1,
+  "since": "0.43.0",
+  "summary": "A read of a send found that the message came back as a bounce, with its kind, the moment and the provider's own word for it.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "work_item": { "at": "/work_item_id", "presence": "always" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^wi_", "description": "The work item that made the send: one line per send." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plugin", "reference", "channel", "message_id", "bounce", "bounce_code", "bounced_at", "read_work_item"],
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin that answered the read." },
+          "reference": { "type": "string", "minLength": 1, "description": "The provider's reference for the send, as the send returned it." },
+          "channel": { "type": "string", "enum": ["email", "linkedin"] },
+          "message_id": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier for the message that went, or null where it gives none." },
+          "bounce": { "type": ["null", "string"], "enum": ["hard", "soft", null], "description": "The kind of bounce: `hard` where the address does not take mail, `soft` where it may still, null where the provider named no kind the plugin can tell." },
+          "bounce_code": { "type": ["null", "string"], "minLength": 1, "maxLength": 128, "description": "The provider's own word for the kind, uninterpreted, or null where it gives none." },
+          "bounced_at": { "type": ["null", "string"], "format": "date-time", "description": "When the bounce notice came, or null where the provider gives no moment." },
+          "read_work_item": { "type": "string", "pattern": "^wi_", "description": "The work item that read the send's status." }
+        }
+      }
+    }
+  }
+}
