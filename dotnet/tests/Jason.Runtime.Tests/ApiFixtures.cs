@@ -268,6 +268,7 @@ public static class ApiFixtures
         "preference.set/invalid-value",
         "preference.set/no-actor",
         "preference.set/not-human",
+        "preference.set/send-mode-cold",
         "preference.set/sender",
         "preference.set/tone",
         "preference.set/unknown-key",

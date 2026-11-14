@@ -1,0 +1,7 @@
+{
+  "key": "send_mode.warm",
+  "version": 1,
+  "case": "what goes to a contact who has answered is released without asking",
+  "value": { "mode": "automatic" },
+  "expect": "valid"
+}
