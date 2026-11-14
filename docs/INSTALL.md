@@ -61,8 +61,9 @@ yes. With nobody to ask, leave it undone and say so. A question tool that comes 
 ask.
 
 If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own
-agent reads them: run `jason skills install --host <your host>` (§4) as a step of the install, without asking again.
-That yes covers your own host and nothing else this page marks **Ask first.** Skills for any other host on this machine
+agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of
+[the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again.
+That yes covers your own host and nothing else this page marks **Ask first.** Where this machine has other agent hosts, skills for them
 are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands.
 
 This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
@@ -103,8 +104,8 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 - **The hand-over.** The install prompt's "Ready" is `jason status` answering with `ready` true in its body. When it
   is, send one message, in this order: two lines saying that Jason is installed and where it keeps the person's
   files — the folder the `harness_root` check of `jason status` names, which is the one in force; two lines saying
-  exactly what you ran and what it changed, never as a question; and one line each, with its command, for two things
-  not done now: starting the runtime at logon (§6) and skills for this machine's other agent hosts (§4). Then start the `quick-start` skill at once, with no question
+  exactly what you ran and what it changed, never as a question; and one line each, with its command, for what is not done now: starting the runtime at logon (§6) and,
+  where this machine has other agent hosts, skills for them (§4). Then start the `quick-start` skill at once, with no question
   about what comes next: its question goes in a message of its own. Where your host does not see a skill installed a
   minute ago, read its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one on the `Target:` line of
   `jason skills install` that names the `jason-runtime-skills` pack and your host.

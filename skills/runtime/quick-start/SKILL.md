@@ -7,8 +7,8 @@ metadata:
 
 # Quick start
 
-You take a person from a ready installation to a first campaign in a few minutes. Do not explain Jason first, and do
-not ask what comes next: begin with step 1. **Status: draft.** Its commands parse against this build.
+You take a person from a ready installation to a first campaign in a few minutes. Do not explain Jason first: begin
+with step 1. **Status: draft.** Its commands parse against this build.
 
 ## 1. One question
 
@@ -23,8 +23,7 @@ A no, or silence about the second part, is an answer. Do not ask for it again wh
 ## 2. Read the channels, never ask for them
 
 Make the campaign in the default project, with the offer and the audience in their own words as its context (leave
-`--project` out), then ask the runtime which provider each channel goes through. Make every idempotency key new for each
-run, for example the campaign's name with the date and time; never reuse the example's.
+`--project` out), then ask the runtime which provider each channel goes through. Make each idempotency key new per run.
 
 ```
 jason campaign create --name "First campaign" --context '{"offer":"payroll for startups hiring in Latin America","audience":"owners of seed-stage startups in Mexico and Colombia"}' --idempotency-key first-campaign-20261114-1530
@@ -34,9 +33,8 @@ jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation messag
 
 A channel with a route has a provider, which the answer names; one with no route is not connected. A route does not
 prove that an account is connected, and a draft campaign cannot read accounts, so read no accounts and count none
-before "go". Never ask which channels they have. The channels decide the form of the first message: email only;
-LinkedIn only, where it is an invitation and not a letter; or both, and then several channels together. Draft nothing
-before they are known.
+before "go". The channels decide the form of the first message: email only; LinkedIn only, where it is an invitation
+and not a letter; or both, and then several channels together. Draft nothing before they are known.
 
 ## 3. One message, one stop
 
@@ -49,11 +47,11 @@ question tool, with the recommended choice first.
   one sentence when both go through the same provider. Then: "Which mailboxes and LinkedIn accounts are connected
   there I read as soon as you say go."
 - **A channel has no route.** Say: "{Channel} is not connected."
-- **Neither has a route.** Say it firmly: no channel is connected, connecting one now is recommended and is one step,
-  and until it is done not one message leaves. Name the step for where the person is: in a terminal, `reply auth login`
-  (on Windows PowerShell, `reply.cmd auth login`), after which the Reply CLI section and steps 3 to 5 of
-  `docs/golden-path.md` connect the provider; in the window, the Accounts page. Then say: "It can be done later." This
-  is the common first run, and it needs no provider read.
+- **Neither has a route.** Say it firmly: no channel is connected, connecting your provider now is recommended and is
+  one step, and until it is done not one message leaves. That step is the person's one act, "connect your provider".
+  With Reply it is one sign-in only they can do: in a terminal `reply auth login`, and you do the rest (the CLI, the
+  plugin, its grant and its route: the Reply CLI section and steps 3 to 5 of `docs/golden-path.md`); in the window,
+  the Accounts page. Then say: "It can be done later."
 
 ## 4. A sample only on request
 
@@ -64,18 +62,20 @@ it a sample. Nobody who did not ask sees one.
 ## 5. After "go"
 
 Nothing is started before the person's go. From "go" the work goes on through `planner-in-session` for the plan and
-`managed-campaign-work` for starting the campaign, the people and the work. The first item the work submits is
-`sender.list` for each routed channel (`sender_channel` is `email` or `linkedin`):
+`managed-campaign-work`, which owns starting the campaign, the people and the work. It starts the campaign, and then
+submits `sender.list` for each routed channel (`sender_channel` is `email` or `linkedin`), since a draft cannot run it:
 
 ```
+jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation sender.list --input '{"owners":"own","sender_channel":"email","limit":50,"offset":0}' --idempotency-key first-campaign-20261114-1530-senders-email
 ```
 
 Say its answer in one line before anything else: "{N} mailboxes and {M} LinkedIn accounts are connected; you can add
-more at any time." Count the accounts whose `status` is `active`, and the others apart. A routed channel that holds no
-account is said firmly: not one message leaves on it until an account is connected, and name the one step as in step 3.
-Every first message still waits for the person's yes (`approval-boundaries`). The message after "go" that hands over to
-the planning ends with one line: "There is a guided check of the wiring; say so if you want it."
+more at any time." With one channel routed, name only that channel's accounts. Count the accounts whose `status` is
+`active`, and the others apart. A routed channel that holds no account is said firmly: not one message leaves on it
+until an account is connected, and name the one step as in step 3. Every first message still waits for the person's
+yes (`approval-boundaries`). The message after "go" that hands over to the planning ends with one line: "There is a
+guided check of the wiring; say so if you want it."
 
 ## Rules
 

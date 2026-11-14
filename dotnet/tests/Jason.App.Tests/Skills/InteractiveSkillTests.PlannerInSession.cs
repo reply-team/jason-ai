@@ -364,7 +364,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("The first campaign of what they sell goes under a project named from it, never under `Default`, and the campaign is made with the brief as its context before anyone is added to it", skill, StringComparison.Ordinal);
         Assert.Contains("The wiring check is no step of this opening.", skill, StringComparison.Ordinal);
         Assert.Contains("a person who skipped it plans exactly as one who took it", skill, StringComparison.Ordinal);
-        Assert.Contains("Offered once and skipped, it stays skipped", skill, StringComparison.Ordinal);
+        Assert.Contains("Mentioned at the end of the quick start and not taken, it stays untaken", skill, StringComparison.Ordinal);
         Assert.Contains("a provider is connected when the work first reaches for one, as `operating-the-installation` says", skill, StringComparison.Ordinal);
 
         // A second campaign of a product that has its project: that project's file is the person's guidance for it, and it
@@ -555,8 +555,10 @@ public partial class InteractiveSkillTests
         Assert.Contains("A routed channel that holds no account is said firmly: not one message leaves on it until an account is connected", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing is started before the person's go.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("The count never holds the person up", skill, StringComparison.Ordinal);
-        Assert.Contains("no channel is connected, connecting one now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
-        Assert.Contains("`reply auth login`", skill, StringComparison.Ordinal);
+        Assert.Contains("no channel is connected, connecting your provider now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
+        Assert.Contains("That step is the person's one act, \"connect your provider\". With Reply it is one sign-in only they can do: in a terminal `reply auth login`, and you do the rest", skill, StringComparison.Ordinal);
+        Assert.Contains("It starts the campaign, and then submits `sender.list` for each routed channel", skill, StringComparison.Ordinal);
+        Assert.Contains("With one channel routed, name only that channel's accounts.", skill, StringComparison.Ordinal);
         Assert.Contains("\"It can be done later.\"", skill, StringComparison.Ordinal);
         Assert.Contains("Never put the offer in the plan message.", skill, StringComparison.Ordinal);
         Assert.Contains("The message after \"go\" that hands over to the planning ends with one line: \"There is a guided check of the wiring; say so if you want it.\"", skill, StringComparison.Ordinal);

@@ -180,7 +180,7 @@ default aloud where they have not said: a demo. The goals are written with the c
 key of its context, and `managed-campaign-work` prints how, including how a change of mind on an existing campaign
 replaces the list whole.
 
-The wiring check is no step of this opening. Offered once and skipped, it stays skipped: a person who skipped it
+The wiring check is no step of this opening. Mentioned at the end of the quick start and not taken, it stays untaken: a person who skipped it
 plans exactly as one who took it, and a provider is connected when the work first reaches for one, as
 `operating-the-installation` says.
 
