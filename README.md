@@ -75,7 +75,7 @@ means today.
   menu (macOS and Linux) or Windows's own uninstaller, and then the application itself. It keeps your data too.
 
 If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
-yes, or run the line below yourself.
+yes, or run the one-liner under "Or install it yourself" below.
 
 <details>
 <summary>Or install it yourself</summary>
