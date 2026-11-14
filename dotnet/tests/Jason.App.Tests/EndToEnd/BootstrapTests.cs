@@ -102,12 +102,11 @@ public class BootstrapTests
         Assert.NotNull((string?)resolution["binding_identity"]);
         Assert.DoesNotContain(it.Account.Root, resolution.ToJsonString(JasonJson.Options), StringComparison.OrdinalIgnoreCase);
 
-        // 7. The one step an operator will reach for and not find. The refusal is documentation: it says where a
-        //    global route lives and what makes it active, before anything is sent to the runtime.
+        // 7. A route written with no scope is refused before anything is sent to the runtime, and the refusal names
+        //    both scopes, so one is chosen and never guessed: a write that forgot its campaign re-routes nothing.
         var refused = await GoldenPath.JasonAsync(it, "route", "set", "--plugin", GoldenPath.PluginId, "--actor", "human:ada");
         Assert.Equal(ExitCodes.Usage, refused.ExitCode);
-        Assert.Contains("settings.json", refused.Error, StringComparison.Ordinal);
-        Assert.Contains("jason plugin reload", refused.Error, StringComparison.Ordinal);
+        Assert.Contains("--campaign or --global is required", refused.Error, StringComparison.Ordinal);
         Assert.Empty(refused.Output);
 
         await GoldenPath.StopAsync(it);

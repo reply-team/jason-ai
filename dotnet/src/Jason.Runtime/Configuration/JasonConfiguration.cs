@@ -48,10 +48,37 @@ public sealed record SettingsFileFailure(string ExceptionType, long? LineNumber,
         return new SettingsFileFailure(root.GetType().Name, null, null);
     }
 
+    /// <summary>
+    /// Where in the file the parser stopped, for a sentence a person reads: <c>at line 2, byte 3</c>, or null where there
+    /// is no position. The place alone, with no exception's type: the type is said in the log, where it is read.
+    /// </summary>
+    public string? Place() => LineNumber is { } line && BytePositionInLine is { } column
+        ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"at line {line}, byte {column}")
+        : null;
+
     /// <summary>The failure as a clause of a sentence: <c>JsonException at line 2, byte 3</c>, or the type alone.</summary>
     public string Describe() => LineNumber is { } line && BytePositionInLine is { } column
         ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{ExceptionType} at line {line}, byte {column}")
         : ExceptionType;
+}
+
+/// <summary>What came of the settings writer's commit (<see cref="JasonConfiguration.CommitSettingsFile"/>).</summary>
+public enum SettingsCommit
+{
+    /// <summary>The file holds the new bytes, or is gone where that was asked, and every section has been told.</summary>
+    Committed,
+
+    /// <summary>The file no longer holds what the writer edited: another writer wrote it. Nothing was written.</summary>
+    Changed,
+
+    /// <summary>Another program holds the file open, which it may let go of. Nothing was written.</summary>
+    Busy,
+
+    /// <summary>
+    /// The file or its folder cannot be written — it is read-only, this user may not write it, or the disk is full — which
+    /// waiting does not mend. Nothing was written.
+    /// </summary>
+    NotWritable,
 }
 
 public static class JasonConfiguration
@@ -225,6 +252,28 @@ public static class JasonConfiguration
         return refused;
     }
 
+    /// <summary>
+    /// The settings file's bytes as they are now, for the settings writer to edit: null for a file that is not there.
+    /// Opened as the loader opens it, shared with any writer, and with a rename over it; nothing is told to any section.
+    /// </summary>
+    /// <exception cref="IOException">Another handle holds the file for itself alone.</exception>
+    /// <exception cref="InvalidOperationException">The configuration has no settings file of its own.</exception>
+    public static byte[]? ReadSettingsBytes(IConfiguration configuration) => Provider(configuration).Bytes();
+
+    /// <summary>
+    /// Replaces the settings file with <paramref name="next"/> — or, for null, takes it away — only if it still holds
+    /// <paramref name="expected"/> (null: only if it is not there), and tells every section of what it now holds. The
+    /// compare, the write and the telling are one step under the lock the file's watch and <see cref="ReadSettingsFile"/>
+    /// take; <see cref="SettingsCommit"/> says what came of it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The configuration has no settings file of its own.</exception>
+    public static SettingsCommit CommitSettingsFile(IConfiguration configuration, byte[]? expected, byte[]? next) =>
+        Provider(configuration).Replace(expected, next);
+
+    private static SettingsFileProvider Provider(IConfiguration configuration) =>
+        (configuration as IConfigurationRoot)?.Providers.OfType<SettingsFileProvider>().SingleOrDefault()
+            ?? throw new InvalidOperationException("This configuration has no settings file of its own to write.");
+
     /// <summary>A failure that has been reported, and the state of the file it was reported for.</summary>
     private sealed record ReportedFailure(SettingsFileFailure Failure, DateTime WrittenAt, long Length);
 
@@ -245,6 +294,105 @@ public static class JasonConfiguration
         {
             EnsureDefaults(builder);
             return new SettingsFileProvider(this);
+        }
+    }
+
+    /// <summary>
+    /// The settings writer's new bytes in a temporary file beside <paramref name="settingsFile"/>, flushed to the disk; null
+    /// where it could not be made, with <paramref name="failure"/> saying why (<see cref="Unwritten"/>). On Unix the file's
+    /// mode is read inside the same guard, so a settings file removed in that instant is answered as a file another writer
+    /// changed, never thrown out of the request.
+    /// </summary>
+    internal static string? WriteTemporary(string settingsFile, byte[] next, bool replacing, out SettingsCommit failure)
+    {
+        failure = SettingsCommit.Committed;
+        var directory = Path.GetDirectoryName(settingsFile)!;
+        var temporary = Path.Combine(directory, $"{Path.GetFileName(settingsFile)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
+            if (!OperatingSystem.IsWindows())
+            {
+                options.UnixCreateMode = replacing ? File.GetUnixFileMode(settingsFile) : UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            }
+
+            Directory.CreateDirectory(directory);
+            using var stream = new FileStream(temporary, options);
+            stream.Write(next);
+            stream.Flush(flushToDisk: true);
+            return temporary;
+        }
+        catch (Exception unwritten) when (unwritten is IOException or UnauthorizedAccessException)
+        {
+            failure = Unwritten(unwritten, settingsFile);
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+            {
+            }
+
+            return null;
+        }
+    }
+
+    private const int SharingViolation = unchecked((int)0x80070020);
+
+    private const int LockViolation = unchecked((int)0x80070021);
+
+    /// <summary>
+    /// What a failure to read, write, replace or remove the settings file says of it: <see cref="SettingsCommit.Busy"/>
+    /// only where another program holds it open, which it may let go of; <see cref="SettingsCommit.Changed"/> where it
+    /// went in between; and <see cref="SettingsCommit.NotWritable"/> for everything else — a read-only file or folder, a
+    /// file this user may not write, a full disk — which waiting does not mend.
+    /// </summary>
+    /// <remarks>
+    /// Only Windows refuses a file another handle holds, and it refuses a rename over one with the same denial it gives a
+    /// read-only file, so a denial is told apart by opening the file for writing, sharing everything, and writing nothing:
+    /// a file that opens, or that is refused as shared, is held; one refused as denied is not writable. On Unix a rename or
+    /// a removal is never refused for a handle another program holds, so no failure there is one that clears.
+    /// </remarks>
+    internal static SettingsCommit Unwritten(Exception failure, string settingsFile)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+        if (failure is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return SettingsCommit.Changed;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return SettingsCommit.NotWritable;
+        }
+
+        if (failure is IOException { HResult: SharingViolation or LockViolation })
+        {
+            return SettingsCommit.Busy;
+        }
+
+        return failure is UnauthorizedAccessException && HeldOpen(settingsFile) ? SettingsCommit.Busy : SettingsCommit.NotWritable;
+    }
+
+    private static bool HeldOpen(string settingsFile)
+    {
+        try
+        {
+            if (File.GetAttributes(settingsFile).HasFlag(FileAttributes.ReadOnly))
+            {
+                return false;
+            }
+
+            using var probe = new FileStream(settingsFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+            return true;
+        }
+        catch (IOException shared) when (shared.HResult is SharingViolation or LockViolation)
+        {
+            return true;
+        }
+        catch (Exception denied) when (denied is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
@@ -316,7 +464,7 @@ public static class JasonConfiguration
                     {
                         Load(stream);
                     }
-                    catch (Exception unparsed) when (unparsed is FormatException or IOException)
+                    catch (Exception unparsed) when (Unparsed(unparsed) || unparsed is IOException)
                     {
                         // The keys are replaced only once the whole file has parsed, so the ones held stay where they were.
                         return Refuse(unparsed);
@@ -326,6 +474,158 @@ public static class JasonConfiguration
                 Tell();
                 return null;
             }
+        }
+
+        /// <summary>How many times a rename over the file is tried while another handle holds it, and how long apart.</summary>
+        private const int RenameAttempts = 5;
+
+        private static readonly TimeSpan RenameRetry = TimeSpan.FromMilliseconds(100);
+
+        private string FullPath => ((SettingsFileSource)Source).FullPath;
+
+        /// <summary>The file's bytes, or null where it is not there. Read outside the lock: the commit compares again inside it.</summary>
+        public byte[]? Bytes()
+        {
+            try
+            {
+                return ReadAll(FullPath);
+            }
+            catch (Exception gone) when (gone is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The settings writer's commit. Under the lock: read the file again and compare it, byte for byte, with what the
+        /// writer edited; write the new bytes to a temporary file beside it; rename that over the file; and load and tell
+        /// the new keys, so that a section read after this returns reads them, and the watch that fires after the rename
+        /// reads the same bytes and changes nothing.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Why under this lock.</b> This provider opens the file shared for reading and writing but not for deletion, and
+        /// on Windows a rename over a file fails while any handle without that share is open: the watch's own read would
+        /// make the writer's rename fail. Under the lock, no read of this process holds the file.
+        /// </para>
+        /// <para>
+        /// <b>The window that remains.</b> Between the compare and the rename, another program can still write the file:
+        /// the desktop's own writer, or an editor saving. Nothing short of a lock that every writer of the file takes closes
+        /// that window, and none of them takes one. It is kept as short as it can be: no read, parse or edit happens in it,
+        /// only the temporary file's write and the rename, and a write that lands before the compare is never overwritten.
+        /// </para>
+        /// <para>
+        /// <b>The temporary file.</b> It is made new, beside the file so that the rename stays on one volume and so is never
+        /// seen half done, and the watch, which watches the file's own name, never fires for it. On Unix it is made with the
+        /// file's own mode, or with the owner alone allowed to read and write where there is no file yet, from its first
+        /// byte: the file holds plugin secrets, and a mode set after the write would leave them readable in between. On
+        /// Windows it takes the folder's permissions, as the desktop's own writer's file does.
+        /// </para>
+        /// <para>
+        /// The file is never absent in between: a rename replaces it whole, so the watch reads either the old bytes or the
+        /// new ones and never a missing file, which it would read as every setting on its default.
+        /// </para>
+        /// </remarks>
+        public SettingsCommit Replace(byte[]? expected, byte[]? next)
+        {
+            lock (_applying)
+            {
+                byte[]? now;
+                try
+                {
+                    now = Bytes();
+                }
+                catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+                {
+                    return Unwritten(held, FullPath);
+                }
+
+                if (!(now is null ? expected is null : expected is not null && now.AsSpan().SequenceEqual(expected)))
+                {
+                    return SettingsCommit.Changed;
+                }
+
+                // From here to the rename is the window the remarks name.
+                if (next is null)
+                {
+                    if (now is not null && Removed() is { } unremoved)
+                    {
+                        return unremoved;
+                    }
+
+                    Data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                    Tell();
+                    return SettingsCommit.Committed;
+                }
+
+                var temporary = WriteTemporary(FullPath, next, now is not null, out var unwritten);
+                if (temporary is null)
+                {
+                    return unwritten;
+                }
+
+                if (Renamed(temporary) is { } unrenamed)
+                {
+                    TryDelete(temporary);
+                    return unrenamed;
+                }
+
+                using (var written = new MemoryStream(next, writable: false))
+                {
+                    Load(written);
+                }
+
+                Tell();
+                return SettingsCommit.Committed;
+            }
+        }
+
+        /// <summary>Renames the temporary file over the settings file; null where it did, else why not (<see cref="Unwritten"/>).</summary>
+        private SettingsCommit? Renamed(string temporary) => Retried(() => File.Move(temporary, FullPath, overwrite: true));
+
+        /// <summary>Removes the settings file; null where it did, else why not (<see cref="Unwritten"/>).</summary>
+        private SettingsCommit? Removed() => Retried(() => File.Delete(FullPath));
+
+        /// <summary>The act, tried again while another program holds the file, and given up at once where waiting does not mend it.</summary>
+        private SettingsCommit? Retried(Action act)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    act();
+                    return null;
+                }
+                catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+                {
+                    var failure = Unwritten(held, FullPath);
+                    if (failure != SettingsCommit.Busy || attempt >= RenameAttempts)
+                    {
+                        return failure;
+                    }
+
+                    Thread.Sleep(RenameRetry);
+                }
+            }
+        }
+
+        private static void TryDelete(string file)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        private static byte[] ReadAll(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1, FileOptions.SequentialScan);
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            return copy.ToArray();
         }
 
         /// <summary>
@@ -367,7 +667,7 @@ public static class JasonConfiguration
                     {
                         Load(stream);
                     }
-                    catch (Exception unparsed) when (unparsed is FormatException or IOException or UnauthorizedAccessException)
+                    catch (Exception unparsed) when (Unparsed(unparsed) || unparsed is IOException or UnauthorizedAccessException)
                     {
                         // The keys are dropped and the failure is said, as the loader does; the rest escape to the
                         // watcher with the keys kept.
@@ -397,6 +697,16 @@ public static class JasonConfiguration
             {
             }
         }
+
+        /// <summary>
+        /// Whether the parser refused the file's text. A syntax error comes as a <see cref="FormatException"/>, which the
+        /// provider wraps around the reader's own exception; an escape no text can be made of, half of a surrogate pair
+        /// written as a backslash, a <c>u</c> and <c>d800</c>, comes from the reader unwrapped as an
+        /// <see cref="InvalidOperationException"/>. Both are a file that does not parse. Escaping as the second did, the
+        /// watch's edit went unsaid and a reload's read answered a server error. A load runs nothing but the parse, so no
+        /// other invalid operation can come out of one.
+        /// </summary>
+        internal static bool Unparsed(Exception failure) => failure is FormatException or InvalidOperationException;
 
         /// <summary>A file this provider cannot use, put through the handling the loader gives an edit it cannot read.</summary>
         private SettingsFileFailure Refuse(Exception failure)
@@ -554,6 +864,7 @@ public static class JasonConfiguration
         services.AddOptions<SubscriptionsOptions>().ValidateOnStart();
 
         services.AddSingleton(new SettingsFile(configuration));
+        services.AddSingleton<SettingsWriter>();
         return services;
     }
 

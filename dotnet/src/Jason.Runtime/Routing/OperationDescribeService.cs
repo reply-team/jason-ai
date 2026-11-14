@@ -33,7 +33,7 @@ public sealed class OperationDescribeService(JasonDbContext db, RouteRegistry ro
         {
             throw new NotFoundException(
                 AttemptErrors.NoRoute,
-                $"No route sends '{routedAs}'{(channel is null ? string.Empty : $" on '{channel}'")} anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one in the settings file.");
+                $"No route sends '{routedAs}'{(channel is null ? string.Empty : $" on '{channel}'")} anywhere for campaign '{campaign.PublicId}'. Write one with route.set, or a global one with route.set and scope global.");
         }
 
         var route = resolution.Route;

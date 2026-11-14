@@ -102,7 +102,9 @@ Jason-Attempt: att_...
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
-the code `decided_inside_a_run` before the body is read, and record nothing. A program that is not running inside an
+the code `decided_inside_a_run` before the body is read, and record nothing. `route.set` and `route.unset` refuse the
+same way, with a sentence of their own, the global scope alone, which the body names, since nothing inside a run
+changes Jason itself; they change a campaign's own route from inside a run as before. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
 so in one line on stderr, naming the variable and never its value.
 
@@ -446,6 +448,23 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   sends; each detail covers one campaign's sends at one account and says how many there are, their work items, the
   latest moment among them and what to do: cancel them, or change the route after that moment
   ([docs/routing.md](routing.md), §6).
+
+  Either takes `scope`, `campaign` when it is left out, or `global`: with `global` and no `campaign_id`, which is then
+  refused `validation_failed` as `not_allowed`, the route is every campaign's that has no route of its own; a request
+  from inside a run, which carries `Jason-Attempt`, is refused it `403` `decided_inside_a_run`. The runtime
+  writes it into `settings.json`, keeping every byte of the file it does not own, and runs the plugin reload in the same
+  act, so the answer is the routes the reload froze. A reload that refuses puts the file back and is answered as a
+  campaign's route write is where only the route stood in the way — `route_orphans_search` or `route_orphans_send`, as
+  above — and otherwise as `plugin_reload_rejected` with the same details as `plugin.reload`'s, its message rewritten to
+  say the route was not written ("The plugins were not loaded again: N problem(s), so the route was not written: …",
+  ending with what became of the file); either way one more detail under the field `settings.json` says whether the file
+  was put back, `settings_file_put_back` or `settings_file_not_put_back`. A binding the file would read back as something else is refused `validation_failed` on
+  `binding` as `not_representable_globally`. Nothing is written, and the answer is `409`, where the file does not parse
+  (`settings_file_unreadable`, by line and byte), says the setting in a way the writer cannot change alone
+  (`settings_file_not_editable`), kept changing while it was written (`settings_file_changed`, retryable), is held open
+  by another program (`settings_file_busy`, retryable), cannot be written — it or its folder is read-only, or the disk is
+  full — (`settings_file_not_writable`), or where a `JASON_` environment variable sets the setting (`setting_shadowed`)
+  ([docs/routing.md](routing.md), §3).
 
 ### `operation`
 

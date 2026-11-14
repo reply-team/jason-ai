@@ -25,6 +25,12 @@ public sealed record RunOptions(bool Human, Func<string, string?>? RenderHuman =
     public Func<string, CancellationToken, Task<string?>>? RenderPromptAsync { get; init; }
 
     public bool Prompt { get; init; }
+
+    /// <summary>
+    /// Called with an error response once it is printed, for a verb that adds a line of its own on stderr about it. The
+    /// printed body and the exit code stay what they are for every verb.
+    /// </summary>
+    public Action<RuntimeResponse>? AfterError { get; init; }
 }
 
 /// <summary>
@@ -52,6 +58,7 @@ public static class OperationRunner
         if (!response.IsSuccess)
         {
             env.Out.WriteLine(ErrorText(response));
+            options.AfterError?.Invoke(response);
             return ExitCodes.ApiError;
         }
 

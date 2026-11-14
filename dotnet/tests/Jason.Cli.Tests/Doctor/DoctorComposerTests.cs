@@ -95,7 +95,7 @@ public sealed class DoctorComposerTests
         Assert.Empty(header["warnings"]!.AsArray());
         Assert.Empty(bundle.Warnings);
         Assert.Contains("the capability token", Strings(header["never_carried"]));
-        Assert.Contains("journal values unless --include-journal: what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link recorded, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed", Strings(header["never_carried"]));
+        Assert.Contains("journal values unless --include-journal: what the journal entries say: campaign names and fields as they changed, project names as they changed, the folders a project link recorded, campaign and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the do-not-contact register, the accounts a campaign's routes and the global routes bind, the options decisions were answered with, the errors attempts ended with, provider identifiers, the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits, the effect, tool and operation a report names, the failure text and receipts notification channels reported, entries people and agents wrote themselves, the names actors gave, and the reasons they typed", Strings(header["never_carried"]));
         Assert.Equal(bundle.NeverCarried, Strings(header["never_carried"]));
 
         // The listing is the sections after the header, each with the size it has in the file.
@@ -863,6 +863,31 @@ public sealed class DoctorComposerTests
             Assert.Equal("plugin_configuration", Text(environment[name]["withheld"]));
             Assert.False(environment[name].ContainsKey("shape"));
         }
+    }
+
+    /// <summary>
+    /// A temporary file the runtime's settings writer left beside the settings file — a crash between its write and its
+    /// rename — holds the whole file, secrets and all, and never reaches a bundle: the settings file is read by its own
+    /// name and projected, and the config folder is never listed. Neither the secret nor the temporary file's name is
+    /// carried, with the journal's own entries asked for too.
+    /// </summary>
+    [Fact]
+    public async Task A_temporary_file_the_settings_writer_left_never_reaches_the_bundle()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false}}""");
+        var stray = $"{Path.GetFileName(dir.Paths.UserSettingsFile)}.{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(
+            Path.Combine(dir.Paths.ConfigDirectory, stray),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Config":{"fake-provider":{"token":"SENTINEL_STRAY_SECRET"}}}}""");
+
+        var bundle = await ComposeAsync(dir, Running(dir), includeJournal: true);
+
+        var text = bundle.Document.ToJsonString();
+        Assert.DoesNotContain("SENTINEL_STRAY_SECRET", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(stray, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(".tmp", text, StringComparison.Ordinal);
     }
 
     // ---- the runtime down, a read that fails midway, and one that times out --------------------------------------
