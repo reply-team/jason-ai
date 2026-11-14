@@ -239,6 +239,7 @@ internal sealed class MovingMachine : IDisposable
             }
 
             return machine.Answers?.Invoke(operation, body)
+                ?? (operation == "project.link" ? RuntimeVerbs.Response(HttpStatusCode.OK, "{\"id\":\"prj_made_up\"}") : null)
                 ?? RuntimeVerbs.Response(
                     HttpStatusCode.NotFound,
                     JsonSerializer.Serialize(new ErrorResponse(new ErrorBody("not_found", "No such operation here.", false)), JasonJson.Options));

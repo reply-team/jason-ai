@@ -1007,7 +1007,7 @@ public sealed class ImportCommandTests
     }
 
     [Fact]
-    public async Task A_link_the_runtime_refuses_is_listed_with_its_code_and_is_not_fatal()
+    public async Task A_link_the_runtime_refuses_is_listed_with_its_code_and_the_import_answers_one_with_the_placing_kept()
     {
         using var from = new MovingMachine();
         using var to = new MovingMachine
@@ -1020,7 +1020,7 @@ public sealed class ImportCommandTests
 
         var exit = await Import(to, Options(file));
 
-        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(ExitCodes.ApiError, exit);
         using var answer = JsonDocument.Parse(to.Out.ToString());
         var refused = Assert.Single(answer.RootElement.GetProperty("link_refused").EnumerateArray());
         Assert.Equal("prj_01ACME", refused.GetProperty("project_id").GetString());
@@ -1031,6 +1031,78 @@ public sealed class ImportCommandTests
         Assert.Contains(
             $"jason project link prj_01ACME --path {Path.Combine(to.Harness, "projects", "acme")}",
             answer.RootElement.GetProperty("next").EnumerateArray().Select(next => next.GetString()));
+    }
+
+    [Fact]
+    public async Task One_project_linking_and_one_refused_answers_one_with_both_in_the_body_and_the_next_project_still_linked()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine
+        {
+            Answers = (operation, body) => operation != "project.link"
+                ? null
+                : JsonDocument.Parse(body).RootElement.GetProperty("project_id").GetString() == "prj_01ACME"
+                    ? RuntimeVerbs.Response(HttpStatusCode.Conflict, "{\"error\":{\"code\":\"harness_folder_present\",\"message\":\"Made up, a folder stands.\",\"retryable\":false}}")
+                    : RuntimeVerbs.Response(HttpStatusCode.OK, "{\"id\":\"prj_made_up\"}"),
+        };
+        var file = new MovingArchive(from).Installation().Mark("harness/projects/beta", HarnessMarker.Project, "prj_01BETA").Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(2, to.Calls.Count(call => call.Operation == "project.link"));
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        Assert.True(answer.RootElement.GetProperty("started").GetBoolean());
+        Assert.False(answer.RootElement.TryGetProperty("error", out _));
+        var refused = Assert.Single(answer.RootElement.GetProperty("link_refused").EnumerateArray());
+        Assert.Equal("prj_01ACME", refused.GetProperty("project_id").GetString());
+        Assert.Equal("harness_folder_present", refused.GetProperty("code").GetString());
+        var linked = Assert.Single(answer.RootElement.GetProperty("linked").EnumerateArray());
+        Assert.Equal("prj_01BETA", linked.GetProperty("project_id").GetString());
+        Assert.Equal(Path.Combine(to.Harness, "projects", "beta"), linked.GetProperty("path").GetString());
+        Assert.True(Directory.Exists(Path.Combine(to.Harness, "projects", "acme")));
+        var next = answer.RootElement.GetProperty("next").EnumerateArray().Select(item => item.GetString()).ToArray();
+        Assert.Contains($"jason project link prj_01ACME --path {Path.Combine(to.Harness, "projects", "acme")}", next);
+        Assert.DoesNotContain(next, item => item!.Contains("prj_01BETA", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_link_asked_of_a_runtime_that_does_not_answer_is_a_refusal_with_exit_one_and_never_three()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine
+        {
+            Answers = (operation, _) => operation == "project.link" ? throw new HttpRequestException("made up, refused") : null,
+        };
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        using var answer = JsonDocument.Parse(to.Out.ToString());
+        var refused = Assert.Single(answer.RootElement.GetProperty("link_refused").EnumerateArray());
+        Assert.Equal("runtime_unreachable", refused.GetProperty("code").GetString());
+        Assert.True(Directory.Exists(Path.Combine(to.Harness, "projects", "acme")));
+    }
+
+    [Fact]
+    public async Task Under_human_a_refused_link_is_followed_by_a_closing_line_saying_the_import_is_incomplete()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine
+        {
+            Answers = (operation, _) => operation == "project.link"
+                ? RuntimeVerbs.Response(HttpStatusCode.Conflict, "{\"error\":{\"code\":\"harness_folder_present\",\"message\":\"Made up.\",\"retryable\":false}}")
+                : null,
+        };
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Human = true });
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var lines = to.Out.ToString().ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Contains("was not linked (harness_folder_present)", string.Join('\n', lines), StringComparison.Ordinal);
+        Assert.Equal("The import is incomplete: a project folder was not linked. Link each one with the 'jason project link' line under 'Left to you'.", lines[^1].Trim());
     }
 
     [Fact]
@@ -1131,6 +1203,7 @@ public sealed class ImportCommandTests
         Assert.Contains("Imported the installation Jason 0.33.0 exported at 2026-11-08 09:30:00Z", said, StringComparison.Ordinal);
         Assert.Contains("Left to you:", said, StringComparison.Ordinal);
         Assert.Contains("jason status", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("The import is incomplete", said, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -1362,9 +1435,10 @@ public sealed class ImportCommandTests
         Assert.Contains("a jason.db-wal or jason.db-shm beside no database", help, StringComparison.Ordinal);
         Assert.Contains("The harness root: --root, else JASON_Harness__Root, else the Harness:Root this machine's settings file names, else Jason in the home directory", help, StringComparison.Ordinal);
         Assert.Contains("Harness:Root first", help, StringComparison.Ordinal);
+        Assert.Contains("A refused link is named in link_refused by project, folder, code and message; the folder and everything placed stay, the other projects are still linked, next carries 'jason project link <id> --path <folder>', and the exit is 1", help, StringComparison.Ordinal);
         Assert.Contains("Left to you: jason skills install", help, StringComparison.Ordinal);
-        Assert.Contains("Exit codes: 0 placed and the runtime answered", help, StringComparison.Ordinal);
-        Assert.Contains("Exit codes: 0 placed and the runtime answered; 1 refused, with nothing written; placed and the runtime did not start; or stopped part-way, which the answer names; 2 usage.", help, StringComparison.Ordinal);
+        Assert.Contains("Exit codes: 0 placed, the runtime answered and every project folder was linked", help, StringComparison.Ordinal);
+        Assert.Contains("Exit codes: 0 placed, the runtime answered and every project folder was linked; 1 refused, with nothing written; placed and the runtime did not start; placed and a project folder not linked, which link_refused names and the answer keeps whole; or stopped part-way, which the answer names; 2 usage.", help, StringComparison.Ordinal);
         Assert.Contains("an update in flight, naming 'jason update apply'", help, StringComparison.Ordinal);
         Assert.Contains("a --root that JASON_Harness__Root contradicts, naming the variable", help, StringComparison.Ordinal);
         Assert.Contains("a settings file in the archive that is not a JSON object", help, StringComparison.Ordinal);

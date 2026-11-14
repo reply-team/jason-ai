@@ -728,15 +728,17 @@ path elsewhere that is not on this machine is said and left as written, for you 
 the secrets among them, is placed as it was. A role skills pack the record says came from a folder that is not
 here is named, with `jason skills install` to deploy it again.
 
-**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as
-`jason project link` does; a link the runtime refuses is named with its code, the folder stays, and the answer's
-`next` carries `jason project link <id> --path <folder>`. An import on the same machine, into a second data
-directory, needs the source harness root moved aside first: the records name its folders, and the runtime refuses
-to link a folder that is present elsewhere (`harness_folder_present`). The import
-exits 0 when everything was placed and the runtime answered, 1 when it refused (nothing written) or the runtime
-did not start (the files are in place; start it with `jason runtime start`), and 2 on a usage error. Three
-things are left to you, in this order: `jason skills install`, `jason runtime autostart enable` if the runtime
-should start at logon here and the import did not register it, and `jason status`.
+**Then the runtime starts on it**, and the import asks it to record each project folder where it now stands, as `jason
+project link` does; a link the runtime refuses is named with its code in `link_refused`, the folder stays, the other
+projects are still linked, and the answer's `next` carries `jason project link <id> --path <folder>`. An import on the
+same machine, into a second data directory, needs the source harness root moved aside first: the records name its
+folders, and the runtime refuses to link a folder that is present elsewhere (`harness_folder_present`). The import exits
+0 when everything was placed, the runtime answered and every project folder was linked, and 1 when it refused (nothing
+written), when the runtime did not start (the files are in place; start it with `jason runtime start`), or when a
+project folder was not linked (everything is placed and the whole answer is still printed; `link_refused` names each
+one, and `next` carries the line that links it), and 2 on a usage error. Three things are left to you, in this order:
+`jason skills install`, `jason runtime autostart enable` if the runtime should start at logon here and the import did
+not register it, and `jason status`.
 
 ---
 

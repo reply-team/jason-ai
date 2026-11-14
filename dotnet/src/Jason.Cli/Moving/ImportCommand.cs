@@ -455,7 +455,8 @@ public static class ImportCommand
                 env.Error.WriteLine(warning);
             }
 
-            return ExitCodes.Success;
+            // A project left unlinked is an import that is not whole: the answer stays complete on stdout, and the exit says so.
+            return refusedLinks.Count == 0 ? ExitCodes.Success : ExitCodes.ApiError;
         }
     }
 
@@ -1263,6 +1264,10 @@ public static class ImportCommand
         lines.AddRange(answer.LinkRefused.Select(link => $"The project folder {link.Path} was not linked ({link.Code}): {link.Message}"));
         lines.Add("Left to you:");
         lines.AddRange(answer.Next.Select(next => "  " + next));
+        if (answer.LinkRefused.Count > 0)
+        {
+            lines.Add("The import is incomplete: a project folder was not linked. Link each one with the 'jason project link' line under 'Left to you'.");
+        }
         return string.Join(Environment.NewLine, lines);
     }
 
@@ -1316,12 +1321,12 @@ public static class ImportCommand
             + "on this machine is said and left as written; every other value, a secret among them, is placed as it was." + nl
             + "The runtime: while it runs this refuses, naming 'jason runtime stop', unless --stop is given. It registers at "
             + "logon when the other machine did, or says this machine cannot; starts the runtime and waits for it; and asks it "
-            + "to link each project folder by its marker. A refused link is said, the folder stays, and next carries "
-            + "'jason project link <id> --path <folder>'. An import on the same machine, into a second data directory, needs the "
+            + "to link each project folder by its marker. A refused link is named in link_refused by project, folder, code and message; the folder and everything placed stay, "
+            + "the other projects are still linked, next carries 'jason project link <id> --path <folder>', and the exit is 1. An import on the same machine, into a second data directory, needs the "
             + "source harness root moved aside first: the records name its folders, and project.link refuses a folder present "
             + "elsewhere (harness_folder_present). It reaches no network but the runtime's own loopback." + nl
             + "Left to you: " + string.Join("; ", LeftToYou) + "." + nl
-            + "Exit codes: 0 placed and the runtime answered; 1 refused, with nothing written; placed and the runtime did not start; "
-            + "or stopped part-way, which the answer names; 2 usage.";
+            + "Exit codes: 0 placed, the runtime answered and every project folder was linked; 1 refused, with nothing written; placed and the runtime did not start; "
+            + "placed and a project folder not linked, which link_refused names and the answer keeps whole; or stopped part-way, which the answer names; 2 usage.";
     }
 }
