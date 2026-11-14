@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import type { Campaign } from '../../api/types';
 import { shortDate } from '../../time/format';
+import { AgentSendModes } from '../send-modes/agent-modes';
 
 type Props = { campaign: Campaign; now: Date; zone: string };
 
@@ -36,6 +37,7 @@ export function Details({ campaign, now, zone }: Props) {
                     </>
                 )}
             </dl>
+            <AgentSendModes campaign={campaign} />
             <div className="section">
                 <h3>Context</h3>
                 {context.length === 0 ? (

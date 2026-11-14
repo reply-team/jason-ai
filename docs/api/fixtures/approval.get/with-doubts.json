@@ -1,0 +1,57 @@
+{
+  "operation": "approval.get",
+  "case": "with-doubts",
+  "request": {
+    "approval_id": "apr_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_1",
+    "work_item_id": "wi_1",
+    "campaign_id": "cmp_1",
+    "operation": "campaign.enroll",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:subject",
+    "subject": {
+      "operation": "campaign.enroll",
+      "work_item": "wi_1"
+    },
+    "preview": {
+      "intent": "Put one person into a campaign at the provider.",
+      "contact": {
+        "name": "Ada",
+        "value": "ada@example.test"
+      },
+      "doubts": [
+        {
+          "source": "ask_person",
+          "by": {
+            "type": "human",
+            "id": null
+          },
+          "role": null,
+          "code": "sensitive_topic",
+          "note": "She asks about a price.",
+          "line": null
+        }
+      ]
+    },
+    "plugin_id": "stand-in-provider",
+    "binding_identity": "sha256:account",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_one",
+    "routing_snapshot_id": "rts_one",
+    "requested_at": "2026-09-14T12:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Flow",
+    "contact_name": null,
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}
