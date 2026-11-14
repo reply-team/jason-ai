@@ -27,6 +27,8 @@ public class SendModeApprovalExchangesTests
     private static readonly OperationContract Send = OperationCatalog.Find("message.send")!;
     private static readonly ActorRef Marta = new(ActorType.Human, "Marta");
 
+    private static readonly IReadOnlyDictionary<string, string> NoPins = new Dictionary<string, string>();
+
     private static readonly ModeInForce Automatic = new(SendMode.Automatic, SendModeSource.Preference, Marta);
 
     /// <summary>Each reason the claim parks a send with, and the temperature its facts say: none where a reply waits.</summary>
@@ -116,27 +118,16 @@ public class SendModeApprovalExchangesTests
         db.Campaigns.Add(campaign);
         var contact = new Contact { PublicId = "cnt_01K7QR00000000000000000001", FirstName = "Ines", LastName = "Duarte", Company = "Kavali", CreatedAt = Noon, UpdatedAt = Noon };
         contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ines@example.test", IsPrimary = true });
-        var input = new JsonObject
+        // The operation's arguments, as a work item holds them; the input the provider is sent is composed from them below.
+        var args = new JsonObject
         {
-            ["args"] = new JsonObject
-            {
-                ["channel"] = "email",
-                ["sender"] = new JsonObject { ["external_id"] = "s_12", ["address"] = "owner@example.test" },
-                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Notes from the meetup", ["body"] = "Hi Ines, thanks for the talk at the meetup." },
-            },
-            ["contacts"] = new JsonArray(new JsonObject
-            {
-                ["id"] = contact.PublicId,
-                ["first_name"] = "Ines",
-                ["last_name"] = "Duarte",
-                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = "ines@example.test", ["primary"] = true }),
-                ["external_ids"] = new JsonObject(),
-            }),
-            ["campaign"] = new JsonObject { ["id"] = campaign.PublicId, ["name"] = campaign.Name, ["status"] = "active", ["external_ids"] = new JsonObject { ["campaign"] = "c_7714" } },
+            ["channel"] = "email",
+            ["sender"] = new JsonObject { ["external_id"] = "s_12", ["address"] = "owner@example.test" },
+            ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Notes from the meetup", ["body"] = "Hi Ines, thanks for the talk at the meetup." },
         };
         var item = WorkItemFactory.NewProviderOp(campaign, Send.Id, Noon);
         item.Contact = contact;
-        item.Context[WorkItemService.InputKey] = input["args"]!.DeepClone();
+        item.Context[WorkItemService.InputKey] = args.DeepClone();
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);
 
@@ -166,12 +157,14 @@ public class SendModeApprovalExchangesTests
         // Edited after the critic passed it: the pass stands under the text it read, and the claim shows that older line.
         if (reason == SendModeReasons.EditedAfterReview)
         {
-            input["args"]!["message"]!["body"] = "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?";
-            item.Context[WorkItemService.InputKey] = input["args"]!.DeepClone();
+            args["message"]!["body"] = "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?";
+            item.Context[WorkItemService.InputKey] = args.DeepClone();
             db.Entry(item).Property(w => w.Context).IsModified = true;
             await db.SaveChangesAsync(Ct);
         }
 
+        // Composed the way the claim composes it, from the item, the campaign and the person, never written by hand.
+        var input = CanonicalInput.Compose(Send, new PreflightFacts(item, campaign, contact, NoPins, NoPins, Suppressed: false));
         var binding = new JsonObject { ["workspace"] = "a" };
         var subject = ApprovalSubject.Of(
             new ProviderOpPlan(TestPlugins.Loaded("reply", [Send.Id]), "snp_01K7QR00000000000000000001", "rts_01K7QR00000000000000000001",

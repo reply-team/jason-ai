@@ -34,6 +34,9 @@
             "id": "cnt_1",
             "first_name": "Ines",
             "last_name": "Duarte",
+            "company": "Kavali",
+            "title": null,
+            "time_zone": null,
             "channels": [
               {
                 "channel": "email",
@@ -48,10 +51,9 @@
           "id": "cmp_1",
           "name": "Spring launch",
           "status": "active",
-          "external_ids": {
-            "campaign": "c_7714"
-          }
-        }
+          "external_ids": {}
+        },
+        "idempotency_key": "wi_1"
       },
       "operation": "message.send",
       "operation_version": 1,
@@ -123,6 +125,9 @@
               "id": "cnt_1",
               "first_name": "Ines",
               "last_name": "Duarte",
+              "company": "Kavali",
+              "title": null,
+              "time_zone": null,
               "channels": [
                 {
                   "channel": "email",
@@ -137,10 +142,9 @@
             "id": "cmp_1",
             "name": "Spring launch",
             "status": "active",
-            "external_ids": {
-              "campaign": "c_7714"
-            }
-          }
+            "external_ids": {}
+          },
+          "idempotency_key": "wi_1"
         },
         "operation": "message.send",
         "operation_version": 1,

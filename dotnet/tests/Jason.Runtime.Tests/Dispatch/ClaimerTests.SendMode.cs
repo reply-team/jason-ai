@@ -958,6 +958,8 @@ public partial class ClaimerTests
             SameMembers(name + ".preview.send_mode", staged["preview"]!["send_mode"]!.AsObject(), claimed["preview"]!["send_mode"]!.AsObject());
             Assert.Equal(["mode", "review", "source", "temperature"], claimed["preview"]!["send_mode"]!.AsObject().Select(member => member.Key).Order());
             SameMembers(name + ".subject", staged["subject"]!.AsObject(), claimed["subject"]!.AsObject());
+            // The input the provider is sent, at every level: what the claim composes, never a hand-written likeness.
+            SameShape(name + ".subject.input", staged["subject"]!["input"], claimed["subject"]!["input"]);
             Assert.Equal(((string?)claimed["reason"], (string?)claimed["status"]), ((string?)staged["reason"], (string?)staged["status"]));
         }
 
@@ -1018,6 +1020,41 @@ public partial class ClaimerTests
             }
 
             Assert.True(Kind(staged[key]) == Kind(value), $"{where}.{key}: staged {Kind(staged[key])}, claimed {Kind(value)}");
+        }
+    }
+
+    /// <summary>
+    /// The same members at every level beneath, lists item by item. A member either side leaves null is a value the data
+    /// leaves empty (a person with no last name), so kinds are compared only where both hold one.
+    /// </summary>
+    private static void SameShape(string where, JsonNode? staged, JsonNode? claimed)
+    {
+        if (staged is null || claimed is null)
+        {
+            return;
+        }
+
+        Assert.True(Kind(staged) == Kind(claimed), $"{where}: staged {Kind(staged)}, claimed {Kind(claimed)}");
+        switch (claimed)
+        {
+            case JsonObject members:
+                var keys = staged.AsObject().Select(member => member.Key).Order().ToArray();
+                var claimedKeys = members.Select(member => member.Key).Order().ToArray();
+                Assert.True(keys.SequenceEqual(claimedKeys), $"{where}: staged [{string.Join(", ", keys)}], claimed [{string.Join(", ", claimedKeys)}]");
+                foreach (var (key, value) in members)
+                {
+                    SameShape($"{where}.{key}", staged[key], value);
+                }
+
+                break;
+            case JsonArray items:
+                Assert.True(staged.AsArray().Count == items.Count, $"{where}: staged {staged.AsArray().Count} items, claimed {items.Count}");
+                for (var at = 0; at < items.Count; at++)
+                {
+                    SameShape($"{where}[{at}]", staged[at], items[at]);
+                }
+
+                break;
         }
     }
 
