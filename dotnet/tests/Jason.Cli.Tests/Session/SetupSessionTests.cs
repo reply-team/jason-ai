@@ -163,31 +163,40 @@ public sealed class SetupSessionTests : IDisposable
         Assert.False(Directory.Exists(_setup.RoleSkillsDirectory));
     }
 
-    /// <summary>Opening it changes nothing: the data directory holds the same entries before and after.</summary>
+    /// <summary>
+    /// Opening it changes nothing: the data directory holds the same entries before the first run and after a real start.
+    /// The runtime is never needed (<c>--host</c> is given and none is there), so the harness writes no descriptor either.
+    /// </summary>
     [Fact]
     public async Task Setup_writes_no_file_of_jasons()
     {
         _run.Programs.AddProgram("claude");
+        _run.Descriptor = false;
         string[] Tree() => [.. Directory.EnumerateFileSystemEntries(_run.DataDirectory, "*", SearchOption.AllDirectories)
             .Where(entry => !entry.StartsWith(_run.Programs.Root, StringComparison.Ordinal))
             .Order(StringComparer.Ordinal)];
-        _ = await _run.Cli("session", "open", "--setup", "--host", "claude_code", "--dry-run");
         var before = Tree();
 
-        var exit = await _run.Cli("session", "open", "--setup");
+        var exit = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
 
         Assert.Equal(ExitCodes.Success, exit);
+        Assert.Single(_run.Terminals.Launches);
         Assert.Equal(before, Tree());
     }
 
     /// <summary>
     /// The folders are the ones <see cref="SetupInfo.From"/> names for the data directory the CLI runs on, so a layout that
-    /// moves them is followed here with no edit.
+    /// moves them is followed here with no edit; never the ones a variable of the environment, or this process's own data
+    /// directory, would name, even where that other place has the same folders.
     /// </summary>
     [Fact]
     public async Task Setup_follows_the_folders_SetupInfo_names()
     {
         _run.Programs.AddProgram("claude");
+        var elsewhere = SetupInfo.From(new JasonPaths(Path.Combine(_run.DataDirectory, "elsewhere")));
+        Directory.CreateDirectory(elsewhere.RoleSkillsDirectory);
+        Directory.CreateDirectory(elsewhere.PluginsDirectory);
+        _run.Variables[JasonPaths.DataDirectoryVariable] = Path.Combine(_run.DataDirectory, "elsewhere");
 
         _ = await _run.Cli("session", "open", "--setup", "--host", "claude_code", "--dry-run");
 
@@ -195,6 +204,8 @@ public sealed class SetupSessionTests : IDisposable
         var expected = SetupInfo.From(new JasonPaths(_run.DataDirectory));
         Assert.Equal(expected.RoleSkillsDirectory, (string?)answer["folder"]!["path"]);
         Assert.Equal(expected.PluginsDirectory, (string?)answer["plugins_folder"]!["path"]);
+        Assert.NotEqual(elsewhere.RoleSkillsDirectory, (string?)answer["folder"]!["path"]);
+        Assert.NotEqual(SetupInfo.From(JasonPaths.FromEnvironment()).RoleSkillsDirectory, (string?)answer["folder"]!["path"]);
     }
 
     /// <summary>
@@ -337,6 +348,21 @@ public sealed class SetupSessionTests : IDisposable
         File.WriteAllText(Path.Combine(SkillsRoot(AgentHostKind.ClaudeCode), SkillsRecord.FileName), "not a record");
         _ = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
         Assert.Equal(SetupBrief.For("claude_code", deployed: false), Brief());
+    }
+
+    /// <summary>A receipt that names the skill whose file has since gone is not a skill the host can read.</summary>
+    [Fact]
+    public async Task Setup_takes_a_skill_whose_file_is_gone_for_not_deployed()
+    {
+        _run.Programs.AddProgram("claude");
+        DeploySkill(AgentHostKind.ClaudeCode);
+        File.Delete(AgentHosts.Under(SkillsRoot(AgentHostKind.ClaudeCode), SetupBrief.SkillName + "/SKILL.md"));
+
+        var exit = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.False((bool)Answer()["skill"]!["deployed"]!);
+        Assert.Equal(SetupBrief.For("claude_code", deployed: false), Assert.Single(_run.Terminals.Launches).Argv[3]);
     }
 
     /// <summary>A skill deployed for another host's root is not deployed for this one: the receipt is read per host.</summary>
