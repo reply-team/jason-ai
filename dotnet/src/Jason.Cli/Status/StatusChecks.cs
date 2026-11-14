@@ -261,7 +261,7 @@ internal static class StatusChecks
             checks.Add(UpdateInFlight(unfinished));
 
             checks.Add(ProviderPlugin(info));
-            checks.Add(PluginPackage(info));
+            checks.Add(PluginPackage(info, env.Paths));
             // One plugin.list answer, read once and passed on: the two checks it serves describe the same snapshot.
             var asked = client is not null && info is not null;
             var registry = asked ? await ReadAsync<PluginRegistryDto>(client!, Operations.PluginList, cancellationToken).ConfigureAwait(false) : null;
@@ -918,7 +918,7 @@ internal static class StatusChecks
     /// passes with a line that says so, a development build compares against its own tree, named in the fact, and the
     /// packages not installed are one sentence.
     /// </summary>
-    private static StatusCheck PluginPackage(SystemInfoResponse? info)
+    private static StatusCheck PluginPackage(SystemInfoResponse? info, JasonPaths paths)
     {
         const string Name = "plugin_package";
         if (info is null)
@@ -939,7 +939,7 @@ internal static class StatusChecks
         var state = packages.Any(package => package.State == ReleasedPluginState.Behind) ? CheckState.Failed
             : packages.Any(package => package.State is ReleasedPluginState.Current or ReleasedPluginState.Differs) ? CheckState.Ok
             : CheckState.Absent;
-        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages)), null);
+        return new StatusCheck(Name, false, state, string.Join(" ", PackageLines(info, packages, paths)), null);
     }
 
     /// <summary>
@@ -947,7 +947,7 @@ internal static class StatusChecks
     /// sentence naming their ids, where the first of them stands, since a release publishes more packages than a person
     /// installs and what there is to do is the same for each.
     /// </summary>
-    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages)
+    private static IEnumerable<string> PackageLines(SystemInfoResponse info, IReadOnlyList<ReleasedPluginInfo> packages, JasonPaths paths)
     {
         var missing = packages.Where(package => package.State == ReleasedPluginState.NotInstalled).Select(package => package.Id).ToList();
         var said = false;
@@ -955,7 +955,7 @@ internal static class StatusChecks
         {
             if (package.State != ReleasedPluginState.NotInstalled || missing.Count == 1)
             {
-                yield return PackageLine(info, package);
+                yield return PackageLine(info, package, paths);
             }
             else if (!said)
             {
@@ -966,30 +966,15 @@ internal static class StatusChecks
         }
     }
 
-    /// <summary>
-    /// The plugins folder of a runtime older than <c>system.info</c>'s setup section, which names none: every such runtime
-    /// keeps its plugins in the plugins folder of its data directory, the one layout there was before the section. Never
-    /// used for a runtime that says where its plugins are.
-    /// </summary>
-    private static string OlderRuntimesPluginsDirectory(string dataDirectory)
-    {
-        var separator = dataDirectory.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
-        return string.Join(separator, dataDirectory.TrimEnd('/', '\\'), "plugins");
-    }
-
-    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package)
+    private static string PackageLine(SystemInfoResponse info, ReleasedPluginInfo package, JasonPaths paths)
     {
         var runtime = info.RuntimeVersion;
         var released = $"{package.Id} {package.Released.Version}";
         var installed = package.Installed is { } mine ? $"{package.Id} {mine.Version}" : package.Id;
 
-        // The runtime's own plugins folder, as its setup section names it, written with the separator it writes, so the line
-        // names the folder a person finds on that machine and this CLI spells no part of the layout. Only a runtime older
-        // than that section says nothing of it, and such a runtime keeps its plugins where every runtime before the
-        // section did: the plugins folder of its data directory.
-        var plugins = info.Setup?.PluginsDirectory ?? OlderRuntimesPluginsDirectory(info.DataDir);
-        var separator = plugins.Contains('\\', StringComparison.Ordinal) ? '\\' : '/';
-        var directory = string.Join(separator, plugins.TrimEnd('/', '\\'), package.Id);
+        // Where the command this line names places the package: `jason plugin install` writes into this CLI's own plugins
+        // folder, so that is the folder said, whatever the runtime reports.
+        var directory = paths.PluginPackageDirectory(package.Id);
 
         return package.State switch
         {
