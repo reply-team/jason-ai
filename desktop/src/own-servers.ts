@@ -4,9 +4,13 @@
  * holds secrets beside the names (a server's environment, its headers, its arguments, its address), so it is read here,
  * in the main process, whole, and only the names leave: no value, command, argument, header, URL or environment entry.
  *
- * A name is the person's own text: the page draws it as text only, and it is cut at forty characters here. It is never
- * written to a log (a read that fails is logged by the program and a kind from a closed table), never given to the chat
- * and never part of a diagnostic bundle.
+ * A name is the person's own text: the page draws it as text only, and it is made one line and cut at forty characters
+ * here. It is never written to a log (a read that fails is logged by the program and a kind from a closed table), never
+ * given to the chat and never part of a diagnostic bundle.
+ *
+ * No file can make the listing fail or hang: only a regular file is opened, one larger than `fileLimit` is not read, a
+ * file nested deeper than `depthLimit` or naming more than `namesLimit` servers lists nothing, and whatever the reading or
+ * the parse throws is caught here and lists nothing.
  *
  * What is read is what those programs load in a session of the person's own, as Open in starts one; what is not read is
  * not listed, and the docs say so: Claude Code's servers of a project folder (local and project scope), of a plugin, of
@@ -15,17 +19,46 @@
  * nothing and harms nothing.
  */
 
-import { readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { unseen } from './chat-header.ts';
 
 /** The programs whose own servers Connect names. */
 export type OwnServersProgram = 'claude' | 'codex';
 
-/** Where a name is cut, in characters; a longer one ends with an ellipsis after them. */
+/** How long a name is drawn, in characters: a longer one keeps the first thirty-nine and ends with an ellipsis. */
 export const nameLimit = 40;
 
-/** Why a file listed nothing although it is there; never its text. */
-export type UnreadKind = 'unreadable' | 'malformed';
+/**
+ * The largest file read, in bytes: 64 MiB. A `.claude.json` with a long history of project folders runs to tens of MB,
+ * and one of 45 MB parses in a fifth of a second; a larger file is not read and lists nothing.
+ */
+export const fileLimit = 64 * 1024 * 1024;
+
+/**
+ * How deep a file may nest its arrays and tables (objects in JSON): 64. A real file nests a handful of levels; the Codex
+ * reader steps over a value by recursion, so a file nested past this is taken as one this reader cannot follow and lists
+ * nothing, and the JSON file is held to the same depth.
+ */
+export const depthLimit = 64;
+
+/**
+ * The most servers a file may name: 1,000. The page draws the first five and counts the rest, so the names are kept
+ * whole up to this many and the count it draws is the file's own; a file naming more lists nothing, and no count is
+ * ever short.
+ */
+export const namesLimit = 1000;
+
+/**
+ * Why a file listed nothing although it is there; never its text. `unreadable`: it could not be read, or it is no
+ * regular file; `too_large`: larger than `fileLimit`, or naming more than `namesLimit` servers; `malformed`: it could not
+ * be parsed, or nests deeper than `depthLimit`.
+ */
+export type UnreadKind = 'unreadable' | 'too_large' | 'malformed';
+
+/** What `readOwnServers` reads a file with: its text, or null for one larger than `fileLimit`; a failure throws. */
+export type ReadFile = (file: string) => Promise<string | null>;
 
 export type OwnServersRead = { names: string[] } | { unread: UnreadKind };
 
@@ -50,38 +83,99 @@ export function ownServersFile(program: OwnServersProgram, env: Readonly<Record<
     return moved ? join(moved, 'config.toml') : join(home, '.codex', 'config.toml');
 }
 
-/** Reads a program's file and keeps its servers' names; a file that is not there lists none and is no failure. */
+/**
+ * Reads a program's file and keeps its servers' names; a file that is not there lists none and is no failure. It never
+ * rejects: whatever the reading or the parse throws lists nothing.
+ */
 export async function readOwnServers(
     program: OwnServersProgram,
     env: Readonly<Record<string, string | undefined>>,
     home: string,
-    read: (file: string) => Promise<string> = (file) => readFile(file, 'utf8'),
+    read: ReadFile = readRegularFile,
 ): Promise<OwnServersRead> {
-    let text: string;
+    let text: string | null;
     try {
         text = await read(ownServersFile(program, env, home));
     } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
+        const code = (error as NodeJS.ErrnoException | undefined)?.code;
         return code === 'ENOENT' || code === 'ENOTDIR' ? { names: [] } : { unread: 'unreadable' };
     }
-    const names = program === 'claude' ? claudeServerNames(text) : codexServerNames(text);
-    return names === null ? { unread: 'malformed' } : { names: shown(names) };
+    if (text === null) return { unread: 'too_large' };
+    try {
+        const names = program === 'claude' ? claudeServerNames(text) : codexServerNames(text);
+        if (names === null) return { unread: 'malformed' };
+        const kept = shown(names);
+        return kept === null ? { unread: 'too_large' } : { names: kept };
+    } catch {
+        return { unread: 'malformed' };
+    }
 }
 
-// Bidirectional controls, which could reorder what is drawn around a name; control characters are taken out too.
-const hidden = /[\p{Cc}‎‏‪-‮⁦-⁩]/gu;
+/**
+ * A file's text, when it is a regular file of at most `limit` bytes; null for a larger one. What is no regular file (a
+ * folder, a FIFO, a device, a socket, or a link to one) is refused by its kind before it is opened, so no open waits for
+ * a writer and no read runs without end; the file is opened without blocking where the system has the flag (Windows has
+ * none), checked again once opened, and read no further than the size it had then.
+ */
+export async function readRegularFile(file: string, limit = fileLimit): Promise<string | null> {
+    const notRegular = () => new Error('not a regular file');
+    const before = await stat(file);
+    if (!before.isFile()) throw notRegular();
+    if (before.size > limit) return null;
+    const handle = await open(file, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    try {
+        const opened = await handle.stat();
+        if (!opened.isFile()) throw notRegular();
+        if (opened.size > limit) return null;
+        const buffer = Buffer.alloc(opened.size);
+        let filled = 0;
+        while (filled < buffer.length) {
+            const { bytesRead } = await handle.read(buffer, filled, buffer.length - filled, filled);
+            if (bytesRead === 0) break;
+            filled += bytesRead;
+        }
+        return buffer.toString('utf8', 0, filled);
+    } finally {
+        await handle.close();
+    }
+}
 
-/** Each name as the page draws it: hidden characters out, cut at `nameLimit`, an empty one dropped, each once, in order. */
-function shown(names: readonly string[]): string[] {
+/**
+ * Each name as the page draws it, in order: white space made single spaces and every unseen character taken out (the
+ * house class, `unseen`: controls, format characters such as the bidirectional and zero-width ones and the tag
+ * characters, the line and paragraph separators, every default-ignorable code point), an empty one dropped, each once,
+ * then cut to `nameLimit` with an ellipsis. Names are told apart before the cut, so two that differ only past it both
+ * stay and the count stays the file's. Null for more than `namesLimit` names.
+ */
+function shown(names: readonly string[]): string[] | null {
+    if (names.length > namesLimit) return null;
+    const seen = new Set<string>();
     const out: string[] = [];
     for (const name of names) {
-        const clean = name.replace(hidden, '').trim();
-        if (clean === '') continue;
-        const characters = [...clean];
-        const cut = characters.length > nameLimit ? `${characters.slice(0, nameLimit).join('')}…` : clean;
-        if (!out.includes(cut)) out.push(cut);
+        const clean = name.replace(/\s+/g, ' ').replace(unseen, '').replace(/\s+/g, ' ').trim();
+        if (clean === '' || seen.has(clean)) continue;
+        seen.add(clean);
+        const characters = Array.from(clean);
+        out.push(characters.length > nameLimit ? `${characters.slice(0, nameLimit - 1).join('')}…` : clean);
     }
     return out;
+}
+
+/** Whether a JSON text nests its arrays and objects deeper than `limit`; brackets inside strings are not counted. */
+function nestedDeeperThan(text: string, limit: number): boolean {
+    let depth = 0;
+    let inString = false;
+    for (let at = 0; at < text.length; at++) {
+        const char = text.charCodeAt(at);
+        if (inString) {
+            if (char === 0x5c) at++;
+            else if (char === 0x22) inString = false;
+        } else if (char === 0x22) inString = true;
+        else if (char === 0x5b || char === 0x7b) {
+            if (++depth > limit) return true;
+        } else if (char === 0x5d || char === 0x7d) depth--;
+    }
+    return false;
 }
 
 /**
@@ -90,9 +184,10 @@ function shown(names: readonly string[]): string[] {
  * JavaScript puts a key that reads as an array index (`"7"`) before the others, so such a name may move forward.
  */
 export function claudeServerNames(text: string): string[] | null {
+    if (nestedDeeperThan(text, depthLimit)) return null;
     let parsed: unknown;
     try {
-        parsed = JSON.parse(text.replace(/^﻿/, ''));
+        parsed = JSON.parse(text.replace(/^\uFEFF/, ''));
     } catch {
         return null;
     }
@@ -115,10 +210,11 @@ export function claudeServerNames(text: string): string[] | null {
  * runs of characters), so a file Codex refuses for such a value may still list its names here; it does not refuse a key
  * or a table defined twice; `enabled = false` is honoured in a server's table, in `<name>.enabled = false` and inside the
  * server's inline table, and missed under `mcp_servers = { ... }`; a bare key is ASCII letters, digits, `_` and `-`, as
- * TOML 1.0 has it, and a file with any other is followed no further and lists nothing.
+ * TOML 1.0 has it, and a file with any other is followed no further and lists nothing; a value nested deeper than
+ * `depthLimit` arrays and inline tables is followed no further either.
  */
 export function codexServerNames(text: string): string[] | null {
-    const reader = new TomlStatements(text.replace(/^﻿/, ''));
+    const reader = new TomlStatements(text.replace(/^\uFEFF/, ''));
     return reader.servers();
 }
 
@@ -126,7 +222,7 @@ export function codexServerNames(text: string): string[] | null {
 class TomlStatements {
     #text: string;
     #at = 0;
-    #names: string[] = [];
+    #names = new Set<string>();
     #disabled = new Set<string>();
 
     constructor(text: string) {
@@ -169,11 +265,11 @@ class TomlStatements {
             }
             if (!this.#lineEnd()) return null;
         }
-        return this.#names.filter((name) => !this.#disabled.has(name));
+        return [...this.#names].filter((name) => !this.#disabled.has(name));
     }
 
     #name(name: string): void {
-        if (!this.#names.includes(name)) this.#names.push(name);
+        this.#names.add(name);
     }
 
     #take(word: string): boolean {
@@ -298,12 +394,14 @@ class TomlStatements {
 
     /**
      * Steps over one value. What it says of it: whether it is the boolean `false`, and for an inline table its keys and
-     * which of its one-part keys are `false`.
+     * which of its one-part keys are `false`. Null past `depthLimit` levels of arrays and inline tables.
      */
-    #value(): { isFalse: boolean; keys: string[][]; falseKeys: Set<string> } | null {
+    #value(depth = 0): { isFalse: boolean; keys: string[][]; falseKeys: Set<string> } | null {
         const plain = { isFalse: false, keys: [] as string[][], falseKeys: new Set<string>() };
         const char = this.#text[this.#at];
         if (char === undefined) return null;
+        // One more array or inline table here would nest deeper than `depthLimit`.
+        if ((char === '[' || char === '{') && depth >= depthLimit) return null;
         if (char === '"' || char === "'") {
             if (this.#text.startsWith(char.repeat(3), this.#at)) return this.#multiline(char) ? plain : null;
             return (char === '"' ? this.#basic() : this.#literal()) === null ? null : plain;
@@ -313,7 +411,7 @@ class TomlStatements {
             for (;;) {
                 this.#blanks(true);
                 if (this.#take(']')) return plain;
-                if (this.#value() === null) return null;
+                if (this.#value(depth + 1) === null) return null;
                 this.#blanks(true);
                 if (this.#take(']')) return plain;
                 if (!this.#take(',')) return null;
@@ -331,7 +429,7 @@ class TomlStatements {
                 this.#spaces();
                 if (!this.#take('=')) return null;
                 this.#spaces();
-                const inner = this.#value();
+                const inner = this.#value(depth + 1);
                 if (inner === null) return null;
                 keys.push(key);
                 if (key.length === 1 && inner.isFalse) falseKeys.add(key[0]!);

@@ -1054,6 +1054,28 @@ test('a moved CLAUDE_CONFIG_DIR and CODEX_HOME are read where they point; a file
     assert.ok(!JSON.stringify(log.lines).includes('half_written'));
 });
 
+test('a file nested ten thousand deep never fails the listing: setup.status answers, every other row is there, and no line is drawn', async (t) => {
+    const b = bench(t, { programs: ['claude', 'codex'] });
+    const home = join(b.root, 'person-home');
+    mkdirSync(join(home, '.codex'), { recursive: true });
+    const depth = 10_000;
+    writeFileSync(join(home, '.claude.json'), `{"mcpServers": {"deep": ${'['.repeat(depth)}${']'.repeat(depth)}}}`);
+    writeFileSync(join(home, '.codex', 'config.toml'), `[mcp_servers.deep]\nargs = ${'['.repeat(depth)}${']'.repeat(depth)}\n`);
+    const log = memoryLog();
+    const state = await new Setup({ ...setupDeps(b, log), ownServers: { env: {}, home } }).status();
+    const byId = new Map(state.hosts.map((host) => [host.id, host]));
+    assert.equal(byId.get('claude')?.found, true);
+    assert.equal(byId.get('codex')?.found, true);
+    for (const host of state.hosts) assert.deepEqual(host.ownServers, [], host.id);
+    assert.deepEqual(
+        log.lines.filter((line) => line.name === 'own_servers_unread').map((line) => line.fields),
+        [
+            { Program: 'claude', Kind: 'malformed' },
+            { Program: 'codex', Kind: 'malformed' },
+        ],
+    );
+});
+
 test('without the environment and home to read under, no file is read and no host names a server', async (t) => {
     const b = bench(t, { programs: ['claude', 'codex'] });
     const { hosts } = await setupOn(b).status();
