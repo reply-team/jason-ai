@@ -39,6 +39,55 @@ function spellings(platform: Platform, cwd: string, inside: string): string[] {
 }
 
 /**
+ * A shell's other ways to reach a path inside a part, each a request of a shell tool that reads it or writes it: by the
+ * home folder's variables, by a change of folder (`cd`, `pushd`, after `&&` or `;`) to the data directory in its literal
+ * spelling or by the home folder's, and by the variable the host's environment carries the data directory in; on Windows
+ * also in PowerShell's forms and the command prompt's. The data directory is the default one, `.jason` in the home
+ * folder. A form a later change finds is a row here.
+ */
+function shellSpellings(platform: Platform, data: string, inside: string): [string, string][] {
+    const paths = platform === 'win32' ? win32 : posix;
+    const relative = paths.relative(data, inside);
+    const slashed = relative.replaceAll('\\', '/');
+    const rows: [string, string][] = [];
+    const homes = ['~', '$HOME', '${HOME}', ...(platform === 'win32' ? ['$USERPROFILE'] : [])];
+    for (const home of homes) rows.push(['Bash', `cat ${home}/.jason/${slashed}`], ['Bash', `echo x > ${home}/.jason/${slashed}`]);
+    const folders = [`"${data}"`, ...homes.map((home) => `${home}/.jason`)];
+    for (const folder of folders) {
+        for (const change of ['cd', 'pushd']) {
+            for (const then of [' && ', '; ']) {
+                rows.push(['Bash', `${change} ${folder}${then}cat ${slashed}`], ['Bash', `${change} ${folder}${then}echo x > ${slashed}`]);
+            }
+        }
+    }
+    rows.push(
+        ['Bash', `cat $JASON_DATA_DIR/${slashed}`],
+        ['Bash', `echo x > \${JASON_DATA_DIR}/${slashed}`],
+        ['Bash', `cd "$JASON_DATA_DIR" && cat ${slashed}`],
+        ['Bash', `pushd $JASON_DATA_DIR; echo x > ${slashed}`],
+    );
+    if (platform !== 'win32') return rows;
+    const powerShell: string[] = [];
+    for (const home of ['$env:USERPROFILE', '~']) {
+        powerShell.push(
+            `Get-Content ${home}\\.jason\\${relative}`,
+            `Set-Content -Path ${home}\\.jason\\${relative} -Value x`,
+            `cd ${home}\\.jason; Get-Content ${relative}`,
+            `Push-Location ${home}\\.jason; Set-Content ${relative} x`,
+        );
+    }
+    powerShell.push(`Get-Content $env:JASON_DATA_DIR\\${relative}`, `cd $env:JASON_DATA_DIR; Set-Content ${relative} x`);
+    for (const command of powerShell) rows.push(['PowerShell', command], ['Bash', `powershell -Command "${command}"`]);
+    rows.push(
+        ['Bash', `cmd /c type %USERPROFILE%\\.jason\\${relative}`],
+        ['Bash', `cmd /c "echo x > %USERPROFILE%\\.jason\\${relative}"`],
+        ['Bash', `cmd /c "cd /d %USERPROFILE%\\.jason && type ${relative}"`],
+        ['Bash', `cmd /c type %JASON_DATA_DIR%\\${relative}`],
+    );
+    return rows;
+}
+
+/**
  * The person's own installation, its data directory the one fenced folder, as the chat builds a turn's scope: a Full
  * access turn works in its grant's folder below `chat-full`, every other in the chat folder.
  */
@@ -102,6 +151,10 @@ for (const mode of chatModes) {
                         const answer = await asked(mode, scope, tool, input);
                         assert.equal(answer.behavior, 'deny', `${platform} ${part} ${path}: ${tool} ${JSON.stringify(input)}`);
                     }
+                }
+                for (const [tool, command] of shellSpellings(platform, scope.data, inside)) {
+                    const answer = await asked(mode, scope, tool, { command });
+                    assert.equal(answer.behavior, 'deny', `${platform} ${part}: ${tool} ${JSON.stringify(command)}`);
                 }
             }
         }
