@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -11,6 +11,7 @@ import {
     fileLimit,
     nameLimit,
     namesLimit,
+    OwnServers,
     ownServersFile,
     readOwnServers,
     readRegularFile,
@@ -282,6 +283,74 @@ test('only a regular file is opened: a folder lists nothing, and so do a FIFO an
     mkdirSync(device);
     symlinkSync('/dev/zero', join(device, 'config.toml'));
     assert.deepEqual(await readOwnServers('codex', { CODEX_HOME: device }, at), { unread: 'unreadable' }, 'a link to /dev/zero');
+});
+
+// ---- The answer is remembered by what stat says of the file -------------------------------------------------------
+
+/** A reader whose opens are counted. */
+function counted(): { reader: OwnServers; opened: string[] } {
+    const opened: string[] = [];
+    const reader = new OwnServers({
+        read: (file, before) => {
+            opened.push(file);
+            return readRegularFile(file, fileLimit, before);
+        },
+    });
+    return { reader, opened };
+}
+
+test('an unchanged file is opened once over several listings, and answered from what was kept', async (t) => {
+    const at = home(t);
+    plant(join(at, '.claude.json'), JSON.stringify({ mcpServers: { kept_one: {} } }));
+    plant(join(at, '.codex', 'config.toml'), '[mcp_servers.kept_two]\ncommand = "x"\n');
+    const { reader, opened } = counted();
+    for (let call = 0; call < 5; call++) {
+        assert.deepEqual(await reader.read('claude', {}, at), { names: ['kept_one'] });
+        assert.deepEqual(await reader.read('codex', {}, at), { names: ['kept_two'] });
+    }
+    assert.deepEqual(opened, [join(at, '.claude.json'), join(at, '.codex', 'config.toml')]);
+    // A malformed file is kept too, so it is not parsed again either.
+    plant(join(at, 'bad', '.claude.json'), '{"mcpServers": ');
+    for (let call = 0; call < 3; call++) assert.deepEqual(await reader.read('claude', { CLAUDE_CONFIG_DIR: join(at, 'bad') }, at), { unread: 'malformed' });
+    assert.equal(opened.length, 3);
+});
+
+test('a file whose size or modification time changed is read again', async (t) => {
+    const at = home(t);
+    const file = join(at, '.claude.json');
+    plant(file, JSON.stringify({ mcpServers: { first: {} } }));
+    const { reader, opened } = counted();
+    assert.deepEqual(await reader.read('claude', {}, at), { names: ['first'] });
+    // The same size, another modification time.
+    const { mtime } = statSync(file);
+    plant(file, JSON.stringify({ mcpServers: { other: {} } }));
+    utimesSync(file, mtime, new Date(mtime.getTime() + 5_000));
+    assert.deepEqual(await reader.read('claude', {}, at), { names: ['other'] });
+    // Another size, the modification time put back to the one kept.
+    const kept = statSync(file).mtime;
+    plant(file, JSON.stringify({ mcpServers: { longer_name: {} } }));
+    utimesSync(file, kept, kept);
+    assert.deepEqual(await reader.read('claude', {}, at), { names: ['longer_name'] });
+    assert.equal(opened.length, 3);
+});
+
+test('a file that goes from read to not there lists nothing at once, and one that cannot be read is asked again', async (t) => {
+    const at = home(t);
+    const file = join(at, '.claude.json');
+    plant(file, JSON.stringify({ mcpServers: { going: {} } }));
+    const { reader, opened } = counted();
+    assert.deepEqual(await reader.read('claude', {}, at), { names: ['going'] });
+    rmSync(file);
+    assert.deepEqual(await reader.read('claude', {}, at), { names: [] });
+    plant(file, JSON.stringify({ mcpServers: { back: {} } }));
+    assert.deepEqual(await reader.read('claude', {}, at), { names: ['back'] });
+    assert.equal(opened.length, 2);
+    // A read that failed is not kept: a change of permissions moves neither the size nor the modification time.
+    let fail = true;
+    const flaky = new OwnServers({ read: (path, before) => (fail ? Promise.reject(Object.assign(new Error('planted'), { code: 'EACCES' })) : readRegularFile(path, fileLimit, before)) });
+    assert.deepEqual(await flaky.read('claude', {}, at), { unread: 'unreadable' });
+    fail = false;
+    assert.deepEqual(await flaky.read('claude', {}, at), { names: ['back'] });
 });
 
 test('the files: ~/.claude.json, or .claude.json in a moved CLAUDE_CONFIG_DIR; config.toml in CODEX_HOME or ~/.codex', async (t) => {

@@ -21,7 +21,7 @@ export const titleLimit = 60;
  * default-ignorable code point, which draws nothing though some are letters or marks (the Hangul fillers, the
  * combining grapheme joiner, the variation selectors). Connect's names of a person's own MCP servers use it too.
  */
-export const unseen =/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu;
+export const unseen = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu;
 /** The same in a recap, but for the line breaks and tabs of a message, which JSON writes as visible escapes. */
 const unseenInRecap = /(?![\t\n\r])[\p{Cc}\p{Cf}\u2028\u2029]/gu;
 

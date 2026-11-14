@@ -19,7 +19,7 @@ import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullA
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
-import { readOwnServers } from './own-servers.ts';
+import { OwnServers, type UnreadKind } from './own-servers.ts';
 import type { ProviderKeys } from './providers.ts';
 import {
     actBox,
@@ -250,7 +250,7 @@ export interface SetupDeps {
      * The environment and the home the person's own MCP servers are read under (`own-servers.ts`), which say where Claude
      * Code's and Codex's files are; absent, no file is read and no host names a server.
      */
-    ownServers?: { env: Readonly<Record<string, string | undefined>>; home: string };
+    ownServers?: { env: Readonly<Record<string, string | undefined>>; home: string; reader?: OwnServers };
 }
 
 const signInLimit = 5 * 60_000;
@@ -341,9 +341,14 @@ export class Setup {
     #listed: ReplyAccount[] = [];
     /** The offers a refusal opened, each for the one ask it answered: the shared page, and a forced delete. */
     #doors = new Set<string>();
+    /** The reader of the person's own MCP servers, which remembers each file's last answer (`own-servers.ts`). */
+    #own: OwnServers;
+    /** The kind each program's file was last logged as unread with; absent while it lists. */
+    #unread = new Map<string, UnreadKind>();
 
     constructor(deps: SetupDeps) {
         this.#deps = deps;
+        this.#own = deps.ownServers?.reader ?? new OwnServers();
     }
 
     onChanged(listener: () => void): () => void {
@@ -391,13 +396,20 @@ export class Setup {
         return { version, belowFloor: floorSentence(version), fullAccess: fullAccessSentence(version) };
     }
 
-    /** The names of a program host's own MCP servers; a file that could not be read is logged by program and kind only. */
+    /**
+     * The names of a program host's own MCP servers; a file that could not be read is logged by program and kind only,
+     * once for each change of its kind, not at every listing.
+     */
     async #ownServers(program: string, found: boolean): Promise<string[]> {
         const where = this.#deps.ownServers;
         if (where === undefined || !found || (program !== 'claude' && program !== 'codex')) return [];
-        const read = await readOwnServers(program, where.env, where.home);
-        if ('names' in read) return read.names;
-        this.#deps.log.info('own_servers_unread', { Program: program, Kind: read.unread });
+        const read = await this.#own.read(program, where.env, where.home);
+        if ('names' in read) {
+            this.#unread.delete(program);
+            return read.names;
+        }
+        if (this.#unread.get(program) !== read.unread) this.#deps.log.info('own_servers_unread', { Program: program, Kind: read.unread });
+        this.#unread.set(program, read.unread);
         return [];
     }
 

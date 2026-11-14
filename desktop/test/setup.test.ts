@@ -1076,6 +1076,32 @@ test('a file nested ten thousand deep never fails the listing: setup.status answ
     );
 });
 
+test('an unread file is logged once while its kind stays, again when its kind changes, and its line goes at once when it is gone', async (t) => {
+    const b = bench(t, { programs: ['claude'] });
+    const home = join(b.root, 'person-home');
+    const file = join(home, '.claude.json');
+    mkdirSync(home, { recursive: true });
+    writeFileSync(file, '{"mcpServers": ');
+    const log = memoryLog();
+    const setup = new Setup({ ...setupDeps(b, log), ownServers: { env: {}, home } });
+    const kinds = () => log.lines.filter((line) => line.name === 'own_servers_unread').map((line) => line.fields['Kind']);
+    const claude = async () => (await setup.status()).hosts.find((host) => host.id === 'claude')?.ownServers;
+    for (let call = 0; call < 3; call++) assert.deepEqual(await claude(), []);
+    assert.deepEqual(kinds(), ['malformed'], 'once for an unchanged file');
+    rmSync(file);
+    mkdirSync(file);
+    for (let call = 0; call < 3; call++) assert.deepEqual(await claude(), []);
+    assert.deepEqual(kinds(), ['malformed', 'unreadable'], 'again when the kind changed');
+    rmSync(file, { recursive: true });
+    writeFileSync(file, JSON.stringify({ mcpServers: { now_read: {} } }));
+    assert.deepEqual(await claude(), ['now_read']);
+    rmSync(file);
+    assert.deepEqual(await claude(), [], 'a file gone lists nothing at once');
+    writeFileSync(file, '{"mcpServers": ');
+    assert.deepEqual(await claude(), []);
+    assert.deepEqual(kinds(), ['malformed', 'unreadable', 'malformed'], 'a kind after it listed is a change');
+});
+
 test('without the environment and home to read under, no file is read and no host names a server', async (t) => {
     const b = bench(t, { programs: ['claude', 'codex'] });
     const { hosts } = await setupOn(b).status();

@@ -19,7 +19,7 @@
  * nothing and harms nothing.
  */
 
-import { constants } from 'node:fs';
+import { constants, type Stats } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { unseen } from './chat-header.ts';
@@ -97,8 +97,7 @@ export async function readOwnServers(
     try {
         text = await read(ownServersFile(program, env, home));
     } catch (error) {
-        const code = (error as NodeJS.ErrnoException | undefined)?.code;
-        return code === 'ENOENT' || code === 'ENOTDIR' ? { names: [] } : { unread: 'unreadable' };
+        return failedRead(error);
     }
     if (text === null) return { unread: 'too_large' };
     try {
@@ -111,15 +110,60 @@ export async function readOwnServers(
     }
 }
 
+/** A file that is not there lists none and is no failure; any other failure to read it is `unreadable`. */
+function failedRead(error: unknown): OwnServersRead {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    return code === 'ENOENT' || code === 'ENOTDIR' ? { names: [] } : { unread: 'unreadable' };
+}
+
+/**
+ * The reader the desktop keeps, one for the main process: it remembers each program's last answer by what `stat` said
+ * of the file before it was opened, its size and its modification time, and while both are unchanged it answers from
+ * what it kept and opens nothing, so a listing at each focus and after each act does not scan and parse the file again.
+ * What it keeps is the answer alone, names or the kind, never the file's text. A file that is not there, or not there
+ * any more, lists nothing at once; one that could not be read is asked again at the next listing, since a change of its
+ * permissions moves neither its size nor its modification time. A file rewritten to the same size within the same tick
+ * of the clock the system stamps it by is answered from what was kept until it changes again.
+ */
+export class OwnServers {
+    #kept = new Map<OwnServersProgram, { file: string; size: number; mtimeMs: number; read: OwnServersRead }>();
+    #stat: (file: string) => Promise<Stats>;
+    #read: (file: string, before: Stats) => Promise<string | null>;
+
+    constructor(files: { stat?: (file: string) => Promise<Stats>; read?: (file: string, before: Stats) => Promise<string | null> } = {}) {
+        this.#stat = files.stat ?? ((file) => stat(file));
+        this.#read = files.read ?? ((file, before) => readRegularFile(file, fileLimit, before));
+    }
+
+    /** As `readOwnServers` answers, from what was kept while the file's size and modification time are unchanged. */
+    async read(program: OwnServersProgram, env: Readonly<Record<string, string | undefined>>, home: string): Promise<OwnServersRead> {
+        const file = ownServersFile(program, env, home);
+        let before: Stats;
+        try {
+            before = await this.#stat(file);
+        } catch (error) {
+            this.#kept.delete(program);
+            return failedRead(error);
+        }
+        const kept = this.#kept.get(program);
+        if (kept !== undefined && kept.file === file && kept.size === before.size && kept.mtimeMs === before.mtimeMs) return kept.read;
+        this.#kept.delete(program);
+        const read = await readOwnServers(program, env, home, (path) => this.#read(path, before));
+        if (!('unread' in read && read.unread === 'unreadable')) this.#kept.set(program, { file, size: before.size, mtimeMs: before.mtimeMs, read });
+        return read;
+    }
+}
+
 /**
  * A file's text, when it is a regular file of at most `limit` bytes; null for a larger one. What is no regular file (a
  * folder, a FIFO, a device, a socket, or a link to one) is refused by its kind before it is opened, so no open waits for
  * a writer and no read runs without end; the file is opened without blocking where the system has the flag (Windows has
- * none), checked again once opened, and read no further than the size it had then.
+ * none), checked again once opened, and read no further than the size it had then. `given` is what `stat` said of it
+ * already, when the caller asked.
  */
-export async function readRegularFile(file: string, limit = fileLimit): Promise<string | null> {
+export async function readRegularFile(file: string, limit = fileLimit, given?: Stats): Promise<string | null> {
     const notRegular = () => new Error('not a regular file');
-    const before = await stat(file);
+    const before = given ?? (await stat(file));
     if (!before.isFile()) throw notRegular();
     if (before.size > limit) return null;
     const handle = await open(file, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
