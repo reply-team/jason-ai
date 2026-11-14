@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Contacts;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -149,12 +150,15 @@ public partial class ClaimerTests
     /// <summary>
     /// Who lifts the lock: only a person's later verdict on the same reply. A role's corrected verdict leaves it; a person's,
     /// recorded outside any run, lifts it, and leaves the register's entries where they are; taking an entry off the
-    /// register lifts that entry and not the lock; a verdict on another reply lifts nothing.
+    /// register lifts that entry and not the lock; a verdict on another reply lifts nothing. Inside a run a person the run
+    /// names lifts nothing, and the run lifts it only by carrying the answer a named person gave, which the runtime checks.
     /// </summary>
     [Theory]
     [InlineData("a role corrects it", AttemptErrors.OptedOut)]
     [InlineData("a person corrects it outside a run", null)]
     [InlineData("a person corrects another reply", AttemptErrors.OptedOut)]
+    [InlineData("a run names a person who corrects it", AttemptErrors.OptedOut)]
+    [InlineData("a run carries a person's checked answer", null)]
     [InlineData("the entry is taken off the register", AttemptErrors.OptedOut)]
     public async Task Only_a_person_s_later_verdict_on_that_reply_lifts_the_lock(string after, string? refused)
     {
@@ -178,6 +182,21 @@ public partial class ClaimerTests
                 break;
             case "a person corrects another reply":
                 await OptOutRegisterTests.Service(db).RecordAsync(corrected with { MessageId = "msg-78" }, Ct);
+                break;
+            case "a run names a person who corrects it":
+                using (RunScope.Open(attempt.PublicId))
+                {
+                    await OptOutRegisterTests.Service(db).RecordAsync(corrected, Ct);
+                }
+
+                break;
+            case "a run carries a person's checked answer":
+                var decision = await OptOutLiftTests.AnsweredAsync(db, campaign, attempt);
+                using (RunScope.Open(attempt.PublicId))
+                {
+                    await OptOutRegisterTests.Service(db).RecordAsync(corrected with { Actor = byTheRun, DecisionId = decision.PublicId }, Ct);
+                }
+
                 break;
             case "the entry is taken off the register":
                 var clock = new FixedClock(new DateTimeOffset(Noon));

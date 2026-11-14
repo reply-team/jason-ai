@@ -26,6 +26,11 @@ namespace Jason.Runtime.Replies;
 /// that records the verdict; a value already registered gets no second entry, and nothing here lifts one. Nobody is asked.
 /// The verdict's journal line names in its contact column the contact its body names, never the person of the run that
 /// records it, so the claim's lock, which reads a contact's own lines, finds the person who asked.
+/// A verdict a caller records under a <c>human</c> actor from inside a run — the request names its attempt
+/// (<see cref="RunScope"/>), as <c>jason</c> does on every request from there — is that run's line: it carries the run's
+/// work item and attempt, checked to be of work in the same campaign, and is refused where they are not. A human actor
+/// outside a run is the person's own word; inside one it is what the run says, so it lifts no opt-out's lock
+/// (<see cref="OptOuts"/>).
 /// </remarks>
 /// <remarks>
 /// What is checked against the database: the campaign (archived ones included, as the chronicle takes lines on an
@@ -309,10 +314,27 @@ public sealed class ReplyService(JasonDbContext db, JournalWriter journal)
 
     /// <summary>
     /// An attempt claims a verdict as the run that decided it, so the line follows back to its work; the claim is checked
-    /// to be an attempt this runtime holds, of work in the same campaign.
+    /// to be an attempt this runtime holds, of work in the same campaign. A person named from inside a run is that run's
+    /// verdict all the same: the run the request names is checked the same way, and a request that names one the runtime
+    /// cannot place in the campaign is refused rather than recorded as the person's own word.
     /// </summary>
     private async Task<(WorkItem? Item, Attempt? Attempt)> AttemptOfAsync(ActorRef actor, Campaign campaign, CancellationToken cancellationToken)
     {
+        if (actor.Type == ActorType.Human && RunScope.Attempt is { } run)
+        {
+            var named = await db.Attempts.Include(a => a.WorkItem)
+                .SingleOrDefaultAsync(a => a.PublicId == run, cancellationToken).ConfigureAwait(false);
+            if (named?.WorkItem is not { } of || of.CampaignId != campaign.Id)
+            {
+                throw new ValidationException([new ErrorDetail(
+                    "actor",
+                    "invalid",
+                    $"This request comes from inside attempt '{run}', which is no attempt of work in this campaign: a verdict a person is named on from inside a run is recorded as that run's, so it is recorded only in the run's own campaign.")]);
+            }
+
+            return (of, named);
+        }
+
         if (actor.Type != ActorType.Attempt)
         {
             return (null, null);
