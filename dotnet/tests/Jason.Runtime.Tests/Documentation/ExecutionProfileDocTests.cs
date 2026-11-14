@@ -442,8 +442,9 @@ public partial class ExecutionProfileDocTests
     /// <summary>
     /// What holds for every host is said once, in the work-execution contract, and each host's own form of it in its
     /// row of the matrix: how a launched role is let read a memory file, and how the brief on standard input reaches the
-    /// host. A row of a host this build registers names both, and how a person's own session on that host is given its
-    /// first prompt, held to the form the facts table starts it with; and
+    /// host. A row of a host this build registers names both, how a person's own session on that host is given its
+    /// first prompt, held to the form the facts table starts it with, and whether it is given a second folder, held to
+    /// the flag the facts table gives it; and
     /// the contract states each rule for every host, with Claude Code's form as its example.
     /// </summary>
     [Fact]
@@ -454,7 +455,7 @@ public partial class ExecutionProfileDocTests
             .Split('\n')
             .First(line => line.StartsWith("| Host | `host` |", StringComparison.Ordinal))
             .Split('|', StringSplitOptions.TrimEntries)[1..^1];
-        Assert.Equal(["Reads a memory file by", "Takes the brief", "Starts interactively with a first prompt"], header[8..]);
+        Assert.Equal(["Reads a memory file by", "Takes the brief", "Starts interactively with a first prompt", "Takes a second folder in a person's session"], header[8..]);
 
         var rows = page[page.IndexOf("\n## 12. The hosts\n", StringComparison.Ordinal)..]
             .Split('\n')
@@ -475,6 +476,8 @@ public partial class ExecutionProfileDocTests
             Assert.Equal(host.FrameStdin("{}") != "{}", row[9].Contains("stream-json", StringComparison.Ordinal));
             var flag = Jason.Contracts.Hosts.AgentHosts.Of(host.Kind).InteractivePromptFlag;
             Assert.StartsWith(flag is null ? "as its one positional argument" : $"after `{flag}`", row[10], StringComparison.Ordinal);
+            var folderFlag = Jason.Contracts.Hosts.AgentHosts.Of(host.Kind).InteractiveFolderFlag;
+            Assert.StartsWith(folderFlag is null ? "no:" : $"after `{folderFlag}`", row[11], StringComparison.Ordinal);
         }
 
         var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "work-execution.md")));
