@@ -798,8 +798,17 @@ read from the campaign's audiences and previewed by the definition it was made f
 number the campaign holds none under is `audience_unknown` (404), as at the claim. The answer is held to the document as
 a person's read is, and nothing is recorded, pinned or journaled: a preview makes no audience.
 
+One more is a campaign's read, made the same way and routed another way: `sender.list` (`jason sender list`), the
+accounts a send can go from. **It is routed by the campaign's route for `sender.list` itself**, on the channel its
+`sender_channel` names, or by the operation alone where it names none: the rule its work item meets at the claim, and the
+one `route resolve` and `operation describe` answer for it. It is held to the same route's half of §7 under the same
+codes; the input is composed as a work item's would be, the arguments and the campaign with the routed plugin's own pins,
+and names nobody; and the answer is held to the document. It names a campaign, and an archived one is not refused: it is
+read by the routes in force, which leave the archived campaign's own out from the next activation (§6). Nothing is
+recorded, pinned or journaled, and the operation stays work as well.
+
 The same route answers what an operation takes for a campaign: `operation.describe` (`jason operation describe
-<operation> --campaign <id>`) resolves the campaign's route for the operation now — for a campaign's read on request,
+<operation> --campaign <id>`) resolves the campaign's route for the operation now — for an audience read on request,
 its route for `audience.search`, where the read goes — holds it to the same route's half, and
 answers the operation's argument schema and, for an operation carrying a definition, the routed plugin's
 `audience_definition` as declared — its schema and its keys — so a definition is written against the schema the claim will
@@ -839,6 +848,9 @@ hold it to. It invokes nothing.
   the same operation, and routing is how you choose between them.
 - **A read on request has no bound of its own.** It runs outside the handler pool, one child each;
   `Dispatcher:MaxParallel` bounds work items only.
+- **A channel route carries one operation.** A route for `message.send` on a channel does not route `sender.list` on
+  it, so where only the sends have a route for a channel, that channel's accounts are read, as work or on request,
+  wherever `sender.list`'s own route goes, which may be another provider than the one the sends go through.
 - **Routes are not exported or imported.** The global half is a settings file you can copy; the campaign
   half is database rows, readable through `route list` and writable only one route at a time.
 
