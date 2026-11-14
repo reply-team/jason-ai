@@ -358,6 +358,36 @@ public class ResponderTests
         Assert.Equal(1, harness.Logs.All.Count(l => l.EndsWith(": thread_not_campaign_own", StringComparison.Ordinal)));
     }
 
+    /// <summary>
+    /// A line found by the person's pin in the one campaign that had written to them is the campaign's own: the step queues
+    /// the read and the responder waiting on it, as for a line found by the campaign's pin, and the responder's context
+    /// carries neither the rule nor the mark.
+    /// </summary>
+    [Fact]
+    public async Task Responder_ContactPinLine_OfTheSoleSender_CreatesPair()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness);
+        RoutedTo(harness, Reader);
+        var line = await LineAsync(harness, campaign, "th-9", Noon.AddMinutes(-3), attributedBy: "contact_pin", events: true, soleSender: true);
+
+        Assert.Equal(1, await harness.RespondAsync(Ct));
+
+        await using var db = harness.Open();
+        var responder = await db.WorkItems.SingleAsync(item => item.Role == Responder.Role, Ct);
+        var get = await db.WorkItems.SingleAsync(item => item.Operation == Responder.ReadOperation, Ct);
+        Assert.Equal(
+            $$$"""{"trigger":"inbound_reply_observed","inbound_reply":{"plugin":"reader","thread":"th-9","channel":"email","contact_id":null,"read":"{{{get.PublicId}}}","last_activity_at":"2026-10-06T11:57:00.000Z","moves":[{"line":"{{{line}}}","at":"2026-10-06T11:57:00.000Z"}],"move_count":1}}""",
+            responder.Context.ToJsonString());
+        foreach (var item in new[] { responder, get })
+        {
+            Assert.DoesNotContain("\"sole_sender\"", item.Context.ToJsonString(), StringComparison.Ordinal);
+        }
+
+        Assert.Equal(await IdOfAsync(harness, line), await WatermarkAsync(harness, campaign));
+        Assert.DoesNotContain(harness.Logs.All, l => l.EndsWith(": thread_not_campaign_own", StringComparison.Ordinal));
+    }
+
     public enum Person
     {
         Unpinned,
@@ -437,7 +467,7 @@ public class ResponderTests
         {
             var text = item.Context.ToJsonString();
             Assert.DoesNotContain(Sentinel, text, StringComparison.Ordinal);
-            foreach (var word in new[] { "subject", "preview", "name", "unread", "has_meeting_intent", "event_id", "attributed_by" })
+            foreach (var word in new[] { "subject", "preview", "name", "unread", "has_meeting_intent", "event_id", "attributed_by", "sole_sender" })
             {
                 Assert.DoesNotContain($"\"{word}\"", text, StringComparison.Ordinal);
             }
@@ -788,7 +818,8 @@ public class ResponderTests
 
     /// <summary>
     /// One line saying a thread moved, as the inbound read says it or, with <paramref name="events"/>, as the events store
-    /// does: the same fields under the same key, and the store's two more. Answers the line's public id.
+    /// does: the same fields under the same key, and the store's two more, and its mark where <paramref name="soleSender"/>
+    /// says so. Answers the line's public id.
     /// </summary>
     private static async Task<string> LineAsync(
         DispatchHarness harness,
@@ -797,7 +828,8 @@ public class ResponderTests
         DateTime moved,
         string? contact = null,
         string? attributedBy = null,
-        bool events = false)
+        bool events = false,
+        bool soleSender = false)
     {
         await using var db = harness.Open();
         var campaign = await db.Campaigns.SingleAsync(c => c.Id == campaignId, Ct);
@@ -816,6 +848,10 @@ public class ResponderTests
         {
             said["event_id"] = PublicId.New("evt");
             said["attributed_by"] = attributedBy;
+            if (soleSender)
+            {
+                said["sole_sender"] = true;
+            }
         }
 
         var entry = new JournalWriter(harness.Clock).Append(

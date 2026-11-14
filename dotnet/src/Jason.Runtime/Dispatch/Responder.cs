@@ -32,9 +32,11 @@ namespace Jason.Runtime.Dispatch;
 /// </para>
 /// </summary>
 /// <remarks>
-/// Nothing here reads meaning. It reads a kind, identifiers, a moment and which rule found the campaign; what the reply
-/// says, and what to do about it, is the responder's. A thread the campaign holds only through a person it shares with
-/// other campaigns is left to the manager, which reads across them before anyone answers.
+/// Nothing here reads meaning. It reads a kind, identifiers, a moment, which rule found the campaign and whether the line
+/// was marked as the sole sender's; what the reply says, and what to do about it, is the responder's. A thread is the
+/// campaign's own when the line was found by the campaign's pin, or by the person's pin in the one campaign that had
+/// written to them through the plugin (<c>sole_sender</c>). A thread the campaign holds only through a person it may share
+/// with other campaigns, unmarked, is left to the manager, which reads across them before anyone answers.
 /// </remarks>
 public sealed class Responder(
     WorkItemService items,
@@ -184,7 +186,7 @@ public sealed class Responder(
             string? skip = null;
             if (reply is not null)
             {
-                if (reply.AttributedBy is { } rule && !string.Equals(rule, EventAttributionRules.CampaignPin, StringComparison.Ordinal))
+                if (!reply.IsCampaignOwn)
                 {
                     skip = ResponderSkipCodes.ThreadNotCampaignOwn;
                 }
@@ -556,7 +558,10 @@ public sealed class Responder(
         Moved,
     }
 
-    /// <summary>What a line says about a reply, in the runtime's own fields: identifiers, a moment, which rule found the campaign.</summary>
+    /// <summary>
+    /// What a line says about a reply, in the runtime's own fields: identifiers, a moment, which rule found the campaign,
+    /// and whether the store marked the campaign as the one that wrote to the person.
+    /// </summary>
     private sealed record Reply(
         string Plugin,
         string Thread,
@@ -564,8 +569,21 @@ public sealed class Responder(
         string? ContactId,
         DateTime LastActivityAt,
         string LastActivityAtText,
-        string? AttributedBy)
+        string? AttributedBy,
+        bool SoleSender)
     {
+        /// <summary>
+        /// Whether the thread is the campaign's own: a line the inbound read said, one the events store found by the
+        /// campaign's pin, or one it found by the person's pin and marked as the sole sender's.
+        /// </summary>
+        public bool IsCampaignOwn => AttributedBy switch
+        {
+            null => true,
+            EventAttributionRules.CampaignPin => true,
+            EventAttributionRules.ContactPin => SoleSender,
+            _ => false,
+        };
+
         /// <summary>The reply a line says, or none when the line lacks a field the rule needs.</summary>
         public static Reply? Read(Line line)
         {
@@ -578,7 +596,15 @@ public sealed class Responder(
                 return null;
             }
 
-            return new Reply(plugin, thread, Text(said, "channel"), Text(said, "contact_id"), at, moment, Text(said, "attributed_by"));
+            return new Reply(
+                plugin,
+                thread,
+                Text(said, "channel"),
+                Text(said, "contact_id"),
+                at,
+                moment,
+                Text(said, "attributed_by"),
+                said["sole_sender"] is JsonValue marked && marked.TryGetValue<bool>(out var sole) && sole);
         }
 
         private static string? Text(JsonObject said, string key) =>
@@ -592,7 +618,10 @@ public static class ResponderSkipCodes
     /// <summary>The claim could launch no responder of the campaign: no profile resolves for it and no entry command does.</summary>
     public const string NotConfigured = "responder_not_configured";
 
-    /// <summary>The campaign holds the thread only through a person it may share with other campaigns: the manager's.</summary>
+    /// <summary>
+    /// The campaign holds the thread only through a person it may share with other campaigns, and was not the one campaign
+    /// that had written to them through the plugin when the line was written: the manager's.
+    /// </summary>
     public const string ThreadNotCampaignOwn = "thread_not_campaign_own";
 
     /// <summary>The thread last moved longer ago than <c>Responder:MaxAgeSeconds</c>: the manager's.</summary>
