@@ -307,6 +307,8 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 - `workitem.update`: a partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
   profile, the result format and the context. A patch that changes the context's `input` of work awaiting approval
   withdraws the question, and the work goes back to the queue, where the claim asks again about what it now says.
+  Inside a run a patch that names the `input` of a send a person decides each one of is made under the run's own name:
+  one that names a person, another attempt or nobody is refused `updated_as_another_inside_a_run` (403).
 - `workitem.cancel`: stops the work for good.
 - `workitem.heartbeat`: the attempt's "I am still here".
 - `workitem.set_result`: progress worth keeping before the work is done; the whole result is replaced.
@@ -317,13 +319,13 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   with that line. It names the send by `work_item_id` and the text it read by `review_hash`, the hash `workitem.get`
   answers on a send a person decides each one of; a send whose input moved since is refused `review_stale`, and only a
   send still `created` or `waiting` is reviewed (`not_reviewable`); a review is refused `not_reviewable` once the send
-  has been parked, approved or attempted. `result` is `passed` or `doubts`; a doubt carries
-  its `code`, from the closed list the kind's document publishes, and may carry one `note`, a line of at most 280
-  characters that the line never carries and the person reads on the approval. The `actor` is a running attempt of the
-  same campaign's role work or a person by name, and never the send's creator: no attempt of the work that made it, and
-  not the person who made it, whose own send is theirs to approve (`review_by_creator`, 403). Inside a run the actor is
-  the attempt the request comes from. It takes no `reason`. [`docs/work-execution.md`](work-execution.md), "Doubts
-  about a send".
+  has been parked, approved or attempted. `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed
+  list the kind's document publishes, and may carry one `note`, a line of at most 280 characters that the line never
+  carries and the person reads on the approval. The `actor` is a running attempt of the same campaign's role work or a
+  person by name, and never the send's creator: no attempt of the work that made it, and not the person who made it,
+  whose own send is theirs to approve (`review_by_creator`, 403); and never one who wrote its `input` since, a person by
+  name or any attempt of a work that did (`review_by_editor`, 403). Inside a run the actor is the attempt the request
+  comes from. It takes no `reason`. [`docs/work-execution.md`](work-execution.md), "Doubts about a send".
 
 `workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait` and `decision.raise` belong to the
 attempt the runtime started for a work item: each takes that attempt's id and is refused for any other, so a program
