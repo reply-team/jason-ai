@@ -103,7 +103,8 @@ The header says where a request comes from; it is not a credential, it opens not
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)) and the two that change what
 a plugin may use, `plugin.grant` and `plugin.revoke`, which answer it `403` with the code `decided_inside_a_run` before
-the body is read, and record nothing. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
+the body is read, and record nothing; the two grants say in a sentence of their own that nothing inside a run changes
+Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
 the global scope alone, which the body names, since nothing inside a run changes Jason itself; they change a
 campaign's own route from inside a run as before. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
@@ -428,8 +429,9 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   The runtime writes the list into `settings.json`, keeping every byte of the file it does not own, and runs the plugin
   reload in the same act, so the answer is what `plugin.reload` answers; a reload that refuses is answered as
   `plugin.reload` answers it, with the file put back and one more detail under the field `settings.json`,
-  `settings_file_put_back` or `settings_file_not_put_back`. A grant already held, and a revoke of what is not granted,
-  write nothing and answer success. `plugin.grant` is refused `409` `grant_unrequested` for an entry the manifest does
+  `settings_file_put_back` or `settings_file_not_put_back`. A grant already held or covered by a `*`, and a revoke of
+  what is not granted, write nothing, activate nothing and answer success: the body is what `plugin.list` answers, with
+  `activated` false and the snapshot unchanged. `plugin.grant` is refused `409` `grant_unrequested` for an entry the manifest does
   not request, though a host the manifest does not name is granted where it says `any_granted_host`, and `404`
   `plugin_not_found` for a plugin the active snapshot does not hold; a directory the load would refuse is refused
   `validation_failed` on `entry` as `grant_path_refused`. `plugin.revoke` is refused `409` `grant_held_by_star` for an

@@ -60,15 +60,20 @@ public sealed class PluginGrantService(
         ArgumentNullException.ThrowIfNull(request);
         var (actor, reason, id, capability, entry) = Read(request);
 
-        var loaded = plugins.Snapshot.Find(id) ?? throw DomainErrors.PluginNotFound(id);
-        var written = Requested(loaded.Manifest, capability, entry);
-        if (capability == PluginGrantCapability.Files && loader.FileGrantRefusal(entry) is { } refusal)
-        {
-            throw new ValidationException([new ErrorDetail("entry", ProblemCodes.GrantPathRefused, refusal)]);
-        }
-
         var comparer = Comparer(capability);
-        return await WriteAsync(id, capability, actor, reason, held => Covers(loaded.Manifest, capability, held, written, comparer) ? held : [.. held, written], takenBack: false, cancellationToken).ConfigureAwait(false);
+        return await WriteAsync(id, capability, actor, reason, before =>
+        {
+            // The manifest is the one the write reads under the gate, so no reload between the check and the write can
+            // replace it with one that does not ask for the entry.
+            var loaded = before.Find(id) ?? throw DomainErrors.PluginNotFound(id);
+            var written = Requested(loaded.Manifest, capability, entry);
+            if (capability == PluginGrantCapability.Files && loader.FileGrantRefusal(entry) is { } refusal)
+            {
+                throw new ValidationException([new ErrorDetail("entry", ProblemCodes.GrantPathRefused, refusal)]);
+            }
+
+            return held => Covers(loaded.Manifest, capability, held, written, comparer) ? held : [.. held, written];
+        }, takenBack: false, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<PluginRegistryDto> RevokeAsync(PluginGrantRequest request, CancellationToken cancellationToken)
@@ -76,20 +81,23 @@ public sealed class PluginGrantService(
         ArgumentNullException.ThrowIfNull(request);
         var (actor, reason, id, capability, entry) = Read(request);
 
-        // Taking a grant back needs no manifest: a package taken away leaves grants nobody can use, and they may go.
-        var manifest = plugins.Snapshot.Find(id)?.Manifest;
         var comparer = Comparer(capability);
-        return await WriteAsync(id, capability, actor, reason, held =>
+        return await WriteAsync(id, capability, actor, reason, before =>
         {
-            if (!string.Equals(entry, GrantResolver.Everything, StringComparison.Ordinal)
-                && held.Contains(GrantResolver.Everything, StringComparer.Ordinal)
-                && manifest is not null
-                && Resolved(manifest, capability, [GrantResolver.Everything]).Contains(entry, comparer))
+            // Taking a grant back needs no manifest: a package taken away leaves grants nobody can use, and they may go.
+            var manifest = before.Find(id)?.Manifest;
+            return held =>
             {
-                throw DomainErrors.GrantHeldByStar(Path(id, capability), entry, id, Words[capability].Flag);
-            }
+                if (!string.Equals(entry, GrantResolver.Everything, StringComparison.Ordinal)
+                    && held.Contains(GrantResolver.Everything, StringComparer.Ordinal)
+                    && manifest is not null
+                    && Resolved(manifest, capability, [GrantResolver.Everything]).Contains(entry, comparer))
+                {
+                    throw DomainErrors.GrantHeldByStar(Path(id, capability), entry, id, Words[capability].Flag);
+                }
 
-            return [.. held.Where(name => !comparer.Equals(name, entry))];
+                return [.. held.Where(name => !comparer.Equals(name, entry))];
+            };
         }, takenBack: true, cancellationToken).ConfigureAwait(false);
     }
 
@@ -97,24 +105,25 @@ public sealed class PluginGrantService(
     /// Whether a list already grants the entry: a star by a star, a directory by itself, and a name where what the list
     /// resolves to holds it, so a star covers a declared host and never one only <c>any_granted_host</c> admits.
     /// </summary>
-    private static bool Covers(PluginManifest manifest, PluginGrantCapability capability, IReadOnlyList<string> list, string entry, StringComparer comparer) =>
+    private static bool Covers(PluginManifest manifest, PluginGrantCapability capability, IReadOnlyList<string> list, string entry, IEqualityComparer<string> comparer) =>
         entry == GrantResolver.Everything || capability == PluginGrantCapability.Files
             ? list.Contains(entry, comparer)
             : Resolved(manifest, capability, list).Contains(entry, comparer);
 
     /// <summary>
-    /// The one shape of both: under the reload gate, the settings writer edits the list from each read of the file, and the
-    /// reload freezes it with a <c>plugin_grants_updated</c> line in the same save as its <c>plugins_reloaded</c>, written
-    /// only where what the plugin may use of the capability changed. A file the edit left as it was is reloaded only where
-    /// the grants in force are not already what the file says, so a grant written by hand and never reloaded is put in
-    /// force by the same request.
+    /// The one shape of both: under the reload gate, the request is checked against the snapshot the gate holds, the
+    /// settings writer edits the list from each read of the file, and the reload freezes it with a
+    /// <c>plugin_grants_updated</c> line in the same save as its <c>plugins_reloaded</c>, written only where what the plugin
+    /// may use of the capability changed. A file the edit left as it was is reloaded only where the grants in force are not
+    /// already what the file says, so a grant written by hand and never reloaded is put in force by the same request;
+    /// otherwise nothing is activated, and the answer is <c>plugin.list</c>'s with <c>activated</c> false.
     /// </summary>
     private async Task<PluginRegistryDto> WriteAsync(
         string id,
         PluginGrantCapability capability,
         ActorRef actor,
         string? reason,
-        Func<IReadOnlyList<string>, IReadOnlyList<string>> next,
+        Func<PluginSnapshot, Func<IReadOnlyList<string>, IReadOnlyList<string>>> checkedAgainst,
         bool takenBack,
         CancellationToken cancellationToken)
     {
@@ -124,6 +133,7 @@ public sealed class PluginGrantService(
         try
         {
             var before = plugins.Snapshot;
+            var next = checkedAgainst(before);
             return await writer.WriteAsync(
                 held =>
                 {
@@ -132,20 +142,21 @@ public sealed class PluginGrantService(
                     inFile = after;
                     return after.SequenceEqual(list, StringComparer.Ordinal) ? [] : Edits(id, path, after);
                 },
+                [path],
                 PluginsOptions.Section,
                 async (wrote, token) =>
                 {
                     var loaded = before.Find(id);
                     if (!wrote && (loaded is null || Granted(loaded, capability).SequenceEqual(Resolved(loaded.Manifest, capability, inFile), StringComparer.Ordinal)))
                     {
-                        return reload.List();
+                        return reload.List() with { Activated = false };
                     }
 
                     var (answer, _) = await reload.ReloadHeldAsync(
                         actor,
                         reason,
                         wrote ? null : settingsFile.Read(),
-                        recordRefusal: false,
+                        recordRefusal: !wrote,
                         routeRefusal: null,
                         besides: (now, _) =>
                         {
@@ -279,9 +290,11 @@ public sealed class PluginGrantService(
 
     private static IReadOnlyList<string> Granted(LoadedPlugin plugin, PluginGrantCapability capability) => Granted(plugin.Grants, capability);
 
-    /// <summary>Hosts are compared the way hosts are; programs, variables, families, kinds and directories exactly.</summary>
-    private static StringComparer Comparer(PluginGrantCapability capability) =>
-        capability == PluginGrantCapability.Http ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    /// <summary>
+    /// Hosts are compared the way hosts are, directories the way the platform compares paths and without a separator at
+    /// their end, and programs, variables, families and kinds exactly (<see cref="PluginGrantEntries"/>).
+    /// </summary>
+    private static IEqualityComparer<string> Comparer(PluginGrantCapability capability) => PluginGrantEntries.Comparer(capability);
 
     /// <summary>The list's path in the settings file, its key spelled as the documentation spells it.</summary>
     private static string Path(string id, PluginGrantCapability capability) =>

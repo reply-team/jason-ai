@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Jason.Contracts.Api;
+using Jason.Contracts.Harness;
 
 namespace Jason.Contracts.Plugins;
 
@@ -144,6 +145,32 @@ public enum PluginGrantCapability
     Api,
     Files,
     Subscriptions,
+}
+
+/// <summary>
+/// How two entries of one capability's grant list are told apart, written once for the runtime, which edits the list, and
+/// for the CLI, which says what the answer holds: a host without regard to case, a directory with or without a separator
+/// at its end and as the platform's file systems compare names (<see cref="FolderPaths.Comparison"/>), and a program, a
+/// variable, an API family or a journal kind exactly.
+/// </summary>
+public static class PluginGrantEntries
+{
+    public static IEqualityComparer<string> Comparer(PluginGrantCapability capability) => capability switch
+    {
+        PluginGrantCapability.Http => StringComparer.OrdinalIgnoreCase,
+        PluginGrantCapability.Files => Directories.Instance,
+        _ => StringComparer.Ordinal,
+    };
+
+    private sealed class Directories : IEqualityComparer<string>
+    {
+        public static Directories Instance { get; } = new();
+
+        public bool Equals(string? x, string? y) =>
+            x is null || y is null ? ReferenceEquals(x, y) : string.Equals(Path.TrimEndingDirectorySeparator(x), Path.TrimEndingDirectorySeparator(y), FolderPaths.Comparison);
+
+        public int GetHashCode(string obj) => string.GetHashCode(Path.TrimEndingDirectorySeparator(obj), FolderPaths.Comparison);
+    }
 }
 
 /// <summary>

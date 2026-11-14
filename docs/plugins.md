@@ -1471,14 +1471,16 @@ stricter than the file, on purpose: an entry the manifest does not request is re
 nothing is written, where the same entry written by hand is the warning above and grants nothing. The rule is the
 load's own, run over the one entry, so a host the manifest does not name is granted where it says `any_granted_host`,
 and `*` still means the declared hosts alone. A directory the load would refuse is refused before anything is written,
-with the same sentence. A grant already held, and a revoke of what is not granted, write nothing and answer success.
+with the same sentence. A grant already held, and a revoke of what is not granted, write nothing and answer success,
+with `activated` false.
 An entry a `*` in the same list grants is not taken back (`grant_held_by_star`): the verb takes one entry out and never
 rewrites the star into the names it stands for today, so take back `*` and grant what it should keep. The verb owns
 the list it edits, so a comment inside its brackets goes when the list is written again; a list a `JASON_` environment
 variable sets an element of is refused with `setting_shadowed`, since the file's list is not the one in force. Work
 already running keeps what it was started with. Each change of what a plugin may use is journaled as
 `plugin_grants_updated`: the plugin, the capability, and what it may use of it before and after, as the reload froze
-them: names and directories, never a variable's value. From inside a run both are refused with
+them: names and directories, never a variable's value. A grant taken back from a plugin that is not loaded changes
+nothing it may use, so it is journaled only as the reload, `plugins_reloaded`. From inside a run both are refused with
 `decided_inside_a_run`: a role Jason launches never changes Jason itself.
 
 Two consequences worth knowing. A capability the manifest never requested is **absent** from the
