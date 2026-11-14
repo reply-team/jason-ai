@@ -223,7 +223,8 @@ than shown.
 and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
 own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
 refused, as the commands that start a session on your computer. It does not open the data directory; the folders of it a
-terminal is opened in are the chat's own, to continue a chat, and the role skills folder, to change Jason itself.
+terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside
+it, to change Jason itself.
 
 **Changing Jason itself.** In your own installation, never in the demo, **Change Jason itself**, below Copy path and
 above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
