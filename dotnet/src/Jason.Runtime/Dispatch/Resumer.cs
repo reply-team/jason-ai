@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -137,11 +138,14 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
     /// of it that could run, and its answer decides nothing but <c>blocked</c>. A trial is under
     /// way as <see cref="TrialUnderWay"/> says. A sender's block holds no trial of its own while its account's block is
     /// open: the account's trial answers first, and it is drawn from the items the account's senders' blocks hold as well
-    /// as its own, since the account covers them. Raw SQL because the pick is a correlated subquery with an order, joined
+    /// as its own, since the account covers them. A sender's block on every channel and its blocks on one channel each
+    /// hold trials of their own, neither waiting for the other: the block on every channel is only the channel unknown, and
+    /// its trial is drawn among the items it holds whose channel has no open block of that sender, since the channel's
+    /// block governs that channel. Raw SQL because the pick is a correlated subquery with an order, joined
     /// in the order it is written — the blocks a trial is drawn from, then their waits — so the waits are read by block
     /// rather than every waiting item by its status; its plan is pinned by a test — the due blocks by the index of the blocks by status and trial moment, an account's open sender
-    /// blocks by the index of one open block a sender, each block's waits by the index of the waits by block and status,
-    /// and every other row by a key.
+    /// blocks, and a sender's open block on an item's channel, by the index of one open block a sender, each block's waits
+    /// by the index of the waits by block and status, and every other row by a key.
     /// </summary>
     internal static Task<List<DueTrial>> DueTrialsAsync(JasonDbContext db, DateTime now, CancellationToken ct) =>
         db.Database.SqlQueryRaw<DueTrial>(DueTrialsSql, now).ToListAsync(ct);
@@ -205,6 +209,20 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
             + $"AND (tc.status = {Text(CampaignStatus.Active)} OR (tc.status = {Text(CampaignStatus.Paused)} AND t.operation IN ({protective})))))";
     }
 
+    /// <summary>
+    /// Where a work item's context keeps the channel its composed input names at
+    /// <see cref="ProviderBlockContract.ChannelPointer"/>: the arguments are the context's input, as written.
+    /// </summary>
+    private static string ChannelPath()
+    {
+        const string arguments = "/args/";
+        var pointer = ProviderBlockContract.ChannelPointer;
+        return pointer.StartsWith(arguments, StringComparison.Ordinal) && pointer.Length > arguments.Length
+            && pointer[arguments.Length..].All(static c => c is (>= 'a' and <= 'z') or '_')
+            ? $"$.{WorkItemService.InputKey}.{pointer[arguments.Length..]}"
+            : throw new InvalidOperationException($"The channel pointer '{pointer}' cannot be read from a work item's context.");
+    }
+
     private static string ComposeTrials()
     {
         static string Text<TEnum>(TEnum value) where TEnum : struct, Enum => $"'{SnakeCaseEnumConverter<TEnum>.Format(value)}'";
@@ -213,6 +231,10 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
         // the work a trial goes to first is the held work that reaches a person, as the catalogue says.
         var protective = Words(OperationCatalog.RunsInPausedCampaign);
         var tried = Words(OperationCatalog.TriedByProviderBlock);
+
+        // The channel an item names, where its context keeps it: a sender's block on every channel draws its trial only among
+        // the items whose channel has no open block of that sender, since that channel's block governs it.
+        var channel = ChannelPath();
 
         return $$"""
             SELECT b.id AS "BlockId", (
@@ -227,6 +249,12 @@ public sealed class Resumer(JournalWriter journal, TimeProvider clock)
                        AND x.status = {{Text(WaitStatus.Open)}} AND w.status = {{Text(WorkItemStatus.Waiting)}}
                        AND (c.status = {{Text(CampaignStatus.Active)}} OR (c.status = {{Text(CampaignStatus.Paused)}} AND w.operation IN ({{protective}})))
                        AND (w.due_at IS NULL OR w.due_at > {0})
+                       AND NOT (b.scope = {{Text(ProviderBlockScope.Sender)}} AND b.channel IS NULL AND EXISTS (
+                                SELECT 1 FROM provider_blocks e
+                                WHERE e.plugin_id = b.plugin_id AND e.binding_identity = b.binding_identity
+                                  AND e.status = {{Text(ProviderBlockStatus.Open)}} AND e.scope = {{Text(ProviderBlockScope.Sender)}}
+                                  AND e.sender_external_id = b.sender_external_id
+                                  AND e.channel = json_extract(w.context_json, '{{channel}}')))
                      ORDER BY CASE WHEN w.operation IN ({{tried}}) THEN 0 ELSE 1 END, w.priority DESC, w.id
                      LIMIT 1) AS "WaitId"
             FROM provider_blocks b

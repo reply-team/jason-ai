@@ -320,8 +320,8 @@ public class ProviderBlockOutcomesTests
     /// <summary>
     /// A sender's block on one channel holds only the work that names that sender on that channel: a provider that numbers
     /// its mailboxes apart from its LinkedIn accounts has a mailbox 12 and a LinkedIn account 12, and a block of one is not
-    /// a block of the other. A sender's block on every channel holds the sender's work on any channel, and is the one that
-    /// holds where both are open, as the account's block is where it and a sender's are.
+    /// a block of the other. A sender's block on every channel holds the sender's work on any channel that has no open
+    /// block of its own; where the block on the work's channel is open, that block governs the channel and holds it.
     /// </summary>
     [Fact]
     public void A_senders_block_on_one_channel_covers_only_that_channel_and_one_on_every_channel_covers_any()
@@ -336,7 +336,10 @@ public class ProviderBlockOutcomesTests
         Assert.Null(ProviderBlocks.Covering([mailbox], Input("12")));
         Assert.Same(everywhere, ProviderBlocks.Covering([everywhere], Input("12", "linkedin")));
         Assert.Same(everywhere, ProviderBlocks.Covering([everywhere], Input("12")));
-        Assert.Same(everywhere, ProviderBlocks.Covering([mailbox, everywhere], Input("12", "email")));
+        Assert.Same(mailbox, ProviderBlocks.Covering([mailbox, everywhere], Input("12", "email")));
+        Assert.Same(mailbox, ProviderBlocks.Covering([everywhere, mailbox], Input("12", "email")));
+        Assert.Same(everywhere, ProviderBlocks.Covering([mailbox, everywhere], Input("12", "linkedin")));
+        Assert.Same(everywhere, ProviderBlocks.Covering([mailbox, everywhere], Input("12")));
         Assert.Equal("email", ProviderBlocks.Channel(Input("12", "email")));
         Assert.Null(ProviderBlocks.Channel(Input("12")));
     }
@@ -406,13 +409,13 @@ public class ProviderBlockOutcomesTests
     }
 
     /// <summary>
-    /// A trial of the sender's block on every channel that meets the sender's block on one channel has got past the block on
-    /// every channel, as an account's trial that meets a sender's block has got past the account: the provider now names the
-    /// channel, so the block on every channel clears and the item parks on the block of its channel. A block left open
-    /// at the upgrade, which names no channel, so gives way at its first trial to the block the provider names.
+    /// A trial of the sender's block on every channel whose call is refused with the block of its channel has got past
+    /// nothing: the block on every channel is only the channel unknown, and a LinkedIn answer says nothing of the mailbox.
+    /// The LinkedIn block opens and the trial moves onto it; the block on every channel stays open and undecided, its next
+    /// trial a cadence off, and still holds the email work parked on it, for which no call was made.
     /// </summary>
     [Fact]
-    public async Task A_trial_of_a_senders_block_on_every_channel_that_meets_its_block_on_one_channel_clears_the_first()
+    public async Task A_trial_of_a_senders_block_on_every_channel_that_meets_one_channels_block_leaves_it_open_and_undecided()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -421,6 +424,8 @@ public class ProviderBlockOutcomesTests
         var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
         var everywhere = BlockRows.Block(opener, Noon.AddHours(-1), Noon, ProviderBlockScope.Sender, "12", reason: "limit");
         db.AddRange(opener, everywhere);
+        await db.SaveChangesAsync(Ct);
+        var email = BlockRows.Parked(db, campaign, everywhere, Noon);
         await db.SaveChangesAsync(Ct);
         var (trial, attempt) = await RunningAsync(db, campaign);
         everywhere.TrialWorkItemId = trial.Id;
@@ -431,11 +436,103 @@ public class ProviderBlockOutcomesTests
 
         var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
         Assert.True(
-            blocks.Count == 2 && blocks[0] is { Status: ProviderBlockStatus.Cleared, Channel: null, TrialWorkItemId: null } && blocks[0].ClearedByAttemptId == attempt.Id
+            blocks.Count == 2
+            && blocks[0] is { Status: ProviderBlockStatus.Open, Channel: null, TrialWorkItemId: null, ClearedByAttemptId: null } && blocks[0].NextTrialAt == Noon.AddSeconds(900)
             && blocks[1] is { Status: ProviderBlockStatus.Open, Channel: "linkedin", TrialWorkItemId: null },
-            $"The blocks are {string.Join(", ", blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status}/trial {x.TrialWorkItemId}"))}.");
-        var wait = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == trial.Id, Ct);
-        Assert.Equal(blocks[1].Id, wait.ProviderBlockId);
+            $"The blocks are {string.Join(", ", blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status}/trial {x.TrialWorkItemId}/next {x.NextTrialAt:O}"))}.");
+        Assert.Equal(blocks[1].Id, (await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == trial.Id, Ct)).ProviderBlockId);
+
+        var parked = await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == email.Id, Ct);
+        Assert.Equal((blocks[0].Id, WaitStatus.Open), (parked.ProviderBlockId, parked.Status));
+        Assert.Equal(WorkItemStatus.Waiting, (await db.WorkItems.AsNoTracking().SingleAsync(w => w.Id == email.Id, Ct)).Status);
+        Assert.False(await db.Attempts.AsNoTracking().AnyAsync(a => a.WorkItemId == email.Id, Ct), "No call was made for the email work.");
+        Assert.Equal(blocks[0].Id, ProviderBlocks.Covering(blocks, Input("12", "email"))?.Id);
+        Assert.False(await db.Journal.AsNoTracking().AnyAsync(e => e.Kind == JournalKinds.ProviderBlockCleared, Ct));
+    }
+
+    /// <summary>
+    /// The same refusal answered to a control that was the trial of the block on every channel: the control decides
+    /// nothing, so the block on every channel stays open with its next trial a cadence off, and the control parks on the
+    /// channel's block its answer opened.
+    /// </summary>
+    [Fact]
+    public async Task A_control_that_is_the_trial_of_a_senders_block_on_every_channel_and_meets_one_channels_block_decides_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var outcomes = NewOutcomes();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var everywhere = BlockRows.Block(opener, Noon.AddHours(-1), Noon, ProviderBlockScope.Sender, "12", reason: "limit");
+        db.AddRange(opener, everywhere);
+        await db.SaveChangesAsync(Ct);
+        var (trial, attempt) = await RunningAsync(db, campaign, "campaign.pause");
+        everywhere.TrialWorkItemId = trial.Id;
+        await db.SaveChangesAsync(Ct);
+
+        await outcomes.AnsweredAsync(db, trial, attempt, BlockRows.Plugin, Input("12", "linkedin"), BlockAnswer.Blocked, Said("sender", "limit", "12", channel: "linkedin"), null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
+        Assert.Equal(["-/Open", "linkedin/Open"], blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status}"));
+        Assert.Equal((Noon.AddSeconds(900), (int?)null), (blocks[0].NextTrialAt, blocks[0].TrialWorkItemId));
+        Assert.Equal(blocks[1].Id, (await db.WorkItemWaits.AsNoTracking().SingleAsync(w => w.WorkItemId == trial.Id, Ct)).ProviderBlockId);
+    }
+
+    /// <summary>
+    /// A send that names its sender and no channel and gets past clears only the sender's block on every channel: it says
+    /// nothing of any one channel, so the sender's block on a channel stays open.
+    /// </summary>
+    [Fact]
+    public async Task A_call_that_names_no_channel_and_gets_past_clears_only_the_senders_block_on_every_channel()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var outcomes = NewOutcomes();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var mailbox = BlockRows.Block(opener, Noon, Noon.AddMinutes(15), ProviderBlockScope.Sender, "12", channel: "email");
+        var everywhere = BlockRows.Block(opener, Noon, Noon.AddMinutes(15), ProviderBlockScope.Sender, "12");
+        db.AddRange(opener, mailbox, everywhere);
+        await db.SaveChangesAsync(Ct);
+
+        var (item, attempt) = await RunningAsync(db, campaign);
+        outcomes.Succeed(db, item, attempt, null, Actors.Dispatcher);
+        await outcomes.AnsweredAsync(db, item, attempt, BlockRows.Plugin, Input("12"), BlockAnswer.GotPast, null, null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
+        Assert.Equal(["email/Open", "-/Cleared"], blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status}"));
+    }
+
+    /// <summary>
+    /// With the sender's block on every channel and its email block both open, the email block's own trial runs, and the
+    /// send that gets past clears both: the one that governs its channel and the one that governs the channel unknown.
+    /// </summary>
+    [Fact]
+    public async Task The_email_blocks_trial_that_gets_past_clears_it_and_the_senders_block_on_every_channel()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var outcomes = NewOutcomes();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var opener = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var mailbox = BlockRows.Block(opener, Noon.AddHours(-1), Noon, ProviderBlockScope.Sender, "12", channel: "email");
+        var everywhere = BlockRows.Block(opener, Noon.AddHours(-1), Noon.AddHours(1), ProviderBlockScope.Sender, "12");
+        db.AddRange(opener, mailbox, everywhere);
+        await db.SaveChangesAsync(Ct);
+        var (trial, attempt) = await RunningAsync(db, campaign);
+        mailbox.TrialWorkItemId = trial.Id;
+        await db.SaveChangesAsync(Ct);
+
+        outcomes.Succeed(db, trial, attempt, null, Actors.Dispatcher);
+        await outcomes.AnsweredAsync(db, trial, attempt, BlockRows.Plugin, Input("12", "email"), BlockAnswer.GotPast, null, null, Ct);
+        await db.SaveChangesAsync(Ct);
+
+        var blocks = await db.ProviderBlocks.AsNoTracking().OrderBy(x => x.Id).ToListAsync(Ct);
+        Assert.True(
+            blocks.All(x => x.Status == ProviderBlockStatus.Cleared && x.ClearedByAttemptId == attempt.Id),
+            $"The blocks are {string.Join(", ", blocks.Select(x => $"{x.Channel ?? "-"}/{x.Status}/by {x.ClearedByAttemptId}"))}.");
     }
 
     private static AttemptOutcomes NewOutcomes()
@@ -445,13 +542,13 @@ public class ProviderBlockOutcomesTests
         return new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(options));
     }
 
-    /// <summary>A provider item of <c>message.send</c> in <paramref name="campaign"/>, processing, with a running attempt under the made-up binding.</summary>
-    private static async Task<(WorkItem Item, Attempt Attempt)> RunningAsync(JasonDbContext db, Campaign campaign)
+    /// <summary>A provider item of <paramref name="operation"/> in <paramref name="campaign"/>, processing, with a running attempt under the made-up binding.</summary>
+    private static async Task<(WorkItem Item, Attempt Attempt)> RunningAsync(JasonDbContext db, Campaign campaign, string operation = "message.send")
     {
-        var item = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        var item = WorkItemFactory.NewProviderOp(campaign, operation, Noon);
         item.Status = WorkItemStatus.Processing;
         var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Running, Noon);
-        attempt.Provenance = new AttemptProvenanceDto(BlockRows.Plugin, null, null, null, null, "message.send", null, null, null, null, BlockRows.Binding);
+        attempt.Provenance = new AttemptProvenanceDto(BlockRows.Plugin, null, null, null, null, operation, null, null, null, null, BlockRows.Binding);
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);
         return (item, attempt);

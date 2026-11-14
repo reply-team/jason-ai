@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -70,8 +71,9 @@ public static class ProviderBlocks
 
     /// <summary>
     /// The open block that holds work with this input, among the open blocks of its plugin and binding: the account's,
-    /// which covers every sender under it, or else a block of the sender the input names on the channel it names — the
-    /// sender's block on every channel first, since it covers the others, then the one on that channel. Null where none is open.
+    /// which covers every sender under it, or else a block of the sender the input names — its block on the channel the
+    /// input names where one is open, which governs that channel, and otherwise its block on every channel, which governs
+    /// every channel that has no open block of its own. Null where none is open.
     /// </summary>
     public static ProviderBlock? Covering(IEnumerable<ProviderBlock> open, JsonObject? input)
     {
@@ -92,23 +94,40 @@ public static class ProviderBlocks
             .Where(block => block.Scope == ProviderBlockScope.Sender
                 && string.Equals(block.SenderExternalId, sender, StringComparison.Ordinal)
                 && OnChannel(block, channel))
-            .OrderBy(block => block.Channel is null ? 0 : 1)
+            .OrderBy(block => block.Channel is null ? 1 : 0)
             .FirstOrDefault();
     }
 
     /// <summary>
-    /// Whether <paramref name="wider"/> holds all that <paramref name="narrower"/> holds and more: the account's block over a
-    /// sender's of the same plugin and binding, or a sender's block on every channel over the same sender's on one. A trial
-    /// of the wider block that meets the narrower has got past the wider one: the provider named the narrower.
+    /// Whether <paramref name="met"/> is a block of the sender <paramref name="everyChannel"/> holds on every channel, on one
+    /// channel of its own: what a trial of the block on every channel meets when the provider names the channel. The block
+    /// on every channel is only the channel unknown, so meeting one channel's block decides nothing about the others.
     /// </summary>
-    public static bool Wider(ProviderBlock wider, ProviderBlock narrower)
+    public static bool OneChannelOf(ProviderBlock met, ProviderBlock everyChannel)
     {
-        ArgumentNullException.ThrowIfNull(wider);
-        ArgumentNullException.ThrowIfNull(narrower);
-        return narrower.Scope == ProviderBlockScope.Sender
-            && (wider.Scope == ProviderBlockScope.Account
-                || (wider.Scope == ProviderBlockScope.Sender && wider.Channel is null && narrower.Channel is not null
-                    && string.Equals(wider.SenderExternalId, narrower.SenderExternalId, StringComparison.Ordinal)));
+        ArgumentNullException.ThrowIfNull(met);
+        ArgumentNullException.ThrowIfNull(everyChannel);
+        return everyChannel is { Scope: ProviderBlockScope.Sender, Channel: null }
+            && met is { Scope: ProviderBlockScope.Sender, Channel: not null }
+            && string.Equals(met.SenderExternalId, everyChannel.SenderExternalId, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What is wrong with a sender's block <paramref name="said"/> beside a call whose input is <paramref name="input"/>, or
+    /// null: a block that names a channel says it is that channel's alone, so one that names another channel than the call
+    /// was asked to send on is a broken answer, refused as a block outside its contract is. A call that names no channel
+    /// is held to nothing here, as a call that names no sender is not held to the sender its block names.
+    /// </summary>
+    public static SchemaProblem? OffChannel(JsonNode? said, JsonObject? input)
+    {
+        var named = said is JsonObject block ? Text(block, "channel") : null;
+        var asked = Channel(input);
+        return named is null || asked is null || string.Equals(named, asked, StringComparison.Ordinal)
+            ? null
+            : new SchemaProblem(
+                "/channel",
+                "const",
+                $"The block names the channel '{named}', but the call was asked to send on '{asked}'; a block that names a channel is that channel's alone.");
     }
 
     /// <summary>
