@@ -223,14 +223,14 @@ public static class AttemptHandler
         {
             await RollBackAsync(db).ConfigureAwait(false);
 
-            // The same holds of the register: a read that found a bounce staged the address another writer put on the
-            // register between this one's read of it and its save. The address is already on the register, so deciding
-            // again stages nothing and the read ends as it answered: never a failed or a repeated read.
             // Another attempt on the same account changed its blocks between this one's read of them and its save: it
             // opened first the block this one met, or cleared first a block this one got past or met again. One block
             // is kept open per account and per sender and a block's status guards it, so this save was refused whole.
             // What the provider answered is still true, and it is decided once more against the blocks as they now
             // stand: a block opened first is met again instead of opened, and one cleared first is not cleared twice.
+            // The same holds of the register: a read that found a bounce staged the address another writer put on the
+            // register between this one's read of it and its save. The address is already on the register, so deciding
+            // again stages nothing and the read ends as it answered: never a failed or a repeated read.
             await RecordAsync(scopes, work, outcome, logger, again: true).ConfigureAwait(false);
         }
         catch (DbUpdateConcurrencyException)

@@ -19,7 +19,8 @@ namespace Jason.Runtime.Execution;
 /// Every read decides alone, at its own end. A read that says the send did not bounce, or cannot say, decides nothing and
 /// stops nothing, and so does a read that fails: "no kind" means the provider said the message bounced and gave no kind,
 /// never that nothing could find out. A soft bounce is recorded and stops nothing. The line is said once per send, under
-/// the key of the item that made it.
+/// the key of the item that made it, and the database is what says so: the key is looked up here first, and a second
+/// line under it is refused by <c>ix_journal_campaign_kind_key_bounces</c>.
 /// </remarks>
 public sealed partial class SentFacts
 {
