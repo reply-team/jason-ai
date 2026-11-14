@@ -360,8 +360,8 @@ Each of them is a skill of its own, because each is a different moment and a per
 something different. What belongs here is only that they exist.
 
 **It may stop and wait for a person.** An operation whose contract says a person must confirm it parks at the
-claim, except a send to a contact whose kind the person has chosen to send automatically, which is theirs to choose and
-never a session's: the item's status becomes `awaiting_approval`, no attempt is made, and nothing is sent to the provider.
+claim (except a send to a contact whose kind the person has chosen to send automatically, which is theirs to choose and
+never a session's): the item's status becomes `awaiting_approval`, no attempt is made, and nothing is sent to the provider.
 The decision is a person's — a session must not make it, and the runtime refuses a decision that does not name
 one. Presenting what is waiting, and recording what the person says about it, is **`approvals-and-questions`**.
 

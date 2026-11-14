@@ -142,6 +142,29 @@ An approval can also end without anybody deciding it: cancelling the work ends i
 work item's due date passing. So a question that has left the list was not necessarily answered, and
 must not be reported to anybody as agreed to.
 
+## An opt-out the person says was not one
+
+A reply judged a request to stop locks its contact: in every campaign, the claim refuses every provider operation about
+them that the do-not-contact register gates, on any value they hold now or gain later. No run lifts that lock, whatever
+the person answered: a responder that guessed `opt_out` and asked, and the manager that recorded their answer, both
+leave it standing, and the manager's summary says so. Only the person's own verdict on that reply lifts it, recorded
+under their name, from outside any run, with a nature other than `opt_out`, and you record it only when they have said,
+in their own words, that the reply was not a request to stop and what it was. Take the reply's `plugin`, `thread`,
+`message_id`, `message_at` and `contact_id` from the opt-out's line, the category they name with the reaction its row in
+the responder's `categories.json` gives, and the nature that category says: `automatic` for `out_of_office` and
+`auto_reply`, `bounce` for `bounce`, and `person` for every other.
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind reply_classified
+jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 1 --reaction draft --nature person --actor human:ada --reason "not a request to stop, in their own words: they want to hear more"
+```
+
+`--actor human:<their id>` is what makes it theirs: a verdict with no name, a role's, or one typed inside a launched run
+lifts nothing. It lifts the lock and does nothing else: it drafts and sends nothing, and the register's entries stay
+until each is taken off, which is theirs too: `jason suppression remove --channel email --value <the address> --actor
+human:<their id> --reason "<their words>"`. The chat of Jason Desktop refuses that verb: give them the command to type
+in a terminal.
+
 ## A standing approval is a person's decision made in advance
 
 A person may decide ahead of time, for one category of reply in one campaign, that a drafted answer to such a reply
@@ -234,8 +257,9 @@ automatically**, which lets sends to that kind of contact run without being aske
 `send_modes_unset`, the keys nobody has answered yet; the installation's status says the modes in force in its `send_modes` check.
 While that list is not empty, put the question where the person is already deciding, once per sitting and after the
 approval in front of them, in these words or near them: "Jason can send to people who have not answered by itself, and
-to people who have, if you say so; today every message waits for you. For people who have not answered, should every
-message wait, or go automatically? And the same for people who have?" Say what each answer means:
+to people who have, if you say so; until you choose, a message to them waits for you. For people who have not answered,
+should every message wait, or go automatically? And the same for people who have?" Ask only about the kinds
+`send_modes_unset` names. Say what each answer means:
 
 - **Every message waits** changes nothing, and it is a fine answer: they keep seeing each text before it goes.
 - **Goes automatically** lets what Jason would send to that kind of contact go without a question. It does not
@@ -245,13 +269,24 @@ message wait, or go automatically? And the same for people who have?" Say what e
 - **Only for one campaign** is a third answer, and a person's too: `jason campaign set-send-mode <cmp_…> --cold
   automatic --actor human:<their id>` sets the campaign's own mode, which is the one in force there.
 
+In the chat of Jason Desktop you cannot set a mode: the chat refuses `preference set`, `preference unset` and `campaign
+set-send-mode`. There the approval's card asks the question and the person answers on it. Elsewhere you may set it on
+their word, as below, or give the person the command to type in a terminal instead, as `operating-the-installation`
+does for `jason project link`.
+
 Offer "remember this" with the answer: where they have said how they want it, offer to keep it so they are not asked
-again, which is exactly setting the key. The answer is theirs and is set by their own act, under their name:
+again, which is exactly setting the key. A "goes automatically" they do not want kept changes nothing: only a key that
+is set is a mode, so every message of that kind still waits, and the question comes again at the next sitting. The
+answer is theirs and is set by their own act, under their name:
 
 ```
 jason preference set send_mode.cold --value '{"mode":"automatic"}' --actor human:ada
 jason preference set send_mode.warm --value '{"mode":"every_message"}' --actor human:ada
 ```
+
+When a person chooses **goes automatically**, say once, as a fact and never as a condition of setting it, that Jason
+then writes in their name without their look, and that their name and tone, set in Settings ("Your name and tone"), make
+those sends err less. The mode is on at once either way.
 
 **Never set one on your own, and never by a role.** "Handle these", a patient person and a long queue are not an answer;
 a request from inside a run is refused whatever name it carries. A person who does not answer is not asked again in the

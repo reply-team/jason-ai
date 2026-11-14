@@ -393,8 +393,8 @@ the person's.
 **In Jason, a person may choose that the sends to one kind of contact go without being asked.** There are two kinds,
 **cold**, a contact who has not answered in the campaign, and **warm**, one who has, and each has its own choice:
 `every_message`, which is what an unset choice means, or `automatic`. It is set for the whole installation by the
-preferences `send_mode.cold` and `send_mode.warm`, and for one campaign's cold contacts by `jason campaign
-set-send-mode`; where a campaign sets its own, that is the one in force there. It is read when the send is claimed, not
+preferences `send_mode.cold` and `send_mode.warm`, and for one campaign by `jason campaign set-send-mode`, for its
+cold contacts, its warm ones or both; where a campaign sets its own, that is the one in force there. It is read when the send is claimed, not
 when it is made.
 
 **It is a person's recorded decision in advance, and it lowers no class.** The operation is still `confirm_each`; what

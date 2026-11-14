@@ -97,18 +97,26 @@ public sealed partial class ReplyLoopSeamsTests
     }
 
     /// <summary>
-    /// The manager's printed second verdict names a category and the reaction word its row in the file gives, the word
-    /// before the colon, so an example that said <c>draft</c> for a category that waits on nothing would teach a wrong act.
+    /// Every verdict the manager prints, and the one a person's session prints to lift an opt-out, names a category and
+    /// the reaction word its row in the file gives, the word before the colon, so an example that said <c>draft</c> for a
+    /// category that waits on nothing would teach a wrong act.
     /// </summary>
     [Fact]
     public void The_manager_example_gives_the_reaction_the_categorys_row_gives()
     {
-        var line = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(command => command.StartsWith("jason reply record ", StringComparison.Ordinal));
-        var category = Regex.Match(line, @"--category (\S+)").Groups[1].Value;
-        var reaction = Regex.Match(line, @"--reaction (\S+)").Groups[1].Value;
+        var lines = new[] { "manager", "approvals-and-questions" }
+            .SelectMany(skill => SkillPack.PrintedCommands(SkillPack.Find(skill).File))
+            .Where(command => command.StartsWith("jason reply record ", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(lines.Count >= 3, "the manager's two verdicts and the person's own");
+        foreach (var line in lines)
+        {
+            var category = Regex.Match(line, @"--category (\S+)").Groups[1].Value;
+            var reaction = Regex.Match(line, @"--reaction (\S+)").Groups[1].Value;
 
-        var row = Categories()["categories"]!.AsArray().Single(candidate => (string)candidate!["id"]! == category)!;
-        var word = ((string)row["reaction"]!).Split(':')[0];
-        Assert.Equal(word, reaction);
+            var row = Categories()["categories"]!.AsArray().Single(candidate => (string)candidate!["id"]! == category)!;
+            var word = ((string)row["reaction"]!).Split(':')[0];
+            Assert.Equal(word, reaction);
+        }
     }
 }

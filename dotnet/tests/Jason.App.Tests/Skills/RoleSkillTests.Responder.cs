@@ -107,7 +107,7 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "the question says the register was written and that only the person's own word lifts it, and your summary says it was",
+            "the question says that the register was written and the contact locked, and that an answer naming another category has the register's entries taken off but leaves the lock, which only a verdict the person records themselves lifts. Your summary says the register was written.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("below `question_below` it is `escalate`", skill, StringComparison.Ordinal);
@@ -246,6 +246,13 @@ public partial class RoleSkillTests
         var skill = Flattened("responder");
 
         Assert.Contains("Somebody who asked to stop is sent no answer: recording the stop is the whole of what you do about that reply.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Where no single person was found, there is no contact to record the verdict against, and `--nature opt_out` is refused without one: make the register's entry by hand, by the address they wrote from,",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "jason suppression add --channel email --value marta@example.com --reason \"replied asking to be taken off the list\"",
+            SkillPack.PrintedCommands(SkillPack.Find("responder").File));
         Assert.Contains(
             "and record the verdict without a nature, since no contact is stopped by it; no `optout.record` item is created, because it needs the person, and your answer says that the provider's half waits for a person.",
             skill,

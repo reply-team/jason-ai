@@ -468,9 +468,9 @@ public partial class RoleSkillTests
         Assert.Contains("The one you do record is a person's answer.", skill, StringComparison.Ordinal);
         Assert.Contains("raises a question whose options are the category ids, and drafts nothing; acting on the answer is yours, at the answered question's line, and is exactly this and nothing more", skill, StringComparison.Ordinal);
         Assert.Contains("Record the person's category as a second verdict for the same reply, which supersedes the first.", skill, StringComparison.Ordinal);
-        Assert.Contains("`plugin`, `thread`, `message_id` and `message_at`, its `contact_id` and `goal_id` and its `nature`, from the first verdict line, never from the question, so that the line which now stands loses none of them", skill, StringComparison.Ordinal);
+        Assert.Contains("`plugin`, `thread`, `message_id` and `message_at`, and its `contact_id` and `goal_id`, from the first verdict line, never from the question, so that the line which now stands loses none of them", skill, StringComparison.Ordinal);
 
-        var printed = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason reply record ", StringComparison.Ordinal));
+        var printed = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason reply record ", StringComparison.Ordinal) && line.Contains("--category interested ", StringComparison.Ordinal));
         foreach (var option in new[] { "--plugin", "--thread", "--message", "--message-at", "--contact", "--category", "--confidence", "--reaction", "--goal", "--decision" })
         {
             Assert.Contains(option + " ", printed, StringComparison.Ordinal);
@@ -501,7 +501,7 @@ public partial class RoleSkillTests
 
         Assert.Contains("Where the responder's guess was `opt_out` and the answer names another category, the register entries the runtime made for that person when the guess was recorded were made on a guess: remove each, with a reason that names the decision.", skill, StringComparison.Ordinal);
         Assert.Contains("Where the answered category's reaction is not `none`, queue the thread's read and a responder for it, exactly as for a line no responder names, below.", skill, StringComparison.Ordinal);
-        Assert.Contains("where the answer confirmed `opt_out`, it finds the register entry already there and goes on to the provider's half", skill, StringComparison.Ordinal);
+        Assert.Contains("where the answer is `opt_out`, it finds the register entries already there and goes on to the provider's half", skill, StringComparison.Ordinal);
         Assert.Contains("Every other answer stays as written: you draft nothing and act on nothing on the reply yourself.", skill, StringComparison.Ordinal);
         Assert.Contains("A draft written after your verdict waits for a person whatever standing approval exists, unless the line carries a person's answer through a decision: without one, its attempt is neither the run the runtime gave that reply nor a named person.", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("always waits", skill, StringComparison.Ordinal);
