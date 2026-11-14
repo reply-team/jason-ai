@@ -373,6 +373,81 @@ public sealed class CampaignService(
         return CampaignMapper.ToDto(campaign);
     }
 
+    /// <summary>
+    /// A campaign's own send mode for its cold contacts, its warm ones, or both: a person's standing word about how this
+    /// campaign's sends go, so only a person who gives their name sets it, and the name is kept beside the mode, since the
+    /// claim releases a send in that person's name. An absent mode is left alone, null gives it back to the installation,
+    /// and a mode the campaign already holds writes nothing. Each mode that moved is one <c>campaign_updated</c> line.
+    /// </summary>
+    public async Task<CampaignDto> SetSendModeAsync(CampaignSetSendModeRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var actor = SendModeSetter(request.Actor);
+
+        var errors = new ValidationErrors();
+        ValidateReason(request.Reason, errors);
+        if (!request.Cold.IsSet && !request.Warm.IsSet)
+        {
+            errors.Add("cold", "required", "name cold, warm or both: a mode word sets the campaign's own, and null gives it back to the installation.");
+        }
+
+        errors.ThrowIfAny();
+
+        var campaign = await LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign.Status == CampaignStatus.Archived)
+        {
+            throw DomainErrors.CampaignArchived(campaign.PublicId);
+        }
+
+        var changes = new List<FieldChange>();
+        if (request.Cold.IsSet && campaign.SendModeCold != request.Cold.Value)
+        {
+            changes.Add(new FieldChange("send_mode_cold", ModeWord(campaign.SendModeCold), ModeWord(request.Cold.Value)));
+            campaign.SendModeCold = request.Cold.Value;
+            campaign.SendModeColdSetBy = request.Cold.Value is null ? null : actor.Id;
+        }
+
+        if (request.Warm.IsSet && campaign.SendModeWarm != request.Warm.Value)
+        {
+            changes.Add(new FieldChange("send_mode_warm", ModeWord(campaign.SendModeWarm), ModeWord(request.Warm.Value)));
+            campaign.SendModeWarm = request.Warm.Value;
+            campaign.SendModeWarmSetBy = request.Warm.Value is null ? null : actor.Id;
+        }
+
+        if (changes.Count == 0)
+        {
+            return CampaignMapper.ToDto(campaign);
+        }
+
+        campaign.UpdatedAt = clock.GetUtcNow().UtcDateTime;
+        var reason = NormalizeReason(request.Reason);
+        foreach (var change in changes)
+        {
+            journal.Append(db, actor, JournalKinds.CampaignUpdated, campaign, key: change.Key, old: change.Old, updated: change.New, reason: reason);
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return CampaignMapper.ToDto(campaign);
+    }
+
+    /// <summary>
+    /// Who sets a campaign's send mode: a person who gives their name. An absent actor is an anonymous person, which is
+    /// right for creating work and wrong here, as it is for a standing approval.
+    /// </summary>
+    private static ActorRef SendModeSetter(ActorRef? claimed)
+    {
+        var actor = Actors.Resolve(claimed);
+        if (actor.Type != ActorType.Human)
+        {
+            throw DomainErrors.SendModeNotHuman(actor.Type);
+        }
+
+        return string.IsNullOrWhiteSpace(actor.Id) ? throw DomainErrors.SendModeActorRequired() : actor;
+    }
+
+    private static JsonNode? ModeWord(SendMode? mode) =>
+        mode is { } word ? JsonValue.Create(SnakeCaseEnumConverter<SendMode>.Format(word)) : null;
+
     public Task<CampaignDto> StartAsync(CampaignTransitionRequest request, CancellationToken cancellationToken) =>
         TransitionAsync(request, CampaignStatus.Active, JournalKinds.CampaignStarted, cancellationToken);
 

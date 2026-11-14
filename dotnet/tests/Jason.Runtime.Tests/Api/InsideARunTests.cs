@@ -14,7 +14,8 @@ namespace Jason.Runtime.Tests.Api;
 /// <summary>
 /// A person's word given from inside a run. The CLI says where it runs with one header, <c>Jason-Attempt</c>, whenever its
 /// environment names the attempt it was launched for; the verbs that are a person's own word — the two decisions on an
-/// approval, a standing approval set or taken back, an answer, and a preference set or taken back — refuse any request
+/// approval, a standing approval set or taken back, an answer, a preference set or taken back, and a campaign's send mode
+/// — refuse any request
 /// that carries it, whatever actor the body claims, and record nothing. Every other verb reads past the header: the fenced
 /// ones keep their attempt in the body, and the header is never their fence.
 /// </summary>
@@ -41,6 +42,7 @@ public class InsideARunTests
         Operations.DecisionAnswer,
         Operations.PreferenceSet,
         Operations.PreferenceUnset,
+        Operations.CampaignSetSendMode,
     ];
 
     /// <summary>
@@ -110,7 +112,8 @@ public class InsideARunTests
     }
 
     /// <summary>
-    /// These and no more. A preference is among them for every key, not for the keys that steer sends alone: a preference
+    /// These and no more. A campaign's send mode is among them, since the claim releases sends in the name of the person
+    /// who set it. A preference is among them for every key, not for the keys that steer sends alone: a preference
     /// is what a named person states, and in a dispatched run no person is there, so a run that names a person on any key
     /// is what the refusal exists for. The gate is by operation and never reads the body, so it holds a key nobody has
     /// written yet; refusing some keys in the service instead would be a second mechanism the next sensitive key had to
@@ -183,6 +186,9 @@ public class InsideARunTests
 
             case Operations.PreferenceSet:
                 return new { key = "send_mode.cold", value = new { mode = "automatic" }, actor = Ada };
+
+            case Operations.CampaignSetSendMode:
+                return new { campaign_id = await CampaignAsync(api), cold = "automatic", actor = Ada };
 
             case Operations.PreferenceUnset:
                 await api.PostOkAsync<PreferenceDto>(Operations.PreferenceSet, new { key = "tone_of_voice", value = new { summary = "Plain." }, actor = Ada }, Ct);

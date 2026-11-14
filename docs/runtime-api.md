@@ -207,6 +207,11 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
 - `campaign.pause`: Jason's own pause; the provider's pause is a `provider_op` work item.
 - `campaign.archive`
 - `campaign.update_context`
+- `campaign.set_send_mode`: the campaign's own send mode for its cold contacts, its warm ones or both, `automatic` or
+  `every_message`; null gives a mode back to the installation's `send_mode.cold` or `send_mode.warm`, and an absent
+  one is left alone. A person's word: only a named `human` sets it (`send_mode_not_human`, `actor_required`), and a
+  request from inside a run is refused. Each mode that moves is one `campaign_updated` line. `campaign.get` answers the
+  campaign's own in `send_modes`, each null where it sets none; `campaign.update` takes no mode.
 - `campaign.add_contacts`: the people Jason's campaign is about; enrolling them at the provider is a `provider_op`
   work item.
 - `campaign.remove_contacts`
@@ -567,9 +572,9 @@ interrupted.
   or through another tool and Jason should know. The report is kept as the claim it is; what it carries is in
   [the reporting skill](../skills/runtime/reporting-outside-effects/SKILL.md).
 - **A decision in a person's name**: `approval.approve`, `approval.reject`, `approval.set_standing`,
-  `approval.unset_standing`, `decision.answer`, `preference.set` and `preference.unset`. Each needs an `actor` of type
-  `human` that names the person, and each is refused for any other type. The runtime cannot tell a
-  person from a program that holds the token, so a program records only what a person decided
+  `approval.unset_standing`, `decision.answer`, `preference.set`, `preference.unset` and `campaign.set_send_mode`. Each
+  needs an `actor` of type `human` that names the person, and each is refused for any other type. The runtime cannot
+  tell a person from a program that holds the token, so a program records only what a person decided
   ([the approvals skill](../skills/runtime/approvals-and-questions/SKILL.md)). A request to any of them that
   carries `Jason-Attempt`, as `jason` sends from inside a run, is answered `403` `decided_inside_a_run` whatever person
   it names, and changes nothing: a person's word is given outside any run. A preference is refused there for every key,

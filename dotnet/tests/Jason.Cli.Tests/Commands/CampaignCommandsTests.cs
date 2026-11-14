@@ -161,6 +161,41 @@ public class CampaignCommandsTests
         Assert.Contains("--clear", cli.Error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A campaign's own send mode: a word sets one, <c>--clear</c> sends null for one, which gives it back to the
+    /// installation, and wins over a word given for the same mode; a mode not named is not sent at all.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "--cold", "automatic" }, "\"cold\":\"automatic\"")]
+    [InlineData(new[] { "--warm", "every_message" }, "\"warm\":\"every_message\"")]
+    [InlineData(new[] { "--cold", "automatic", "--clear", "warm" }, "\"cold\":\"automatic\",\"warm\":null")]
+    [InlineData(new[] { "--cold", "automatic", "--clear", "cold" }, "\"cold\":null")]
+    [InlineData(new[] { "--clear", "cold", "--clear", "warm" }, "\"cold\":null,\"warm\":null")]
+    public async Task Set_send_mode_sends_the_modes_named_and_null_for_a_mode_cleared(string[] options, string modes)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["--actor", "human:Marta", "campaign", "set-send-mode", "cmp_A", .. options, "--reason", "her call"]);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.CampaignSetSendMode,
+            $"{{\"campaign_id\":\"cmp_A\",{modes},\"reason\":\"her call\",\"actor\":{{\"type\":\"human\",\"id\":\"Marta\"}}}}");
+    }
+
+    [Theory]
+    [InlineData(new[] { "--clear", "both" }, "--clear names cold or warm.")]
+    [InlineData(new string[0], "campaign set-send-mode needs --cold, --warm or --clear")]
+    public async Task Set_send_mode_refuses_a_request_that_names_no_mode_it_knows(string[] options, string said)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(["--actor", "human:Marta", "campaign", "set-send-mode", "cmp_A", .. options]);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains(said, cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("start", Operations.CampaignStart)]
     [InlineData("pause", Operations.CampaignPause)]

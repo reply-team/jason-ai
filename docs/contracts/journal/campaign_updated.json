@@ -2,7 +2,7 @@
   "kind": "campaign_updated",
   "version": 1,
   "since": "0.1.0",
-  "summary": "One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold or the project it is in; a change of several settings writes one line for each.",
+  "summary": "One setting of a campaign changed: its name, its execution profile, its review cadence, its audience threshold, the project it is in, or its own send mode for cold or for warm contacts; a change of several settings writes one line for each.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -15,7 +15,7 @@
     "required": ["key", "old", "new"],
     "properties": {
       "key": {
-        "enum": ["name", "execution_profile", "review_seconds", "audience_threshold", "project_id"],
+        "enum": ["name", "execution_profile", "review_seconds", "audience_threshold", "project_id", "send_mode_cold", "send_mode_warm"],
         "description": "The setting that changed."
       },
       "old": { "type": ["string", "integer", "null"], "description": "The setting's value before the change." },
@@ -55,6 +55,20 @@
           "key": { "const": "project_id" },
           "old": { "type": "string", "pattern": "^prj_", "description": "The project the campaign left." },
           "new": { "type": "string", "pattern": "^prj_", "description": "The project the campaign moved to." }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "send_mode_cold" },
+          "old": { "enum": ["automatic", "every_message", null], "description": "The campaign's own mode for a contact who has not answered in it, or null where it followed the installation." },
+          "new": { "enum": ["automatic", "every_message", null], "description": "The campaign's own mode for a contact who has not answered in it, or null where it follows the installation." }
+        }
+      },
+      {
+        "properties": {
+          "key": { "const": "send_mode_warm" },
+          "old": { "enum": ["automatic", "every_message", null], "description": "The campaign's own mode for a contact who has answered in it, or null where it followed the installation." },
+          "new": { "enum": ["automatic", "every_message", null], "description": "The campaign's own mode for a contact who has answered in it, or null where it follows the installation." }
         }
       }
     ]

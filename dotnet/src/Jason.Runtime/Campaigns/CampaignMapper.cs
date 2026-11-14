@@ -30,7 +30,8 @@ public static class CampaignMapper
             campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null,
             campaign.IdempotencyKey,
             campaign.FolderPath,
-            campaign.AudienceThreshold);
+            campaign.AudienceThreshold,
+            new SendModesDto(campaign.SendModeCold, campaign.SendModeWarm));
     }
 
     public static CampaignSummaryDto ToSummary(Campaign campaign)

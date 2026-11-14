@@ -155,6 +155,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<ProviderBlockStatus>().HaveConversion<SnakeCaseEnumConverter<ProviderBlockStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<EventBackfillStatus>().HaveConversion<SnakeCaseEnumConverter<EventBackfillStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<SubscriptionRunStatus>().HaveConversion<SnakeCaseEnumConverter<SubscriptionRunStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<SendMode>().HaveConversion<SnakeCaseEnumConverter<SendMode>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
         // A function a query calls on a JSON object column (CustomValues) takes the column as the column stores it.
         configurationBuilder.DefaultTypeMapping<JsonObject>().HasConversion<JsonObjectConverter>();
@@ -207,6 +208,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.HasIndex(c => c.PublicId).IsUnique();
             campaign.Property(c => c.Name).HasMaxLength(200);
             campaign.Property(c => c.ExecutionProfile).HasMaxLength(64);
+            campaign.Property(c => c.SendModeColdSetBy).HasMaxLength(100);
+            campaign.Property(c => c.SendModeWarmSetBy).HasMaxLength(100);
             campaign.Property(c => c.Context).HasColumnName("context_json").IsRequired().HasDefaultValueSql("'{}'");
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);

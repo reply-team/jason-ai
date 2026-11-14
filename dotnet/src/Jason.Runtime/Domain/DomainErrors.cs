@@ -335,6 +335,18 @@ public static class DomainErrors
             "approval_not_human",
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot set or unset a standing approval; it is a person's decision, made in advance.");
 
+    /// <summary>
+    /// A campaign's send mode is a person's standing word about how its sends go, so it is refused to whoever may not
+    /// decide one: no role and no run sets it.
+    /// </summary>
+    public static InvalidRequestException SendModeNotHuman(ActorType type) =>
+        new(
+            "send_mode_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot set a campaign's send mode; it is a person's standing word about how the campaign's sends go.");
+
+    public static InvalidRequestException SendModeActorRequired() =>
+        new("actor_required", "actor.id is required on a campaign's send mode: the sends it releases go in the name of the person who set it.");
+
     public static InvalidRequestException StandingApprovalActorRequired() =>
         new("actor_required", "actor.id is required on a standing approval: what is recorded has to name the person whose decision it is.");
 

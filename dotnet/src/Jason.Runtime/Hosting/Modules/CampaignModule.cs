@@ -37,6 +37,8 @@ public static class CampaignModule
             Operations.CampaignArchive, (service, request, cancellationToken) => service.ArchiveAsync(request, cancellationToken));
         app.MapOperation<CampaignService, CampaignUpdateContextRequest, CampaignDto>(
             Operations.CampaignUpdateContext, (service, request, cancellationToken) => service.UpdateContextAsync(request, cancellationToken));
+        app.MapOperation<CampaignService, CampaignSetSendModeRequest, CampaignDto>(
+            Operations.CampaignSetSendMode, (service, request, cancellationToken) => service.SetSendModeAsync(request, cancellationToken));
 
         app.MapOperation<CampaignNumbers, CampaignSummaryRequest, CampaignSummaryResponse>(
             Operations.CampaignSummary, (service, request, cancellationToken) => service.SummaryAsync(request, cancellationToken));

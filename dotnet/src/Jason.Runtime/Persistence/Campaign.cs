@@ -51,6 +51,21 @@ public sealed class Campaign
     public int? AudienceThreshold { get; set; }
 
     /// <summary>
+    /// The campaign's own send mode for a contact who has not answered in it, and the name of the person who set it; both
+    /// null while the campaign follows the installation's <c>send_mode.cold</c>. A row and not the context because the
+    /// claim reads it, and the setter beside it because the claim releases a send in that person's name. Only a named
+    /// person writes it, through <c>campaign.set_send_mode</c>.
+    /// </summary>
+    public SendMode? SendModeCold { get; set; }
+
+    public string? SendModeColdSetBy { get; set; }
+
+    /// <summary>The same for a contact who has answered in the campaign, against <c>send_mode.warm</c>.</summary>
+    public SendMode? SendModeWarm { get; set; }
+
+    public string? SendModeWarmSetBy { get; set; }
+
+    /// <summary>
     /// The highest journal entry the reserve step has checked this campaign's count against. It reads only the lines
     /// above it, so a tick with nothing new to look at costs one read and counts nobody.
     /// </summary>

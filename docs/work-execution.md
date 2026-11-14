@@ -306,8 +306,8 @@ provenance, the coded failure, and one against the budget.
 with a name; a role or an attempt is refused with `approval_not_human`, and an absent actor with
 `actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
-approve anything, and that every decision names who made it. An approval, an answer or a preference sent from inside a
-run is refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on every request it sends from
+approve anything, and that every decision names who made it. An approval, an answer, a preference or a campaign's send
+mode sent from inside a run is refused with `decided_inside_a_run` whoever it names, since the CLI names its attempt on every request it sends from
 there: a higher bar against a role deciding its own work, not a boundary.
 
 An approval is about one operation on one work item, and it is not the only thing a person is asked. A

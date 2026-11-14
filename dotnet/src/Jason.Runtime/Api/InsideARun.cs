@@ -31,6 +31,7 @@ public static class InsideARun
         Operations.DecisionAnswer,
         Operations.PreferenceSet,
         Operations.PreferenceUnset,
+        Operations.CampaignSetSendMode,
     };
 
     /// <summary>The attempt a request says it comes from, as it said it; null where it names none.</summary>
