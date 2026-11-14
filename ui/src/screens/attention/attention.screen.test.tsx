@@ -7,11 +7,13 @@ import { route } from '../../router';
 import * as store from './store';
 
 function pendingFake() {
+    // An open card's reminder about name and tone reads the preferences; with both set it says nothing.
     return new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('approval.get', 'approval.get/pending-with-preview')
-        .answer('decision.get', 'decision.get/pending-with-options');
+        .answer('decision.get', 'decision.get/pending-with-options')
+        .answer('preference.list', 'preference.list/set');
 }
 
 /** The fact a panel states under a term, or undefined where it states none. */
@@ -74,7 +76,8 @@ describe('Attention', () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty')
-            .answer('approval.get', 'approval.get/email-message');
+            .answer('approval.get', 'approval.get/email-message')
+            .answer('preference.list', 'preference.list/set');
         // A message approval is checked against its work item; no recording holds a message item, so this row holds it.
         const call = fake.call.bind(fake);
         fake.call = async (operation, body, kind) =>

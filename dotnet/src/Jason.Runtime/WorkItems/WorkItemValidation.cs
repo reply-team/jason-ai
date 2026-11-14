@@ -93,6 +93,7 @@ internal static partial class WorkItemValidation
 
         ValidateWaitOn(request.WaitOn, errors);
         Doubts.ValidateCreate(request, errors);
+        SendReview.RefuseAtCreate(request.Context, errors);
         ValidateReason(request.Reason, errors);
     }
 

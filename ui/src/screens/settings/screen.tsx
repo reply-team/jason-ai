@@ -3,6 +3,7 @@ import { svg } from '../../console/icons';
 import { Painted } from '../../console/painted';
 import { t } from '../../platform/i18n';
 import { setTheme, themeChoice, type ThemeChoice } from '../../platform/theme';
+import { SendModesSettings } from '../send-modes/settings-section';
 import { VoiceSection } from './voice';
 
 const themes: readonly ThemeChoice[] = ['light', 'dark', 'system'];
@@ -33,6 +34,7 @@ export function SettingsScreen() {
                 </div>
             </section>
             <VoiceSection />
+            <SendModesSettings />
         </div>
     );
 }

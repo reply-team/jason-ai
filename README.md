@@ -144,7 +144,7 @@ to.
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 20 guides, 30 operation contracts in Markdown and JSON with 942 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1104 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 8 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1109 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 8 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -263,8 +263,8 @@ Day to day, it goes like this:
    question at a time, like a new hire would.
 3. **Bring contacts or let Jason find them:** Reply's Live Data API, your own search tools, a CSV, a Google Sheet, your CRM,
    or public research.
-4. **Approve the first message.** Your feedback ("too formal", "always mention a customer result") becomes a rule.
-5. **Start small.** A pilot of ten, every message approved. Jason reports what's working; you decide whether to grow it.
+4. **Approve the first message.** Until you say otherwise, it waits for your yes. Your feedback ("too formal", "always mention a customer result") becomes a rule.
+5. **Start small.** A pilot of ten, and each message waits for you until you choose that some go automatically. Jason reports what's working; you decide whether to grow it.
 6. **It reacts.** Replies, objections, out-of-office and silence each change the plan for that one person.
 
 ---
@@ -650,7 +650,7 @@ yourself. Nothing else. No telemetry.
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
 **In numbers:** 20 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 942 contract fixtures and
-410 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 8 runtime skills and 9 role
+430 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 8 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |
@@ -752,8 +752,10 @@ remembered when they say no. A tool that only sends messages doesn't hold that l
 **Your AI thinks. Jason remembers. Your provider delivers.** Each part does one job, and none of them pretends to be the
 others.
 
-**Autonomous doesn't mean unsupervised.** Every operation that reaches a real person waits for a person's word, given on
-the item or, for one kind of reply, in advance. That's written into the operation's contract, and no role can give it.
+**Autonomous doesn't mean unsupervised.** Every operation that reaches a real person waits for a person's word unless a
+person has recorded, in advance, that it may go: for people who have not answered, for people who have, or for one kind
+of reply. A role that is unsure, or a reviewer that doubts, sends the item to the person anyway, and nobody who asked not
+to be contacted is written to again. Only a person records that word, and no role can give it.
 
 **Honest over smooth.** An interrupted send is never guessed at: it repeats only where the provider can't send it twice, and otherwise comes back to you. A role that isn't sure asks. The
 history is append-only, so what happened stays what happened.
