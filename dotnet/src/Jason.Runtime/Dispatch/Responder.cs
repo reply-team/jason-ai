@@ -480,30 +480,11 @@ public sealed class Responder(
     }
 
     /// <summary>
-    /// Whether the claim could launch a responder of this campaign: a profile is resolved for it, enabled or not, or an
-    /// entry command is. Otherwise the claim would end it <c>role_not_launchable</c>, and nothing is created.
+    /// Whether the claim could launch a responder of this campaign (<see cref="RoleLaunch"/>): the responder is root work.
+    /// Otherwise the claim would end it <c>role_not_launchable</c>, and nothing is created.
     /// </summary>
-    private async Task<bool> ConfiguredAsync(JasonDbContext db, Active campaign, CancellationToken ct)
-    {
-        var rolePolicy = await db.Roles
-            .AsNoTracking()
-            .Where(role => role.Name == Role)
-            .Select(role => role.ExecutionProfile)
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
-
-        var decision = ProfileResolution.Decide(new ProfileInputs(
-            Override: null,
-            campaign.ExecutionProfile,
-            rolePolicy,
-            LineageState.Root,
-            LineageName: null,
-            LineageRevision: null,
-            roles.Current.DefaultExecutionProfile));
-
-        return decision is not ProfileDecision.None
-            || await entryCommands.ResolveAsync(db, Role, ct).ConfigureAwait(false) is not null;
-    }
+    private Task<bool> ConfiguredAsync(JasonDbContext db, Active campaign, CancellationToken ct) =>
+        RoleLaunch.ConfiguredAsync(db, entryCommands, roles.Current, Role, campaign.ExecutionProfile, LineageRecord.Root, ct);
 
     /// <summary>
     /// No new line: the watermark goes to the campaign's own last line, read again inside the transaction that writes

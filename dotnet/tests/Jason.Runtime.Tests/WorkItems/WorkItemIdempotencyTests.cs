@@ -1,8 +1,11 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
@@ -241,6 +244,57 @@ public class WorkItemIdempotencyTests
         Assert.Equal(0, await db.Journal.CountAsync(Ct));
     }
 
+    /// <summary>
+    /// A repeat answers with what the first create made, its critic included: the key is looked up before the runtime
+    /// decides about a critic, so a repeat makes no second one and writes no second wait, whatever the modes say now.
+    /// </summary>
+    [Fact]
+    public async Task A_repeat_under_the_same_key_makes_no_second_critic_and_no_second_wait()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var (campaign, contact) = await SeedReviewedAsync(db);
+        var service = ReviewedService(db, new FixedClock(Noon));
+        var request = Send(campaign.PublicId, contact.PublicId) with { IdempotencyKey = "send-1" };
+
+        var first = await service.CreateAsync(request, Ct);
+        var again = await service.CreateAsync(request, Ct);
+
+        Assert.Equal(first.Id, again.Id);
+        Assert.Equal(WorkItemStatus.Waiting, again.Status);
+        Assert.Equal(1, await db.WorkItems.CountAsync(w => w.Role == "critic", Ct));
+        Assert.Equal(1, await db.WorkItemWaits.CountAsync(Ct));
+        Assert.Equal(1, await db.Journal.CountAsync(e => e.Kind == JournalKinds.WorkItemWaiting, Ct));
+        Assert.Equal(2, await db.Journal.CountAsync(e => e.Kind == JournalKinds.WorkItemCreated, Ct));
+    }
+
+    /// <summary>The critic is in the losing writer's one save, so the key's refusal takes it down with the send.</summary>
+    [Fact]
+    public async Task A_writer_that_loses_the_race_leaves_no_critic_behind()
+    {
+        using var database = new TestDatabase();
+        Campaign campaign;
+        Contact contact;
+        using (var seeding = database.Open())
+        {
+            (campaign, contact) = await SeedReviewedAsync(seeding);
+        }
+
+        var request = Send(campaign.PublicId, contact.PublicId) with { IdempotencyKey = "send-1" };
+        var rival = new CompetingInsert(database.File, _ => Rival(campaign.Id, "send-1", CreationKey.Digest(request)));
+        using var db = Open(database, rival);
+        var service = ReviewedService(db, new FixedClock(Noon));
+
+        var answer = await service.CreateAsync(request, Ct);
+
+        Assert.True(rival.Fired);
+        Assert.Equal("wi_rival", answer.Id);
+        Assert.Equal(1, await db.WorkItems.CountAsync(Ct));
+        Assert.Equal(0, await db.WorkItems.CountAsync(w => w.Role == "critic", Ct));
+        Assert.Empty(await db.WorkItemWaits.ToListAsync(Ct));
+        Assert.Equal(0, await db.Journal.CountAsync(Ct));
+    }
+
     [Fact]
     public async Task A_writer_that_loses_the_race_to_a_different_request_is_refused_naming_the_winner()
     {
@@ -348,6 +402,57 @@ public class WorkItemIdempotencyTests
 
     private static WorkItemService NewService(JasonDbContext db, TimeProvider clock) =>
         new(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestOptions.PluginSettings());
+
+    /// <summary>The service as the runtime builds it, where a critic can be launched and a wait can be written.</summary>
+    private static WorkItemService ReviewedService(JasonDbContext db, TimeProvider clock)
+    {
+        var journal = new JournalWriter(clock);
+        return new WorkItemService(
+            db,
+            journal,
+            clock,
+            TestCanceller.New(clock),
+            TestOptions.PluginSettings(),
+            outcomes: new AttemptOutcomes(journal, clock, TestOptions.Settings()),
+            roles: TestOptions.RoleSettings(new RolesOptions { DefaultEntryCommand = ["agent"] }));
+    }
+
+    /// <summary>A campaign with one member, under an automatic cold mode a person set for the installation.</summary>
+    private static async Task<(Campaign Campaign, Contact Contact)> SeedReviewedAsync(JasonDbContext db)
+    {
+        var at = Noon.UtcDateTime;
+        var campaign = WorkItemFactory.NewCampaign(now: at);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = at, UpdatedAt = at };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Campaigns.Add(campaign);
+        db.Contacts.Add(contact);
+        db.CampaignContacts.Add(new CampaignContact { Campaign = campaign, Contact = contact, State = MembershipState.Enrolled, AddedAt = at, UpdatedAt = at });
+        db.Preferences.Add(new Preference
+        {
+            Key = SendModes.ColdKey,
+            Value = new JsonObject { ["mode"] = "automatic" },
+            ValueHash = "sha256:" + new string('0', 64),
+            UpdatedByType = ActorType.Human,
+            UpdatedById = "ada",
+            CreatedAt = at,
+            UpdatedAt = at,
+        });
+        await db.SaveChangesAsync(Ct);
+        return (campaign, contact);
+    }
+
+    private static WorkItemCreateRequest Send(string campaignId, string contactId) =>
+        new(campaignId, WorkItemKind.ProviderOp, null, "message.send", contactId, null, null, null, null, null, null, null,
+            new JsonObject
+            {
+                ["input"] = new JsonObject
+                {
+                    ["channel"] = "email",
+                    ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                    ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Thursday", ["body"] = "Thursday at 10 works." },
+                },
+            },
+            null, new ActorRef(ActorType.Role, "composer"), null);
 
     private static WorkItemCreateRequest Request(string campaignId) =>
         new(campaignId, WorkItemKind.AiRole, "researcher", null, null, null, null, null, null, null, null, null, null, null, null, null);

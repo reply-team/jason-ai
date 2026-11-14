@@ -12,6 +12,7 @@ using Jason.Runtime.Approvals;
 using Jason.Runtime.Audiences;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -45,6 +46,10 @@ namespace Jason.Runtime.WorkItems;
 /// The attempt the request says it comes from: inside a run, a send a review covers is created under that attempt's own
 /// name. Null outside a request and for a request that names none.
 /// </param>
+/// <param name="roles">
+/// Read for whether a critic could be launched, before the runtime creates one for a send under an automatic mode. Null
+/// only in the tests that build this service by hand: no critic can be launched there, so none is created.
+/// </param>
 public sealed class WorkItemService(
     JasonDbContext db,
     JournalWriter journal,
@@ -53,7 +58,8 @@ public sealed class WorkItemService(
     LiveSettings<PluginsOptions> plugins,
     PatternTiming? timing = null,
     AttemptOutcomes? outcomes = null,
-    RequestRun? run = null)
+    RequestRun? run = null,
+    LiveSettings<RolesOptions>? roles = null)
 {
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
 
@@ -232,6 +238,86 @@ public sealed class WorkItemService(
         var record = lineage ?? await Lineage.ForCreationAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
         var now = clock.GetUtcNow().UtcDateTime;
+        var item = Compose(request, actor, record, campaign, contact, context, now);
+
+        // Under an automatic mode the runtime adds the send's critic, in this same save: both are written or neither is.
+        var critic = await CriticAsync(item, campaign, contact, record, now, cancellationToken).ConfigureAwait(false);
+
+        // Written waiting, in the create's own save: the item is never claimable before what it waits on has ended. The
+        // wait only orders — once it is over the item is ordinary queued work, and the claim decides about it as ever.
+        if (awaited.Count > 0 || critic is not null)
+        {
+            var writer = outcomes ?? throw new InvalidOperationException("This service was built without the outcomes that write a wait, and a create names work to wait on.");
+            writer.WaitFromCreation(db, item, awaited, awaited.Count > 0 ? actor : Actors.Runtime, critic);
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return item;
+    }
+
+    /// <summary>
+    /// The critic the runtime creates for <paramref name="send"/>, composed into the create's own save; null where it
+    /// creates none. It creates one for a send a person decides each one of, about a contact, that does not ask the person
+    /// itself and was not written in the desktop's chat, where the send mode in force for the contact's temperature would
+    /// release it (either mode, for a contact who waits on a verdict) and a critic could be launched. The critic is the runtime's own work: a <c>critic</c> item of the send's
+    /// campaign, contact, priority, due date and lineage, whose context names the send under <see cref="SendReview.Key"/>
+    /// and nothing else. The modes are read here only to decide whether to create it; the claim reads them again when it
+    /// decides about the send.
+    /// </summary>
+    private async Task<WorkItem?> CriticAsync(WorkItem send, Campaign campaign, Contact? contact, LineageRecord record, DateTime now, CancellationToken cancellationToken)
+    {
+        // A send written in the desktop's chat always waits for the person, so a critic would be a run for nothing.
+        if (!ReviewSubject.IsReviewable(send) || contact is null || Doubts.AskPersonCode(send) is not null || ConfinedScope.Confined || roles is null)
+        {
+            return null;
+        }
+
+        // The claim's own reading of the mode for this contact: the mode of the contact's temperature, or either while the
+        // contact waits on a verdict. A contact cold now and warm at the claim has no pass then, and parks for the person.
+        if (!(await AutomaticRelease.ModeForAsync(db, campaign, campaign.Id, contact.Id, cancellationToken).ConfigureAwait(false)).InForce)
+        {
+            return null;
+        }
+
+        var settings = roles.Current;
+        if (!await RoleLaunch.ConfiguredAsync(db, new EntryCommandResolver(roles), settings, AutomaticRelease.CriticRole, campaign.ExecutionProfile, record, cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var request = new WorkItemCreateRequest(
+            CampaignId: campaign.PublicId,
+            Kind: WorkItemKind.AiRole,
+            Role: AutomaticRelease.CriticRole,
+            Operation: null,
+            ContactId: contact.PublicId,
+            ExecutionProfile: null,
+            Priority: send.Priority,
+            NotBefore: null,
+            DueAt: send.DueAt is { } due ? new DateTimeOffset(due, TimeSpan.Zero) : null,
+            TimeoutSeconds: null,
+            HeartbeatSeconds: null,
+            MaxAttempts: null,
+            Context: SendReview.Context(send.PublicId, send.Operation!),
+            ResultFormat: null,
+            Actor: Actors.Runtime,
+            Reason: SendReview.Reason);
+        return Compose(request, Actors.Runtime, record, campaign, contact, request.Context!, now);
+    }
+
+    /// <summary>
+    /// Builds one new item and its <c>workitem_created</c> line, and adds both without saving, so one create can write the
+    /// work it was asked for and the work the runtime adds to it in a single save: both or neither.
+    /// </summary>
+    private WorkItem Compose(
+        WorkItemCreateRequest request,
+        ActorRef actor,
+        LineageRecord record,
+        Campaign campaign,
+        Contact? contact,
+        JsonObject context,
+        DateTime now)
+    {
         var item = new WorkItem
         {
             PublicId = PublicId.New("wi"),
@@ -278,16 +364,6 @@ public sealed class WorkItemService(
             updated: CreationSummary(item, contact),
             reason: NormalizeReason(request.Reason),
             workItem: item);
-
-        // Written waiting, in the create's own save: the item is never claimable before what it waits on has ended. The
-        // wait only orders — once it is over the item is ordinary queued work, and the claim decides about it as ever.
-        if (awaited.Count > 0)
-        {
-            var writer = outcomes ?? throw new InvalidOperationException("This service was built without the outcomes that write a wait, and a create names work to wait on.");
-            writer.WaitFromCreation(db, item, awaited, actor);
-        }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return item;
     }
 
@@ -505,6 +581,7 @@ public sealed class WorkItemService(
 
         ValidateContextKeys(request.Set, request.Unset, errors);
         Doubts.RefuseInPatch(request.Set, request.Unset, errors);
+        SendReview.RefuseInPatch(request.Set, request.Unset, errors);
         ValidateProviderInput(item, request.Set, request.Unset, _timing, errors);
         CampaignAudiences.RefuseWritten(
             item.Operation,
