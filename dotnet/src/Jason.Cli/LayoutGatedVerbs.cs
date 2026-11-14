@@ -62,15 +62,22 @@ public static class LayoutGatedVerbs
         var current = SkillsSource.BuildVersion(env);
         var refusal = LayoutStamp.Refusal(env.Paths, current);
 
-        // "Update this jason" is what these two were asked to do, and they cannot: a build that does not know the layout
-        // cannot follow it. They name what does, the install line, and keep the code.
-        if (refusal is { Code: LayoutStamp.NewerCode } && verb is "update apply" or "update rollback")
+        // "Update this jason" is what these two were asked to do, and they cannot: a build that does not know the layout,
+        // or cannot read the stamp, cannot follow it. They name what does, the install line, and keep the code.
+        if (refusal is { } refused && verb is "update apply" or "update rollback")
         {
-            return (LayoutStamp.NewerCode, UpdateNewerSentence(env.Paths.Stamp!.WrittenBy!, current));
+            var stamp = env.Paths.Stamp!;
+            return refused.Code == LayoutStamp.NewerCode
+                ? (LayoutStamp.NewerCode, UpdateNewerSentence(stamp.WrittenBy!, current))
+                : (LayoutStamp.UnreadableCode, UpdateUnreadableSentence(stamp.Path, stamp.Problem!));
         }
 
         return refusal;
     }
+
+    /// <summary>The sentence <c>update apply</c> and <c>update rollback</c> refuse a stamp they cannot read with.</summary>
+    public static string UpdateUnreadableSentence(string path, string problem) =>
+        $"This data directory's layout stamp at {path} cannot be read ({problem}), so this jason cannot tell how the directory is laid out, and its update cannot either: install the newest Jason by running the install line again, or use the Jason that set it up.";
 
     /// <summary>The sentence <c>update apply</c> and <c>update rollback</c> refuse a newer layout with.</summary>
     public static string UpdateNewerSentence(string writtenBy, string current) =>

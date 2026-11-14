@@ -139,12 +139,38 @@ public sealed class LayoutGateTests : IDisposable
         var envelope = JsonDocument.Parse(output).RootElement.GetProperty("error");
         Assert.Equal("layout_unreadable", envelope.GetProperty("code").GetString());
         Assert.Equal(
-            $"This data directory's layout stamp at {Path.Combine(_root, "layout.json")} cannot be read (its layout is 0, and layouts count from 1), so this jason cannot tell how the directory is laid out: use the Jason that set it up, or update this jason.",
+            line.StartsWith("update ", StringComparison.Ordinal) ? UpdateUnreadableSentence(_root) : UnreadableSentence(_root),
             envelope.GetProperty("message").GetString());
         Assert.Empty(processes.Launches);
         Assert.Empty(asked);
         Assert.Equal(before, Listing());
     }
+
+    /// <summary>
+    /// The update verbs never say "update this jason" of a stamp they cannot read either: they name the install line, which
+    /// takes the newest Jason, and keep the code. Every other gated verb says the general sentence.
+    /// </summary>
+    [Theory]
+    [InlineData("update apply", true)]
+    [InlineData("update rollback", true)]
+    [InlineData("plugin reload", false)]
+    public async Task Of_an_unreadable_stamp_the_update_verbs_name_the_install_line_and_every_other_verb_says_update_this_jason(string line, bool update)
+    {
+        File.WriteAllText(Path.Combine(_root, "layout.json"), """{"layout":0,"written_by":"0.43.0"}""");
+
+        var (exit, output, _, _, _, _) = await RunAsync(line.Split(' '));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var envelope = JsonDocument.Parse(output).RootElement.GetProperty("error");
+        Assert.Equal("layout_unreadable", envelope.GetProperty("code").GetString());
+        Assert.Equal(update ? UpdateUnreadableSentence(_root) : UnreadableSentence(_root), envelope.GetProperty("message").GetString());
+    }
+
+    private static string UnreadableSentence(string root) =>
+        $"This data directory's layout stamp at {Path.Combine(root, "layout.json")} cannot be read (its layout is 0, and layouts count from 1), so this jason cannot tell how the directory is laid out: use the Jason that set it up, or update this jason.";
+
+    private static string UpdateUnreadableSentence(string root) =>
+        $"This data directory's layout stamp at {Path.Combine(root, "layout.json")} cannot be read (its layout is 0, and layouts count from 1), so this jason cannot tell how the directory is laid out, and its update cannot either: install the newest Jason by running the install line again, or use the Jason that set it up.";
 
     [Fact]
     public async Task Under_human_the_sentence_goes_to_standard_error_and_nothing_to_standard_output()
