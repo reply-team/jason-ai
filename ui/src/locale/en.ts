@@ -49,6 +49,8 @@ export const en = {
     'voice.tone.formality.neutral': 'Neutral',
     'voice.tone.formality.formal': 'Formal',
     'voice.tone.empty': 'Write a few words to save this part. Nothing is saved without them.',
+    'voice.refused': 'The save did not go through.',
+    'start.voice.name': 'Name and tone',
     'voice.save': 'Save',
     'voice.saved': 'Saved.',
     'start.placeholder': 'Tell Jason what you sell and who you want to reach.',

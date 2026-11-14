@@ -333,7 +333,7 @@ export function StartPanel() {
                     <ChatNotes chat={startChatNow()} modeMenu={modeMenu} />
                 </form>
                 {askable && voiceKnown.value === 'none' && (
-                    <div className="start-note" role="note" aria-label="Name and tone">
+                    <div className="start-note" role="note" aria-label={t('start.voice.name')}>
                         <span>
                             <strong>{t('start.voice.lead')}</strong> {t('start.voice.body')}
                         </span>

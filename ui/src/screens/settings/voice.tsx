@@ -27,8 +27,7 @@ import { voiceSectionId } from './voice-id';
 
 type Said = { kind: 'saved' | 'empty' | 'refused'; text: string } | null;
 
-const messageOf = (error: unknown): string =>
-    error instanceof ApiError ? error.message : 'The save did not go through.';
+const messageOf = (error: unknown): string => (error instanceof ApiError ? error.message : t('voice.refused'));
 
 /** "Your name and tone": who writes and how they write, each part saved on its own. Live only; the demo says where. */
 export function VoiceSection() {
