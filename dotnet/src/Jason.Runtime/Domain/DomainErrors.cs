@@ -351,6 +351,15 @@ public static class DomainErrors
             $"This request comes from inside attempt `{attempt}`. An approval or an answer is a person's own word, given outside the run that asked: leave it to the person (`jason approval list`, `jason decision list`) or raise it as a decision.");
 
     /// <summary>
+    /// A route for every campaign asked for from inside a run: the global scope of <c>route.set</c> and <c>route.unset</c>,
+    /// refused by the run's header with the code a person's own word is refused with there.
+    /// </summary>
+    public static ForbiddenException GlobalRouteInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. A route for every campaign is a person's own word, given outside any run: leave it to the person, or raise it as a decision.");
+
+    /// <summary>
     /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
     /// offered would be an answer that reads like a quotation and is not one.
     /// </summary>

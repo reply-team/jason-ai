@@ -528,14 +528,14 @@ public sealed class RouteService(
     /// <summary>
     /// Nothing inside a dispatched run changes Jason itself, and a global route is Jason's own configuration: it is
     /// refused to a request from inside a run as the gate refuses a person's own word, by the same header and with the
-    /// same answer, before anything is read or written. The gate refuses by operation and cannot see the scope, which is
+    /// same code and a sentence of its own, before anything is read or written. The gate refuses by operation and cannot see the scope, which is
     /// in the body, so the refusal stands here. A campaign's own route is a run's to change, as it always was.
     /// </summary>
     private static void RefuseInsideARun(string? insideRun)
     {
         if (insideRun is not null)
         {
-            throw DomainErrors.DecidedInsideARun(insideRun);
+            throw DomainErrors.GlobalRouteInsideARun(insideRun);
         }
     }
 

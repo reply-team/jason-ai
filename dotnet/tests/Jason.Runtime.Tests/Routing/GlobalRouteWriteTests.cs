@@ -479,8 +479,9 @@ public class GlobalRouteWriteTests
 
     /// <summary>
     /// Nothing inside a dispatched run changes Jason itself: a global route set or unset from inside a run is refused by
-    /// the run's header, with the answer the gate gives a person's own word, and the file and the routes in force are left
-    /// as they were. The same request without the header is answered, so the refusal is the header's.
+    /// the run's header, with the code the gate gives a person's own word and a sentence of its own, and the file, the
+    /// routes in force and the journal are left as they were. The same request without the header is answered, so the
+    /// refusal is the header's.
     /// </summary>
     [Theory]
     [InlineData(Operations.RouteSet)]
@@ -499,15 +500,20 @@ public class GlobalRouteWriteTests
 
         var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
         var routes = api.Resolve<RouteRegistry>().Snapshot.Global;
+        var lines = (await JournalAsync(api)).Items.Count;
 
         var (status, text) = await api.PostAsync(operation, body, InsideARunHeader, Ct);
 
         Assert.True(status == HttpStatusCode.Forbidden, $"{operation} answered {(int)status}: {text}");
         var error = System.Text.Json.JsonSerializer.Deserialize<ErrorResponse>(text, Jason.Contracts.Json.JasonJson.Options)!.Error;
         Assert.Equal("decided_inside_a_run", error.Code);
-        Assert.Equal(DomainErrors.DecidedInsideARun(RunAttempt).Message, error.Message);
+        Assert.Equal(403, (int)status);
+        Assert.Equal(
+            $"This request comes from inside attempt `{RunAttempt}`. A route for every campaign is a person's own word, given outside any run: leave it to the person, or raise it as a decision.",
+            error.Message);
         Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
         Assert.Same(routes, api.Resolve<RouteRegistry>().Snapshot.Global);
+        Assert.Equal(lines, (await JournalAsync(api)).Items.Count);
 
         var (plain, plainText) = await api.PostAsync(operation, body, Ct);
         Assert.True(plain == HttpStatusCode.OK, $"{operation} without the header answered {(int)plain}: {plainText}");
@@ -801,6 +807,9 @@ public class GlobalRouteWriteTests
 
     private static Task<Page<JournalEntryDto>> LinesAsync(RuntimeApiFixture api) =>
         api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = JournalKinds.GlobalRoutesUpdated }, Ct);
+
+    private static Task<Page<JournalEntryDto>> JournalAsync(RuntimeApiFixture api) =>
+        api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Limit = 200 }, Ct);
 
     private static Task<Page<JournalEntryDto>> ReloadedAsync(RuntimeApiFixture api) =>
         api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = JournalKinds.PluginsReloaded }, Ct);
