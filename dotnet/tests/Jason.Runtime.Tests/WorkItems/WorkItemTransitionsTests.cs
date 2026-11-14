@@ -192,16 +192,22 @@ public class WorkItemTransitionsTests
     [Theory]
     [InlineData(WorkItemStatus.Cancelled, true)]
     [InlineData(WorkItemStatus.Failed, true)]
+    [InlineData(WorkItemStatus.Succeeded, true)]
     [InlineData(WorkItemStatus.Expired, false)]
     public void A_send_that_can_never_be_asked_about_again_keeps_no_doubt_s_sentence(WorkItemStatus to, bool cleared)
     {
         var send = WorkItemFactory.NewProviderOp(WorkItemFactory.NewCampaign(), "message.send", Noon);
         send.AskPersonNote = "the brief never mentions pricing.";
         send.ReviewNote = "the subject promises a discount.";
-        if (to == WorkItemStatus.Failed)
+        if (to is WorkItemStatus.Failed or WorkItemStatus.Succeeded)
         {
-            // A send fails from the claim, as one the pre-flight refuses does.
+            // A send fails from the claim, as one the pre-flight refuses does; it goes once its run has started.
             WorkItemTransitions.Apply(send, WorkItemStatus.Scheduled, Noon);
+        }
+
+        if (to == WorkItemStatus.Succeeded)
+        {
+            WorkItemTransitions.Apply(send, WorkItemStatus.Processing, Noon);
         }
 
         WorkItemTransitions.Apply(send, to, Noon);
