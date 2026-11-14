@@ -12,6 +12,7 @@
     "confidence": 0.9,
     "reaction": "draft",
     "goal_id": "demo",
+    "nature": "person",
     "actor": {
       "type": "role",
       "id": "responder"
@@ -44,7 +45,8 @@
       "goal_id": "demo",
       "goal_kind": "demo",
       "decision_id": null,
-      "answered_by": null
+      "answered_by": null,
+      "nature": "person"
     },
     "reason": "interested by the table; draft toward the demo",
     "contact_id": "cnt_1",

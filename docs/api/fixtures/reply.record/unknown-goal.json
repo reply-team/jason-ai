@@ -12,6 +12,7 @@
     "confidence": 0.9,
     "reaction": "draft",
     "goal_id": "purchase",
+    "nature": "person",
     "actor": {
       "type": "role",
       "id": "responder"

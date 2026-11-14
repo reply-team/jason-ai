@@ -1,0 +1,37 @@
+{
+  "operation": "reply.record",
+  "case": "opt-out-without-contact",
+  "request": {
+    "campaign_id": "cmp_1",
+    "plugin_id": "mailbox",
+    "thread_id": "thr-1042",
+    "message_id": "msg-77",
+    "message_at": "2026-09-14T11:30:00.250Z",
+    "contact_id": null,
+    "category": "unsubscribe",
+    "confidence": 0.9,
+    "reaction": "none",
+    "goal_id": null,
+    "nature": "opt_out",
+    "actor": {
+      "type": "role",
+      "id": "responder"
+    },
+    "reason": "asked not to be written to again"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: contact_id: required.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "contact_id",
+          "code": "required",
+          "message": "contact_id is required with the nature opt_out: an opt-out stops a person."
+        }
+      ]
+    }
+  }
+}

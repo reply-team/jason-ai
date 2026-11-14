@@ -29,7 +29,7 @@ public class ReplyRecordTests
 
     /// <summary>What the line carries, and all of it: identifiers, a moment, numbers and words from closed lists, and the category.</summary>
     private static readonly string[] LineFields =
-        ["plugin", "thread", "message_id", "message_at", "contact_id", "category", "confidence", "reaction", "goal_id", "goal_kind", "decision_id", "answered_by"];
+        ["plugin", "thread", "message_id", "message_at", "contact_id", "category", "confidence", "reaction", "goal_id", "goal_kind", "decision_id", "answered_by", "nature"];
 
     /// <summary>Each check the request is held to, the field it is refused at and the code it is refused with.</summary>
     public static TheoryData<string, string, string> Refusals() => new()
@@ -182,6 +182,50 @@ public class ReplyRecordTests
         Assert.Equal("none", (string?)line["reaction"]);
         Assert.True(line.ContainsKey("decision_id") && line["decision_id"] is null);
         Assert.True(line.ContainsKey("answered_by") && line["answered_by"] is null);
+        Assert.True(line.ContainsKey("nature") && line["nature"] is null);
+    }
+
+    /// <summary>
+    /// What a reply is, in the runtime's own closed words, lands on the line as written: the one word of a verdict the
+    /// runtime reads, beside the category it never does.
+    /// </summary>
+    [Theory]
+    [InlineData(ReplyNature.Person, "person")]
+    [InlineData(ReplyNature.Automatic, "automatic")]
+    [InlineData(ReplyNature.Bounce, "bounce")]
+    [InlineData(ReplyNature.OptOut, "opt_out")]
+    public async Task The_nature_lands_on_the_line_as_written(ReplyNature nature, string word)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+
+        var entry = await Service(db).RecordAsync(Request(seed) with { Nature = nature }, Ct);
+
+        Assert.Equal(word, (string?)entry.New!["nature"]);
+        var stored = Assert.Single(await db.Journal.Where(row => row.Kind == JournalKinds.ReplyClassified).ToListAsync(Ct));
+        Assert.Equal(word, (string?)stored.New!["nature"]);
+    }
+
+    /// <summary>
+    /// An opt-out stops a person, so a verdict that says the reply is one must name whom: without a contact it is refused at
+    /// <c>contact_id</c> and writes nothing. Every other nature may name nobody.
+    /// </summary>
+    [Fact]
+    public async Task An_opt_out_that_names_nobody_is_refused_at_the_contact_and_writes_nothing()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+
+        var refused = await Assert.ThrowsAsync<ValidationException>(() => Service(db).RecordAsync(
+            Request(seed) with { Nature = ReplyNature.OptOut, ContactId = null }, Ct));
+        var person = await Service(db).RecordAsync(Request(seed) with { Nature = ReplyNature.Person, ContactId = null }, Ct);
+
+        Assert.Equal(["contact_id/required"], refused.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
+        Assert.Equal([person.Id], await db.Journal.Where(row => row.Kind == JournalKinds.ReplyClassified).Select(row => row.PublicId).ToListAsync(Ct));
+        Assert.Equal("person", (string?)person.New!["nature"]);
+        Assert.Null(person.New!["contact_id"]);
     }
 
     /// <summary>
@@ -544,6 +588,40 @@ public class ReplyRecordTests
         Assert.Equal("invalid_request", refused.Code);
     }
 
+    /// <summary>Over the wire the nature is a snake_case word, and a word outside the four is refused at the door.</summary>
+    [Fact]
+    public async Task The_nature_is_a_word_over_the_api_and_one_outside_the_four_is_refused()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring" }, Ct);
+        var contact = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Marta" }, Ct);
+
+        var entry = await api.PostOkAsync<JournalEntryDto>(
+            Operations.ReplyRecord,
+            new
+            {
+                campaign_id = campaign.Id,
+                plugin_id = "mailbox",
+                thread_id = "thr-1042",
+                message_id = "msg-77",
+                message_at = "2026-09-14T11:30:00Z",
+                contact_id = contact.Id,
+                category = "unsubscribe",
+                confidence = 0.95,
+                reaction = "none",
+                nature = "opt_out",
+            },
+            Ct);
+        var refused = await api.PostErrorAsync(
+            Operations.ReplyRecord,
+            new { campaign_id = campaign.Id, plugin_id = "mailbox", thread_id = "t", message_id = "m", message_at = "2026-09-14T11:30:00Z", category = "x", confidence = 0.5, reaction = "none", nature = "spam" },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal("opt_out", (string?)entry.New!["nature"]);
+        Assert.Equal("invalid_request", refused.Code);
+    }
+
     /// <summary>
     /// The exchanges a consumer renders: a verdict recorded, one that carries a person's answer to the question about it, a
     /// goal the campaign does not carry, and a confidence out of range.
@@ -567,6 +645,7 @@ public class ReplyRecordTests
             confidence = 0.9,
             reaction = "draft",
             goal_id = "demo",
+            nature = "person",
             actor = new { type = "role", id = "responder" },
             reason = "interested by the table; draft toward the demo",
         };
@@ -574,6 +653,8 @@ public class ReplyRecordTests
         var recorded = await api.RecordAsync<JournalEntryDto>(Operations.ReplyRecord, "recorded", verdict, Ct);
         var unknown = await api.RecordErrorAsync(Operations.ReplyRecord, "unknown-goal", verdict with { goal_id = "purchase" }, HttpStatusCode.BadRequest, Ct);
         var range = await api.RecordErrorAsync(Operations.ReplyRecord, "confidence-out-of-range", verdict with { confidence = 1.5 }, HttpStatusCode.BadRequest, Ct);
+        var optOut = await api.RecordErrorAsync(
+            Operations.ReplyRecord, "opt-out-without-contact", verdict with { contact_id = (string)null!, category = "unsubscribe", reaction = "none", goal_id = (string)null!, nature = "opt_out", reason = "asked not to be written to again" }, HttpStatusCode.BadRequest, Ct);
         var question = await AnsweredQuestionAsync(
             api,
             campaign.Id,
@@ -602,6 +683,8 @@ public class ReplyRecordTests
         Assert.Equal(("reply_classified", "demo"), (recorded.Kind, (string?)recorded.New!["goal_kind"]));
         Assert.Equal(["goal_id/unknown"], unknown.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
         Assert.Equal(["confidence/invalid"], range.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
+        Assert.Equal(["contact_id/required"], optOut.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
+        Assert.Equal("person", (string?)recorded.New!["nature"]);
         Assert.Equal((question.Id, "human", "ada"), ((string?)answered.New!["decision_id"], (string?)answered.New!["answered_by"]!["type"], (string?)answered.New!["answered_by"]!["id"]));
     }
 

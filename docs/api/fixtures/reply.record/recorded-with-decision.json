@@ -48,7 +48,8 @@
       "answered_by": {
         "type": "human",
         "id": "ada"
-      }
+      },
+      "nature": null
     },
     "reason": "the person chose interested",
     "contact_id": "cnt_1",
