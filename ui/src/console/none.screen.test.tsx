@@ -23,7 +23,7 @@ const needs = 'This needs Jason Desktop.';
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 
-async function renderNone(): Promise<void> {
+async function renderNone(): Promise<FakeApi> {
     const none = noDesktop();
     setPlace('none', none);
     await loadMode(none);
@@ -36,6 +36,8 @@ async function renderNone(): Promise<void> {
         .answer('route.list', 'route.list/empty')
         .answer('ui.tokens', 'ui.tokens/two')
         .answer('system.info', 'system.info/with-ui')
+        .answer('preference.list', 'preference.list/set')
+        .answerAnyRequest('preference.set', 'preference.set/sender')
         .answerAnyRequest('campaign.activity', 'campaign.activity/all-30-days')
         .answerAnyRequest('reply.count', 'reply.count/every-campaign');
     watch(fake);
@@ -51,6 +53,7 @@ async function renderNone(): Promise<void> {
     await session.bootstrap();
     render(<Console api={fake} desktop={none} stream={stubStream().stream} bootstrapped />);
     await waitFor(() => document.querySelector('.side'));
+    return fake;
 }
 
 beforeEach(() => {
@@ -180,5 +183,20 @@ describe('The console in a tab with no desktop', () => {
             if (/^Connect/.test(words(item))) continue;
             expect(item.disabled, words(item)).toBe(false);
         }
+    });
+
+    it('draws the name and tone form and saves it, since it needs only the Runtime API', async () => {
+        const fake = await renderNone();
+        fireEvent.click(side().getByRole('button', { name: 'Settings' }));
+        const who = await waitFor(() => screen.getByRole('form', { name: 'Who writes' }));
+        await waitFor(() =>
+            expect((within(who).getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Marta Lind'),
+        );
+        fireEvent.change(within(who).getByRole('textbox', { name: 'Company' }), {
+            target: { value: 'Example Analytics Ltd' },
+        });
+        fireEvent.click(within(who).getByRole('button', { name: 'Save' }));
+        await waitFor(() => within(who).getByText('Saved.'));
+        expect(fake.calls.filter((each) => each.operation === 'preference.set')).toHaveLength(1);
     });
 });
