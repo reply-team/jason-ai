@@ -279,6 +279,36 @@ public partial class PageClaimsTests
         Assert.Contains(said, text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <c>session open --setup</c> is the verb's third form, and every place that states what the verb does says it: the
+    /// declared exception where it is written, the page that is its contract, the preference that names its host, the
+    /// hosts table's page and the decision. A page that left it out would tell its reader there is no way in from the
+    /// command line to change Jason itself.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md", "and with `--setup` it opens the same terminal at the installation's role skills folder, its plugins folder beside it where the host takes one, with the setup brief as its first input, asking the runtime only `preference.list` and only when no `--host` is given")]
+    [InlineData("dotnet/src/Jason.Cli/CliApp.cs", "With --setup it opens the same terminal at the role skills folder <c>SetupInfo</c> names, with the plugins folder beside it where the host takes a second folder, and the setup brief as its first input")]
+    [InlineData("docs/ui.md", "With `--setup`, the same verb opens your own agent host on Jason itself: at its role skills folder, with the setup brief as its first input.")]
+    [InlineData("docs/contracts/preferences/agent.interactive_host.md", "or, with `--setup`, at the installation's role skills folder with the setup brief as its first input")]
+    [InlineData("docs/execution-profiles.md", "or, opened with `--setup` at the role skills folder with the setup brief as its first message")]
+    [InlineData("docs/architecture.md", "or, with `--setup`, at the installation's role skills folder with the setup brief, which names the skill customising-jason, as its first input")]
+    public void Every_page_that_says_what_session_open_does_says_its_setup_form(string page, string said)
+    {
+        var text = Flat(Regex.Replace(Page(page.Split('/')), @"(?m)^\s*(///|\*)\s?", ""));
+
+        Assert.Contains(said, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The help says the setup form in the words the release agreed, and what it is not taken with.</summary>
+    [Fact]
+    public void The_session_help_says_its_setup_form()
+    {
+        Assert.Contains(
+            "With --setup: at this installation's role skills folder, with its plugins folder beside it where the host can take one, running the host --host names, else the one the preference names, with the setup brief as its first message. Opening it changes nothing. Not with an item, --campaign, --project, --here, --shell or --resume.",
+            Jason.Cli.Session.SessionCommands.OpenDescription,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The help names both forms and the flags of the folder's, and that it carries no first input.</summary>
     [Fact]
     public void The_session_help_says_its_folder_form()
