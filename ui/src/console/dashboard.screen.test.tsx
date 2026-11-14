@@ -840,6 +840,48 @@ describe('the cards', () => {
         );
     });
 
+    it('reads nothing on the journal while out of sight, and reads its counts again once shown if something was written', async () => {
+        const { fake, journal } = renderConsole();
+        await open();
+        const reads = () => fake.calls.filter((each) => each.operation === 'campaign.activity').length;
+        const waits = () => fake.calls.filter((each) => each.operation === 'approval.list').length;
+        await waitFor(() => expect(reads()).toBeGreaterThan(0));
+        await settled();
+        const shownReads = reads();
+        const needsRow = () =>
+            within(within(side()).getByRole('navigation', { name: 'Menu' })).getByRole('button', {
+                name: /^Needs you/,
+            });
+        fireEvent.click(needsRow());
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Needs you', level: 1 })).toBeTruthy());
+        const waitsBefore = waits();
+        flushNow(() => {
+            journal.open();
+            journal.send(
+                journalLine({
+                    id: 'jrn_600',
+                    ts: '2026-11-11T10:00:00.000Z',
+                    kind: 'campaign_started',
+                    campaign_id: 'cmp_1',
+                }),
+            );
+        });
+        // The journal's burst was read where it is in sight, and the Dashboard out of sight read nothing.
+        await waitFor(() => expect(waits()).toBeGreaterThan(waitsBefore));
+        await settled();
+        expect(reads()).toBe(shownReads);
+        fireEvent.click(dashboardRow());
+        await waitFor(() => expect(reads()).toBeGreaterThan(shownReads));
+        // Shown again with nothing written meanwhile, it reads nothing more.
+        await settled();
+        const again = reads();
+        fireEvent.click(needsRow());
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Needs you', level: 1 })).toBeTruthy());
+        fireEvent.click(dashboardRow());
+        await settled();
+        expect(reads()).toBe(again);
+    });
+
     it('draws the latest lines of the Feed, six at most, the one naming an agent opening it', async () => {
         const { journal } = renderConsole();
         await open();

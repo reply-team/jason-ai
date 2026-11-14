@@ -107,8 +107,6 @@ test('in the console Needs you, Agents and Activity keep a measure in the wide a
     await page.waitForFunction(
         () => typeof (window as unknown as { menuCommand?: unknown }).menuCommand === 'function',
     );
-    const area = await page.locator('.jc-console .area').boundingBox();
-    expect(area).not.toBeNull();
     for (const [command, title] of [
         ['navigate.attention', 'Needs you'],
         ['navigate.campaigns', 'Agents'],
@@ -120,13 +118,23 @@ test('in the console Needs you, Agents and Activity keep a measure in the wide a
         );
         const body = page.locator('.jc-console .area > .pane:not([hidden]) .panel-body');
         await expect(body.getByRole('heading', { name: title, level: 1 }), command).toBeVisible();
-        const drawn = await body.boundingBox();
-        expect(drawn, command).not.toBeNull();
-        // Narrower than the area, by a measure of its own, with as much room on its left as on its right.
-        expect(drawn!.width, `${command}: its measure`).toBeLessThanOrEqual(880);
-        const left = drawn!.x - area!.x;
-        const right = area!.x + area!.width - (drawn!.x + drawn!.width);
-        expect(Math.abs(left - right), `${command}: centred`).toBeLessThanOrEqual(2);
+        // Measured against the panel it is drawn in, inside its scroll bar, so a panel long enough to scroll is
+        // measured as a short one is.
+        const room = await body.evaluate((element) => {
+            const panel = element.closest<HTMLElement>('.painted')!;
+            const drawn = element.getBoundingClientRect();
+            const inner = panel.getBoundingClientRect().left + panel.clientLeft;
+            return {
+                width: drawn.width,
+                panelWidth: panel.clientWidth,
+                left: drawn.left - inner,
+                right: inner + panel.clientWidth - drawn.right,
+            };
+        });
+        // Narrower than the panel, by a measure of its own, with as much room on its left as on its right.
+        expect(room.width, `${command}: its measure`).toBeLessThanOrEqual(880);
+        expect(room.width, `${command}: narrower than the panel`).toBeLessThan(room.panelWidth);
+        expect(Math.abs(room.left - room.right), `${command}: centred`).toBeLessThanOrEqual(2);
     }
 });
 

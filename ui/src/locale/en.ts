@@ -132,7 +132,7 @@ export const en = {
     'palette.results': 'Results',
     'palette.hint.mac': '⌘K',
     'palette.hint.other': 'Ctrl K',
-    'palette.kind.page': 'Page',
+    'palette.kind.page': 'Menu',
     'palette.kind.settings': 'Settings',
     'palette.kind.action': 'Action',
     'palette.kind.agent': 'Agent',

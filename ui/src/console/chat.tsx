@@ -61,6 +61,7 @@ import { can } from '../platform/places';
 import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
 import {
     changeChat,
+    chatOf,
     chats,
     clock,
     conversations,
@@ -943,8 +944,10 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const renameButton = useRef<HTMLButtonElement>(null);
     const wasRemoving = useRef(false);
     const wasRenaming = useRef(false);
-    const removing = chats.value[chatId]?.removing ?? false;
-    const renaming = chats.value[chatId]?.renaming !== null && chats.value[chatId]?.renaming !== undefined;
+    // The panel reads its own chat alone, so a word typed in another chat does not draw this one again.
+    const record = chatOf(chatId).value;
+    const removing = record?.removing ?? false;
+    const renaming = record?.renaming !== null && record?.renaming !== undefined;
     // The rename box takes focus with its name selected, so typing replaces it; once it closes, by Save, Cancel or
     // Escape, focus goes back to Rename.
     useEffect(() => {
@@ -965,7 +968,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
         else if (wasRemoving.current) removeButton.current?.focus();
         wasRemoving.current = removing;
     }, [removing]);
-    const chat = chats.value[chatId];
+    const chat = record;
     // Reply is offered unless the campaign's enrolment is routed to another plugin: read when the chat is of a draft campaign
     // while Reply is not connected, and read again if the campaign or what is connected changes.
     const draftCampaignId =
@@ -1188,7 +1191,6 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                 {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
                 {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                 <textarea
-                    id="box"
                     rows={2}
                     disabled={chat.removing || tabLocked}
                     placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}

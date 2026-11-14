@@ -55,7 +55,7 @@ const thread = () => shownPane()!.querySelector<HTMLElement>('.thread')!;
 async function send(desktop: StubDesktop, text: string, panel?: HTMLElement): Promise<string> {
     const before = calls(desktop, 'chat.send').length;
     const scope = panel ? within(panel) : screen;
-    await waitFor(() => scope.getByRole('button', { name: 'Send' }));
+    await waitFor(() => scope.getByRole('textbox', { name: 'Your message' }));
     fireEvent.change(scope.getByRole('textbox', { name: 'Your message' }), { target: { value: text } });
     fireEvent.click(scope.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(before + 1));
@@ -669,7 +669,7 @@ describe('the desktop’s conversations', () => {
 
     it('renames a conversation from its header: the sidebar follows, and nothing is asked before it is kept', async () => {
         const { desktop } = renderConsole();
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', true);
         const id = await send(desktop, 'Help me start a new campaign.');
         flush(() => desktop.emit(id, { kind: 'done', error: null }));

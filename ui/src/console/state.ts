@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals-react';
+import { computed, signal, type ReadonlySignal } from '@preact/signals-react';
 import type { Api } from '../api/client';
 import { ApiError } from '../api/client';
 import type { JournalEntry } from '../api/types';
@@ -48,6 +48,21 @@ export function keepLine(line: JournalEntry): void {
 export function changeChat(id: string, change: (chat: Chat) => Chat): void {
     const chat = chats.value[id];
     if (chat) chats.value = { ...chats.value, [id]: change(chat) };
+}
+
+const chatSignals = new Map<string, ReadonlySignal<Chat | undefined>>();
+
+/**
+ * One chat's record as a signal of its own: it tells only when that chat changed, so what draws one chat is not drawn
+ * again for a word typed in another.
+ */
+export function chatOf(id: string): ReadonlySignal<Chat | undefined> {
+    let held = chatSignals.get(id);
+    if (held === undefined) {
+        held = computed(() => chats.value[id]);
+        chatSignals.set(id, held);
+    }
+    return held;
 }
 
 export const messageOf = (error: unknown): string =>

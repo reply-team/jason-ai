@@ -68,8 +68,9 @@ campaign and nothing else: the commands, the API and the ids keep `campaign`, an
 runs commands is called the AI.
 
 The desktop wears the console: a sidebar and one area beside it that shows one thing at a time, chosen from the sidebar,
-its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen, and what you leave stays as
-you left it, a chat with its typed words and what arrived meanwhile. The window opens on **Start**, headed
+its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
+choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
+The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
 without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign

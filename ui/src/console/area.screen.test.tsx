@@ -1,4 +1,5 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
@@ -12,7 +13,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
 import { resetRecent } from './recent';
-import { chats, conversations } from './state';
+import { chats, conversations, here } from './state';
 
 // The console's one area beside the sidebar: no tab strip and no right column, exactly one thing shown at a time, chosen
 // from the menu, Recent, the palette, a desktop command or a link, and marked in the sidebar. Read against the recorded
@@ -21,6 +22,7 @@ import { chats, conversations } from './state';
 async function renderConsole(
     seed: (desktop: StubDesktop) => void = () => undefined,
     waits: 'pending' | 'empty' = 'pending',
+    strict = false,
 ): Promise<StubDesktop> {
     const desktop = stubDesktop();
     seed(desktop);
@@ -42,7 +44,8 @@ async function renderConsole(
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     fake.answer('system.info', 'system.info/with-ui');
-    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
+    const shell = <Console api={fake} desktop={desktop} stream={stubStream().stream} />;
+    render(strict ? <StrictMode>{shell}</StrictMode> : shell);
     await waitFor(() => expect(attention.loaded.value).toBe(true));
     return desktop;
 }
@@ -62,6 +65,24 @@ const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name
 
 const seedSpring = (desktop: StubDesktop) => {
     desktop.keep({ id: 'conv_s', campaignId: 'cmp_1', title: 'Q4 push', updatedAt: new Date().toISOString() });
+};
+
+const fourTitles = ['Q4 push', 'North list', 'Renewals', 'Old leads'] as const;
+const seedFour = (desktop: StubDesktop) => {
+    fourTitles.forEach((title, at) =>
+        desktop.keep({
+            id: `conv_${at + 1}`,
+            // The first is a campaign's chat, so its first turn does not rename it.
+            campaignId: at === 0 ? 'cmp_1' : null,
+            title,
+            updatedAt: new Date(Date.now() - at * 60_000).toISOString(),
+        }),
+    );
+};
+/** The ids the document carries more than once. */
+const repeatedIds = () => {
+    const ids = Array.from(document.querySelectorAll('[id]'), (each) => each.id);
+    return ids.filter((each, at) => ids.indexOf(each) !== at);
 };
 
 beforeEach(() => {
@@ -141,6 +162,50 @@ describe('the one area', () => {
         expect(within(shownPane()!).getByText('Arrived while you were away')).toBeTruthy();
         expect(screen.getByRole('status', { name: 'Waiting message' }).textContent).toContain('And then?');
         expect(sends(desktop)).toHaveLength(1);
+    });
+
+    it('keeps drawn only the chat shown and the two before it, and a chat chosen again after that still has all it had', async () => {
+        const desktop = await renderConsole(seedFour);
+        fireEvent.click(await waitFor(() => recentRow('Q4 push')));
+        await waitFor(() => expect(shown()).toBe('chat:conv_1'));
+        type('Go');
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        type('And then?');
+        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
+        await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
+        type('Half a thought');
+        for (const [at, title] of fourTitles.slice(1).entries()) {
+            fireEvent.click(recentRow(title));
+            await waitFor(() => expect(shown()).toBe(`chat:conv_${at + 2}`));
+            flush(() => desktop.emit('conv_1', { kind: 'text', text: `Arrived while ${title} was shown` }));
+        }
+        // Four chats were shown: the first is no longer drawn, the last three are, one of them in sight.
+        expect(document.querySelector('[data-pane="chat:conv_1"]')).toBeNull();
+        expect(document.querySelectorAll('.area > .pane[data-pane^="chat:"]')).toHaveLength(3);
+        expect(repeatedIds()).toEqual([]);
+        fireEvent.click(recentRow('Q4 push'));
+        await waitFor(() => expect(shown()).toBe('chat:conv_1'));
+        expect(box().value).toBe('Half a thought');
+        for (const title of fourTitles.slice(1))
+            expect(within(shownPane()!).getByText(`Arrived while ${title} was shown`)).toBeTruthy();
+        expect(screen.getByRole('status', { name: 'Waiting message' }).textContent).toContain('And then?');
+        expect(sends(desktop)).toHaveLength(1);
+        // Chosen again, it is drawn again, and the one shown longest ago goes in its place.
+        expect(document.querySelector('[data-pane="chat:conv_2"]')).toBeNull();
+        expect(document.querySelectorAll('.area > .pane[data-pane^="chat:"]')).toHaveLength(3);
+        expect(repeatedIds()).toEqual([]);
+    });
+
+    it('stays bound when React mounts it twice, as StrictMode does', async () => {
+        await renderConsole(() => undefined, 'pending', true);
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        expect(() => here()).not.toThrow();
+        expect(shown()).toBe('start');
+        expect(document.querySelectorAll('.area > .pane')).toHaveLength(1);
+        fireEvent.click(menu().getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(shown()).toBe('needs'));
+        expect(marked()[0]).toMatch(/^Needs you/);
     });
 
     it('shows Start when the chat shown is taken away', async () => {

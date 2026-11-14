@@ -32,8 +32,10 @@ The page mounts the console, in one of three places that differ by what each can
 thing at a time, chosen from the sidebar's menu, its Recent or the palette: Start, one chat, what needs the person
 (approvals and questions), the agents, the journal's activity, Connect, which shows the AI hosts found on the computer,
 the model keys, the Reply connection and the notification channels, or one of the screens under `src/screens/`. Nothing
-in it is closed, only chosen: what was shown before stays as it was left, out of sight, so a chat chosen again has its
-typed words, what arrived meanwhile and the message that waits. The console reaches the desktop only through the seam typed in
+in it is closed, only chosen. A chat chosen again has the words typed and not sent, what arrived meanwhile and the
+message that waits: they are held in the chat's record (`chats` in `src/console/state.ts`), not by keeping it drawn, and
+only the chat shown and the two shown before it stay drawn out of sight.
+The console reaches the desktop only through the seam typed in
 `src/platform/desktop.d.ts`, and the runtime only through the API client and the journal stream
 (`src/platform/journal-stream.ts`, a WebSocket at `GET /v1/journal.stream` under the page's own pairing).
 

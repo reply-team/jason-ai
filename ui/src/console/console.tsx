@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
@@ -33,6 +33,7 @@ import {
     activePanel,
     bind,
     changeChat,
+    chatOf,
     chats,
     clock,
     conversationsFailure,
@@ -75,17 +76,22 @@ function PagePanel() {
     );
 }
 
-function DashboardPanel() {
+function DashboardPanel({ inSight }: { inSight: boolean }) {
     useEffect(() => {
         dashboard.watching(true);
         return () => dashboard.watching(false);
     }, []);
+    // Out of sight it reads nothing on the journal's word; shown again, it reads what it missed.
+    useEffect(() => {
+        dashboard.sighted(inSight);
+        return () => dashboard.sighted(false);
+    }, [inSight]);
     return <Painted className="painted" view={dashboard.dashboardView} />;
 }
 
-const panels: Readonly<Record<PanelName, () => ReactNode>> = {
+const panels: Readonly<Record<PanelName, (inSight: boolean) => ReactNode>> = {
     start: () => <StartPanel />,
-    dashboard: () => <DashboardPanel />,
+    dashboard: (inSight) => <DashboardPanel inSight={inSight} />,
     needs: () => <Painted className="painted" view={needs.needsView} />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
@@ -100,16 +106,28 @@ const measured = new Set<string>(['needs', 'campaigns', 'activity']);
 
 /**
  * What the area holds, in the order each was first shown: a panel's name or `chat:<id>`. Only the one shown is in sight;
- * the others stay as they were left, so a chat or a page chosen again has what it had (what was typed, what arrived
- * meanwhile, a message that waits, a dialog open, a page's own table), as a tab in the background kept it.
+ * the others are drawn out of sight. The panels are a fixed few; of the chats only the ones shown last are kept drawn.
+ * A chat's record holds what it had (what was typed and not sent, what arrived meanwhile, a message that waits), so a
+ * chat drawn afresh when it is chosen again has all of it.
  */
 const inArea = signal<readonly string[]>([]);
+
+/** How many chats stay drawn: the one shown and the two shown before it. */
+const chatsDrawn = 3;
+
+/** The chats' panes, the one shown last first. */
+let lastChats: string[] = [];
 
 const chatPane = (id: string) => `chat:${id}`;
 
 /** Shows one thing in the area, and marks it for the sidebar. */
 function reveal(pane: string): void {
-    if (!inArea.value.includes(pane)) inArea.value = [...inArea.value, pane];
+    let held = inArea.value.includes(pane) ? inArea.value : [...inArea.value, pane];
+    if (pane.startsWith('chat:')) {
+        lastChats = [pane, ...lastChats.filter((each) => each !== pane)].slice(0, chatsDrawn);
+        held = held.filter((each) => !each.startsWith('chat:') || lastChats.includes(each));
+    }
+    if (held.length !== inArea.value.length || held.some((each, at) => each !== inArea.value[at])) inArea.value = held;
     activePanel.value = pane;
     currentChat.value = pane.startsWith('chat:') ? pane.slice('chat:'.length) : null;
     if (currentChat.value !== null && currentChat.value === feedId.value) feedUnseen.value = false;
@@ -118,20 +136,22 @@ function reveal(pane: string): void {
 /** One thing the area holds: in sight while it is the one shown, else hidden as it was left. */
 function Pane({ pane }: { pane: string }) {
     const chatId = pane.startsWith('chat:') ? pane.slice('chat:'.length) : null;
-    const kept = chatId === null || chats.value[chatId] !== undefined;
+    // Its own chat alone is read here, so a word typed in the chat shown draws no other.
+    const kept = chatId === null || chatOf(chatId).value !== undefined;
+    const inSight = pane === activePanel.value;
     return (
-        <section
-            className={measured.has(pane) ? 'pane measure' : 'pane'}
-            data-pane={pane}
-            hidden={pane !== activePanel.value}
-        >
-            {chatId === null ? <PanelBody name={pane as PanelName} /> : kept && <ChatPanel chatId={chatId} />}
+        <section className={measured.has(pane) ? 'pane measure' : 'pane'} data-pane={pane} hidden={!inSight}>
+            {chatId === null ? (
+                <PanelBody name={pane as PanelName} inSight={inSight} />
+            ) : (
+                kept && <ChatPanel chatId={chatId} />
+            )}
         </section>
     );
 }
 
-function PanelBody({ name }: { name: PanelName }) {
-    return panels[name]();
+function PanelBody({ name, inSight }: { name: PanelName; inSight: boolean }) {
+    return panels[name](inSight);
 }
 
 /** The one area: every thing it holds is drawn, and all but the one shown are hidden. */
@@ -188,6 +208,7 @@ function makeDock(): Dock {
         },
         dropChat: (id) => {
             inArea.value = inArea.value.filter((each) => each !== chatPane(id));
+            lastChats = lastChats.filter((each) => each !== chatPane(id));
             // The chat shown was taken away: the area shows what the window opens on.
             if (activePanel.value === chatPane(id)) reveal('start');
         },
@@ -201,12 +222,16 @@ function makeDock(): Dock {
 function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stream: JournalStream | undefined }) {
     const root = useRef<HTMLDivElement>(null);
     const dock = useMemo(() => makeDock(), []);
-    // What the area draws asks the console it is in, so the console is bound before the area is first drawn, and the
-    // window opens on Start, holding nothing else.
-    const unbind = useMemo(() => {
+    // What the shell draws asks the console it is in, so nothing in it is drawn until the console is bound. It is bound
+    // as the shell mounts, before the page is painted, and again whenever React mounts the shell once more (StrictMode
+    // does, at once); the window opens on Start, holding nothing else.
+    const [bound, setBound] = useState(false);
+    useLayoutEffect(() => {
         const unbound = bind({ api, desktop, dock });
         inArea.value = [];
+        lastChats = [];
         reveal('start');
+        setBound(true);
         return unbound;
     }, [api, desktop, dock]);
     useEffect(() => {
@@ -322,26 +347,28 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             connect.resetDialogs();
         };
     }, [api, desktop, dock, stream]);
-    // Declared after the effect above, so its cleanup runs first and the console is unbound last.
-    useEffect(() => unbind, [unbind]);
 
     return (
         <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
-            <ModeStrip
-                openIn={
-                    can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
-                        <OpenIn desktop={desktop} />
-                    ) : undefined
-                }
-            />
-            <div className="shell">
-                <aside className="side">
-                    <Painted className="side-body" view={sideView} />
-                    <SideFailure />
-                </aside>
-                <Area />
-            </div>
-            <Palette system={desktop.platform} />
+            {bound && (
+                <>
+                    <ModeStrip
+                        openIn={
+                            can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
+                                <OpenIn desktop={desktop} />
+                            ) : undefined
+                        }
+                    />
+                    <div className="shell">
+                        <aside className="side">
+                            <Painted className="side-body" view={sideView} />
+                            <SideFailure />
+                        </aside>
+                        <Area />
+                    </div>
+                    <Palette system={desktop.platform} />
+                </>
+            )}
         </div>
     );
 }
