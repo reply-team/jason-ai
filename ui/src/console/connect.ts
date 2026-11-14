@@ -812,8 +812,28 @@ const secret = (key: string, label: string): Html => field(key, label, 'password
 const withCode = (sentence: string): Html[] =>
     sentence.split('`').map((part, at) => (at % 2 ? html`<code>${part}</code>` : html`${part}`));
 
+/** How many of a host's own MCP servers its line names before it counts the rest. */
+const ownServersShown = 5;
+
+/**
+ * The one line under Claude Code or Codex naming the person's own MCP servers, as the desktop read them from that
+ * program's own settings: the first five in the file's order, then how many more. Nothing for a host with none, a host
+ * not found, or a file the desktop could not read. The names are the person's own text, drawn as text and nothing else.
+ */
+export function ownServersLine(host: DesktopHost): string | null {
+    const names = Array.isArray(host.ownServers) ? host.ownServers : [];
+    if (host.kind !== 'program' || !host.found || names.length === 0) return null;
+    const first = names.slice(0, ownServersShown).join(', ');
+    const more = names.length - ownServersShown;
+    return t('connect.ownServers', {
+        names: more > 0 ? t('connect.ownServers.more', { names: first, count: String(more) }) : first,
+        host: host.label,
+    });
+}
+
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
+    const own = ownServersLine(host);
     return html`<div class="setrow">
         <div class="grow">
             <b>${host.label}</b>
@@ -827,6 +847,7 @@ function program(host: DesktopHost, busy: Html | null): Html {
             }
             ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
             ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
+            ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
         </div>
         ${
             !host.found && host.install
