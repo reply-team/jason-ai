@@ -155,15 +155,15 @@ public class DemoInstallationEndToEndTests
         Assert.True(reload.Status == HttpStatusCode.OK, $"plugin.reload answered {(int)reload.Status}: {reload.Body}");
 
         // 3. The account's next read, a cadence later, returns the person's written reply. It is stored, said to that
-        //    campaign once as a thread the other side moved, found by the person the send pinned, and the person's thread
-        //    shows it.
+        //    campaign once as a thread the other side moved, found by the person the send pinned and marked as the
+        //    campaign's own, the one that wrote to them, and the person's thread shows it.
         host.Clock.Advance(TimeSpan.FromSeconds(EventsCadenceSeconds + 1));
         await SettleAsync(host, async () => (await SeenAsync(host, campaign)).Count > 0);
 
         var seen = Assert.Single(await SeenAsync(host, campaign));
         Assert.Equal(
-            (Demo, writtenThread, "email", "contact_pin", contact),
-            ((string)seen["plugin"]!, (string)seen["thread"]!, (string)seen["channel"]!, (string)seen["attributed_by"]!, (string?)seen["contact_id"]));
+            (Demo, writtenThread, "email", "contact_pin", contact, (bool?)true),
+            ((string)seen["plugin"]!, (string)seen["thread"]!, (string)seen["channel"]!, (string)seen["attributed_by"]!, (string?)seen["contact_id"], (bool?)seen["sole_sender"]));
         var reply = await StoredEventAsync(host, writtenThread);
         Assert.Equal((string)seen["event_id"]!, reply.PublicId);
         Assert.Equal(storyStart.AddSeconds(Offset(written)).UtcDateTime, reply.OccurredAt);
