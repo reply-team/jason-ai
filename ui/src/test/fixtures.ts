@@ -327,6 +327,7 @@ import workitemCountZero from '../../../docs/api/fixtures/workitem.count/zero.js
 import workitemGetAwaiting from '../../../docs/api/fixtures/workitem.get/awaiting.json';
 import workitemGetExpired from '../../../docs/api/fixtures/workitem.get/expired.json';
 import workitemGetFailed from '../../../docs/api/fixtures/workitem.get/failed.json';
+import workitemGetParkedEditedSend from '../../../docs/api/fixtures/workitem.get/parked-edited-send.json';
 import workitemGetParkedSend from '../../../docs/api/fixtures/workitem.get/parked-send.json';
 import workitemGetOpen from '../../../docs/api/fixtures/workitem.get/open.json';
 import workitemGetSucceeded from '../../../docs/api/fixtures/workitem.get/succeeded.json';
@@ -1029,6 +1030,10 @@ export const fixtures = {
     'workitem.get/awaiting': workitemGetAwaiting satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/expired': workitemGetExpired satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/failed': workitemGetFailed satisfies Exchange<{ work_item_id: string }, WorkItem>,
+    'workitem.get/parked-edited-send': workitemGetParkedEditedSend satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
     'workitem.get/parked-send': workitemGetParkedSend satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/open': workitemGetOpen satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/succeeded': workitemGetSucceeded satisfies Exchange<{ work_item_id: string }, WorkItem>,

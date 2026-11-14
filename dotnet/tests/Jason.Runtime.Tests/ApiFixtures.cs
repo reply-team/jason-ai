@@ -416,6 +416,7 @@ public static class ApiFixtures
         "workitem.get/expired",
         "workitem.get/failed",
         "workitem.get/open",
+        "workitem.get/parked-edited-send",
         "workitem.get/parked-send",
         "workitem.get/researcher-finding",
         "workitem.get/researcher-finding-second",

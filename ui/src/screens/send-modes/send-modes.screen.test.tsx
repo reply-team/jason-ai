@@ -430,11 +430,18 @@ describe('why the send mode held a send, or let one go', () => {
             "This agent has reached today's limit of automatic messages, so this one waits for you to approve it.",
         ],
     ] as const)('%s says why it waits', async (name, sentence) => {
-        const api = held();
+        // The edited send's item holds the edited text; every other park's item holds the text first written.
+        const api =
+            name === 'approval.get/park-edited-after-review'
+                ? marta().answer('workitem.get', 'workitem.get/parked-edited-send')
+                : held();
         mount(api, structuredClone(fixtures[name].response) as unknown as Approval);
         expect(why()).toBe(sentence);
         await waitFor(() => expect(operations(api)).toContain('workitem.get'));
         await act(async () => {});
+        // The item holds the text the approval asks about, so the card is current and can be approved.
+        expect(screen.queryByText(/changed after this approval was asked/)).toBeNull();
+        expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(false);
         // A send that waits is not one that went.
         expect(screen.queryByRole('heading', { name: 'Sent without asking you' })).toBeNull();
     });

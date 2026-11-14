@@ -103,24 +103,24 @@ brief an agent on one item, [Copy prompt](#copy-prompt) and [Open an AI session]
 approval answer: for people who have not replied yet and for people who have, whether every message waits for you or
 goes automatically. Nothing is chosen for you; **Remember this** sets `send_mode.cold` or `send_mode.warm` as you
 (`jason preference set`), and the question is gone once both are set. Approve and Reject never wait on it. Once a kind
-is remembered as going automatically, the mode is on, and the card recommends, with **Open Settings** beside it and
-nothing to answer, saying who writes and how under "Your name and tone", which makes those messages err less. A send
-that was doubted shows, above the message, who doubted it and why, with the sentence they wrote drawn as text
-(`preview.doubts`). While a mode in force goes automatically, the installation's own or that of the card's agent
-(`send_modes_in_force` of `campaign.get`), and the name or the tone is unset, a quiet line points to Settings, "Your
-name and tone"; while every mode waits for you it never shows, and it goes once both are set. **Hide for 7 days** keeps
-it away for a week in this browser's own storage, nothing sent to the runtime. **How messages go** in Settings sets the
-two for every agent, each kind on its own press as you (`jason preference set`), and **Forget my answer** gives one back
-(`jason preference unset`): a kind nobody has answered waits for you on every message, and the cards ask again. An
-agent's **Settings** tab says what each kind goes under for that agent and from where (`send_modes_in_force`), and sets
-the agent's own or gives it back to the choice for every agent (`jason campaign set-send-mode`); System says the
-installation's (`send_modes` of `system.info`). A send the mode held says why on its card, under "Why it's here", in one
-sentence for each of the claim's reasons: written in Jason's chat, doubted, a reply not judged yet or judged without its
-kind, an answer that names no judged reply, a reply that was not a person's, a reply marked for you, a text edited after
-its review, a text no review passed, and the campaign's limit of automatic sends for the day. A send the mode let go
-(`automatic_mode`) says so on its card, **Sent without asking you**, with the kind's mode and where it comes from, that
-a review passed its text first, and where to change it: Settings, or the agent's own Settings tab where the agent sets
-its own.
+is remembered as going automatically, the mode is on, and the card says "Jason now sends messages in your name without
+you reading each one first. Saying who writes and how, in Settings under "Your name and tone", helps them sound like
+you.", with **Open Settings** beside it and nothing to answer. A send that was doubted shows, above the message, who
+doubted it and why, with the sentence they wrote drawn as text (`preview.doubts`). While a mode in force goes
+automatically, the installation's own or that of the card's agent (`send_modes_in_force` of `campaign.get`), and the
+name or the tone is unset, a quiet line points to Settings, "Your name and tone"; while every mode waits for you it
+never shows, and it goes once both are set. **Hide for 7 days** keeps it away for a week in this browser's own storage,
+nothing sent to the runtime. **How messages go** in Settings sets the two for every agent, each kind on its own press as
+you (`jason preference set`), and **Forget my answer** gives one back (`jason preference unset`): a kind nobody has
+answered waits for you on every message, and the cards ask again. An agent's **Settings** tab says what each kind goes
+under for that agent and from where (`send_modes_in_force`), and sets the agent's own or gives it back to the choice for
+every agent (`jason campaign set-send-mode`); System says the installation's (`send_modes` of `system.info`). A send the
+mode held says why on its card, under "Why it's here", in one sentence for each of the claim's reasons: written in
+Jason's chat, doubted, a reply not judged yet or judged without its kind, an answer that names no judged reply, a reply
+that was not a person's, a reply marked for you, a text edited after its review, a text no review passed, and the
+campaign's limit of automatic sends for the day. A send the mode let go (`automatic_mode`) says so on its card, **Sent
+without asking you**, with the kind's mode and where it comes from, that a review passed its text first, and where to
+change it: Settings, or the agent's own Settings tab where the agent sets its own.
 
 ## Agents
 

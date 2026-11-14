@@ -28,40 +28,15 @@
     },
     "context": {
       "input": {
-        "args": {
-          "channel": "email",
-          "sender": {
-            "external_id": "s_12",
-            "address": "owner@example.test"
-          },
-          "message": {
-            "format": "email",
-            "subject": "Notes from the meetup",
-            "body": "Hi Ines, thanks for the talk at the meetup."
-          }
+        "channel": "email",
+        "sender": {
+          "external_id": "s_12",
+          "address": "owner@example.test"
         },
-        "contacts": [
-          {
-            "id": "cnt_1",
-            "first_name": "Ines",
-            "last_name": "Duarte",
-            "channels": [
-              {
-                "channel": "email",
-                "value": "ines@example.test",
-                "primary": true
-              }
-            ],
-            "external_ids": {}
-          }
-        ],
-        "campaign": {
-          "id": "cmp_1",
-          "name": "Spring launch",
-          "status": "active",
-          "external_ids": {
-            "campaign": "c_7714"
-          }
+        "message": {
+          "format": "email",
+          "subject": "Notes from the meetup",
+          "body": "Hi Ines, thanks for the talk at the meetup."
         }
       }
     },

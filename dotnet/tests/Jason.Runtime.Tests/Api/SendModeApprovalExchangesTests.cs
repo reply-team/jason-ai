@@ -7,6 +7,7 @@ using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Approvals;
 using Jason.Runtime.Tests.Plugins;
+using Jason.Runtime.WorkItems;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Api;
@@ -75,6 +76,16 @@ public class SendModeApprovalExchangesTests
             Assert.Equal((20, 20, "2026-10-15T00:00:00Z"), ((int)ceiling["limit"]!, (int)ceiling["released"]!, (string?)ceiling["since"]));
         }
 
+        if (reason == SendModeReasons.EditedAfterReview)
+        {
+            // The claim shows the pass an edit voided: the critic's line, under the text it read.
+            Assert.StartsWith("jrn_", (string?)facts["review"]);
+
+            // The item as it waits holds the edited text the approval asks about.
+            var edited = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "parked-edited-send", new { work_item_id = item }, Ct);
+            Assert.Equal("Hi Ines, thanks for the talk at the meetup. Shall we talk next week?", (string?)edited.Context["input"]!["message"]!["body"]);
+        }
+
         if (reason == SendModeReasons.NotReviewed)
         {
             // The card checks a message against its item before Approve is offered: the item as it waits, once.
@@ -125,13 +136,13 @@ public class SendModeApprovalExchangesTests
         };
         var item = WorkItemFactory.NewProviderOp(campaign, Send.Id, Noon);
         item.Contact = contact;
-        item.Context["input"] = input.DeepClone();
+        item.Context[WorkItemService.InputKey] = input["args"]!.DeepClone();
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(Ct);
 
         // A review of the send's text, by a running attempt of the critic's work, through the verb, while it is still queued.
         string? review = null;
-        var passes = reason == ApprovalGate.AutomaticMode || reason == SendModeReasons.DailyCeiling;
+        var passes = reason == ApprovalGate.AutomaticMode || reason == SendModeReasons.DailyCeiling || reason == SendModeReasons.EditedAfterReview;
         if (reason == SendModeReasons.Doubted || passes)
         {
             var work = WorkItemFactory.NewAiRole(campaign, role: AutomaticRelease.CriticRole, now: Noon);
@@ -150,6 +161,15 @@ public class SendModeApprovalExchangesTests
                     new ActorRef(ActorType.Attempt, run.PublicId)),
                 Ct);
             review = line.Id;
+        }
+
+        // Edited after the critic passed it: the pass stands under the text it read, and the claim shows that older line.
+        if (reason == SendModeReasons.EditedAfterReview)
+        {
+            input["args"]!["message"]!["body"] = "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?";
+            item.Context[WorkItemService.InputKey] = input["args"]!.DeepClone();
+            db.Entry(item).Property(w => w.Context).IsModified = true;
+            await db.SaveChangesAsync(Ct);
         }
 
         var binding = new JsonObject { ["workspace"] = "a" };
