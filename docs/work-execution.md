@@ -690,9 +690,10 @@ still go:
   it was written the thread was not already the campaign's own and this campaign was not the one campaign that had
   written to the person through that plugin; a verdict on its thread warms nobody here either, and the contact stays as
   they were. So once two campaigns have written to a person, a reply on a thread that is neither's own holds nobody in
-  either, a person already warm in one of them included: automatic sends to them go on until a verdict on the reply is
-  recorded, and the managers are woken by it. Nothing is marked after the fact: a line written before 0.43.0 stays
-  unmarked; only a later reply, marked when it is said, can make the person warm.
+  either, a person already warm in one of them included: automatic sends to them go on while the reply is not judged,
+  and only an opt-out verdict on it stops them, everywhere; the managers are woken by the reply. Nothing is marked after
+  the fact: a line written before 0.43.0 stays unmarked; only a later reply, marked when it is said, can make the person
+  warm.
 
 ## Leases and heartbeats
 

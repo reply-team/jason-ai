@@ -35,14 +35,15 @@ public enum WarmthState
 /// <remarks>
 /// <para>
 /// WARM: a verdict that stands in the campaign (no later verdict under its key), whose nature is <c>person</c>, which
-/// names the contact itself in its body, on a thread the campaign's own read saw move: a line the inbound read wrote, one
-/// the events store said by the campaign's own pin, or one it said by the contact's pin and marked <c>campaign_own</c>,
-/// because the thread was already the campaign's own or, where no campaign held it yet, this campaign was the only one
-/// that had written to the person through the plugin (<see cref="CampaignOwnThreads"/>). A verdict on a thread the
-/// campaign heard of only through the contact's pin, unmarked, or of no observed thread at all (a verdict recorded by hand
-/// included), warms nobody; nor does a verdict whose body names nobody or another person, whatever the journal's contact
-/// column holds: the body must name this very contact. Once warm, always warm: no moment is read. Channels are one
-/// bucket, and another campaign's verdicts are never read.
+/// names the contact itself in its body, on a thread the campaign's own read saw move: a line the inbound read wrote,
+/// one the events store said by the campaign's own pin, or one it said by the contact's pin and marked
+/// <c>campaign_own</c>, because the thread was already the campaign's own or, where no campaign the reply was found in
+/// held it yet, this campaign was the only one that had written to the person through the plugin
+/// (<see cref="CampaignOwnThreads"/>). A verdict on a thread the campaign heard of only through the contact's pin,
+/// unmarked, or of no observed thread at all (a verdict recorded by hand included), warms nobody; nor does a verdict
+/// whose body names nobody or another person, whatever the journal's contact column holds: the body must name this very
+/// contact. Once warm, always warm: no moment is read. Channels are one bucket, and another campaign's verdicts are
+/// never read.
 /// </para>
 /// <para>
 /// AWAITING: a line of the campaign's own read that names the contact and that no standing verdict on its thread has

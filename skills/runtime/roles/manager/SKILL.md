@@ -349,11 +349,11 @@ campaign's own operations pinned: the thread is this campaign's outreach. `conta
 provider named no campaign, or one that no campaign that is not archived is linked to, or more than one is — so the
 thread may be one this campaign did not start: a direct email, a message outside any sequence, another campaign's
 outreach. Where the line also says `campaign_own` `true`, the thread is this campaign's own: when the line was written,
-it already was, or no campaign held it yet and this campaign was the only one, of those not archived, that had written
-to the person through that plugin — a message, an invitation or an answer that succeeded. The runtime raises its read
-and its responder as for `campaign_pin`, so look for them as above. Without `campaign_own`, the thread is yours: queue
-the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`: the read
-follows this campaign's route, which may lead elsewhere, and this names where it goes:
+it already was, or no campaign the reply was found in held it yet and this campaign was the only one, of those not
+archived, that had written to the person through that plugin — a message, an invitation or an answer that succeeded. The
+runtime raises its read and its responder as for `campaign_pin`, so look for them as above. Without `campaign_own`, the
+thread is yours: queue the read alone, and only where this campaign reads conversations at the plugin the line names
+under `plugin`: the read follows this campaign's route, which may lead elsewhere, and this names where it goes:
 
 ```
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get

@@ -32,12 +32,13 @@ namespace Jason.Runtime.Dispatch;
 /// </para>
 /// </summary>
 /// <remarks>
-/// Nothing here reads meaning. It reads a kind, identifiers, a moment, which rule found the campaign and whether the line
-/// was marked as the campaign's own; what the reply says, and what to do about it, is the responder's. A thread is the
-/// campaign's own when the line was found by the campaign's pin, or by the person's pin and marked <c>campaign_own</c>:
-/// the thread was already the campaign's own, or, where no campaign held it yet, the campaign was the one that had
-/// written to the person through the plugin. A thread the campaign holds only through a person it may share with other
-/// campaigns, unmarked, is left to the manager, which reads across them before anyone answers.
+/// Nothing here reads meaning. It reads a kind, identifiers, a moment, which rule found the campaign and whether the
+/// line was marked as the campaign's own; what the reply says, and what to do about it, is the responder's. A thread is
+/// the campaign's own when the line was found by the campaign's pin, or by the person's pin and marked
+/// <c>campaign_own</c>: the thread was already the campaign's own, or, where no campaign the reply was found in held it
+/// yet, the campaign was the one that had written to the person through the plugin. A thread the campaign holds only
+/// through a person it may share with other campaigns, unmarked, is left to the manager, which reads across them before
+/// anyone answers.
 /// </remarks>
 public sealed class Responder(
     WorkItemService items,

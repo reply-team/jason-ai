@@ -120,9 +120,9 @@ public class CampaignOwnRespondTests
     }
 
     /// <summary>
-    /// What stays open, said on the page: once two campaigns have written to the person, a reply on a thread neither holds
-    /// as its own holds nobody — a person warm in one of them stays warm there until a verdict is recorded — and raises no
-    /// responder in either; the managers are woken by the line, as before.
+    /// What stays open, said on the page: once two campaigns have written to the person, a reply on a thread neither
+    /// holds as its own holds nobody — a person warm in one of them stays warm there, sent to while the reply is not
+    /// judged — and raises no responder in either; the managers are woken by the line, as before.
     /// </summary>
     [Fact]
     public async Task A_reply_on_a_thread_neither_writer_holds_holds_nobody()
