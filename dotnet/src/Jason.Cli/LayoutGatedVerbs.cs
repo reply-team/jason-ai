@@ -58,8 +58,22 @@ public static class LayoutGatedVerbs
             return null;
         }
 
-        return LayoutStamp.Refusal(env.Paths, SkillsSource.BuildVersion(env));
+        var current = SkillsSource.BuildVersion(env);
+        var refusal = LayoutStamp.Refusal(env.Paths, current);
+
+        // "Update this jason" is what these two were asked to do, and they cannot: a build that does not know the layout
+        // cannot follow it. They name what does, the install line, and keep the code.
+        if (refusal is { Code: LayoutStamp.NewerCode } && verb is "update apply" or "update rollback")
+        {
+            return (LayoutStamp.NewerCode, UpdateNewerSentence(env.Paths.Stamp!.WrittenBy!, current));
+        }
+
+        return refusal;
     }
+
+    /// <summary>The sentence <c>update apply</c> and <c>update rollback</c> refuse a newer layout with.</summary>
+    public static string UpdateNewerSentence(string writtenBy, string current) =>
+        $"This data directory was set up by Jason {writtenBy}, newer than this jason ({current}), and this jason's update cannot follow it: install Jason {writtenBy} or newer by running the install line again, or use the one that set it up.";
 
     /// <summary>Says the refusal as every local refusal is said: the envelope on stdout, or the sentence on stderr under <c>--human</c>.</summary>
     public static int Refuse(CliEnvironment env, ParseResult parseResult, (string Code, string Message) refusal)

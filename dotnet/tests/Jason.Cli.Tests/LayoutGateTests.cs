@@ -19,6 +19,10 @@ public sealed class LayoutGateTests : IDisposable
     private const string NewerSentence =
         "This data directory was set up by Jason 0.43.0, newer than this jason (0.42.0): update this jason, or use the one that set it up.";
 
+    /// <summary>What the update verbs say instead: updating this jason is what they are, so they name the install line.</summary>
+    private const string UpdateNewerSentence =
+        "This data directory was set up by Jason 0.43.0, newer than this jason (0.42.0), and this jason's update cannot follow it: install Jason 0.43.0 or newer by running the install line again, or use the one that set it up.";
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jason-cli-tests", "layout-gate-" + Guid.NewGuid().ToString("N"));
 
     public LayoutGateTests() => Directory.CreateDirectory(_root);
@@ -91,12 +95,32 @@ public sealed class LayoutGateTests : IDisposable
         Assert.Equal(ExitCodes.ApiError, exit);
         var envelope = JsonDocument.Parse(output).RootElement.GetProperty("error");
         Assert.Equal("layout_newer", envelope.GetProperty("code").GetString());
-        Assert.Equal(NewerSentence, envelope.GetProperty("message").GetString());
+        Assert.Equal(line.StartsWith("update ", StringComparison.Ordinal) ? UpdateNewerSentence : NewerSentence, envelope.GetProperty("message").GetString());
         Assert.False(envelope.GetProperty("retryable").GetBoolean());
         Assert.Equal(string.Empty, error);
         Assert.Empty(processes.Launches);
         Assert.Empty(asked);
         Assert.Equal(before, Listing());
+    }
+
+    /// <summary>
+    /// The update verbs never say "update this jason", which is what they were asked to do: they name the install line, which
+    /// takes any version, and keep the code. Every other gated verb says the sentence every refusal of a newer layout says.
+    /// </summary>
+    [Theory]
+    [InlineData("update apply", UpdateNewerSentence)]
+    [InlineData("update rollback", UpdateNewerSentence)]
+    [InlineData("plugin reload", NewerSentence)]
+    public async Task The_update_verbs_name_the_install_line_and_every_other_verb_says_update_this_jason(string line, string sentence)
+    {
+        File.WriteAllText(Path.Combine(_root, "layout.json"), """{"layout":2,"written_by":" 0.43.0+\u001b[31mx","at":"2026-11-20T10:00:00Z"}""");
+
+        var (exit, output, _, _, _, _) = await RunAsync(line.Split(' '));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var envelope = JsonDocument.Parse(output).RootElement.GetProperty("error");
+        Assert.Equal("layout_newer", envelope.GetProperty("code").GetString());
+        Assert.Equal(sentence, envelope.GetProperty("message").GetString());
     }
 
     [Theory]
