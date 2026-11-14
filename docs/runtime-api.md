@@ -175,9 +175,9 @@ runtime's own descriptions say it; an operation with only its name here does wha
 They are the runtime's own operations, on Jason's own records. The operations a plugin performs at a provider are
 another vocabulary, one document each under `docs/contracts/` ([docs/contracts/](contracts/README.md)), and run as
 `provider_op` work items. Four names are in both — `campaign.create`, `campaign.get`, `campaign.pause` and
-`contact.update` — and here each of them means Jason's own record. Three more are in both and mean the same work in each:
-`audience.preview`, `audience.filter_values` and `audience.availability` are the provider's reads, asked here for a
-campaign when a person or an agent asks, outside any work item.
+`contact.update` — and here each of them means Jason's own record. Four more are in both and mean the same work in each:
+`audience.preview`, `audience.filter_values`, `audience.availability` and `sender.list` are the provider's reads, asked
+here for a campaign when a person or an agent asks, outside any work item.
 `docs/api/fixtures/` holds requests and answers the runtime's own tests recorded for many of them, one folder per
 operation ([docs/api/fixtures/](api/fixtures/)).
 
@@ -277,6 +277,18 @@ or an agent asks, outside any work item: nothing is recorded, journaled or pinne
   order.
 - `audience.availability`: whether the campaign's account may search now, why not, and its credits and headroom where
   the provider says.
+
+### `sender`
+
+The provider's accounts a send can go from, read for a campaign when a person or an agent asks, outside any work item,
+and answered by the plugin the campaign's route for `sender.list` names on the channel asked for: nothing is recorded,
+journaled or pinned ([docs/routing.md](routing.md), "A read on request").
+
+- `sender.list`: one page of the accounts, each with the identifier a send names it by, the address it sends from,
+  whether it can send now and whose it is. It takes `campaign_id`, `owners` (`own` or `team`, required),
+  `sender_channel` (`email` or `linkedin`; every channel when absent), `limit` (1 to 100, 20 when absent) and `offset`,
+  and answers `plugin_id`, `items`, `has_more`, `channels` and `vendor` as the provider gave them. The same operation
+  is still work too, a `provider_op` item of the campaign.
 
 ### `workitem`
 

@@ -163,6 +163,11 @@ for the operation and held to the route's half of the claim ([`docs/routing.md`]
 `operation.describe` resolves the same route and answers what the operation takes there: its argument schema, and the
 routed plugin's declared definition — `jason operation describe audience.search --campaign <id>`.
 
+**The accounts a send can go from are read on request too.** `sender.list` is also read when a person or an agent asks
+for a campaign, outside any work item, routed by the campaign's route for `sender.list` itself and held to the same half
+of the claim ([`docs/routing.md`](../routing.md), "A read on request"); the same document is the contract of both, and
+the operation stays work as well.
+
 ## The delivery contract
 
 One more document is published here, and it is not a canonical operation:

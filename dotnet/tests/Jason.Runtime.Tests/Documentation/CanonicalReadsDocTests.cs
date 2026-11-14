@@ -392,8 +392,21 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("`contact.thread`")]
     [InlineData("It skips the claim's other half, and with it the attempt, provenance, the journal, pins, approval and retry")]
     [InlineData("whose binding has the identity recorded in the provenance of the attempt that learned the pin")]
+    [InlineData("`sender.list` (`jason sender list`)")]
+    [InlineData("**It is routed by the campaign's route for `sender.list` itself**, on the channel its `sender_channel` names, or by the operation alone where it names none")]
+    [InlineData("A route for `message.send` on a channel does not route `sender.list` on it")]
     public void The_routing_page_names_the_read_on_request(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/routing.md")), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The plugin author's page and the contracts' index say that <c>sender.list</c> is read on request too, and by its
+    /// own route, as the routing page does: the one campaign read on request that is not routed by the search.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/plugins.md")]
+    [InlineData("docs/contracts/README.md")]
+    public void The_published_pages_say_the_sender_read_goes_by_its_own_route(string page) =>
+        Assert.Contains("routed by the campaign's route for `sender.list` itself", Flat(Source(page)), StringComparison.Ordinal);
 
     /// <summary>
     /// The two published pages that say what a read on request keeps of a claim and what it skips say it in the words

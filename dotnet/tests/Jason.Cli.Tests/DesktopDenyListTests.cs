@@ -89,7 +89,7 @@ public class DesktopDenyListTests
         "campaign get", "campaign list", "campaign list-contacts", "campaign summary", "contact get", "contact list",
         "contact thread", "contact threads", "decision get", "decision list", "events sources", "journal kinds", "journal list",
         "logs", "operation describe", "plugin list", "preference list", "project get", "project list", "reply count", "report get",
-        "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "status",
+        "report list", "role list", "rolenote get", "rolenote list", "route list", "route resolve", "sender list", "status",
         "subscription list", "subscription runs", "suppression list", "workitem count", "workitem get", "workitem list",
         "workitem wait",
     ];

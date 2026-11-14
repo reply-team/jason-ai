@@ -399,6 +399,7 @@ public class DefaultActorTests
         ["audience", "preview", "--campaign", "cmp_A", "--definition", "{\"industries\":[\"Software\"]}"],
         ["audience", "filter-values", "--campaign", "cmp_A", "--filter", "industries"],
         ["audience", "availability", "--campaign", "cmp_A"],
+        ["sender", "list", "--campaign", "cmp_A", "--owners", "own"],
         ["route", "list"],
         ["events", "sources"],
         ["events", "backfill", "--source", "evs_A", "--from", "2026-10-12T00:00:00Z", "--to", "2026-10-13T00:00:00Z"],

@@ -123,6 +123,8 @@ public static class Operations
     public const string AudienceFilterValues = "audience.filter_values";
     public const string AudienceAvailability = "audience.availability";
 
+    public const string SenderList = "sender.list";
+
     public const string OperationDescribe = "operation.describe";
 
     public const string RouteResolve = "route.resolve";
