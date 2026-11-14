@@ -242,6 +242,50 @@ public class WarmthTests
         Assert.Equal(WarmthState.Cold, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
+    /// <summary>
+    /// A verdict whose journal column holds one person and whose body names another warms neither: warm needs the body to
+    /// name this very contact, and the line to be among the contact's own.
+    /// </summary>
+    [Fact]
+    public async Task A_verdict_whose_column_names_one_contact_and_whose_body_names_another_warms_nobody()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var other = new Contact { PublicId = "cnt_01K52JR0000000000000000008", FirstName = "Olga", LastName = "Example", CreatedAt = Noon, UpdatedAt = Noon };
+        db.Contacts.Add(other);
+        await db.SaveChangesAsync(Ct);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+
+        Writer.Append(
+            db,
+            Ada,
+            JournalKinds.ReplyClassified,
+            seed.Campaign,
+            key: InboundSync.VerdictKey("mailbox", "thr-1", "msg-1"),
+            updated: new JsonObject
+            {
+                ["plugin"] = "mailbox",
+                ["thread"] = "thr-1",
+                ["message_id"] = "msg-1",
+                ["message_at"] = "2026-09-14T11:30:00.000Z",
+                ["contact_id"] = other.PublicId,
+                ["category"] = "interested",
+                ["confidence"] = 0.9,
+                ["reaction"] = "draft",
+                ["goal_id"] = null,
+                ["goal_kind"] = null,
+                ["decision_id"] = null,
+                ["answered_by"] = null,
+                ["nature"] = "person",
+            },
+            contactId: seed.Contact.Id);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WarmthState.Cold, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+        Assert.Equal(WarmthState.Cold, await Warmth.OfAsync(db, seed.Campaign.Id, other.Id, Ct));
+    }
+
     /// <summary>A verdict on a thread the campaign's own read never saw warms nobody, a person's verdict by hand included.</summary>
     [Fact]
     public async Task A_verdict_with_no_own_line_for_its_thread_warms_nobody()

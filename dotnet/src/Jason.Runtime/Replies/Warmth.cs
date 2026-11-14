@@ -35,7 +35,8 @@ public enum WarmthState
 /// names the contact itself in its body, on a thread the campaign's own read saw move: a line the inbound read wrote, or
 /// one the events store said by the campaign's own pin. A verdict on a thread the campaign heard of only through the
 /// contact's pin, or of no observed thread at all (a verdict recorded by hand included), warms nobody; nor does a verdict
-/// that names nobody, whatever the journal's contact column holds. Once warm, always warm: no moment is read. Channels
+/// whose body names nobody or another person, whatever the journal's contact column holds: the body must name this very
+/// contact. Once warm, always warm: no moment is read. Channels
 /// are one bucket, and another campaign's verdicts are never read.
 /// </para>
 /// <para>
@@ -124,7 +125,7 @@ public static class Warmth
         db.Database.SqlQuery<int>($"""
             SELECT v.id AS "Value" FROM journal AS v INDEXED BY ix_journal_contact_id_public_id
             WHERE v.contact_id = {contactId} AND v.campaign_id = {campaignId} AND v.kind = 'reply_classified'
-              AND json_extract(v.new_json, '$.contact_id') IS NOT NULL
+              AND json_extract(v.new_json, '$.contact_id') = (SELECT public_id FROM contacts WHERE id = {contactId})
               AND json_extract(v.new_json, '$.nature') = 'person'
               AND NOT EXISTS (SELECT 1 FROM journal AS later INDEXED BY ix_journal_campaign_id_id
                   WHERE later.kind = 'reply_classified' AND later.id > v.id
