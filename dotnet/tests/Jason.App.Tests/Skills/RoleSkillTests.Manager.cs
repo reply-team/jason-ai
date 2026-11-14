@@ -145,6 +145,21 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A line found by the person and marked as the sole sender's is the campaign's own, and the runtime raises its
+    /// responder; one without the mark is the manager's, as before. The skill says both plainly.
+    /// </summary>
+    [Fact]
+    public void The_manager_defers_a_marked_line_to_the_runtime_and_keeps_an_unmarked_one()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("and for a line found by the person's pin that says `sole_sender` `true`, the runtime queues the read of the thread and the responder by itself", skill, StringComparison.Ordinal);
+        Assert.Contains("A line found by the person's pin without `sole_sender` is yours, as below: the runtime raises nothing for it.", skill, StringComparison.Ordinal);
+        Assert.Contains("Without `sole_sender`, the thread is yours: queue the read alone", skill, StringComparison.Ordinal);
+        Assert.Contains("a provider event's line never says `sole_sender`", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The read of a thread found by the person follows this campaign's route, which may lead elsewhere than the plugin the
     /// line came from: it is queued only where the two agree, and otherwise the manager asks.
     /// </summary>
@@ -153,7 +168,7 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("manager");
 
-        Assert.Contains("Then queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
+        Assert.Contains("Without `sole_sender`, the thread is yours: queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
         Assert.Contains("jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get", skill, StringComparison.Ordinal);
         Assert.Contains("Where it names another plugin, or none, queue nothing, say so in your note and raise one question instead.", skill, StringComparison.Ordinal);
     }

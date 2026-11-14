@@ -114,11 +114,18 @@ For each campaign it concerns, a stored event says at most one line, written in 
 
 Both lines are written by `system:dispatcher`, name the campaign and no work item or attempt, and are trigger kinds a
 manager is woken by under the default `Manager:Triggers`; an `inbound_reply_observed` line whose `attributed_by` is
-`campaign_pin` also wakes the campaign's responder ([inbound sync](inbound-sync.md) §1).
+`campaign_pin`, or `contact_pin` with `sole_sender`, also wakes the campaign's responder
+([inbound sync](inbound-sync.md) §1).
 
 - **`inbound_reply_observed`** is the line the inbound read writes, with the fields
   [its document](contracts/journal/inbound_reply_observed.json) requires, and two more, `event_id`, the stored event,
-  and `attributed_by`, the rule that found the campaign (section 3). The inbound read's own line carries neither, since
+  and `attributed_by`, the rule that found the campaign (section 3); and, in one campaign at most, `sole_sender`,
+  `true`: the line was found by the contact's pin, and when it was written this campaign was the only one, of those not
+  archived, that had written to the person through the plugin — a provider operation whose `reach` is `act` without a
+  condition (a message, an invitation, an answer in a thread) about the person, that succeeded there. A send the
+  provider took for later counts from when it was taken, even where it is taken back later; one that ended `ambiguous`
+  does not. The mark is decided once: a campaign that writes to the person later, or one archived later, changes no line
+  already said, and a line written before 0.43.0 has none. The inbound read's own line carries none of the three, since
   the thread it names is the campaign's own by the read that listed it. It is keyed as the inbound read keys it, by the
   plugin, the thread and the moment, so a move both reads found is said once.
   A move the provider cannot say who made reads as a reply, so a follow-up sent into a thread that already has a reply

@@ -223,8 +223,9 @@ under way, and once its reads have landed nobody for the stall bound it ends the
 A search the provider holds is read on the slower cadence of a held search and stalls only at its own, longer bound; and
 for a search of a campaign archived while it ran, poll makes the one stop the archive owes it
 ([docs/campaign-manager.md](campaign-manager.md) §10). Respond reads those lines, whichever writer said them, and
-for a thread the campaign holds by its own pin queues a `conversation.get` of the thread and a responder created
-waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+for a thread that is the campaign's own — one it holds by its own pin, or one found by the person's pin in the one
+campaign that had written to them — queues a `conversation.get` of the thread and a responder created waiting on it, or
+records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
 the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
 recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
@@ -637,7 +638,10 @@ asked, so nothing is notified.
 Where a contact stands in a campaign is read from that campaign's own chronicle alone — its
 `inbound_reply_observed` lines and its `reply_classified` verdicts — and from the responders the runtime made for a
 thread. Nothing is stored for it, another campaign's verdicts are never read, and nothing here reads a category, a
-reaction or the words of a reply.
+reaction or the words of a reply. A thread the campaign's own read saw move is one its `inbound_reply_observed` lines
+say by the campaign's own read or its own pin, or by the person's pin where the line says `sole_sender`: when the line
+was written, this campaign was the only one, of those not archived, that had written to the person through that plugin
+([events](events.md) §4).
 
 - **Warm** is a verdict that stands in the campaign (no later verdict under its key), whose `nature` is `person`, whose
   body names this contact, on a thread the campaign's own read saw move. Once warm, always warm: no moment is read.
@@ -681,8 +685,10 @@ still go:
 
 - A reply the provider could not tie to one of the campaign's contacts, on a thread no verdict that stands names
   anybody on: until a verdict names the person, nothing holds a first message to them.
-- A reply the campaign heard of only through the contact's pin, because another campaign knows the same person; a verdict
-  on its thread warms nobody here either, and the contact stays as they were.
+- A reply the campaign heard of only through the contact's pin and whose line does not say `sole_sender`, because when
+  it was written this campaign was not the one campaign that had written to the person through that plugin; a verdict
+  on its thread warms nobody here either, and the contact stays as they were. Nothing is marked after the fact: a line
+  written before 0.43.0 stays unmarked, and the person becomes warm by a later reply.
 
 ## Leases and heartbeats
 
