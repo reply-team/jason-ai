@@ -339,7 +339,9 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   approval. The `actor` is a running attempt of the same campaign's role work or a person by name, and never the send's
   creator: no attempt of the work that made it, and not the person who made it, whose own send is theirs to approve
   (`review_by_creator`, 403); and never one who wrote its `input` since, a person by name or any attempt of a work that
-  did (`review_by_editor`, 403). Inside a run the actor is the attempt the request comes from. It takes no `reason`.
+  did (`review_by_editor`, 403). Once its `input` was written by an actor the runtime cannot hold to anybody, under no
+  name or as a role outside a run, only a person by name reviews it, and a run is refused `review_by_editor` too.
+  Inside a run the actor is the attempt the request comes from. It takes no `reason`.
   [`docs/work-execution.md`](work-execution.md), "Doubts about a send".
 
 `workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait` and `decision.raise` belong to the

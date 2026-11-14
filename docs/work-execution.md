@@ -482,7 +482,9 @@ same campaign's role work, other than every attempt of the work that created the
 same author), or a person by name who did not create it (`review_by_creator`); a person's own send goes to them as an
 approval, their own explicit yes. Whoever wrote the send's input since it was made is one of its authors and does not
 review it either, read from the send's own `workitem_context_updated` lines for `input`: a person by name, or any
-attempt of a work that did (`review_by_editor`). Inside a run a review speaks as its run: an actor other than the
+attempt of a work that did (`review_by_editor`). An edit by an actor the runtime cannot hold to anybody, under no name
+or as a role outside a run, has an author no run can be told apart from, so from then on only a person by name reviews
+the send, and a run is refused `review_by_editor`. Inside a run a review speaks as its run: an actor other than the
 attempt the request's header names is refused; and a send created inside a run is created under that run's name, since
 its creator is who a review is told apart from: a create naming a person, another attempt or nobody is refused
 `created_as_another_inside_a_run`. A patch of such a send's input inside a run is the same door: one naming anybody but

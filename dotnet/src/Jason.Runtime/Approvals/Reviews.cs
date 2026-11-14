@@ -206,7 +206,8 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
 
     /// <summary>
     /// The reviewing attempt and its role, checked: running, of role work in the send's campaign, and not of the work that
-    /// created the send or wrote its input since; or, for a person, one who did neither.
+    /// created the send or wrote its input since, on a send whose input nobody wrote under a name that holds nobody; or, for
+    /// a person, one who did neither.
     /// </summary>
     private async Task<(Attempt? Attempt, string? Role)> ReviewerAsync(WorkItem item, ActorRef actor, CancellationToken cancellationToken)
     {
@@ -263,6 +264,13 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             && await db.Attempts.AsNoTracking().AnyAsync(a => editing.Contains(a.PublicId) && a.WorkItemId == work.Id, cancellationToken).ConfigureAwait(false))
         {
             throw DomainErrors.ReviewByEditor(item.PublicId);
+        }
+
+        // An edit under a name that holds nobody, none at all or a role's outside a run, has an author no run can be told
+        // apart from, this one included: from then on only a person by name reviews the send.
+        if (editors.Any(editor => editor.Type is not (ActorType.Human or ActorType.Attempt) || string.IsNullOrWhiteSpace(editor.Id)))
+        {
+            throw DomainErrors.ReviewAfterAnUnnamedEdit(item.PublicId);
         }
 
         return (attempt, work.Role);
