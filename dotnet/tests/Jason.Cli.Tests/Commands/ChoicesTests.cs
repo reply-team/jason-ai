@@ -119,6 +119,28 @@ public class ChoicesTests
         Assert.All(Words<DecisionReferenceKind>(), word => Assert.Matches($@"(?<![a-z_]){word}(?![a-z_])", help));
     }
 
+    /// <summary>
+    /// A campaign's send mode is a word of two, and so is the mode <c>--clear</c> gives back: a word outside them is refused
+    /// in the CLI's words while the command line is read, so no request reaches the runtime and its JSON binding never
+    /// answers for it.
+    /// </summary>
+    [Theory]
+    [InlineData("--cold", "always", "automatic or every_message")]
+    [InlineData("--warm", "sometimes", "automatic or every_message")]
+    [InlineData("--clear", "hot", "cold or warm")]
+    public async Task A_send_mode_outside_its_words_is_refused_before_any_request(string option, string word, string words)
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("--actor", "human:ada", "campaign", "set-send-mode", "cmp_1", option, word);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains($"{option} takes ", cli.Error.ToString(), StringComparison.Ordinal);
+        Assert.Contains($"'{word}' is not one of them.", cli.Error.ToString(), StringComparison.Ordinal);
+        Assert.All(words.Split(" or "), each => Assert.Contains(each, cli.Error.ToString(), StringComparison.Ordinal));
+        Assert.Equal(0, cli.Requests);
+    }
+
     /// <summary>Each option whose value is an API enum's, refusing a word outside it before anything is sent.</summary>
     [Theory]
     [MemberData(nameof(Held))]
@@ -172,6 +194,9 @@ public class ChoicesTests
         { "campaign list-contacts", "--activity", Words<CampaignActivityFilter>() },
         { "campaign list-contacts", "--state", Words<MembershipState>() },
         { "campaign list-contacts", "--summary", Words<CampaignSummaryFilter>() },
+        { "campaign set-send-mode", "--clear", ["cold", "warm"] },
+        { "campaign set-send-mode", "--cold", Words<SendMode>() },
+        { "campaign set-send-mode", "--warm", Words<SendMode>() },
         { "contact list", "--order", Words<ContactListOrder>() },
         { "contact list", "--summary", Words<CampaignSummaryFilter>() },
         { "decision list", "--status", Words<DecisionStatus>() },

@@ -238,6 +238,9 @@ public static class CampaignCommands
     /// other; <c>--clear</c> sends null, which gives that mode back to the installation, and a mode both set and cleared in
     /// one command is a usage error, because which of the two the person meant is not the CLI's to guess.
     /// </summary>
+    /// <summary>The two kinds of contact a campaign's send mode is set for, as <c>--clear</c> names them.</summary>
+    private static readonly string[] Temperatures = ["cold", "warm"];
+
     private static Command SetSendMode(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command(
@@ -246,11 +249,14 @@ public static class CampaignCommands
                 + "Cold is a contact who has not answered in the campaign, warm one who has; a mode the campaign does not set follows the installation's preference. "
                 + ActorOption.NoDefault + " " + ActorOption.RefusedInsideARun);
         var id = CampaignId();
-        var cold = new Option<string?>("--cold") { Description = "The mode for a contact who has not answered in the campaign: automatic or every_message. Absent leaves it alone." };
-        var warm = new Option<string?>("--warm") { Description = "The mode for a contact who has answered in the campaign: automatic or every_message. Absent leaves it alone." };
-        var clear = VerbOptions.Repeatable(
-            "--clear",
-            "A mode to give back to the installation's preference: cold or warm. Repeat the option for both.");
+        var cold = Choice<SendMode>.Only(new Option<string?>("--cold") { Description = "The mode for a contact who has not answered in the campaign: automatic or every_message. Absent leaves it alone." });
+        var warm = Choice<SendMode>.Only(new Option<string?>("--warm") { Description = "The mode for a contact who has answered in the campaign: automatic or every_message. Absent leaves it alone." });
+        var clear = Choices.Hold(
+            VerbOptions.Repeatable(
+                "--clear",
+                "A mode to give back to the installation's preference: cold or warm. Repeat the option for both."),
+            Temperatures,
+            word => Temperatures.Contains(word, StringComparer.Ordinal));
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
