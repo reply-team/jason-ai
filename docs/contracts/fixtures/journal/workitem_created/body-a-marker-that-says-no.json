@@ -1,0 +1,7 @@
+{
+  "kind": "workitem_created",
+  "version": 1,
+  "case": "the marker is written only where it is so; an item made outside the chat carries no member at all",
+  "body": { "key": "kind", "old": null, "new": { "kind": "provider_op", "role": null, "operation": "message.send", "contact_id": "cnt_01JC0000000000000000000001", "priority": 0, "not_before": null, "due_at": null, "confined": false } },
+  "expect": { "invalid": [{ "pointer": "/new/confined", "reason": "const" }] }
+}

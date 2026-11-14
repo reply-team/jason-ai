@@ -44,4 +44,15 @@ public static class InsideARun
         var value = request.Headers[ExecutionEnvironment.AttemptHeader].ToString();
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+
+    /// <summary>
+    /// Whether a request says it comes from a confined call of the CLI, the desktop's chat: it carries the
+    /// <see cref="Confinement.Header"/> header with any value at all, since a marker read too widely only parks a send for a
+    /// person, never releases one.
+    /// </summary>
+    public static bool ConfinedOf(HttpRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return !string.IsNullOrWhiteSpace(request.Headers[Confinement.Header].ToString());
+    }
 }

@@ -663,6 +663,100 @@ public partial class ClaimerTests
         Assert.Equal(blocked ? 1 : 0, await fresh.Journal.CountAsync(e => e.Kind == "approval_automatic_applied", Ct));
     }
 
+    /// <summary>
+    /// A send written in the desktop's chat waits for the person in every mode, ahead of any standing approval. Under the
+    /// automatic mode, its text passed by the critic, it parks <c>sent_from_chat</c>; under every message it parks under the
+    /// reason every first park has, and a standing approval that would have released it says <c>sent_from_chat</c>; under the
+    /// automatic mode with such a standing approval it parks <c>sent_from_chat</c> too. The same send written outside the
+    /// chat goes, automatically or under the standing approval.
+    /// </summary>
+    [Theory]
+    [InlineData("automatic", false, true, "sent_from_chat")]
+    [InlineData("every_message", true, true, "approval_required")]
+    [InlineData("automatic", true, true, "sent_from_chat")]
+    [InlineData("automatic", false, false, "automatic_mode")]
+    [InlineData("every_message", true, false, "standing_approval")]
+    [Critical(Family.S2, "a send written in the chat always waits for the person")]
+    public async Task SendMode_ASendWrittenInTheChat_AlwaysWaitsForThePerson(string mode, bool standing, bool chat, string reason)
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, mode);
+        var verdict = await NatureVerdictAsync(db, reading, ReplyNature.Person, by: Operator);
+        if (standing)
+        {
+            await StandAsync(db, reading.Campaign);
+        }
+
+        WorkItemDto draft;
+        using (chat ? ConfinedScope.Open() : null)
+        {
+            draft = await Items(db).CreateAsync(
+                new WorkItemCreateRequest(
+                    reading.Campaign.PublicId, WorkItemKind.ProviderOp, null, "conversation.reply", reading.Contact.PublicId,
+                    null, null, null, null, null, null, null,
+                    new JsonObject { [WorkItemService.InputKey] = ReplyingIn(InThread), [StandingApprovals.VerdictKey] = verdict },
+                    null, Operator, null),
+                Ct);
+        }
+
+        await CriticPassAsync(db, reading, draft.Id, draft.ReviewHash);
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(reason, approval.Reason);
+        Assert.Equal(reason is "automatic_mode" or "standing_approval" ? 1 : 0, claimed.Count);
+        if (chat && standing)
+        {
+            Assert.Equal(StandingApprovals.Why.SentFromChat, (string?)approval.Preview["standing_approval"]!["why"]);
+        }
+
+        if (chat)
+        {
+            Assert.False(await fresh.Journal.AnyAsync(e => e.Kind == "approval_automatic_applied" || e.Kind == JournalKinds.ApprovalStandingApplied, Ct));
+        }
+    }
+
+    /// <summary>
+    /// An edit of a send's input in the chat makes it the chat's: a send written outside the chat, its text then edited
+    /// there and passed again by the critic, parks <c>sent_from_chat</c> under the automatic mode.
+    /// </summary>
+    [Fact]
+    public async Task SendMode_AnEditInTheChat_MakesTheSendTheChats()
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, "automatic");
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        db.ChangeTracker.Clear();
+        WorkItemDto edited;
+        using (ConfinedScope.Open())
+        {
+            edited = await Items(db).UpdateAsync(
+                new WorkItemUpdateRequest(
+                    send.Id,
+                    new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") },
+                    null, default, default, default, default, default, default, default, default,
+                    new ActorRef(ActorType.Human, "operator"),
+                    Reason: null),
+                Ct);
+        }
+
+        await CriticPassAsync(db, reading, send.Id, edited.ReviewHash);
+        db.ChangeTracker.Clear();
+
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        Assert.Equal("sent_from_chat", (await fresh.Approvals.AsNoTracking().SingleAsync(Ct)).Reason);
+    }
+
     private static Harness ModeHarness() => new(
         plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "social_invitation.send"]),
         route: new Route(Provider, null, null));
@@ -708,7 +802,7 @@ public partial class ClaimerTests
     }
 
     /// <summary>A verdict of the reading's run on the reply, saying the nature given; its line's id.</summary>
-    private static async Task<string> NatureVerdictAsync(JasonDbContext db, Reading reading, ReplyNature? nature, ReplyReaction reaction = ReplyReaction.Draft)
+    private static async Task<string> NatureVerdictAsync(JasonDbContext db, Reading reading, ReplyNature? nature, ReplyReaction reaction = ReplyReaction.Draft, ActorRef? by = null)
     {
         var line = await new ReplyService(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon)))).RecordAsync(
             new ReplyRecordRequest(
@@ -721,7 +815,7 @@ public partial class ClaimerTests
                 0.9,
                 reaction,
                 ContactId: reading.Contact.PublicId,
-                Actor: RunOf(reading),
+                Actor: by ?? RunOf(reading),
                 Nature: nature),
             Ct);
         return line.Id;
