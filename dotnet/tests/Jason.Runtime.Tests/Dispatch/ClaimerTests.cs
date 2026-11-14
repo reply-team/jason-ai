@@ -2181,6 +2181,11 @@ public partial class ClaimerTests
                     RouteSnapshot.Empty(Noon, plugins.Snapshot.Id).Campaigns));
             }
 
+            _plugin = plugin;
+            _route = route;
+            _plugins = plugins;
+            _routing = routing;
+
             if (routes is not null)
             {
                 routing.Replace(routes(plugins.Snapshot.Id));
@@ -2208,9 +2213,32 @@ public partial class ClaimerTests
                 timing);
         }
 
+        private readonly LoadedPlugin? _plugin;
+        private readonly Route? _route;
+        private readonly PluginRegistry _plugins;
+        private readonly RouteRegistry _routing;
+
         public JasonPaths Paths => _dir.Paths;
 
         public Claimer Claimer { get; }
+
+        /// <summary>
+        /// The harness's plugin loaded again with <paramref name="status"/>, as a reload would leave it, and its route frozen
+        /// again against that load, so the claim's next pre-flight reads the plugin as it now stands.
+        /// </summary>
+        public void Load(PluginStatus status)
+        {
+            var plugin = _plugin! with { Status = status };
+            _plugins.Replace(
+                new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Reload, [plugin]),
+                new ReloadReport(Noon, SnapshotSource.Reload, Activated: true, [], []));
+            _routing.Replace(new RouteSnapshot(
+                PublicId.New(RouteSnapshot.IdPrefix),
+                Noon,
+                _plugins.Snapshot.Id,
+                new RouteSet(_route!, RouteSet.Empty.Operations),
+                RouteSnapshot.Empty(Noon, _plugins.Snapshot.Id).Campaigns));
+        }
 
         /// <summary>What the claim logged, with the scope each line was written under.</summary>
         public RecordingLogs Logs { get; } = new();

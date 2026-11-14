@@ -3,7 +3,6 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Runtime.Api;
-using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -33,12 +32,12 @@ public sealed record ReviewStanding(ReviewResult Result, string? Code, string Li
 /// The invariant: a review is refused exactly where the claim would not read it. The claim reads a send's reviews
 /// whenever it decides about the send, and runs it without reading them only under a live approved row whose subject is
 /// the send as it now stands (<see cref="ApprovalGate.Authorizes"/>), so a review is refused there, asked of the claim
-/// itself (<see cref="Claimer.RunsUnderAsync"/>), and accepted everywhere else: after a park and an edit, after an expiry
+/// itself (<see cref="IClaimReading.RunsUnderAsync"/>), and accepted everywhere else: after a park and an edit, after an expiry
 /// and a reopen, after an approval whose text was edited since, after an attempt that failed before any decision.
 /// </remarks>
+/// <param name="claim">The claim whose question a review asks; required, so no composition reviews without the rule.</param>
 /// <param name="run">The attempt the request says it comes from; null outside a request and for a request that names none.</param>
-/// <param name="claim">The claim whose question a review asks; null only in a composition without one, which the runtime is not.</param>
-public sealed class ReviewService(JasonDbContext db, JournalWriter journal, RequestRun? run = null, Claimer? claim = null)
+public sealed class ReviewService(JasonDbContext db, JournalWriter journal, IClaimReading claim, RequestRun? run = null)
 {
     public async Task<JournalEntryDto> ReviewAsync(WorkItemReviewRequest request, CancellationToken cancellationToken)
     {
@@ -170,13 +169,19 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
 
     /// <summary>
     /// Refuses a review the claim would never read: where the claim would run the send now under an approval that stands
-    /// for it as it reads, a retry goes under that approval and no review is heard. Named by the approval's id alone.
+    /// for it as it reads, a retry goes under that approval and no review is heard. Where the claim cannot say, because
+    /// the send cannot be claimed right now while an approved row is live, the review is refused too, failing closed.
+    /// Named by the approval's id alone.
     /// </summary>
     private async Task HeardByTheClaimAsync(WorkItem item, CancellationToken cancellationToken)
     {
-        if (claim is not null && await claim.RunsUnderAsync(db, item, cancellationToken).ConfigureAwait(false) is { } approval)
+        var reading = await claim.RunsUnderAsync(db, item, cancellationToken).ConfigureAwait(false);
+        switch (reading.Hearing)
         {
-            throw DomainErrors.NotReviewable(item.PublicId, $"approval '{approval.PublicId}' approved it as it now reads, and a retry goes under that approval without reading a review");
+            case ReviewHearing.NotRead:
+                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' approved it as it now reads, and a retry goes under that approval without reading a review");
+            case ReviewHearing.Unjudged:
+                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' cannot be checked against the send's text right now; review it again once the send can be claimed");
         }
     }
 

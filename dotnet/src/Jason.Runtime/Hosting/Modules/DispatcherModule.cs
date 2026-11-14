@@ -1,5 +1,6 @@
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Events;
@@ -41,6 +42,7 @@ public static class DispatcherModule
             .AddScoped<Summoner>()
             .AddScoped<Resumer>()
             .AddScoped<Claimer>()
+            .AddScoped<IClaimReading>(provider => provider.GetRequiredService<Claimer>())
             .AddScoped<Notifier>()
             .AddScoped<SubscriptionScan>()
             .AddScoped<StartupRecovery>();

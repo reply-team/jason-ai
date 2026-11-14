@@ -357,7 +357,7 @@ public class ReviewServiceTests
             "another attempt" => Run(other),
             _ => Run(seed.ReviewRun),
         };
-        var service = new ReviewService(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon))), new RequestRun { AttemptId = seed.ReviewRun.PublicId });
+        var service = new ReviewService(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon))), TheClaimReadsEveryReview.Instance, new RequestRun { AttemptId = seed.ReviewRun.PublicId });
 
         if (accepted)
         {
@@ -446,6 +446,24 @@ public class ReviewServiceTests
         await Service(again).ReviewAsync(Pass(seed), Ct);
     }
 
+    /// <summary>
+    /// No composition reviews without the rule: every way to make the service names the claim it asks, and none lets it be
+    /// left out or passed as nothing.
+    /// </summary>
+    [Fact]
+    public void The_service_cannot_be_made_without_the_claim_it_asks()
+    {
+        var constructors = typeof(ReviewService).GetConstructors();
+
+        Assert.NotEmpty(constructors);
+        Assert.All(constructors, constructor =>
+        {
+            var claim = Assert.Single(constructor.GetParameters(), parameter => parameter.ParameterType == typeof(IClaimReading));
+            Assert.False(claim.HasDefaultValue);
+            Assert.Equal(System.Reflection.NullabilityState.NotNull, new System.Reflection.NullabilityInfoContext().Create(claim).WriteState);
+        });
+    }
+
     /// <summary>The read is bounded by the send's own lines: answered from the index of the journal by work item.</summary>
     [Fact]
     public async Task The_read_of_a_send_s_reviews_uses_the_index_of_the_journal_by_work_item()
@@ -500,7 +518,7 @@ public class ReviewServiceTests
     private static WorkItemUpdateRequest Patch(string id, JsonObject set) =>
         new(id, set, null, default, default, default, default, default, default, default, default, Ada, Reason: null);
 
-    private static ReviewService Service(JasonDbContext db) => new(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon))));
+    private static ReviewService Service(JasonDbContext db) => new(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon))), TheClaimReadsEveryReview.Instance);
 
     private static WorkItemService Items(JasonDbContext db)
     {

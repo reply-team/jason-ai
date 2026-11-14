@@ -381,6 +381,68 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// Where the claim cannot be judged it fails closed. With the send's plugin unavailable the pre-flight refuses it, so no
+    /// subject can be composed: a live approved row may still stand for the text once the plugin is back, and the review is
+    /// refused naming that row; with no approved row the claim will decide anew, and the review is accepted. Back, and with
+    /// the text edited since the approval, the row no longer stands for it, and the review is accepted.
+    /// </summary>
+    [Theory]
+    [InlineData("unavailable, approved", false)]
+    [InlineData("unavailable, never approved", true)]
+    [InlineData("back, the text edited since the approval", true)]
+    public async Task Doubts_AReviewTheClaimCannotJudgeNow_IsRefusedOnlyUnderALiveApproval(string path, bool accepted)
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        if (path != "unavailable, never approved")
+        {
+            Assert.Empty(await ClaimSettledAsync(harness, db));
+            var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+            var clock = new FixedClock(Noon);
+            await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        }
+
+        harness.Load(PluginStatus.Unavailable);
+        if (path == "back, the text edited since the approval")
+        {
+            harness.Load(PluginStatus.Valid);
+            db.ChangeTracker.Clear();
+            await Items(db).UpdateAsync(
+                new WorkItemUpdateRequest(
+                    send.Id,
+                    new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") },
+                    null, default, default, default, default, default, default, default, default,
+                    new ActorRef(ActorType.Human, "operator"),
+                    Reason: null),
+                Ct);
+        }
+
+        db.ChangeTracker.Clear();
+        db.Attach(reading.Campaign);
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+        Assert.Equal(WorkItemStatus.Created, now.Status);
+        Task<(string Line, string Run)> Review() => ReviewAsync(db, reading, send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, harness.Claimer);
+
+        if (accepted)
+        {
+            await Review();
+            return;
+        }
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(Review);
+        var approval = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal("not_reviewable", refused.Code);
+        Assert.Contains(
+            $"approval '{approval.PublicId}' cannot be checked against the send's text right now; review it again once the send can be claimed",
+            refused.Message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A claim that comes and goes between a review's read and its save (a standing approval releases the send, its run fails
     /// for a reason that is retried, and the send is queued again) leaves the status as the review read it, so the guard on
     /// the status alone would let the doubt land after the decision it can no longer stop. The claim's question is asked
@@ -411,7 +473,7 @@ public partial class ClaimerTests
         });
         await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
 
-        var refused = await Assert.ThrowsAsync<ConflictException>(() => new ReviewService(racing, new JournalWriter(new FixedClock(Noon)), claim: harness.Claimer).ReviewAsync(
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => new ReviewService(racing, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
             new WorkItemReviewRequest(item.PublicId, hash, ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "ada")),
             Ct));
 
@@ -497,14 +559,14 @@ public partial class ClaimerTests
     private static Task<(string Line, string Run)> ReviewAsync(JasonDbContext db, Reading reading, WorkItemDto send, ReviewResult result, string? code, string? note) =>
         ReviewAsync(db, reading, send.Id, send.ReviewHash, result, code, note);
 
-    private static async Task<(string Line, string Run)> ReviewAsync(JasonDbContext db, Reading reading, string sendId, string? hash, ReviewResult result, string? code, string? note, Claimer? claim = null)
+    private static async Task<(string Line, string Run)> ReviewAsync(JasonDbContext db, Reading reading, string sendId, string? hash, ReviewResult result, string? code, string? note, IClaimReading? claim = null)
     {
         var review = WorkItemFactory.NewAiRole(reading.Campaign, role: "reviewer", now: Noon);
         review.Status = WorkItemStatus.Processing;
         var run = WorkItemFactory.NewAttempt(review, 1, AttemptStatus.Running, Noon);
         db.WorkItems.Add(review);
         await db.SaveChangesAsync(Ct);
-        var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), claim: claim).ReviewAsync(
+        var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), claim ?? Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
             new WorkItemReviewRequest(sendId, hash, result, code, note, new ActorRef(ActorType.Attempt, run.PublicId)),
             Ct);
         return (line.Id, run.PublicId);

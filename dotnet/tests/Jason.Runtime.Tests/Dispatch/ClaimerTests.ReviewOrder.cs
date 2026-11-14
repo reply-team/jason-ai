@@ -76,7 +76,7 @@ public partial class ClaimerTests
         review.Status = WorkItemStatus.Processing;
         var run = WorkItemFactory.NewAttempt(review, 1, AttemptStatus.Running, Noon);
         await db.SaveChangesAsync(Ct);
-        await new ReviewService(db, new JournalWriter(new FixedClock(Noon))).ReviewAsync(
+        await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), Tests.Approvals.TheClaimReadsEveryReview.Instance).ReviewAsync(
             new WorkItemReviewRequest(send.Id, send.ReviewHash, ReviewResult.Passed, Code: null, Note: null, new ActorRef(ActorType.Attempt, run.PublicId)),
             Ct);
         await db.WorkItems.Where(w => w.Id == review.Id).ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkItemStatus.Succeeded), Ct);

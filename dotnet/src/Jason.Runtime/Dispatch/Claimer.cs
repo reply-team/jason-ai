@@ -44,7 +44,7 @@ public sealed class Claimer(
     LiveSettings<LaunchesOptions> launches,
     JasonPaths paths,
     ILogger<Claimer> logger,
-    PatternTiming? timing = null)
+    PatternTiming? timing = null) : IClaimReading
 {
     /// <summary>How the claim matches a schema's patterns: the runtime's one default, which a test replaces.</summary>
     private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
@@ -552,18 +552,19 @@ public sealed class Claimer(
     }
 
     /// <summary>
-    /// The approval the claim would run <paramref name="item"/> under if it claimed it now, reading nothing else about it
-    /// (its reviews included), or null where it would decide about it anew. The same facts, the same pre-flight against the
-    /// same two snapshots, and the same test (<see cref="ApprovalGate.Authorizes"/>) as the claim's own decision, so a review
-    /// asks the claim's question rather than a description of it. Reads only.
+    /// Whether the claim would read <paramref name="item"/>'s reviews if it claimed it now: not where it would run it under
+    /// a live approval that stands for it as it reads, and not known where the pre-flight refuses it while such a row is
+    /// live, since no subject can be composed to hold the row to; read everywhere else. The same facts, the same pre-flight
+    /// against the same two snapshots, and the same test (<see cref="ApprovalGate.Authorizes"/>) as the claim's own
+    /// decision, so a review asks the claim's question rather than a description of it. Reads only.
     /// </summary>
-    public async Task<Approval?> RunsUnderAsync(JasonDbContext db, WorkItem item, CancellationToken ct)
+    public async Task<ClaimReading> RunsUnderAsync(JasonDbContext db, WorkItem item, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
         if (item.Kind != WorkItemKind.ProviderOp)
         {
-            return null;
+            return ClaimReading.Reads;
         }
 
         // Read as the claim reads it, so an attempt another writer added since the item was first loaded is among its own.
@@ -573,13 +574,15 @@ public sealed class Claimer(
         var routing = routes.Snapshot;
         var facts = await FactsAsync(db, current, routing, ct).ConfigureAwait(false);
         var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
+        var live = await ApprovalGate.LiveAsync(db, current.CampaignId, current.Id, ct).ConfigureAwait(false);
         if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
         {
-            return null;
+            return live is { Status: ApprovalStatus.Approved } ? new ClaimReading(ReviewHearing.Unjudged, live) : ClaimReading.Reads;
         }
 
-        var live = await ApprovalGate.LiveAsync(db, current.CampaignId, current.Id, ct).ConfigureAwait(false);
-        return ApprovalGate.Authorizes(live, ApprovalSubject.Of(plan, current)) ? live : null;
+        return ApprovalGate.Authorizes(live, ApprovalSubject.Of(plan, current))
+            ? new ClaimReading(ReviewHearing.NotRead, live)
+            : ClaimReading.Reads;
     }
 
     /// <summary>
