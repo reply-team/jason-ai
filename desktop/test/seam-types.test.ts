@@ -145,7 +145,8 @@ type ModeIsTheSeam = [
 
 // Open in: the places, the default and the folder's name reach the page as the desktop makes them, a place is named by
 // the one list of words both sides hold, and the page sends a name and a campaign's id, nothing else. A chat to continue in
-// a terminal reaches the page as its host's name and whether a turn runs, and the page sends the chat's id alone.
+// a terminal reaches the page as its host's name and whether a turn runs, and the page sends the chat's id alone. Change
+// Jason itself reaches the page as a mark that names no host, and the page sends nothing with it.
 type OpenInIsTheSeam = [
     Holds<Equal<PlaceId, DesktopOpenInPlace>>,
     Holds<Equal<OpenInAnswer, DesktopOpenInAnswer>>,
@@ -153,6 +154,7 @@ type OpenInIsTheSeam = [
     Holds<Equal<Parameters<JasonDesktop['openIn']['open']>, [target: DesktopOpenInPlace, campaignId?: string]>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['targets']>, [campaignId?: string, chatId?: string]>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['continueChat']>, [chatId: string]>>,
+    Holds<Equal<Parameters<JasonDesktop['openIn']['changeJason']>, []>>,
     Holds<Equal<ContinueOffer, DesktopOpenInContinue>>,
     Holds<Equal<keyof DesktopOpenInContinue, 'host' | 'label' | 'running'>>,
 ];

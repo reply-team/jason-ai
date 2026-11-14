@@ -106,6 +106,7 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
             targets: async () => refused(),
             open: async () => refused(),
             continueChat: async () => refused(),
+            changeJason: async () => refused(),
         },
         pairing: { paired: rejected },
         chat: {
@@ -176,6 +177,7 @@ export function noDesktop(): JasonDesktop {
             targets: async () => needsRefusal(),
             open: async () => needsRefusal(),
             continueChat: async () => needsRefusal(),
+            changeJason: async () => needsRefusal(),
         },
         pairing: { paired: needs },
         chat: {

@@ -561,3 +561,123 @@ describe('Continue this chat in a terminal', () => {
         expect(within(menu()).getByRole('group', { name: 'Continue this chat in Codex' })).not.toBeNull();
     });
 });
+
+describe('Change Jason itself', () => {
+    const changes = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'openIn.changeJason');
+    const entry = () => within(menu()).getByRole('menuitem', { name: /^Change Jason itself/ });
+    const line = "Open your own AI on Jason's roles and plugins, and tell it what to change.";
+    /** A console whose desktop offers the entry, as the person's own installation does. */
+    async function offered(): Promise<StubDesktop> {
+        const desktop = chatDesktop();
+        desktop.openInKept.changeJason = true;
+        return renderConsole('live', desktop);
+    }
+
+    it('draws the entry with its line where the desktop offers it, naming no host, and none where it offers none', async () => {
+        await offered();
+        fireEvent.click(arrow());
+        await waitFor(() => expect(entry()).not.toBeNull());
+        expect(entry().querySelector('span')?.textContent).toBe('Change Jason itself');
+        expect(entry().querySelector('small')?.textContent).toBe(line);
+        expect(entry().textContent).not.toMatch(/Claude Code|Codex/);
+        expect((entry() as HTMLButtonElement).disabled).toBe(false);
+        expect(entry().className).not.toBe('on');
+        expect(within(menu()).getByRole('group', { name: 'Change Jason itself' })).not.toBeNull();
+    });
+
+    it.each(['live', 'demo'] as const)('draws no entry where the desktop offers none, in %s', async (kept) => {
+        await renderConsole(kept);
+        fireEvent.click(arrow());
+        await waitFor(() => expect(within(menu()).getAllByRole('menuitem').length).toBeGreaterThan(1));
+        expect(within(menu()).queryByRole('menuitem', { name: /^Change Jason itself/ })).toBeNull();
+        expect(menu().querySelector('.open-in-change')).toBeNull();
+    });
+
+    it('opens through the desktop with nothing sent, closes the menu and says what opened', async () => {
+        const desktop = await offered();
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        expect(screen.queryByRole('menu')).toBeNull();
+        await waitFor(() => expect(changes(desktop)).toHaveLength(1));
+        expect(changes(desktop)[0]!.args).toEqual([]);
+        expect(opens(desktop)).toEqual([]);
+        await waitFor(() =>
+            expect(document.querySelector('.open-in-toast')?.textContent).toBe(
+                "Opened your own AI in a new terminal, on Jason's roles and plugins. Tell it what you want changed.",
+            ),
+        );
+    });
+
+    it('is never the default: after it, the main part opens the place it opened before', async () => {
+        const desktop = await offered();
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        await waitFor(() => expect(changes(desktop)).toHaveLength(1));
+        await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(2));
+        expect(mainPart().textContent).toBe('Open in Claude Code');
+        fireEvent.click(mainPart());
+        await waitFor(() => expect(opens(desktop)).toHaveLength(1));
+        expect(opens(desktop)[0]!.args).toEqual(['claude', undefined]);
+    });
+
+    it('says the desktop’s refusal beside the button, in its own sentence, and draws no toast', async () => {
+        const desktop = await offered();
+        desktop.refuse.set('openIn.changeJason', 'Change Jason itself needs Claude Code or Codex on this computer.');
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        const alert = await waitFor(() => within(split().parentElement!).getByRole('alert'));
+        expect(alert.textContent).toBe('Change Jason itself needs Claude Code or Codex on this computer.');
+        expect(document.querySelector('.open-in-toast')).toBeNull();
+    });
+
+    it('sits in its own group after the places and above Continue this chat', async () => {
+        const desktop = await offered();
+        const id = await waitFor(() => {
+            const chat = currentChat.value;
+            expect(chat).not.toBeNull();
+            expect(activePanel.value).toBe('chat:' + chat);
+            return chat!;
+        });
+        desktop.openInContinue.set(id, { host: 'claude', label: 'Claude Code', running: false });
+        fireEvent.click(arrow());
+        // The entry may be drawn from the answer read before; Continue only from the read the arrow asks for.
+        await waitFor(() =>
+            expect(within(menu()).getByRole('menuitem', { name: /^Continue this chat in/ })).not.toBeNull(),
+        );
+        const all = within(menu()).getAllByRole('menuitem');
+        expect(all.at(-2)).toBe(entry());
+        expect(all.at(-1)?.querySelector('span')?.textContent).toBe('Continue this chat in Claude Code');
+        const groups = [...menu().children].map((each) => each.className);
+        expect(groups.slice(-2)).toEqual(['open-in-change', 'open-in-continue']);
+    });
+});
+
+describe('Change Jason itself while one is opening', () => {
+    it('opens nothing more for a second choice while the first is still being opened', async () => {
+        const desktop = chatDesktop();
+        desktop.openInKept.changeJason = true;
+        await renderConsole('live', desktop);
+        let asked = 0;
+        let finish: (value: null) => void = () => undefined;
+        desktop.openIn.changeJason = () => {
+            asked++;
+            return new Promise<null>((resolve) => {
+                finish = resolve;
+            });
+        };
+        const entry = () => within(menu()).getByRole('menuitem', { name: /^Change Jason itself/ });
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        await waitFor(() => expect(asked).toBe(1));
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        expect(asked).toBe(1);
+        finish(null);
+        await waitFor(() => expect(document.querySelector('.open-in-toast')).not.toBeNull());
+        // Once it has answered, the entry opens again.
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        await waitFor(() => expect(asked).toBe(2));
+        finish(null);
+    });
+});
