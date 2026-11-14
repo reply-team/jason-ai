@@ -11,7 +11,7 @@ import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
-import { can } from '../platform/places';
+import { can, earlier } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { registry } from '../platform/slots';
@@ -345,7 +345,13 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
 
     return (
         <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
-            <ModeStrip openIn={can('openIn.targets') ? <OpenIn desktop={desktop} /> : undefined} />
+            <ModeStrip
+                openIn={
+                    can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
+                        <OpenIn desktop={desktop} />
+                    ) : undefined
+                }
+            />
             <div className="shell">
                 <aside className="side">
                     <Painted className="side-body" view={sideView} />

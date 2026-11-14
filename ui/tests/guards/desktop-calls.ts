@@ -64,12 +64,41 @@ function unwrap(node: ts.Expression): ts.Expression {
     return current;
 }
 
-/** Whether an expression is the desktop's object: `desktop`, or what `.desktop` of something reads. */
-function isObject(node: ts.Expression): boolean {
-    const e = unwrap(node);
-    if (ts.isIdentifier(e)) return e.text === 'desktop';
-    if (ts.isPropertyAccessExpression(e)) return e.name.text === 'desktop';
-    return false;
+/** A member read by a name, as `a.b` or `a['b']`: its base and its name. */
+function access(node: ts.Node): { base: ts.Expression; name: string } | null {
+    if (ts.isPropertyAccessExpression(node)) return { base: unwrap(node.expression), name: node.name.text };
+    if (
+        ts.isElementAccessExpression(node) &&
+        (ts.isStringLiteral(node.argumentExpression) || ts.isNoSubstitutionTemplateLiteral(node.argumentExpression))
+    )
+        return { base: unwrap(node.expression), name: node.argumentExpression.text };
+    return null;
+}
+
+/** What a type annotation says about the desktop: the whole object, one part of it, or nothing. */
+function typed(type: ts.TypeNode | undefined, parts: Map<string, Set<string>>): 'object' | string | null {
+    if (!type) return null;
+    let found: 'object' | string | null = null;
+    const look = (node: ts.Node): void => {
+        if (ts.isIndexedAccessTypeNode(node) && /\bJasonDesktop$/.test(node.objectType.getText())) {
+            if (ts.isLiteralTypeNode(node.indexType) && ts.isStringLiteral(node.indexType.literal)) {
+                const part = node.indexType.literal.text;
+                if (parts.has(part)) found = part;
+            }
+            return;
+        }
+        if (ts.isTypeReferenceNode(node) && node.typeName.getText() === 'JasonDesktop') found = 'object';
+        node.forEachChild(look);
+    };
+    look(type);
+    return found;
+}
+
+/** Whether the branch of a condition that asks for `member` is the one where the answer was yes; null if it does not ask. */
+function sideOf(condition: ts.Expression, source: ts.SourceFile, member: string): boolean | null {
+    const text = condition.getText(source);
+    if (!text.includes(`can('${member}')`)) return null;
+    return !text.includes(`!can('${member}')`);
 }
 
 const wrappers = ['gated', 'defineReal'];
@@ -77,15 +106,21 @@ const wrappers = ['gated', 'defineReal'];
 /** Whether something around `node` puts the use of `member` behind the question `can('<member>')`. */
 function behind(node: ts.Node, member: string, source: ts.SourceFile): boolean {
     const asks = (text: string) => text.includes(`can('${member}')`);
-    for (let up: ts.Node | undefined = node.parent; up; up = up.parent) {
-        if (ts.isIfStatement(up) && asks(up.expression.getText(source))) return true;
-        if (ts.isConditionalExpression(up) && asks(up.condition.getText(source))) return true;
-        if (
-            ts.isBinaryExpression(up) &&
-            up.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
-            asks(up.left.getText(source))
-        )
-            return true;
+    let child: ts.Node = node;
+    for (let up: ts.Node | undefined = node.parent; up; child = up, up = up.parent) {
+        if (ts.isIfStatement(up)) {
+            const yes = sideOf(up.expression, source, member);
+            // The branch the question was answered yes in passes; the other refuses, whatever else the function asks.
+            if (yes !== null && child !== up.expression) return child === up.thenStatement ? yes : !yes;
+        }
+        if (ts.isConditionalExpression(up)) {
+            const yes = sideOf(up.condition, source, member);
+            if (yes !== null && child !== up.condition) return child === up.whenTrue ? yes : !yes;
+        }
+        if (ts.isBinaryExpression(up) && up.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+            const yes = sideOf(up.left, source, member);
+            if (yes !== null && child === up.right) return yes;
+        }
         if (
             ts.isCallExpression(up) &&
             ts.isIdentifier(up.expression) &&
@@ -123,48 +158,87 @@ export function problems(
     const where = (node: ts.Node) => `${name}:${file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1}`;
     const alias = partAliases[name];
 
+    // Names this file gives the object or a part of it by their type, under any name.
+    const objects = new Set(['desktop']);
+    const partNames = new Map<string, string>();
+    const collect = (node: ts.Node): void => {
+        if (
+            (ts.isParameter(node) || ts.isVariableDeclaration(node) || ts.isPropertySignature(node)) &&
+            ts.isIdentifier(node.name)
+        ) {
+            const typedAs = typed(node.type, members.parts);
+            if (typedAs === 'object') objects.add(node.name.text);
+            else if (typedAs !== null) partNames.set(node.name.text, typedAs);
+        }
+        node.forEachChild(collect);
+    };
+    collect(file);
+
+    const isObject = (node: ts.Expression): boolean => {
+        const e = unwrap(node);
+        if (ts.isIdentifier(e)) return objects.has(e.text);
+        const a = access(e);
+        return a !== null && a.name === 'desktop';
+    };
+    /** The part of the object an expression is, if it is one: `desktop.chat`, or a name typed as one. */
+    const partOf = (node: ts.Expression): string | null => {
+        const e = unwrap(node);
+        if (ts.isIdentifier(e)) return partNames.get(e.text) ?? null;
+        const a = access(e);
+        if (a !== null && isObject(a.base) && members.parts.has(a.name)) return a.name;
+        return null;
+    };
+
     const check = (node: ts.Node, member: string) => {
         if (tabMember(member) || behind(node, member, file)) return;
         found.push(`${where(node)}: ${member} is used outside the one question can('${member}')`);
     };
 
     const visit = (node: ts.Node): void => {
-        if (ts.isPropertyAccessExpression(node)) {
-            const last = node.name.text;
-            const base = unwrap(node.expression);
-            if (isObject(base) && members.top.has(last)) check(node, last);
-            else if (
-                ts.isPropertyAccessExpression(base) &&
-                isObject(base.expression) &&
-                members.parts.get(base.name.text)?.has(last)
-            )
-                check(node, `${base.name.text}.${last}`);
+        const a = access(node);
+        if (a !== null) {
+            const part = partOf(a.base);
+            if (isObject(a.base) && members.top.has(a.name)) check(node, a.name);
+            else if (part !== null && members.parts.get(part)?.has(a.name)) check(node, `${part}.${a.name}`);
             else if (
                 alias &&
-                ts.isIdentifier(base) &&
-                base.text === alias.identifier &&
-                members.parts.get(alias.part)?.has(last)
+                ts.isIdentifier(a.base) &&
+                a.base.text === alias.identifier &&
+                members.parts.get(alias.part)?.has(a.name)
             )
-                check(node, `${alias.part}.${last}`);
-            else if (isObject(base) && members.parts.has(last)) {
+                check(node, `${alias.part}.${a.name}`);
+            else if (isObject(a.base) && members.parts.has(a.name)) {
                 // A part held under a name of its own hides which member is used.
-                const parent = node.parent;
-                const read = ts.isPropertyAccessExpression(parent) && unwrap(parent.expression) === node;
-                if (!read && !partHandedOn.has(`${name}:${last}`))
+                const read = access(node.parent)?.base === node;
+                if (!read && !partHandedOn.has(`${name}:${a.name}`))
                     found.push(
-                        `${where(node)}: ${last} is held under a name of its own; name the member where it is used`,
+                        `${where(node)}: ${a.name} is held under a name of its own; name the member where it is used`,
                     );
             }
-            if (last === 'jasonDesktop')
-                found.push(`${where(node)}: window.jasonDesktop is read outside platform/window-desktop.ts`);
+            if (a.name === 'jasonDesktop')
+                found.push(`${where(node)}: the window's object is read outside platform/window-desktop.ts`);
         }
-        if (
-            ts.isVariableDeclaration(node) &&
-            ts.isObjectBindingPattern(node.name) &&
-            node.initializer &&
-            isObject(node.initializer)
-        )
-            found.push(`${where(node)}: the desktop's object is destructured; name the part and member where used`);
+        if (ts.isVariableDeclaration(node) && node.initializer) {
+            const init = unwrap(node.initializer);
+            if (ts.isObjectBindingPattern(node.name)) {
+                if (isObject(init) || partOf(init) !== null)
+                    found.push(
+                        `${where(node)}: the desktop's object is destructured; name the part and member where used`,
+                    );
+                if (node.name.elements.some((each) => (each.propertyName ?? each.name).getText() === 'jasonDesktop'))
+                    found.push(`${where(node)}: the window's object is read outside platform/window-desktop.ts`);
+            } else if (
+                ts.isIdentifier(node.name) &&
+                node.name.text !== 'desktop' &&
+                alias?.identifier !== node.name.text
+            ) {
+                // A name of its own for the object or a part of it, where its type says nothing.
+                if (isObject(init) || (partOf(init) !== null && ts.isIdentifier(init)))
+                    found.push(
+                        `${where(node)}: the desktop's object is held under the name ${node.name.text}; use it as desktop`,
+                    );
+            }
+        }
         node.forEachChild(visit);
     };
     visit(file);

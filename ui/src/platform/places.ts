@@ -34,7 +34,8 @@ export function canIn(kind: PlaceKind, member: DesktopMember): boolean {
     return (bridgeMembers as readonly string[]).includes(member) || streamed.includes(member);
 }
 
-let kind: PlaceKind = 'window';
+// Until the page says where it runs nothing is done: a place that was never named can do nothing of the desktop.
+let kind: PlaceKind = 'none';
 let held: JasonDesktop | undefined;
 
 /** Says which place this page runs in, and the object it hands the console; `windowDesktop()` in the window. */
@@ -47,6 +48,9 @@ export const placeKind = (): PlaceKind => kind;
 
 /** The object the page was handed: the window's, the tab's, or none in a plain browser. */
 export const currentDesktop = (): JasonDesktop | undefined => held ?? windowDesktop();
+
+/** The desktop as one of an earlier version may be: a part of it may be missing, and the page asks before it reads one. */
+export const earlier = (desktop: JasonDesktop): Partial<JasonDesktop> => desktop;
 
 /** The one question: can this place do this member? */
 export const can = (member: DesktopMember): boolean => canIn(kind, member);

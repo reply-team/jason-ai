@@ -53,8 +53,8 @@ describe('the start of the page', () => {
     it('keeps the classic shell for a browser tab with no bridge', async () => {
         const { made, order } = deps();
         await start(made);
-        expect(order).toEqual(['bootstrap', 'classic']);
+        // A place that has no desktop is named, so it can do nothing of one.
+        expect(order).toEqual(['bootstrap', 'place:none', 'classic']);
         expect(made.startConsole).not.toHaveBeenCalled();
-        expect(made.setPlace).not.toHaveBeenCalled();
     });
 });

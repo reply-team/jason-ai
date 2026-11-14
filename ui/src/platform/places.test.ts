@@ -55,7 +55,15 @@ describe('what each place can do', () => {
         }
     });
 
+    it('can do nothing until the page names its place', async () => {
+        vi.resetModules();
+        const fresh = await import('./places');
+        expect(fresh.placeKind()).toBe('none');
+        for (const member of everyMember) expect(fresh.can(member), member).toBe(false);
+    });
+
     it('is asked of the place the page was started in', () => {
+        setPlace('window');
         expect(placeKind()).toBe('window');
         expect(can('chat.remove')).toBe(true);
         setPlace('tab');

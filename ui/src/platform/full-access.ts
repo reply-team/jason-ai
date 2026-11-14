@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals-react';
-import { can } from './places';
+import { can, earlier } from './places';
 import type { DesktopFullAccessStanding, DesktopRefusal, JasonDesktop } from './desktop';
 
 // The standing choice of Full access as the desktop last said it: the mode menu offers its take-back while it stands,
@@ -11,9 +11,6 @@ export const fullAccessStanding = signal<DesktopFullAccessStanding | null>(null)
 
 /** What the menu offers, after the modes, while the standing choice stands: its take-back. */
 export const takeBackWords = 'Full access: ask each time again';
-
-/** The desktop as one of an earlier version may be: a part of it may be missing. */
-export const earlier = (desktop: JasonDesktop): Partial<JasonDesktop> => desktop;
 
 let known: Promise<void> = Promise.resolve();
 

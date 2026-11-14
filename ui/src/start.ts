@@ -28,7 +28,11 @@ export async function start(deps: Starts): Promise<void> {
     }
     await deps.session.bootstrap();
     const bridge = deps.session.bridge.value;
-    if (bridge === null) return deps.startClassic();
+    if (bridge === null) {
+        // The classic shell has no desktop to ask: its place can do nothing of one.
+        deps.setPlace('none');
+        return deps.startClassic();
+    }
     const tab = deps.tabDesktop(bridge);
     deps.setPlace('tab', tab);
     return deps.startConsole(tab, true);

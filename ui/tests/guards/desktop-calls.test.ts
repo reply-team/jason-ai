@@ -57,6 +57,50 @@ describe('the guard on the console source', () => {
     });
 });
 
+describe('the guard, the gaps closed', () => {
+    it('refuses a use in the negated branch of a question, or the else of a positive one', () => {
+        expect(of('a.ts', `if (!can('chat.remove')) { desktop.chat.remove('a'); }`)).toHaveLength(1);
+        expect(of('a.ts', `if (can('chat.remove')) { x(); } else { desktop.chat.remove('a'); }`)).toHaveLength(1);
+        expect(of('a.ts', `if (!can('chat.remove')) { x(); } else { desktop.chat.remove('a'); }`)).toEqual([]);
+        expect(of('a.ts', `const r = can('chat.remove') ? x() : desktop.chat.remove('a');`)).toHaveLength(1);
+        expect(of('a.ts', `const r = !can('chat.remove') ? x() : desktop.chat.remove('a');`)).toEqual([]);
+        expect(of('a.ts', `!can('chat.remove') && desktop.chat.remove('a');`)).toHaveLength(1);
+        // Even in a function that asks elsewhere in its body.
+        expect(
+            of(
+                'a.ts',
+                `function f(){ if (!can('chat.remove')) { desktop.chat.remove('a'); } if (!can('chat.remove')) return; }`,
+            ),
+        ).toHaveLength(1);
+    });
+
+    it('catches an alias of the object, of a part, and a typed name', () => {
+        expect(of('a.ts', `const d = here().desktop; d.chat.remove('a');`)).toHaveLength(1);
+        expect(of('a.ts', `const d = desktop; d.chat.remove('a');`)).toHaveLength(1);
+        expect(of('a.ts', `function f(d: JasonDesktop) { d.chat.remove('a'); }`)).toHaveLength(1);
+        expect(of('a.ts', `function f(d: JasonDesktop | undefined) { d?.chat.remove('a'); }`)).toHaveLength(1);
+        expect(of('a.ts', `function f(c: JasonDesktop['chat']) { c.remove('a'); }`)).toHaveLength(1);
+        expect(of('a.ts', `function f(d: Partial<JasonDesktop>) { d.chat?.remove?.('a'); }`)).toHaveLength(1);
+        expect(of('a.ts', `function f(d: JasonDesktop) { if (can('chat.remove')) d.chat.remove('a'); }`)).toEqual([]);
+        expect(of('a.ts', `function f(d: JasonDesktop) { d.chat.send('a', 'b', {}); }`)).toEqual([]);
+    });
+
+    it('catches element access', () => {
+        expect(of('a.ts', `desktop['chat'].remove('a');`)).toHaveLength(1);
+        expect(of('a.ts', `desktop.chat['remove']('a');`)).toHaveLength(1);
+        expect(of('a.ts', `desktop['chat']['remove']('a');`)).toHaveLength(1);
+        expect(of('a.ts', `if (can('chat.remove')) desktop['chat']['remove']('a');`)).toEqual([]);
+    });
+
+    it('catches every form of reading the window object outside its module', () => {
+        expect(of('a.ts', `const d = window['jasonDesktop'];`)).toHaveLength(1);
+        expect(of('a.ts', `const { jasonDesktop } = window;`)).toHaveLength(1);
+        expect(of('a.ts', `const d = globalThis.jasonDesktop;`)).toHaveLength(1);
+        expect(of('a.ts', `const { jasonDesktop: held } = globalThis;`)).toHaveLength(1);
+        expect(of('platform/window-desktop.ts', `window['jasonDesktop']; globalThis.jasonDesktop;`)).toEqual([]);
+    });
+});
+
 describe('the guard', () => {
     it('lets a bridge member through and refuses another member used bare', () => {
         expect(of('console/a.ts', `here().desktop.chat.send('a', 'b', {});`)).toEqual([]);
