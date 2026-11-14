@@ -39,7 +39,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.15.2", plugin.Version);
+        Assert.Equal("0.16.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["audience.availability", "audience.filter_values", "audience.preview", "audience.search", "audience.search_cancel", "audience.search_status", "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.cancel", "message.send", "message.status", "optout.record", "schedule.list", "sender.list", "social_invitation.send"],
@@ -298,7 +298,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.15.2", result.Provenance.Version);
+        Assert.Equal("0.16.0", result.Provenance.Version);
     }
 
     /// <summary>
@@ -1420,19 +1420,40 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The changelog opens with 0.15.2: every sender's block names the channel the send went on, since Reply numbers its
+    /// The changelog opens with 0.16.0: every sender's block names the channel the send went on, since Reply numbers its
     /// mailboxes apart from its LinkedIn accounts, and the runtime it needs to keep a block per channel. The README says the
     /// same where the sends' endings are explained.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_15_2_a_senders_block_on_the_channel_the_send_went_on()
+    public void The_changelog_opens_with_0_16_0_a_senders_block_on_the_channel_the_send_went_on()
     {
         var section = Flat(ChangelogSection(0));
         var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
 
-        Assert.StartsWith(" ## 0.15.2 ", section, StringComparison.Ordinal);
+        Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
         Assert.All(["`channel`", "mailbox 12 and LinkedIn account 12", "Jason 0.43.0"], word => Assert.Contains(word, section, StringComparison.Ordinal));
         Assert.Contains("Every sender's block this package reports names the channel the send went on", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 0.16.0 also reads Reply's two limits on a direct email by Reply's code as the mailbox's block, the daily one until the
+    /// next midnight UTC, and keeps nothing of the dead record a refusal names. The README says, in one sentence, what the
+    /// active-contacts block holds: every email from that mailbox, to people already in conversation too.
+    /// </summary>
+    [Fact]
+    public void The_changelog_and_the_readme_say_what_reply_s_limits_on_a_direct_email_hold()
+    {
+        var section = Flat(ChangelogSection(0));
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            ["`contact.dailyLimitReached`", "`contact.activeContactsLimitReached`", "midnight UTC", "dead one"],
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.Contains(
+            "While the active-contacts block stands, every email send from that mailbox waits, people already in conversation included.",
+            readme,
+            StringComparison.Ordinal);
     }
 
     /// <summary>

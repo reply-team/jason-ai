@@ -416,7 +416,7 @@ public partial class ReplyErrorTableTests
             }
         }
 
-        Assert.True(blocked == 4, $"the table has {blocked} rows that say a block; the two sends have two each.");
+        Assert.True(blocked == 6, $"the table has {blocked} rows that say a block; the two sends have two each, and message.send two more for a mailbox's limits.");
 
         var shared = ReplyErrorTable.Shared["account_or_sender_blocked"]!.AsObject();
         Assert.Equal(("provider_blocked", "blocked"), (Text(shared, "code"), Text(shared, "class")));
@@ -464,6 +464,45 @@ public partial class ReplyErrorTableTests
         Assert.DoesNotContain("row: \"sender_unavailable\"", send, StringComparison.Ordinal);
     }
 
+    /// <summary>The prefix of a key the table reads by Reply's own code rather than by reply-cli's.</summary>
+    private const string ReplyCodeKey = "reply_code:";
+
+    /// <summary>
+    /// Reply's two refusals of a direct email for a limit it counts are read by Reply's own code, on <c>message.send</c>
+    /// alone, whatever reply-cli calls them: each is the mailbox's block for its limit, which keeps nothing of the record a
+    /// refusal may name. The daily limit clears at the next midnight UTC, when Reply counts a new day; the active contacts
+    /// say no moment. A command that ran from no sending account ends in the contract's word for a spent allowance.
+    /// </summary>
+    [Fact]
+    public void Reply_s_limits_on_a_direct_email_are_read_by_reply_s_code_as_the_mailbox_s_block()
+    {
+        var codes = ReplyErrorTable.Codes["per_operation"]!["message.send"]!.AsObject();
+        var rows = ReplyErrorTable.Own("message.send");
+
+        Assert.Equal(
+            ["mailbox_daily_limit", "mailbox_active_contacts_limit"],
+            new[] { "reply_code:contact.dailyLimitReached", "reply_code:contact.activeContactsLimitReached" }.Select(code => (string?)codes[code]));
+        foreach (var name in new[] { "mailbox_daily_limit", "mailbox_active_contacts_limit" })
+        {
+            var row = rows[name]!.AsObject();
+            Assert.Equal(("provider_blocked", "blocked"), (Text(row, "code"), Text(row, "class")));
+            Assert.Equal("""{"scope":"sender","reason":"limit"}""", row["block"]!.ToJsonString());
+            Assert.True((bool?)row["keeps_no_send"] == true, $"row '{name}' keeps the record its refusal names.");
+            var unnamed = rows[Text(row, "unnamed_sender")]!.AsObject();
+            Assert.Equal(("sender_limit_reached", "permanent"), (Text(unnamed, "code"), Text(unnamed, "class")));
+        }
+
+        Assert.Equal("next_utc_day", (string?)rows["mailbox_daily_limit"]!["clears"]);
+        Assert.Null(rows["mailbox_active_contacts_limit"]!["clears"]);
+
+        // Read by Reply's code on the one operation the ruling names, and nowhere else.
+        var elsewhere = ReplyErrorTable.Codes["per_operation"]!.AsObject()
+            .Where(operation => operation.Key != "message.send")
+            .SelectMany(operation => operation.Value!.AsObject().Select(entry => entry.Key))
+            .Concat(ReplyErrorTable.Codes["shared"]!.AsObject().Select(entry => entry.Key));
+        Assert.DoesNotContain(elsewhere, key => key.StartsWith(ReplyCodeKey, StringComparison.Ordinal));
+    }
+
     /// <summary>
     /// The README's table for each send says the same as the error table about the block: every reply-cli code the table
     /// maps to a row of class <c>blocked</c> is named in a README row whose code is <c>provider_blocked</c>, and in no
@@ -492,8 +531,10 @@ public partial class ReplyErrorTableTests
             .ToList();
         Assert.NotEmpty(blocking);
 
-        foreach (var code in blocking)
+        foreach (var key in blocking)
         {
+            // A key read by Reply's own code is named in the README by that code.
+            var code = key.StartsWith(ReplyCodeKey, StringComparison.Ordinal) ? key[ReplyCodeKey.Length..] : key;
             var naming = rows.Where(columns => columns[1].Contains($"`{code}`", StringComparison.Ordinal)).ToList();
             Assert.True(naming.Count > 0, $"The README's {operation} table names '{code}' nowhere.");
             Assert.All(

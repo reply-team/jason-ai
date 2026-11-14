@@ -3,7 +3,7 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
-## 0.15.2
+## 0.16.0
 
 - Every sender's block the package reports names the `channel` the send went on, `email` or `linkedin`, beside the
   sender's number: a mailbox turned off or disconnected, and a LinkedIn account turned off, disconnected or at its
@@ -12,6 +12,15 @@ absorbed by a release of this package alone.
   got past cleared the other's block.
 - Needs Jason 0.43.0 or newer, the release that keeps a sender's block per channel: an older one refuses a block that
   names a channel, and the send it met ends `permanent` instead of waiting on the block.
+- Reply's two limits on a direct email, the mailbox's daily limit (`contact.dailyLimitReached`) and the account's active
+  contacts for its billing period (`contact.activeContactsLimitReached`), are read on `message.send` by Reply's own code,
+  whatever the status and whatever code reply-cli prints for them (`rate_limited` today), as the mailbox's block for its
+  `limit` on the `email` channel, never as a wait on a busy Reply repeated blind. The daily block clears at the next
+  midnight UTC, when Reply counts a new day, or as long after the answer as the CLI said to wait; the active-contacts
+  block only at such a wait, and is otherwise tried at the runtime's cadence. A refusal that names a record of the send
+  names a dead one, which is no longer kept as the work item's `send`; the send a later trial makes is. A command run from
+  no sending account ends `sender_limit_reached`, permanent. Against a Reply that never answers these codes nothing
+  changes.
 
 ## 0.15.1
 

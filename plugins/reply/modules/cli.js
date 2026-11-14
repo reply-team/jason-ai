@@ -10,7 +10,7 @@
 // This module knows command lines and how the Reply CLI ends, and nothing about operations; the operation modules know
 // which command serves them and nothing about command lines. That split is what makes the rules above assertable
 // instead of aspirational.
-import { codeOf, cutAnswerRow, fail, lostAnswerRow, rowOf, unexplainedRefusalRow } from "./errors.js";
+import { codeOf, cutAnswerRow, fail, keepsNoSend, lostAnswerRow, rowOf, unexplainedRefusalRow } from "./errors.js";
 
 // The vendor program, by the name the manifest declares and the operator grants. The runtime decided at reload
 // what that name means on this machine; nothing here looks a program up for itself.
@@ -408,8 +408,8 @@ function withoutContact(learned) {
 
 // What a failure carries out: what this package knew, joined by the ids the CLI had learned — the contact it created
 // before Reply refused the add, say — and, for a direct send made under a key, the reference Reply named it by, whatever
-// the ending: it is the work item's send, and the way to read it back. A campaign the provider has just denied is never
-// pinned.
+// the ending: it is the work item's send, and the way to read it back — but for a row whose refusal names a dead record,
+// such as a mailbox's limit, which Reply released the key with. A campaign the provider has just denied is never pinned.
 function learnedWith(learned, said, operation, row, kept) {
   const merged = Object.assign({}, learned || {});
   const ids = said !== null && said.ids !== null && typeof said.ids === "object" ? said.ids : {};
@@ -423,7 +423,7 @@ function learnedWith(learned, said, operation, row, kept) {
   }
 
   const details = said !== null && said.details !== null && typeof said.details === "object" ? said.details : {};
-  if (kept && isReference(details.reference)) {
+  if (kept && isReference(details.reference) && !keepsNoSend(operation, row)) {
     merged.send = details.reference;
   }
 
