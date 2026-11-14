@@ -418,7 +418,7 @@ public sealed class RouteService(
                         {
                             var old = Recorded(At(before.Global, operation, channel));
                             var now = Recorded(At(after.Global, operation, channel));
-                            if (old is not null || now is not null)
+                            if (!JsonNode.DeepEquals(old, now))
                             {
                                 journal.Append(db, actor, JournalKinds.GlobalRoutesUpdated, campaign: null, key: JournalKey(operation, channel), old: old, updated: now, reason: reason);
                             }
