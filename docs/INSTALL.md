@@ -432,6 +432,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
 | role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | every plugin is granted something of each capability it asks for |
+| the data directory is laid out as this jason runs it (`layout.json`; none means layout 1) — a layout a newer Jason set up, or a stamp that cannot be read, fails it with the sentence the refused verbs say | |
 | | a route is configured |
 | | a binding names an account |
 | | a provider CLI **you name** answers |
@@ -447,9 +448,11 @@ job is to answer when the runtime cannot be asked. The JSON body carries `ready`
 **an agent branches on the body, never on the exit code**.
 
 Under its checks, `jason status --human` prints where this installation's parts are: the role skills, plugins and
-custom UI folders and the settings file. Its JSON carries the same under `setup`, whether or not a runtime answers.
-While `setup.settings_file_holds_secrets` is true, the settings file is also where plugin secrets are kept, and `--human`
-names `jason route set --global` and `jason plugin grant` for its routes and grants.
+custom UI folders, the settings file and the layout. Its JSON carries the same under `setup`, whether or not a runtime
+answers. While `setup.settings_file_holds_secrets` is true, the settings file is also where plugin secrets are kept, and
+`--human` names `jason route set --global` and `jason plugin grant` for its routes and grants. `setup.layout` is the
+layout the data directory's `layout.json` names, 1 where there is none, and null where it cannot be read: `jason status`
+never guesses one.
 
 A check reports a fact and, where there is one, the command that repairs it. Most repairs are `jason`
 commands. One is not: putting an executable on a PATH is the shell's own act, so the `path` check prints the
@@ -703,8 +706,8 @@ jason status
 ```
 
 **What travels:** the database, the settings file, the plugins, the role skills with their record, a custom UI
-under `ui/custom/`, the logs, and the harness root's tree — your memory files and every project's and campaign's
-folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256. Whether the runtime started at logon travels as
+under `ui/custom/`, the logs, the layout stamp `layout.json` when there is one, and the harness root's tree — your memory files and every project's and campaign's
+folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256 and the layout the data directory is in. Whether the runtime started at logon travels as
 a fact: the import registers it again on a machine that can, and on one that cannot says "No logon registration,
 and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
 work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an
@@ -714,7 +717,9 @@ everything in it, a token under `Plugins:Config` included: keep the archive as y
 
 **Before anything is written**, the import refuses an archive it cannot read, a name in it that would land
 outside the data directory or the harness root, a file whose size or SHA-256 is not the one `export.json` lists,
-an archive a newer Jason wrote, and an installation already here — a database, or a harness root with a folder
+an archive a newer Jason wrote, an archive whose data directory is in a layout newer than this jason runs
+(`layout_newer`), an archive whose layout stamp cannot be read or names another layout than `export.json` does, and an
+installation already here — a database, or a harness root with a folder
 marker in it, which a Jason that has run once on the new machine has. The refusal names what is there. Give
 `--replace` to move it aside and place the archive instead: the data directory's parts go into
 `<data>/replaced-<stamp>/` — `state/` whole, the database's `-wal` and `-shm` files and its backups with it — and

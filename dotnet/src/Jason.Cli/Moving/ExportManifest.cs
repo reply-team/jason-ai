@@ -20,6 +20,8 @@ public sealed record ExportAutostart(bool Registered, string Platform);
 /// </summary>
 /// <param name="Format">The layout of the archive; <see cref="CurrentFormat"/> is the only one.</param>
 /// <param name="JasonVersion">The version of the Jason that wrote it.</param>
+/// <param name="Layout">The layout of the data directory it carries (<see cref="Jason.Contracts.Discovery.LayoutStamp"/>); an archive
+/// written before the layout stamp has none, and carries layout 1.</param>
 /// <param name="ExportedAt">The moment it was written, in UTC.</param>
 /// <param name="OperatingSystem"><c>windows</c>, <c>macos</c> or <c>linux</c>.</param>
 /// <param name="DataDirectory">The data directory it was read from, as that machine spelt it.</param>
@@ -31,6 +33,7 @@ public sealed record ExportAutostart(bool Registered, string Platform);
 public sealed record ExportManifest(
     int Format,
     string JasonVersion,
+    int? Layout,
     DateTimeOffset ExportedAt,
     string OperatingSystem,
     string DataDirectory,

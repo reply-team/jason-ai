@@ -60,7 +60,7 @@ public class WorkFlowEndToEndTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "config"));
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
 
         var behaviour = Path.Combine(root, "behaviour.txt");
@@ -334,7 +334,7 @@ public class WorkFlowEndToEndTests
     {
         const int MostLines = 80;
         const int LongestLine = 400;
-        var logs = new JasonPaths(root).LogsDirectory;
+        var logs = new JasonPaths(root, 1).LogsDirectory;
         if (!Directory.Exists(logs))
         {
             return "The runtime left no log.";
@@ -457,7 +457,7 @@ public class WorkFlowEndToEndTests
     /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
     private static Task<CliResult> StartRuntimeAsync(string root) =>
         EndToEnd.PatientStart.RunAsync(
-            new JasonPaths(root),
+            new JasonPaths(root, 1),
             within => JasonAsync(root, within, "runtime", "start"),
             () => JasonAsync(root, "runtime", "status"),
             result => (result.ExitCode, result.Output));

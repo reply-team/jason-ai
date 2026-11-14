@@ -25,12 +25,18 @@ namespace Jason.Contracts.Api;
 /// True where this layout keeps plugins' configuration (<c>Plugins:Config</c>), their secrets among it, in the settings
 /// file too. A fact of the layout rather than of the file's content, so that it can be said without reading the file.
 /// </param>
+/// <param name="Layout">
+/// The layout the data directory is in, as its stamp says: 1 where there is none, the layout a readable stamp names, and
+/// null where it cannot be read — never a layout guessed for it. A runtime is only ever on a layout it runs, so in
+/// <c>system.info</c> it is always a number; null is said by <c>jason status</c>, and the doctor's copy of its report, of a stamp it found unreadable.
+/// </param>
 public sealed record SetupInfo(
     string RoleSkillsDirectory,
     string PluginsDirectory,
     string CustomUiDirectory,
     string SettingsFile,
-    bool SettingsFileHoldsSecrets)
+    bool SettingsFileHoldsSecrets,
+    int? Layout = null)
 {
     /// <summary>The parts of the installation <paramref name="paths"/> names, as its layout places them.</summary>
     public static SetupInfo From(JasonPaths paths)
@@ -42,6 +48,13 @@ public sealed record SetupInfo(
             paths.PluginsDirectory,
             paths.UiCustomDirectory,
             paths.UserSettingsFile,
-            paths.UserSettingsFileHoldsSecrets);
+            paths.UserSettingsFileHoldsSecrets,
+            paths.Stamp switch
+            {
+                null => paths.Layout,
+                { State: LayoutStampState.Read } stamp => stamp.Layout,
+                { State: LayoutStampState.Missing } => 1,
+                _ => null,
+            });
     }
 }

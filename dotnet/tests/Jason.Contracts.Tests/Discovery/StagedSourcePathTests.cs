@@ -21,7 +21,7 @@ namespace Jason.Contracts.Tests.Discovery;
 /// </remarks>
 public class StagedSourcePathTests
 {
-    private static readonly JasonPaths Paths = new(OperatingSystem.IsWindows() ? @"C:\data" : "/data");
+    private static readonly JasonPaths Paths = new(OperatingSystem.IsWindows() ? @"C:\data" : "/data", 1);
 
     [Theory]
     [InlineData("v0.1.0")]

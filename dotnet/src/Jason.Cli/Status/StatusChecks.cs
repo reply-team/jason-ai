@@ -259,6 +259,7 @@ internal static class StatusChecks
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
             checks.Add(UpdateInFlight(unfinished));
+            checks.Add(Layout(env));
 
             checks.Add(ProviderPlugin(info));
             checks.Add(PluginPackage(info, env.Paths));
@@ -316,6 +317,36 @@ internal static class StatusChecks
         return info is null
             ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
             : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
+    }
+
+    /// <summary>
+    /// Whether the data directory is laid out as this jason runs it, by its stamp. Required: a stamp naming a later layout,
+    /// or one that cannot be read, refuses the runtime's start and every verb that touches a part that moves, so nothing
+    /// can start work; the fact is that refusal's own sentence. Read from this CLI's paths, which read the stamp once, and
+    /// never refused here: this verb is how such an installation is diagnosed.
+    /// </summary>
+    private static StatusCheck Layout(CliEnvironment env)
+    {
+        var paths = env.Paths;
+        Dictionary<string, string>? written = null;
+        if (paths.Stamp is { State: LayoutStampState.Read } stamp)
+        {
+            written = new Dictionary<string, string>(StringComparer.Ordinal) { ["written_by"] = stamp.WrittenBy! };
+            if (stamp.At is { } at)
+            {
+                written["at"] = at;
+            }
+        }
+
+        if (LayoutStamp.Refusal(paths, SkillsSource.BuildVersion(env)) is { } refusal)
+        {
+            return new StatusCheck("layout", true, CheckState.Failed, refusal.Message, null) with { Details = written };
+        }
+
+        var fact = paths.Stamp is { State: LayoutStampState.Missing }
+            ? "This data directory is laid out as this jason runs it (layout 1, no layout.json)."
+            : string.Create(CultureInfo.InvariantCulture, $"This data directory is laid out as this jason runs it (layout {paths.Layout}).");
+        return new StatusCheck("layout", true, CheckState.Ok, fact, null) with { Details = written };
     }
 
     /// <summary>

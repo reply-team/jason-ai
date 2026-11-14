@@ -31,7 +31,7 @@ public class StartRefusalPageTests
         var root = Path.Combine(tree.Root, "jasón");
         await File.WriteAllTextAsync(root, "a file where the data directory goes", Ct);
 
-        using var runtime = RuntimeProcessControl.Instance.Launch(new JasonPaths(root), ["dotnet", GoldenPath.Assembly], updateLaunch: null);
+        using var runtime = RuntimeProcessControl.Instance.Launch(new JasonPaths(root, 1), ["dotnet", GoldenPath.Assembly], updateLaunch: null);
         using (var bound = CancellationTokenSource.CreateLinkedTokenSource(Ct))
         {
             bound.CancelAfter(TimeSpan.FromMinutes(2));

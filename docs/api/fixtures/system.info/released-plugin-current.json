@@ -165,7 +165,8 @@
       "plugins_directory": "<data>/plugins",
       "custom_ui_directory": "<data>/ui/custom",
       "settings_file": "<data>/config/settings.json",
-      "settings_file_holds_secrets": true
+      "settings_file_holds_secrets": true,
+      "layout": 1
     }
   }
 }

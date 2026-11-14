@@ -21,12 +21,12 @@ public class SetupInfoTests
     {
         var info = SystemInfo() with
         {
-            Setup = new SetupInfo("/data/skills/roles", "/data/plugins", "/data/ui/custom", "/data/config/settings.json", true),
+            Setup = new SetupInfo("/data/skills/roles", "/data/plugins", "/data/ui/custom", "/data/config/settings.json", true, 1),
         };
 
         Assert.EndsWith(
             "\"released_plugins\":null,\"setup\":{\"role_skills_directory\":\"/data/skills/roles\",\"plugins_directory\":\"/data/plugins\","
-                + "\"custom_ui_directory\":\"/data/ui/custom\",\"settings_file\":\"/data/config/settings.json\",\"settings_file_holds_secrets\":true}}",
+                + "\"custom_ui_directory\":\"/data/ui/custom\",\"settings_file\":\"/data/config/settings.json\",\"settings_file_holds_secrets\":true,\"layout\":1}}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
         Assert.EndsWith("\"released_plugins\":null,\"setup\":null}", JsonSerializer.Serialize(info with { Setup = null }, JasonJson.Options), StringComparison.Ordinal);
@@ -34,14 +34,15 @@ public class SetupInfoTests
 
     /// <summary>
     /// Every member is the <see cref="JasonPaths"/> property of the same name, over any root: nothing here composes a path
-    /// of its own, and the settings file holds plugin secrets in this layout.
+    /// of its own, in either layout, and the layout is the one the paths answer by.
     /// </summary>
     [Theory]
-    [InlineData("jason-setup-a")]
-    [InlineData("elsewhere/jason-setup-b")]
-    public void Setup_is_composed_from_jason_paths_alone(string folder)
+    [InlineData("jason-setup-a", 1)]
+    [InlineData("elsewhere/jason-setup-b", 1)]
+    [InlineData("jason-setup-c", 2)]
+    public void Setup_is_composed_from_jason_paths_alone(string folder, int layout)
     {
-        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), folder));
+        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), folder), layout);
 
         var setup = SetupInfo.From(paths);
 
@@ -50,7 +51,8 @@ public class SetupInfoTests
         Assert.Equal(paths.UiCustomDirectory, setup.CustomUiDirectory);
         Assert.Equal(paths.UserSettingsFile, setup.SettingsFile);
         Assert.Equal(paths.UserSettingsFileHoldsSecrets, setup.SettingsFileHoldsSecrets);
-        Assert.True(setup.SettingsFileHoldsSecrets, "Today's layout keeps Plugins:Config in the one settings file.");
+        Assert.Equal(layout, setup.Layout);
+        Assert.Equal(layout == 1, setup.SettingsFileHoldsSecrets);
     }
 
     /// <summary>

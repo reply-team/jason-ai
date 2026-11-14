@@ -43,7 +43,7 @@ public class LaunchedActorTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-launched-actor", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "config"));
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
 
         try
@@ -110,7 +110,7 @@ public class LaunchedActorTests
     {
         var root = Path.Combine(Path.GetTempPath(), "jason-launched-actor", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "config"));
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings, Ct);
 
         try
@@ -255,7 +255,7 @@ public class LaunchedActorTests
     /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
     private static Task<CliResult> StartRuntimeAsync(string root) =>
         EndToEnd.PatientStart.RunAsync(
-            new JasonPaths(root),
+            new JasonPaths(root, 1),
             within => JasonAsync(root, null, within, "runtime", "start"),
             () => JasonAsync(root, null, "runtime", "status"),
             result => (result.ExitCode, result.Output));

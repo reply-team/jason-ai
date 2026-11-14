@@ -68,7 +68,7 @@ public class ProviderOperationE2ETests
 
         Directory.CreateDirectory(Path.Combine(root, "config"));
         Directory.CreateDirectory(workspace);
-        var paths = new JasonPaths(root);
+        var paths = new JasonPaths(root, 1);
         await File.WriteAllTextAsync(paths.UserSettingsFile, Settings(workspace, routed: true), Ct);
 
         // The provider's own account: a list to add someone to, and a campaign whose name is not a name. The
@@ -492,7 +492,7 @@ public class ProviderOperationE2ETests
     /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
     private static Task<CliResult> StartRuntimeAsync(string root) =>
         EndToEnd.PatientStart.RunAsync(
-            new JasonPaths(root),
+            new JasonPaths(root, 1),
             within => JasonAsync(root, within, "runtime", "start"),
             () => JasonAsync(root, "runtime", "status"),
             result => (result.ExitCode, result.Output));

@@ -44,8 +44,9 @@ public static class SetupSessionOpener
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        // A check of the data directory's layout, refusing a layout newer than this build, belongs here: before the one
-        // read of the layout below, so that no folder of a layout this build does not know is ever named.
+        // The data directory's layout is checked before this runs: LayoutGatedVerbs refuses `session open --setup` where
+        // the stamp names a layout newer than this build runs or cannot be read, before the one read of the layout below,
+        // so that no folder of a layout this build does not know is ever named.
         var setup = SetupInfo.From(env.Paths);
         var folder = setup.RoleSkillsDirectory;
         if (!Directory.Exists(folder))

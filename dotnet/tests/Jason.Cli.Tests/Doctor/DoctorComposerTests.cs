@@ -2578,7 +2578,7 @@ public sealed class DoctorComposerTests
             _ => (Path.Combine(home, JasonPaths.DefaultFolder), "~" + Path.DirectorySeparatorChar + JasonPaths.DefaultFolder),
         };
         var runtime = Running(dir, dataDir: runtimeRoot);
-        runtime.Info = StubRuntime.EveryField(runtimeRoot) with { Setup = SetupInfo.From(new JasonPaths(runtimeRoot)) };
+        runtime.Info = StubRuntime.EveryField(runtimeRoot) with { Setup = SetupInfo.From(new JasonPaths(runtimeRoot, 1)) };
 
         var bundle = await ComposeAsync(dir, runtime, identity: MadeUp with { Home = home });
         Assert.DoesNotContain(Everything(JsonNode.Parse(bundle.Serialize())!), text => text.Contains(home, StringComparison.OrdinalIgnoreCase));

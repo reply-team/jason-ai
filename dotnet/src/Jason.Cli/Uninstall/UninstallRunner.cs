@@ -373,9 +373,25 @@ public static class UninstallRunner
         }
 
         var entries = Directory.EnumerateFileSystemEntries(dataDirectory).Order(StringComparer.Ordinal).ToList();
-        var own = entries.Where(entry => Contracts.Discovery.JasonPaths.OwnEntries.Contains(Path.GetFileName(entry), StringComparer.Ordinal)).ToList();
+        var setupIsJasons = SetupIsJasons(dataDirectory);
+        var own = entries
+            .Where(entry => Contracts.Discovery.JasonPaths.OwnEntries.Contains(Path.GetFileName(entry), StringComparer.Ordinal))
+            .Where(entry => setupIsJasons || Path.GetFileName(entry) != Contracts.Discovery.JasonPaths.SetupFolder)
+            .ToList();
         return (own, [.. entries.Except(own)]);
     }
+
+    /// <summary>The record a move between layouts keeps while it runs, beside the stamp it ends by writing.</summary>
+    internal const string LayoutMigrationFile = "layout-migration.json";
+
+    /// <summary>
+    /// Whether <c>setup/</c> is Jason's to remove: only where Jason says it made one — a layout stamp, which only the build
+    /// that moves the parts writes, or the record of a move under way. Every Jason before the stamp kept nothing there,
+    /// so in a directory with neither, a <c>setup</c> folder is a person's, and the purge keeps it.
+    /// </summary>
+    private static bool SetupIsJasons(string dataDirectory) =>
+        Path.Exists(Path.Combine(dataDirectory, Contracts.Discovery.LayoutStamp.FileName))
+        || Path.Exists(Path.Combine(dataDirectory, LayoutMigrationFile));
 
     /// <summary>
     /// Prints exactly what will be deleted and what will be kept, and asks. Only in the shape a person is

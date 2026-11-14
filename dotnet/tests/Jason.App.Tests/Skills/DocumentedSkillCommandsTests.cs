@@ -295,7 +295,7 @@ public class DocumentedSkillCommandsTests
         new(
             new StringWriter(),
             error,
-            new JasonPaths(tree.Root),
+            new JasonPaths(tree.Root, 1),
             HttpHandler: new Unreachable(),
             Processes: new FakeProcessControl
             {

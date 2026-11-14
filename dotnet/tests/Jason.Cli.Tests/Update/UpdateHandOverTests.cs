@@ -274,7 +274,7 @@ public class UpdateHandOverTests
     public async Task A_command_run_to_its_end_hands_back_its_exit_code_and_output_and_passes_its_error_on()
     {
         using var tree = new TempTree();
-        var paths = new JasonPaths(Path.Combine(tree.Root, "data"));
+        var paths = new JasonPaths(Path.Combine(tree.Root, "data"), 1);
         var error = new StringWriter();
         string[] command = OperatingSystem.IsWindows()
             ? [Path.Combine(Environment.SystemDirectory, "cmd.exe"), "/d", "/c", "echo %JASON_DATA_DIR%&echo said on the side 1>&2&exit /b 3"]

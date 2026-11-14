@@ -45,7 +45,7 @@ internal sealed class Installation : IDisposable
     internal Installation(string root, ReplyAccount account)
     {
         Root = root;
-        Paths = new JasonPaths(root);
+        Paths = new JasonPaths(root, 1);
         Account = account;
     }
 

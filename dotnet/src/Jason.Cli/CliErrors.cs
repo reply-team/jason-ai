@@ -56,6 +56,12 @@ public static class CliErrors
     /// <summary>The runtime runs, and a verb that works on its files cold was not told to stop it, so nothing was written.</summary>
     public const string RuntimeRunning = "runtime_running";
 
+    /// <summary>The data directory's stamp names a layout newer than this build runs, so a verb that touches a part that moves did nothing.</summary>
+    public const string LayoutNewer = Contracts.Discovery.LayoutStamp.NewerCode;
+
+    /// <summary>The data directory's stamp is there and cannot be read, so a verb that touches a part that moves did nothing.</summary>
+    public const string LayoutUnreadable = Contracts.Discovery.LayoutStamp.UnreadableCode;
+
     /// <summary>Something is already at the path <c>jason export</c> would write, and an archive is never written over anything.</summary>
     public const string ExportOutputExists = "export_output_exists";
 

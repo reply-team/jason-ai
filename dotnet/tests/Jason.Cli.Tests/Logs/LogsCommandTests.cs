@@ -114,7 +114,7 @@ public sealed class LogsCommandTests
     {
         // The directory is part of the answer, and a user's profile path is where it can be non-ASCII.
         using var dir = new TempPaths();
-        var paths = new Jason.Contracts.Discovery.JasonPaths(Path.Combine(dir.Paths.Root, "Привіт 日本語 é"));
+        var paths = new Jason.Contracts.Discovery.JasonPaths(Path.Combine(dir.Paths.Root, "Привіт 日本語 é"), 1);
         Directory.CreateDirectory(paths.LogsDirectory);
         var astral = char.ConvertFromUtf32(0x1F600);
         Write(
