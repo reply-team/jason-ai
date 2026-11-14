@@ -7,6 +7,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Plugins;
@@ -209,7 +210,7 @@ public class GlobalRouteWriteTests
     {
         await using var api = await StartAsync();
         var path = api.Paths.UserSettingsFile;
-        var writer = new SettingsWriter(api.Resolve<SettingsFile>(), api.Paths, NullLogger<SettingsWriter>.Instance, attempt =>
+        var writer = new SettingsWriter(api.Resolve<SettingsFile>(), api.Paths, api.Resolve<ReloadGate>(), NullLogger<SettingsWriter>.Instance, attempt =>
         {
             if (attempt <= changes)
             {
@@ -217,12 +218,12 @@ public class GlobalRouteWriteTests
             }
         });
 
-        Task<bool> Act() => writer.WriteAsync(
+        Task<bool> Act() => UnderTheGateAsync(api, () => writer.WriteAsync(
             [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", new JsonArray("example.com"))],
             "Plugins",
             (wrote, _) => Task.FromResult(wrote),
             (refused, _, _) => refused,
-            Ct);
+            Ct));
 
         if (written)
         {
@@ -255,7 +256,7 @@ public class GlobalRouteWriteTests
         var theirs = Original.Replace("\"Enabled\": false", "\"Enabled\": false, \"TickSeconds\": 12", StringComparison.Ordinal);
         SettingsPutBack? outcome = null;
 
-        var refused = await Assert.ThrowsAsync<DomainException>(() => api.Resolve<SettingsWriter>().WriteAsync<bool>(
+        var refused = await Assert.ThrowsAsync<DomainException>(() => UnderTheGateAsync(api, () => api.Resolve<SettingsWriter>().WriteAsync<bool>(
             [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", new JsonArray("example.com"))],
             "Plugins",
             (_, _) =>
@@ -268,7 +269,7 @@ public class GlobalRouteWriteTests
                 outcome = putBack;
                 return domain;
             },
-            Ct));
+            Ct)));
 
         Assert.Equal("refused_for_the_test", refused.Code);
         Assert.Equal(SettingsPutBack.ChangedSince, outcome);
@@ -289,7 +290,7 @@ public class GlobalRouteWriteTests
         FileStream? held = null;
         try
         {
-            await Assert.ThrowsAsync<DomainException>(() => api.Resolve<SettingsWriter>().WriteAsync<bool>(
+            await Assert.ThrowsAsync<DomainException>(() => UnderTheGateAsync(api, () => api.Resolve<SettingsWriter>().WriteAsync<bool>(
                 [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", new JsonArray("example.com"))],
                 "Plugins",
                 (_, _) =>
@@ -302,7 +303,7 @@ public class GlobalRouteWriteTests
                     outcome = putBack;
                     return domain;
                 },
-                Ct));
+                Ct)));
         }
         finally
         {
@@ -367,7 +368,7 @@ public class GlobalRouteWriteTests
         await using var api = await StartAsync();
         IReadOnlyDictionary<string, string?>? told = null;
 
-        await Assert.ThrowsAsync<DomainException>(() => api.Resolve<SettingsWriter>().WriteAsync<bool>(
+        await Assert.ThrowsAsync<DomainException>(() => UnderTheGateAsync(api, () => api.Resolve<SettingsWriter>().WriteAsync<bool>(
             [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", new JsonArray("example.com"))],
             "Plugins",
             (_, _) => throw new DomainException(409, "refused_for_the_test", "Refused for the test.", false),
@@ -376,7 +377,7 @@ public class GlobalRouteWriteTests
                 told = held;
                 return domain;
             },
-            Ct));
+            Ct)));
 
         Assert.NotNull(told);
         Assert.Equal("False", told["dispatcher:enabled"]);
@@ -392,11 +393,12 @@ public class GlobalRouteWriteTests
         try
         {
             var configuration = new ConfigurationBuilder().AddEnvironmentVariables(prefix).Build();
-            var file = new SettingsFile(configuration);
+            var file = new SettingsFile(configuration, prefix);
 
-            Assert.True(file.Shadowed("Routes:Default:Plugin"));
-            Assert.True(file.Shadowed("routes:default"));
-            Assert.False(file.Shadowed("Routes:Operations:campaign.get:Plugin"));
+            Assert.Equal(prefix + "Routes__Default__Plugin", file.Shadowing("Routes:Default:Plugin"));
+            Assert.Equal(prefix + "Routes__Default__Plugin", file.Shadowing("routes:default"));
+            Assert.Null(file.Shadowing("Routes:Operations:campaign.get:Plugin"));
+            Assert.Null(file.Shadowing("Routes:Default:Plug"));
         }
         finally
         {
@@ -404,13 +406,89 @@ public class GlobalRouteWriteTests
         }
     }
 
+    /// <summary>
+    /// The variable is named as the environment spells it, in its own case, and where it sets a setting under the one the
+    /// write would take away it is that variable, not one made up from the path.
+    /// </summary>
     [Fact]
-    public void Shadowed_names_the_variable_that_holds_the_setting()
+    public void Shadowed_names_the_variable_that_holds_the_setting_as_the_environment_spells_it()
     {
-        var refused = DomainErrors.SettingShadowed("Routes:Default:Plugin");
+        var prefix = "JASONTEST" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant() + "_";
+        var variable = prefix + "routes__DEFAULT__binding__workspace";
+        Environment.SetEnvironmentVariable(variable, "elsewhere");
+        try
+        {
+            var file = new SettingsFile(new ConfigurationBuilder().AddEnvironmentVariables(prefix).Build(), prefix);
+
+            Assert.Equal(variable, file.Shadowing("Routes:Default:Binding"));
+            Assert.Equal(variable, file.Shadowing("Routes:Default"));
+            Assert.Null(file.Shadowing("Routes:Default:Plugin"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
+
+        var refused = DomainErrors.SettingShadowed("Routes:Default:Binding", "JASON_routes__DEFAULT__binding__workspace");
 
         Assert.Equal("setting_shadowed", refused.Code);
-        Assert.Contains("JASON_Routes__Default__Plugin", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "Routes:Default:Binding is set by the environment variable JASON_routes__DEFAULT__binding__workspace, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.",
+            refused.Message);
+    }
+
+    /// <summary>
+    /// The writer runs only under the reload gate its caller holds: a caller that forgot it is stopped before the file is
+    /// read, rather than racing a reload.
+    /// </summary>
+    [Fact]
+    public async Task The_settings_writer_refuses_to_run_outside_the_reload_gate()
+    {
+        await using var api = await StartAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => api.Resolve<SettingsWriter>().WriteAsync<bool>(
+            [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", new JsonArray("example.com"))],
+            "Plugins",
+            (wrote, _) => Task.FromResult(wrote),
+            (refused, _, _) => refused,
+            Ct));
+
+        Assert.Equal(Original, File.ReadAllText(api.Paths.UserSettingsFile));
+    }
+
+    /// <summary>
+    /// A set that wrote nothing and whose reload refused leaves the refusal for <c>plugin.list</c> to say: the file is as
+    /// a person left it, so the report describes the file that is there.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_reload_of_a_file_the_set_left_as_it_was_is_kept_for_plugin_list()
+    {
+        await using var api = await StartAsync();
+        var broken = WithRoute.Replace(
+            "\"campaign.get\": {",
+            "\"contact.find\": { \"Plugin\": \"no-such-plugin\" },\n            \"campaign.get\": {",
+            StringComparison.Ordinal);
+        File.WriteAllText(api.Paths.UserSettingsFile, broken);
+
+        var error = await api.PostErrorAsync(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        Assert.Equal(broken, File.ReadAllText(api.Paths.UserSettingsFile));
+        Assert.False(api.Resolve<PluginRegistry>().LastReload?.Activated ?? true);
+    }
+
+    private static async Task<T> UnderTheGateAsync<T>(RuntimeApiFixture api, Func<Task<T>> act)
+    {
+        var gate = api.Resolve<ReloadGate>().Semaphore;
+        await gate.WaitAsync(Ct);
+        try
+        {
+            return await act();
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     /// <summary>

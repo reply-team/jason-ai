@@ -265,14 +265,14 @@ public static class DomainErrors
 
     /// <summary>
     /// A <c>JASON_</c> environment variable sets the path the writer would write, and overrides the file: a write would
-    /// answer success for a setting that is not the one in force. Named by the setting and the variable's form, never
-    /// by what either holds.
+    /// answer success for a setting that is not the one in force. Named by the setting and the variable as the environment
+    /// spells it (<see cref="Configuration.SettingsFile.Shadowing"/>), never by what either holds.
     /// </summary>
-    public static DomainException SettingShadowed(string setting) =>
+    public static DomainException SettingShadowed(string setting, string variable) =>
         new(
             StatusCodes.Status409Conflict,
             "setting_shadowed",
-            $"{setting} is set by the environment variable {Configuration.JasonConfiguration.EnvironmentPrefix}{setting.Replace(":", "__", StringComparison.Ordinal)}, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.",
+            $"{setting} is set by the environment variable {variable}, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.",
             retryable: false);
 
     /// <summary>No provider block has this id. Nothing deletes a block, so this is a wrong id.</summary>

@@ -425,7 +425,7 @@ public sealed class RouteService(
                         actor,
                         reason,
                         wrote ? null : settingsFile.Read(),
-                        recordRefusal: false,
+                        recordRefusal: !wrote,
                         routeRefusal: RouteRefusal,
                         besides: after =>
                         {

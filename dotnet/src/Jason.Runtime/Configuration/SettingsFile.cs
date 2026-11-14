@@ -1,3 +1,4 @@
+using System.Collections;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
@@ -8,7 +9,9 @@ namespace Jason.Runtime.Configuration;
 /// the runtime so far. A service, because the configuration it reads is the runtime's own root, which the host's
 /// services do not otherwise see.
 /// </summary>
-public sealed class SettingsFile(IConfiguration configuration)
+/// <param name="configuration">The runtime's own configuration root.</param>
+/// <param name="environmentPrefix">The prefix its environment variables are read under, which a test may set.</param>
+public sealed class SettingsFile(IConfiguration configuration, string environmentPrefix = JasonConfiguration.EnvironmentPrefix)
 {
     /// <summary>
     /// Reads the file now, and answers the failure of a file that is there and could not be used, or null;
@@ -23,15 +26,29 @@ public sealed class SettingsFile(IConfiguration configuration)
     public SettingsCommit Commit(byte[]? expected, byte[]? next) => JasonConfiguration.CommitSettingsFile(configuration, expected, next);
 
     /// <summary>
-    /// Whether a <c>JASON_</c> environment variable sets this path or anything under it. The variables are read after the
-    /// file, so what one says is what the runtime works from whatever the file says: a write there would answer success
-    /// for a setting that is not the one in force. Matched without regard to case, as the configuration matches keys.
+    /// The name of a <c>JASON_</c> environment variable that sets this path or anything under it, as the environment
+    /// spells it, or null where none does. The variables are read after the file, so what one says is what the runtime
+    /// works from whatever the file says: a write there would answer success for a setting that is not the one in force.
+    /// Matched without regard to case, as the configuration matches keys; of several, the first by ordinal order.
     /// </summary>
-    public bool Shadowed(string path)
+    public string? Shadowing(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        return configuration is IConfigurationRoot root
+        if (!(configuration is IConfigurationRoot root
             && root.Providers.OfType<EnvironmentVariablesConfigurationProvider>()
-                .Any(provider => provider.TryGet(path, out _) || provider.GetChildKeys([], path).Any());
+                .Any(provider => provider.TryGet(path, out _) || provider.GetChildKeys([], path).Any())))
+        {
+            return null;
+        }
+
+        return Environment.GetEnvironmentVariables().Keys.OfType<string>()
+            .Where(name => name.StartsWith(environmentPrefix, StringComparison.OrdinalIgnoreCase)
+                && AtOrUnder(name[environmentPrefix.Length..].Replace("__", ":", StringComparison.Ordinal), path))
+            .Order(StringComparer.Ordinal)
+            .FirstOrDefault()
+            ?? environmentPrefix + path.Replace(":", "__", StringComparison.Ordinal);
     }
+
+    private static bool AtOrUnder(string key, string path) =>
+        key.StartsWith(path, StringComparison.OrdinalIgnoreCase) && (key.Length == path.Length || key[path.Length] == ':');
 }

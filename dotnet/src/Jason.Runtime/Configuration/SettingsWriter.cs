@@ -31,7 +31,9 @@ public enum SettingsPutBack
 /// <para>
 /// <b>One at a time.</b> The caller holds the reload gate (<see cref="Plugins.Registry.ReloadGate"/>) through the whole
 /// act, so no other write and no reload of this runtime runs in between; another program's write is what the compare
-/// guards against (<see cref="JasonConfiguration.CommitSettingsFile"/>).
+/// guards against (<see cref="JasonConfiguration.CommitSettingsFile"/>). The writer refuses to run where nobody holds
+/// the gate, rather than take it itself: the reload its caller runs after the write takes no gate of its own, and must
+/// run under the same hold, which a gate the writer took and let go of would not give.
 /// </para>
 /// <para>
 /// <b>What it says.</b> Its log lines name the section and a code, and nothing else: never a value of the file, a path
@@ -43,7 +45,7 @@ public enum SettingsPutBack
 /// <b>A live edit never stops the runtime.</b> A refused write leaves the file and the settings in force as they were.
 /// </para>
 /// </remarks>
-public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<SettingsWriter> logger, Action<int>? beforeCommit = null)
+public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, Plugins.Registry.ReloadGate gate, ILogger<SettingsWriter> logger, Action<int>? beforeCommit = null)
 {
     /// <summary>How many times the act is made again from a fresh read when another writer changed the file meanwhile.</summary>
     public const int Attempts = 3;
@@ -71,6 +73,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
     /// </summary>
     /// <param name="edits">Every path the caller owns, in order; nothing else in the file is touched.</param>
     /// <param name="section">The section the edits are in, for the log.</param>
+    /// <exception cref="InvalidOperationException">Nobody holds the reload gate: a caller that forgot it.</exception>
     /// <exception cref="DomainException">
     /// <c>setting_shadowed</c>, <c>settings_file_unreadable</c>, <c>settings_file_not_editable</c>, <c>settings_file_changed</c>,
     /// <c>settings_file_busy</c> or <c>settings_file_not_writable</c>, each with nothing written.
@@ -85,10 +88,17 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
         ArgumentNullException.ThrowIfNull(edits);
         ArgumentNullException.ThrowIfNull(inForce);
         ArgumentNullException.ThrowIfNull(refused);
-
-        if (edits.FirstOrDefault(edit => edit is not RemoveIfEmptyEdit && file.Shadowed(edit.Path)) is { } shadowed)
+        if (gate.Semaphore.CurrentCount != 0)
         {
-            throw Refuse(section, DomainErrors.SettingShadowed(Shown(shadowed.Path)));
+            throw new InvalidOperationException("The settings writer runs under the reload gate, which its caller holds through the act.");
+        }
+
+        foreach (var edit in edits.Where(edit => edit is not RemoveIfEmptyEdit))
+        {
+            if (file.Shadowing(edit.Path) is { } variable)
+            {
+                throw Refuse(section, DomainErrors.SettingShadowed(Shown(edit.Path), variable));
+            }
         }
 
         var (before, after) = Commit(edits, section);
