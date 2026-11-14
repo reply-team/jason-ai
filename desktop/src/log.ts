@@ -33,6 +33,7 @@ export const templates = {
     cli_exited: 'jason {Verb} exited {Exit} after {ElapsedMs} ms',
     program_exited: '{Program} {Verb} exited {Exit} after {ElapsedMs} ms',
     settings_refused: 'The settings file at {Path} could not be read as JSON; nothing was written to it',
+    settings_layout_refused: 'A Connect card wrote nothing: the data directory’s layout was refused with {Code}',
     plugin_configured: 'Plugin {PluginId} was configured; token {TokenChanged}, target {TargetChanged}, server {ServerChanged}; jason plugin reload exited {Exit}; valid {Valid}',
     plugin_disconnected: 'Plugin {PluginId} was disconnected; settings file written {Written}; jason plugin reload exited {Exit}; valid {Valid}',
     provider_key_stored: 'The key of provider {ProviderId} was stored',

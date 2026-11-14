@@ -66,8 +66,7 @@ export interface DesktopPaths {
     windowPairing: string;
     /** `<data>/logs/`, shared with the runtime; the desktop writes only `desktop-*.jsonl` there. */
     logs: string;
-    /** `<data>/config/settings.json`, the installation's settings, which a Connect card edits as a person would. */
-    installationSettings: string;
+    // The installation's settings file is not here: it is one of the parts a layout places, answered by `dataLayout`.
     /** `<data>/run/runtime.json`, which the running runtime writes and the desktop only reads. */
     runFile: string;
 }
@@ -104,7 +103,6 @@ export function desktopPaths(data: string): DesktopPaths {
         electronLogs: join(desktop, 'electron', 'logs'),
         windowPairing: join(desktop, 'window-pairing.json'),
         logs: join(data, 'logs'),
-        installationSettings: join(data, 'config', 'settings.json'),
         runFile: join(data, 'run', 'runtime.json'),
     };
 }

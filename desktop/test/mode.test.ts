@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyMode, defaultMode, demoDirectory, demoMenu, demoMenuLine, demoPreparing, demoUnopened, enterRun, isSettingsVariable, keepFirstStart, modeUnkept, offersOf, openDirectory, opensOnDemo, parseMode, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, writeMode, type Environment, type Mode } from '../src/mode.ts';
-import { dataDirectory, desktopPaths } from '../src/paths.ts';
+import { dataDirectory, dataLayout, desktopPaths } from '../src/paths.ts';
 import { harnessRoot } from '../src/uninstall.ts';
 import { isNewInstallation } from '../src/theme.ts';
 import { prepareDemo, writeDemoRoute } from '../src/demo-start.ts';
@@ -194,7 +194,7 @@ test('the prepared demo is placed from the first instant a start is the only one
     assert.ok(begin.includes('spawned: (pid) => requestStartOver(request, process.pid, true, true, pid),'), 'the import is named in the request');
     // Every log of a start is on the hold, the run's as well as the early one.
     assert.ok(main.includes('return logHold.logger(() => fileLines(logs));'));
-    assert.ok(main.includes('const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(paths.installationSettings))));'));
+    assert.ok(main.includes('const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile))));'));
     // In the run: the window first, then the import's end, then the runtime's start.
     const run = main.slice(main.indexOf('async function run('), main.indexOf('function keepElectronUnderData('));
     const window = run.indexOf('const window = new BrowserWindow({');
@@ -619,7 +619,7 @@ test('a demo run hands the chat the person\'s data directory and harness root, r
     const person = join(folder(), '.jason');
     const root = join(folder(), 'MyJason');
     const env: Environment = { JASON_DATA_DIR: person, JASON_Harness__Root: root };
-    const settings = desktopPaths(person).installationSettings;
+    const settings = dataLayout(person).userSettingsFile;
     const demo = runsOn(person, 'demo', false);
     const own = personsOwnOf(demo, () => harnessRoot(env, '/home/someone', settings));
     enterRun(env, demo);
@@ -637,7 +637,7 @@ test('main passes the person\'s directories to the chat, read before the run is 
     const read = choose.indexOf('personsOwn = personsOwnOf(runOn, () => personHarness);');
     const entered = choose.indexOf('personEnvironment = enterRun(process.env, runOn);');
     assert.ok(read > 0 && entered > read);
-    assert.ok(choose.indexOf('const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);') > 0);
+    assert.ok(choose.indexOf('const personHarness = harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile);') > 0);
     const chat = main.slice(main.indexOf('const chat = new Chat({'));
     assert.ok(chat.slice(0, chat.indexOf('});')).includes('        personsOwn,\n'));
 });

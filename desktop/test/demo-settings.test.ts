@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { demoReviewSeconds, demoSettingsValues, mergeSettings, writeDemoSettings } from '../src/demo-settings.ts';
 import { demoUnopened, enterRun, openDirectory, startOn, writeMode, type Environment } from '../src/mode.ts';
-import { dataDirectory, desktopPaths } from '../src/paths.ts';
+import { dataDirectory, dataLayout, desktopPaths } from '../src/paths.ts';
 import { harnessRoot } from '../src/uninstall.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'demo-settings-'));
@@ -26,7 +26,7 @@ function startWithRuntime(home: string, env: Environment, startRuntime: (env: En
         },
         prepare: (dir) => {
             steps.push('prepare');
-            writeDemoSettings(dir, harnessRoot(env, home, desktopPaths(person).installationSettings));
+            writeDemoSettings(dir, harnessRoot(env, home, dataLayout(person).userSettingsFile));
         },
         keep: (mode) => writeMode(desktopPaths(person).mode, mode),
     });
@@ -41,13 +41,13 @@ test('the demo’s settings file holds every value before the demo’s runtime i
     let seen: Record<string, Record<string, unknown>> | null = null;
     const { run, steps } = startWithRuntime(home, { PATH: '/bin' }, (env) => {
         // What the runtime reads: the settings file of the data directory its environment names, nothing else.
-        const file = desktopPaths(dataDirectory({ JASON_DATA_DIR: env.JASON_DATA_DIR }, home)).installationSettings;
+        const file = dataLayout(dataDirectory({ JASON_DATA_DIR: env.JASON_DATA_DIR }, home)).userSettingsFile;
         assert.ok(existsSync(file), 'the file is there before the runtime starts');
         seen = readJson(file);
     });
     assert.deepEqual(steps, ['open', 'prepare', 'runtime start']);
     assert.equal(run.mode, 'demo');
-    assert.equal(desktopPaths(run.data).installationSettings, join(home, '.jason-demo', 'config', 'settings.json'));
+    assert.equal(dataLayout(run.data).userSettingsFile, join(home, '.jason-demo', 'config', 'settings.json'));
     assert.deepEqual(seen, {
         Harness: { Root: join(home, 'Jason-demo') },
         Responder: { OnReply: false },
@@ -61,27 +61,27 @@ test('the harness root is the sibling of the person’s: their settings’ root,
     const home = folder();
     const person = join(home, '.jason');
     mkdirSync(join(person, 'config'), { recursive: true });
-    writeFileSync(desktopPaths(person).installationSettings, JSON.stringify({ harness: { root: join(home, 'Work', 'Agents') } }));
+    writeFileSync(dataLayout(person).userSettingsFile, JSON.stringify({ harness: { root: join(home, 'Work', 'Agents') } }));
     const fromSettings = join(home, 'a-demo');
-    writeDemoSettings(fromSettings, harnessRoot({}, home, desktopPaths(person).installationSettings));
-    assert.equal(readJson(desktopPaths(fromSettings).installationSettings).Harness!.Root, join(home, 'Work', 'Agents-demo'));
+    writeDemoSettings(fromSettings, harnessRoot({}, home, dataLayout(person).userSettingsFile));
+    assert.equal(readJson(dataLayout(fromSettings).userSettingsFile).Harness!.Root, join(home, 'Work', 'Agents-demo'));
     const fromVariable = join(home, 'b-demo');
-    writeDemoSettings(fromVariable, harnessRoot({ JASON_Harness__Root: join(home, 'Roots') }, home, desktopPaths(person).installationSettings));
-    assert.equal(readJson(desktopPaths(fromVariable).installationSettings).Harness!.Root, join(home, 'Roots-demo'));
+    writeDemoSettings(fromVariable, harnessRoot({ JASON_Harness__Root: join(home, 'Roots') }, home, dataLayout(person).userSettingsFile));
+    assert.equal(readJson(dataLayout(fromVariable).userSettingsFile).Harness!.Root, join(home, 'Roots-demo'));
 });
 
 test('the person’s own settings file is never touched', () => {
     const home = folder();
     const person = join(home, '.jason');
     mkdirSync(join(person, 'config'), { recursive: true });
-    const theirs = desktopPaths(person).installationSettings;
+    const theirs = dataLayout(person).userSettingsFile;
     const text = `${JSON.stringify({ Harness: { Root: join(home, 'Mine') }, Responder: { OnReply: true }, Plugins: { Config: { reply: { key: 'kept' } } } }, null, 2)}\n`;
     writeFileSync(theirs, text);
     const before = statSync(theirs).mtimeMs;
     startWithRuntime(home, {}, () => undefined);
     assert.equal(readFileSync(theirs, 'utf8'), text);
     assert.equal(statSync(theirs).mtimeMs, before);
-    assert.equal(readJson(desktopPaths(join(home, '.jason-demo')).installationSettings).Harness!.Root, join(home, 'Mine-demo'));
+    assert.equal(readJson(dataLayout(join(home, '.jason-demo')).userSettingsFile).Harness!.Root, join(home, 'Mine-demo'));
 });
 
 test('a settings file already in the demo keeps its other keys; the demo’s values replace theirs whatever the case', () => {
@@ -110,15 +110,15 @@ test('a cheap cut: the demo’s own dispatcher ticks each second, in the demo’
     const home = folder();
     const person = join(home, '.jason');
     mkdirSync(join(person, 'config'), { recursive: true });
-    writeFileSync(desktopPaths(person).installationSettings, '{}');
+    writeFileSync(dataLayout(person).userSettingsFile, '{}');
     writeDemoSettings(join(home, '.jason-demo'), join(home, 'Jason'));
-    assert.equal(readFileSync(desktopPaths(person).installationSettings, 'utf8'), '{}');
+    assert.equal(readFileSync(dataLayout(person).userSettingsFile, 'utf8'), '{}');
 });
 
 test('the settings written name no route: the route is written beside the plugin’s placing, after these', () => {
     const demo = join(folder(), '.jason-demo');
     writeDemoSettings(demo, '/r/Jason');
-    const written = readJson(desktopPaths(demo).installationSettings);
+    const written = readJson(dataLayout(demo).userSettingsFile);
     assert.deepEqual(Object.keys(written).sort(), ['Dispatcher', 'Harness', 'Manager', 'Responder']);
 });
 
@@ -126,9 +126,9 @@ test('a demo settings file that is not a JSON object fails the preparation, and 
     const home = folder();
     const demo = join(home, '.jason-demo');
     mkdirSync(join(demo, 'config'), { recursive: true });
-    writeFileSync(desktopPaths(demo).installationSettings, '[1, 2]');
+    writeFileSync(dataLayout(demo).userSettingsFile, '[1, 2]');
     assert.throws(() => writeDemoSettings(demo, join(home, 'Jason')));
     const { run } = startWithRuntime(home, {}, () => undefined);
     assert.deepEqual(run, { person: join(home, '.jason'), data: join(home, '.jason'), mode: 'live', unopened: demoUnopened });
-    assert.equal(readFileSync(desktopPaths(demo).installationSettings, 'utf8'), '[1, 2]');
+    assert.equal(readFileSync(dataLayout(demo).userSettingsFile, 'utf8'), '[1, 2]');
 });

@@ -38,7 +38,7 @@ import { loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
-import { dataDirectory, desktopPaths, type DesktopPaths } from './paths.ts';
+import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
 import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
 import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftRuntimeStops, noteLeftStopped, placingInFlight, requestStartOver } from './demo-over.ts';
 import { demoRuntimeAlive } from './demo-alive.ts';
@@ -244,7 +244,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
     // Held while the prepared demo is placed (`demo-archive.ts`); its file is opened, and the limits read, once it is let go.
-    const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(paths.installationSettings))));
+    const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile))));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
     // What this start carries (`bundle-copy.ts`): an AppImage's copy under <data>/desktop/bundle/<version>/, the bundle
@@ -652,7 +652,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
         cli,
-        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), desktopPaths(runOn.person).installationSettings)),
+        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), dataLayout(runOn.person).userSettingsFile)),
         isDirectory: isFolder,
         remembered: () => settings.openIn ?? null,
         remember: (id: PlaceId) => {
@@ -904,7 +904,7 @@ if (unsandboxed !== null) {
  */
 function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
-    const personHarness = harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings);
+    const personHarness = harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile);
     demoWhere = demoPlaces(personDirectory, personHarness);
     // Whether this installation is new is read first, of the person's directory: before this start writes anything there,
     // before Electron makes its profile, before the single-instance lock. A new installation's first start opens on the
@@ -947,10 +947,10 @@ function chooseInstallation(installerStart: boolean): void {
     // after the directory is made and before any runtime start, and a step that fails makes this run the person's own.
     prepareLive = (demo) =>
         prepareDemo(demo, {
-            harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings))),
+            harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile))),
             place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
             route: writeDemoRoute,
-            fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), desktopPaths(personDirectory).installationSettings)),
+            fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile)),
             runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),
         });
     // A demo that holds nothing yet is placed from the archive the application carries, when it is fresh, rather than made

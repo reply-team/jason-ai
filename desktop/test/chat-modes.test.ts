@@ -17,7 +17,7 @@ import type { ChatMode } from '../src/chat-modes.ts';
 import { fullAccessJudgement, heldSentence, judge, toolsThatRunNothing, type ChatScope } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 import { newSecret, newTurnId, removeTurnFiles, sweepTurnFiles, turnSettingsPath, writeTurnConfig, writeTurnSettings } from '../src/chat-turn-files.ts';
-import { desktopPaths } from '../src/paths.ts';
+import { desktopPaths, settingsFilesOf } from '../src/paths.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
 const base = { mcpConfig: '/data/desktop/turns/turn-0123456789abcdef01234567.mcp.json', addDirs: [], denied: fence.commands, allowed: fence.allowed, reads: fence.reads, dataRules: ['Read(//data/desktop/turns)'], version: '2.1.300' };
@@ -187,7 +187,7 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mod
         added: [],
         data: root,
         home: root,
-        protectedFiles: [paths.installationSettings, paths.runFile],
+        protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
         denied: fence.commands,
         deniedOperations: fence.operations,
         real: realPathOf,

@@ -23,7 +23,7 @@ import { fileLogger, limitsFrom } from './log.ts';
 import { commandFolder, isProgramFile, PathCommand } from './path-command.ts';
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { demoDirectory } from './mode.ts';
-import { dataDirectory, desktopPaths } from './paths.ts';
+import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
 import { harnessRoot, stopRuntimeCode, uninstall, uninstallExit, uninstallText, updaterCache } from './uninstall.ts';
@@ -40,7 +40,7 @@ function readText(file: string): string | null {
 function carried() {
     const home = homedir();
     const paths = desktopPaths(dataDirectory(process.env, home));
-    const log = fileLogger(paths.logs, limitsFrom(readText(paths.installationSettings)));
+    const log = fileLogger(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile)));
     const executable = join(process.resourcesPath, 'bundle', process.platform === 'win32' ? 'jason.exe' : 'jason');
     const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
     const own = ownRuntimeDeps(process.platform, executable, paths.runFile, cli);
@@ -93,12 +93,12 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         bundles: null,
         jason: executable,
         dataDirectory: paths.data,
-        harnessRoot: harnessRoot(process.env, home, paths.installationSettings),
+        harnessRoot: harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile),
         updaterCache: updaterCache(process.env, home, process.platform),
         // The demo's two folders, beside the person's: the uninstaller's start acts on the person's installation alone.
         demo: {
             data: demoDirectory(paths.data),
-            harnessRoot: demoDirectory(harnessRoot(process.env, home, paths.installationSettings)),
+            harnessRoot: demoDirectory(harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile)),
             stop: stopDemo,
         },
         log,

@@ -24,7 +24,7 @@ import { stopWithDemo } from './demo-runtime.ts';
 import { demoDirectory } from './mode.ts';
 import type { StopOutcome } from './own-runtime.ts';
 import { commandFolder, type CommandStatus } from './path-command.ts';
-import type { DesktopPaths } from './paths.ts';
+import { dataLayout, type DesktopPaths } from './paths.ts';
 import { applicationFolder } from './rollback.ts';
 import { harnessRoot, runtimeRefusal, stopFromAny, uninstall, updaterCache, type RunsFrom, type UninstallDeps, type UninstallReport } from './uninstall.ts';
 
@@ -271,7 +271,7 @@ export function placedRemoval(input: PlacedInput): Pick<RemovalDeps, 'scope' | '
     const bundles = copiesBundle(input.form) ? input.paths.bundle : null;
     const command = input.command ?? input.makeCommand();
     const autostart = input.autostart ?? (input.version === null ? null : input.makeAutostart());
-    const root = () => harnessRoot(input.env, input.home, input.paths.installationSettings);
+    const root = () => harnessRoot(input.env, input.home, dataLayout(input.paths.data).userSettingsFile);
     const cache = () => updaterCache(input.env, input.home, input.platform);
     const demo = () => ({ data: demoDirectory(input.paths.data), harnessRoot: demoDirectory(root()) });
     const candidates = (): string[] => {

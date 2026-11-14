@@ -863,7 +863,7 @@ test('the desktop gives both removals the demo’s stop, from the person’s dir
     assert.ok(main.includes('stopDemo: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }),'));
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     assert.ok(start.includes('data: demoDirectory(paths.data),'));
-    assert.ok(start.includes('harnessRoot: demoDirectory(harnessRoot(process.env, home, paths.installationSettings)),'));
+    assert.ok(start.includes('harnessRoot: demoDirectory(harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile)),'));
     assert.ok(start.includes('const stopDemo = () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data,'));
 });
 
