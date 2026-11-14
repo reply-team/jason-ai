@@ -147,7 +147,7 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw DomainErrors.NotReviewable(item.PublicId, "it moved on while the review was made, and a review is made while the send is still queued or waiting");
+            throw DomainErrors.NotReviewable(item.PublicId, "it changed while the review was made; read it again with workitem.get, and while it is still queued or waiting it may be reviewed again");
         }
 
         return JournalWriter.ToDto(entry, item.Campaign!.PublicId) with { ContactId = item.Contact?.PublicId };

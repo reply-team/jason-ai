@@ -413,6 +413,40 @@ public class ReviewServiceTests
         Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct)).Status);
     }
 
+    /// <summary>
+    /// A review of a waiting send that saves after the wait's ceiling or a resume put it back in the queue is refused, and
+    /// writes nothing; the send is still one a review may be made of, and the refusal says so rather than that it moved on.
+    /// </summary>
+    [Fact]
+    public async Task A_review_that_loses_the_race_with_a_resume_says_the_send_may_be_reviewed_again()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        seed.Send.Status = WorkItemStatus.Waiting;
+        await db.SaveChangesAsync(Ct);
+        var resume = new CompetingInsert(
+            database.File,
+            context => context.ChangeTracker.Entries<JournalEntry>().Any(e => e.State == EntityState.Added)
+                ? $"UPDATE work_items SET status = 'created' WHERE id = {seed.Send.Id};"
+                : null);
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(resume).Options);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(racing).ReviewAsync(Pass(seed), Ct));
+
+        Assert.True(resume.Fired);
+        Assert.Equal("not_reviewable", refused.Code);
+        Assert.Contains("may be reviewed again", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("moved on", refused.Message, StringComparison.Ordinal);
+        await using var fresh = database.Open();
+        Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct));
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct);
+        Assert.Equal(WorkItemStatus.Created, row.Status);
+
+        await using var again = database.Open();
+        await Service(again).ReviewAsync(Pass(seed), Ct);
+    }
+
     /// <summary>The read is bounded by the send's own lines: answered from the index of the journal by work item.</summary>
     [Fact]
     public async Task The_read_of_a_send_s_reviews_uses_the_index_of_the_journal_by_work_item()
