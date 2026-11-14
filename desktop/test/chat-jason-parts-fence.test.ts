@@ -23,6 +23,11 @@ function parts(platform: Platform, data: string): { part: string; inside: string
         { part: 'role skills folder', inside: paths.join(data, 'skills', 'roles', 'copywriter', 'SKILL.md') },
         { part: 'plugins folder', inside: paths.join(data, 'plugins', 'crm', 'main.js') },
         { part: 'settings file', inside: paths.join(data, 'config', 'settings.json') },
+        // Layout 2 keeps what a person sets up under `setup/` and the plugins' secrets apart (`layoutTable` in paths.ts).
+        { part: 'layout 2 role skills folder', inside: paths.join(data, 'setup', 'roles', 'copywriter', 'SKILL.md') },
+        { part: 'layout 2 plugins folder', inside: paths.join(data, 'setup', 'plugins', 'crm', 'main.js') },
+        { part: 'layout 2 settings file', inside: paths.join(data, 'setup', 'settings.json') },
+        { part: 'layout 2 secrets file', inside: paths.join(data, 'config', 'secrets.json') },
     ];
 }
 
