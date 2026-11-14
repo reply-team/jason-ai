@@ -757,6 +757,26 @@ test('a command that names JASON_CONFINED is refused in any letter case, on ever
     }
 });
 
+test('a command that names JASON_ATTEMPT_ID is refused in every mode, in any letter case, on every platform, whatever wraps it: the chat is never a run', () => {
+    const sentence = 'That command names JASON_ATTEMPT_ID, which tells jason it runs inside a role\'s attempt: the chat is never an attempt, so it never reads, sets or clears it. Nothing was run.';
+    const named = ['JASON_ATTEMPT_ID=att_01K7QN0000000000000000000R jason workitem create cmp_A --kind ai_role --role writer',
+        'export JASON_ATTEMPT_ID=att_A; jason workitem update wi_A --file -', 'env JASON_ATTEMPT_ID=att_A jason workitem create cmp_A', 'printenv jason_attempt_id',
+        'echo ${JASON_ATTEMPT_ID:-}', '$env:Jason_Attempt_Id = "att_A"; jason workitem create cmp_A', 'set JASON_ATTEMPT_ID=att_A', 'echo %jason_attempt_id%',
+        'unset JASON_ATTEMPT_ID', `python3 -c "import os, subprocess; os.environ['JASON_ATTEMPT_ID'] = 'att_A'; subprocess.run(['jason','workitem','create'])"`];
+    for (const scope of carriedScopes()) {
+        for (const command of named) {
+            refusedInEveryMode(scope, command);
+            const judged = run(scope, command);
+            assert.equal(judged.verdict === 'deny' ? judged.message : '', sentence, `${scope.platform} ${command}`);
+            assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), { outcome: 'refused', message: sentence }, `${scope.platform} ${command}`);
+        }
+        // Spelled with a quote or a backslash inside it, the second look reads it.
+        for (const command of ["JASON_ATTEMPT''_ID=att_A jason workitem create cmp_A", 'echo $JASON_ATTEMPT\\_ID']) refusedInEveryMode(scope, command);
+        // A longer name that only begins or ends like it is not it.
+        for (const command of ['echo $JASON_ATTEMPT_ID_X', 'printenv MY_JASON_ATTEMPT_ID']) assert.equal(run(scope, command).verdict, 'ask', `${scope.platform} ${command}`);
+    }
+});
+
 test('a command that names a denied operation is refused, the runtime\'s stop, system.shutdown, first among them', () => {
     assert.equal(run(windows(), 'curl -X POST http://127.0.0.1:5000/v1/approval.approve -d "{}"').verdict, 'deny');
     assert.equal(run(mac(), 'curl http://127.0.0.1:5000/v1/approval.set_standing').verdict, 'deny');

@@ -172,6 +172,7 @@ const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096
 const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
 const confinedRefusal = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
+const attemptRefusal = 'That command names JASON_ATTEMPT_ID, which tells jason it runs inside a role\'s attempt: the chat is never an attempt, so it never reads, sets or clears it. Nothing was run.';
 const lookupRefusal = 'That command changes where the shell finds a program, so the jason it would start may not be the desktop\'s: the chat never runs it. Nothing was run.';
 const instructionsRefusal = 'That file is the chat\'s own instructions, which the desktop writes before each turn: the chat never changes it. Nothing was done.';
 const configurationRefusal = 'That folder is the chat\'s own AI settings and skills, which the desktop keeps: the chat never changes it. Nothing was done.';
@@ -732,6 +733,20 @@ function namesConfinedVariable(command: string): boolean {
 }
 
 /**
+ * The variable a role's attempt is launched with, naming the attempt the jason it runs works inside; the CLI sends it
+ * with every request, and the runtime takes the request as that attempt's. The chat is never an attempt, so a command
+ * that names it could only claim one: it is refused by its name as a whole word, in any letter case on every platform,
+ * whatever wraps it, as the confining variable is, and the host's own deny rule (`attemptRule`) refuses the exact
+ * spelling first. A longer name that only begins or ends like it is not it. A spelling that builds the name is not
+ * refused by this check and reaches a card.
+ */
+export const attemptVariable = 'JASON_ATTEMPT_ID';
+
+function namesAttemptVariable(command: string): boolean {
+    return new RegExp(`(?<![A-Za-z0-9_])${attemptVariable}(?![A-Za-z0-9_])`, 'i').test(command);
+}
+
+/**
  * The variables a shell finds a program by: PATH, and PATHEXT, which Windows' own search reads. A command that assigns
  * either could start a `jason` the agent wrote in place of the desktop's, and the confined CLI never runs to say so; the
  * host's own deny rules (`searchRules`) refuse the plain assignments first.
@@ -1016,6 +1031,7 @@ function changesServers(command: string, scope: ChatScope): boolean {
 
 function judgeCommand(tool: string, command: string, scope: ChatScope): Judgement {
     if (namesConfinedVariable(command)) return { verdict: 'deny', message: confinedRefusal };
+    if (namesAttemptVariable(command)) return { verdict: 'deny', message: attemptRefusal };
     if (changesSearch(command)) return { verdict: 'deny', message: lookupRefusal };
     const places = [...placesOf(command, scope), ...literalPlaces(tool, command, scope)];
     const remote = wordNamesHost(places, scope);
@@ -1226,7 +1242,7 @@ function programLaunches(words: readonly string[]): boolean {
  * variable or the installation's data in any literal spelling, or clears the environment around a jason.
  */
 function textRefused(text: string, scope: ChatScope): boolean {
-    if (namesConfinedVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || namesPersonsOwn(text, scope) || jasonIn(text, scope) === 'deny') return true;
+    if (namesConfinedVariable(text) || namesAttemptVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || namesPersonsOwn(text, scope) || jasonIn(text, scope) === 'deny') return true;
     return respelledRefusal(text, scope) !== null;
 }
 
@@ -1391,6 +1407,7 @@ function respelledRefusal(text: string, scope: ChatScope): string | null {
     for (const plain of readingsOf(text)) {
         if (plain === text) continue;
         if (namesConfinedVariable(plain)) return confinedRefusal;
+        if (namesAttemptVariable(plain)) return attemptRefusal;
         if (namesPersonsOwn(plain, scope)) return personsRefusal;
         if (namesDataVariable(plain, scope) || namesData(plain, scope)) return dataRefusal;
         if (jasonIn(plain, scope) === 'deny') return commandRefusal;
@@ -1608,6 +1625,7 @@ function literalJudgement(tool: string, command: string | null, scope: ChatScope
 /** The refusals of a command's text and of the places its words name, by Ask first's own checks. */
 function refusalOver(text: string, places: readonly string[], scope: ChatScope): string | null {
     if (namesConfinedVariable(text)) return confinedRefusal;
+    if (namesAttemptVariable(text)) return attemptRefusal;
     if (changesSearch(text)) return lookupRefusal;
     const remote = wordNamesHost(places, scope);
     if (remote !== null) return remote;

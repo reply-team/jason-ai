@@ -292,6 +292,14 @@ test('under Full access the hook refuses the confining variable in any letter ca
     assert.ok((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'x.sh'), content: 'unset JASON_CONFINED' })) !== null);
 });
 
+test('under Full access the hook refuses the attempt\'s variable in any letter case, in a command and in a file\'s content', async (t) => {
+    const w = await wired(t, 'full_access');
+    for (const command of ['JASON_ATTEMPT_ID=att_1 jason workitem create cmp_1 --kind ai_role --role writer', 'export jason_attempt_id=att_1', 'env Jason_Attempt_Id=att_1 jason workitem update wi_1 --file -']) {
+        assert.match((await hooked(w, 'Bash', { command })) ?? 'not refused', /JASON_ATTEMPT_ID/, command);
+    }
+    assert.match((await hooked(w, 'Write', { file_path: join(w.scope.chat, 'x.sh'), content: 'export JASON_ATTEMPT_ID=att_1\njason workitem create cmp_1\n' })) ?? 'not refused', /Nothing was written/);
+});
+
 test('under Full access the hook refuses a read of the turns folder and of the key folders, by a file tool or a command', async (t) => {
     const w = await wired(t, 'full_access');
     const desktop = join(w.root, 'desktop');

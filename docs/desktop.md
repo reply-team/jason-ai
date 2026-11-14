@@ -623,7 +623,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   typed in a terminal**: a role's entry command is started by the dispatcher, and a project's linked folder becomes a
   working folder of every chat on its campaigns. A command that names an operation these verbs call is refused too.
   Also refused: any `reply` command but the two above, any read or write under the data directory outside the chat folder (the
-  settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that changes
+  settings file and the run file first among them), a command that names that directory, a command that names `JASON_CONFINED`, a command that names `JASON_ATTEMPT_ID` (a chat is never a role's run), a command that changes
   where the shell finds a program (`PATH`, `PATHEXT`), a command too long for a card to show whole, and a write by the
   agent to the chat's own instruction files, to the `.claude`, `.agents` and `.codex` folders of the chat folder and to
   its `.mcp.json`.
@@ -636,7 +636,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
 - **A tool of an MCP server of yours is a card each time, if one ever reaches a turn.** None does in this version (see
   What is not here); the fence stands anyway. Its card says "Use one of your own tools", the server and the tool, and the
   input exactly as the host would send it, never cut: an input too long to show whole is refused, and so is one any of
-  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, the data directory). Full access
+  whose texts would be refused as a command (a verb of the deny list, `JASON_CONFINED`, `JASON_ATTEMPT_ID`, the data directory). Full access
   does not run it. "Allow for this chat" is never offered for it.
 - **The documentation opens with no card, and a page is information.** A fetch from these pages needs no card: the
   `/docs/` pages of `code.claude.com` and of `learn.chatgpt.com`, the `/codex/`, `/api/docs/` and `/api/reference/`

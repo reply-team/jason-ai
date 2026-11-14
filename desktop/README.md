@@ -353,7 +353,7 @@ applies to the turns a person starts by sending, from the next one on.
   sends nothing, and the fence does not lean on that. A value spelled like a denied verb is refused too, in any case, as
   its lower-case spelling already was.
 - **A re-spelled refusal is still a refusal, in every mode.** Before judging, the deny-list commands, the operations by
-  their dots, the confining variable and the data directory's names are looked for a second time over a normalised text:
+  their dots, the confining variable, the attempt's variable and the data directory's names are looked for a second time over a normalised text:
   quotes and a backslash inside a word removed, a bracket, a comma or a parenthesis read as a space. `appro\ve`,
   `approv''e`, `approval.appr''ove` and `['jason','approval','approve']` are refused as their plain spelling is, in Ask
   first too, and so is the content of a file being written in Full access. The same look reads through an empty `$''`
@@ -377,7 +377,7 @@ applies to the turns a person starts by sending, from the next one on.
   the card is "Use one of your own tools", its detail the server and the tool, then the input exactly as the host sent
   it (`JSON.stringify`), never cut. Before the card, an input whose detail would be longer than the card shows whole
   (4,000 characters) is refused, and so is one any of whose strings, at any depth and the keys of its objects among
-  them, is refused when read as a command's text: a deny-list verb or operation, plainly or re-spelled, `JASON_CONFINED`,
+  them, is refused when read as a command's text: a deny-list verb or operation, plainly or re-spelled, `JASON_CONFINED`, `JASON_ATTEMPT_ID`,
   the data directory's variable or the data directory in any spelling, the settings file and the run file included.
   "Allow for this chat" is never offered for it, Plan only refuses it, and Full access holds it on every call.
 - **The chat folder's top is the desktop's, in every mode.** What the desktop placed in it is recorded outside it,
