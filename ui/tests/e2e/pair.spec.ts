@@ -6,9 +6,11 @@ test('jason ui open pairs a browser once; the ticket leaves the address bar; the
 }) => {
     const { url } = await jason.uiOpen();
     await page.goto(url);
-    // Paired, the console is shown: the sidebar, and the area on Start, which every window opens on.
+    // Paired, the console is shown: the sidebar, and the area on Start, which every window opens on. A tab with no
+    // desktop draws Start as the place that says where the chat is, headed Chat (`none.screen.test.tsx`).
     await expect(page.locator('.jc-console .side')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Who do you want to reach?', level: 1 })).toBeVisible();
+    await expect(page.locator('.jc-console .area > .pane:not([hidden])')).toHaveAttribute('data-pane', 'start');
+    await expect(page.getByRole('heading', { name: 'Chat', exact: true, level: 1 })).toBeVisible();
     // Needs you is a page of the menu. A fresh runtime has nothing waiting, and the page says so once it has read.
     await page
         .locator('.jc-console .side')
