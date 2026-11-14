@@ -232,15 +232,15 @@ public static class CampaignCommands
         return command;
     }
 
-    /// <summary>
-    /// A campaign's own send mode, for its cold contacts, its warm ones or both: a person's standing word, so the CLI's
-    /// default actor does not apply, and a run is refused it. The mode words are sent as typed, and the runtime refuses any
-    /// other; <c>--clear</c> sends null, which gives that mode back to the installation, and a mode both set and cleared in
-    /// one command is a usage error, because which of the two the person meant is not the CLI's to guess.
-    /// </summary>
     /// <summary>The two kinds of contact a campaign's send mode is set for, as <c>--clear</c> names them.</summary>
     private static readonly string[] Temperatures = ["cold", "warm"];
 
+    /// <summary>
+    /// A campaign's own send mode, for its cold contacts, its warm ones or both: a person's standing word, so the CLI's
+    /// default actor does not apply, and a run is refused it. The mode words are held to automatic and every_message;
+    /// <c>--clear</c> sends null, which gives that mode back to the installation, and a mode both set and cleared in
+    /// one command is a usage error, because which of the two the person meant is not the CLI's to guess.
+    /// </summary>
     private static Command SetSendMode(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command(
@@ -274,11 +274,6 @@ public static class CampaignCommands
                 .Set("warm", parseResult.GetValue(warm));
             foreach (var mode in parseResult.GetValue(clear) ?? [])
             {
-                if (mode is not ("cold" or "warm"))
-                {
-                    throw new UsageException("--clear names cold or warm.");
-                }
-
                 if ((mode == "cold" ? parseResult.GetValue(cold) : parseResult.GetValue(warm)) is not null)
                 {
                     throw new UsageException($"--{mode} and --clear {mode} both name the {mode} mode: set it or give it back, not both.");
