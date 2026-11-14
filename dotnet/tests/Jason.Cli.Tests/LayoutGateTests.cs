@@ -58,6 +58,8 @@ public sealed class LayoutGateTests : IDisposable
         "uninstall --purge-data",
         "uninstall --purge-data --yes",
         "uninstall --purge-data --dry-run",
+        "session open --setup",
+        "session open --setup --dry-run",
     ];
 
     public static TheoryData<string> Gated() => new(GatedLines);
@@ -70,6 +72,7 @@ public sealed class LayoutGateTests : IDisposable
                 ("runtime start", null), ("runtime restart", null), ("plugin install", null), ("plugin reload", null),
                 ("skills install", null), ("skills update", null), ("ui install", null), ("update apply", null),
                 ("update rollback", null), ("export", null), ("import", null), ("uninstall", "--purge-data"),
+                ("session open", "--setup"),
             ],
             LayoutGatedVerbs.Table);
 
@@ -200,6 +203,10 @@ public sealed class LayoutGateTests : IDisposable
     [InlineData("plugin list")]
     [InlineData("runtime status")]
     [InlineData("runtime stop")]
+    [InlineData("session open --here")]
+    [InlineData("session open --campaign cmp_01")]
+    [InlineData("session open --approval apr_01")]
+    [InlineData("session open --question dec_01")]
     public void Verbs_outside_the_table_are_never_refused_by_the_stamp(string line)
     {
         File.WriteAllText(Path.Combine(_root, "layout.json"), Newer);

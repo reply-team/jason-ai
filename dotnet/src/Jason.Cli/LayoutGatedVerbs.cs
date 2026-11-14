@@ -31,6 +31,7 @@ public static class LayoutGatedVerbs
         ("export", null),
         ("import", null),
         ("uninstall", "--purge-data"),
+        ("session open", "--setup"),
     ];
 
     /// <summary>What a refused command's <c>--help</c> says.</summary>
