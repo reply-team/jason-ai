@@ -225,13 +225,14 @@ own act, through the window's one object, and the chat's AI cannot reach it: in 
 refused, as the commands that start a session on your computer. It does not open the data directory; the folders of it a
 terminal is opened in are the chat's own, to continue a chat, and the role skills folder, to change Jason itself.
 
-**Changing Jason itself.** In your own installation, never in the demo, the menu's group above the last holds **Change
-Jason itself**, which opens your own AI in a new terminal on Jason's role skills folder, with its plugins folder beside it
-and a first message that tells it how Jason is changed: the desktop runs `jason session open --setup`, which opens the host
-the preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only
-where that host cannot be chosen or is not installed runs it once more with the host the desktop finds, Claude Code, else
-Codex. It is never the default, and the chat, which is kept out of Jason's roles, plugins and settings, answers a request to
-change one of them by pointing to it.
+**Changing Jason itself.** In your own installation, never in the demo, **Change Jason itself**, below Copy path and
+above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
+plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
+`jason session open --setup`, which opens the host the preference
+[`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
+host cannot be chosen or is not installed runs it once more with the host the desktop finds, Claude Code, else Codex. It is
+never the default, and the chat, which is kept out of Jason's roles, plugins and settings, answers a request to change one
+of them by pointing to it.
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
 Code** (or **in Codex**). It continues that program's own conversation in a new terminal: the desktop runs
