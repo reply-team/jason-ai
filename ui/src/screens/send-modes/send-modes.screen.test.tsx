@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiProvider } from '../../api/context';
 import type { Approval, Campaign } from '../../api/types';
@@ -8,6 +8,7 @@ import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { AgentSendModes } from './agent-modes';
 import { reminderKey } from './reminder';
+import { SendModesSettings } from './settings-section';
 
 // The recordings that carry a person's act were made by Marta. A card reads the preferences and its agent for the
 // reminder about name and tone; unless a test says otherwise, every mode waits, so there is none.
@@ -306,5 +307,73 @@ describe('the agent’s own send modes', () => {
         delete old.send_modes_in_force;
         mountAgent(marta(), old);
         expect(screen.queryByRole('heading', { name: 'How messages go' })).toBeNull();
+    });
+});
+
+describe('the send modes in Settings', () => {
+    const inGroup = (legend: string) => within(groupOf(legend));
+    const checkedIn = (legend: string) =>
+        Array.from(groupOf(legend).querySelectorAll('input')).some((each) => each.checked);
+    const unsetLine = 'Not answered yet, so every message waits for you, and an approval card asks.';
+    const cold = 'People who have not replied yet';
+    const warm = 'People who have replied';
+    const mountSettings = (api: FakeApi) =>
+        render(
+            <ApiProvider api={api}>
+                <SendModesSettings />
+            </ApiProvider>,
+        );
+
+    it('turns a mode that goes automatically off, answers the other kind, and gives an answer back', async () => {
+        const api = marta()
+            .answer('preference.list', 'preference.list/set')
+            .answer('preference.set', 'preference.set/send-mode-cold-every-message', 'preference.set/send-mode-warm')
+            .answer('preference.unset', 'preference.unset/send-mode-cold');
+        mountSettings(api);
+
+        expect(await screen.findByRole('heading', { name: 'How messages go', level: 2 })).toBeTruthy();
+        expect(radio(cold, 'Goes automatically').checked).toBe(true);
+        expect(inGroup(warm).getByText(unsetLine)).toBeTruthy();
+        expect(checkedIn(warm)).toBe(false);
+        expect(inGroup(warm).queryByRole('button', { name: 'Forget my answer' })).toBeNull();
+        expect((inGroup(cold).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+        expect(operations(api)).toEqual(['preference.list']);
+
+        // Turning "Goes automatically" off from the page, without a terminal.
+        fireEvent.click(radio(cold, 'Every message waits for you'));
+        expect(api.sent('preference.set')).toBeUndefined();
+        fireEvent.click(inGroup(cold).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(inGroup(cold).getByText('Saved.')).toBeTruthy());
+        expect(api.sent('preference.set')).toEqual({
+            key: 'send_mode.cold',
+            value: { mode: 'every_message' },
+            reason: "the person's answer",
+        });
+        expect(radio(cold, 'Every message waits for you').checked).toBe(true);
+
+        fireEvent.click(radio(warm, 'Every message waits for you'));
+        fireEvent.click(inGroup(warm).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(inGroup(warm).getByText('Saved.')).toBeTruthy());
+        expect(api.sent('preference.set')).toEqual({
+            key: 'send_mode.warm',
+            value: { mode: 'every_message' },
+            reason: "the person's answer",
+        });
+        expect(inGroup(warm).queryByText(unsetLine)).toBeNull();
+
+        // Giving the cold answer back leaves it unanswered, which waits for the person and is asked again.
+        fireEvent.click(inGroup(cold).getByRole('button', { name: 'Forget my answer' }));
+        await waitFor(() => expect(inGroup(cold).getByText(unsetLine)).toBeTruthy());
+        expect(api.sent('preference.unset')).toEqual({ key: 'send_mode.cold', reason: "the person's answer" });
+        expect(checkedIn(cold)).toBe(false);
+        expect(inGroup(cold).queryByRole('button', { name: 'Forget my answer' })).toBeNull();
+    });
+
+    it('says so when the preferences cannot be read, and offers nothing to save', async () => {
+        const api = new FakeApi('Marta');
+        api.unreachable('preference.list');
+        mountSettings(api);
+        expect(await screen.findByText('The send modes could not be read.')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
     });
 });

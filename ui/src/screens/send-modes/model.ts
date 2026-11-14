@@ -1,7 +1,7 @@
 import type { Api } from '../../api/client';
 import type { ActorRef, ModeInForce } from '../../api/types';
 import { t } from '../../platform/i18n';
-import { senderKey, toneKey, valueOf, type PreferenceItem } from '../settings/voice-model';
+import { senderKey, toneKey, valueOf, type PreferenceItem, type PreferenceUnsetRequest } from '../settings/voice-model';
 
 // What the send-mode words and acts of the page share: the two preferences, the two modes, where a mode comes from,
 // and the doubts an approval's preview carries. The words themselves are in the locale table.
@@ -37,6 +37,15 @@ export async function remember(api: Api, kind: Kind, mode: Mode): Promise<void> 
     await api.call<PreferenceItem>(
         'preference.set',
         { key: keyOf(kind), value: { mode }, reason: answerReason } satisfies SendModePreferenceRequest,
+        'write',
+    );
+}
+
+/** Gives one of the two preferences back as the paired person: unanswered again, so every message waits and is asked. */
+export async function forget(api: Api, kind: Kind): Promise<void> {
+    await api.call<PreferenceItem>(
+        'preference.unset',
+        { key: keyOf(kind), reason: answerReason } satisfies PreferenceUnsetRequest,
         'write',
     );
 }

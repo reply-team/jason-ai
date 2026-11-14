@@ -262,6 +262,17 @@ export const en = {
     'modes.question.voice':
         'Jason now writes in your name without your look. Saying who writes and how, in Settings under "Your name and tone", makes those messages err less.',
     'modes.settings.open': 'Open Settings',
+    'modes.settings.heading': 'How messages go',
+    'modes.settings.lead': 'For every agent. An agent may set its own under its Settings tab, and that one goes first.',
+    'modes.settings.demo': 'How messages go is set in Live.',
+    'modes.settings.reading': 'Reading what is set.',
+    'modes.settings.unreadable': 'The send modes could not be read.',
+    'modes.settings.unset': 'Not answered yet, so every message waits for you, and an approval card asks.',
+    'modes.settings.unknown': 'Set to {mode}, which this page does not know.',
+    'modes.settings.save': 'Save',
+    'modes.settings.saved': 'Saved.',
+    'modes.settings.forget': 'Forget my answer',
+    'modes.settings.forgotten': 'Forgotten.',
     'modes.reminder':
         'Your name and tone are not set. Messages are written better with them: Settings, "Your name and tone".',
     'modes.reminder.hide': 'Hide for 7 days',
