@@ -105,7 +105,7 @@ public sealed class PluginGrantService(
     /// Whether a list already grants the entry: a star by a star, a directory by itself, and a name where what the list
     /// resolves to holds it, so a star covers a declared host and never one only <c>any_granted_host</c> admits.
     /// </summary>
-    private static bool Covers(PluginManifest manifest, PluginGrantCapability capability, IReadOnlyList<string> list, string entry, StringComparer comparer) =>
+    private static bool Covers(PluginManifest manifest, PluginGrantCapability capability, IReadOnlyList<string> list, string entry, IEqualityComparer<string> comparer) =>
         entry == GrantResolver.Everything || capability == PluginGrantCapability.Files
             ? list.Contains(entry, comparer)
             : Resolved(manifest, capability, list).Contains(entry, comparer);
@@ -290,9 +290,11 @@ public sealed class PluginGrantService(
 
     private static IReadOnlyList<string> Granted(LoadedPlugin plugin, PluginGrantCapability capability) => Granted(plugin.Grants, capability);
 
-    /// <summary>Hosts are compared the way hosts are; programs, variables, families, kinds and directories exactly.</summary>
-    private static StringComparer Comparer(PluginGrantCapability capability) =>
-        capability == PluginGrantCapability.Http ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    /// <summary>
+    /// Hosts are compared the way hosts are, directories the way the platform compares paths and without a separator at
+    /// their end, and programs, variables, families and kinds exactly (<see cref="PluginGrantEntries"/>).
+    /// </summary>
+    private static IEqualityComparer<string> Comparer(PluginGrantCapability capability) => PluginGrantEntries.Comparer(capability);
 
     /// <summary>The list's path in the settings file, its key spelled as the documentation spells it.</summary>
     private static string Path(string id, PluginGrantCapability capability) =>

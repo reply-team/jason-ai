@@ -107,6 +107,28 @@ public class PluginGrantWriteTests
     }
 
     /// <summary>
+    /// A directory is the same directory with or without a separator at its end, and, where the platform's file systems
+    /// ignore case, in either case: granting it again is held, and taking it back so written takes it out.
+    /// </summary>
+    [Fact]
+    public async Task A_directory_is_compared_without_its_trailing_separator_and_as_the_platform_compares_paths()
+    {
+        await using var api = await StartAsync();
+        var directory = Path.Combine(Path.GetTempPath(), "jason-grant-" + Guid.NewGuid().ToString("N"));
+        await GrantAsync(api, Asker, "files", directory);
+        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+
+        var again = await GrantAsync(api, Asker, "files", directory + Path.DirectorySeparatorChar);
+        Assert.False(again.Activated);
+        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+
+        var spelled = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? directory.ToUpperInvariant() : directory;
+        var answer = await RevokeAsync(api, Asker, "files", spelled + Path.DirectorySeparatorChar);
+        Assert.Empty(Plugin(answer, Asker).Capabilities.Files!.Granted);
+        Assert.Equal(Original, File.ReadAllText(api.Paths.UserSettingsFile));
+    }
+
+    /// <summary>
     /// What the manifest does not request is refused and nothing is written: the file would keep it as a warning that grants
     /// nothing, and a verb that answered success for it would mislead whoever ran it.
     /// </summary>
