@@ -230,6 +230,7 @@ public class ReviewServiceTests
     [InlineData("a run edits, then reviews", false)]
     [InlineData("a run edits, then another run of its work reviews", false)]
     [InlineData("another reviews after an edit", true)]
+    [InlineData("a person edits another key, then reviews", true)]
     public async Task Whoever_wrote_the_send_s_input_does_not_review_it(string path, bool accepted)
     {
         using var database = new TestDatabase();
@@ -237,14 +238,17 @@ public class ReviewServiceTests
         var seed = await SeedAsync(db);
         var editor = path switch
         {
-            "a person edits, then reviews" => Ada,
+            "a person edits, then reviews" or "a person edits another key, then reviews" => Ada,
             "another reviews after an edit" => new ActorRef(ActorType.Human, "grace"),
             _ => Run(seed.ReviewRun),
         };
-        await Items(db).UpdateAsync(Patch(seed.Send.PublicId, new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") }) with { Actor = editor }, Ct);
+        var edit = path == "a person edits another key, then reviews"
+            ? new JsonObject { ["brief"] = "Keep it short." }
+            : new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") };
+        await Items(db).UpdateAsync(Patch(seed.Send.PublicId, edit) with { Actor = editor }, Ct);
         var reviewer = path switch
         {
-            "a person edits, then reviews" => new ActorRef(ActorType.Human, " ADA "),
+            "a person edits, then reviews" or "a person edits another key, then reviews" => new ActorRef(ActorType.Human, " ADA "),
             "a run edits, then another run of its work reviews" => Run(await AgainAsync(db, seed.ReviewRun)),
             _ => Run(seed.ReviewRun),
         };

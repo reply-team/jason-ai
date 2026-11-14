@@ -144,6 +144,47 @@ public class SendCreatedInsideARunTests
         Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemContextUpdated).ToListAsync(Ct));
     }
 
+    /// <summary>Taking a send's input away is writing it too: inside a run, an unset of it under another name is refused.</summary>
+    [Fact]
+    public async Task Inside_a_run_an_unset_of_a_send_s_input_under_another_name_is_refused()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var send = await Service(db, run: null).CreateAsync(Send(seed, Run(seed.Run)), Ct);
+
+        var refused = await Assert.ThrowsAsync<ForbiddenException>(() => Service(db, seed.Run).UpdateAsync(
+            new WorkItemUpdateRequest(
+                send.Id, null, [WorkItemService.InputKey],
+                default, default, default, default, default, default, default, default,
+                new ActorRef(ActorType.Human, "x"), Reason: null),
+            Ct));
+
+        Assert.Equal("updated_as_another_inside_a_run", refused.Code);
+    }
+
+    /// <summary>Work that is no send to a person is not this rule's: inside a run a role's work is patched under any name.</summary>
+    [Fact]
+    public async Task Inside_a_run_a_patch_of_role_work_names_whoever_the_caller_names()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        var work = WorkItemFactory.NewAiRole(seed.Campaign, "researcher", Noon);
+        db.WorkItems.Add(work);
+        await db.SaveChangesAsync(Ct);
+
+        await Service(db, seed.Run).UpdateAsync(
+            new WorkItemUpdateRequest(
+                work.PublicId, new JsonObject { [WorkItemService.InputKey] = new JsonObject { ["topic"] = "pricing" } }, null,
+                default, default, default, default, default, default, default, default,
+                new ActorRef(ActorType.Human, "x"), Reason: null),
+            Ct);
+
+        var line = await db.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.WorkItemContextUpdated, Ct);
+        Assert.Equal((ActorType.Human, "x"), (line.ActorType, line.ActorId));
+    }
+
     /// <summary>Outside a run a send's input is written by whoever the patch names, as before.</summary>
     [Fact]
     public async Task Outside_a_run_a_send_s_input_is_written_by_whoever_the_patch_names()
