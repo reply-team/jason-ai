@@ -321,11 +321,11 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
 ## The account's events
 
 `reply inbox changes` reads Reply's change feed: the threads that moved in the account, oldest first, a page at a time,
-from a cursor or from a moment. Each item is read as one event of one kind, `thread_moved` — the thread, its contact
-and its sequence by Reply's identifiers, the channel, when it moved, and Reply's judgement that it asks for a meeting.
-Its moment is the thread's last activity, written as `conversation.list` writes `last_activity_at`, to the millisecond,
-so a move both reads find is said once. Who moved it is read from the thread's last message and Reply's flag that the
-thread holds a reply (`flags.hasReply`):
+from a cursor or from a moment. Each item is read as one event, a `thread_moved` or, for a bounce notice (below), a
+`bounce`. A moved thread is the thread, its contact and its sequence by Reply's identifiers, the channel, when it
+moved, and Reply's judgement that it asks for a meeting. Its moment is the thread's last activity, written as
+`conversation.list` writes `last_activity_at`, to the millisecond, so a move both reads find is said once. Who moved it
+is read from the thread's last message and Reply's flag that the thread holds a reply (`flags.hasReply`):
 
 - `other_side` — the last message is the other side's, whatever the flag says;
 - `account` — the last message was sent as the account, by Jason, by a sequence or by a person in Reply's own screens,
@@ -349,10 +349,30 @@ later detector of sends made outside Jason therefore needs a source of its own. 
 names nobody, says `inbound_reply_observed`. A thread outside every sequence — the reply to a direct send — names no
 sequence, so it reaches the campaigns that hold its contact pinned, by `contact_pin`.
 
-`unread` is always `null`: the feed does not say. The other three kinds the contract names — `reply_detected`,
-`invitation_accepted` and `bounce` — are never produced, and Reply's flags for a bounce, an automatic reply and an
-absence are not carried. Nothing anybody wrote travels: no subject, no preview, no name. A thread Reply deleted is not in
-the feed, and a read pins nothing.
+`unread` is always `null`: the feed does not say.
+
+A bounce notice is read as a `bounce`, never as the other side's move. When an email the account sent bounces, the
+notice lands on that email's thread as an inbound message, and nothing in the message says it is a notice; Reply flags
+the thread as holding a bounce (`flags.hasBounce`), and the flag stays on the thread for good. An item whose thread
+Reply flags as holding a bounce and no reply, and whose last message is inbound, is therefore one `bounce` event, and no
+`thread_moved` is read from it:
+
+- `contact` — the thread's contact; `campaign` — its sequence, or `null` for a thread outside every sequence, such as a
+  direct send's;
+- `message` and `bounce` — `null`: the feed names neither the email that bounced nor whether the bounce was hard or soft;
+- `occurred_at` — the notice's own moment, which stays the same however often the thread comes back into the feed, so a
+  bounce read twice is one event.
+
+Jason records it as `provider_event_observed` with `kind: bounce` in the campaigns it reaches, which wakes their manager;
+it says no `inbound_reply_observed`, so no responder is raised for it. A thread Reply flags as holding both a reply and a
+bounce stays a moved thread, read as above: the flags are permanent and the feed cannot say whether the reply or the
+notice came last, so reading the thread decides. A flag on a thread whose last message is the account's, or where Reply
+gave no last message, changes nothing. A bounce on a thread Reply names no contact for is left out of the page, as the
+account's moves are. A Reply whose feed never sets the flag reads exactly as before.
+
+The other two kinds the contract names, `reply_detected` and `invitation_accepted`, are never produced, and Reply's
+flags for an automatic reply and an absence are not carried. Nothing anybody wrote travels: no subject, no preview, no
+name. A thread Reply deleted is not in the feed, and a read pins nothing.
 
 The cursor is the package's own, in one of three forms, each from 1 to 2048 printable characters with no space:
 
@@ -421,7 +441,7 @@ route's binding names them.
 | `inbox list --contact-id` or `--sequence-id`, `--source --since --channel --category-id --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
 | `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from, and the read `conversation.reply` makes of the thread's channel and person, one message long, before it sends anything. |
 | `inbox categories` | read | The account's inbox categories, Reply's reserved ones included: what `conversation.classify` matches the category it was given against, by identifier or by name, before it files anything. |
-| `inbox changes` with `--cursor` or `--since`, and `--top` | read | One page of Reply's change feed: the threads that moved in the account, oldest first, from a cursor or from a moment within the last 30 days, each with its identifiers, its moment and who moved it. What `events.read` answers from. |
+| `inbox changes` with `--cursor` or `--since`, and `--top` | read | One page of Reply's change feed: the threads that moved in the account, oldest first, from a cursor or from a moment within the last 30 days, each with its identifiers, its moment, who moved it and whether it holds a bounce. What `events.read` answers from. |
 | `contact get <contact>` | read | One contact by its id, as Reply holds it: the read `contact.delete` makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out, and the read a send makes of the same, and of the address or profile the contact is reached at. Nothing else is read and nothing is kept. |
 | `contact find --contact -` | read | Reply's exact lookup of one address — an email, or a LinkedIn URL by its lowercased slug — read to its end and creating nobody: how every operation about a person with no pin finds Reply's contact for them before anything is written. The address is on stdin. |
 | `sequence list --name -` | read | Every sequence whose whole name is this one, ignoring case, read to its end: what `campaign.create` compares with the name it is to give, before it makes anything. The name is on stdin. |

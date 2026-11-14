@@ -3,6 +3,17 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.16.0
+
+- `events.read` reads a bounce notice as a `bounce` event rather than as the other side's move. When an email the account
+  sent bounces, the notice lands on its thread as an inbound message, and Reply's change feed flags that thread as
+  holding a bounce (`flags.hasBounce`). An item flagged as holding a bounce and no reply, whose last message is inbound,
+  is now one `bounce` event: the thread's contact and sequence, `message` and `bounce` null because the feed names
+  neither, and the notice's own moment, so a bounce read twice is stored once. No `thread_moved` is read from that item,
+  so Jason no longer says `inbound_reply_observed` for a bounce or raises a responder for it; the campaign's manager is
+  woken by `provider_event_observed` instead. An item flagged with both a reply and a bounce stays a moved thread, and a
+  feed that never sets the flag reads as before. Update the package (`jason update apply`) to have it.
+
 ## 0.15.1
 
 - The README says the two names this package gives a search never change from one version of the package to the next:
