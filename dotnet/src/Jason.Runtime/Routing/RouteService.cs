@@ -137,11 +137,13 @@ public sealed class RouteService(
     /// is rather than stored and then refused by its own activation. A channel route is a row of its own beside the
     /// operation's: setting one never changes the operation's own route, nor the other way round.
     /// </summary>
-    public async Task<RoutesDto> SetAsync(RouteSetRequest request, CancellationToken cancellationToken)
+    /// <param name="insideRun">The attempt a request from inside a run names (<see cref="Api.InsideARun.AttemptOf"/>); null for one from outside.</param>
+    public async Task<RoutesDto> SetAsync(RouteSetRequest request, string? insideRun, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.Scope == RouteWriteScope.Global)
         {
+            RefuseInsideARun(insideRun);
             return await SetGlobalAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
@@ -244,11 +246,13 @@ public sealed class RouteService(
     /// the operation's document would never let a route name is refused as <c>route.set</c> refuses it, before "not
     /// there" is considered: answering "nothing to take away" for it would leave the route the caller meant in place.
     /// </summary>
-    public async Task<RoutesDto> UnsetAsync(RouteUnsetRequest request, CancellationToken cancellationToken)
+    /// <param name="insideRun">The attempt a request from inside a run names (<see cref="Api.InsideARun.AttemptOf"/>); null for one from outside.</param>
+    public async Task<RoutesDto> UnsetAsync(RouteUnsetRequest request, string? insideRun, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.Scope == RouteWriteScope.Global)
         {
+            RefuseInsideARun(insideRun);
             return await UnsetGlobalAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
@@ -520,6 +524,20 @@ public sealed class RouteService(
         wanted is null ? GlobalRouteWrite.TakenAway
         : held.TryGetValue($"{GlobalPath(operation, channel)}:{nameof(RouteEntry.Plugin)}", out var plugin) && plugin is not null ? GlobalRouteWrite.Replaced
         : GlobalRouteWrite.Added;
+
+    /// <summary>
+    /// Nothing inside a dispatched run changes Jason itself, and a global route is Jason's own configuration: it is
+    /// refused to a request from inside a run as the gate refuses a person's own word, by the same header and with the
+    /// same answer, before anything is read or written. The gate refuses by operation and cannot see the scope, which is
+    /// in the body, so the refusal stands here. A campaign's own route is a run's to change, as it always was.
+    /// </summary>
+    private static void RefuseInsideARun(string? insideRun)
+    {
+        if (insideRun is not null)
+        {
+            throw DomainErrors.DecidedInsideARun(insideRun);
+        }
+    }
 
     /// <summary>A global route names no campaign: one that does is a caller that meant a campaign's route, or meant both.</summary>
     private static void NoCampaign(string? campaignId, ValidationErrors errors)

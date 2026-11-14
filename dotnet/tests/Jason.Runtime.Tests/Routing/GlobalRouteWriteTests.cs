@@ -477,6 +477,63 @@ public class GlobalRouteWriteTests
         Assert.False(api.Resolve<PluginRegistry>().LastReload?.Activated ?? true);
     }
 
+    /// <summary>
+    /// Nothing inside a dispatched run changes Jason itself: a global route set or unset from inside a run is refused by
+    /// the run's header, with the answer the gate gives a person's own word, and the file and the routes in force are left
+    /// as they were. The same request without the header is answered, so the refusal is the header's.
+    /// </summary>
+    [Theory]
+    [InlineData(Operations.RouteSet)]
+    [InlineData(Operations.RouteUnset)]
+    public async Task A_global_route_write_from_inside_a_run_is_refused_and_writes_nothing(string operation)
+    {
+        await using var api = await StartAsync();
+        object body = operation == Operations.RouteSet
+            ? Global("campaign.get", RouteActivationTests.Workspace())
+            : new { scope = "global", operation = "campaign.get", reason = "taken away for the test" };
+        if (operation == Operations.RouteUnset)
+        {
+            File.WriteAllText(api.Paths.UserSettingsFile, WithRoute);
+            await api.PostOkAsync<RoutesDto>(Operations.RouteSet, Global("campaign.get", RouteActivationTests.Workspace()), Ct);
+        }
+
+        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+        var routes = api.Resolve<RouteRegistry>().Snapshot.Global;
+
+        var (status, text) = await api.PostAsync(operation, body, InsideARunHeader, Ct);
+
+        Assert.True(status == HttpStatusCode.Forbidden, $"{operation} answered {(int)status}: {text}");
+        var error = System.Text.Json.JsonSerializer.Deserialize<ErrorResponse>(text, Jason.Contracts.Json.JasonJson.Options)!.Error;
+        Assert.Equal("decided_inside_a_run", error.Code);
+        Assert.Equal(DomainErrors.DecidedInsideARun(RunAttempt).Message, error.Message);
+        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        Assert.Same(routes, api.Resolve<RouteRegistry>().Snapshot.Global);
+
+        var (plain, plainText) = await api.PostAsync(operation, body, Ct);
+        Assert.True(plain == HttpStatusCode.OK, $"{operation} without the header answered {(int)plain}: {plainText}");
+    }
+
+    /// <summary>A campaign's own route is a run's to change, as it always was: the header refuses only the global scope.</summary>
+    [Fact]
+    public async Task A_campaigns_own_route_set_from_inside_a_run_is_answered_as_before()
+    {
+        await using var api = await StartAsync();
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
+
+        var (status, text) = await api.PostAsync(
+            Operations.RouteSet,
+            new { campaign_id = campaign, operation = "campaign.get", plugin = TestPlugins.FakeProviderId, binding = RouteActivationTests.Workspace(), actor = new { type = "human", id = "ada" } },
+            InsideARunHeader,
+            Ct);
+
+        Assert.True(status == HttpStatusCode.OK, $"route.set answered {(int)status}: {text}");
+        Assert.Equal(Original, File.ReadAllText(api.Paths.UserSettingsFile));
+    }
+
+    private const string RunAttempt = "att_01K7QN0000000000000000000R";
+
+    private static readonly Dictionary<string, string> InsideARunHeader = new() { ["Jason-Attempt"] = RunAttempt };
+
     private static async Task<T> UnderTheGateAsync<T>(RuntimeApiFixture api, Func<Task<T>> act)
     {
         var gate = api.Resolve<ReloadGate>().Semaphore;

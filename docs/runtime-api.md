@@ -102,7 +102,9 @@ Jason-Attempt: att_...
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the five that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
-the code `decided_inside_a_run` before the body is read, and record nothing. A program that is not running inside an
+the code `decided_inside_a_run` before the body is read, and record nothing; `route.set` and `route.unset` give the
+same answer to the global scope alone, which the body names, since nothing inside a run changes Jason itself, and
+change a campaign's own route from inside a run as before. A program that is not running inside an
 attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
 so in one line on stderr, naming the variable and never its value.
 
@@ -448,7 +450,8 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   ([docs/routing.md](routing.md), §6).
 
   Either takes `scope`, `campaign` when it is left out, or `global`: with `global` and no `campaign_id`, which is then
-  refused `validation_failed` as `not_allowed`, the route is every campaign's that has no route of its own. The runtime
+  refused `validation_failed` as `not_allowed`, the route is every campaign's that has no route of its own; a request
+  from inside a run, which carries `Jason-Attempt`, is refused it `403` `decided_inside_a_run`. The runtime
   writes it into `settings.json`, keeping every byte of the file it does not own, and runs the plugin reload in the same
   act, so the answer is the routes the reload froze. A reload that refuses puts the file back and is answered as a
   campaign's route write is where only the route stood in the way — `route_orphans_search` or `route_orphans_send`, as

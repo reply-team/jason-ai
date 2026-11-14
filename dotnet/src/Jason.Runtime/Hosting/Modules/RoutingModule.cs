@@ -35,9 +35,9 @@ public static class RoutingModule
         app.MapOperation<RouteService, RouteListRequest, RoutesDto>(
             Operations.RouteList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
         app.MapOperation<RouteService, RouteSetRequest, RoutesDto>(
-            Operations.RouteSet, (service, request, cancellationToken) => service.SetAsync(request, cancellationToken));
+            Operations.RouteSet, (service, request, http, cancellationToken) => service.SetAsync(request, InsideARun.AttemptOf(http), cancellationToken));
         app.MapOperation<RouteService, RouteUnsetRequest, RoutesDto>(
-            Operations.RouteUnset, (service, request, cancellationToken) => service.UnsetAsync(request, cancellationToken));
+            Operations.RouteUnset, (service, request, http, cancellationToken) => service.UnsetAsync(request, InsideARun.AttemptOf(http), cancellationToken));
         app.MapOperation<OperationDescribeService, OperationDescribeRequest, OperationDescriptionDto>(
             Operations.OperationDescribe, (service, request, cancellationToken) => service.DescribeAsync(request, cancellationToken));
     }
