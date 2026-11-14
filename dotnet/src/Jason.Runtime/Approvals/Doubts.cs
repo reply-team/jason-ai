@@ -2,9 +2,11 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Approvals;
 
@@ -24,6 +26,52 @@ public static class Doubts
 
     /// <summary>The request field that carries <see cref="AskPersonKey"/>'s sentence, beside the context.</summary>
     public const string AskPersonNoteField = "ask_person_note";
+
+    /// <summary>The preview's member that carries the doubts a person reads before deciding.</summary>
+    public const string PreviewKey = "doubts";
+
+    /// <summary>
+    /// The doubts that stand about <paramref name="item"/>, as the approval's preview carries them, or null where none does:
+    /// the creator's <c>ask_person</c> first, then the review that stands when it doubts. Each entry is <c>source</c>,
+    /// <c>by</c>, <c>role</c>, <c>code</c>, <c>note</c> and <c>line</c>. The sentences come from the item's row; a send
+    /// parked before, whose row the first park cleared, takes its creator's sentence from its newest earlier approval that
+    /// carried one, since <c>ask_person</c> is never taken back. A review's sentence is never carried over: the text it was
+    /// about no longer stands, and only a doubt that stands now brings its sentence at all.
+    /// </summary>
+    public static async Task<JsonArray?> PreviewAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        var doubts = new JsonArray();
+        if (AskPersonCode(item) is { } code)
+        {
+            doubts.Add(Entry(
+                AskPersonKey,
+                new ActorRef(item.CreatedByType, item.CreatedById),
+                await CreatorsRoleAsync(db, item, cancellationToken).ConfigureAwait(false),
+                code,
+                item.AskPersonNote ?? await EarlierAskPersonNoteAsync(db, item, cancellationToken).ConfigureAwait(false),
+                line: null));
+        }
+
+        if (await Reviews.StandingAsync(db, item, cancellationToken).ConfigureAwait(false) is { Result: ReviewResult.Doubts } review)
+        {
+            doubts.Add(Entry("review", review.By, review.Role, review.Code!, item.ReviewNote, review.Line));
+        }
+
+        return doubts.Count == 0 ? null : doubts;
+    }
+
+    /// <summary>
+    /// Both sentences leave the row: the park moves what stands onto the preview, and nothing is kept at rest after it,
+    /// whether or not a doubt stood. Called by the one park routine, in the park's own save.
+    /// </summary>
+    internal static void ClearAtPark(WorkItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        item.AskPersonNote = null;
+        item.ReviewNote = null;
+    }
 
     /// <summary>The code a context's <see cref="AskPersonKey"/> carries, or null where it carries none.</summary>
     public static string? AskPersonCode(WorkItem item)
@@ -124,6 +172,57 @@ public static class Doubts
         {
             errors.Add(field, "invalid", $"{field} is one of: {string.Join(", ", DoubtCodes.All)}.");
         }
+    }
+
+    private static JsonObject Entry(string source, ActorRef by, string? role, string code, string? note, string? line) => new()
+    {
+        ["source"] = source,
+        ["by"] = JsonSerializer.SerializeToNode(by, JasonJson.Options),
+        ["role"] = role,
+        ["code"] = code,
+        ["note"] = note,
+        ["line"] = line,
+    };
+
+    /// <summary>The role of the run that created the send, where an attempt did; null for anybody else.</summary>
+    private static async Task<string?> CreatorsRoleAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
+    {
+        if (item.CreatedByType != ActorType.Attempt || item.CreatedById is not { } attempt)
+        {
+            return null;
+        }
+
+        return await db.Attempts.AsNoTracking()
+            .Where(a => a.PublicId == attempt)
+            .Select(a => a.WorkItem!.Role)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The creator's sentence as an earlier approval of the item's carried it, the newest first; null where none did. Read
+    /// through the campaign's approvals, so it is bounded by them.
+    /// </summary>
+    private static async Task<string?> EarlierAskPersonNoteAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
+    {
+        var earlier = await db.Approvals.FromSqlInterpolated($"""
+                SELECT * FROM approvals INDEXED BY ix_approvals_campaign_id
+                WHERE campaign_id = {item.CampaignId} AND work_item_id = {item.Id}
+                ORDER BY id DESC
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var approval in earlier)
+        {
+            if (approval.Preview[PreviewKey] is JsonArray entries
+                && entries.FirstOrDefault(entry => (string?)entry?["source"] == AskPersonKey) is JsonObject asked
+                && (string?)asked["note"] is { } note)
+            {
+                return note;
+            }
+        }
+
+        return null;
     }
 
     private static void ValidateAskPerson(JsonNode? asked, string field, ValidationErrors errors)

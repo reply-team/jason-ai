@@ -112,6 +112,9 @@ public static class ApprovalGate
         };
 
         db.Approvals.Add(approval);
+
+        // A doubt's sentences were moved onto the preview by the caller; none is kept on the row past the park.
+        Doubts.ClearAtPark(item);
         Wait(db, journal, item, now);
         journal.Append(
             db,
@@ -175,6 +178,9 @@ public static class ApprovalGate
         };
 
         db.Approvals.Add(approval);
+
+        // As at a park: whatever the preview carries of a doubt's sentences, none is kept on the row past this write.
+        Doubts.ClearAtPark(item);
         var names = Names(approval);
         names["standing"] = cover.Standing.PublicId;
         foreach (var (name, value) in cover.Names)

@@ -599,6 +599,12 @@ public sealed class Claimer(
             item.Contact,
             CanonicalInput.ConsumedChannel(plan.Contract, item));
 
+        // Who doubted and why, where the person deciding reads it; the park clears the sentences from the row.
+        if (await Doubts.PreviewAsync(db, item, ct).ConfigureAwait(false) is { } doubts)
+        {
+            preview[Doubts.PreviewKey] = doubts;
+        }
+
         // Only about work nobody was ever asked about: a decision a person made, or a question already put to them, is
         // theirs, and a later standing approval never answers it — not even once the question is gone, cancelled by an
         // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
