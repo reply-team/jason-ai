@@ -240,17 +240,22 @@ words, and in the demo the terminal works with the demo's data, as the other ter
 
 ### The chat in a browser tab
 
-**Browser** opens the desktop's chat in a tab of your system's browser, one more view onto the same chats the window
-shows, for as long as the desktop runs: the browser page's **Chat** screen shows the list of conversations, a
-conversation and the box. A tab sends only to a chat in Ask first or Plan only; for a chat in any other mode its box is
-locked, with a sentence naming the mode. A tab never answers a permission card or a plan card, which say they are
-answered in Jason Desktop, never changes a chat's mode and never chooses Full access, and a chat started from a tab starts
-in Ask first. The desktop's window stays the only place that approves. A tab draws no Start afresh, Remove, Open folder,
-attach buttons, Reply card or Connect button, and Open in is not offered inside it.
+**Browser** opens the console in a tab of your system's browser, drawn as the window draws it, with the chats the window
+shows, for as long as the desktop runs. Everything that reads the runtime works there as it does in the window: the
+Dashboard, Needs you, People, Agents, Accounts as far as the runtime knows them, Performance, Activity, Work items,
+System, Settings and the search, and the chat's list of conversations, a conversation and the box. A tab sends only to a
+chat in Ask first or Plan only; for a chat in any other mode its box is locked, with a sentence naming the mode. A tab
+never answers a permission card or a plan card, which say they are answered in Jason Desktop, never changes a chat's mode
+and never chooses Full access, and a chat started from a tab starts in Ask first, whatever the standing choice of Full
+access says. The desktop's window stays the only place that approves. What a tab cannot do is drawn in its place, off,
+with one sentence, "Done in Jason Desktop's own window.": the Demo | Live switch, the account acts of Connect and of the
+Accounts page, the access modes other than the chat's own, and the take-back of the standing choice of Full access. A tab
+draws no Start afresh, Remove, Open folder or attach buttons, and Open in is not offered inside it. The tab shows the
+Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
 
 The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
 on its first use or expires within sixty seconds, whichever comes first, and a spent or expired code opens nothing, so only
-a tab the desktop opened shows the chat; any other tab's Chat screen says how to open it from the desktop
+a tab the desktop opened holds the chat; any other tab shows the same console with no chat, and says that the chat needs Jason Desktop
 ([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
 not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
 `127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,

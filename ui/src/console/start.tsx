@@ -1,5 +1,5 @@
 import { effect, signal } from '@preact/signals-react';
-import { can } from '../platform/places';
+import { can, cannotHere, releasesPage } from '../platform/places';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
@@ -212,7 +212,37 @@ function placeholder(): string {
     return host?.id === 'claude' ? `${t('start.placeholder')} ${t('start.placeholder.site')}` : t('start.placeholder');
 }
 
+/** The place of the chat when this place has no desktop: where the chat is, and where to get it. */
+function ChatElsewhere() {
+    return (
+        <div className="painted start">
+            <div className="panel-body">
+                <div className="ph">
+                    <div>
+                        <h1>{t('chat.title')}</h1>
+                    </div>
+                </div>
+                <div className="note" role="note">
+                    {cannotHere()}
+                </div>
+                <p>{t('chat.desktop')}</p>
+                <p>
+                    <a href={releasesPage} target="_blank" rel="noopener noreferrer">
+                        {t('chat.get')}
+                    </a>
+                </p>
+                <p className="muted">{t('chat.agent')}</p>
+            </div>
+        </div>
+    );
+}
+
+/** The window opens on the chat; a place that cannot make one says where the chat is instead. */
 export function StartPanel() {
+    return can('chat.create') ? <StartChat /> : <ChatElsewhere />;
+}
+
+function StartChat() {
     const modeMenu = useRef<HTMLButtonElement>(null);
     const waiting = startWaiting.value;
     const making = startMaking.value;

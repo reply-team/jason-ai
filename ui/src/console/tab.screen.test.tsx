@@ -171,8 +171,9 @@ describe('Connect in a tab', () => {
         expect(notes.length).toBeGreaterThanOrEqual(2);
         const reply = within(document.body).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
         // Checking again is a read, which the bridge carries.
+        // Add account and Check again only change what the page shows, so they stay live; Add account's form is below.
         const acts = (within(reply).getAllByRole('button') as HTMLButtonElement[]).filter(
-            (each) => words(each) !== 'Check again',
+            (each) => !['Check again', 'Add account'].includes(words(each)),
         );
         expect(acts.length).toBeGreaterThan(1);
         for (const each of acts) {
@@ -197,12 +198,68 @@ describe('Connect in a tab', () => {
         expect(plugins.length).toBeGreaterThan(0);
         for (const row of plugins)
             for (const each of within(row).queryAllByRole('button') as HTMLButtonElement[])
-                expect(each.disabled, words(each)).toBe(true);
+                // Disconnect only asks for the confirmation, which is the act and is drawn off.
+                expect(each.disabled, words(each)).toBe(words(each) !== 'Disconnect');
         const ai = screen.getAllByText('AI', { selector: 'b' })[0]!.closest<HTMLElement>('.card')!;
         for (const each of within(ai).queryAllByRole('button') as HTMLButtonElement[])
             expect(each.disabled, words(each)).toBe(true);
         expect(calls(stand, 'setup.installProgram')).toEqual([]);
         expect(calls(stand, 'setup.configurePlugin')).toEqual([]);
+    });
+});
+
+describe('Connect in a tab: each control by the member it calls', () => {
+    it('keeps Add account live, since it only opens a form, and draws what the form does off', async () => {
+        const { stand } = await renderTab();
+        // The card is drawn again on each change, so it is found afresh each time.
+        const reply = () => within(document.body).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
+        const add = within(reply()).getByRole('button', { name: 'Add account' }) as HTMLButtonElement;
+        expect(add.disabled).toBe(false);
+        fireEvent.click(add);
+        const form = await waitFor(() => {
+            const found = reply().querySelector<HTMLElement>('.add-account');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect((within(form).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(false);
+        const choices = (within(form).getAllByRole('button') as HTMLButtonElement[]).filter(
+            (each) => !['Cancel', 'LinkedIn'].includes(words(each)),
+        );
+        expect(choices.length).toBeGreaterThan(1);
+        for (const each of choices) {
+            expect(each.disabled, words(each)).toBe(true);
+            fireEvent.click(each);
+        }
+        // LinkedIn only asks for a name, which stays live; making the link is the act, and is off.
+        const linkedin = within(form).getByRole('button', { name: 'LinkedIn' }) as HTMLButtonElement;
+        expect(linkedin.disabled).toBe(false);
+        fireEvent.click(linkedin);
+        const make = await waitFor(() => within(reply()).getByRole('button', { name: 'Make the link' }));
+        expect((make as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(make);
+        fireEvent.click(within(reply()).getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(reply().querySelector('.add-account')).toBeNull());
+        expect(calls(stand, 'setup.replyConnect')).toEqual([]);
+    });
+
+    it('keeps Disconnect live, since it only asks for the confirmation, and draws the confirmation off', async () => {
+        const { stand } = await renderTab();
+        // The card is drawn again on each change, so the row is found afresh each time.
+        const rowOf = () =>
+            [...document.querySelectorAll<HTMLElement>('.plugin')].find(
+                (each) =>
+                    within(each).queryByRole('button', { name: 'Disconnect' }) ??
+                    within(each).queryByRole('alertdialog'),
+            )!;
+        const disconnect = within(rowOf()).getByRole('button', { name: 'Disconnect' }) as HTMLButtonElement;
+        expect(disconnect.disabled).toBe(false);
+        fireEvent.click(disconnect);
+        const dialog = await waitFor(() => within(rowOf()).getByRole('alertdialog'));
+        const confirm = within(dialog).getByRole('button', { name: /^Disconnect / }) as HTMLButtonElement;
+        expect(confirm.disabled).toBe(true);
+        expect((within(dialog).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(false);
+        fireEvent.click(confirm);
+        expect(calls(stand, 'setup.disconnectPlugin')).toEqual([]);
     });
 });
 

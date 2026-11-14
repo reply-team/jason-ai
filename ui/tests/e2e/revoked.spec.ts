@@ -3,7 +3,7 @@ import { expect, test } from './fixtures';
 test('a revoked token lands on the pair-again screen and the stored pairing is cleared', async ({ page, jason }) => {
     const { url } = await jason.uiOpen();
     await page.goto(url);
-    await expect(page.getByRole('navigation')).toBeVisible();
+    await expect(page.locator('.jc-console .side')).toBeVisible();
 
     await jason.uiRevoke('--all');
     await page.reload();

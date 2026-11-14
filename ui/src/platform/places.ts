@@ -22,6 +22,9 @@ export type DesktopMember = {
           : never;
 }[keyof JasonDesktop & string];
 
+/** Where a person gets Jason Desktop. */
+export const releasesPage = 'https://github.com/reply-team/jason-ai/releases';
+
 export type PlaceKind = 'window' | 'tab' | 'none';
 
 /** The subscriptions the bridge's event stream feeds: not calls of the table, but a tab has them. */
@@ -143,6 +146,72 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
             replyUnblock: async () => replyRefused(),
             replyDelete: async () => replyRefused(),
             onChanged: seam.setup.onChanged,
+        },
+    };
+}
+
+const needs = (): Promise<never> => Promise.reject(new Error(t('place.needs')));
+const needsRefusal = (): DesktopRefusal => ({ refused: t('place.needs') });
+const needsReply = (): DesktopReplyRefusal => ({ refused: t('place.needs'), code: null, offer: null, reread: false });
+
+/**
+ * The object of a tab with no desktop, of the desktop's whole shape: every act refuses in one sentence, and a read says
+ * what a page with no desktop can truthfully say: the person's own installation, no conversations, nothing standing, no
+ * link held. What the desktop alone knows, the setup, is refused with the sentence, never made up. `platform` is the
+ * browser's own.
+ */
+export function noDesktop(): JasonDesktop {
+    return {
+        platform: browserPlatform(),
+        onCommand: none,
+        theme: { get: async () => null, set: needs },
+        dailyTrends: { get: async () => null, set: needs },
+        mode: {
+            get: async () => ({ mode: 'live', unopened: null, preparing: false }),
+            set: async () => needsRefusal(),
+            startOver: async () => needsRefusal(),
+            onPreparing: none,
+        },
+        openIn: {
+            targets: async () => needsRefusal(),
+            open: async () => needsRefusal(),
+            continueChat: async () => needsRefusal(),
+        },
+        pairing: { paired: needs },
+        chat: {
+            send: async () => needsRefusal(),
+            stop: needs,
+            answer: needs,
+            onEvent: none,
+            list: async () => [],
+            open: async () => needsRefusal(),
+            create: async () => needsRefusal(),
+            remove: async () => needsRefusal(),
+            restart: async () => needsRefusal(),
+            attach: async () => needsRefusal(),
+            rename: async () => needsRefusal(),
+            setMode: async () => needsRefusal(),
+            openFolder: async () => needsRefusal(),
+            feed: async () => needsRefusal(),
+        },
+        fullAccess: { standing: async () => null, takeBack: async () => needsRefusal(), onChanged: none },
+        links: { take: async () => null, onOpen: none },
+        setup: {
+            status: needs,
+            connectReply: needs,
+            connectReplyWithKey: needs,
+            setProviderKey: needs,
+            installProgram: needs,
+            configurePlugin: needs,
+            disconnectPlugin: needs,
+            replyConnect: async () => needsReply(),
+            replyReconnect: async () => needsReply(),
+            replyLimits: async () => needsReply(),
+            replyPause: async () => needsReply(),
+            replyResume: async () => needsReply(),
+            replyUnblock: async () => needsReply(),
+            replyDelete: async () => needsReply(),
+            onChanged: none,
         },
     };
 }

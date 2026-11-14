@@ -13,7 +13,7 @@ import type {
 } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
-import { can, cannotHere } from '../platform/places';
+import { can, cannotHere, type DesktopMember } from '../platform/places';
 import { act, argsOf, define, type Action } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
@@ -39,7 +39,7 @@ const actsOff = (): boolean => !can('setup.connectReply');
 /** Defines an act that connects or changes a real account: in the demo it does nothing. */
 function defineReal(name: string, action: Action): void {
     define(name, (args, element, event) => {
-        if (!inDemo() && !actsOff()) action(args, element, event);
+        if (!inDemo()) action(args, element, event);
     });
 }
 
@@ -56,7 +56,10 @@ const elsewhere = (): Html | null =>
     actsOff() ? html`<div class="setrow meta demo-off" role="note">${cannotHere()}</div>` : null;
 
 /** `busy`, or disabled in the demo, for a control that connects or changes a real account. */
-const realBusy = (busy: Html | null): Html | null => (inDemo() || actsOff() ? html`disabled` : busy);
+const realBusy = (busy: Html | null): Html | null => (inDemo() ? html`disabled` : busy);
+
+/** `busy`, or off where this place cannot do the member the control calls; a control that only changes the page is not asked. */
+const unlessCan = (busy: Html | null, member: DesktopMember): Html | null => (can(member) ? busy : html`disabled`);
 
 /** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
 const confirming = signal<string | null>(null);
@@ -560,7 +563,7 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
                               html`<button
                                   class="btn sm"
                                   type="button"
-                                  ${busy}
+                                  ${unlessCan(busy, 'setup.replyConnect')}
                                   ${act('connect.addMailbox', place, provider)}
                               >
                                   ${name}
@@ -580,7 +583,12 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
             naming.value === place
                 ? html`<div class="setrow">
                       ${field('linkedin-name', 'Name for the LinkedIn account', 'text')}
-                      <button class="btn sm" type="button" ${busy} ${act('connect.makeLinkedIn', place)}>
+                      <button
+                          class="btn sm"
+                          type="button"
+                          ${unlessCan(busy, 'setup.replyConnect')}
+                          ${act('connect.makeLinkedIn', place)}
+                      >
                           Make the link
                       </button>
                   </div>`
@@ -590,12 +598,18 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
 
 /** The acts a row offers, by its channel and state; Pause and Resume not while the account is signed out. */
 function rowActs(account: DesktopReplyAccount, place: Place, busy: Html | null): Html[] {
-    const button = (label: string, name: string, ...args: string[]) =>
-        html`<button class="btn sm" type="button" ${busy} ${act(name, place, ...args)}>${label}</button>`;
+    const button = (label: string, name: string, member: DesktopMember, ...args: string[]) =>
+        html`<button class="btn sm" type="button" ${unlessCan(busy, member)} ${act(name, place, ...args)}>
+            ${label}
+        </button>`;
     const acts: Html[] = [];
-    if (needsReconnect(account)) acts.push(button('Reconnect', 'connect.reconnect', account.channel, account.id));
+    if (needsReconnect(account))
+        acts.push(button('Reconnect', 'connect.reconnect', 'setup.replyReconnect', account.channel, account.id));
     if (account.channel === 'email') {
-        acts.push(button('Limits', 'connect.limits', account.id), button('Unblock', 'connect.unblock', account.id));
+        acts.push(
+            button('Limits', 'connect.limits', 'setup.replyLimits', account.id),
+            button('Unblock', 'connect.unblock', 'setup.replyUnblock', account.id),
+        );
     } else if (
         account.channel === 'linkedin' &&
         account.status !== 'cookieInvalid' &&
@@ -603,11 +617,13 @@ function rowActs(account: DesktopReplyAccount, place: Place, busy: Html | null):
     ) {
         // Reply's one call flips the state, so Pause is offered only from enabled and Resume only from disabled; an
         // account at its daily limit is on and offers neither.
-        if (account.status === 'disabled') acts.push(button('Resume', 'connect.resume', account.id));
-        else if (account.status === 'enabled') acts.push(button('Pause', 'connect.pause', account.id));
+        if (account.status === 'disabled')
+            acts.push(button('Resume', 'connect.resume', 'setup.replyResume', account.id));
+        else if (account.status === 'enabled')
+            acts.push(button('Pause', 'connect.pause', 'setup.replyPause', account.id));
     }
     if (account.channel === 'email' || account.channel === 'linkedin')
-        acts.push(button('Delete', 'connect.delete', account.channel, account.id));
+        acts.push(button('Delete', 'connect.delete', 'setup.replyDelete', account.channel, account.id));
     return acts;
 }
 
@@ -618,7 +634,14 @@ function limitView(account: DesktopReplyAccount, place: Place, busy: Html | null
     return html`<div class="setrow acct-limit">
         <div class="grow meta">Emails a day${open.daily === null ? '' : `, now ${open.daily}`}:</div>
         ${field(`limit:${account.id}`, 'Daily limit', 'text')}
-        <button class="btn sm" type="button" ${busy} ${act('connect.setLimit', place, account.id)}>Set</button>
+        <button
+            class="btn sm"
+            type="button"
+            ${unlessCan(busy, 'setup.replyLimits')}
+            ${act('connect.setLimit', place, account.id)}
+        >
+            Set
+        </button>
     </div>`;
 }
 
@@ -807,7 +830,12 @@ function program(host: DesktopHost, busy: Html | null): Html {
         </div>
         ${
             !host.found && host.install
-                ? html`<button class="btn sm" type="button" ${busy} ${act('connect.install', host.install)}>
+                ? html`<button
+                      class="btn sm"
+                      type="button"
+                      ${unlessCan(busy, 'setup.installProgram')}
+                      ${act('connect.install', host.install)}
+                  >
                       Install
                   </button>`
                 : null
@@ -820,11 +848,23 @@ function provider(host: DesktopHost, busy: Html | null): Html {
         <div class="grow"><b>${host.label}</b> <span class="meta">${host.found ? 'Key set' : 'No key'}</span></div>
         ${
             host.found
-                ? html`<button class="btn sm" type="button" ${busy} ${act('connect.providerKey', host.id, true)}>
+                ? html`<button
+                      class="btn sm"
+                      type="button"
+                      ${unlessCan(busy, 'setup.setProviderKey')}
+                      ${act('connect.providerKey', host.id, true)}
+                  >
                       Remove the key
                   </button>`
                 : html`${secret(`provider:${host.id}`, `${host.label} key`)}
-                      <button class="btn sm" type="button" ${busy} ${act('connect.providerKey', host.id)}>Keep</button>`
+                      <button
+                          class="btn sm"
+                          type="button"
+                          ${unlessCan(busy, 'setup.setProviderKey')}
+                          ${act('connect.providerKey', host.id)}
+                      >
+                          Keep
+                      </button>`
         }
     </div>`;
 }
@@ -842,7 +882,12 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
         ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
         : html`<span class="meta">The Reply CLI was not found.</span> ${
                   state.cli.install
-                      ? html`<button class="btn sm" type="button" ${real} ${act('connect.install', state.cli.install)}>
+                      ? html`<button
+                            class="btn sm"
+                            type="button"
+                            ${unlessCan(real, 'setup.installProgram')}
+                            ${act('connect.install', state.cli.install)}
+                        >
                             Install
                         </button>`
                       : null
@@ -861,7 +906,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                                   ? html`<button
                                         class="btn sm"
                                         type="button"
-                                        ${real}
+                                        ${unlessCan(real, 'setup.installProgram')}
                                         ${act('connect.install', state.cli.install)}
                                     >
                                         Update
@@ -876,14 +921,21 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
                     <span class="meta">${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span>
                 </div>
-                ${state.cli.found ? html`<button class="btn sm p" type="button" ${real} ${act('connect.reply')}>Sign in</button>` : null}
+                ${state.cli.found ? html`<button class="btn sm p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in</button>` : null}
             </div>
             ${
                 state.cli.found
                     ? html`<div class="setrow">
                           <div class="grow meta">Or an API key, for an account the browser sign-in does not reach:</div>
                           ${secret('reply', 'Reply API key')}
-                          <button class="btn sm" type="button" ${real} ${act('connect.replyKey')}>Connect</button>
+                          <button
+                              class="btn sm"
+                              type="button"
+                              ${unlessCan(real, 'setup.connectReplyWithKey')}
+                              ${act('connect.replyKey')}
+                          >
+                              Connect
+                          </button>
                       </div>`
                     : null
             }
@@ -980,14 +1032,21 @@ function plugin(each: DesktopPlugin, busyReal: Html | null, refused: boolean): H
                               ? html`<button
                                     class="btn sm"
                                     type="button"
-                                    ${busy}
+                                    ${unlessCan(busy, 'setup.configurePlugin')}
                                     ${act('connect.pluginServerClear', each.id)}
                                 >
                                     Use the public server
                                 </button>`
                               : null
                       }
-                      <button class="btn sm" type="button" ${busy} ${act('connect.plugin', each.id)}>Configure</button>
+                      <button
+                          class="btn sm"
+                          type="button"
+                          ${unlessCan(busy, 'setup.configurePlugin')}
+                          ${act('connect.plugin', each.id)}
+                      >
+                          Configure
+                      </button>
                       ${disconnect(each, busy)}`
         }
     </div>`;
@@ -1006,7 +1065,12 @@ function disconnect(each: DesktopPlugin, busy: Html | null): Html | null {
     return html`<div class="note am" role="alertdialog" aria-label="Disconnect ${each.label}">
         Disconnect ${each.label}? Every value under its configuration in the settings file and its notification target
         are removed. Jason stops sending notifications there. The plugin stays installed.
-        <button class="btn sm" type="button" ${busy} ${act('connect.disconnectConfirm', each.id)}>
+        <button
+            class="btn sm"
+            type="button"
+            ${unlessCan(busy, 'setup.disconnectPlugin')}
+            ${act('connect.disconnectConfirm', each.id)}
+        >
             Disconnect ${each.label}
         </button>
         <button class="btn sm" type="button" ${act('connect.disconnectCancel')}>Cancel</button>
@@ -1026,7 +1090,14 @@ function plugins(state: DesktopSetup, busy: Html | null): Html {
                 refused
                     ? html`<div class="note am" role="alert">
                           ${state.settingsRefused} Edit it by hand, then press Reload.
-                          <button class="btn sm" type="button" ${busy} ${act('connect.reload')}>Reload</button>
+                          <button
+                              class="btn sm"
+                              type="button"
+                              ${unlessCan(busy, 'setup.configurePlugin')}
+                              ${act('connect.reload')}
+                          >
+                              Reload
+                          </button>
                       </div>`
                     : null
             }
@@ -1043,7 +1114,7 @@ export function aiCardView(): Html {
     const state = setup.value;
     const busy = setupBusy.value;
     const failure = setupError.value;
-    const disabled = busy === null && !actsOff() ? null : html`disabled`;
+    const disabled = busy === null ? null : html`disabled`;
     return html`<div class="card" role="region" aria-label="Connect an AI">
         <div class="hd"><b>AI</b></div>
         <div class="bd">
@@ -1112,7 +1183,7 @@ export function connectView(): Html {
     const state = setup.value;
     const busy = setupBusy.value;
     const failure = setupError.value;
-    const disabled = busy === null && !actsOff() ? null : html`disabled`;
+    const disabled = busy === null ? null : html`disabled`;
     const header = html`<div class="ph">
         <div>
             <h1>Connect</h1>
