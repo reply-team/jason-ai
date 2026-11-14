@@ -103,9 +103,9 @@ The header says where a request comes from; it is not a credential, it opens not
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the ones that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), which answer it `403` with
 the code `decided_inside_a_run` before the body is read, and record nothing, and `reply.record`, which records a verdict
-that names a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running inside an
-attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent: `jason` says
-so in one line on stderr, naming the variable and never its value.
+that names a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running
+inside an attempt sends no `Jason-Attempt`, and is not affected. A value that is not all visible ASCII is not sent:
+`jason` says so in one line on stderr, naming the variable and never its value.
 
 ## The request form
 
@@ -395,11 +395,12 @@ that is not that attempt does not call them.
   `suppressed`, and a value it never held — one the contact gains later, or any value of a contact who had none — as
   `opted_out` ([routing](routing.md) §7). Sends already parked for a person's approval stay parked and are refused
   when they are claimed. The runtime never takes an entry off the register, and the provider's own sequence is not
-  stopped here. **Only a person's own later verdict on the same reply lifts the lock**: one recorded under a `human`
-  actor that names the person (`human:<Name>`), outside any run, that states a `nature` other than `opt_out`. A role's or
-  an attempt's own verdict never lifts it, nor does a `human` actor with no name, a verdict that states no nature, or one
-  that carries a `decision_id` by that alone — a run may carry an answer given the other way, before the opt-out, or
-  about another reply, and `suppression.remove` takes an entry off the register and leaves the lock. A request from inside a
+  stopped here. **Only a person's own later verdict on the same reply in that verdict's campaign lifts the
+  lock**: one recorded under a `human` actor that names the person (`human:<Name>`), outside any run, that states a
+  `nature` other than `opt_out`. A role's or an attempt's own verdict never lifts it, nor does a `human` actor with no
+  name, a verdict that states no nature, or one that carries a `decision_id` by that alone — a run may carry an answer
+  given the other way, before the opt-out, or about another reply. `suppression.remove` takes an entry off the register
+  and leaves the lock. A request from inside a
   run — one that carries `Jason-Attempt`, as `jason` sends from there — that names a `human` actor is recorded as that
   run's verdict: the line names the run's work item and attempt, the run is checked to be of work in the same campaign
   (a 400 at `actor` where it is not), and it lifts no lock.
@@ -506,8 +507,8 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   pair answers with the entry already there. The runtime adds entries of its own: an `opt_out` verdict (`reply.record`
   above) puts every value of the contact on the list, written by `system:opt_out` with the verdict's id in the reason.
 - `suppression.remove`: lifts a suppression; the reason is mandatory. It lifts that one entry: a contact an opt-out
-  verdict stands for is still refused by the claim's `opted_out` lock, which only a person's later verdict on that reply
-  lifts.
+  verdict stands for is still refused by the claim's `opted_out` lock, which only a person's own later verdict on that
+  reply lifts: recorded under their name, outside any run, saying what the reply is other than an opt-out.
 - `suppression.list`: the do-not-contact list.
 
 ### `events`

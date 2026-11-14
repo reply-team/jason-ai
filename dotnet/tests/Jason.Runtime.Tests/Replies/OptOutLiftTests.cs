@@ -80,7 +80,8 @@ public class OptOutLiftTests
 
     /// <summary>
     /// A person's verdict lifts only when it is theirs and says something: one by a human who gave no name, or by a named
-    /// person who left the nature out, or one that says opt_out again, leaves the lock where it is.
+    /// person who left the nature out, or one that says opt_out again, leaves the lock where it is, and the verdict that
+    /// stands is still the first one.
     /// </summary>
     [Theory]
     [InlineData("a nameless human, nature person")]
@@ -91,6 +92,7 @@ public class OptOutLiftTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var (campaign, contact, _) = await OptedOutAsync(db);
+        var first = await OptOuts.StandingAsync(db, contact.Id, Ct);
         var request = shape switch
         {
             "a nameless human, nature person" => OptOutRegisterTests.Request(campaign, contact, ReplyNature.Person) with { Actor = new ActorRef(ActorType.Human) },
@@ -101,7 +103,29 @@ public class OptOutLiftTests
         await OptOutRegisterTests.Service(db).RecordAsync(request, Ct);
 
         await using var fresh = database.Open();
-        Assert.NotNull(await OptOuts.StandingAsync(fresh, contact.Id, Ct));
+        Assert.Equal(first, await OptOuts.StandingAsync(fresh, contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// The verdict that lifts is read by its key, the reply, whoever its body names. A named person outside a run who
+    /// records an opt-out on the same reply for another contact lifts nothing for the first, who stays locked, and the other
+    /// is locked too; the same person recording that the reply was another contact's answer lifts the first.
+    /// </summary>
+    [Theory]
+    [InlineData(ReplyNature.OptOut, false)]
+    [InlineData(ReplyNature.Person, true)]
+    public async Task A_person_s_verdict_on_the_same_reply_naming_another_contact_is_read_by_the_reply(ReplyNature nature, bool lifts)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (campaign, contactA, _) = await OptedOutAsync(db);
+        var contactB = await OptOutRegisterTests.ContactAsync(db, "cnt_01K52JR000000000000000000B", ("email", "boris@example.test"));
+
+        await OptOutRegisterTests.Service(db).RecordAsync(OptOutRegisterTests.Request(campaign, contactB, nature), Ct);
+
+        await using var fresh = database.Open();
+        Assert.Equal(lifts, await OptOuts.StandingAsync(fresh, contactA.Id, Ct) is null);
+        Assert.Equal(nature == ReplyNature.OptOut, await OptOuts.StandingAsync(fresh, contactB.Id, Ct) is not null);
     }
 
     /// <summary>
