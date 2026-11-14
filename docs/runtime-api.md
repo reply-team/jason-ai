@@ -318,14 +318,15 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 - `workitem.review`: a review of a send before it goes, written as the journal line `workitem_reviewed` and answered
   with that line. It names the send by `work_item_id` and the text it read by `review_hash`, the hash `workitem.get`
   answers on a send a person decides each one of; a send whose input moved since is refused `review_stale`, and only a
-  send still `created` or `waiting` is reviewed (`not_reviewable`); a review is refused `not_reviewable` once the send
-  has been parked, approved or attempted. `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed
-  list the kind's document publishes, and may carry one `note`, a line of at most 280 characters that the line never
-  carries and the person reads on the approval. The `actor` is a running attempt of the same campaign's role work or a
-  person by name, and never the send's creator: no attempt of the work that made it, and not the person who made it,
-  whose own send is theirs to approve (`review_by_creator`, 403); and never one who wrote its `input` since, a person by
-  name or any attempt of a work that did (`review_by_editor`, 403). Inside a run the actor is the attempt the request
-  comes from. It takes no `reason`. [`docs/work-execution.md`](work-execution.md), "Doubts about a send".
+  send still `created` or `waiting` is reviewed (`not_reviewable`); a review is also refused `not_reviewable` where an
+  approval stands for the send's text as it now reads, since a retry goes under that approval without reading a review.
+  `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document publishes, and
+  may carry one `note`, a line of at most 280 characters that the line never carries and the person reads on the
+  approval. The `actor` is a running attempt of the same campaign's role work or a person by name, and never the send's
+  creator: no attempt of the work that made it, and not the person who made it, whose own send is theirs to approve
+  (`review_by_creator`, 403); and never one who wrote its `input` since, a person by name or any attempt of a work that
+  did (`review_by_editor`, 403). Inside a run the actor is the attempt the request comes from. It takes no `reason`.
+  [`docs/work-execution.md`](work-execution.md), "Doubts about a send".
 
 `workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait` and `decision.raise` belong to the
 attempt the runtime started for a work item: each takes that attempt's id and is refused for any other, so a program
