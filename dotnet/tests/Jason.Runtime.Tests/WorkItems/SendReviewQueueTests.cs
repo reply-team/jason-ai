@@ -53,8 +53,12 @@ public class SendReviewQueueTests
         Assert.Equal((ActorType.System, "runtime"), (lines[2].ActorType, lines[2].ActorId));
     }
 
+    /// <summary>
+    /// The create reads the mode the claim would read for this contact: a contact who has not answered is cold, and a mode
+    /// that releases only warm contacts would release nothing, so no critic is run for it.
+    /// </summary>
     [Fact]
-    public async Task Automatic_for_warm_alone_queues_the_critic_too()
+    public async Task A_cold_contact_under_an_automatic_warm_mode_alone_is_given_no_critic()
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -63,8 +67,8 @@ public class SendReviewQueueTests
 
         var made = await Service(db).CreateAsync(Send(seed), Ct);
 
-        Assert.Equal(WorkItemStatus.Waiting, made.Status);
-        Assert.Single(await CriticsAsync(db));
+        Assert.Equal(WorkItemStatus.Created, made.Status);
+        Assert.Empty(await CriticsAsync(db));
     }
 
     [Theory]

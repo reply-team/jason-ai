@@ -258,8 +258,8 @@ public sealed class WorkItemService(
     /// <summary>
     /// The critic the runtime creates for <paramref name="send"/>, composed into the create's own save; null where it
     /// creates none. It creates one for a send a person decides each one of, about a contact, that does not ask the person
-    /// itself and was not written in the desktop's chat, where the campaign's send mode for cold or for warm contacts would
-    /// release it and a critic could be launched. The critic is the runtime's own work: a <c>critic</c> item of the send's
+    /// itself and was not written in the desktop's chat, where the send mode in force for the contact's temperature would
+    /// release it (either mode, for a contact who waits on a verdict) and a critic could be launched. The critic is the runtime's own work: a <c>critic</c> item of the send's
     /// campaign, contact, priority, due date and lineage, whose context names the send under <see cref="SendReview.Key"/>
     /// and nothing else. The modes are read here only to decide whether to create it; the claim reads them again when it
     /// decides about the send.
@@ -272,9 +272,9 @@ public sealed class WorkItemService(
             return null;
         }
 
-        var installation = await SendModes.ReadAsync(db, cancellationToken).ConfigureAwait(false);
-        if (AutomaticRelease.Releasing(SendModes.Resolve(campaign, installation, Temperature.Cold)) is null
-            && AutomaticRelease.Releasing(SendModes.Resolve(campaign, installation, Temperature.Warm)) is null)
+        // The claim's own reading of the mode for this contact: the mode of the contact's temperature, or either while the
+        // contact waits on a verdict. A contact cold now and warm at the claim has no pass then, and parks for the person.
+        if (!(await AutomaticRelease.ModeForAsync(db, campaign, campaign.Id, contact.Id, cancellationToken).ConfigureAwait(false)).InForce)
         {
             return null;
         }

@@ -185,10 +185,61 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// The create reads the mode the claim reads for the contact, by the claim's own function: the mode of the contact's
+    /// temperature, or either mode while the contact waits on a verdict. A warm contact under a mode that releases only cold
+    /// contacts is given no critic; a contact who waits is given one under either.
+    /// </summary>
+    [Theory]
+    [InlineData("warm", "cold", false)]
+    [InlineData("waiting", "cold", true)]
+    [InlineData("waiting", "warm", true)]
+    public async Task SendReview_TheCreateReadsTheContactsTemperature_AsTheClaimDoes(string contact, string automatic, bool critic)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        if (contact == "warm")
+        {
+            await WarmAsync(db, reading);
+        }
+        else
+        {
+            await ObservedAsync(db, reading, "2026-09-14T11:30:00.000Z");
+        }
+
+        await ModeAsync(db, automatic == "cold" ? ColdMode : WarmMode, "automatic");
+
+        var send = await ReviewedSendAsync(db, reading, reviewed: critic);
+
+        Assert.Equal(critic ? 1 : 0, await db.WorkItems.CountAsync(w => w.Role == AutomaticRelease.CriticRole && w.CreatedByType == ActorType.System, Ct));
+        Assert.Equal(critic ? WorkItemStatus.Waiting : WorkItemStatus.Created, send.Status);
+    }
+
+    /// <summary>
+    /// It fails closed the other way: a contact cold when the send is made gets no critic under a mode that releases only warm
+    /// contacts, and warm by the claim the send has no pass, so it parks for the person.
+    /// </summary>
+    [Fact]
+    public async Task SendReview_AContactColdAtTheCreateAndWarmAtTheClaim_ParksUnreviewed()
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, WarmMode, "automatic");
+        var send = await ReviewedSendAsync(db, reading, reviewed: false);
+
+        await WarmAsync(db, reading);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await ParkedNotReviewedAsync(database, send.Id);
+    }
+
+    /// <summary>
     /// The send the composing run creates through the verb, by the service as the runtime builds it: a critic can be launched
     /// where the send is created, so the runtime creates one under an automatic mode.
     /// </summary>
-    private static async Task<WorkItemDto> ReviewedSendAsync(JasonDbContext db, Reading reading, string operation = "message.send", JsonObject? context = null)
+    private static async Task<WorkItemDto> ReviewedSendAsync(JasonDbContext db, Reading reading, string operation = "message.send", JsonObject? context = null, bool reviewed = true)
     {
         var send = await ReviewedItems(db).CreateAsync(
             new WorkItemCreateRequest(
@@ -209,7 +260,7 @@ public partial class ClaimerTests
                 new ActorRef(ActorType.Attempt, reading.Run.PublicId),
                 Reason: null),
             Ct);
-        Assert.Equal(WorkItemStatus.Waiting, send.Status);
+        Assert.Equal(reviewed ? WorkItemStatus.Waiting : WorkItemStatus.Created, send.Status);
         return send;
     }
 

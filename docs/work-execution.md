@@ -493,21 +493,22 @@ work has ended; whatever way it ended, the claim then decides as ever. A doubt p
 any standing approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying
 `doubted`, and no row is born approved; a pass is no doubt and leaves the standing approval to decide.
 
-**Under an automatic send mode the runtime creates the review itself.** When a send a person decides each one of is
-created about a contact while the send mode in force for its campaign, for cold or for warm contacts, is `automatic` and
-was set by a named person, the same save creates a `critic` work item by `system:runtime`, of the send's campaign,
-contact, priority, due date and lineage, whose context is the reserved key `send_review`, exactly
-`{"work_item_id": "wi_…", "operation": "…"}` and nothing else, and writes the send waiting on it, after any items its
-`wait_on` named. A keyed repeat answers with what the first create made, and a create that loses the race on its key
-leaves no critic behind. A create or a patch that names `send_review` is refused `not_allowed` at that field, on every
-item, whoever sends it, so an item that carries the key was made by the runtime and its brief was never changed. Nothing
-is created under `every_message`, for a send that carries `ask_person`, for one written in the desktop's chat, for one
-about nobody, or where no critic could be launched (no profile resolves for it and no entry command does), and the send
-is then not held. The modes are read for this once, when the send is created: a later change neither adds nor removes
-the critic, and the claim reads the modes again when it decides. No second critic is created when the send's input is
-edited, and the critic is not cancelled when the send ends first. A critic that fails, is cancelled, expires or ends
-without a review, or a wait whose ceiling comes first, releases the send without a pass, and the claim parks it for the
-person as `not_reviewed` unless a standing approval covers it.
+**Under an automatic send mode the runtime creates the review itself.** When a send to a person is created about a
+contact while the send mode in force for that contact's kind, cold or warm, is `automatic` and was set by a named person
+(for a contact who waits on a verdict, where either is), as the claim itself reads the mode, the same save creates a
+`critic` work item by `system:runtime`, of the send's campaign, contact, priority, due date and lineage, whose context
+is the reserved key `send_review`, exactly `{"work_item_id": "wi_…", "operation": "…"}` and nothing else, and writes the
+send waiting on it, after any items its `wait_on` named. A keyed repeat answers with what the first create made, and a
+create that loses the race on its key leaves no critic behind. A create or a patch that names `send_review` is refused
+`not_allowed` at that field, on every item, whoever sends it, so an item that carries the key was made by the runtime
+and its brief was never changed. Nothing is created under `every_message`, for a send that carries `ask_person`, for one
+written in the desktop's chat, for one about nobody, or where no critic could be launched (no profile resolves for it
+and no entry command does), and the send is then not held. The modes and the contact's kind are read for this once, when
+the send is created: a later change neither adds nor removes the critic, and the claim reads them again when it decides,
+so a contact cold at the create and warm by the claim has no pass and parks `not_reviewed`. No second critic is created
+when the send's input is edited, and the critic is not cancelled when the send ends first. A critic that fails, is
+cancelled, expires or ends without a review, or a wait whose ceiling comes first, releases the send without a pass, and
+the claim parks it for the person as `not_reviewed` unless a standing approval covers it.
 
 **The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
 item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the

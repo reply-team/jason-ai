@@ -82,31 +82,13 @@ public static class AutomaticRelease
         }
 
         var chat = await Confined(db, item.PublicId).AnyAsync(ct).ConfigureAwait(false);
-        var installation = await SendModes.ReadAsync(db, ct).ConfigureAwait(false);
-        var cold = Releasing(SendModes.Resolve(item.Campaign, installation, Temperature.Cold));
-        var warm = Releasing(SendModes.Resolve(item.Campaign, installation, Temperature.Warm));
-        if (cold is null && warm is null)
+        var reading = await ModeForAsync(db, item.Campaign, item.CampaignId, contact, ct).ConfigureAwait(false);
+        if (!reading.InForce)
         {
             return new AutomaticDecision.NotInForce(chat);
         }
 
-        var state = await Warmth.OfAsync(db, item.CampaignId, contact, ct).ConfigureAwait(false);
-        Temperature? temperature = state switch
-        {
-            WarmthState.Cold => Temperature.Cold,
-            WarmthState.Warm => Temperature.Warm,
-            _ => null,
-        };
-        var mode = temperature switch
-        {
-            Temperature.Cold => cold,
-            Temperature.Warm => warm,
-            _ => null,
-        };
-        if (temperature is not null && mode is null)
-        {
-            return new AutomaticDecision.NotInForce(chat);
-        }
+        var (state, temperature, mode) = (reading.State!.Value, reading.Temperature, reading.Mode);
 
         var facts = Facts(mode, temperature, review: null);
         if (chat)
@@ -137,6 +119,40 @@ public static class AutomaticRelease
 
         // The place for a limit on automatic releases: after the pass that would release the send, before the release.
         return new AutomaticDecision.Release(mode!, temperature!.Value, pass, Facts(mode, temperature, pass));
+    }
+
+    /// <summary>
+    /// The mode in force for a send to <paramref name="contactId"/> in <paramref name="campaign"/>, whose row id is
+    /// <paramref name="campaignId"/>, as the claim decides it:
+    /// both modes are read, and only where either releases is the contact's warmth read, which picks the mode of its
+    /// temperature; a contact who waits on a verdict has no temperature yet. The one reading of a mode for a contact, asked
+    /// by this step at the claim and by a create before the runtime creates the critic of a send.
+    /// </summary>
+    internal static async Task<ModeForContact> ModeForAsync(JasonDbContext db, Campaign? campaign, int campaignId, int contactId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var installation = await SendModes.ReadAsync(db, ct).ConfigureAwait(false);
+        var cold = Releasing(SendModes.Resolve(campaign, installation, Temperature.Cold));
+        var warm = Releasing(SendModes.Resolve(campaign, installation, Temperature.Warm));
+        if (cold is null && warm is null)
+        {
+            return new ModeForContact(cold, warm, State: null, Temperature: null, Mode: null);
+        }
+
+        var state = await Warmth.OfAsync(db, campaignId, contactId, ct).ConfigureAwait(false);
+        Temperature? temperature = state switch
+        {
+            WarmthState.Cold => Temperature.Cold,
+            WarmthState.Warm => Temperature.Warm,
+            _ => null,
+        };
+        var mode = temperature switch
+        {
+            Temperature.Cold => cold,
+            Temperature.Warm => warm,
+            _ => null,
+        };
+        return new ModeForContact(cold, warm, state, temperature, mode);
     }
 
     /// <summary>
@@ -318,4 +334,17 @@ public static class AutomaticRelease
     internal static string Word(Temperature temperature) => temperature == Temperature.Cold ? "cold" : "warm";
 
     private static string? Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+}
+
+/// <summary>
+/// The modes that release for a campaign, each null where it does not, and, only where either does, the contact's warmth,
+/// its temperature and the mode of that temperature (<see cref="AutomaticRelease.ModeForAsync"/>).
+/// </summary>
+internal sealed record ModeForContact(ModeInForce? Cold, ModeInForce? Warm, WarmthState? State, Temperature? Temperature, ModeInForce? Mode)
+{
+    /// <summary>
+    /// Whether a mode is in force for a send to this contact: the mode of the contact's temperature releases, or, for a
+    /// contact who waits on a verdict, either mode does.
+    /// </summary>
+    public bool InForce => State is not null && (Temperature is null || Mode is not null);
 }
