@@ -59,10 +59,12 @@ subscriptions:
   - external_id_diverged
   - external_id_origin
   - external_id_pinned
+  - global_routes_updated
   - inbound_reply_observed
   - message_bounce_observed
   - message_sent_observed
   - notification_sent
+  - plugin_grants_updated
   - plugins_reloaded
   - preference_set
   - preference_unset
