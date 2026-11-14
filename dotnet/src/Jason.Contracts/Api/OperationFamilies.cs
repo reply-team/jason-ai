@@ -82,7 +82,7 @@ public static class OperationFamilies
         Operations.SuppressionRemove,
         Operations.RoleAdd, Operations.RoleSetProfile, Operations.RoleNoteSet,
         Operations.ProfileCreate, Operations.ProfileUpdate, Operations.ProfileDisable, Operations.ProfileEnable,
-        Operations.PluginReload,
+        Operations.PluginReload, Operations.PluginGrant, Operations.PluginRevoke,
         Operations.RouteSet, Operations.RouteUnset,
         Operations.EventsBackfill, Operations.EventsSignal,
         Operations.SubscriptionRuns, Operations.SubscriptionRewind,

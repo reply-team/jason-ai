@@ -1,0 +1,102 @@
+{
+  "kind": "plugin_grants_updated",
+  "version": 1,
+  "since": "0.42.0",
+  "summary": "A plugin was granted something its manifest requests, or a grant was taken back, by plugin.grant or plugin.revoke: that capability's grants in force before and after, as the reload froze them.",
+  "subscribable": false,
+  "entities": {
+    "plugin": {
+      "at": "/new/plugin",
+      "presence": "always"
+    }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "key",
+      "old",
+      "new"
+    ],
+    "properties": {
+      "key": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Which list the line is about: the plugin's id and the capability, as `fake-provider/http`."
+      },
+      "old": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plugin",
+          "capability",
+          "granted"
+        ],
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The plugin's id."
+          },
+          "capability": {
+            "enum": [
+              "exec",
+              "http",
+              "env",
+              "api",
+              "files",
+              "subscriptions"
+            ],
+            "description": "The capability, as plugin.grant names it: the list of that name under `Plugins:Grants:<id>`."
+          },
+          "granted": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "What the plugin may use of the capability, as the reload froze it: names in the manifest's spelling, `*` resolved to what it requests; for `files`, the directories as they were written. A program's name, a host, a variable's name and never its value, an API family, a directory or a journal kind; empty where nothing is granted."
+          }
+        },
+        "description": "The capability's grants in force before the write."
+      },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plugin",
+          "capability",
+          "granted"
+        ],
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The plugin's id."
+          },
+          "capability": {
+            "enum": [
+              "exec",
+              "http",
+              "env",
+              "api",
+              "files",
+              "subscriptions"
+            ],
+            "description": "The capability, as plugin.grant names it: the list of that name under `Plugins:Grants:<id>`."
+          },
+          "granted": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "What the plugin may use of the capability, as the reload froze it: names in the manifest's spelling, `*` resolved to what it requests; for `files`, the directories as they were written. A program's name, a host, a variable's name and never its value, an API family, a directory or a journal kind; empty where nothing is granted."
+          }
+        },
+        "description": "The capability's grants in force now, as the reload froze them from the settings file."
+      }
+    }
+  }
+}

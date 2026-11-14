@@ -117,7 +117,36 @@ public class InsideARunTests
     {
         Assert.Equal(
             PersonsVerbs.Select(row => row.Data).Order(StringComparer.Ordinal),
-            Jason.Runtime.Api.InsideARun.Refusing.Order(StringComparer.Ordinal));
+            Jason.Runtime.Api.InsideARun.PersonsWord.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A grant given or taken back changes Jason itself, and a role Jason launches is not the person who runs it: inside a
+    /// run the two are refused by the header alone, before the body is read, and the settings file is not touched.
+    /// </summary>
+    [Theory]
+    [InlineData(Operations.PluginGrant)]
+    [InlineData(Operations.PluginRevoke)]
+    public async Task A_grant_given_or_taken_back_from_inside_a_run_is_refused_and_writes_nothing(string operation)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var before = File.ReadAllBytes(api.Paths.UserSettingsFile);
+
+        var (status, text) = await api.PostAsync(operation, new { plugin_id = "fake-provider", capability = "env", entry = "FAKE_TOKEN", actor = Ada }, Inside, Ct);
+        var (unread, unreadText) = await api.PostRawAsync(operation, "{not json", Inside, Ct);
+
+        Assert.True(status == HttpStatusCode.Forbidden, $"{operation} answered {(int)status}: {text}");
+        var error = JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
+        Assert.Equal("decided_inside_a_run", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Equal(
+            $"This request comes from inside attempt `{HeaderAttempt}`. Nothing inside a run changes Jason itself, and what a plugin may use is part of it: leave it to the person, or raise it as a decision.",
+            error.Message);
+        Assert.True(unread == HttpStatusCode.Forbidden, $"{operation} answered {(int)unread}: {unreadText}");
+        Assert.Equal(before, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        Assert.Equal(
+            [Operations.PluginGrant, Operations.PluginRevoke],
+            Jason.Runtime.Api.InsideARun.ChangesJason.Order(StringComparer.Ordinal));
     }
 
     public static TheoryData<string> OtherVerbs =>

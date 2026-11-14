@@ -195,12 +195,13 @@ public class DesktopDenyListTests
         [ConfinedVerbs.Kind.PersonsWord] =
             "#\n# The verbs that are a person's own word: an approval approved or rejected, a standing approval, a decision answered, a\n" +
             "# preference, a block cleared, work resumed, a report and a subscription rewound. The CLI gives them no default actor,\n" +
-            "# and gives none to four verbs further down either.\n",
+            "# and gives none to six verbs further down either.\n",
         [ConfinedVerbs.Kind.Installation] =
             "#\n# The verbs that change the installation, follow it without end, or carry it off the machine:\n",
         [ConfinedVerbs.Kind.Acts] =
             "#\n# The verbs the CLI gives no default actor that change who is reached or what runs: taking someone off the\n" +
-            "# do-not-contact register, changing which plugin performs an operation, and changing which profile a role runs on.\n",
+            "# do-not-contact register, changing which plugin performs an operation, granting a plugin something or taking a\n" +
+            "# grant back, and changing which profile a role runs on.\n",
         [ConfinedVerbs.Kind.ChatsOwn] =
             "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
             "# work names the role, and linking a project's folder, which then becomes a working folder of every chat on the\n" +

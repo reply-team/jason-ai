@@ -49,6 +49,7 @@ public static class PluginModule
         services.AddScoped<ExternalIdStore>();
         services.AddScoped<PluginLoader>();
         services.AddScoped<PluginService>();
+        services.AddScoped<PluginGrantService>();
 
         // Holds nothing of its own: the order is read from the settings at the moment a load asks for it.
         services.AddSingleton<SubscriptionOrderSource>();
@@ -64,5 +65,9 @@ public static class PluginModule
             Operations.PluginList, (service, _, _) => Task.FromResult(service.List()));
         app.MapOperation<PluginService, PluginReloadRequest, PluginRegistryDto>(
             Operations.PluginReload, (service, request, cancellationToken) => service.ReloadAsync(request, cancellationToken));
+        app.MapOperation<PluginGrantService, PluginGrantRequest, PluginRegistryDto>(
+            Operations.PluginGrant, (service, request, cancellationToken) => service.GrantAsync(request, cancellationToken));
+        app.MapOperation<PluginGrantService, PluginGrantRequest, PluginRegistryDto>(
+            Operations.PluginRevoke, (service, request, cancellationToken) => service.RevokeAsync(request, cancellationToken));
     }
 }

@@ -1,0 +1,7 @@
+{
+  "kind": "plugin_grants_updated",
+  "version": 1,
+  "case": "a journal kind taken back",
+  "body": { "key": "example-forwarder/subscriptions", "old": { "plugin": "example-forwarder", "capability": "subscriptions", "granted": ["workitem_failed"] }, "new": { "plugin": "example-forwarder", "capability": "subscriptions", "granted": [] } },
+  "expect": "valid"
+}

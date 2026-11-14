@@ -81,7 +81,7 @@ public class SetupTests
                 $"Role skills: {dir.Paths.RoleSkillsDirectory}",
                 $"Plugins:     {dir.Paths.PluginsDirectory}",
                 $"Custom UI:   {dir.Paths.UiCustomDirectory}",
-                $"Settings:    {dir.Paths.UserSettingsFile} (where plugin secrets are kept)",
+                $"Settings:    {dir.Paths.UserSettingsFile} (where plugin secrets are kept: change routes and grants with `jason route set --global` and `jason plugin grant`)",
             ],
             lines[first..(first + 4)]);
         Assert.Equal(string.Empty, lines[first - 1]);

@@ -515,7 +515,8 @@ test('with the file the desktop carries, export and import are refused, and so a
     for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
         for (const command of ['jason export --stop', 'jason export', 'jason import --replace backup.zip', 'jason suppression remove --channel email --value a@example.com',
             'jason route set --campaign cmp_A --plugin x --operation campaign.get', 'jason route unset --campaign cmp_A --operation campaign.get',
-            'jason role set-profile researcher --execution-profile local-claude']) {
+            'jason role set-profile researcher --execution-profile local-claude', 'jason plugin grant reply --http api.example.com',
+            'jason plugin revoke reply --env REPLY_TOKEN']) {
             assert.equal(run(scope, command).verdict, 'deny', command);
         }
     }
