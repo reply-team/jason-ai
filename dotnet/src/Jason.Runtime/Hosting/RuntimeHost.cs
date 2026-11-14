@@ -528,7 +528,7 @@ public static class RuntimeHost
         builder.Services.AddScoped<SentFacts>();
         builder.Services.AddScoped<SearchLanding>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
-        builder.Services.AddSystemModule().AddCampaignModule().AddProjectModule().AddPreferenceModule().AddContactModule().AddAudienceModule();
+        builder.Services.AddSystemModule().AddCampaignModule().AddProjectModule().AddPreferenceModule().AddContactModule().AddAudienceModule().AddSenderModule();
         builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddEventsModule().AddSubscriptionModule().AddNotificationsModule().AddCommandModule().AddUiModule();
         builder.Services.AddApprovalModule().AddBlockModule().AddDecisionModule().AddReplyModule().AddReportModule().AddProfileModule().AddRoleNoteModule();
         builder.Services.AddUpdateModule(options.FeedHandler);
@@ -566,6 +566,7 @@ public static class RuntimeHost
         app.MapPreferenceOperations();
         app.MapContactOperations();
         app.MapAudienceOperations();
+        app.MapSenderOperations();
         app.MapWorkItemOperations();
         app.MapExecutorOperations();
         app.MapRoleOperations();
