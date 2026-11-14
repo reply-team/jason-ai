@@ -91,7 +91,8 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed.
-- **The hand-over.** When `ready` is true, say in two lines that Jason is installed and where it keeps the person's
+- **The hand-over.** The install prompt's "Ready" is `jason status` answering with `ready` true in its body. When it
+  is, say in two lines that Jason is installed and where it keeps the person's
   files — the folder the `harness_root` check of `jason status` names, which is the one in force — then start the
   `quick-start` skill at once, with no question about what comes next. Where your host does not see a skill installed
   a minute ago, read its file at `<root>/quick-start/SKILL.md`, where `<root>` is the one the `Target:` line of

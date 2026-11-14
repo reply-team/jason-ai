@@ -1043,7 +1043,7 @@ public partial class PageClaimsTests
         var agent = Flat(Agent());
 
         Assert.Contains(
-            "When `ready` is true, say in two lines that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force — then start the `quick-start` skill at once, with no question about what comes next.",
+            "The install prompt's \"Ready\" is `jason status` answering with `ready` true in its body. When it is, say in two lines that Jason is installed and where it keeps the person's files — the folder the `harness_root` check of `jason status` names, which is the one in force — then start the `quick-start` skill at once, with no question about what comes next.",
             agent,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -2421,7 +2421,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:dfe911f97419b9e6fbf54ffbf641ad338de6ef6b797b905e9059fa5dfd33167c";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:c56948c2b70b03bddbaa1b0735c3b7b929fcb888cd4f11f2d8e4885ea498d022";
+    private const string AgentSectionDigest = "sha256:1d7ce2da1fd4648a90ad6c7857570a1180ef2abb788c0181433a61fe66e6b6ad";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";
