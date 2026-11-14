@@ -1293,10 +1293,10 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The prompt is these three lines, the same in the README and in the handbook, and no others.
+    /// The prompt is these three lines, the same in the README, the handbook and the install page, and no others.
     /// </summary>
     [Fact]
-    public void The_install_prompt_is_three_lines_the_same_in_the_readme_and_the_handbook()
+    public void The_install_prompt_is_three_lines_the_same_in_the_readme_the_handbook_and_the_install_page()
     {
         const string Lines =
             "Install Jason by following https://get.jasonharness.ai/install.\n" +
@@ -1305,6 +1305,7 @@ public partial class PageClaimsTests
 
         Assert.Equal(Lines, Fenced(Page("README.md"), "```text\nInstall Jason by following"));
         Assert.Equal(Lines, Fenced(Page("docs", "handbook.md"), "```text\nInstall Jason by following"));
+        Assert.Equal(Lines, Fenced(Page("docs", "INSTALL.md"), "```text\nInstall Jason by following"));
     }
 
     /// <summary>
