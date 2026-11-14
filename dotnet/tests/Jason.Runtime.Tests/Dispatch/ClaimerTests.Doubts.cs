@@ -8,6 +8,8 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
@@ -295,7 +297,8 @@ public partial class ClaimerTests
         var refused = await Assert.ThrowsAsync<ConflictException>(() => ReviewAsync(db, reading, item.PublicId, hash, ReviewResult.Doubts, "off_brief", ReviewSentence, harness.Claimer));
 
         Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads, and a retry goes under that approval", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{approval.PublicId}' stands for the send as it would now go, and the claim would run it under that approval without reading a review", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("retry", refused.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
         await using var fresh = database.Open();
         Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
@@ -436,7 +439,7 @@ public partial class ClaimerTests
         var approval = await db.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal("not_reviewable", refused.Code);
         Assert.Contains(
-            $"approval '{approval.PublicId}' cannot be checked against the send's text right now; review it again once the send can be claimed",
+            $"approval '{approval.PublicId}' is live and the send cannot be claimed right now, so whether the claim would read a review cannot be told yet; once the send can be claimed it may be reviewed again, and is refused then too while that approval stands for the send as it would go",
             refused.Message,
             StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
@@ -482,10 +485,288 @@ public partial class ClaimerTests
         await using var fresh = database.Open();
         var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal((ApprovalStatus.Approved, ApprovalGate.StandingApproval), (approval.Status, approval.Reason));
-        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{approval.PublicId}' stands for the send as it would now go", refused.Message, StringComparison.Ordinal);
         Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
         var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct);
         Assert.Equal((WorkItemStatus.Created, (string?)null), (row.Status, row.ReviewNote));
+    }
+
+    /// <summary>
+    /// The claim's question inside the save is asked of the database as it now stands, never of the entities the review loaded
+    /// first. The send is approved while the person is named Ada, and the approval stops standing for it when the name becomes
+    /// Anna, since the person's name is composed into what the send carries. A person reviews and doubts, and between the
+    /// review's read and its save the name is set back to Ada: the approval stands for the send again, and the claim would run
+    /// it under that approval without reading a review. The question asked inside the save meets the name as it is, and the
+    /// review is refused <c>not_reviewable</c>, naming the approval; nothing is written, and the claim runs the send under it.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_AReviewWhoseSendAnApprovalStandsForAgainDuringItsSave_IsRefused()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        var clock = new FixedClock(Noon);
+        await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        await db.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Anna"), Ct);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+        Assert.Equal(WorkItemStatus.Created, now.Status);
+
+        var meanwhile = new Meanwhile(async () =>
+        {
+            await using var other = database.Open();
+            await other.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Ada"), Ct);
+        });
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => new ReviewService(racing, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "ada")),
+            Ct));
+
+        Assert.True(meanwhile.Fired);
+        Assert.Equal("not_reviewable", refused.Code);
+        Assert.Contains($"approval '{asked.PublicId}' stands for the send as it would now go", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
+        Assert.Null((await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == now.Id, Ct)).ReviewNote);
+        db.ChangeTracker.Clear();
+        Assert.Single(await ClaimSettledAsync(harness, db));
+    }
+
+    /// <summary>
+    /// A doubt is accepted while an approved row is live only where the row no longer stands for the send as it would now
+    /// go, and it supersedes that row in its own save: a standing doubt leaves the send with no approval to run under. So
+    /// when the facts come back (the person's name set back, or the route set away and back) the row does not stand again:
+    /// the next claim parks the send with the doubt on the preview, and no row authorises it.
+    /// </summary>
+    [Theory]
+    [InlineData("the person's name set back")]
+    [InlineData("the route set away and back")]
+    public async Task Doubts_ADoubtAcceptedUnderAnApprovalThatNoLongerStands_SupersedesIt_SoTheFactsComingBackPark(string path)
+    {
+        using var harness = TwoProviders();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var (send, approved) = await ApprovedAsync(harness, db, reading);
+        var name = path == "the person's name set back";
+        await AwayAsync(harness, db, reading, name);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+
+        var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "grace")),
+            Ct);
+
+        await using (var after = database.Open())
+        {
+            Assert.Equal(ApprovalStatus.Superseded, (await after.Approvals.AsNoTracking().SingleAsync(a => a.PublicId == approved, Ct)).Status);
+            var superseded = await after.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.ApprovalSuperseded, Ct);
+            Assert.Equal((ActorType.Human, "grace", approved), (superseded.ActorType, superseded.ActorId, (string?)superseded.New!["id"]));
+        }
+
+        await BackAsync(harness, db, reading, name);
+        db.ChangeTracker.Clear();
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+
+        await using var fresh = database.Open();
+        var rows = await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).ToListAsync(Ct);
+        Assert.DoesNotContain(rows, row => row.Status == ApprovalStatus.Approved);
+        var parked = rows[^1];
+        Assert.Equal((ApprovalStatus.Pending, Provider), (parked.Status, parked.PluginId));
+        var doubt = Assert.Single(parked.Preview[Doubts.PreviewKey]!.AsArray())!;
+        Assert.Equal(("review", line.Id, ReviewSentence), ((string?)doubt["source"], (string?)doubt["line"], (string?)doubt["note"]));
+    }
+
+    /// <summary>
+    /// A pass accepted in the same window changes no row: the person's approval is left as it was, and when the facts come
+    /// back it stands for the send again and the claim runs the send under it.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_APassAcceptedUnderAnApprovalThatNoLongerStands_LeavesThePersonsApproval()
+    {
+        using var harness = TwoProviders();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var (send, approved) = await ApprovedAsync(harness, db, reading);
+        await AwayAsync(harness, db, reading, name: true);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+
+        await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Passed, null, null, new ActorRef(ActorType.Human, "grace")),
+            Ct);
+
+        await using (var after = database.Open())
+        {
+            Assert.Equal(ApprovalStatus.Approved, (await after.Approvals.AsNoTracking().SingleAsync(a => a.PublicId == approved, Ct)).Status);
+            Assert.Empty(await after.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.ApprovalSuperseded).ToListAsync(Ct));
+        }
+
+        await BackAsync(harness, db, reading, name: true);
+        db.ChangeTracker.Clear();
+        Assert.Single(await ClaimSettledAsync(harness, db));
+    }
+
+    /// <summary>
+    /// The review hash is held to the send's row as it stands inside the review's save, not to the row the review read: an
+    /// edit of the input between the read and the save leaves the status as it was, so only the hash tells the review is of
+    /// a text that is gone. It is refused <c>review_stale</c>, and nothing is written: no line, and no sentence over the row.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_AReviewWhoseSendWasEditedDuringItsSave_IsRefusedStale_AndWritesNothing()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        db.ChangeTracker.Clear();
+        var hash = ReviewSubject.Hash(await WorkItemService.LoadAsync(db, send.Id, Ct));
+
+        var meanwhile = new Meanwhile(async () =>
+        {
+            await using var other = database.Open();
+            await Items(other).UpdateAsync(
+                new WorkItemUpdateRequest(
+                    send.Id,
+                    new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") },
+                    null, default, default, default, default, default, default, default, default,
+                    new ActorRef(ActorType.Human, "operator"),
+                    Reason: null),
+                Ct);
+        });
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => new ReviewService(racing, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(send.Id, hash, ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "grace")),
+            Ct));
+
+        Assert.True(meanwhile.Fired);
+        Assert.Equal("review_stale", refused.Code);
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.PublicId == send.Id, Ct);
+        Assert.Null(row.ReviewNote);
+        Assert.NotEqual(hash, ReviewSubject.Hash(row));
+    }
+
+    private static Harness TwoProviders() => new(
+        plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "campaign.enroll"]),
+        route: new Route(Provider, null, null),
+        others: [TestPlugins.Loaded(Social, ["message.send"])]);
+
+    /// <summary>The send composed, parked by the claim and approved by a person while the person is named Ada; the row's id.</summary>
+    private static async Task<(WorkItemDto Send, string Approval)> ApprovedAsync(Harness harness, JasonDbContext db, Reading reading)
+    {
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        var clock = new FixedClock(Noon);
+        await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        return (send, asked.PublicId);
+    }
+
+    /// <summary>A fact the approval's subject composes moved away: the person renamed Anna, or the route set to another provider.</summary>
+    private static async Task AwayAsync(Harness harness, JasonDbContext db, Reading reading, bool name)
+    {
+        if (name)
+        {
+            await db.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Anna"), Ct);
+        }
+        else
+        {
+            harness.Reroute(new Route(Social, null, null));
+        }
+    }
+
+    /// <summary>The same fact back as the approval was made under.</summary>
+    private static async Task BackAsync(Harness harness, JasonDbContext db, Reading reading, bool name)
+    {
+        if (name)
+        {
+            await db.Contacts.Where(c => c.Id == reading.Contact.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FirstName, "Ada"), Ct);
+        }
+        else
+        {
+            harness.Reroute(new Route(Provider, null, null));
+        }
+    }
+
+    /// <summary>
+    /// The claim decides against the route and plugin snapshots it reads once it holds the database, so a review that held it
+    /// first was asked the claim's question against the same routes or older ones. The send is approved under one provider;
+    /// as the claim is about to begin, the route is set to another, under which the approval no longer stands, and a person's
+    /// doubt is accepted. The claim then decides under the new route: it does not run the send under the old approval, which
+    /// would leave the doubt unread, but parks it with the doubt on the preview.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_ARouteSetAsTheClaimBegins_IsTheRouteTheClaimDecidesBy_SoAReviewAcceptedThenIsRead()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded(Provider, ["conversation.reply", "message.send", "campaign.enroll"]),
+            route: new Route(Provider, null, null),
+            others: [TestPlugins.Loaded(Social, ["message.send"])]);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+        var clock = new FixedClock(Noon);
+        await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+        db.ChangeTracker.Clear();
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+        Assert.Equal(WorkItemStatus.Created, now.Status);
+
+        var meanwhile = new BeforeBegin(async () =>
+        {
+            harness.Reroute(new Route(Social, null, null));
+            await using var other = database.Open();
+            await new ReviewService(other, new JournalWriter(new FixedClock(Noon)), harness.Claimer).ReviewAsync(
+                new WorkItemReviewRequest(send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "ada")),
+                Ct);
+        });
+        await using var claiming = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var claimed = await harness.Claimer.ClaimAsync(claiming, 4, Ct);
+
+        Assert.True(meanwhile.Fired);
+        Assert.Empty(claimed);
+        await using var fresh = database.Open();
+        var line = await fresh.Journal.AsNoTracking().SingleAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct);
+        var parked = await fresh.Approvals.AsNoTracking().OrderByDescending(a => a.Id).FirstAsync(Ct);
+        Assert.Equal((ApprovalStatus.Pending, Social), (parked.Status, parked.PluginId));
+        var doubt = Assert.Single(parked.Preview[Doubts.PreviewKey]!.AsArray())!;
+        Assert.Equal(("review", line.PublicId, ReviewSentence), ((string?)doubt["source"], (string?)doubt["line"], (string?)doubt["note"]));
+    }
+
+    /// <summary>Another writer as a context is about to begin its first transaction: the action runs first, on contexts of its own.</summary>
+    private sealed class BeforeBegin(Func<Task> act) : Microsoft.EntityFrameworkCore.Diagnostics.DbTransactionInterceptor
+    {
+        private int _fired;
+
+        public bool Fired => _fired == 1;
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction>> TransactionStartingAsync(
+            System.Data.Common.DbConnection connection,
+            Microsoft.EntityFrameworkCore.Diagnostics.TransactionStartingEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _fired, 1) == 0)
+            {
+                await act().ConfigureAwait(false);
+            }
+
+            return result;
+        }
     }
 
     /// <summary>

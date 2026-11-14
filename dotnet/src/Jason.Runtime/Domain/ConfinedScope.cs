@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Jason.Runtime.Domain;
 
 /// <summary>
@@ -20,6 +22,28 @@ public static class ConfinedScope
         Current.Value = true;
         return new Restore(previous);
     }
+
+    /// <summary>
+    /// The member a line's body carries, <c>true</c> and only where it is so, when the line was written under the mark: a
+    /// line so marked is the chat's, never a person's own word, as a line that carries an attempt is the run's.
+    /// </summary>
+    public const string Member = "confined";
+
+    /// <summary>Puts the mark on <paramref name="body"/> where this request carries it; leaves it as it is otherwise.</summary>
+    public static JsonObject Mark(JsonObject body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        if (Confined)
+        {
+            body[Member] = true;
+        }
+
+        return body;
+    }
+
+    /// <summary>Whether a line's body says it was written under the mark.</summary>
+    public static bool Marked(JsonNode? body) =>
+        body is JsonObject said && said[Member] is JsonValue value && value.TryGetValue<bool>(out var marked) && marked;
 
     private sealed class Restore(bool previous) : IDisposable
     {

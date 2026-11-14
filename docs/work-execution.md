@@ -275,6 +275,19 @@ applies at the next scan to work not yet held, while an item already held keeps 
 date and expires by it like any waiting item, and a held manager check-in is still the campaign's one check-in
 ([docs/campaign-manager.md](campaign-manager.md) §1).
 
+**The daily ceiling of automatic sends.** While a send mode is automatic, `Sending:AutomaticMaxPerDay` is the most sends
+a campaign releases in a UTC day without asking a person. Where the automatic mode would release a send, the claim first
+counts, in the same transaction, the sends the mode released from the item's campaign since 00:00Z: the rows born
+approved with the reason `automatic_mode` and decided since then, whatever became of each. A retry runs under the row it
+was released under and is not counted again, and a send a person approves runs under a row of another reason and counts for nothing. At
+the ceiling the send parks for the person instead: its row's reason is `daily_ceiling`, and its preview carries
+`daily_ceiling` with three numbers only, `limit`, `released` and `since`, the moment the count began. The ceiling never
+slips, so a standing approval that covers the send does not let it go either, and the standing approval's answer in the
+preview says `daily_ceiling`. The ceiling is asked only where the mode would release: a send the mode parks for another
+reason keeps that reason, and where no mode is automatic nothing is counted and nothing changes. A send parked at the
+ceiling is one more approval waiting, notified as any is, and it is the person's from then on: a new day does not
+release it automatically.
+
 ## Approvals
 
 An operation's contract says what approval it needs. Most published operations publish `auto`, which is
@@ -383,12 +396,12 @@ approval row of its own is covered when, in this order: its operation is one a s
 verdict it names is a verdict of its campaign; no later verdict on the same reply replaced it; the verdict's reaction is
 `draft`; the verdict was recorded by a run of the campaign's work that the runtime gave that reply's plugin and thread
 (its `inbound_reply`; a responder a manager queued by hand carries none, so its verdicts fail `verdict_not_authentic`
-and its drafts are asked), or by a person who gave their name, or carries a person's answer — a verdict whose
+and its drafts are asked), or by a person who gave their name outside the desktop's chat, or carries a person's answer — a verdict whose
 `reply.record` named an answered decision, and whose line therefore names the person as `answered_by`; a run's verdict
 covers only a draft a run of that same work created, while a person's, or one carrying a person's answer, covers
 whoever drafted it; the draft's context was not changed after it was created; the
 verdict's plugin is the one the route resolved, and its thread the one the reply answers in (for a message, its person
-the work's person); the newest standing-approval line for the campaign and the verdict's category is a set; it names
+the work's person); the newest standing-approval line for the campaign and the verdict's category is a set, made outside the chat; it names
 the operation; it has not expired; and fewer drafts were let go under it since it was set than its ceiling. A category
 is the verdict's word exactly: `interested` covers neither `very_interested` nor `Interested`. The decision behind
 `answered_by` was checked when the line was written — answered, by a named person, choosing the verdict's category,
@@ -404,8 +417,9 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
 `ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
 and a doubt is the person's to answer, so no standing approval releases it; or `sent_from_chat`: the send was written
-in the desktop's chat, which always waits for the person (§The send mode at the claim). A reply or a message that
-names no verdict is not asked about.
+in the desktop's chat, which always waits for the person (§The send mode at the claim); or `daily_ceiling`: the
+automatic mode would have released the send and its campaign has reached `Sending:AutomaticMaxPerDay` for the day,
+which never slips (§The claim rule). A reply or a message that names no verdict is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
@@ -469,21 +483,31 @@ key; a `note` member inside the key is refused and pointed there. The sentence i
 
 **A review of the send** is `workitem.review`, written as the reserved line
 [`workitem_reviewed`](contracts/journal/workitem_reviewed.json): `passed`, or `doubts` with a code and an optional
-sentence (`note`). It is bound to the text it read by the **review hash**, the canonical hash of the operation, the
-work item and its context's `input` as stored, which `workitem.get` answers as `review_hash` on such a send. Nothing but
-an edit of the input moves the hash — a pin, a rename, the campaign's status or a route leave it as it is — and an edit
+sentence (`note`). It is bound to the text it read by the **review hash**, the canonical hash of the operation, the work
+item and its context's `input` as stored, which `workitem.get` answers as `review_hash` on such a send. Nothing but an
+edit of the input moves the hash — a pin, a rename, the campaign's status or a route leave it as it is — and an edit
 voids every review made before it: the line under the old hash no longer stands, the doubt's sentence is cleared in the
-edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or
-`waiting` is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is
-refused `not_reviewable` exactly where the claim would not read it: where an approval stands for the send's text as it
-now reads, since a retry goes under the decision already made and reads no review. Who reviews: a running attempt of the
-same campaign's role work, other than every attempt of the work that created the send (a retry of the composer is the
-same author), or a person by name who did not create it (`review_by_creator`); a person's own send goes to them as an
-approval, their own explicit yes. Whoever wrote the send's input since it was made is one of its authors and does not
-review it either, read from the send's own `workitem_context_updated` lines for `input`: a person by name, or any
-attempt of a work that did (`review_by_editor`). Inside a run a review speaks as its run: an actor other than the
-attempt the request's header names is refused; and a send created inside a run is created under that run's name, since
-its creator is who a review is told apart from: a create naming a person, another attempt or nobody is refused
+edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or `waiting`
+is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is refused
+`not_reviewable` exactly where the claim would not read it: where an approval stands for the send as it would now go,
+since the claim would run it under the decision already made and read no review. The one exception fails closed: where
+the runtime cannot yet tell whether the claim would read the review, because an approval is live and the pre-flight
+stops the send at a check that comes before the approval's (its plugin unavailable, say), so no subject can be composed
+to hold the approval to, the review is refused too, and may be made again once the pre-flight lets the send reach the
+approval; a provider block, the one check after the approval's, does not stop a review from being judged. A doubt
+accepted then leaves the send with no approval to run under, whatever changes after; a pass leaves a person's approval
+as it stood, and the claim may run the send under that approval without reading the pass. The doubt does so by
+superseding, in the review's own save, the approved row still live, which no longer stands for the send as it would now
+go (`approval_superseded`, under the reviewer's name). Who reviews: a running attempt of the same campaign's role work,
+other than every attempt of the work that created the send (a retry of the composer is the same author), or a person by
+name who did not create it (`review_by_creator`); a person's own send goes to them as an approval, their own explicit
+yes. Whoever wrote the send's input since it was made is one of its authors and does not review it either, read from the
+send's own `workitem_context_updated` lines for `input`: a person by name, or any attempt of a work that did
+(`review_by_editor`). An edit by an actor the runtime cannot hold to anybody, under no name or as a role outside a run,
+has an author no run can be told apart from, so from then on only a person by name reviews the send, and a run is
+refused `review_by_editor`. Inside a run a review speaks as its run: an actor other than the attempt the request's
+header names is refused; and a send created inside a run is created under that run's name, since its creator is who a
+review is told apart from: a create naming a person, another attempt or nobody is refused
 `created_as_another_inside_a_run`. A patch of such a send's input inside a run is the same door: one naming anybody but
 the run is refused `updated_as_another_inside_a_run`. The verb takes no `reason`, since a reason is journaled and the
 line never carries the doubt's sentence. Which review stands for the send is read from the send's own lines under its
@@ -509,7 +533,7 @@ preview, since the key is never taken back; a review's is not carried, because t
 
 ### The send mode at the claim
 
-A send a person decides each one of may go without being asked where a person said so for the kind of contact it
+A send to a person may go without being asked where a person said so for the kind of contact it
 reaches: the send mode, `automatic` or `every_message`, for a cold contact and for a warm one, set for the installation
 by the named preferences `send_mode.cold` and `send_mode.warm`, and for one campaign by `campaign.set_send_mode`, whose
 own mode is the one in force where it sets one. Unset, a mode is `every_message`, and every such send parks as above. A
@@ -521,7 +545,7 @@ what kind of reply it is, they are neither, and nothing goes to them automatical
 **It is asked at the claim, where nothing has been decided about the work yet**, in the same place and on the same
 guard as a standing approval, and in this order:
 
-1. **Is a mode in force?** The send is one a person decides each one of and names a contact, and a mode of `automatic`
+1. **Is a mode in force?** The send is a send to a person and names a contact, and a mode of `automatic`
    set by a named person stands for its campaign, for cold or for warm. Where none does, nothing below is asked, warmth
    is not read, and the send parks as it always did.
 2. **The contact's warmth**, read from the campaign's chronicle. Where the mode for the contact's warmth is
@@ -535,23 +559,33 @@ guard as a standing approval, and in this order:
    verdict it answers (`reply_verdict`), is held to the verdict that stands on the reply it answers: the one it names, or
    else the newest on its thread; none, `answers_no_verdict`; a verdict that does not say what kind of reply it was,
    `awaiting_nature`; a reply that is not a person's — an automatic reply, a bounce or a request to stop —
-   `reply_not_from_a_person`; a verdict whose reaction is `escalate`, `escalated`.
-7. **A review that passed the text as it now reads.** The newest review under the send's review hash that passed,
-   written by a running attempt of the campaign's `critic` role or by a person by name, outside a run, counts; any such
-   pass counts, whatever was reviewed after it, since a doubt was asked before. A counting pass only under an earlier
-   hash is `edited_after_review`; none at all, `not_reviewed`. A copywriter's pass, a pass on a line a run wrote in a
-   person's name, or one naming an attempt other than its own, does not count.
-8. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
+   `reply_not_from_a_person`; a verdict whose reaction is `escalate`, `escalated` — and `escalated` too where a verdict
+   that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
+   or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
+7. **A review that passed the text as it now reads.** A pass under the send's review hash counts where a person by name
+   wrote it, outside a run and outside the desktop's chat, or where the critic the runtime created for this send did:
+   the `critic` work the runtime makes for a send created under an automatic mode, which it creates under its own
+   actor, names the send and its operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`),
+   and whose context was changed since by nobody but the runtime's own actors: a change by a person, a role or the
+   critic's own attempt disqualifies it. Any such pass counts, whatever was reviewed after it, since a doubt was asked
+   before. A counting pass only under an earlier hash is
+   `edited_after_review`; none at all, `not_reviewed`. Another critic's pass does not count: one somebody queued by
+   hand, or the runtime's critic of another send. Nor does a pass by another role, on a line a run wrote in a person's
+   name, or naming an attempt other than its own; each is shown on the preview and releases nothing.
+8. **The daily ceiling.** The campaign has had fewer sends released by the mode since 00:00Z than
+   `Sending:AutomaticMaxPerDay`; at it, `daily_ceiling`, and the preview carries `daily_ceiling` with the limit, the
+   count and since when (§The claim rule).
+9. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
    `automatic_mode`, requested and decided at the claim's moment, decided by the person who set the mode in force.
 
-A park of steps 3 to 7 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
+A park of steps 3 to 8 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
 above, and its preview carries `send_mode`, the facts and never the code: the `mode`, its `source` (`preference` or
 `campaign`) and the contact's `temperature` (`cold` or `warm`), all three null while the contact waits on a verdict,
 and the `review` line the step read — the pass, the pass under the earlier text, or another role's — or null. Where
 no mode is in force the reason is what it always was. The parks of steps 5 to 7 **fall through to a standing
-approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat
-and a doubted one do not: they park even where a standing approval would have covered it, and its preview's
-`standing_approval` says `sent_from_chat` or `doubted`. A send written in the desktop's chat always waits for the person,
+approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat,
+a doubted one and one at the daily ceiling do not: they park even where a standing approval would have covered it, and
+its preview's `standing_approval` says `sent_from_chat`, `doubted` or `daily_ceiling`. A send written in the desktop's chat always waits for the person,
 whatever the send mode, `every_message` included.
 
 **A release decides once, but warmth is read again.** A retry of the same subject runs under the row the mode wrote, and
@@ -567,6 +601,13 @@ every turn) carries the header `Jason-Confined`. The runtime records it on the w
 `workitem_updated` line keyed `confined`; the claim reads the mark through the item's own lines, and nothing takes it
 back. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, so a program
 that leaves the header off is not marked.
+
+**A line written under the mark is the chat's, never a person's own word**, as a line that carries an attempt is the
+run's. Besides a send's lines, the mark is recorded, as `confined: true`, on a verdict (`reply_classified`), on a
+review (`workitem_reviewed`) and on a standing approval's set line (`standing_approval_set`) written under the header.
+A verdict so marked lifts no opt-out, and under a standing approval it vouches for no draft as a person's verdict
+(`verdict_not_authentic`) unless it carries a person's answered decision, which is read as the decision records it; a
+review so marked is no person's pass, and a set line so marked sets nothing (`no_standing_approval`).
 
 Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperature (`cold` or `warm`), names the row, the
 operation, the subject hash, the mode's source, the temperature and the review line, and carries no text. Nobody is
@@ -1380,6 +1421,7 @@ mistyped one.
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |
 | `Launches:MaxPerDay:<role>` | `responder: 25` | 1..1000 | how many runs of a role one campaign may start in a UTC day, counted from 00:00Z; a role the map does not name has no limit, and the responder's number can be changed and not removed, a thousand being as high as it goes; the claim holds a role at its limit until the next 00:00Z (§The claim rule) |
+| `Sending:AutomaticMaxPerDay` | `100` | 1..1000 | the most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote, whatever became of each; at the ceiling the next send it would release waits for a person, even where a standing approval covers it (§The claim rule); there is no 0 and no unlimited: a person who wants no automatic sends sets the mode to `every_message` |
 
 `Responder:MaxLaunchesPerDay`, the key the responder's limit had through 0.30.0, is refused wherever the configuration finds
 it: a start stops and says where the number went, nothing is carried over for you, and a live edit that names it keeps

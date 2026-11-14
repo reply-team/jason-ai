@@ -1,0 +1,11 @@
+{
+  "kind": "workitem_reviewed",
+  "version": 1,
+  "case": "the marker is written only where it is so; a review made outside the chat carries no member at all",
+  "body": {
+    "key": "sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "old": null,
+    "new": { "result": "passed", "code": null, "operation": "message.send", "role": null, "confined": false }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/confined", "reason": "const" }] }
+}

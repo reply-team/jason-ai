@@ -2,7 +2,7 @@
   "kind": "approval_superseded",
   "version": 1,
   "since": "0.1.0",
-  "summary": "A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place: by the claim in the same save, or, where an edit of the work's input withdrew a question still pending, by the next claim.",
+  "summary": "A decision stopped applying because the subject of the work it was about changed before the work ran, and a new decision is asked in its place: by the claim in the same save, or by the next claim, where an edit of the work's input withdrew a question still pending or a doubting review ended an approval that no longer stood for the work as it would now go.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },

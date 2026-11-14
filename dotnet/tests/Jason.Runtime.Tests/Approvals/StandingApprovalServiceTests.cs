@@ -456,6 +456,48 @@ public class StandingApprovalServiceTests
         Assert.Equal("campaign_archived", archived.Code);
     }
 
+    /// <summary>
+    /// A standing approval set in the desktop's chat carries the chat's mark, and every line that later carries its record
+    /// over keeps it on its document: taken back, the unset's <c>old</c> is the set as it was, mark included; replaced from a
+    /// terminal, the new set's <c>old</c> is too. Both for a category of reply and for an allowance; each line is checked
+    /// against its kind's document as it is saved.
+    /// </summary>
+    [Theory]
+    [InlineData("a category, then taken back")]
+    [InlineData("a category, then replaced")]
+    [InlineData("an allowance, then taken back")]
+    [InlineData("an allowance, then replaced")]
+    public async Task A_set_made_in_the_chat_is_carried_over_on_its_document(string then)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = await SeedAsync(db);
+        var allowance = then.StartsWith("an allowance", StringComparison.Ordinal);
+        using (ConfinedScope.Open())
+        {
+            await Service(db).SetAsync(allowance ? Allow(campaign, 2) : Set(campaign), Ct);
+        }
+
+        if (then.EndsWith("taken back", StringComparison.Ordinal))
+        {
+            await Service(db).UnsetAsync(
+                allowance
+                    ? new ApprovalUnsetStandingRequest(campaign.PublicId, null, Operator, Operation: "audience.search")
+                    : new ApprovalUnsetStandingRequest(campaign.PublicId, "interested", Operator),
+                Ct);
+        }
+        else
+        {
+            await Service(db).SetAsync(allowance ? Allow(campaign, 2) with { MaxPeople = 300 } : Set(campaign) with { MaxReleases = 5 }, Ct);
+        }
+
+        var lines = await StandingLinesAsync(db);
+        Assert.Equal("true", lines[0].New![ConfinedScope.Member]?.ToJsonString());
+        var carried = lines.Last(line => line.Old is not null);
+        Assert.Equal("true", carried.Old![ConfinedScope.Member]?.ToJsonString());
+        Assert.Null(lines[^1].New?[ConfinedScope.Member]);
+    }
+
     private static ApprovalSetStandingRequest Set(Campaign campaign) => new(campaign.PublicId, "interested", Actor: Operator);
 
     /// <summary>

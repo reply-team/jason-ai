@@ -336,6 +336,21 @@ test('a Claude turn is denied, by the host itself, any command that names JASON_
     assert.ok(valuesOf(claudeArguments(turn), '--disallowedTools').includes('Bash(*JASON_CONFINED*)'));
 });
 
+test('a Claude turn is denied, by the host itself, any command that names JASON_ATTEMPT_ID, in every mode', () => {
+    for (const mode of ['ask_first', 'plan_only', 'auto_edit', 'full_access'] as const) {
+        assert.equal(valuesOf(claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn.settings.json' }), '--disallowedTools').filter((rule) => rule === 'Bash(*JASON_ATTEMPT_ID*)').length, 1, mode);
+    }
+});
+
+test('no host\'s environment carries an attempt id the desktop inherited, in any letter case: a chat turn is never a run', () => {
+    for (const program of ['claude', 'codex'] as const) {
+        for (const platform of ['win32', 'darwin', 'linux'] as const) {
+            const env = hostEnvironment({ PATH: '/x', JASON_ATTEMPT_ID: 'att_A', jason_attempt_id: 'att_B', Jason_Attempt_Id: 'att_C' }, { platform, bundleVersion: null, bundle: '/b', data: null, program, keyed: false, provider: {} });
+            assert.deepEqual(Object.keys(env).filter((name) => name.toUpperCase() === 'JASON_ATTEMPT_ID'), [], `${program} ${platform}`);
+        }
+    }
+});
+
 test('the host\'s environment never carries a plugin\'s configuration nor CLAUDE_AUTO_BACKGROUND_TASKS', () => {
     const env = hostEnvironment(
         { PATH: '/x', JASON_Plugins__slack__Token: 'xoxb-planted', jason_plugins__grants__reply: 'y', CLAUDE_AUTO_BACKGROUND_TASKS: '1', claude_auto_background_tasks: '1', JASON_Harness__Root: '/h/Jason' },

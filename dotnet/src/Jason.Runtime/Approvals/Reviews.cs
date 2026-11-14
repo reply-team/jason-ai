@@ -33,7 +33,9 @@ public sealed record ReviewStanding(ReviewResult Result, string? Code, string Li
 /// whenever it decides about the send, and runs it without reading them only under a live approved row whose subject is
 /// the send as it now stands (<see cref="ApprovalGate.Authorizes"/>), so a review is refused there, asked of the claim
 /// itself (<see cref="IClaimReading.RunsUnderAsync"/>), and accepted everywhere else: after a park and an edit, after an expiry
-/// and a reopen, after an approval whose text was edited since, after an attempt that failed before any decision.
+/// and a reopen, after an approval whose text was edited since, after an attempt that failed before any decision. A doubt
+/// accepted while an approved row is live supersedes that row in its own save, so a standing doubt always leaves the send
+/// with no approval to run under; a pass changes no row.
 /// </remarks>
 /// <param name="claim">The claim whose question a review asks; required, so no composition reviews without the rule.</param>
 /// <param name="run">The attempt the request says it comes from; null outside a request and for a request that names none.</param>
@@ -128,13 +130,13 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             JournalKinds.WorkItemReviewed,
             item.Campaign,
             key: hash,
-            updated: new JsonObject
+            updated: ConfinedScope.Mark(new JsonObject
             {
                 ["result"] = JsonSerializer.SerializeToNode(request.Result!.Value, JasonJson.Options),
                 ["code"] = request.Result == ReviewResult.Doubts ? request.Code : null,
                 ["operation"] = item.Operation,
                 ["role"] = role,
-            },
+            }),
             workItem: item,
             attempt: attempt);
 
@@ -161,7 +163,29 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             throw DomainErrors.NotReviewable(item.PublicId, "it changed while the review was made; read it again with workitem.get, and while it is still queued or waiting it may be reviewed again");
         }
 
-        await HeardByTheClaimAsync(item, cancellationToken).ConfigureAwait(false);
+        // The text too is held to the row as it stands now, not as the review read it: an edit of the input leaves the status
+        // as it was, so the guard above does not see it, and a review of a text that is gone would land with its sentence.
+        await using (var beside = await db.BesideAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var now = await beside.WorkItems.AsNoTracking().FirstAsync(w => w.Id == item.Id, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(ReviewSubject.Hash(now), hash, StringComparison.Ordinal))
+            {
+                throw DomainErrors.ReviewStale(item.PublicId);
+            }
+        }
+
+        var reading = await HeardByTheClaimAsync(item, cancellationToken).ConfigureAwait(false);
+
+        // A doubt accepted while an approved row is live, which happens only where that row no longer stands for the send as
+        // it would now go, supersedes the row in this save, as a park supersedes one: the facts drifting back must not leave
+        // the send an approval to run under past the doubt. A pass changes no row, so it never takes a person's approval away.
+        if (request.Result == ReviewResult.Doubts && reading.Approval is { } outgrown)
+        {
+            var approval = await db.Approvals.SingleAsync(a => a.Id == outgrown.Id, cancellationToken).ConfigureAwait(false);
+            ApprovalGate.Resolve(db, journal, item, approval, ApprovalStatus.Superseded, actor, reason: null, entry.Ts);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return JournalWriter.ToDto(entry, item.Campaign!.PublicId) with { ContactId = item.Contact?.PublicId };
@@ -169,20 +193,23 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
 
     /// <summary>
     /// Refuses a review the claim would never read: where the claim would run the send now under an approval that stands
-    /// for it as it reads, a retry goes under that approval and no review is heard. Where the claim cannot say, because
+    /// for it as it would now go, it runs under that approval and no review is heard. Where the claim cannot say, because
     /// the send cannot be claimed right now while an approved row is live, the review is refused too, failing closed.
-    /// Named by the approval's id alone.
+    /// Named by the approval's id alone. Otherwise it answers the claim's reading, which names a live approved row that no
+    /// longer stands for the send, where there is one.
     /// </summary>
-    private async Task HeardByTheClaimAsync(WorkItem item, CancellationToken cancellationToken)
+    private async Task<ClaimReading> HeardByTheClaimAsync(WorkItem item, CancellationToken cancellationToken)
     {
         var reading = await claim.RunsUnderAsync(db, item, cancellationToken).ConfigureAwait(false);
         switch (reading.Hearing)
         {
             case ReviewHearing.NotRead:
-                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' approved it as it now reads, and a retry goes under that approval without reading a review");
+                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' stands for the send as it would now go, and the claim would run it under that approval without reading a review");
             case ReviewHearing.Unjudged:
-                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' cannot be checked against the send's text right now; review it again once the send can be claimed");
+                throw DomainErrors.NotReviewable(item.PublicId, $"approval '{reading.Approval!.PublicId}' is live and the send cannot be claimed right now, so whether the claim would read a review cannot be told yet; once the send can be claimed it may be reviewed again, and is refused then too while that approval stands for the send as it would go");
         }
+
+        return reading;
     }
 
     /// <summary>A review is made by an attempt or by a person who names themselves; a role's name, a plugin or nobody is refused.</summary>
@@ -206,7 +233,8 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
 
     /// <summary>
     /// The reviewing attempt and its role, checked: running, of role work in the send's campaign, and not of the work that
-    /// created the send or wrote its input since; or, for a person, one who did neither.
+    /// created the send or wrote its input since, on a send whose input nobody wrote under a name that holds nobody; or, for
+    /// a person, one who did neither.
     /// </summary>
     private async Task<(Attempt? Attempt, string? Role)> ReviewerAsync(WorkItem item, ActorRef actor, CancellationToken cancellationToken)
     {
@@ -263,6 +291,13 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, ICla
             && await db.Attempts.AsNoTracking().AnyAsync(a => editing.Contains(a.PublicId) && a.WorkItemId == work.Id, cancellationToken).ConfigureAwait(false))
         {
             throw DomainErrors.ReviewByEditor(item.PublicId);
+        }
+
+        // An edit under a name that holds nobody, none at all or a role's outside a run, has an author no run can be told
+        // apart from, this one included: from then on only a person by name reviews the send.
+        if (editors.Any(editor => editor.Type is not (ActorType.Human or ActorType.Attempt) || string.IsNullOrWhiteSpace(editor.Id)))
+        {
+            throw DomainErrors.ReviewAfterAnUnnamedEdit(item.PublicId);
         }
 
         return (attempt, work.Role);

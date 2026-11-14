@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Replies;
@@ -23,9 +25,10 @@ internal abstract record AutomaticDecision
     /// <summary>
     /// The send parks for the person with <paramref name="Why"/>, one of <see cref="SendModeReasons"/>, and the facts for the
     /// preview's <c>send_mode</c>. Where <paramref name="FallsThrough"/>, a standing approval that covers the send still
-    /// decides by its own conditions; a doubt and a send from the chat never fall through.
+    /// decides by its own conditions; a doubt, a send from the chat and the daily ceiling never fall through. At the ceiling,
+    /// <paramref name="Ceiling"/> is the preview's <c>daily_ceiling</c>: the limit, the releases counted and since when.
     /// </summary>
-    internal sealed record Park(string Why, bool FallsThrough, JsonObject Facts) : AutomaticDecision;
+    internal sealed record Park(string Why, bool FallsThrough, JsonObject Facts, JsonObject? Ceiling = null) : AutomaticDecision;
 
     /// <summary>The send goes in this claim, under a row the person who set <paramref name="Mode"/> decided.</summary>
     internal sealed record Release(ModeInForce Mode, Temperature Temperature, string Review, JsonObject Facts) : AutomaticDecision;
@@ -46,18 +49,22 @@ internal abstract record AutomaticDecision
 /// campaign; the mode in force for it, every message ending the step; a send from the chat; a doubt that stands; a reply
 /// that waits for a judgement; one that waits for its nature; for an answer, the verdict it answers, which must stand,
 /// say a nature of a person and not say <c>escalate</c>; a pass of its current text by the critic or by a person; the
-/// place for a limit on automatic releases; the release.
+/// daily ceiling, the campaign's releases since 00:00Z counted against <c>Sending:AutomaticMaxPerDay</c>; the release.
 /// </para>
 /// <para>
 /// A mode in force releases in the name of the person who set it, so a mode whose setter is not a named person releases
-/// nothing. The critic is known by its role's name, <see cref="CriticRole"/>, which the runtime writes on the review's
-/// line from the reviewing attempt's work; a pass by any other role is shown and releases nothing. A person's pass counts
+/// nothing. The critic whose pass releases is the one the runtime made for the send (<see cref="CriticsAsync"/>): its
+/// work created under the runtime's own actor, its <see cref="SendReview.Key"/> naming the send, its context changed by
+/// nobody but the runtime's own actors since, a change by a person, a role or the critic's own attempt disqualifying it;
+/// a critic somebody queued by hand, the runtime's critic of another send, or another role is
+/// shown and releases nothing. A person's pass counts
 /// where the line names a person and carries no attempt: a line that carries an attempt is the run's, whatever actor it
 /// names, and a run's pass is the critic's only where the line's actor is the attempt it carries.
 /// </para>
 /// <para>
 /// Every read is written SQL that names its index: the item's own lines through the journal's work item index, and a
-/// campaign's verdicts on one thread through the verdicts' thread index.
+/// campaign's verdicts on one thread through the verdicts' thread index, and the campaign's releases of the day through
+/// the partial index of automatic releases (<see cref="DailyCeiling"/>).
 /// </para>
 /// </remarks>
 public static class AutomaticRelease
@@ -72,11 +79,18 @@ public static class AutomaticRelease
     /// The decision for <paramref name="item"/>, about to park under <paramref name="plan"/>, where nobody was ever asked
     /// about it; <paramref name="doubted"/> says a doubt stands, as the park's preview reads it.
     /// </summary>
-    internal static async Task<AutomaticDecision> DecideAsync(JasonDbContext db, WorkItem item, ProviderOpPlan plan, bool doubted, CancellationToken ct)
+    internal static async Task<AutomaticDecision> DecideAsync(
+        JasonDbContext db,
+        WorkItem item,
+        ProviderOpPlan plan,
+        bool doubted,
+        DailyCeiling.Limit ceiling,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(ceiling);
         if (!ReviewSubject.IsReviewable(item))
         {
             return new AutomaticDecision.NotInForce(Chat: false);
@@ -142,7 +156,19 @@ public static class AutomaticRelease
             return new AutomaticDecision.Park(why!, FallsThrough: true, Facts(mode, temperature, shown));
         }
 
-        // The place for a limit on automatic releases: after the pass that would release the send, before the release.
+        // The daily ceiling, asked only here, where the mode would release the send, and inside the claim's transaction, which
+        // no other writer enters before its commit: at the ceiling the send waits for the person, and since the ceiling never
+        // slips, no standing approval lets it go either.
+        var released = await DailyCeiling.Released(db, item.CampaignId, ceiling.Since).SingleAsync(ct).ConfigureAwait(false);
+        if (released >= ceiling.PerDay)
+        {
+            return new AutomaticDecision.Park(
+                SendModeReasons.DailyCeiling,
+                FallsThrough: false,
+                Facts(mode, temperature, pass),
+                DailyCeiling.Preview(ceiling, released));
+        }
+
         return new AutomaticDecision.Release(mode!, temperature!.Value, pass, Facts(mode, temperature, pass));
     }
 
@@ -206,10 +232,14 @@ public static class AutomaticRelease
             ORDER BY id
             """).AsNoTracking();
 
-    /// <summary>Whether a review line is a pass that counts: the critic's run's, or a named person's outside any run.</summary>
-    internal static bool Counts(JournalEntry line)
+    /// <summary>
+    /// Whether a review line is a pass that counts: a named person's outside any run, or the pass of a running attempt of
+    /// the critic's work the runtime made for this send, whose attempt is among <paramref name="critics"/>.
+    /// </summary>
+    internal static bool Counts(JournalEntry line, IReadOnlySet<string> critics)
     {
         ArgumentNullException.ThrowIfNull(line);
+        ArgumentNullException.ThrowIfNull(critics);
         if (!string.Equals(Text(line.New?["result"]), "passed", StringComparison.Ordinal))
         {
             return false;
@@ -217,13 +247,67 @@ public static class AutomaticRelease
 
         return line.ActorType switch
         {
-            ActorType.Human => !string.IsNullOrWhiteSpace(line.ActorId) && line.AttemptId is null,
-            ActorType.Attempt => line.AttemptId is not null
-                && string.Equals(line.ActorId, line.AttemptId, StringComparison.Ordinal)
-                && string.Equals(Text(line.New?["role"]), CriticRole, StringComparison.Ordinal),
+            ActorType.Human => !string.IsNullOrWhiteSpace(line.ActorId) && line.AttemptId is null && !ConfinedScope.Marked(line.New),
+            ActorType.Attempt => line.AttemptId is { } attempt
+                && string.Equals(line.ActorId, attempt, StringComparison.Ordinal)
+                && string.Equals(Text(line.New?["role"]), CriticRole, StringComparison.Ordinal)
+                && critics.Contains(attempt),
             _ => false,
         };
     }
+
+    /// <summary>
+    /// Of the attempts the item's review lines carry, those of the critic's work the runtime made for this send: the work
+    /// was created by the runtime's own actor, as its created line says; its <see cref="SendReview.Key"/> names this send
+    /// and its operation; and no line says that anybody but the runtime changed its context since. Read by the attempts the
+    /// lines carry, and by each such work item's own lines, through the journal's work item index.
+    /// </summary>
+    internal static async Task<IReadOnlySet<string>> CriticsAsync(JasonDbContext db, WorkItem send, IEnumerable<JournalEntry> lines, CancellationToken ct)
+    {
+        var carried = lines.Where(line => line.ActorType == ActorType.Attempt && line.AttemptId is not null)
+            .Select(line => line.AttemptId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var critics = new HashSet<string>(StringComparer.Ordinal);
+        if (carried.Count == 0)
+        {
+            return critics;
+        }
+
+        var runs = await db.Attempts.AsNoTracking()
+            .Where(attempt => carried.Contains(attempt.PublicId))
+            .Select(attempt => new { attempt.PublicId, Work = attempt.WorkItem!.PublicId, attempt.WorkItem.Role, attempt.WorkItem.Context })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var run in runs)
+        {
+            if (!string.Equals(run.Role, CriticRole, StringComparison.Ordinal)
+                || !string.Equals(SendReview.Named(run.Context), send.PublicId, StringComparison.Ordinal)
+                || !string.Equals(SendReview.Operation(run.Context), send.Operation, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var own = await CriticLines(db, run.Work).ToListAsync(ct).ConfigureAwait(false);
+            var created = own.Where(line => line.Kind == JournalKinds.WorkItemCreated).ToList();
+            if (created.Count == 1
+                && created[0].ActorType == ActorType.System
+                && string.Equals(created[0].ActorId, Actors.Runtime.Id, StringComparison.Ordinal)
+                && own.All(line => line.ActorType == ActorType.System))
+            {
+                critics.Add(run.PublicId);
+            }
+        }
+
+        return critics;
+    }
+
+    /// <summary>A work item's created line and its context's changes, through the journal's work item index.</summary>
+    internal static IQueryable<JournalEntry> CriticLines(JasonDbContext db, string workItemId) =>
+        db.Journal.FromSqlInterpolated($"""
+            SELECT * FROM journal INDEXED BY ix_journal_work_item_id_public_id
+            WHERE work_item_id = {workItemId} AND kind IN ('workitem_created', 'workitem_context_updated')
+            """).AsNoTracking();
 
     /// <summary>The mode, where it releases: automatic, set by a named person.</summary>
     private static ModeInForce? Releasing(ModeInForce mode) =>
@@ -260,13 +344,52 @@ public static class AutomaticRelease
             return SendModeReasons.AnswersNoVerdict;
         }
 
-        return Text(said["nature"]) switch
+        switch (Text(said["nature"]))
         {
-            null => SendModeReasons.AwaitingNature,
-            "person" => string.Equals(Text(said["reaction"]), "escalate", StringComparison.Ordinal) ? SendModeReasons.Escalated : null,
-            _ => SendModeReasons.ReplyNotFromAPerson,
-        };
+            case null:
+                return SendModeReasons.AwaitingNature;
+            case not "person":
+                return SendModeReasons.ReplyNotFromAPerson;
+        }
+
+        return Escalates(said) || await EscalatedSinceAsync(db, item.CampaignId, said, ct).ConfigureAwait(false)
+            ? SendModeReasons.Escalated
+            : null;
     }
+
+    private static bool Escalates(JsonObject said) => string.Equals(Text(said["reaction"]), "escalate", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether a verdict that stands on the answered verdict's thread and plugin, about a reply at or after the one answered,
+    /// says escalate: the conversation was marked for the person, whichever reply of it the answer names. A moment that is
+    /// not known holds, since nothing tells the escalation is earlier.
+    /// </summary>
+    internal static async Task<bool> EscalatedSinceAsync(JasonDbContext db, int campaignId, JsonObject answered, CancellationToken ct)
+    {
+        if (Text(answered["thread"]) is not { } thread || Text(answered["plugin"]) is not { } plugin)
+        {
+            return true;
+        }
+
+        var from = Moment(answered["message_at"]);
+        var verdicts = await OnThread(db, campaignId, thread, plugin).ToListAsync(ct).ConfigureAwait(false);
+        return verdicts
+            .GroupBy(line => line.Key, StringComparer.Ordinal)
+            .Select(under => under.MaxBy(line => line.Id)!)
+            .Where(standing => standing.New is JsonObject said && Escalates(said))
+            .Any(standing => from is not { } since || Moment(standing.New!["message_at"]) is not { } at || at >= since);
+    }
+
+    private static DateTimeOffset? Moment(JsonNode? node) =>
+        Text(node) is { } text && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+
+    /// <summary>Every verdict of a campaign on one thread through one plugin, through the verdicts' thread index.</summary>
+    internal static IQueryable<JournalEntry> OnThread(JasonDbContext db, int campaignId, string thread, string plugin) =>
+        db.Journal.FromSqlInterpolated($"""
+            SELECT * FROM journal INDEXED BY ix_journal_campaign_verdict_thread
+            WHERE kind = 'reply_classified' AND campaign_id = {campaignId}
+              AND json_extract(new_json, '$.thread') = {thread} AND json_extract(new_json, '$.plugin') = {plugin}
+            """).AsNoTracking();
 
     /// <summary>The verdict that stands for the reply the named line judged: the newest of the campaign under its key.</summary>
     private static async Task<JournalEntry?> NamedAsync(JasonDbContext db, int campaignId, string cited, CancellationToken ct)
@@ -291,12 +414,13 @@ public static class AutomaticRelease
         var hash = ReviewSubject.Hash(item);
         var lines = await ReviewLines(db, item.PublicId).ToListAsync(ct).ConfigureAwait(false);
         var current = lines.Where(line => string.Equals(line.Key, hash, StringComparison.Ordinal)).ToList();
-        if (current.LastOrDefault(Counts) is { } pass)
+        var critics = await CriticsAsync(db, item, lines, ct).ConfigureAwait(false);
+        if (current.LastOrDefault(line => Counts(line, critics)) is { } pass)
         {
             return (pass.PublicId, null, null);
         }
 
-        if (lines.LastOrDefault(line => !string.Equals(line.Key, hash, StringComparison.Ordinal) && Counts(line)) is { } older)
+        if (lines.LastOrDefault(line => !string.Equals(line.Key, hash, StringComparison.Ordinal) && Counts(line, critics)) is { } older)
         {
             return (null, SendModeReasons.EditedAfterReview, older.PublicId);
         }

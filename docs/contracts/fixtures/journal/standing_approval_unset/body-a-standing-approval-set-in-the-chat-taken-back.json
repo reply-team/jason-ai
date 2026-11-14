@@ -1,0 +1,7 @@
+{
+  "kind": "standing_approval_unset",
+  "version": 1,
+  "case": "a standing approval set under the desktop's chat marker is taken back as it was set, its mark carried over",
+  "body": { "key": "interested", "old": { "category": "interested", "operations": ["conversation.reply"], "expires_at": null, "max_releases": null, "confined": true }, "new": null },
+  "expect": "valid"
+}
