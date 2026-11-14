@@ -122,6 +122,10 @@ export const en = {
         "It continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and this window does not show what happens there.",
     'openIn.continueRunning': 'A turn of this chat is running. Stop it or wait for it to end.',
     'openIn.continued': 'Continued this chat in {place}, in a new terminal.',
+    'openIn.changeJason': 'Change Jason itself',
+    'openIn.changeJasonNote': "Open your own AI on Jason's roles and plugins, and tell it what to change.",
+    'openIn.changeJasonOpened':
+        "Opened your own AI in a new terminal, on Jason's roles and plugins. Tell it what you want changed.",
     'palette.search': 'Search',
     'palette.placeholder': 'Search agents, people, pages and settings',
     'palette.none': 'Nothing found',
