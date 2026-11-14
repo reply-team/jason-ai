@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -243,15 +244,15 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// A review is made before the send is first decided about. Released under a standing approval and then failed for a
-    /// reason that is retried, the send is queued again and its retry runs under its approved row; approved by a person, it
+    /// A review is refused exactly where the claim would not read it. Released under a standing approval and then failed for
+    /// a reason that is retried, the send is queued again and its retry runs under its approved row; approved by a person, it
     /// goes under their decision. Neither reads a review, so a doubt recorded then would be accepted and never heard: it is
     /// refused <c>not_reviewable</c>, naming the approval by its id and no sentence, and nothing is written.
     /// </summary>
     [Theory]
-    [InlineData("a standing release, then a transient failure", "a standing approval released it as approval")]
-    [InlineData("a person's approval", "a person approved it as approval")]
-    public async Task Doubts_AReviewAfterTheSendWasDecidedAbout_IsRefused_AndWritesNothing(string path, string why)
+    [InlineData("a standing release, then a transient failure")]
+    [InlineData("a person's approval")]
+    public async Task Doubts_AReviewTheClaimWouldNotRead_IsRefused_AndWritesNothing(string path)
     {
         using var harness = StandingHarness();
         using var database = new TestDatabase();
@@ -291,14 +292,181 @@ public partial class ClaimerTests
         var approval = await db.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal(ApprovalStatus.Approved, approval.Status);
 
-        var refused = await Assert.ThrowsAsync<ConflictException>(() => ReviewAsync(db, reading, item.PublicId, hash, ReviewResult.Doubts, "off_brief", ReviewSentence));
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => ReviewAsync(db, reading, item.PublicId, hash, ReviewResult.Doubts, "off_brief", ReviewSentence, harness.Claimer));
 
         Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains($"{why} '{approval.PublicId}'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads, and a retry goes under that approval", refused.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINEL_PARK_", refused.Message, StringComparison.Ordinal);
         await using var fresh = database.Open();
         Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
         Assert.Null((await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct)).ReviewNote);
+    }
+
+    /// <summary>
+    /// Everywhere else the claim hears a review, so it is accepted, and the next claim parks the send with that doubt on the
+    /// preview: after an attempt that failed before any decision, after an expiry and a reopen, after a park and an edit by
+    /// another, and after an approval, a retry that failed and an edit, whose text the approval no longer stands for.
+    /// </summary>
+    [Theory]
+    [InlineData("an attempt that failed before any decision")]
+    [InlineData("an expiry and a reopen")]
+    [InlineData("a park and an edit")]
+    [InlineData("an approval, a retry that failed and an edit")]
+    public async Task Doubts_AReviewTheClaimWillRead_IsAccepted_AndTheNextClaimParksWithIt(string path)
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var send = await ComposeAsync(db, reading, waitOn: null);
+        var item = await db.WorkItems.SingleAsync(w => w.PublicId == send.Id, Ct);
+        switch (path)
+        {
+            case "an attempt that failed before any decision":
+                var early = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Failed, Noon);
+                early.FinishedAt = Noon;
+                early.Error = new AttemptErrorDto("provider_unavailable", "The provider did not answer in time.", Retriable: true, Class: FailureClass.Transient);
+                item.AttemptCount = 1;
+                await db.SaveChangesAsync(Ct);
+                break;
+            case "an expiry and a reopen":
+                Assert.Empty(await ClaimSettledAsync(harness, db));
+                await db.Approvals.ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, ApprovalStatus.Cancelled), Ct);
+                await db.WorkItems.Where(w => w.Id == item.Id).ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkItemStatus.Created), Ct);
+                break;
+            case "a park and an edit":
+                Assert.Empty(await ClaimSettledAsync(harness, db));
+                await EditAsync();
+                break;
+            default:
+                Assert.Empty(await ClaimSettledAsync(harness, db));
+                var asked = await db.Approvals.AsNoTracking().SingleAsync(Ct);
+                var clock = new FixedClock(Noon);
+                await new ApprovalService(db, new JournalWriter(clock), clock).ApproveAsync(new ApprovalDecisionRequest(asked.PublicId, Operator, Reason: null), Ct);
+                Assert.Single(await ClaimSettledAsync(harness, db));
+                await db.Attempts.Where(a => a.WorkItemId == item.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, AttemptStatus.Failed).SetProperty(a => a.FinishedAt, Noon), Ct);
+                await db.WorkItems.Where(w => w.Id == item.Id).ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkItemStatus.Created), Ct);
+                await EditAsync();
+                break;
+        }
+
+        db.ChangeTracker.Clear();
+        db.Attach(reading.Campaign);
+        var now = await WorkItemService.LoadAsync(db, send.Id, Ct);
+        Assert.Equal(WorkItemStatus.Created, now.Status);
+
+        var (line, _) = await ReviewAsync(db, reading, send.Id, ReviewSubject.Hash(now), ReviewResult.Doubts, "off_brief", ReviewSentence, harness.Claimer);
+
+        db.ChangeTracker.Clear();
+        Assert.Empty(await ClaimSettledAsync(harness, db));
+        await using var fresh = database.Open();
+        var parked = await fresh.Approvals.AsNoTracking().OrderByDescending(a => a.Id).FirstAsync(Ct);
+        Assert.Equal(ApprovalStatus.Pending, parked.Status);
+        var doubt = Assert.Single(parked.Preview[Doubts.PreviewKey]!.AsArray())!;
+        Assert.Equal(("review", line, ReviewSentence), ((string?)doubt["source"], (string?)doubt["line"], (string?)doubt["note"]));
+
+        async Task EditAsync()
+        {
+            db.ChangeTracker.Clear();
+            await Items(db).UpdateAsync(
+                new WorkItemUpdateRequest(
+                    send.Id,
+                    new JsonObject { [WorkItemService.InputKey] = Message("Friday at 10 works.") },
+                    null, default, default, default, default, default, default, default, default,
+                    new ActorRef(ActorType.Human, "operator"),
+                    Reason: null),
+                Ct);
+            db.ChangeTracker.Clear();
+        }
+    }
+
+    /// <summary>
+    /// A claim that comes and goes between a review's read and its save (a standing approval releases the send, its run fails
+    /// for a reason that is retried, and the send is queued again) leaves the status as the review read it, so the guard on
+    /// the status alone would let the doubt land after the decision it can no longer stop. The claim's question is asked
+    /// again inside the save, which meets the approval that claim wrote and is refused <c>not_reviewable</c>; nothing is
+    /// written. A person reviews here, since a reviewing run would keep the campaign busy and no claim would come between.
+    /// </summary>
+    [Fact]
+    public async Task Doubts_AReviewWhoseSendWasReleasedAndRetriedDuringItsSave_IsRefused()
+    {
+        using var harness = StandingHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var verdict = await VerdictAsync(db, reading, RunOf(reading));
+        await StandAsync(db, reading.Campaign);
+        var item = Drafted(db, reading, verdict);
+        await db.SaveChangesAsync(Ct);
+        var hash = ReviewSubject.Hash(item);
+        await db.WorkItems.Where(w => w.Status == WorkItemStatus.Processing).ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkItemStatus.Succeeded).SetProperty(w => w.FinishedAt, Noon), Ct);
+        await db.Attempts.Where(a => a.FinishedAt == null).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, AttemptStatus.Succeeded).SetProperty(a => a.FinishedAt, Noon), Ct);
+
+        var meanwhile = new Meanwhile(async () =>
+        {
+            await using var other = database.Open();
+            Assert.Single(await harness.Claimer.ClaimAsync(other, 4, Ct));
+            await other.Attempts.Where(a => a.WorkItemId == item.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, AttemptStatus.Failed).SetProperty(a => a.FinishedAt, Noon), Ct);
+            await other.WorkItems.Where(w => w.Id == item.Id).ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkItemStatus.Created), Ct);
+        });
+        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => new ReviewService(racing, new JournalWriter(new FixedClock(Noon)), claim: harness.Claimer).ReviewAsync(
+            new WorkItemReviewRequest(item.PublicId, hash, ReviewResult.Doubts, "off_brief", ReviewSentence, new ActorRef(ActorType.Human, "ada")),
+            Ct));
+
+        Assert.True(meanwhile.Fired);
+        Assert.Equal("not_reviewable", refused.Code);
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((ApprovalStatus.Approved, ApprovalGate.StandingApproval), (approval.Status, approval.Reason));
+        Assert.Contains($"approval '{approval.PublicId}' approved it as it now reads", refused.Message, StringComparison.Ordinal);
+        Assert.Empty(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemReviewed).ToListAsync(Ct));
+        var row = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == item.Id, Ct);
+        Assert.Equal((WorkItemStatus.Created, (string?)null), (row.Status, row.ReviewNote));
+    }
+
+    /// <summary>
+    /// Another writer between a review's read and its save: the first time the context is about to begin a transaction or to
+    /// save with the review's line added, the action runs on a context of its own and commits, before this save takes the
+    /// database.
+    /// </summary>
+    private sealed class Meanwhile(Func<Task> act) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor, Microsoft.EntityFrameworkCore.Diagnostics.IDbTransactionInterceptor
+    {
+        private int _fired;
+
+        public bool Fired => _fired == 1;
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(eventData);
+            await FireAsync(eventData.Context!).ConfigureAwait(false);
+            return result;
+        }
+
+        public async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction>> TransactionStartingAsync(
+            System.Data.Common.DbConnection connection,
+            Microsoft.EntityFrameworkCore.Diagnostics.TransactionStartingEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbTransaction> result,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(eventData);
+            await FireAsync(eventData.Context!).ConfigureAwait(false);
+            return result;
+        }
+
+        private async Task FireAsync(DbContext context)
+        {
+            if (_fired == 0
+                && context.ChangeTracker.Entries<JournalEntry>().Any(e => e.State == EntityState.Added)
+                && Interlocked.Exchange(ref _fired, 1) == 0)
+            {
+                await act().ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Both columns are empty after the park, and no line — the park's own or any other — says either sentence.</summary>
@@ -329,14 +497,14 @@ public partial class ClaimerTests
     private static Task<(string Line, string Run)> ReviewAsync(JasonDbContext db, Reading reading, WorkItemDto send, ReviewResult result, string? code, string? note) =>
         ReviewAsync(db, reading, send.Id, send.ReviewHash, result, code, note);
 
-    private static async Task<(string Line, string Run)> ReviewAsync(JasonDbContext db, Reading reading, string sendId, string? hash, ReviewResult result, string? code, string? note)
+    private static async Task<(string Line, string Run)> ReviewAsync(JasonDbContext db, Reading reading, string sendId, string? hash, ReviewResult result, string? code, string? note, Claimer? claim = null)
     {
         var review = WorkItemFactory.NewAiRole(reading.Campaign, role: "reviewer", now: Noon);
         review.Status = WorkItemStatus.Processing;
         var run = WorkItemFactory.NewAttempt(review, 1, AttemptStatus.Running, Noon);
         db.WorkItems.Add(review);
         await db.SaveChangesAsync(Ct);
-        var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon))).ReviewAsync(
+        var line = await new ReviewService(db, new JournalWriter(new FixedClock(Noon)), claim: claim).ReviewAsync(
             new WorkItemReviewRequest(sendId, hash, result, code, note, new ActorRef(ActorType.Attempt, run.PublicId)),
             Ct);
         return (line.Id, run.PublicId);

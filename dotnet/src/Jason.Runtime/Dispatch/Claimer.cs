@@ -552,6 +552,37 @@ public sealed class Claimer(
     }
 
     /// <summary>
+    /// The approval the claim would run <paramref name="item"/> under if it claimed it now, reading nothing else about it
+    /// (its reviews included), or null where it would decide about it anew. The same facts, the same pre-flight against the
+    /// same two snapshots, and the same test (<see cref="ApprovalGate.Authorizes"/>) as the claim's own decision, so a review
+    /// asks the claim's question rather than a description of it. Reads only.
+    /// </summary>
+    public async Task<Approval?> RunsUnderAsync(JasonDbContext db, WorkItem item, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.Kind != WorkItemKind.ProviderOp)
+        {
+            return null;
+        }
+
+        // Read as the claim reads it, so an attempt another writer added since the item was first loaded is among its own.
+        var current = await db.WorkItems.WithNavigation().Include(w => w.Attempts)
+            .FirstAsync(w => w.Id == item.Id, ct)
+            .ConfigureAwait(false);
+        var routing = routes.Snapshot;
+        var facts = await FactsAsync(db, current, routing, ct).ConfigureAwait(false);
+        var verdict = ProviderOpPreflight.Check(facts, plugins.Snapshot, routing, _timing);
+        if (verdict is not { Parks: true, Code: AttemptErrors.ApprovalRequired, Plan: { } plan })
+        {
+            return null;
+        }
+
+        var live = await ApprovalGate.LiveAsync(db, current.CampaignId, current.Id, ct).ConfigureAwait(false);
+        return ApprovalGate.Authorizes(live, ApprovalSubject.Of(plan, current)) ? live : null;
+    }
+
+    /// <summary>
     /// Whether this work may run now: the decision a person has already made about exactly this subject, or
     /// nothing — in which case the item has been parked for one by the time this returns.
     /// </summary>
@@ -572,8 +603,7 @@ public sealed class Claimer(
         var subject = ApprovalSubject.Of(plan, item);
         var live = await ApprovalGate.LiveAsync(db, item.CampaignId, item.Id, ct).ConfigureAwait(false);
 
-        if (live is { Status: ApprovalStatus.Approved }
-            && string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal))
+        if (ApprovalGate.Authorizes(live, subject))
         {
             return live;
         }

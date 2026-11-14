@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Runtime.Api;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -28,8 +29,16 @@ public sealed record ReviewStanding(ReviewResult Result, string? Code, string Li
 /// the claim makes of them. Who may review: a running attempt of the same campaign's role work, other than any attempt of
 /// the work that created the send, or a named person who did not create it. Inside a run a review speaks as its run.
 /// </summary>
+/// <remarks>
+/// The invariant: a review is refused exactly where the claim would not read it. The claim reads a send's reviews
+/// whenever it decides about the send, and runs it without reading them only under a live approved row whose subject is
+/// the send as it now stands (<see cref="ApprovalGate.Authorizes"/>), so a review is refused there, asked of the claim
+/// itself (<see cref="Claimer.RunsUnderAsync"/>), and accepted everywhere else: after a park and an edit, after an expiry
+/// and a reopen, after an approval whose text was edited since, after an attempt that failed before any decision.
+/// </remarks>
 /// <param name="run">The attempt the request says it comes from; null outside a request and for a request that names none.</param>
-public sealed class ReviewService(JasonDbContext db, JournalWriter journal, RequestRun? run = null)
+/// <param name="claim">The claim whose question a review asks; null only in a composition without one, which the runtime is not.</param>
+public sealed class ReviewService(JasonDbContext db, JournalWriter journal, RequestRun? run = null, Claimer? claim = null)
 {
     public async Task<JournalEntryDto> ReviewAsync(WorkItemReviewRequest request, CancellationToken cancellationToken)
     {
@@ -104,7 +113,7 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
             throw DomainErrors.NotReviewable(item.PublicId, $"it is {SnakeCaseEnumConverter<WorkItemStatus>.Format(item.Status)}, and a review is made while the send is still queued or waiting");
         }
 
-        await BeforeTheFirstDecisionAsync(item, cancellationToken).ConfigureAwait(false);
+        await HeardByTheClaimAsync(item, cancellationToken).ConfigureAwait(false);
 
         var hash = ReviewSubject.Hash(item);
         if (!string.Equals(hash, request.ReviewHash!.Trim(), StringComparison.Ordinal))
@@ -140,8 +149,8 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
         // The row is written on every review, whatever it changes, so the save is guarded by the status the review read: a
         // claim that parked or took the send meanwhile wins, and the review, with its line, is refused rather than landing
         // after the person was asked. A claim that came and went meanwhile — released, run, failed and queued again — leaves
-        // the status as it was read, so the send's decisions and runs are read once more inside the save's own transaction,
-        // after its first write, when no other writer can add one before the commit.
+        // the status as it was read, so the claim's question is asked once more inside the save's own transaction, after
+        // its first write, when no other writer can add an approval or an attempt before the commit.
         db.Entry(item).Property(w => w.Status).IsModified = true;
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -153,42 +162,21 @@ public sealed class ReviewService(JasonDbContext db, JournalWriter journal, Requ
             throw DomainErrors.NotReviewable(item.PublicId, "it changed while the review was made; read it again with workitem.get, and while it is still queued or waiting it may be reviewed again");
         }
 
-        await BeforeTheFirstDecisionAsync(item, cancellationToken).ConfigureAwait(false);
+        await HeardByTheClaimAsync(item, cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return JournalWriter.ToDto(entry, item.Campaign!.PublicId) with { ContactId = item.Contact?.PublicId };
     }
 
     /// <summary>
-    /// A review is made before the send is first decided about. Once a question was put to a person about it, a standing
-    /// approval released it, a person approved it, or it ran, a retry goes under that decision and no review is read
-    /// again, so a review then would be accepted and never heard. Refused naming the approval or the run by its id alone.
+    /// Refuses a review the claim would never read: where the claim would run the send now under an approval that stands
+    /// for it as it reads, a retry goes under that approval and no review is heard. Named by the approval's id alone.
     /// </summary>
-    private async Task BeforeTheFirstDecisionAsync(WorkItem item, CancellationToken cancellationToken)
+    private async Task HeardByTheClaimAsync(WorkItem item, CancellationToken cancellationToken)
     {
-        var approval = await db.Approvals.AsNoTracking()
-            .Where(a => a.CampaignId == item.CampaignId && a.WorkItemId == item.Id)
-            .OrderByDescending(a => a.Id)
-            .Select(a => new { a.PublicId, a.Status, a.Reason })
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        if (approval is not null)
+        if (claim is not null && await claim.RunsUnderAsync(db, item, cancellationToken).ConfigureAwait(false) is { } approval)
         {
-            var decided = string.Equals(approval.Reason, ApprovalGate.StandingApproval, StringComparison.Ordinal)
-                ? $"a standing approval released it as approval '{approval.PublicId}'"
-                : approval.Status == ApprovalStatus.Approved
-                    ? $"a person approved it as approval '{approval.PublicId}'"
-                    : $"it was put to a person as approval '{approval.PublicId}'";
-            throw DomainErrors.NotReviewable(item.PublicId, $"{decided}, and a review is made before the send is put to a person, approved or run");
-        }
-
-        var ran = await db.Attempts.AsNoTracking()
-            .Where(a => a.WorkItemId == item.Id)
-            .OrderByDescending(a => a.Id)
-            .Select(a => a.PublicId)
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        if (ran is not null)
-        {
-            throw DomainErrors.NotReviewable(item.PublicId, $"it already ran as attempt '{ran}', and a review is made before the send is put to a person, approved or run");
+            throw DomainErrors.NotReviewable(item.PublicId, $"approval '{approval.PublicId}' approved it as it now reads, and a retry goes under that approval without reading a review");
         }
     }
 

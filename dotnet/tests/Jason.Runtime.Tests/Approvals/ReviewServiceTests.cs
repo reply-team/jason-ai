@@ -323,63 +323,6 @@ public class ReviewServiceTests
         Assert.Equal("not_reviewable", refused.Code);
     }
 
-    /// <summary>
-    /// A review is made before the send is first decided about. Queued again after a run that ended, or after a question
-    /// put to a person that was then withdrawn, the send is refused <c>not_reviewable</c>, the refusal naming the run or the
-    /// approval by its id, and nothing is written.
-    /// </summary>
-    [Theory]
-    [InlineData("a send that ran")]
-    [InlineData("a send that was put to a person")]
-    public async Task A_send_queued_again_after_it_was_decided_about_or_run_is_not_reviewable(string what)
-    {
-        using var database = new TestDatabase();
-        await using var db = database.Open();
-        var seed = await SeedAsync(db);
-        string named;
-        if (what == "a send that ran")
-        {
-            var run = WorkItemFactory.NewAttempt(seed.Send, 1, AttemptStatus.Failed, Noon);
-            run.FinishedAt = Noon;
-            run.Error = new AttemptErrorDto("provider_unavailable", "The provider did not answer in time.", Retriable: true, Class: FailureClass.Transient);
-            seed.Send.AttemptCount = 1;
-            named = $"it already ran as attempt '{run.PublicId}'";
-        }
-        else
-        {
-            var asked = new Approval
-            {
-                PublicId = PublicId.New(ApprovalGate.IdPrefix),
-                WorkItemId = seed.Send.Id,
-                CampaignId = seed.Send.CampaignId,
-                Operation = "message.send",
-                OperationVersion = 1,
-                Subject = new JsonObject { ["operation"] = "message.send", ["work_item"] = seed.Send.PublicId },
-                SubjectHash = "sha256:subject",
-                Preview = new JsonObject(),
-                PluginId = "stand-in-provider",
-                PluginSnapshotId = "snp_one",
-                RoutingSnapshotId = "rts_one",
-                Status = ApprovalStatus.Cancelled,
-                Reason = ApprovalGate.ApprovalRequired,
-                RequestedAt = Noon,
-            };
-            db.Approvals.Add(asked);
-            named = $"it was put to a person as approval '{asked.PublicId}'";
-        }
-
-        await db.SaveChangesAsync(Ct);
-
-        var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(db).ReviewAsync(Doubt(seed, "off_brief") with { Note = Sentence }, Ct));
-
-        Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains(named, refused.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(Sentence, refused.Message, StringComparison.Ordinal);
-        await using var fresh = database.Open();
-        Assert.Equal(0, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct));
-        Assert.Null((await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct)).ReviewNote);
-    }
-
     [Fact]
     public async Task A_send_waiting_on_its_review_is_reviewable()
     {
@@ -467,41 +410,6 @@ public class ReviewServiceTests
         await using var fresh = database.Open();
         Assert.Equal(before, await fresh.Journal.AsNoTracking().CountAsync(e => e.Kind == JournalKinds.WorkItemReviewed, Ct));
         Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct)).Status);
-    }
-
-    /// <summary>
-    /// A claim that comes and goes between the review's read and its save — a standing approval releases the send, its run
-    /// fails for a reason that is retried, and the send is queued again — leaves the status as the review read it, so the
-    /// guard on the status alone would let the doubt land after the decision it can no longer stop. The save meets the
-    /// approval and the attempt that claim wrote and is refused <c>not_reviewable</c>, and nothing is written.
-    /// </summary>
-    [Fact]
-    public async Task A_review_whose_send_was_released_and_retried_meanwhile_is_refused_not_reviewable()
-    {
-        using var database = new TestDatabase();
-        await using var db = database.Open();
-        var seed = await SeedAsync(db);
-        var meanwhile = new CompetingInsert(
-            database.File,
-            context => context.ChangeTracker.Entries<JournalEntry>().Any(e => e.State == EntityState.Added)
-                ? $"""
-                    INSERT INTO approvals (public_id, work_item_id, campaign_id, operation, operation_version, subject_json, subject_hash, preview_json, plugin_id, route_scope, plugin_snapshot_id, routing_snapshot_id, status, reason, requested_at, decided_at, decided_by_type, decided_by_id)
-                    VALUES ('apr_01K52JR00000000000000000AB', {seed.Send.Id}, {seed.Campaign.Id}, 'message.send', 1, '{"{}"}', 'sha256:subject', '{"{}"}', 'stand-in-provider', 'global_default', 'snp_one', 'rts_one', 'approved', '{ApprovalGate.StandingApproval}', '2026-10-05 12:00:00', '2026-10-05 12:00:00', 'human', 'operator');
-                    INSERT INTO attempts (public_id, work_item_id, number, status, command, context_snapshot_json, claimed_at, lock_until, finished_at)
-                    VALUES ('att_01K52JR00000000000000000AB', {seed.Send.Id}, 1, 'failed', 'stand-in-provider', '{"{}"}', '2026-10-05 12:00:00', '2026-10-05 12:05:00', '2026-10-05 12:00:00');
-                    UPDATE work_items SET attempt_count = 1 WHERE id = {seed.Send.Id};
-                    """
-                : null);
-        await using var racing = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(meanwhile).Options);
-
-        var refused = await Assert.ThrowsAsync<ConflictException>(() => Service(racing).ReviewAsync(Doubt(seed, "off_brief") with { Note = Sentence }, Ct));
-
-        Assert.True(meanwhile.Fired);
-        Assert.Equal("not_reviewable", refused.Code);
-        Assert.Contains("a standing approval released it as approval 'apr_01K52JR00000000000000000AB'", refused.Message, StringComparison.Ordinal);
-        await NothingWrittenAsync(database, seed);
-        await using var fresh = database.Open();
-        Assert.Equal(WorkItemStatus.Created, (await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == seed.Send.Id, Ct)).Status);
     }
 
     /// <summary>
