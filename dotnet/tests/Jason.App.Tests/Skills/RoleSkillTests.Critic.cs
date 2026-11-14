@@ -9,8 +9,8 @@ public partial class RoleSkillTests
 
         // A critic that believed it could stop something would report the work blocked and stop there, and
         // nobody downstream would learn what was wrong with the draft.
-        Assert.Contains("Nothing here blocks or vetoes another work item", skill, StringComparison.Ordinal);
-        Assert.Contains("Your verdict is your result", skill, StringComparison.Ordinal);
+        Assert.Contains("You veto nothing and cancel nothing.", skill, StringComparison.Ordinal);
+        Assert.Contains("for anything else your verdict is your result", skill, StringComparison.Ordinal);
 
         CarriesTheLaunchContract("critic");
     }

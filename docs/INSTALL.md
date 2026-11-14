@@ -752,5 +752,5 @@ The install prompt ends by starting the `quick-start` skill. In five lines:
    ask you. The count never holds you up: when it cannot be read at once, the plan goes on without it.
 3. It makes a draft of your first campaign and says the plan in one message: the goal, who it will look for, the channels, and
    how it will write.
-4. It stops there, until you say what to change or say go. A first message is never sent without your yes.
+4. It stops there, until you say what to change or say go. Until you choose otherwise, a first message is never sent without your yes; you may later say that sends to people who have not answered, or to people who have, go on their own.
 5. Its text is [`skills/runtime/quick-start/SKILL.md`](../skills/runtime/quick-start/SKILL.md).

@@ -98,7 +98,7 @@ jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"goals":[{"
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-Every first message still waits for the person's yes (`approval-boundaries`). The message after "go" that hands over to the planning ends with one line: "There is a
+Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it. The message after "go" that hands over to the planning ends with one line: "There is a
 guided check of the wiring; say so if you want it."
 
 ## Rules
