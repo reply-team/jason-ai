@@ -85,6 +85,13 @@ public sealed class Campaign
     public int ResponderWatermark { get; set; }
 
     /// <summary>
+    /// The highest journal entry the bounce step has read for this campaign. It reads the bounces said above it, so a
+    /// bounce asks for its reads once. Its own number, beside the respond step's: the two steps read the same lines for
+    /// different ends, and neither may pass a line over for the other.
+    /// </summary>
+    public int BounceWatermark { get; set; }
+
+    /// <summary>
     /// What the cadence is measured from: the campaign going live, and every check-in since. Null while a
     /// campaign has never been live, which is also why such a campaign is never due.
     /// </summary>

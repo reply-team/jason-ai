@@ -500,6 +500,12 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("audience_watermark");
 
+                    b.Property<int>("BounceWatermark")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("bounce_watermark");
+
                     b.Property<string>("Context")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1580,6 +1586,11 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.HasIndex(new[] { "CampaignId", "Id" }, "ix_journal_audience_reserve_recovered_campaign_id")
                         .HasDatabaseName("ix_journal_audience_reserve_recovered_campaign_id")
                         .HasFilter("kind = 'audience_reserve_recovered'");
+
+                    b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_bounces")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_campaign_kind_key_bounces")
+                        .HasFilter("kind = 'message_bounce_observed'");
 
                     b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_events")
                         .IsUnique()
