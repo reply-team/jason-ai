@@ -38,7 +38,16 @@ const snake = (name: string) => name.replace(/[A-Z]/g, (letter) => `_${letter.to
 
 function scratch(t: { after(fn: () => void): void }): string {
     const folder = mkdtempSync(join(tmpdir(), 'jason-layout-'));
-    t.after(() => rmSync(folder, { recursive: true, force: true }));
+    t.after(() => {
+        // The unaskable case shuts a folder inside; it is opened again here, before the tree is removed, since a folder
+        // that cannot be listed cannot be emptied.
+        try {
+            chmodSync(join(folder, 'shut'), 0o700);
+        } catch {
+            // Nothing was shut.
+        }
+        rmSync(folder, { recursive: true, force: true });
+    });
     return folder;
 }
 
@@ -144,7 +153,6 @@ function holding(t: { after(fn: () => void): void }, stamp: StampCase): string {
             mkdirSync(shut);
             writeFileSync(join(shut, 'layout.json'), '{"layout":1,"written_by":"0.42.0"}');
             chmodSync(shut, 0o600);
-            t.after(() => chmodSync(shut, 0o700));
             return shut;
         }
         case undefined:
