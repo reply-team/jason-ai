@@ -44,7 +44,7 @@ function pending(fake: FakeApi): FakeApi {
         .answer('campaign.summary', 'campaign.summary/all');
 }
 
-/** Shows a panel of the dock the way a person does, from the sidebar. */
+/** Shows a panel in the area the way a person does, from the sidebar. */
 function show(name: string): void {
     const side = within(document.querySelector<HTMLElement>('.side')!);
     // What has no row of its own is under More: the menu opens, and the entry is chosen by its title.

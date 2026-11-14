@@ -75,7 +75,7 @@ afterEach(() => {
 });
 
 describe('Demo in the desktop', () => {
-    it('draws the bar once, above the sidebar and every panel of the dock', async () => {
+    it('draws the bar once, above the sidebar and every panel of the area', async () => {
         await renderConsole('demo');
         const shown = await waitFor(() => {
             expect(strip()).not.toBeNull();

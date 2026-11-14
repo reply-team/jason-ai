@@ -974,7 +974,7 @@
     letter-spacing: -0.02em;
 }
 
-/* The console's own rules: the dock, the panels, a dark theme, and what the live panels draw. */
+/* The console's own rules: the area, the panels, a dark theme, and what the live panels draw. */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) .jc-console .brand .wordmark.light {
         display: none;
@@ -1272,7 +1272,7 @@ body,
     margin: 0 auto;
     padding: 0 20px;
 }
-/* The bar heads the window above the sidebar and the dock in both modes, and the shell takes the height that is left. */
+/* The bar heads the window above the sidebar and the area in both modes, and the shell takes the height that is left. */
 .jc-console {
     display: flex;
     flex-direction: column;

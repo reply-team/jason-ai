@@ -171,24 +171,24 @@ describe('the palette', () => {
         expect(fake.calls.filter((each) => each.operation === 'contact.list')).toEqual([]);
     });
 
-    it('has a Menu, Settings and Action entry for each place and act the sidebar has, and none of what is not here', async () => {
+    it('has a Page, Settings and Action entry for each place and act the sidebar has, and none of what is not here', async () => {
         renderConsole({ desktop: kept() });
         await opened();
         await waitFor(() => expect(conversations.value.length).toBe(3));
         await waitFor(() => expect(feedId.value).not.toBeNull());
         // Every page the sidebar and More reach, each found by its own name, with its kind on the right.
         for (const [name, word] of [
-            ['Feed', 'Menu'],
-            ['Dashboard', 'Menu'],
-            ['Needs you', 'Menu'],
-            ['People', 'Menu'],
-            ['Agents', 'Menu'],
-            ['Accounts', 'Menu'],
-            ['Performance', 'Menu'],
-            ['Activity', 'Menu'],
-            ['Work items', 'Menu'],
-            ['Connect', 'Menu'],
-            ['System', 'Menu'],
+            ['Feed', 'Page'],
+            ['Dashboard', 'Page'],
+            ['Needs you', 'Page'],
+            ['People', 'Page'],
+            ['Agents', 'Page'],
+            ['Accounts', 'Page'],
+            ['Performance', 'Page'],
+            ['Activity', 'Page'],
+            ['Work items', 'Page'],
+            ['Connect', 'Page'],
+            ['System', 'Page'],
             ['Settings', 'Settings'],
             ['New GTM agent', 'Action'],
             ['New chat', 'Action'],
@@ -211,7 +211,7 @@ describe('the palette', () => {
 
         type('work');
         expect(labels()).toEqual(['Work items']);
-        expect(kinds()).toEqual(['Menu']);
+        expect(kinds()).toEqual(['Page']);
 
         // An agent of the Agents panel with no conversation is found by its name.
         type('spring');

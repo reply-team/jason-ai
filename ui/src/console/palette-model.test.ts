@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hintFor, isShortcut, moved, plain, resultLimit, search, type Entry, type Kind } from './palette-model';
 
 const words: Record<Kind, string> = {
-    page: 'Menu',
+    page: 'Page',
     settings: 'Settings',
     action: 'Action',
     agent: 'Agent',
