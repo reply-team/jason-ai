@@ -60,15 +60,20 @@ public sealed class PluginGrantService(
         ArgumentNullException.ThrowIfNull(request);
         var (actor, reason, id, capability, entry) = Read(request);
 
-        var loaded = plugins.Snapshot.Find(id) ?? throw DomainErrors.PluginNotFound(id);
-        var written = Requested(loaded.Manifest, capability, entry);
-        if (capability == PluginGrantCapability.Files && loader.FileGrantRefusal(entry) is { } refusal)
-        {
-            throw new ValidationException([new ErrorDetail("entry", ProblemCodes.GrantPathRefused, refusal)]);
-        }
-
         var comparer = Comparer(capability);
-        return await WriteAsync(id, capability, actor, reason, held => Covers(loaded.Manifest, capability, held, written, comparer) ? held : [.. held, written], takenBack: false, cancellationToken).ConfigureAwait(false);
+        return await WriteAsync(id, capability, actor, reason, before =>
+        {
+            // The manifest is the one the write reads under the gate, so no reload between the check and the write can
+            // replace it with one that does not ask for the entry.
+            var loaded = before.Find(id) ?? throw DomainErrors.PluginNotFound(id);
+            var written = Requested(loaded.Manifest, capability, entry);
+            if (capability == PluginGrantCapability.Files && loader.FileGrantRefusal(entry) is { } refusal)
+            {
+                throw new ValidationException([new ErrorDetail("entry", ProblemCodes.GrantPathRefused, refusal)]);
+            }
+
+            return held => Covers(loaded.Manifest, capability, held, written, comparer) ? held : [.. held, written];
+        }, takenBack: false, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<PluginRegistryDto> RevokeAsync(PluginGrantRequest request, CancellationToken cancellationToken)
@@ -76,20 +81,23 @@ public sealed class PluginGrantService(
         ArgumentNullException.ThrowIfNull(request);
         var (actor, reason, id, capability, entry) = Read(request);
 
-        // Taking a grant back needs no manifest: a package taken away leaves grants nobody can use, and they may go.
-        var manifest = plugins.Snapshot.Find(id)?.Manifest;
         var comparer = Comparer(capability);
-        return await WriteAsync(id, capability, actor, reason, held =>
+        return await WriteAsync(id, capability, actor, reason, before =>
         {
-            if (!string.Equals(entry, GrantResolver.Everything, StringComparison.Ordinal)
-                && held.Contains(GrantResolver.Everything, StringComparer.Ordinal)
-                && manifest is not null
-                && Resolved(manifest, capability, [GrantResolver.Everything]).Contains(entry, comparer))
+            // Taking a grant back needs no manifest: a package taken away leaves grants nobody can use, and they may go.
+            var manifest = before.Find(id)?.Manifest;
+            return held =>
             {
-                throw DomainErrors.GrantHeldByStar(Path(id, capability), entry, id, Words[capability].Flag);
-            }
+                if (!string.Equals(entry, GrantResolver.Everything, StringComparison.Ordinal)
+                    && held.Contains(GrantResolver.Everything, StringComparer.Ordinal)
+                    && manifest is not null
+                    && Resolved(manifest, capability, [GrantResolver.Everything]).Contains(entry, comparer))
+                {
+                    throw DomainErrors.GrantHeldByStar(Path(id, capability), entry, id, Words[capability].Flag);
+                }
 
-            return [.. held.Where(name => !comparer.Equals(name, entry))];
+                return [.. held.Where(name => !comparer.Equals(name, entry))];
+            };
         }, takenBack: true, cancellationToken).ConfigureAwait(false);
     }
 
@@ -103,18 +111,19 @@ public sealed class PluginGrantService(
             : Resolved(manifest, capability, list).Contains(entry, comparer);
 
     /// <summary>
-    /// The one shape of both: under the reload gate, the settings writer edits the list from each read of the file, and the
-    /// reload freezes it with a <c>plugin_grants_updated</c> line in the same save as its <c>plugins_reloaded</c>, written
-    /// only where what the plugin may use of the capability changed. A file the edit left as it was is reloaded only where
-    /// the grants in force are not already what the file says, so a grant written by hand and never reloaded is put in
-    /// force by the same request.
+    /// The one shape of both: under the reload gate, the request is checked against the snapshot the gate holds, the
+    /// settings writer edits the list from each read of the file, and the reload freezes it with a
+    /// <c>plugin_grants_updated</c> line in the same save as its <c>plugins_reloaded</c>, written only where what the plugin
+    /// may use of the capability changed. A file the edit left as it was is reloaded only where the grants in force are not
+    /// already what the file says, so a grant written by hand and never reloaded is put in force by the same request;
+    /// otherwise nothing is activated, and the answer is <c>plugin.list</c>'s with <c>activated</c> false.
     /// </summary>
     private async Task<PluginRegistryDto> WriteAsync(
         string id,
         PluginGrantCapability capability,
         ActorRef actor,
         string? reason,
-        Func<IReadOnlyList<string>, IReadOnlyList<string>> next,
+        Func<PluginSnapshot, Func<IReadOnlyList<string>, IReadOnlyList<string>>> checkedAgainst,
         bool takenBack,
         CancellationToken cancellationToken)
     {
@@ -124,6 +133,7 @@ public sealed class PluginGrantService(
         try
         {
             var before = plugins.Snapshot;
+            var next = checkedAgainst(before);
             return await writer.WriteAsync(
                 held =>
                 {
