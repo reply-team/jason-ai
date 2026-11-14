@@ -68,6 +68,8 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     // Each read is numbered; an answer that lands after a later read was asked for is dropped, so a slow read for one chat
     // never overwrites the answer for the chat in front now.
     const reads = useRef(0);
+    // True while a Change Jason itself the person chose is being opened: a second choice meanwhile opens nothing.
+    const changing = useRef(false);
 
     const read = useCallback(async () => {
         if (!can('openIn.targets')) return;
@@ -175,11 +177,17 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
     const changeJason = async () => {
         setMenu(false);
-        if (!can('openIn.changeJason')) return;
-        const said = await desktop.openIn.changeJason().then(
-            (result) => (result === null ? null : result.refused),
-            (error: unknown) => (error instanceof Error ? error.message : String(error)),
-        );
+        if (changing.current || !can('openIn.changeJason')) return;
+        changing.current = true;
+        const said = await desktop.openIn
+            .changeJason()
+            .then(
+                (result) => (result === null ? null : result.refused),
+                (error: unknown) => (error instanceof Error ? error.message : String(error)),
+            )
+            .finally(() => {
+                changing.current = false;
+            });
         await read();
         if (said !== null) {
             setProblem(said);

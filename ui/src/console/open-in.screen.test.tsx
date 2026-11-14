@@ -648,3 +648,33 @@ describe('Change Jason itself', () => {
         expect(groups.slice(-2)).toEqual(['open-in-change', 'open-in-continue']);
     });
 });
+
+describe('Change Jason itself while one is opening', () => {
+    it('opens nothing more for a second choice while the first is still being opened', async () => {
+        const desktop = chatDesktop();
+        desktop.openInKept.changeJason = true;
+        await renderConsole('live', desktop);
+        let asked = 0;
+        let finish: (value: null) => void = () => undefined;
+        desktop.openIn.changeJason = () => {
+            asked++;
+            return new Promise<null>((resolve) => {
+                finish = resolve;
+            });
+        };
+        const entry = () => within(menu()).getByRole('menuitem', { name: /^Change Jason itself/ });
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        await waitFor(() => expect(asked).toBe(1));
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        expect(asked).toBe(1);
+        finish(null);
+        await waitFor(() => expect(document.querySelector('.open-in-toast')).not.toBeNull());
+        // Once it has answered, the entry opens again.
+        fireEvent.click(arrow());
+        fireEvent.click(await waitFor(() => entry()));
+        await waitFor(() => expect(asked).toBe(2));
+        finish(null);
+    });
+});
