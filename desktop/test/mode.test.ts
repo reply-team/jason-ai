@@ -170,10 +170,66 @@ test('a start reads the record before it resolves any path, and only then points
     const between = start.slice(start.indexOf('    const uninstalling = uninstallStart('), choice);
     for (const path of ['dataDirectory(', 'startLog(', 'keepElectronUnderData(', 'desktopPaths(']) assert.equal(between.includes(path), false, path);
     assert.ok(decided > 0 && choice > decided);
-    for (const after of ['keepElectronUnderData();\n    const early = startLog();', 'app.requestSingleInstanceLock(']) assert.ok(start.indexOf(after) > choice, after);
+    for (const after of ['keepElectronUnderData();' + String.fromCharCode(10) + '    if (uninstalling !== null) {', 'app.requestSingleInstanceLock(', 'const early = startLog();']) assert.ok(start.indexOf(after) > choice, after);
     // Nothing at the module's top resolves the data directory before a start chooses, but the sandbox's refusal.
     const top = main.slice(main.indexOf('const unsandboxed'), main.indexOf('function chooseInstallation('));
     assert.equal(top.replace(/if \(unsandboxed !== null\) \{[\s\S]*?\} else \{/, '').includes('dataDirectory('), false);
+});
+
+// What runs around Electron's own start cannot be run here: the prepared demo's order is held on the main module's text.
+test('the prepared demo is placed from the first instant a start is the only one, before its log opens, and waited for before the runtime starts', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const start = main.slice(main.indexOf('function startDesktop('), main.indexOf('function beginDemoPlacement('));
+    const lock = start.indexOf('app.requestSingleInstanceLock(');
+    const placed = start.indexOf('placement = beginDemoPlacement();');
+    const logged = start.indexOf('const early = startLog();');
+    const ran = start.indexOf('void app.whenReady().then(() => releasedAfter(logHold, () => run(links, installationWasNew)));');
+    assert.ok(lock > 0 && placed > lock && logged > placed && ran > logged, 'the lock, the import, the log, then the window');
+    // However the run ends, and at a quit, the held lines are written.
+    assert.ok(start.indexOf('releaseAtQuit(app, logHold);') > placed && start.indexOf('releaseAtQuit(app, logHold);') < ran);
+    // The import and the run share one reading of the login shell's PATH, which the import waits for.
+    const begin = main.slice(main.indexOf('function beginDemoPlacement('));
+    assert.ok(begin.includes('pathReadAtStart = pathRead;') && begin.includes('withPath(process.env, await pathRead)'));
+    assert.ok(main.includes('const pathRead = pathReadAtStart ?? loginPath(pathOf(process.env), home);'));
+    assert.ok(begin.includes('spawned: (pid) => requestStartOver(request, process.pid, true, true, pid),'), 'the import is named in the request');
+    // Every log of a start is on the hold, the run's as well as the early one.
+    assert.ok(main.includes('return logHold.logger(() => fileLines(logs));'));
+    assert.ok(main.includes('const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(paths.installationSettings))));'));
+    // In the run: the window first, then the import's end, then the runtime's start.
+    const run = main.slice(main.indexOf('async function run('), main.indexOf('function keepElectronUnderData('));
+    const window = run.indexOf('const window = new BrowserWindow({');
+    const settled = run.indexOf('await settlePlacing(placement, {');
+    const runtime = run.indexOf('const started = await startInstallation({');
+    assert.ok(window > 0 && settled > window && runtime > settled);
+    // The mark is on from the first menu while the import runs, not only from its end.
+    const marked = run.indexOf('if (placement !== null) setPreparing(true);');
+    assert.ok(marked > run.indexOf('const setPreparing = (on: boolean) => {') && marked < settled);
+    assert.ok(run.includes("await showStarting(window, placement !== null ? placingWords : 'Starting Jason…', false);"));
+    // The sample's marker is written by the placing's end alone, which writes it only once the import has succeeded.
+    assert.equal(main.split('writeSampleWhole(').length - 1, 1, 'called once');
+    assert.ok(run.includes('seal: () => writeSampleWhole(demoWhere.data),'));
+    // A start that places the demo neither prepares it nor makes its harness root before the import.
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    assert.ok(choose.indexOf('demoPlacing =') > 0 && choose.indexOf('demoPlacing =') < choose.indexOf('runOn = startOn('));
+    assert.ok(choose.includes("prepare: (demo) => (demoPlacing.kind === 'place' || placingElsewhere ? undefined : prepareLive(demo)),"));
+    assert.ok(main.includes('request: () => requestStartOver(request, process.pid, true, true),'), 'a placing’s request is a making’s too');
+    assert.ok(choose.indexOf('carryOutStartOver({') < choose.indexOf('demoPlacing ='), 'a start over is carried out first, so the plan sees the folders it left');
+});
+
+test('a start that finds a demo runtime a crashed making or placing left stops it through the demo’s own stop and starts again', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
+    const caught = choose.indexOf('} catch (error) {', choose.indexOf('carryOutStartOver({'));
+    const left = choose.indexOf("if (reason === 'runtime_alive' && leftRuntimeStops(readText(desktopPaths(personDirectory).demoStartOver), process.pid, processIsRunning)) {");
+    assert.ok(caught > 0 && left > caught, 'decided on the carry-out’s own refusal');
+    // Only after the demo's instance lock is won, and only the demo's runtime: by the demo's directory, never the person's.
+    const start = main.slice(main.indexOf('function startDesktop('));
+    assert.ok(start.indexOf('} else if (leftDemoRuntime) {') > start.indexOf('app.requestSingleInstanceLock('));
+    const stop = main.slice(main.indexOf('async function stopLeftRuntimeAndStart('));
+    assert.ok(stop.includes('await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });'));
+    assert.equal(stop.includes('stopOwnRuntime('), false, 'the person’s runtime is never asked to stop');
+    assert.ok(stop.includes('bundles: desktopPaths(runOn.data).bundle'), 'with the jason the demo’s runtime runs from');
+    assert.ok(stop.includes('note: () => noteLeftStopped(desktopPaths(runOn.person).demoStartOver),'), 'once for a request');
 });
 
 const noPreparation = { prepare: () => undefined };

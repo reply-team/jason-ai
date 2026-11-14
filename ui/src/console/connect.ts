@@ -13,6 +13,7 @@ import type {
 } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
+import { can, cannotHere, type DesktopMember } from '../platform/places';
 import { act, argsOf, define, type Action } from './actions';
 import { withModels } from './chat-model';
 import { html, type Html } from './html';
@@ -32,6 +33,9 @@ const typed = new Map<string, string>();
 /** Whether this window is the demo. */
 const inDemo = (): boolean => mode.value === 'demo';
 
+/** Whether this place cannot do the acts of a card: a browser tab, which only reads what the desktop found. */
+const actsOff = (): boolean => !can('setup.connectReply');
+
 /** Defines an act that connects or changes a real account: in the demo it does nothing. */
 function defineReal(name: string, action: Action): void {
     define(name, (args, element, event) => {
@@ -41,10 +45,21 @@ function defineReal(name: string, action: Action): void {
 
 /** The one sentence a card says in the demo about its acts being off. */
 const notInDemo = (): Html | null =>
-    inDemo() ? html`<div class="setrow meta demo-off" role="note">${t('mode.notDemo')}</div>` : null;
+    inDemo()
+        ? html`<div class="setrow meta demo-off" role="note">${t('mode.notDemo')}</div>`
+        : actsOff()
+          ? html`<div class="setrow meta demo-off" role="note">${cannotHere()}</div>`
+          : null;
+
+/** The one sentence a card whose acts this place cannot do says; nothing where it can. */
+const elsewhere = (): Html | null =>
+    actsOff() ? html`<div class="setrow meta demo-off" role="note">${cannotHere()}</div>` : null;
 
 /** `busy`, or disabled in the demo, for a control that connects or changes a real account. */
 const realBusy = (busy: Html | null): Html | null => (inDemo() ? html`disabled` : busy);
+
+/** `busy`, or off where this place cannot do the member the control calls; a control that only changes the page is not asked. */
+const unlessCan = (busy: Html | null, member: DesktopMember): Html | null => (can(member) ? busy : html`disabled`);
 
 /** The plugin whose Disconnect waits on the person's confirmation; null when none does. */
 const confirming = signal<string | null>(null);
@@ -341,6 +356,7 @@ define('connect.addCancel', () => {
 });
 
 defineReal('connect.addMailbox', ([place, provider]) => {
+    if (!can('setup.replyConnect')) return;
     if (typeof place !== 'string' || !isProvider(provider)) return;
     const name = mailboxProviders.find(([each]) => each === provider)![1];
     void askLink(place, `Connect a ${name} mailbox`, null, (how) =>
@@ -353,6 +369,7 @@ defineReal('connect.addLinkedIn', ([place]) => {
 });
 
 defineReal('connect.makeLinkedIn', ([place]) => {
+    if (!can('setup.replyConnect')) return;
     const name = typedOf('linkedin-name');
     if (typeof place !== 'string' || !name) return;
     const copy = copying.value;
@@ -364,6 +381,7 @@ defineReal('connect.makeLinkedIn', ([place]) => {
 });
 
 defineReal('connect.reconnect', ([place, channel, id]) => {
+    if (!can('setup.replyReconnect')) return;
     const account = listedAccount(channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     signedOut.value = signedOut.value.filter((each) => each !== account.id);
@@ -373,6 +391,7 @@ defineReal('connect.reconnect', ([place, channel, id]) => {
 });
 
 defineReal('connect.pause', ([place, id]) => {
+    if (!can('setup.replyPause')) return;
     const account = listedAccount('linkedin', id);
     if (typeof place === 'string' && account)
         void ask(place, `Pause ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
@@ -381,6 +400,7 @@ defineReal('connect.pause', ([place, id]) => {
 });
 
 defineReal('connect.resume', ([place, id]) => {
+    if (!can('setup.replyResume')) return;
     const account = listedAccount('linkedin', id);
     if (typeof place === 'string' && account)
         void ask(place, `Resume ${accountTitle(account)}`, { channel: 'linkedin', id: account.id }, () =>
@@ -389,6 +409,7 @@ defineReal('connect.resume', ([place, id]) => {
 });
 
 defineReal('connect.unblock', ([place, id]) => {
+    if (!can('setup.replyUnblock')) return;
     const account = listedAccount('email', id);
     if (typeof place === 'string' && account)
         void ask(place, `Unblock ${accountTitle(account)}`, { channel: 'email', id: account.id }, () =>
@@ -397,6 +418,7 @@ defineReal('connect.unblock', ([place, id]) => {
 });
 
 defineReal('connect.delete', ([place, channel, id]) => {
+    if (!can('setup.replyDelete')) return;
     const account = listedAccount(channel, id);
     if (typeof place !== 'string' || !isChannel(channel) || !account) return;
     void ask(
@@ -412,6 +434,7 @@ defineReal('connect.delete', ([place, channel, id]) => {
 });
 
 defineReal('connect.limits', ([place, id]) => {
+    if (!can('setup.replyLimits')) return;
     const account = listedAccount('email', id);
     if (typeof place !== 'string' || !account) return;
     if (limiting.value?.place === place && limiting.value.id === account.id) {
@@ -424,6 +447,7 @@ defineReal('connect.limits', ([place, id]) => {
 });
 
 defineReal('connect.setLimit', ([place, id]) => {
+    if (!can('setup.replyLimits')) return;
     const account = listedAccount('email', id);
     const text = typedOf(`limit:${typeof id === 'string' ? id : ''}`);
     if (typeof place !== 'string' || !account || !/^\d{1,10}$/.test(text)) return;
@@ -539,7 +563,7 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
                               html`<button
                                   class="btn sm"
                                   type="button"
-                                  ${busy}
+                                  ${unlessCan(busy, 'setup.replyConnect')}
                                   ${act('connect.addMailbox', place, provider)}
                               >
                                   ${name}
@@ -559,7 +583,12 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
             naming.value === place
                 ? html`<div class="setrow">
                       ${field('linkedin-name', 'Name for the LinkedIn account', 'text')}
-                      <button class="btn sm" type="button" ${busy} ${act('connect.makeLinkedIn', place)}>
+                      <button
+                          class="btn sm"
+                          type="button"
+                          ${unlessCan(busy, 'setup.replyConnect')}
+                          ${act('connect.makeLinkedIn', place)}
+                      >
                           Make the link
                       </button>
                   </div>`
@@ -569,12 +598,18 @@ function addView(state: DesktopSetup['reply'], place: Place, busy: Html | null):
 
 /** The acts a row offers, by its channel and state; Pause and Resume not while the account is signed out. */
 function rowActs(account: DesktopReplyAccount, place: Place, busy: Html | null): Html[] {
-    const button = (label: string, name: string, ...args: string[]) =>
-        html`<button class="btn sm" type="button" ${busy} ${act(name, place, ...args)}>${label}</button>`;
+    const button = (label: string, name: string, member: DesktopMember, ...args: string[]) =>
+        html`<button class="btn sm" type="button" ${unlessCan(busy, member)} ${act(name, place, ...args)}>
+            ${label}
+        </button>`;
     const acts: Html[] = [];
-    if (needsReconnect(account)) acts.push(button('Reconnect', 'connect.reconnect', account.channel, account.id));
+    if (needsReconnect(account))
+        acts.push(button('Reconnect', 'connect.reconnect', 'setup.replyReconnect', account.channel, account.id));
     if (account.channel === 'email') {
-        acts.push(button('Limits', 'connect.limits', account.id), button('Unblock', 'connect.unblock', account.id));
+        acts.push(
+            button('Limits', 'connect.limits', 'setup.replyLimits', account.id),
+            button('Unblock', 'connect.unblock', 'setup.replyUnblock', account.id),
+        );
     } else if (
         account.channel === 'linkedin' &&
         account.status !== 'cookieInvalid' &&
@@ -582,11 +617,13 @@ function rowActs(account: DesktopReplyAccount, place: Place, busy: Html | null):
     ) {
         // Reply's one call flips the state, so Pause is offered only from enabled and Resume only from disabled; an
         // account at its daily limit is on and offers neither.
-        if (account.status === 'disabled') acts.push(button('Resume', 'connect.resume', account.id));
-        else if (account.status === 'enabled') acts.push(button('Pause', 'connect.pause', account.id));
+        if (account.status === 'disabled')
+            acts.push(button('Resume', 'connect.resume', 'setup.replyResume', account.id));
+        else if (account.status === 'enabled')
+            acts.push(button('Pause', 'connect.pause', 'setup.replyPause', account.id));
     }
     if (account.channel === 'email' || account.channel === 'linkedin')
-        acts.push(button('Delete', 'connect.delete', account.channel, account.id));
+        acts.push(button('Delete', 'connect.delete', 'setup.replyDelete', account.channel, account.id));
     return acts;
 }
 
@@ -597,7 +634,14 @@ function limitView(account: DesktopReplyAccount, place: Place, busy: Html | null
     return html`<div class="setrow acct-limit">
         <div class="grow meta">Emails a day${open.daily === null ? '' : `, now ${open.daily}`}:</div>
         ${field(`limit:${account.id}`, 'Daily limit', 'text')}
-        <button class="btn sm" type="button" ${busy} ${act('connect.setLimit', place, account.id)}>Set</button>
+        <button
+            class="btn sm"
+            type="button"
+            ${unlessCan(busy, 'setup.replyLimits')}
+            ${act('connect.setLimit', place, account.id)}
+        >
+            Set
+        </button>
     </div>`;
 }
 
@@ -669,15 +713,20 @@ define('connect.type', (args, element) => {
 });
 
 define('connect.install', ([program]) => {
+    if (!can('setup.installProgram')) return;
     // The Reply CLI is the Reply account's program: placing or updating it is off in the demo, an AI's program is not.
     if (inDemo() && program === setup.value?.reply.cli.install) return;
     if (typeof program === 'string')
         void doing(`Installing ${program}…`, () => here().desktop.setup.installProgram(program));
 });
 
-defineReal('connect.reply', () => void doing('Signing in to Reply…', () => here().desktop.setup.connectReply()));
+defineReal('connect.reply', () => {
+    if (!can('setup.connectReply')) return;
+    void doing('Signing in to Reply…', () => here().desktop.setup.connectReply());
+});
 
 defineReal('connect.replyKey', () => {
+    if (!can('setup.connectReplyWithKey')) return;
     const key = typedOf('reply');
     if (key)
         void doing('Connecting Reply with the key…', async () => {
@@ -687,6 +736,7 @@ defineReal('connect.replyKey', () => {
 });
 
 define('connect.providerKey', ([provider, remove]) => {
+    if (!can('setup.setProviderKey')) return;
     if (typeof provider !== 'string') return;
     const key = remove === true ? '' : typedOf(`provider:${provider}`);
     if (key || remove === true)
@@ -697,6 +747,7 @@ define('connect.providerKey', ([provider, remove]) => {
 });
 
 defineReal('connect.plugin', ([id]) => {
+    if (!can('setup.configurePlugin')) return;
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     if (!plugin) return;
     const keys = ['token', 'target', 'server'].map((name) => `plugin:${plugin.id}:${name}`);
@@ -712,6 +763,7 @@ defineReal('connect.plugin', ([id]) => {
 });
 
 defineReal('connect.pluginServerClear', ([id]) => {
+    if (!can('setup.configurePlugin')) return;
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     if (plugin?.serverLabel)
         void doing(`Configuring ${plugin.label}…`, () =>
@@ -728,6 +780,7 @@ define('connect.disconnectCancel', () => {
 });
 
 defineReal('connect.disconnectConfirm', ([id]) => {
+    if (!can('setup.disconnectPlugin')) return;
     const plugin = setup.value?.plugins.find((each) => each.id === id);
     confirming.value = null;
     if (plugin) void doing(`Disconnecting ${plugin.label}…`, () => here().desktop.setup.disconnectPlugin(plugin.id));
@@ -736,6 +789,7 @@ defineReal('connect.disconnectConfirm', ([id]) => {
 // Reload is the configure call with no values: it writes nothing, has the runtime read its plugins again, and reads
 // them back. The reload is the installation's, so any of the plugins names it.
 define('connect.reload', () => {
+    if (!can('setup.configurePlugin')) return;
     const first = setup.value?.plugins[0];
     if (first) void doing('Reading the settings again…', () => here().desktop.setup.configurePlugin(first.id, {}));
 });
@@ -776,7 +830,12 @@ function program(host: DesktopHost, busy: Html | null): Html {
         </div>
         ${
             !host.found && host.install
-                ? html`<button class="btn sm" type="button" ${busy} ${act('connect.install', host.install)}>
+                ? html`<button
+                      class="btn sm"
+                      type="button"
+                      ${unlessCan(busy, 'setup.installProgram')}
+                      ${act('connect.install', host.install)}
+                  >
                       Install
                   </button>`
                 : null
@@ -789,11 +848,23 @@ function provider(host: DesktopHost, busy: Html | null): Html {
         <div class="grow"><b>${host.label}</b> <span class="meta">${host.found ? 'Key set' : 'No key'}</span></div>
         ${
             host.found
-                ? html`<button class="btn sm" type="button" ${busy} ${act('connect.providerKey', host.id, true)}>
+                ? html`<button
+                      class="btn sm"
+                      type="button"
+                      ${unlessCan(busy, 'setup.setProviderKey')}
+                      ${act('connect.providerKey', host.id, true)}
+                  >
                       Remove the key
                   </button>`
                 : html`${secret(`provider:${host.id}`, `${host.label} key`)}
-                      <button class="btn sm" type="button" ${busy} ${act('connect.providerKey', host.id)}>Keep</button>`
+                      <button
+                          class="btn sm"
+                          type="button"
+                          ${unlessCan(busy, 'setup.setProviderKey')}
+                          ${act('connect.providerKey', host.id)}
+                      >
+                          Keep
+                      </button>`
         }
     </div>`;
 }
@@ -811,7 +882,12 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
         ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
         : html`<span class="meta">The Reply CLI was not found.</span> ${
                   state.cli.install
-                      ? html`<button class="btn sm" type="button" ${real} ${act('connect.install', state.cli.install)}>
+                      ? html`<button
+                            class="btn sm"
+                            type="button"
+                            ${unlessCan(real, 'setup.installProgram')}
+                            ${act('connect.install', state.cli.install)}
+                        >
                             Install
                         </button>`
                       : null
@@ -830,7 +906,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                                   ? html`<button
                                         class="btn sm"
                                         type="button"
-                                        ${real}
+                                        ${unlessCan(real, 'setup.installProgram')}
                                         ${act('connect.install', state.cli.install)}
                                     >
                                         Update
@@ -845,14 +921,21 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
                     <span class="meta">${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span>
                 </div>
-                ${state.cli.found ? html`<button class="btn sm p" type="button" ${real} ${act('connect.reply')}>Sign in</button>` : null}
+                ${state.cli.found ? html`<button class="btn sm p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in</button>` : null}
             </div>
             ${
                 state.cli.found
                     ? html`<div class="setrow">
                           <div class="grow meta">Or an API key, for an account the browser sign-in does not reach:</div>
                           ${secret('reply', 'Reply API key')}
-                          <button class="btn sm" type="button" ${real} ${act('connect.replyKey')}>Connect</button>
+                          <button
+                              class="btn sm"
+                              type="button"
+                              ${unlessCan(real, 'setup.connectReplyWithKey')}
+                              ${act('connect.replyKey')}
+                          >
+                              Connect
+                          </button>
                       </div>`
                     : null
             }
@@ -949,14 +1032,21 @@ function plugin(each: DesktopPlugin, busyReal: Html | null, refused: boolean): H
                               ? html`<button
                                     class="btn sm"
                                     type="button"
-                                    ${busy}
+                                    ${unlessCan(busy, 'setup.configurePlugin')}
                                     ${act('connect.pluginServerClear', each.id)}
                                 >
                                     Use the public server
                                 </button>`
                               : null
                       }
-                      <button class="btn sm" type="button" ${busy} ${act('connect.plugin', each.id)}>Configure</button>
+                      <button
+                          class="btn sm"
+                          type="button"
+                          ${unlessCan(busy, 'setup.configurePlugin')}
+                          ${act('connect.plugin', each.id)}
+                      >
+                          Configure
+                      </button>
                       ${disconnect(each, busy)}`
         }
     </div>`;
@@ -975,7 +1065,12 @@ function disconnect(each: DesktopPlugin, busy: Html | null): Html | null {
     return html`<div class="note am" role="alertdialog" aria-label="Disconnect ${each.label}">
         Disconnect ${each.label}? Every value under its configuration in the settings file and its notification target
         are removed. Jason stops sending notifications there. The plugin stays installed.
-        <button class="btn sm" type="button" ${busy} ${act('connect.disconnectConfirm', each.id)}>
+        <button
+            class="btn sm"
+            type="button"
+            ${unlessCan(busy, 'setup.disconnectPlugin')}
+            ${act('connect.disconnectConfirm', each.id)}
+        >
             Disconnect ${each.label}
         </button>
         <button class="btn sm" type="button" ${act('connect.disconnectCancel')}>Cancel</button>
@@ -995,7 +1090,14 @@ function plugins(state: DesktopSetup, busy: Html | null): Html {
                 refused
                     ? html`<div class="note am" role="alert">
                           ${state.settingsRefused} Edit it by hand, then press Reload.
-                          <button class="btn sm" type="button" ${busy} ${act('connect.reload')}>Reload</button>
+                          <button
+                              class="btn sm"
+                              type="button"
+                              ${unlessCan(busy, 'setup.configurePlugin')}
+                              ${act('connect.reload')}
+                          >
+                              Reload
+                          </button>
                       </div>`
                     : null
             }
@@ -1017,7 +1119,7 @@ export function aiCardView(): Html {
         <div class="hd"><b>AI</b></div>
         <div class="bd">
             ${busy ? html`<div class="note" role="status"><span class="spin"></span>${busy}</div>` : null}
-            ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+            ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null} ${elsewhere()}
             ${
                 state
                     ? state.hosts.filter((each) => each.kind === 'program').map((each) => program(each, disabled))
@@ -1099,7 +1201,7 @@ export function connectView(): Html {
         ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
         <div class="card">
             <div class="hd"><b>AI</b></div>
-            <div class="bd">${programs.map((each) => program(each, disabled))}</div>
+            <div class="bd">${elsewhere()}${programs.map((each) => program(each, disabled))}</div>
         </div>
         ${
             providers.length

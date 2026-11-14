@@ -158,6 +158,29 @@
 }
 /* Settings: the icon beside each section's heading, set on the line of its words; the console shows this screen
    under the same rule. */
+.settings .voice-part {
+    display: grid;
+    gap: var(--space-2);
+    margin: var(--space-3) 0;
+}
+.settings .voice-part h3 {
+    font-size: var(--text-md);
+    font-weight: 600;
+    margin: var(--space-2) 0 0;
+}
+.settings .voice-part label {
+    display: grid;
+    gap: var(--space-1);
+}
+.settings .voice-part button {
+    justify-self: start;
+}
+.settings .voice-small {
+    font-size: var(--text-sm);
+}
+.settings .voice-problem {
+    color: var(--danger);
+}
 .settings-icon {
     vertical-align: -2px;
     color: var(--accent-text);

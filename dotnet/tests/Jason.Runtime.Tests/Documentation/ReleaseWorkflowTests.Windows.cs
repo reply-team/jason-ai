@@ -824,7 +824,7 @@ public partial class ReleaseWorkflowTests
     [Fact]
     public void The_windows_job_runs_these_steps_and_no_other() =>
         Assert.Equal(
-            ["actions/checkout@v7", "./.github/actions/setup-dotnet", "Package", ArchivedWindows, "Smoke-test the published executable", WindowsLibraries],
+            ["actions/checkout@v7", "./.github/actions/setup-dotnet", "actions/download-artifact@v7", "Package", ArchivedWindows, "Smoke-test the published executable", WindowsLibraries],
             JobSteps(WindowsJob()).Select(step => Scalar(step, "name") ?? Scalar(step, "uses")));
 
     /// <summary>

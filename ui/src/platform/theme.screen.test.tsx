@@ -24,7 +24,11 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-const load = () => import('./theme');
+// The modules are loaded afresh for each test, so the place the page runs in is named afresh too: the desktop's own window.
+const load = async () => {
+    (await import('./places')).setPlace('window');
+    return import('./theme');
+};
 const shown = () => document.documentElement.dataset['theme'];
 
 describe('the theme in a browser', () => {

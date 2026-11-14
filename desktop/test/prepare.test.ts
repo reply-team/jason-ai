@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkBundle } from '../electron-builder.config.mjs';
-import { complete, plan, versionPrefix } from '../scripts/prepare.mjs';
+import { checkBundle, demoArchive } from '../electron-builder.config.mjs';
+import { carryDemo, complete, plan, versionPrefix } from '../scripts/prepare.mjs';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -20,7 +20,7 @@ function temporary(t: { after(fn: () => void): void }): string {
 
 test('a development run publishes into bundle/ at the repository’s version with a candidate’s word', () => {
     const run = plan(['node', 'prepare.mjs', '--rid', 'win-x64'], '0.34.0');
-    assert.deepEqual(run, { output: join(desktop, 'bundle'), version: '0.34.0-rc.1', rid: 'win-x64', executable: null, name: 'jason.exe' });
+    assert.deepEqual(run, { output: join(desktop, 'bundle'), version: '0.34.0-rc.1', rid: 'win-x64', executable: null, name: 'jason.exe', demo: null });
     assert.equal(plan(['node', 'prepare.mjs', '--rid', 'osx-arm64', '--pre', 'rc.2'], '0.34.0').version, '0.34.0-rc.2');
     assert.match(versionPrefix(), /^\d+\.\d+\.\d+$/);
     assert.throws(() => plan(['node', 'prepare.mjs', '--pre', 'dev.1'], '0.34.0'), /never carries a dev version/);
@@ -70,4 +70,24 @@ test('a completed bundle carries the licence and the notices beside the executab
     // What prepare completes is what a pack accepts, at that version and no other.
     checkBundle(folder, '0.34.0-rc.1', 'win32');
     assert.throws(() => checkBundle(folder, '0.34.0', 'win32'), /prepared as 0\.34\.0-rc\.1/);
+});
+
+test('a release’s run names the demo’s sample archive it carries; a run that names none carries none', () => {
+    const release = plan(['node', 'prepare.mjs', '--rid', 'linux-x64', '--output', 'bundles/x64', '--version', '0.34.0', '--demo', '/r/artifacts/demo/jason-demo.zip'], '0.34.0');
+    assert.equal(release.demo, resolve('/r/artifacts/demo/jason-demo.zip'));
+    assert.equal(plan(['node', 'prepare.mjs', '--rid', 'linux-x64', '--output', 'bundles/x64', '--version', '0.34.0'], '0.34.0').demo, null);
+    assert.equal(demoArchive, 'demo/jason-demo.zip');
+});
+
+test('a release’s bundle carries the demo’s sample archive it was given, byte for byte, at demo/jason-demo.zip', (t) => {
+    const folder = temporary(t);
+    // Bytes standing for the archive the release's demo job made: the copy is what is held, not the archive's content.
+    const given = join(folder, 'given.zip');
+    writeFileSync(given, Buffer.from([0x50, 0x4b, 0x05, 0x06, 1, 2, 3]));
+    const bundle = join(folder, 'bundle');
+    mkdirSync(bundle);
+    carryDemo(bundle, given);
+    assert.deepEqual(readFileSync(join(bundle, ...demoArchive.split('/'))), readFileSync(given));
+    assert.deepEqual(readdirSync(bundle), ['demo']);
+    assert.throws(() => carryDemo(bundle, join(folder, 'missing.zip')), /no archive at/);
 });

@@ -1,16 +1,20 @@
 import { effect, signal } from '@preact/signals-react';
+import { can, cannotHere, releasesPage } from '../platform/places';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
 import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { mode, type Mode } from '../platform/mode';
-import { ChatNotes, hostOf, isRefusal, sendTurn, startChat } from './chat';
+import { ChatNotes, hostOf, isRefusal, sendTurn, startChat, tabLockedSentence, tabMaySend } from './chat';
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
 import { AccessButton, ModelButton } from './start-menus';
-import { changeChat, chats, here, messageOf, setup, setupError } from './state';
+import { readPreferences, noneStated } from '../screens/settings/voice-model';
+import { voiceSectionId } from '../screens/settings/voice-id';
+import { voiceKnown } from '../screens/settings/voice-state';
+import { changeChat, chats, conversations, here, inTab, messageOf, setup, setupError } from './state';
 
 // The start screen: the window opens on the question who the person wants to reach. What is sent there starts a set-up
 // chat. With no AI that drives the chat the AI card comes first and the message waits there, to go once one is
@@ -42,7 +46,8 @@ export const startMode = signal<DesktopChatMode | null>(null);
  * chats start in it and the host that chat would run on can take it, Ask first otherwise.
  */
 function defaultMode(): DesktopChatMode {
-    if (fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
+    // A tab never makes a chat in Full access: it could send nothing to it, so the standing choice is not its default.
+    if (inTab() || fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
     return hostOf(startPick.value)?.fullAccess === null ? 'full_access' : 'ask_first';
 }
 
@@ -78,6 +83,46 @@ export function closeNote(): void {
     }
 }
 
+/** The key under which this browser keeps that the note about name and tone was closed. */
+export const voiceNoteKey = 'jason.ui.start-voice-note-closed';
+
+/** Whether the note about name and tone was closed, as this browser kept it; false where it keeps nothing. */
+export function voiceNoteWasClosed(): boolean {
+    try {
+        return localStorage.getItem(voiceNoteKey) === '1';
+    } catch {
+        return false;
+    }
+}
+
+export const voiceNoteClosed = signal(voiceNoteWasClosed());
+
+export { voiceKnown };
+
+/** Closes the note about name and tone for good. */
+export function closeVoiceNote(): void {
+    voiceNoteClosed.value = true;
+    try {
+        localStorage.setItem(voiceNoteKey, '1');
+    } catch {
+        // A browser that keeps nothing shows the note again next time.
+    }
+}
+
+/**
+ * Whether a first message was sent: a chat exists. The desktop lists one besides the Feed, or a chat of this window
+ * holds a message the person sent and is not listed yet.
+ */
+const messageWasSent = (): boolean =>
+    conversations.value.some((each) => each.main !== true) ||
+    Object.values(chats.value).some((chat) => chat.entries.some((entry) => entry.kind === 'user'));
+
+/** Opens Settings at the section for name and tone. */
+function openVoice(): void {
+    here().dock.page({ screen: 'settings' });
+    setTimeout(() => document.getElementById(voiceSectionId)?.scrollIntoView?.(), 0);
+}
+
 /** Whether the setup, once read, holds an AI that can drive the chat; null while it is not read. */
 const aiConnected = (): boolean | null => {
     const hosts = setup.value?.hosts;
@@ -105,6 +150,13 @@ async function begin(text: string): Promise<void> {
     }
     startPick.value = newChat('', null);
     startMode.value = null;
+    // A tab sends to a chat only in Ask first or Plan only: a chat made in another mode keeps the words in the box.
+    if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) {
+        startDraft.value = text;
+        changeChat(id, (each) => told(each, tabLockedSentence(chats.value[id]?.mode ?? '')));
+        here().dock.showChat(id);
+        return;
+    }
     // The chat's first turn names what the controls chose; a mode the desktop did not start the chat in is asked of it.
     changeChat(id, (each) => ({
         ...each,
@@ -113,7 +165,7 @@ async function begin(text: string): Promise<void> {
         effort: pick.effort,
         typing: pick.typing,
     }));
-    if (chats.value[id]?.mode !== wanted) {
+    if (chats.value[id]?.mode !== wanted && can('chat.setMode')) {
         try {
             const answer = await here().desktop.chat.setMode(id, wanted, hostOf(chats.value[id]!)?.id ?? '');
             if (isRefusal(answer)) changeChat(id, (each) => told(each, answer.refused));
@@ -160,7 +212,37 @@ function placeholder(): string {
     return host?.id === 'claude' ? `${t('start.placeholder')} ${t('start.placeholder.site')}` : t('start.placeholder');
 }
 
+/** The place of the chat when this place has no desktop: where the chat is, and where to get it. */
+function ChatElsewhere() {
+    return (
+        <div className="painted start">
+            <div className="panel-body">
+                <div className="ph">
+                    <div>
+                        <h1>{t('chat.title')}</h1>
+                    </div>
+                </div>
+                <div className="note" role="note">
+                    {cannotHere()}
+                </div>
+                <p>{t('chat.desktop')}</p>
+                <p>
+                    <a href={releasesPage} target="_blank" rel="noopener noreferrer">
+                        {t('chat.get')}
+                    </a>
+                </p>
+                <p className="muted">{t('chat.agent')}</p>
+            </div>
+        </div>
+    );
+}
+
+/** The window opens on the chat; a place that cannot make one says where the chat is instead. */
 export function StartPanel() {
+    return can('chat.create') ? <StartChat /> : <ChatElsewhere />;
+}
+
+function StartChat() {
     const modeMenu = useRef<HTMLButtonElement>(null);
     const waiting = startWaiting.value;
     const making = startMaking.value;
@@ -171,6 +253,23 @@ export function StartPanel() {
     const card = connected === false || (unread && setupError.value !== null);
     const box = useRef<HTMLTextAreaElement>(null);
     const held = waiting !== null || making !== null;
+    // The note about name and tone waits for a first message, in Live only, and for a read that holds neither.
+    const askable = mode.value === 'live' && !voiceNoteClosed.value && messageWasSent();
+    useEffect(() => {
+        if (!askable || voiceKnown.value !== 'unread') return;
+        let current = true;
+        readPreferences(here().api).then(
+            (items) => {
+                if (current) voiceKnown.value = noneStated(items) ? 'none' : 'some';
+            },
+            () => {
+                if (current) voiceKnown.value = 'failed';
+            },
+        );
+        return () => {
+            current = false;
+        };
+    }, [askable]);
     // The box takes the focus when the window opens on Start, and again when a message is taken back into it.
     useEffect(() => {
         if (!held) box.current?.focus();
@@ -267,6 +366,21 @@ export function StartPanel() {
                     </div>
                     <ChatNotes chat={startChatNow()} modeMenu={modeMenu} />
                 </form>
+                {askable && voiceKnown.value === 'none' && (
+                    <div className="start-note" role="note" aria-label={t('start.voice.name')}>
+                        <span>
+                            <strong>{t('start.voice.lead')}</strong> {t('start.voice.body')}
+                        </span>
+                        <span className="crow start-note-close">
+                            <button className="btn sm" type="button" onClick={openVoice}>
+                                {t('start.voice.now')}
+                            </button>
+                            <button className="btn sm" type="button" onClick={closeVoiceNote}>
+                                {t('start.voice.later')}
+                            </button>
+                        </span>
+                    </div>
+                )}
                 {!notesClosed.value.includes(mode.value) && (
                     <div className="start-note" role="note">
                         <span>

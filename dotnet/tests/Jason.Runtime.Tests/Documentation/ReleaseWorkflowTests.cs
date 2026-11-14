@@ -491,7 +491,7 @@ public partial class ReleaseWorkflowTests
         var test = Scalar(testing, "run")!;
         Assert.StartsWith("./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION ", test, StringComparison.Ordinal);
         Assert.Equal("${{ needs.version.outputs.release }}", Scalar(Mapping(testing, "env"), "VERSION"));
-        foreach (var narrowing in new[] { "-Projects", "-Namespaces", "-NotNamespaces", "-Critical", "filter" })
+        foreach (var narrowing in new[] { "-Projects", "-Namespaces", "-NotNamespaces", "-Classes", "-NotClasses", "-Critical", "filter" })
         {
             Assert.DoesNotContain(narrowing, test, StringComparison.OrdinalIgnoreCase);
         }
@@ -608,22 +608,28 @@ public partial class ReleaseWorkflowTests
             "linux-x64 tests: the critical tier",
             "linux-x64 tests: App",
             "linux-x64 tests: Cli, Contracts and PluginHost",
-            "linux-x64 tests: Runtime 1 of 4",
-            "linux-x64 tests: Runtime 2 of 4",
-            "linux-x64 tests: Runtime 3 of 4",
-            "linux-x64 tests: Runtime 4 of 4",
+            "linux-x64 tests: Runtime 1 of 6",
+            "linux-x64 tests: Runtime 2 of 6",
+            "linux-x64 tests: Runtime 3 of 6",
+            "linux-x64 tests: Runtime 4 of 6",
+            "linux-x64 tests: Runtime 5 of 6",
+            "linux-x64 tests: Runtime 6 of 6",
             "win-x64 tests: App",
             "win-x64 tests: Cli, Contracts and PluginHost",
-            "win-x64 tests: Runtime 1 of 4",
-            "win-x64 tests: Runtime 2 of 4",
-            "win-x64 tests: Runtime 3 of 4",
-            "win-x64 tests: Runtime 4 of 4",
+            "win-x64 tests: Runtime 1 of 6",
+            "win-x64 tests: Runtime 2 of 6",
+            "win-x64 tests: Runtime 3 of 6",
+            "win-x64 tests: Runtime 4 of 6",
+            "win-x64 tests: Runtime 5 of 6",
+            "win-x64 tests: Runtime 6 of 6",
             "osx-arm64 tests: App",
             "osx-arm64 tests: Cli, Contracts and PluginHost",
-            "osx-arm64 tests: Runtime 1 of 4",
-            "osx-arm64 tests: Runtime 2 of 4",
-            "osx-arm64 tests: Runtime 3 of 4",
-            "osx-arm64 tests: Runtime 4 of 4",
+            "osx-arm64 tests: Runtime 1 of 6",
+            "osx-arm64 tests: Runtime 2 of 6",
+            "osx-arm64 tests: Runtime 3 of 6",
+            "osx-arm64 tests: Runtime 4 of 6",
+            "osx-arm64 tests: Runtime 5 of 6",
+            "osx-arm64 tests: Runtime 6 of 6",
         ];
 
         var jobs = Mapping(Parse(Read(Ci)), "jobs");
@@ -2055,7 +2061,7 @@ public partial class ReleaseWorkflowTests
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
         var building = (YamlMappingNode)jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Value;
-        Assert.Equal("version", Scalar(building, "needs"));
+        Assert.Equal(["version", DemoJob], Needs(building));
 
         var decided = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "version"), "steps")).Children.Cast<YamlMappingNode>()
             .Single(step => Scalar(step, "id") == "version");
@@ -4134,11 +4140,18 @@ public partial class ReleaseWorkflowTests
         }
     }
 
-    /// <summary>Whether a step really asks an executable what version it is, rather than talking about it.</summary>
+    /// <summary>
+    /// Whether a step really asks an executable what version it is, rather than talking about it, or, in the demo job's one
+    /// publish, telling the desktop's prepare script the version to publish the sample's jason at, which asks no executable
+    /// anything (the sample is made with that jason, its runtime started and stopped, right after).
+    /// </summary>
     private static bool Checks(string step) =>
         step.Split('\n')
             .Select(line => line.Trim())
-            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
+            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#') && line != DemoPublish);
+
+    /// <summary>The demo job's publish of the release's jason for Linux, the one line the check above passes over.</summary>
+    private const string DemoPublish = "node scripts/prepare.mjs --rid linux-x64 --output bundles/demo --version \"$VERSION\"";
 
     /// <summary>
     /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it

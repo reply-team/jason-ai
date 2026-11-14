@@ -38,9 +38,14 @@ name: CI
 # main, as a success where a rule skipped it: a skipped job reports success, and a matrix row that is absent would not
 # report at all.
 # A platform is three kinds of job: its package (`<rid> package`), its tests in parts that run side by side
-# (`<rid> tests: <part>`, the whole suite in six parts or the critical tier in one), and its check under the platform's
+# (`<rid> tests: <part>`, the whole suite in eight parts or the critical tier in one), and its check under the platform's
 # own name, which the rulesets require and which is green only when the package and every part of that platform this run
 # made succeeded. The parts' and the package's checks are reported too, and no ruleset requires them.
+# Where the whole suite runs, each part writes the test methods it ran, each package job lists the whole suite's test
+# methods on its platform without running any of it, and the platform's check compares the two by method, each method
+# known by its test assembly and its full name, and says on the run's summary both numbers, each part's, and every
+# method listed and run by no part, run and not listed, or run in more than one part; where there is any, it raises a
+# warning naming the platform and both numbers, and stays green.
 # Wherever the suite runs, a test that fails is run again, alone, at most twice, by the test platform's own repeat
 # (.github/scripts/Invoke-Tests.ps1): one that passes on a repeat keeps its job green and is named on the run's summary
 # and among its annotations, and one that fails every attempt fails its job. On Windows, a job that builds leaves its
@@ -309,16 +314,23 @@ jobs:
           PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest","name":"linux-x64"},{"rid":"win-x64","os":"windows-latest","name":"win-x64"},{"rid":"osx-arm64","os":"macos-latest","name":"osx-arm64"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
           # The parts a platform's tests are run in, each on a runner of its own: the critical tier in one part, and the
-          # whole suite in six, by test project and, for the runtime's tests, by namespace, each namespace with every
-          # namespace inside it. The part marked rest runs every namespace of its projects that no other part names.
+          # whole suite in eight, by test project and, for the runtime's tests, by namespace, each namespace with every
+          # namespace inside it, or by the start of a class's name, with a wildcard after it. A part names namespaces or
+          # classes, never both. A test runs in the one part that names it most closely: the part whose class pattern
+          # matches its class, else the part that names the deepest namespace around it, else the part marked rest, which
+          # names nothing. So the plugins' tests are three parts: the classes of the Reply plugin's tests whose names start
+          # as listed, the rest of that namespace, and the rest of the plugins' namespace; and a class added later lands in
+          # one part without anyone naming it.
           PARTS: >-
-            [{"part":"the critical tier","tier":"true","projects":"","namespaces":"","rest":"false"},
-            {"part":"App","tier":"false","projects":"Jason.App.Tests","namespaces":"","rest":"false"},
-            {"part":"Cli, Contracts and PluginHost","tier":"false","projects":"Jason.Cli.Tests Jason.Contracts.Tests Jason.PluginHost.Tests","namespaces":"","rest":"false"},
-            {"part":"Runtime 1 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Plugins","rest":"false"},
-            {"part":"Runtime 2 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Execution Jason.Runtime.Tests.Dispatch Jason.Runtime.Tests.Hosting Jason.Runtime.Tests.Integration","rest":"false"},
-            {"part":"Runtime 3 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Documentation Jason.Runtime.Tests.Notifications Jason.Runtime.Tests.Routing Jason.Runtime.Tests.Configuration Jason.Runtime.Tests.Profiles Jason.Runtime.Tests.WorkItems","rest":"false"},
-            {"part":"Runtime 4 of 4","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"","rest":"true"}]
+            [{"part":"the critical tier","tier":"true","projects":"","namespaces":"","classes":"","rest":"false"},
+            {"part":"App","tier":"false","projects":"Jason.App.Tests","namespaces":"","classes":"","rest":"false"},
+            {"part":"Cli, Contracts and PluginHost","tier":"false","projects":"Jason.Cli.Tests Jason.Contracts.Tests Jason.PluginHost.Tests","namespaces":"","classes":"","rest":"false"},
+            {"part":"Runtime 1 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Plugins","classes":"","rest":"false"},
+            {"part":"Runtime 2 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"","classes":"Jason.Runtime.Tests.Plugins.Reply.ReplyMessage* Jason.Runtime.Tests.Plugins.Reply.ReplySocial* Jason.Runtime.Tests.Plugins.Reply.ReplyStub*","rest":"false"},
+            {"part":"Runtime 3 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Plugins.Reply","classes":"","rest":"false"},
+            {"part":"Runtime 4 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Execution Jason.Runtime.Tests.Dispatch Jason.Runtime.Tests.Hosting Jason.Runtime.Tests.Integration","classes":"","rest":"false"},
+            {"part":"Runtime 5 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"Jason.Runtime.Tests.Documentation Jason.Runtime.Tests.Notifications Jason.Runtime.Tests.Routing Jason.Runtime.Tests.Configuration Jason.Runtime.Tests.Profiles Jason.Runtime.Tests.WorkItems","classes":"","rest":"false"},
+            {"part":"Runtime 6 of 6","tier":"false","projects":"Jason.Runtime.Tests","namespaces":"","classes":"","rest":"true"}]
         run: |
           # Documentation is Markdown a build compiles nothing of: outside the C# tree, the workflows and the plugins, a
           # plain file before and after. Read is documentation, run is code: a page a test merely reads (the publication,
@@ -537,15 +549,27 @@ jobs:
           $kept = @($kept | ForEach-Object { @{ rid = $_.rid; os = $_.os; name = $(if ($draft) { "$($_.rid) (critical tier)" } else { $_.rid }) } })
 
           # The test jobs: every platform that runs, in each part of what it tests, the tier's one part or the whole suite's
-          # six. The rest's namespaces to leave out are every namespace another part of the same projects names, so a
-          # namespace added later lands in the rest without anyone naming it.
+          # eight. A part leaves out every name another part of the same projects gives inside what it runs: a part that
+          # names namespaces, each namespace named inside one of its own and each class pattern of a namespace inside or
+          # equal to one of its own; a part that names classes, nothing; the rest, every name the others give. So a test
+          # runs in the one part that names it most closely, and a namespace or a class added later lands in a part
+          # without anyone naming it.
           $parts = @($env:PARTS | ConvertFrom-Json | Where-Object { $_.tier -ceq $(if ($tier) { 'true' } else { 'false' }) })
+          function Names([string] $list) { @($list.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)) }
+          function Within([string] $name, [string] $outer) { $name -ceq $outer -or $name.StartsWith("$outer.", [StringComparison]::Ordinal) }
           $tests = @(foreach ($platform in $kept) {
             foreach ($part in $parts) {
-              $others = if ($part.rest -ceq 'true') {
-                @($parts | Where-Object { $_.rest -cne 'true' -and $_.projects -ceq $part.projects } | ForEach-Object { "$($_.namespaces)".Split(' ', [StringSplitOptions]::RemoveEmptyEntries) })
-              } else { @() }
-              [ordered] @{ rid = $platform.rid; os = $platform.os; part = $part.part; projects = $part.projects; namespaces = $part.namespaces; not_namespaces = ($others -join ' ') }
+              $rest = $part.rest -ceq 'true'
+              $holds = Names $part.namespaces
+              $others = @($parts | Where-Object { $_.part -cne $part.part -and $_.projects -ceq $part.projects })
+              $notNamespaces = @(foreach ($name in @($others | ForEach-Object { Names $_.namespaces })) {
+                if ($rest -or @($holds | Where-Object { $name -cne $_ -and (Within $name $_) }).Count -gt 0) { $name }
+              })
+              $notClasses = @(foreach ($pattern in @($others | ForEach-Object { Names $_.classes })) {
+                $space = $pattern.Substring(0, $pattern.LastIndexOf('.'))
+                if ($rest -or @($holds | Where-Object { Within $space $_ }).Count -gt 0) { $pattern }
+              })
+              [ordered] @{ rid = $platform.rid; os = $platform.os; part = $part.part; projects = $part.projects; namespaces = $part.namespaces; classes = $part.classes; not_namespaces = ($notNamespaces -join ' '); not_classes = ($notClasses -join ' ') }
             }
           })
 
@@ -714,6 +738,94 @@ jobs:
           }
           exit 0
 
+      # On a run of the whole suite: what each part of this platform ran, and what its package job listed, each artifact in
+      # a folder of its own name. A fetch that fails never turns the check red: what it did not fetch reads as a difference
+      # below.
+      - name: Fetch this platform's counts
+        if: needs.version.outputs.tier != 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          pattern: tests-*-${{ matrix.rid }}*
+          path: ${{ runner.temp }}/tests-counted
+
+      # The parts together ran every test method the whole suite lists, each in one part, compared by method: a theory is
+      # listed once however its rows are, and its rows are known only when it runs. A method is known by its test assembly
+      # and its full name, `Jason.App.Tests: Namespace.Class.Method`: a class compiled into more than one test assembly is
+      # a method of each, run in each assembly's part, and run twice only when its assembly runs it twice. Said on the
+      # run's summary with each part's methods and rows, and every method listed and run by no part, run and not listed,
+      # or run in more than one part, up to twenty of each by name. A difference - any of those, a part with no count, a
+      # platform with no listing - is raised as a warning naming the platform and both numbers, and the check stays green;
+      # the one line that names the warning makes it an error that fails the check.
+      - name: The parts ran the tests the whole suite lists
+        if: needs.version.outputs.tier != 'true'
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          TESTS: ${{ needs.version.outputs.tests }}
+          COUNTS: ${{ runner.temp }}/tests-counted
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # What a difference is raised as: a warning, which leaves the check green, or an error, which fails it.
+          $difference = 'warning'
+
+          function Read-Counted([string] $file) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $null }
+            try { $read = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json } catch { return $null }
+            if ($null -eq $read -or $null -eq $read.PSObject.Properties['methods']) { return $null }
+            $read
+          }
+          function Sorted([string[]] $names) { $sorted = [string[]] @($names); [Array]::Sort($sorted, [StringComparer]::Ordinal); , $sorted }
+          function Named([string] $title, [string[]] $lines) {
+            @("${title}: $($lines.Count)", '') + @($lines | Select-Object -First 20 | ForEach-Object { "- $_" }) +
+              @(if ($lines.Count -gt 20) { "- and $($lines.Count - 20) more" }) + @('')
+          }
+
+          $parts = @(@(($env:TESTS | ConvertFrom-Json).include) | Where-Object { $_ -and $_.rid -ceq $env:RID } | ForEach-Object { $_.part })
+          $ranIn = [Collections.Generic.Dictionary[string, Collections.Generic.List[string]]]::new([StringComparer]::Ordinal)
+          $rows = [long] 0
+          $uncounted = @()
+          $table = @()
+          foreach ($part in $parts) {
+            $read = Read-Counted (Join-Path $env:COUNTS "tests-ran-$env:RID-$part" 'ran.json')
+            if ($null -eq $read) { $uncounted += $part; $table += "| $part | not counted | not counted |"; continue }
+            $methods = [Collections.Generic.HashSet[string]]::new([string[]] @($read.methods), [StringComparer]::Ordinal)
+            foreach ($method in $methods) {
+              if (-not $ranIn.ContainsKey($method)) { $ranIn[$method] = [Collections.Generic.List[string]]::new() }
+              $ranIn[$method].Add($part)
+            }
+            $rows += [long] $read.rows
+            $table += "| $part | $($methods.Count) | $($read.rows) |"
+          }
+          $read = Read-Counted (Join-Path $env:COUNTS "tests-listed-$env:RID" 'listed.json')
+          $listed = if ($null -ne $read) { [Collections.Generic.HashSet[string]]::new([string[]] @($read.methods), [StringComparer]::Ordinal) }
+
+          $line = "${env:RID}: the parts ran $($ranIn.Count) test methods, the whole suite lists $(if ($null -eq $listed) { 'no number: it was not listed' } else { $listed.Count })"
+          if ($uncounted.Count -gt 0) { $line += "; not counted: $($uncounted -join ', ')" }
+          $twice = Sorted @($ranIn.Keys | Where-Object { $ranIn[$_].Count -gt 1 })
+          $sections = @()
+          $differs = $uncounted.Count -gt 0 -or $null -eq $listed -or $twice.Count -gt 0
+          if ($null -ne $listed) {
+            $unrun = Sorted @($listed | Where-Object { -not $ranIn.ContainsKey($_) })
+            $unlisted = Sorted @($ranIn.Keys | Where-Object { -not $listed.Contains($_) })
+            $differs = $differs -or $unrun.Count -gt 0 -or $unlisted.Count -gt 0
+            $line += $(if ($differs) { "; listed and run by no part: $($unrun.Count), run and not listed: $($unlisted.Count), run in more than one part: $($twice.Count)" })
+            $sections += Named 'Listed, and run by no part' @($unrun | ForEach-Object { "``$_``" })
+            $sections += Named 'Run, and not listed' @($unlisted | ForEach-Object { "``$_``" })
+          }
+          $sections += Named 'Run in more than one part' @($twice | ForEach-Object { "``$_`` ($($ranIn[$_] -join ', '))" })
+
+          $summary = @("### ${env:RID}: the tests counted", '', $line, '', '| Part | Test methods it ran | Tests it ran |', '| --- | --- | --- |') + $table + @('') +
+            @("The parts ran $rows tests in all, a theory's every row. This is compared with nothing: a theory's rows are counted when it runs, not when it is listed.", '') +
+            $sections
+          $summary | ForEach-Object { Write-Host $_ }
+          if ($env:GITHUB_STEP_SUMMARY) { $summary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+          if ($differs) {
+            Write-Host "::$difference title=$env:RID tests counted::$line"
+            if ($difference -ceq 'error') { exit 1 }
+          }
+          exit 0
+
   # A platform's package: the build, the packaged executable, its smoke test and its own uninstall. The jobs that use the
   # archive wait for this one alone, not for the tests.
   build-test-publish:
@@ -764,6 +876,53 @@ jobs:
 
       - name: Build (warnings are errors)
         run: dotnet build dotnet/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
+
+      # The whole suite the platform's parts are measured against, on a run of the whole suite: every test method each test
+      # project's built assembly holds, by the assembly's name and the method's full name, as the test framework's own
+      # runner discovers it on this platform, each once, and none of it run. A theory is one method however many rows it runs. A test that runs only when asked
+      # by name is left out, since no part asks for it. A listing that cannot be read leaves the suite unlisted, with a
+      # warning, and the platform's check says so: the count is a report, and never fails this job.
+      - name: List the whole suite
+        if: needs.version.outputs.tier != 'true'
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          $projects = @(Get-ChildItem -LiteralPath dotnet/tests -Directory | Where-Object { $_.Name -cmatch '^Jason\.[A-Za-z]+\.Tests$' } | Sort-Object Name)
+          $methods = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+          $failed = @()
+          if ($projects.Count -eq 0) { $failed += 'no test project was found' }
+          foreach ($project in $projects) {
+            $assembly = Join-Path 'dotnet/tests' $project.Name 'bin' 'Release' 'net10.0' "$($project.Name).dll"
+            $output = @(& dotnet $assembly -list full/json)
+            if ($LASTEXITCODE -ne 0) { $failed += "$($project.Name) exited $LASTEXITCODE"; continue }
+            try { $tests = @(($output -join "`n") | ConvertFrom-Json) } catch { $failed += "$($project.Name) listed no JSON"; continue }
+            $before = $methods.Count
+            foreach ($test in @($tests | Where-Object { -not $_.Explicit })) {
+              $assembly = if ("$($test.Assembly)") { [IO.Path]::GetFileNameWithoutExtension("$($test.Assembly)") } else { $project.Name }
+              [void] $methods.Add("${assembly}: $($test.Class).$($test.Method)")
+            }
+            Write-Host "$($project.Name) lists $($methods.Count - $before) test methods"
+          }
+          if ($failed.Count -gt 0) {
+            Write-Host "::warning title=$env:RID whole suite::the whole suite was not listed: $($failed -join '; ')"
+            exit 0
+          }
+          $into = Join-Path $env:RUNNER_TEMP 'tests-listed'
+          New-Item -ItemType Directory -Force -Path $into | Out-Null
+          [ordered] @{ methods = @($methods) } | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $into 'listed.json')
+          Write-Host "the whole suite lists $($methods.Count) test methods"
+          exit 0
+
+      # For the platform's check, which compares the parts with it.
+      - name: Keep the test methods the whole suite lists
+        if: needs.version.outputs.tier != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-listed-${{ matrix.rid }}
+          path: ${{ runner.temp }}/tests-listed
+          retention-days: 3
+          if-no-files-found: warn
 
       # Whether the SDK writes the application manifest into a Windows executable built on another host has not
       # been measured, so the project refuses to build one anywhere but Windows. The target is asked for by name
@@ -921,8 +1080,9 @@ jobs:
 
   # A platform's tests, in parts that run side by side, each on a runner of its own, each building the tree as the package
   # does: the version job decides the parts (PARTS, beside the platforms), and every part of a platform together is the
-  # whole suite. Runtime's tests are four parts by namespace, the fourth everything the first three do not name, so a new
-  # namespace lands there; App's are a part alone; Cli's, Contracts' and PluginHost's are one part together. A draft's
+  # whole suite, each test in one part. Runtime's tests are six parts by namespace and by the start of a class's name, the
+  # plugins' tests three of them, and the sixth everything the first five do not name, so a new namespace lands there
+  # unless a part names one around it; App's are a part alone; Cli's, Contracts' and PluginHost's are one part together. A draft's
   # push, a pull request into a release branch and the version pull request test the critical tier alone, as one part.
   # A test that fails is run again, alone, at most twice: one that passes on a repeat keeps its part green and is named on
   # the run's summary, and one that fails every attempt fails its part (.github/scripts/Invoke-Tests.ps1).
@@ -981,7 +1141,9 @@ jobs:
           PROJECTS: ${{ matrix.projects }}
           NAMESPACES: ${{ matrix.namespaces }}
           NOT_NAMESPACES: ${{ matrix.not_namespaces }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE
+          CLASSES: ${{ matrix.classes }}
+          NOT_CLASSES: ${{ matrix.not_classes }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Ran (Join-Path $env:RUNNER_TEMP 'tests-ran' 'ran.json') -Title $env:TITLE
 
       - name: Test the critical tier (offline)
         if: needs.version.outputs.tier == 'true'
@@ -992,7 +1154,20 @@ jobs:
           PROJECTS: ${{ matrix.projects }}
           NAMESPACES: ${{ matrix.namespaces }}
           NOT_NAMESPACES: ${{ matrix.not_namespaces }}
-        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
+          CLASSES: ${{ matrix.classes }}
+          NOT_CLASSES: ${{ matrix.not_classes }}
+        run: ./.github/scripts/Invoke-Tests.ps1 -Version $env:VERSION -Projects ($env:PROJECTS -split ' ') -Namespaces ($env:NAMESPACES -split ' ') -NotNamespaces ($env:NOT_NAMESPACES -split ' ') -Classes ($env:CLASSES -split ' ') -NotClasses ($env:NOT_CLASSES -split ' ') -Results (Join-Path $env:RUNNER_TEMP 'test-results') -Title $env:TITLE -Critical
+
+      # The test methods and the tests this part ran, for the platform's check, which compares the parts of a run of the
+      # whole suite with the listing.
+      - name: Keep what this part ran
+        if: needs.version.outputs.tier != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-ran-${{ matrix.rid }}-${{ matrix.part }}
+          path: ${{ runner.temp }}/tests-ran
+          retention-days: 3
+          if-no-files-found: warn
 
   # The manifest declares consoleAllocationPolicy, which Windows 11 24H2 (build 26100) introduced. A loader that
   # rejected a manifest carrying a setting it does not know would not start jason.exe at all, and every other Windows

@@ -77,13 +77,9 @@ Paste this into an agent that has a shell on the machine you want Jason on. It i
 preamble, no repository tour:
 
 ```text
-Install Jason on this machine. The instructions are
-<https://get.jasonharness.ai/install>: read the whole file
-first, then follow it in order from section 2, installing from a release and building nothing. Before
-you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
-again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
-exactly what you ran and changed. Then do what the guide's hand-over says: offer me the wiring check
-once, and bring me to my first campaign in my own words.
+Install Jason by following https://get.jasonharness.ai/install.
+When it reports Ready, start its quick-start skill and take me to my first campaign.
+If anything stops you, ask me directly and tell me why.
 ```
 
 Once it runs, [examples/](../examples/README.md) is where cases of Jason applied to outbound work are collected, with a
@@ -146,7 +142,7 @@ your own address approved by you and performed against the provider, and the his
 [docs/golden-path.md](golden-path.md), and every command on that page is executed by a test. It proves the
 wiring and is not the real work, which begins with a campaign planned with the business skills
 ([`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles. It is optional:
-a synthetic walk, offered once when an installation is ready, which you may skip for the real work at once — and that
+a synthetic walk, mentioned at the end of the quick start and taken only when you say so, which you may skip for the real work at once — and that
 begins with you telling your agent about your first campaign in your own words. Releases arrive one self-contained
 increment at a time; no dates, no roadmap promises.
 

@@ -12,6 +12,8 @@ export interface Entry {
     label: string;
     /** Words the entry is also found by, which no row shows. */
     words: string;
+    /** The sentence saying why the entry cannot be chosen in this place; absent when it can. */
+    off?: string;
 }
 
 /** The most rows the palette draws. */

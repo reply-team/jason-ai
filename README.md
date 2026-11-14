@@ -27,7 +27,7 @@ answered and what comes next.
 **Jason is the missing layer.** Tell it what you sell and who should buy it, in plain words. Jason finds the contacts,
 plans each person's line of contact, writes, sends through your provider, reads the replies and keeps the work going
 while you're in meetings. Your agent does the thinking, Jason keeps the memory, and every message waits for your
-approval.
+approval. Whoever installs it, you or your AI, starts from the three lines under Quick start.
 
 **You use Jason from a release.** Nothing in this repository is built, cloned or tested to use it; the source is here
 for changing Jason.
@@ -41,6 +41,20 @@ for changing Jason.
 ---
 
 ## Quick start
+
+Paste this into your AI (Claude Code, Codex or another agent). It installs Jason and takes you to your first campaign.
+
+```text
+Install Jason by following https://get.jasonharness.ai/install.
+When it reports Ready, start its quick-start skill and take me to my first campaign.
+If anything stops you, ask me directly and tell me why.
+```
+
+Prefer a window? [Jason Desktop](#jason-desktop). Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
+
+---
+
+## What the install does
 
 **Installing Jason should be the easy part: one prompt, one program, nothing to configure by hand.** Here is what that
 means today.
@@ -60,20 +74,8 @@ means today.
   for Windows, a dmg for macOS, or a deb or an AppImage for Linux, and comes off with Remove What Jason Placed… in its
   menu (macOS and Linux) or Windows's own uninstaller, and then the application itself. It keeps your data too.
 
-**1. Paste this into your agent.** It installs Jason, checks it's ready and guides you to your first campaign.
-
-```text
-Install Jason on this machine. The instructions are
-<https://get.jasonharness.ai/install>: read the whole file
-first, then follow it in order from section 2, installing from a release and building nothing. Before
-you run anything, tell me in a few words what you will install and where, and wait for my yes; ask me
-again before each act the guide marks "Ask first". At the end, tell me whether Jason can start work and
-exactly what you ran and changed. Then do what the guide's hand-over says: offer me the wiring check
-once, and bring me to my first campaign in my own words.
-```
-
 If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
-yes, or run the line below yourself.
+yes, or run the install line under "Or install it yourself".
 
 <details>
 <summary>Or install it yourself</summary>
@@ -108,12 +110,12 @@ responsibility when it reaches people, is in [docs/responsible-use.md](docs/resp
 
 </details>
 
-**2. Connect your provider.** With Reply, it's one sign-in that only you do: `reply auth login`, so your key never passes
+**Connect your provider.** With Reply, it's one sign-in that only you do: `reply auth login`, so your key never passes
 through the chat. Your agent does the rest: the Reply CLI (it needs Node 20 or newer), the plugin, its grant and its route.
 You open Reply's web app only to sign in, create your first API key, or connect a LinkedIn account or a mailbox by single
 sign-on. Using another provider? Its plugin goes into `~/.jason/plugins/`, a grant names what it may run and reach, and a route points your campaigns at it.
 
-**3. Tell your agent about your first campaign.** In your own words. Want to see the whole path first? Your agent offers
+**Your first campaign.** The quick start asks one thing first: what you sell and who should buy it. Installed Jason yourself? Ask your agent to start Jason's quick-start skill. Want to see the whole path first? Your agent offers
 a [wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) once: one draft campaign in your account, with your own address as the only
 contact, and nothing sent.
 
@@ -141,7 +143,7 @@ to.
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 20 guides, 30 operation contracts in Markdown and JSON with 909 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
-| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1066 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 7 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
+| **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1069 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 8 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |
 | **Security and compliance** | No telemetry. Campaign data stays on your machine, apart from what the plugins you install send to their services. Install scripts verify the download's SHA-256 before unpacking. Plugins run in their own short-lived process, only with the programs and hosts you granted, and are digest-checked. The provider's CLI holds the credential, so Jason never sees it. The do-not-contact list never relaxes. Staying within the law where you send stays your job. | [What leaves your machine](#under-the-hood) · [Responsible use](https://github.com/reply-team/jason-ai/blob/main/docs/responsible-use.md) |
 
 ---
@@ -642,7 +644,7 @@ yourself. Nothing else. No telemetry.
 Everything below is public, and every page is written to be followed by a person or by an agent.
 
 **In numbers:** 20 guides · 30 operation contracts, each in Markdown and machine-readable JSON · 909 contract fixtures and
-398 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 7 runtime skills and 9 role
+401 API fixtures · a catalogue of 325 SDR operations in 21 families · 9 business skills, 8 runtime skills and 9 role
 skills · release notes on every release.
 
 | To… | Read |

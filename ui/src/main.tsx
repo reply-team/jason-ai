@@ -1,7 +1,11 @@
+import { session } from './api/session';
 import type { JasonDesktop } from './platform/desktop';
+import { noDesktop, setPlace, tabDesktop } from './platform/places';
+import { windowDesktop } from './platform/window-desktop';
+import { start } from './start';
 
-// One build, two shells: inside Jason Desktop the console, with the Live chat as its home; in a browser the classic
-// shell. Each loads its own stylesheet, and its own code but for four small modules of the console the classic shell
+// One build, two shells: inside Jason Desktop, and in a tab the desktop opened with a bridge, the console; in any other
+// browser the classic shell. The choice is `start.ts`'s. Each loads its own stylesheet, and its own code but for four small modules of the console the classic shell
 // shares: the html tag, its painter and the icons, which draw the Settings headings, and the live words, which name an
 // approval's sender and channel. None of the four imports a stylesheet or the console's state.
 //
@@ -11,15 +15,9 @@ import type { JasonDesktop } from './platform/desktop';
 // stylesheet gives, against the built page.
 const element = document.getElementById('app')!;
 
-async function startConsole(desktop: JasonDesktop): Promise<void> {
+async function startConsole(desktop: JasonDesktop, bootstrapped: boolean): Promise<void> {
     const shell = await import('./console/mount');
-    await shell.mount(element, desktop);
+    await shell.mount(element, desktop, bootstrapped);
 }
 
-async function startClassic(): Promise<void> {
-    const shell = await import('./classic');
-    shell.mount(element);
-}
-
-const desktop = window.jasonDesktop;
-void (desktop ? startConsole(desktop) : startClassic());
+void start({ windowDesktop, session, tabDesktop, noDesktop, setPlace, startConsole });

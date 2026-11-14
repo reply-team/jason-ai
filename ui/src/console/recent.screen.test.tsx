@@ -25,6 +25,7 @@ async function renderConsole(seed: (desktop: StubDesktop) => void = () => undefi
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
+        .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
     watch(fake);

@@ -4,6 +4,7 @@ import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { html, type Html } from './html';
+import { offUnless } from './off';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
 import { attention } from './needs';
@@ -107,8 +108,8 @@ define('side.page', ([hash]) => {
 /** Where the build's own files are served from: the runtime serves the build under /ui/. */
 const assets = import.meta.env.BASE_URL;
 
-const entry = (title: string, hint: string, action: Html, icon: IconName): Html =>
-    html`<button class="menuitem" type="button" role="menuitem" ${action}>
+const entry = (title: string, hint: string, action: Html, icon: IconName, off: Html | null = null): Html =>
+    html`<button class="menuitem" type="button" role="menuitem" ${action} ${off}>
         ${svg(icon, 15)}<span class="mt">${title}</span><span class="ms">${hint}</span>
     </button>`;
 
@@ -145,7 +146,9 @@ export function sideView(): Html {
         </div>
         <div class="menuwrap create">
             <div class="newrow">
-                <button class="newbtn" type="button" ${act('side.start')}>${svg('plusc', 15)}New GTM agent</button>
+                <button class="newbtn" type="button" ${act('side.start')} ${offUnless('chat.create')}>
+                    ${svg('plusc', 15)}New GTM agent
+                </button>
                 <button
                     class="caret"
                     type="button"
@@ -161,8 +164,8 @@ export function sideView(): Html {
             ${
                 menu === 'create'
                     ? html`<div class="menu" role="menu" aria-label="Create">
-                          ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus')}
-                          ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat')}
+                          ${entry('New GTM agent', 'Plan and run outreach', act('side.start'), 'plus', offUnless('chat.create'))}
+                          ${entry('New chat', 'Talk with Jason, with no agent yet', act('side.new'), 'chat', offUnless('chat.create'))}
                           ${
                               accounts === null
                                   ? null

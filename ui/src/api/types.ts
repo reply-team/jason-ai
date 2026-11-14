@@ -326,6 +326,15 @@ export type CampaignActivityRow = {
     removed: number;
 };
 export type CampaignActivityTotal = Omit<CampaignActivityRow, 'campaign_id'>;
+/** The replies a role judged between two instants, `since` included and `until` not: without campaigns, every one that is not archived. */
+export type ReplyCountRequest = { campaign_ids?: string[]; since: string; until: string };
+/** One word of a verdict, with the replies carrying it and the conversations they are in. */
+export type ReplyCountCategory = { category: string; replies: number; threads: number };
+export type ReplyCountTotal = { replies: number; threads: number; categories: ReplyCountCategory[] };
+export type ReplyCountResponse = {
+    campaigns: (ReplyCountTotal & { campaign_id: string })[];
+    total: ReplyCountTotal;
+};
 export type CampaignActivityResponse = { campaigns: CampaignActivityRow[]; total: CampaignActivityTotal };
 /** What each bucket of a series is: an hour, a day or a Monday-to-Sunday week of the zone. */
 export type ActivityPeriod = 'hour' | 'day' | 'week';

@@ -610,7 +610,7 @@ public static class CampaignCommands
     /// listing that cannot be read leaves the rest unnamed, and the counts are shown all the same. JSON output asks
     /// nothing more.
     /// </summary>
-    private static RunOptions Named(CliEnvironment env, bool human, Func<string, IReadOnlyDictionary<string, string>, string?> render) =>
+    internal static RunOptions Named(CliEnvironment env, bool human, Func<string, IReadOnlyDictionary<string, string>, string?> render) =>
         new(human)
         {
             RenderHumanAsync = async (json, cancellationToken) =>
@@ -672,10 +672,10 @@ public static class CampaignCommands
     }
 
     /// <summary>The campaigns named, or nothing at all when none is: then the runtime answers for every campaign not archived, in every project.</summary>
-    private static JsonArray? Ids(string[]? ids) =>
+    internal static JsonArray? Ids(string[]? ids) =>
         ids is null || ids.Length == 0 ? null : new JsonArray([.. ids.Select(id => (JsonNode?)JsonValue.Create(id))]);
 
-    private static Argument<string[]> CampaignIds() => new("campaign-id")
+    internal static Argument<string[]> CampaignIds() => new("campaign-id")
     {
         Description = "The campaigns, as cmp_...; none means every campaign not archived, in every project.",
         Arity = ArgumentArity.ZeroOrMore,

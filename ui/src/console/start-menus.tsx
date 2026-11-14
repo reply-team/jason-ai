@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { can, cannotHere } from '../platform/places';
 import type { DesktopChatMode, DesktopEffort } from '../platform/desktop';
 import { fullAccessStanding, readStandingAgain, takeBackWords } from '../platform/full-access';
 import { t } from '../platform/i18n';
@@ -147,8 +148,11 @@ export function AccessButton({
                             key={each.mode}
                             label={each.label}
                             checked={each.mode === chat.mode}
-                            disabled={each.disabled !== null}
-                            reason={each.disabled?.replaceAll('`', '')}
+                            disabled={each.disabled !== null || (each.mode !== chat.mode && !can('chat.setMode'))}
+                            reason={
+                                each.disabled?.replaceAll('`', '') ??
+                                (each.mode !== chat.mode && !can('chat.setMode') ? cannotHere() : undefined)
+                            }
                             onChoose={() => {
                                 choose(each.mode);
                                 close();
@@ -159,6 +163,8 @@ export function AccessButton({
                         <Item
                             label={takeBackWords}
                             checked={false}
+                            disabled={!can('fullAccess.takeBack')}
+                            reason={can('fullAccess.takeBack') ? undefined : cannotHere()}
                             onChoose={() => {
                                 takeBack();
                                 close();

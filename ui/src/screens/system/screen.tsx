@@ -5,6 +5,7 @@ import { session } from '../../api/session';
 import type { UiToken } from '../../api/types';
 import { clock, relative, when } from '../../time/format';
 import { followStanding, fullAccessStanding, takeBackStanding } from '../../platform/full-access';
+import { can, cannotHere, currentDesktop, earlier, placeKind } from '../../platform/places';
 import * as store from './store';
 import { routeCounts } from './route-counts';
 import { Notice } from '../../layout/notice';
@@ -14,11 +15,11 @@ const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 /**
  * The standing choice of Full access, in the desktop alone: what stands and its take-back, which asks the box again at
  * the next entry and starts new chats in Ask first. The page never gives the choice; only the desktop's own box does. A
- * browser, and a desktop of an earlier version, show no card.
+ * desktop of an earlier version shows no card, and a tab draws it off, with the sentence of its place.
  */
 function FullAccessCard() {
-    const desktop = window.jasonDesktop;
-    const offered = desktop !== undefined && (desktop as Partial<typeof desktop>).fullAccess !== undefined;
+    const desktop = currentDesktop();
+    const offered = desktop !== undefined && earlier(desktop).fullAccess !== undefined;
     const [refused, setRefused] = useState<string | null>(null);
     useEffect(() => (desktop !== undefined && offered ? followStanding(desktop) : undefined), [desktop, offered]);
     if (desktop === undefined || !offered) return null;
@@ -31,7 +32,16 @@ function FullAccessCard() {
         <section className="card">
             <h2>Full access</h2>
             {refused && <Notice danger>{refused}</Notice>}
-            {standing === null ? (
+            {!can('fullAccess.standing') ? (
+                <>
+                    <p>{cannotHere()}</p>
+                    <div className="btn-row">
+                        <button className="btn" type="button" disabled title={cannotHere()}>
+                            Ask each time again
+                        </button>
+                    </div>
+                </>
+            ) : standing === null ? (
                 <p>Full access asks you each time a chat enters it.</p>
             ) : (
                 <>
@@ -42,7 +52,13 @@ function FullAccessCard() {
                     </p>
                     {standing.newChats && <p>New chats start in Full access.</p>}
                     <div className="btn-row">
-                        <button className="btn" type="button" onClick={takeBack}>
+                        <button
+                            className="btn"
+                            type="button"
+                            onClick={takeBack}
+                            disabled={!can('fullAccess.takeBack')}
+                            title={can('fullAccess.takeBack') ? undefined : cannotHere()}
+                        >
                             Ask each time again
                         </button>
                     </div>
@@ -72,7 +88,7 @@ export function SystemScreen() {
                 {info?.update?.available && (
                     <Notice>
                         Jason {info.update.version} is available.{' '}
-                        {window.jasonDesktop ? (
+                        {placeKind() === 'window' && currentDesktop() ? (
                             <>
                                 The desktop updates itself and the jason it carries. Choose Check for Updates… in the
                                 desktop&apos;s Jason menu, or in the menu of its icon in the tray.

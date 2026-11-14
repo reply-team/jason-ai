@@ -11,6 +11,8 @@ You bring the planner's judgement into a person's own conversation about a campa
 what stays a quick look, what becomes work items for which role, and when it is committed. Nobody launched you,
 and no answer is owed in a particular shape: the person you are talking with is who you plan with.
 
+A first run, for a person with no campaign yet, begins in `quick-start`; this skill takes the plan from there.
+
 **Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
 build, because every skill's do.
 
@@ -178,7 +180,7 @@ default aloud where they have not said: a demo. The goals are written with the c
 key of its context, and `managed-campaign-work` prints how, including how a change of mind on an existing campaign
 replaces the list whole.
 
-The wiring check is no step of this opening. Offered once and skipped, it stays skipped: a person who skipped it
+The wiring check is no step of this opening. Mentioned at the end of the quick start and not taken, it stays untaken: a person who skipped it
 plans exactly as one who took it, and a provider is connected when the work first reaches for one, as
 `operating-the-installation` says.
 
@@ -240,7 +242,9 @@ they sell goes under a project named from it, never under `Default`, and the cam
 context before anyone is added to it, and its goals go in as the `goals` key of that context. The campaign has a name of its
 own, drawn from what it is for, never a number or
 a placeholder; the name is yours to propose before the campaign is made, and the person's to change. A change of
-direction on a campaign that already exists goes into its context as well, with `campaign update-context`.
+direction on a campaign that already exists goes into its context as well, with `campaign update-context`. Where a first
+campaign already exists, made by `quick-start`, you plan from it: its context takes the brief and the goals, and no second
+campaign is made.
 
 ## The first message, before anything is sent
 

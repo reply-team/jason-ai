@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { expect, openSystem, test } from './fixtures';
 
 test('every request the page makes is an operation, the door, or a file under /ui/', async ({ page, jason }) => {
     const seen: string[] = [];
@@ -6,9 +6,11 @@ test('every request the page makes is an operation, the door, or a file under /u
 
     const { url } = await jason.uiOpen();
     await page.goto(url);
-    await expect(page.getByRole('navigation')).toBeVisible();
-    await page.getByTitle('Refresh').click();
-    await page.goto(`${jason.origin}/ui/#/system`);
+    await expect(page.locator('.jc-console .side')).toBeVisible();
+    // The console's panels follow the journal and have no Refresh of their own: the first screen reads what waits by
+    // itself, and the System screen's own Refresh, in the Page tab, is the read the person asks for.
+    await expect.poll(() => seen.some((line) => line.startsWith(`POST ${jason.origin}/v1/approval.list`))).toBe(true);
+    await openSystem(page);
     await expect(page.getByText('Paired browsers')).toBeVisible();
     await page.getByTitle('Refresh').click();
     await page.waitForLoadState('networkidle');

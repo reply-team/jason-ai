@@ -1,5 +1,6 @@
 import { cleanup, configure } from '@testing-library/react';
-import { afterEach } from 'vitest';
+import { afterEach, beforeEach } from 'vitest';
+import { setPlace } from '../platform/places';
 import { takeUnanswered } from './fake-api';
 
 // Times on the page are the person's clock; a test reads them in one zone on every machine.
@@ -11,6 +12,9 @@ configure({ asyncUtilTimeout: 15_000 });
 
 // Vitest globals are off, so testing-library's automatic cleanup is not; each screen test starts from an empty document.
 // A request the test recorded no answer for fails it, even when the screen caught the error and showed a failure.
+// A screen test runs in the desktop's own window unless it says otherwise; the page names its place as it starts.
+beforeEach(() => setPlace('window'));
+
 afterEach(() => {
     cleanup();
     const unanswered = takeUnanswered();

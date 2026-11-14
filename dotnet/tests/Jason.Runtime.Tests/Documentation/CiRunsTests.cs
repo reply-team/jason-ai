@@ -55,6 +55,9 @@ public class CiRunsTests
     /// <summary>What a test step of ci.yml adds to the script that runs the tests to test the critical tier alone.</summary>
     private const string TierSwitch = "-Critical";
 
+    /// <summary>What the whole suite's step hands the script for the file it writes what the part ran to.</summary>
+    private const string RanSwitch = " -Ran (Join-Path $env:RUNNER_TEMP 'tests-ran' 'ran.json')";
+
     /// <summary>The script every test step of ci.yml runs the tests through.</summary>
     private static readonly string[] TestScript = [".github", "scripts", "Invoke-Tests.ps1"];
 
@@ -973,7 +976,8 @@ public class CiRunsTests
         var tier = Assert.Single(steps, step => Scalar(step, "if") == "needs.version.outputs.tier == 'true'");
         var whole = Assert.Single(steps, step => Scalar(step, "if") == "needs.version.outputs.tier != 'true'");
         Assert.Equal(2, steps.Count);
-        Assert.Equal($"{Scalar(whole, "run")} {TierSwitch}", Scalar(tier, "run"));
+        Assert.Contains(RanSwitch, Scalar(whole, "run"), StringComparison.Ordinal);
+        Assert.Equal($"{Scalar(whole, "run")!.Replace(RanSwitch, string.Empty, StringComparison.Ordinal)} {TierSwitch}", Scalar(tier, "run"));
         Assert.False(Tiered(Scalar(whole, "run")!), "the whole suite's step tests the critical tier alone");
 
         var atTheTag = Mapping(Parse(Read(Release)), "jobs").Children.Values.Cast<YamlMappingNode>().SelectMany(TestSteps)
@@ -1675,20 +1679,22 @@ public class CiRunsTests
 
     /// <summary>
     /// The whole suite runs in parts, and together they are all of it: every test project is in a part, either whole and in
-    /// one part alone, or split by namespace over parts that hold that project alone. A split project's parts name
-    /// namespaces it declares, none named twice and none inside another, and exactly one of them is the rest, which names
-    /// none and runs every namespace the others do not, so it holds tests of its own and a namespace added later lands
-    /// there. The critical tier is one part, the whole solution under the tier's switch.
+    /// one part alone, or split over parts that hold that project alone. A split project's parts each name namespaces it
+    /// declares or patterns of the classes in one of them, never both, and no name twice; exactly one of them is the rest,
+    /// which names nothing and runs what no other part names, so it holds tests of its own. A class pattern is a namespace
+    /// the project declares and the start of a class name directly in it, with one wildcard at its end: it matches a class
+    /// the project declares, no namespace starts with it, and no pattern starts another, so a class matches at most one.
+    /// The critical tier is one part, the whole solution under the tier's switch.
     /// </summary>
     [Fact]
-    public void The_whole_suite_s_parts_hold_every_test_project_once_whole_or_split_by_namespace_with_one_rest()
+    public void The_whole_suite_s_parts_hold_every_test_project_once_whole_or_split_with_one_rest()
     {
         var parts = Parts();
         var tier = Assert.Single(parts, part => part["tier"] == "true");
-        Assert.Equal(("the critical tier", "", "", "false"), (tier["part"], tier["projects"], tier["namespaces"], tier["rest"]));
+        Assert.Equal(("the critical tier", "", "", "", "false"), (tier["part"], tier["projects"], tier["namespaces"], tier["classes"], tier["rest"]));
 
         var whole = parts.Where(part => part["tier"] == "false").ToList();
-        Assert.Equal(6, whole.Count);
+        Assert.Equal(8, whole.Count);
         Assert.Equal(whole.Count + 1, parts.Select(part => part["part"]).Distinct(StringComparer.Ordinal).Count());
 
         var tests = Path.Combine(RepositoryRoot(), "dotnet", "tests");
@@ -1702,35 +1708,53 @@ public class CiRunsTests
             var holding = whole.Where(part => Words(part["projects"]).Contains(project, StringComparer.Ordinal)).ToList();
             if (holding.Count == 1)
             {
-                Assert.True(holding[0]["namespaces"] == "" && holding[0]["rest"] == "false", $"{project} is in the part '{holding[0]["part"]}' alone, which must run it whole");
+                Assert.True(
+                    holding[0]["namespaces"] == "" && holding[0]["classes"] == "" && holding[0]["rest"] == "false",
+                    $"{project} is in the part '{holding[0]["part"]}' alone, which must run it whole");
                 continue;
             }
 
             Assert.All(holding, part => Assert.True(part["projects"] == project, $"the part '{part["part"]}' splits {project} and holds another project too"));
             var rest = Assert.Single(holding, part => part["rest"] == "true");
-            Assert.Equal("", rest["namespaces"]);
-            var named = holding.Where(part => part != rest).SelectMany(part => Words(part["namespaces"])).ToList();
-            Assert.All(holding.Where(part => part != rest), part => Assert.True(Words(part["namespaces"]).Length > 0, $"the part '{part["part"]}' names no namespace of {project}"));
-            Assert.Equal(named.Count, named.Distinct(StringComparer.Ordinal).Count());
-            Assert.All(named, name => Assert.DoesNotContain(named, other => Inside(other, name) && other != name));
+            Assert.Equal(("", ""), (rest["namespaces"], rest["classes"]));
+            var others = holding.Where(part => part != rest).ToList();
+            Assert.All(others, part => Assert.True(
+                Words(part["namespaces"]).Length > 0 != Words(part["classes"]).Length > 0,
+                $"the part '{part["part"]}' must name namespaces of {project} or classes of it, one of the two"));
+
+            var namespaces = others.SelectMany(part => Words(part["namespaces"])).ToList();
+            var patterns = others.SelectMany(part => Words(part["classes"])).ToList();
+            Assert.Equal(namespaces.Count, namespaces.Distinct(StringComparer.Ordinal).Count());
+            Assert.Equal(patterns.Count, patterns.Distinct(StringComparer.Ordinal).Count());
 
             var declared = Namespaces(Path.Combine(tests, project));
-            Assert.All(named, name => Assert.True(declared.Any(it => Inside(it, name)), $"{project} declares no namespace {name}, so its part would run nothing"));
+            var classes = Classes(Path.Combine(tests, project));
+            Assert.All(namespaces, name => Assert.True(declared.Any(it => Inside(it, name)), $"{project} declares no namespace {name}, so its part would run nothing"));
+            foreach (var pattern in patterns)
+            {
+                Assert.Matches(@"^[A-Za-z0-9_.]+\.[A-Za-z0-9_]+\*$", pattern);
+                var prefix = pattern[..^1];
+                Assert.True(declared.Contains(prefix[..prefix.LastIndexOf('.')]), $"{project} declares no namespace that the pattern {pattern} names");
+                Assert.True(classes.Any(name => name.StartsWith(prefix, StringComparison.Ordinal)), $"{project} declares no class the pattern {pattern} matches, so its part would run nothing of it");
+                Assert.DoesNotContain(declared, name => name.StartsWith(prefix, StringComparison.Ordinal));
+                Assert.DoesNotContain(patterns, other => other != pattern && other.StartsWith(prefix, StringComparison.Ordinal));
+            }
+
             Assert.True(
-                declared.Any(it => !named.Any(name => Inside(it, name))),
+                declared.Any(it => !namespaces.Any(name => Inside(it, name))),
                 $"every namespace of {project} is named by a part, so its rest runs nothing");
         }
     }
 
     /// <summary>
-    /// The rest of a split project runs exactly what its other parts do not: the script is handed, for the rest, every
-    /// namespace the others are handed, to leave out, and nothing else. Run through the script with a stand-in for
-    /// <c>dotnet</c>, the namespaces the runtime's first three parts include, each with every namespace inside it, are the
-    /// namespaces its fourth leaves out, each with every namespace inside it — so the four together run every test of the
-    /// project once.
+    /// Each part leaves out exactly what a more specific part of its project names inside what it runs: a part that names
+    /// namespaces leaves out every namespace another part names inside them and every pattern of the classes in them; a part
+    /// that names classes leaves out nothing; the rest leaves out every name the others name. The deciding step works this
+    /// out from the parts it is given, and the script hands each name to the test platform, a namespace with every
+    /// namespace inside it, as the parts are run on a runner.
     /// </summary>
     [Fact]
-    public void The_fourth_part_of_the_runtime_s_tests_leaves_out_exactly_what_the_first_three_run()
+    public void Each_part_leaves_out_exactly_what_a_more_specific_part_of_its_project_runs()
     {
         var decided = Decide(Kinds["a push to main"].Run);
         var parts = Parts().Where(part => part["tier"] == "false").ToList();
@@ -1739,39 +1763,78 @@ public class CiRunsTests
         foreach (var leg in legs)
         {
             var part = Assert.Single(parts, candidate => candidate["part"] == leg["part"]);
-            Assert.Equal(part["projects"], leg["projects"]);
-            Assert.Equal(part["namespaces"], leg["namespaces"]);
-            var left = part["rest"] == "true"
-                ? parts.Where(other => other["rest"] == "false" && other["projects"] == part["projects"]).SelectMany(other => Words(other["namespaces"]))
-                : Enumerable.Empty<string>();
-            Assert.Equal(left.Order(StringComparer.Ordinal), Words(leg["not_namespaces"]).Order(StringComparer.Ordinal));
+            Assert.Equal((part["projects"], part["namespaces"], part["classes"]), (leg["projects"], leg["namespaces"], leg["classes"]));
+            var others = parts.Where(other => other != part && other["projects"] == part["projects"]).ToList();
+            var holds = Words(part["namespaces"]);
+            var rest = part["rest"] == "true";
+            var namespaces = others.SelectMany(other => Words(other["namespaces"]))
+                .Where(name => rest || holds.Any(outer => name != outer && Inside(name, outer)));
+            var classes = others.SelectMany(other => Words(other["classes"]))
+                .Where(pattern => rest || holds.Any(outer => Inside(pattern[..pattern.LastIndexOf('.')], outer)));
+            Assert.Equal(namespaces.Order(StringComparer.Ordinal), Words(leg["not_namespaces"]).Order(StringComparer.Ordinal));
+            Assert.Equal(classes.Order(StringComparer.Ordinal), Words(leg["not_classes"]).Order(StringComparer.Ordinal));
         }
 
-        var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
-        List<string> Filters(string part, string kind)
-        {
-            var leg = Assert.Single(legs, candidate => candidate["rid"] == "linux-x64" && candidate["part"] == part);
-            var call = Assert.Single(RunTests(step, [[]], environment: Told(leg)).Calls);
-            var words = call.Split(' ');
-            return [.. words.Select((word, at) => (word, at)).Where(pair => pair.word == kind).Select(pair => words[pair.at + 1])];
-        }
-
-        var run = new[] { "Runtime 1 of 4", "Runtime 2 of 4", "Runtime 3 of 4" }.SelectMany(part => Filters(part, "--filter-namespace")).ToList();
-        var leftOut = Filters("Runtime 4 of 4", "--filter-not-namespace");
-        Assert.NotEmpty(run);
-        Assert.All(run, name => Assert.True(run.Contains(name.EndsWith(".*", StringComparison.Ordinal) ? name[..^2] : $"{name}.*", StringComparer.Ordinal), $"{name} is named without its pair"));
-        Assert.Equal(run.Order(StringComparer.Ordinal), leftOut.Order(StringComparer.Ordinal));
-        Assert.Empty(Filters("Runtime 4 of 4", "--filter-namespace"));
+        var filters = RuntimeFilters.Value["linux-x64"];
+        Assert.Contains("--filter-not-namespace Jason.Runtime.Tests.Plugins.Reply", filters["Runtime 1 of 6"]);
+        Assert.Contains("--filter-not-namespace Jason.Runtime.Tests.Plugins.Reply.*", filters["Runtime 1 of 6"]);
+        Assert.DoesNotContain(filters["Runtime 2 of 6"], filter => filter.StartsWith("--filter-not-", StringComparison.Ordinal));
+        Assert.All(Words(parts.Single(part => part["part"] == "Runtime 2 of 6")["classes"]), pattern => Assert.Contains($"--filter-not-class {pattern}", filters["Runtime 3 of 6"]));
+        Assert.DoesNotContain(filters["Runtime 6 of 6"], filter => !filter.StartsWith("--filter-not-", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// Each part runs its own projects and namespaces through the script, one <c>dotnet test</c> per project, with the
-    /// platform's repeat: a part that names projects runs each, a part that names namespaces includes each with every
-    /// namespace inside it, and the rest leaves the others' out the same way. Run as a runner runs the step, with a
-    /// stand-in for <c>dotnet</c>.
+    /// Every class of a split project runs in exactly one part on each platform, as the filters the script hands the test
+    /// platform select it: a namespace filter names a namespace exactly or, ending in a wildcard, every name that starts
+    /// with what comes before it; a class filter does the same over a class's full name; a test is run when it matches one of
+    /// its part's include filters, there being any, and none of its exclude filters. No part mixes the two kinds of include,
+    /// so the answer does not depend on how the platform joins them.
     /// </summary>
     [Fact]
-    public void Each_part_runs_its_projects_and_namespaces_with_the_platform_s_repeat()
+    public void Every_class_of_a_split_project_runs_in_exactly_one_part()
+    {
+        var project = Path.Combine(RepositoryRoot(), "dotnet", "tests", "Jason.Runtime.Tests");
+        var classes = Classes(project);
+        Assert.True(classes.Count > 100, $"only {classes.Count} classes were found");
+        foreach (var rid in new[] { "linux-x64", "win-x64", "osx-arm64" })
+        {
+            var filters = RuntimeFilters.Value[rid];
+            Assert.All(filters, pair => Assert.False(
+                pair.Value.Any(filter => filter.StartsWith("--filter-namespace ", StringComparison.Ordinal)) && pair.Value.Any(filter => filter.StartsWith("--filter-class ", StringComparison.Ordinal)),
+                $"the part '{pair.Key}' includes by namespace and by class at once"));
+            Assert.All(classes, name => Assert.Single(filters, pair => Runs(pair.Value, name)));
+        }
+    }
+
+    /// <summary>
+    /// A class added later lands in exactly one part without anyone naming it: a class whose name a part's pattern matches
+    /// in that part; a class no pattern matches in the part of the deepest namespace a part names around it; and a class
+    /// in a namespace no part names, the project's own included, in the rest.
+    /// </summary>
+    [Theory]
+    [InlineData("Jason.Runtime.Tests.Plugins.Reply.ReplyNewOperationTests", "Runtime 3 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.Reply.ReplyMessageNewTests", "Runtime 2 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.Reply.Deeper.ReplyMessageTests", "Runtime 3 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.PluginNewTests", "Runtime 1 of 6")]
+    [InlineData("Jason.Runtime.Tests.Plugins.Newcomer.NewTests", "Runtime 1 of 6")]
+    [InlineData("Jason.Runtime.Tests.Dispatch.NewTests", "Runtime 4 of 6")]
+    [InlineData("Jason.Runtime.Tests.WorkItems.NewTests", "Runtime 5 of 6")]
+    [InlineData("Jason.Runtime.Tests.Newcomer.NewTests", "Runtime 6 of 6")]
+    [InlineData("Jason.Runtime.Tests.NewTests", "Runtime 6 of 6")]
+    public void A_class_added_later_lands_in_exactly_one_part(string name, string part)
+    {
+        Assert.All(RuntimeFilters.Value, platform => Assert.Equal(part, Assert.Single(platform.Value, pair => Runs(pair.Value, name)).Key));
+    }
+
+
+    /// <summary>
+    /// Each part runs its own projects, namespaces and classes through the script, one <c>dotnet test</c> per project, with
+    /// the platform's repeat: a part that names projects runs each, a part that names namespaces includes each with every
+    /// namespace inside it, a part that names classes includes each pattern, and each leaves out what it is told to the same
+    /// way. Run as a runner runs the step, with a stand-in for <c>dotnet</c>.
+    /// </summary>
+    [Fact]
+    public void Each_part_runs_its_projects_namespaces_and_classes_with_the_platform_s_repeat()
     {
         var decided = Decide(Kinds["a push to main"].Run);
         var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
@@ -1783,7 +1846,9 @@ public class CiRunsTests
 
             var filters = string.Concat(
                 Words(leg["namespaces"]).Select(name => $"--filter-namespace {name} --filter-namespace {name}.* ")
-                    .Concat(Words(leg["not_namespaces"]).Select(name => $"--filter-not-namespace {name} --filter-not-namespace {name}.* ")));
+                    .Concat(Words(leg["not_namespaces"]).Select(name => $"--filter-not-namespace {name} --filter-not-namespace {name}.* "))
+                    .Concat(Words(leg["classes"]).Select(pattern => $"--filter-class {pattern} "))
+                    .Concat(Words(leg["not_classes"]).Select(pattern => $"--filter-not-class {pattern} ")));
             var expected = Words(leg["projects"]).Select((project, at) =>
                 $"test --project dotnet/tests/{project}/{project}.csproj --configuration Release --no-build -p:Version={TestedVersion} --results-directory <results>/{at + 1} -- {filters}--retry-failed-tests 2 --report-xunit-trx");
             Assert.Equal(expected, tests.Calls);
@@ -1802,7 +1867,7 @@ public class CiRunsTests
         var decided = Decide(Kinds[kind].Run);
         var platforms = Legs(decided.Outputs["platforms"]);
         var parts = Parts().Where(part => part["tier"] == decided.Outputs["tier"]).Select(part => part["part"]).ToList();
-        Assert.Equal(decided.Outputs["tier"] == "true" ? 1 : 6, parts.Count);
+        Assert.Equal(decided.Outputs["tier"] == "true" ? 1 : 8, parts.Count);
 
         Assert.Equal(
             platforms.SelectMany(platform => parts.Select(part => $"{platform["rid"]} on {platform["os"]}: {part}")),
@@ -1834,7 +1899,8 @@ public class CiRunsTests
         Assert.Equal("false", Scalar(Mapping(platform, "strategy"), "fail-fast"));
         Assert.Equal(["actions=read"], Grants(Mapping(platform, "permissions")));
         Assert.Null(Node(platform, "continue-on-error"));
-        var step = Assert.Single(Steps(platform));
+        var step = Steps(platform)[0];
+        Assert.Equal("Every job of this platform succeeded", Scalar(step, "name"));
         Assert.Null(Scalar(step, "if"));
         Assert.Null(Node(step, "continue-on-error"));
         var env = Variables(Mapping(step, "env"));
@@ -1871,18 +1937,18 @@ public class CiRunsTests
     /// </summary>
     [Theory]
     [InlineData("every job of the platform succeeded", null, "completed", "success", 0)]
-    [InlineData("a part failed", "linux-x64 tests: Runtime 2 of 4", "completed", "failure", 1)]
+    [InlineData("a part failed", "linux-x64 tests: Runtime 4 of 6", "completed", "failure", 1)]
     [InlineData("a part was cancelled", "linux-x64 tests: App", "completed", "cancelled", 1)]
-    [InlineData("a part was skipped", "linux-x64 tests: Runtime 4 of 4", "completed", "skipped", 1)]
-    [InlineData("a part timed out", "linux-x64 tests: Runtime 1 of 4", "completed", "timed_out", 1)]
+    [InlineData("a part was skipped", "linux-x64 tests: Runtime 6 of 6", "completed", "skipped", 1)]
+    [InlineData("a part timed out", "linux-x64 tests: Runtime 1 of 6", "completed", "timed_out", 1)]
     [InlineData("a part has not finished", "linux-x64 tests: Cli, Contracts and PluginHost", "in_progress", "", 1)]
-    [InlineData("a part is missing", "linux-x64 tests: Runtime 3 of 4", "missing", "", 1)]
+    [InlineData("a part is missing", "linux-x64 tests: Runtime 3 of 6", "missing", "", 1)]
     [InlineData("a part is listed twice", "linux-x64 tests: App", "twice", "", 1)]
     [InlineData("the package failed", "linux-x64 package", "completed", "failure", 1)]
     [InlineData("the package is missing", "linux-x64 package", "missing", "", 1)]
     [InlineData("the API did not list the jobs", null, "unreadable", "", 1)]
     [InlineData("no part was decided for the platform", null, "undecided", "", 1)]
-    [InlineData("another platform's part failed", "win-x64 tests: Runtime 1 of 4", "completed", "failure", 0)]
+    [InlineData("another platform's part failed", "win-x64 tests: Runtime 2 of 6", "completed", "failure", 0)]
     [InlineData("another platform's package failed", "win-x64 package", "completed", "failure", 0)]
     public void A_platform_s_check_is_green_only_when_its_package_and_every_part_succeeded(string what, string? job, string status, string conclusion, int exit)
     {
@@ -1921,7 +1987,7 @@ public class CiRunsTests
 
         if (exit == 0)
         {
-            Assert.Contains("| linux-x64 tests: Runtime 4 of 4 | success |", verdict.Summary, StringComparison.Ordinal);
+            Assert.Contains("| linux-x64 tests: Runtime 6 of 6 | success |", verdict.Summary, StringComparison.Ordinal);
             Assert.Contains("| linux-x64 package | success |", verdict.Summary, StringComparison.Ordinal);
             Assert.DoesNotContain("win-x64", verdict.Summary, StringComparison.Ordinal);
         }
@@ -1929,6 +1995,431 @@ public class CiRunsTests
         {
             Assert.Contains(job, verdict.Output, StringComparison.Ordinal);
         }
+    }
+
+    // --- the test methods a platform's parts ran, against the whole suite it lists ----------------------------------
+
+    /// <summary>
+    /// A part of the whole suite writes what its first attempt ran, over every project it runs, from that attempt's own
+    /// reports: every test method, by its test assembly and its full name, each once however many rows of a theory ran,
+    /// and the number of tests, the rows. A test run again after a failure is counted once. A part none of whose attempts left a report writes
+    /// nothing, and neither the critical tier's step nor the suite under a release's version writes anything. Run as a
+    /// runner runs the step, with a stand-in for <c>dotnet</c>.
+    /// </summary>
+    [Fact]
+    public void A_part_writes_the_test_methods_and_the_tests_its_first_attempt_ran_over_every_project()
+    {
+        var decided = Decide(Kinds["a push to main"].Run);
+        var steps = TestSteps(Mapping(Jobs(), Testing));
+        var step = Assert.Single(steps, candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
+        var leg = Assert.Single(Legs(decided.Outputs["tests"]), candidate => candidate["rid"] == "linux-x64" && candidate["part"] == "Cli, Contracts and PluginHost");
+
+        var tests = RunTests(
+            step,
+            [
+                [
+                    [("Acme.Tests.One.Passes", "Passed"), ("Acme.Tests.One.Fails", "Failed"), ("Acme.Tests.One.Skips", "NotExecuted"), ("Acme.Tests.Rows.Each(code: \"a\")", "Passed"), ("Acme.Tests.Rows.Each(code: \"b\")", "Passed"), ("Acme.Tests.Rows.Each(code: \"c\")", "Passed")],
+                    [("Acme.Tests.One.Fails", "Passed")],
+                ],
+                [[("Acme.Tests.Two+Nested.Runs", "Passed")]],
+                [],
+            ],
+            environment: Told(leg));
+        Assert.True(tests.Exit == 0, tests.Output);
+        Assert.Equal(3, tests.Calls.Count);
+        var ran = Ran(tests.Counted);
+        Assert.Equal(7, ran.Rows);
+        Assert.Equal(
+            ["Jason.Cli.Tests: Acme.Tests.One.Fails", "Jason.Cli.Tests: Acme.Tests.One.Passes", "Jason.Cli.Tests: Acme.Tests.One.Skips", "Jason.Cli.Tests: Acme.Tests.Rows.Each", "Jason.Contracts.Tests: Acme.Tests.Two+Nested.Runs"],
+            ran.Methods);
+
+        Assert.Null(RunTests(step, [[]], environment: Told(leg)).Counted);
+        var tier = Assert.Single(steps, candidate => Scalar(candidate, "if") == "needs.version.outputs.tier == 'true'");
+        Assert.Null(RunTests(tier, [[[("Acme.Tests.One.Passes", "Passed")]]], environment: Unnamed).Counted);
+        Assert.Null(RunTests(Assert.Single(TestSteps(Mapping(Jobs(), "release-stamp"))), [[[("Acme.Tests.One.Passes", "Passed")]]]).Counted);
+    }
+
+    /// <summary>
+    /// A part of the whole suite keeps what it ran, after its tests, as an artifact of its own named by its platform and
+    /// its part, three days, for the platform's check; a part that wrote nothing leaves a warning rather than failing. The
+    /// critical tier's part keeps nothing.
+    /// </summary>
+    [Fact]
+    public void A_part_of_the_whole_suite_keeps_what_it_ran_for_the_platform_s_check()
+    {
+        var steps = Steps(Mapping(Jobs(), Testing));
+        var keeping = Assert.Single(steps, step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true);
+        Assert.Equal("needs.version.outputs.tier != 'true'", Scalar(keeping, "if"));
+        var with = Mapping(keeping, "with");
+        Assert.Equal(
+            ("tests-ran-${{ matrix.rid }}-${{ matrix.part }}", "${{ runner.temp }}/tests-ran", "3", "warn"),
+            (Scalar(with, "name"), Scalar(with, "path"), Scalar(with, "retention-days"), Scalar(with, "if-no-files-found")));
+        Assert.True(
+            steps.IndexOf(keeping) > steps.FindIndex(step => Scalar(step, "if") == "needs.version.outputs.tier != 'true'" && Scalar(step, "run")?.Contains("Invoke-Tests.ps1", StringComparison.Ordinal) == true),
+            "what the part ran is kept before its tests have run");
+    }
+
+    /// <summary>
+    /// Each platform's package job, on a run of the whole suite, lists the whole suite after its build, and runs none of
+    /// it: each test project's built assembly is asked by the test framework's own runner for every test it holds, and each
+    /// test method is kept once, by its assembly's name — the listing's own, or the project's where it gives none — and its
+    /// full name, a theory once however many rows it has; a test that runs only when asked by name is left out. The names are kept as an artifact named by the platform, three days, for the platform's
+    /// check.
+    /// </summary>
+    [Fact]
+    public void Each_package_job_lists_the_whole_suite_s_test_methods_after_its_build_and_keeps_them()
+    {
+        var steps = Steps(Mapping(Jobs(), Packaging));
+        var listing = Assert.Single(steps, step => Scalar(step, "name") == "List the whole suite");
+        Assert.Equal("needs.version.outputs.tier != 'true'", Scalar(listing, "if"));
+        Assert.Equal("pwsh", Scalar(listing, "shell"));
+        Assert.Equal("${{ matrix.rid }}", Variables(Mapping(listing, "env"))["RID"]);
+        Assert.True(
+            steps.IndexOf(listing) > steps.FindIndex(step => Scalar(step, "name") == "Build (warnings are errors)"),
+            "the suite is listed before it is built");
+
+        var keeping = Assert.Single(steps, step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true
+            && Scalar(Mapping(step, "with"), "name") == "tests-listed-${{ matrix.rid }}");
+        Assert.Equal("needs.version.outputs.tier != 'true'", Scalar(keeping, "if"));
+        var with = Mapping(keeping, "with");
+        Assert.Equal(("${{ runner.temp }}/tests-listed", "3", "warn"), (Scalar(with, "path"), Scalar(with, "retention-days"), Scalar(with, "if-no-files-found")));
+        Assert.True(steps.IndexOf(keeping) > steps.IndexOf(listing), "the names are kept before the suite is listed");
+
+        var listed = ListSuite(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Jason.App.Tests"] = """
+                [{"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"One","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"Rows","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"Rows","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A+Nested","Method":"Inner","Explicit":false},
+                 {"Assembly":"/work/bin/Release/net10.0/Jason.App.Tests.dll","Class":"Acme.A","Method":"Asked","Explicit":true}]
+                """,
+            ["Jason.Runtime.Tests"] = """[{"Class":"Acme.R","Method":"One","Explicit":false}]""",
+        });
+        Assert.True(listed.Exit == 0, listed.Output);
+        var projects = Directory.GetDirectories(Path.Combine(RepositoryRoot(), "dotnet", "tests")).Select(Path.GetFileName).OfType<string>()
+            .Where(name => Regex.IsMatch(name, @"^Jason\.[A-Za-z]+\.Tests$")).Order(StringComparer.Ordinal).ToList();
+        Assert.True(projects.Count >= 5, $"only {projects.Count} test projects were found");
+        Assert.Equal(projects.Select(project => $"dotnet/tests/{project}/bin/Release/net10.0/{project}.dll -list full/json"), listed.Calls);
+        Assert.Equal(["Jason.App.Tests: Acme.A+Nested.Inner", "Jason.App.Tests: Acme.A.One", "Jason.App.Tests: Acme.A.Rows", "Jason.Runtime.Tests: Acme.R.One"], Ran(listed.Listed).Methods);
+        Assert.DoesNotContain("::warning", listed.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A listing that cannot be read leaves the whole suite unlisted, with a warning that names the platform and the project,
+    /// and keeps the package job green: the count is a report, and a platform with no listing is said to have none on its
+    /// check's summary.
+    /// </summary>
+    [Theory]
+    [InlineData("a project's listing exits with an error", "exit 1", "Jason.Cli.Tests exited 1")]
+    [InlineData("a project's listing is not JSON", "not json", "Jason.Cli.Tests listed no JSON")]
+    public void A_listing_that_cannot_be_read_leaves_the_suite_unlisted_with_a_warning(string what, string answer, string said)
+    {
+        var listed = ListSuite(new Dictionary<string, string>(StringComparer.Ordinal) { ["Jason.Cli.Tests"] = answer });
+        Assert.True(listed.Exit == 0, $"{what}: {listed.Output}");
+        Assert.Null(listed.Listed);
+        Assert.Contains($"::warning title=linux-x64 whole suite::the whole suite was not listed: {said}", listed.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A platform's check, on a run of the whole suite, fetches its platform's counts and compares them after its jobs have
+    /// passed. The fetch continues on an error, so a fetch that fails can never turn the check red: what it did not fetch
+    /// reads as a difference. Neither step runs where the critical tier alone was tested.
+    /// </summary>
+    [Fact]
+    public void A_platform_s_check_fetches_its_own_counts_and_compares_them_on_a_run_of_the_whole_suite()
+    {
+        var steps = Steps(Mapping(Jobs(), Platform));
+        Assert.Equal(3, steps.Count);
+        Assert.Equal("Every job of this platform succeeded", Scalar(steps[0], "name"));
+
+        Assert.StartsWith("actions/download-artifact@", Scalar(steps[1], "uses"), StringComparison.Ordinal);
+        Assert.Equal("needs.version.outputs.tier != 'true'", Scalar(steps[1], "if"));
+        Assert.Equal("true", Scalar(steps[1], "continue-on-error"));
+        var with = Mapping(steps[1], "with");
+        Assert.Equal(("tests-*-${{ matrix.rid }}*", "${{ runner.temp }}/tests-counted"), (Scalar(with, "pattern"), Scalar(with, "path")));
+        Assert.Null(Scalar(with, "merge-multiple"));
+
+        Assert.Equal("needs.version.outputs.tier != 'true'", Scalar(steps[2], "if"));
+        Assert.Equal("pwsh", Scalar(steps[2], "shell"));
+        var env = Variables(Mapping(steps[2], "env"));
+        Assert.Equal(
+            ("${{ matrix.rid }}", "${{ needs.version.outputs.tests }}", "${{ runner.temp }}/tests-counted"),
+            (env["RID"], env["TESTS"], env["COUNTS"]));
+        Assert.Null(Node(steps[2], "continue-on-error"));
+    }
+
+    /// <summary>
+    /// The comparison is by test method, for its platform: the methods the whole suite lists against the methods the parts
+    /// ran, each known by its test assembly and its full name, so a class compiled into two test assemblies is a method of
+    /// each and runs once in each, and only a method its own assembly ran in two parts ran twice. It says both numbers, each part's methods and rows, and the rows in all as information compared with nothing,
+    /// since a theory's rows are counted when it runs and not when it is listed. A difference is raised as a warning naming
+    /// the platform and both numbers, and the check stays green: a method listed and run by no part, a method run and not
+    /// listed, a method run in more than one part — each named on the summary — a part with no count, or no listing.
+    /// Another platform's counts are not its business. Run as a runner runs the step.
+    /// </summary>
+    [Theory]
+    [InlineData("every listed method ran in one part", "agree", "linux-x64: the parts ran 24 test methods, the whole suite lists 24", "", "")]
+    [InlineData("a class compiled into two assemblies ran in each one's part", "linked", "linux-x64: the parts ran 26 test methods, the whole suite lists 26", "", "")]
+    [InlineData("a listed method ran in no part", "unrun", "linux-x64: the parts ran 24 test methods, the whole suite lists 25", "listed and run by no part: 1, run and not listed: 0, run in more than one part: 0", "- `Jason.Runtime.Tests: Acme.Extra.Listed`")]
+    [InlineData("a method ran that is not listed", "unlisted-method", "linux-x64: the parts ran 25 test methods, the whole suite lists 24", "listed and run by no part: 0, run and not listed: 1, run in more than one part: 0", "- `Jason.App.Tests: Acme.Extra.Ran`")]
+    [InlineData("a method of one assembly ran in two parts", "twice", "linux-x64: the parts ran 24 test methods, the whole suite lists 24", "listed and run by no part: 0, run and not listed: 0, run in more than one part: 1", "- `Jason.Runtime.Tests: Acme.P2.Test1` (Runtime 1 of 6, Runtime 3 of 6)")]
+    [InlineData("a part has no count", "uncounted", "linux-x64: the parts ran 21 test methods, the whole suite lists 24; not counted: Runtime 2 of 6", "listed and run by no part: 3, run and not listed: 0, run in more than one part: 0", "- `Jason.Runtime.Tests: Acme.P3.Test1`")]
+    [InlineData("the whole suite was not listed", "unlisted", "linux-x64: the parts ran 24 test methods, the whole suite lists no number: it was not listed", "", "")]
+    [InlineData("another platform's counts differ", "elsewhere", "linux-x64: the parts ran 24 test methods, the whole suite lists 24", "", "")]
+    public void The_comparison_is_by_test_method_and_warns_where_the_sets_differ(string what, string kind, string line, string facts, string named)
+    {
+        var compared = CompareCounts(Counts(kind));
+        Assert.True(compared.Exit == 0, $"{what}: the step exited {compared.Exit}: {compared.Output}");
+        Assert.Contains("### linux-x64: the tests counted", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains(line, compared.Summary, StringComparison.Ordinal);
+        Assert.Contains("| Part | Test methods it ran | Tests it ran |", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains(kind is "unlisted-method" or "linked" ? "| App | 4 | 10 |" : "| App | 3 | 10 |", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains(kind == "uncounted" ? "| Runtime 2 of 6 | not counted | not counted |" : "| Runtime 2 of 6 | 3 | 80 |", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains(
+            $"The parts ran {(kind == "uncounted" ? 280 : 360)} tests in all, a theory's every row. This is compared with nothing: a theory's rows are counted when it runs, not when it is listed.",
+            compared.Summary,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("win-x64", compared.Summary, StringComparison.Ordinal);
+        if (named.Length > 0)
+        {
+            Assert.Contains(named, compared.Summary, StringComparison.Ordinal);
+        }
+
+        var warned = kind is "agree" or "elsewhere" or "linked" ? null : facts.Length > 0 ? $"{line}; {facts}" : line;
+        if (warned is null)
+        {
+            Assert.DoesNotContain("::warning", compared.Output, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains($"::warning title=linux-x64 tests counted::{warned}", compared.Output, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A difference names at most twenty methods of a kind, in order, and says how many more there are.
+    /// </summary>
+    [Fact]
+    public void A_difference_names_twenty_methods_and_counts_the_rest()
+    {
+        var counts = Counts("agree");
+        var listing = Ran(counts["tests-listed-linux-x64"]).Methods.Concat(Enumerable.Range(10, 25).Select(at => $"Jason.App.Tests: Acme.Extra.Listed{at}"));
+        counts["tests-listed-linux-x64"] = JsonSerializer.Serialize(new { methods = listing });
+        var compared = CompareCounts(counts);
+        Assert.Contains("Listed, and run by no part: 25", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains("- `Jason.App.Tests: Acme.Extra.Listed29`", compared.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("Acme.Extra.Listed30", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains("- and 5 more", compared.Summary, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A theory whose data cannot be listed row by row is listed once and runs as several rows; compared by method, it is
+    /// no difference. Through the steps themselves: the part's step writes what a stand-in for the test platform ran, the
+    /// package job's step lists what a stand-in for the runner listed, and the comparison reads both.
+    /// </summary>
+    [Fact]
+    public void A_theory_listed_once_and_run_as_several_rows_is_no_difference()
+    {
+        var decided = Decide(Kinds["a push to main"].Run);
+        var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
+        var leg = Assert.Single(Legs(decided.Outputs["tests"]), candidate => candidate["rid"] == "linux-x64" && candidate["part"] == "App");
+        var ran = RunTests(
+            step,
+            [[[("Acme.Skills.Codes.Each(code: \"a\")", "Passed"), ("Acme.Skills.Codes.Each(code: \"b\")", "Passed"), ("Acme.Skills.Codes.Each(code: \"c\")", "Passed"), ("Acme.Skills.Codes.Single", "Passed")]]],
+            environment: Told(leg));
+        Assert.True(ran.Exit == 0, ran.Output);
+        var listed = ListSuite(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Jason.App.Tests"] = """[{"Assembly":"/work/Jason.App.Tests.dll","Class":"Acme.Skills.Codes","Method":"Each","Explicit":false},{"Assembly":"/work/Jason.App.Tests.dll","Class":"Acme.Skills.Codes","Method":"Single","Explicit":false}]""",
+        });
+        Assert.True(listed.Exit == 0, listed.Output);
+
+        var counts = Legs(decided.Outputs["tests"]).Where(other => other["rid"] == "linux-x64")
+            .ToDictionary(other => $"tests-ran-linux-x64-{other["part"]}", other => other["part"] == "App" ? ran.Counted! : """{"rows":0,"methods":[]}""", StringComparer.Ordinal);
+        counts["tests-listed-linux-x64"] = listed.Listed!;
+        var compared = CompareCounts(counts);
+        Assert.True(compared.Exit == 0, compared.Output);
+        Assert.Contains("linux-x64: the parts ran 2 test methods, the whole suite lists 2", compared.Summary, StringComparison.Ordinal);
+        Assert.Contains("| App | 2 | 4 |", compared.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("::warning", compared.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Making a difference fail the check is one line: the comparison names the level of what it raises once, as a
+    /// warning, and the same step with that one line saying error fails on a difference, naming the platform and both
+    /// numbers, and still passes where the sets agree.
+    /// </summary>
+    [Fact]
+    public void Making_a_difference_fail_the_check_is_a_one_line_change()
+    {
+        var script = Scalar(Steps(Mapping(Jobs(), Platform))[2], "run")!;
+        const string Warning = "$difference = 'warning'";
+        Assert.Single(script.Split('\n'), text => text.Trim() == Warning);
+
+        var failing = script.Replace(Warning, "$difference = 'error'", StringComparison.Ordinal);
+        var differs = CompareCounts(Counts("unrun"), failing);
+        Assert.Equal(1, differs.Exit);
+        Assert.Contains("::error title=linux-x64 tests counted::linux-x64: the parts ran 24 test methods, the whole suite lists 25", differs.Output, StringComparison.Ordinal);
+        Assert.Equal(0, CompareCounts(Counts("agree"), failing).Exit);
+    }
+
+    /// <summary>What a part ran or the whole suite lists, as its file says it: the rows, where it says them, and the methods.</summary>
+    private static (long Rows, List<string> Methods) Ran(string? json)
+    {
+        Assert.NotNull(json);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        return (
+            root.TryGetProperty("rows", out var rows) ? rows.GetInt64() : -1,
+            [.. root.GetProperty("methods").EnumerateArray().Select(method => method.GetString()!)]);
+    }
+
+    /// <summary>
+    /// The counts of a push to main as the fetch leaves them, by artifact name, for linux-x64 and win-x64: the parts of each
+    /// platform in turn ran three methods each, <c>Acme.P&lt;n&gt;.Test1</c> to <c>Test3</c>, in the assembly of the part's
+    /// project, and 10, 20, 40, 80, 80, 80, 40 and 10 rows, and the whole suite lists those 24 methods; as
+    /// <paramref name="kind"/> changes it — <c>linked</c> runs one class in App's and in Cli's assembly and lists it in both,
+    /// <c>unrun</c> lists one method more, <c>unlisted-method</c> runs one more in App, <c>twice</c> runs Runtime 1 of 6's
+    /// first method in Runtime 3 of 6 as well, <c>uncounted</c> drops Runtime 2 of 6's file, <c>unlisted</c> drops the
+    /// listing, and <c>elsewhere</c> gives win-x64 a listing that differs.
+    /// </summary>
+    private static Dictionary<string, string> Counts(string kind)
+    {
+        var tests = Decide(Kinds["a push to main"].Run).Outputs["tests"];
+        int[] rows = [10, 20, 40, 80, 80, 80, 40, 10];
+        var counts = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var rid in new[] { "linux-x64", "win-x64" })
+        {
+            var parts = Legs(tests).Where(leg => leg["rid"] == rid).Select(leg => leg["part"]).ToList();
+            Assert.Equal(rows.Length, parts.Count);
+            var listed = new List<string>();
+            for (var at = 0; at < parts.Count; at++)
+            {
+                var assembly = parts[at] switch { "App" => "Jason.App.Tests", "Cli, Contracts and PluginHost" => "Jason.Cli.Tests", _ => "Jason.Runtime.Tests" };
+                var methods = Enumerable.Range(1, 3).Select(test => $"{assembly}: Acme.P{at}.Test{test}").ToList();
+                if (rid == "linux-x64" && kind == "linked" && assembly is "Jason.App.Tests" or "Jason.Cli.Tests")
+                {
+                    methods.Add($"{assembly}: Jason.Runtime.Tests.CriticalTierTests.Every_case_is_named");
+                }
+
+
+                listed.AddRange(methods);
+                if (rid == "linux-x64" && kind == "uncounted" && parts[at] == "Runtime 2 of 6")
+                {
+                    continue;
+                }
+
+                var ran = new List<string>(methods);
+                if (rid == "linux-x64" && kind == "unlisted-method" && parts[at] == "App")
+                {
+                    ran.Add("Jason.App.Tests: Acme.Extra.Ran");
+                }
+
+                if (rid == "linux-x64" && kind == "twice" && parts[at] == "Runtime 3 of 6")
+                {
+                    ran.Add("Jason.Runtime.Tests: Acme.P2.Test1");
+                }
+
+                counts[$"tests-ran-{rid}-{parts[at]}"] = JsonSerializer.Serialize(new { rows = rows[at], methods = ran });
+            }
+
+            if (rid == "linux-x64" && kind == "unrun")
+            {
+                listed.Add("Jason.Runtime.Tests: Acme.Extra.Listed");
+            }
+
+            if (rid == "win-x64" && kind == "elsewhere")
+            {
+                listed.Add("Jason.Runtime.Tests: Acme.Extra.Elsewhere");
+            }
+
+            if (!(rid == "linux-x64" && kind == "unlisted"))
+            {
+                counts[$"tests-listed-{rid}"] = JsonSerializer.Serialize(new { methods = listed });
+            }
+        }
+
+        return counts;
+    }
+
+    /// <summary>
+    /// The package job's listing step run as a runner runs it, from the repository's root, for linux-x64, with a stand-in
+    /// for <c>dotnet</c> that answers each test project's listing from <paramref name="answers"/> by the project's name — a
+    /// JSON listing, <c>exit 1</c> for a listing that fails, anything else as it is — and an empty listing for a project
+    /// it does not name. Says the calls, with the path's separators as forward slashes, and the file it kept.
+    /// </summary>
+    private static (int Exit, List<string> Calls, string? Listed, string Output) ListSuite(Dictionary<string, string> answers)
+    {
+        using var tree = new TempTree();
+        var step = Assert.Single(Steps(Mapping(Jobs(), Packaging)), candidate => Scalar(candidate, "name") == "List the whole suite");
+        var script = Path.Combine(tree.Root, "list.ps1");
+        File.WriteAllText(script, Scalar(step, "run"));
+        var calls = Path.Combine(tree.Root, "calls");
+        File.WriteAllText(calls, string.Empty);
+        var plan = Path.Combine(tree.Root, "answers.json");
+        File.WriteAllText(plan, JsonSerializer.Serialize(answers));
+
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, $$"""
+            $ErrorActionPreference = 'Stop'
+            function dotnet {
+                Add-Content -LiteralPath '{{calls}}' -Value (($args -join ' ').Replace('\', '/'))
+                $answers = Get-Content -Raw -LiteralPath '{{plan}}' | ConvertFrom-Json -AsHashtable
+                $name = [IO.Path]::GetFileNameWithoutExtension("$($args[0])")
+                $answer = if ($answers.ContainsKey($name)) { $answers[$name] } else { '[]' }
+                if ($answer -ceq 'exit 1') { $global:LASTEXITCODE = 1; return }
+                $global:LASTEXITCODE = 0
+                $answer
+            }
+            Set-Location -LiteralPath '{{RepositoryRoot()}}'
+            & '{{script}}'
+            exit $LASTEXITCODE
+            """);
+
+        var told = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["RID"] = "linux-x64",
+            ["RUNNER_TEMP"] = tree.Root,
+        };
+        var ran = Pwsh(told, "-File", harness);
+        var listed = Path.Combine(tree.Root, "tests-listed", "listed.json");
+        return (
+            ran.Exit,
+            [.. File.ReadAllLines(calls).Where(line => line.Length > 0)],
+            File.Exists(listed) ? File.ReadAllText(listed).Trim() : null,
+            ran.Stdout + ran.Stderr);
+    }
+
+    /// <summary>
+    /// The platform job's comparing step run as a runner runs it, for linux-x64 on a push to main, with the counts laid out
+    /// as the fetch leaves them: each artifact, by name, a folder holding its one file, <c>ran.json</c> for a part and
+    /// <c>listed.json</c> for the listing. <paramref name="script"/> stands in for the step's own.
+    /// </summary>
+    private static (int Exit, string Summary, string Output) CompareCounts(Dictionary<string, string> counts, string? script = null)
+    {
+        using var tree = new TempTree();
+        var step = Steps(Mapping(Jobs(), Platform))[2];
+        var file = Path.Combine(tree.Root, "compare.ps1");
+        File.WriteAllText(file, script ?? Scalar(step, "run"));
+        var summary = Path.Combine(tree.Root, "summary");
+        File.WriteAllText(summary, string.Empty);
+        var fetched = Path.Combine(tree.Root, "tests-counted");
+        foreach (var (artifact, content) in counts)
+        {
+            Directory.CreateDirectory(Path.Combine(fetched, artifact));
+            File.WriteAllText(Path.Combine(fetched, artifact, artifact.StartsWith("tests-listed-", StringComparison.Ordinal) ? "listed.json" : "ran.json"), content);
+        }
+
+        var told = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["RID"] = "linux-x64",
+            ["TESTS"] = Decide(Kinds["a push to main"].Run).Outputs["tests"],
+            ["COUNTS"] = fetched,
+            ["GITHUB_STEP_SUMMARY"] = summary,
+        };
+        var ran = Pwsh(told, "-File", file);
+        return (ran.Exit, File.ReadAllText(summary), ran.Stdout + ran.Stderr);
     }
 
     /// <summary>The parts a platform's tests run in, as the deciding step is given them.</summary>
@@ -1954,7 +2445,125 @@ public class CiRunsTests
             ["PROJECTS"] = leg["projects"],
             ["NAMESPACES"] = leg["namespaces"],
             ["NOT_NAMESPACES"] = leg["not_namespaces"],
+            ["CLASSES"] = leg["classes"],
+            ["NOT_CLASSES"] = leg["not_classes"],
         };
+
+    /// <summary>
+    /// The filters the script hands the test platform for each part that runs the runtime's tests, by platform and part,
+    /// each as the option and its value: what a runner's step makes of the parts a push to main decides.
+    /// </summary>
+    private static readonly Lazy<Dictionary<string, Dictionary<string, List<string>>>> RuntimeFilters = new(() =>
+    {
+        var decided = Decide(Kinds["a push to main"].Run);
+        var step = Assert.Single(TestSteps(Mapping(Jobs(), Testing)), candidate => Scalar(candidate, "if") == "needs.version.outputs.tier != 'true'");
+        return Legs(decided.Outputs["tests"])
+            .Where(leg => Words(leg["projects"]).Contains("Jason.Runtime.Tests", StringComparer.Ordinal))
+            .GroupBy(leg => leg["rid"], StringComparer.Ordinal)
+            .ToDictionary(
+                platform => platform.Key,
+                platform => platform.ToDictionary(
+                    leg => leg["part"],
+                    leg =>
+                    {
+                        var words = Assert.Single(RunTests(step, [[]], environment: Told(leg)).Calls).Split(' ');
+                        return words.Select((word, at) => (word, at)).Where(pair => pair.word.StartsWith("--filter-", StringComparison.Ordinal))
+                            .Select(pair => $"{pair.word} {words[pair.at + 1]}").ToList();
+                    },
+                    StringComparer.Ordinal),
+                StringComparer.Ordinal);
+    });
+
+    /// <summary>
+    /// Whether a part handed <paramref name="filters"/> runs the tests of the class <paramref name="name"/>, a full name: it
+    /// matches one of the include filters of each kind the part has, and none of its exclude filters. A filter's value names
+    /// a namespace or a class exactly, or, ending in a wildcard, every name that starts with what comes before it.
+    /// </summary>
+    private static bool Runs(List<string> filters, string name)
+    {
+        var space = name[..name.LastIndexOf('.')];
+        List<string> Values(string option) => [.. filters.Where(filter => filter.StartsWith(option + " ", StringComparison.Ordinal)).Select(filter => filter[(option.Length + 1)..])];
+        static bool Match(string value, string candidate) =>
+            value.EndsWith('*') ? candidate.StartsWith(value[..^1], StringComparison.Ordinal) : candidate == value;
+
+        var namespaces = Values("--filter-namespace");
+        var classes = Values("--filter-class");
+        return (namespaces.Count == 0 || namespaces.Any(value => Match(value, space)))
+            && (classes.Count == 0 || classes.Any(value => Match(value, name)))
+            && !Values("--filter-not-namespace").Any(value => Match(value, space))
+            && !Values("--filter-not-class").Any(value => Match(value, name));
+    }
+
+    /// <summary>
+    /// The full names of the classes a test project's own sources declare, its build output aside, as the test platform
+    /// names them: a class declared inside another is named after it with a plus between, <c>Outer+Inner</c>. A class is
+    /// inside the nearest class declared above it at a shallower indent.
+    /// </summary>
+    private static HashSet<string> Classes(string project) =>
+        [.. Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(segment => segment is "bin" or "obj"))
+            .SelectMany(file => Declared(File.ReadAllText(file)))];
+
+    /// <summary>The full names of the classes one source file declares, nested ones as <c>Outer+Inner</c>.</summary>
+    private static List<string> Declared(string text)
+    {
+        var space = Regex.Match(text, @"^namespace\s+([A-Za-z0-9_.]+)", RegexOptions.Multiline);
+        if (!space.Success)
+        {
+            return [];
+        }
+
+        var names = new List<string>();
+        var around = new Stack<(int Indent, string Name)>();
+        foreach (Match match in Regex.Matches(text, @"^([ \t]*)(?:(?:public|internal|private|protected|sealed|static|abstract|partial|file)\s+)*(?:class|record)\s+(\w+)", RegexOptions.Multiline))
+        {
+            var indent = match.Groups[1].Value.Length;
+            while (around.Count > 0 && around.Peek().Indent >= indent)
+            {
+                around.Pop();
+            }
+
+            var name = around.Count > 0 ? $"{around.Peek().Name}+{match.Groups[2].Value}" : match.Groups[2].Value;
+            around.Push((indent, name));
+            names.Add($"{space.Groups[1].Value}.{name}");
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// A class declared inside another is named as the test platform names it, the outer class, a plus, and the inner one,
+    /// and a pattern of the outer class's name matches it; a class after the nested one at the outer indent is the outer
+    /// class's sibling again.
+    /// </summary>
+    [Fact]
+    public void A_nested_class_is_named_after_the_class_around_it_with_a_plus()
+    {
+        var names = Declared("""
+            namespace Acme.Tests.Plugins.Reply;
+
+            public class ReplyStubTests
+            {
+                private sealed class Fake
+                {
+                    public sealed record Row(string Name);
+                }
+
+                public static class Helpers
+                {
+                }
+            }
+
+            internal static class Other
+            {
+            }
+            """);
+        Assert.Equal(
+            ["Acme.Tests.Plugins.Reply.ReplyStubTests", "Acme.Tests.Plugins.Reply.ReplyStubTests+Fake", "Acme.Tests.Plugins.Reply.ReplyStubTests+Fake+Row", "Acme.Tests.Plugins.Reply.ReplyStubTests+Helpers", "Acme.Tests.Plugins.Reply.Other"],
+            names);
+        Assert.True(Runs(["--filter-class Acme.Tests.Plugins.Reply.ReplyStub*"], "Acme.Tests.Plugins.Reply.ReplyStubTests+Fake"));
+        Assert.False(Runs(["--filter-class Acme.Tests.Plugins.Reply.ReplyStub*"], "Acme.Tests.Plugins.Reply.Other"));
+    }
 
     /// <summary>
     /// The platform job's step run as a runner runs it, for <paramref name="rid"/>, told the parts the version job decided,
@@ -1965,7 +2574,7 @@ public class CiRunsTests
         string rid, string tests, IEnumerable<(string Name, string Status, string Conclusion)> jobs, bool listed)
     {
         using var tree = new TempTree();
-        var step = Assert.Single(Steps(Mapping(Jobs(), Platform)));
+        var step = Steps(Mapping(Jobs(), Platform))[0];
         var script = Path.Combine(tree.Root, "platform.ps1");
         File.WriteAllText(script, Scalar(step, "run"));
         var calls = Path.Combine(tree.Root, "calls");
@@ -2001,7 +2610,7 @@ public class CiRunsTests
     }
 
     /// <summary>What a part of the tests that names no project and no namespace is told.</summary>
-    private static readonly Dictionary<string, string> Unnamed = new(StringComparer.Ordinal) { ["PROJECTS"] = "", ["NAMESPACES"] = "", ["NOT_NAMESPACES"] = "" };
+    private static readonly Dictionary<string, string> Unnamed = new(StringComparer.Ordinal) { ["PROJECTS"] = "", ["NAMESPACES"] = "", ["NOT_NAMESPACES"] = "", ["CLASSES"] = "", ["NOT_CLASSES"] = "" };
 
     /// <summary>The version a test step is told the build carries. Made up.</summary>
     private const string TestedVersion = "0.0.0-dev";
@@ -2020,7 +2629,7 @@ public class CiRunsTests
     /// exits with the code <paramref name="exits"/> gives that call, 0 when it gives none. The step is told its own
     /// environment's names with made-up values, and <paramref name="environment"/> over them.
     /// </summary>
-    private static (int Exit, List<string> Calls, string Summary, string Output) RunTests(
+    private static (int Exit, List<string> Calls, string Summary, string Output, string? Counted) RunTests(
         YamlMappingNode step, Outcome[][][] attempts, int[]? exits = null, Dictionary<string, string>? environment = null)
     {
         using var tree = new TempTree();
@@ -2048,13 +2657,19 @@ public class CiRunsTests
                 Add-Content -LiteralPath '{{calls}}' -Value (($args -join ' ').Replace('{{results}}', '<results>').Replace('\', '/'))
                 $call = $global:called
                 $global:called++
+                $assembly = if ($args -contains '--project') { [IO.Path]::GetFileNameWithoutExtension($args[[array]::IndexOf($args, '--project') + 1]) } else { 'Jason.Solution' }
                 $attempt = 0
                 foreach ($tests in @(if ($call -lt @($plan.attempts).Count) { $plan.attempts[$call] })) {
                     $attempt++
                     $into = Join-Path $directory "Retries/run/$attempt"
                     New-Item -ItemType Directory -Force -Path $into | Out-Null
-                    $lines = @($tests | ForEach-Object { "<UnitTestResult testName=`"$($_[0])`" outcome=`"$($_[1])`" />" })
-                    Set-Content -LiteralPath (Join-Path $into 'attempt.trx') -Value "<TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><Results>$($lines -join '')</Results></TestRun>"
+                    $lines = @($tests | ForEach-Object { "<UnitTestResult testName=`"$([Security.SecurityElement]::Escape($_[0]))`" outcome=`"$($_[1])`" />" })
+                    $definitions = @($tests | ForEach-Object {
+                        $full = "$($_[0])".Split('(')[0]
+                        $at = $full.LastIndexOf('.')
+                        "<UnitTest name=`"$([Security.SecurityElement]::Escape($_[0]))`"><TestMethod codeBase=`"/work/bin/Release/net10.0/$assembly.dll`" className=`"$($full.Substring(0, $at))`" name=`"$($full.Substring($at + 1))`" /></UnitTest>"
+                    })
+                    Set-Content -LiteralPath (Join-Path $into 'attempt.trx') -Value "<TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><TestDefinitions>$($definitions -join '')</TestDefinitions><Results>$($lines -join '')</Results></TestRun>"
                 }
                 $global:LASTEXITCODE = if ($call -lt @($plan.exits).Count) { $plan.exits[$call] } else { 0 }
             }
@@ -2074,7 +2689,13 @@ public class CiRunsTests
         told["RUNNER_TEMP"] = tree.Root;
         told["GITHUB_STEP_SUMMARY"] = summary;
         var ran = Pwsh(told, "-File", harness);
-        return (ran.Exit, [.. File.ReadAllLines(calls).Where(line => line.Length > 0)], File.ReadAllText(summary), ran.Stdout + ran.Stderr);
+        var counted = Path.Combine(tree.Root, "tests-ran", "ran.json");
+        return (
+            ran.Exit,
+            [.. File.ReadAllLines(calls).Where(line => line.Length > 0)],
+            File.ReadAllText(summary),
+            ran.Stdout + ran.Stderr,
+            File.Exists(counted) ? File.ReadAllText(counted).Trim() : null);
     }
 
     // --- what a run decides and reports --------------------------------------------------------------------------

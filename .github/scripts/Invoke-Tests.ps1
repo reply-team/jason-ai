@@ -24,6 +24,17 @@ Namespaces whose tests alone are run, each with every namespace inside it.
 .PARAMETER NotNamespaces
 Namespaces whose tests are not run, each with every namespace inside it.
 
+.PARAMETER Classes
+Classes whose tests alone are run, each a full class name, or the start of one with * after it.
+
+.PARAMETER NotClasses
+Classes whose tests are not run, named as Classes names them.
+
+.PARAMETER Ran
+A file what the first attempt ran is written to, over every target, read from that attempt's own reports, as JSON: the
+number of tests it ran (rows, each row of a theory one), and every test method it ran, each once, by its test assembly's
+name and its full name: Jason.App.Tests: Namespace.Class.Method. A test run again after a failure is counted once. Nothing is written when no attempt left a report.
+
 .PARAMETER Critical
 Runs the critical tier alone: the tests that carry the Critical trait.
 
@@ -41,6 +52,9 @@ param(
     [string[]] $Projects = @(),
     [string[]] $Namespaces = @(),
     [string[]] $NotNamespaces = @(),
+    [string[]] $Classes = @(),
+    [string[]] $NotClasses = @(),
+    [string] $Ran = '',
     [switch] $Critical,
     [Parameter(Mandatory)] [string] $Version,
     [Parameter(Mandatory)] [string] $Results,
@@ -56,14 +70,19 @@ $repeats = 2
 $Projects = @($Projects | Where-Object { $_ })
 $Namespaces = @($Namespaces | Where-Object { $_ })
 $NotNamespaces = @($NotNamespaces | Where-Object { $_ })
+$Classes = @($Classes | Where-Object { $_ })
+$NotClasses = @($NotClasses | Where-Object { $_ })
 foreach ($name in $Projects) {
     if ($name -cnotmatch '^Jason\.[A-Za-z]+\.Tests$') { throw "'$name' is not the name of a test project." }
 }
 
-# A namespace filter names one namespace exactly; the one inside it is named with .* after it.
+# A namespace filter names one namespace exactly; the one inside it is named with .* after it. A class filter is handed
+# on as it is given: a full class name, or the start of one with * after it.
 $filters = @(
     $Namespaces | ForEach-Object { '--filter-namespace', $_, '--filter-namespace', "$_.*" }
     $NotNamespaces | ForEach-Object { '--filter-not-namespace', $_, '--filter-not-namespace', "$_.*" }
+    $Classes | ForEach-Object { '--filter-class', $_ }
+    $NotClasses | ForEach-Object { '--filter-not-class', $_ }
     if ($Critical) { '--filter-trait', 'Category=Critical' }
 )
 
@@ -102,6 +121,30 @@ foreach ($run in @($retries | ForEach-Object { Get-ChildItem -LiteralPath $_.Ful
                 $histories[$key].Add("$($result.outcome)")
             }
         }
+    }
+}
+
+# What the first attempt ran, over every target: each run's attempt 1 holds every test its target ran once, and its test
+# definitions name each test's method and the assembly it is in.
+if ($Ran) {
+    $first = @(foreach ($run in @($retries | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory })) {
+        $attempt = Join-Path $run.FullName '1'
+        if (Test-Path -LiteralPath $attempt -PathType Container) { Get-ChildItem -LiteralPath $attempt -Filter *.trx -File }
+    })
+    if ($first.Count -gt 0) {
+        $rows = 0
+        $methods = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($report in $first) {
+            [xml] $trx = Get-Content -Raw -LiteralPath $report.FullName
+            $rows += @($trx.SelectNodes("//*[local-name()='UnitTestResult']")).Count
+            foreach ($method in @($trx.SelectNodes("//*[local-name()='UnitTest']/*[local-name()='TestMethod']"))) {
+                [void] $methods.Add("$([IO.Path]::GetFileNameWithoutExtension("$($method.codeBase)")): $($method.className).$($method.name)")
+            }
+        }
+        $Ran = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Ran)
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Ran) | Out-Null
+        [ordered] @{ rows = $rows; methods = @($methods) } | ConvertTo-Json -Compress | Set-Content -LiteralPath $Ran
+        Write-Host "the first attempt ran $rows tests of $($methods.Count) test methods"
     }
 }
 

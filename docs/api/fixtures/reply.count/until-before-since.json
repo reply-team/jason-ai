@@ -1,0 +1,23 @@
+{
+  "operation": "reply.count",
+  "case": "until-before-since",
+  "request": {
+    "since": "2026-09-14T12:00:00Z",
+    "until": "2026-09-14T00:00:00Z"
+  },
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "validation_failed",
+      "message": "Validation failed: until: invalid.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "until",
+          "code": "invalid",
+          "message": "until must not be before since."
+        }
+      ]
+    }
+  }
+}

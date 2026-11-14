@@ -8,7 +8,7 @@ export function fuseFile(app: string, platform: Platform): string;
 /** Where electron-builder writes app-update.yml: the resources folder beside the program, or inside the .app. */
 export function updateFile(app: string, platform: Platform): string;
 /** What the package says, line by line; throws when it is not what it was configured to be. */
-export function checkPackage(app: string, platform: Platform, form?: Form): string[];
+export function checkPackage(app: string, platform: Platform, form?: Form, demo?: string): string[];
 /** The icon sizes, in pixels, a Linux package must install, each byte-equal to the file installer/linux-icons holds. */
 export const linuxIconSizes: readonly number[];
 /** Where a Linux package's file system begins: a deb's folder is /opt/Jason inside it, an AppImage's is its root. */
