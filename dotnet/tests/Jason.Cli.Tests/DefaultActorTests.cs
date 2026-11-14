@@ -195,7 +195,7 @@ public class DefaultActorTests
         Assert.Contains("where that name cannot be read, as a person who gave no name", description, StringComparison.Ordinal);
         Assert.Contains("rewinding a subscription", description, StringComparison.Ordinal);
         Assert.Contains("lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, and setting a role's execution profile take no default.", description, StringComparison.Ordinal);
-        Assert.Contains("and approving, rejecting, setting or unsetting a standing approval, answering, and granting or taking back a plugin's grant are refused there.", description, StringComparison.Ordinal);
+        Assert.Contains("and approving, rejecting, setting or unsetting a standing approval and answering are refused there, and so are granting or taking back a plugin's grant, since nothing inside a run changes Jason itself.", description, StringComparison.Ordinal);
     }
 
     /// <summary>

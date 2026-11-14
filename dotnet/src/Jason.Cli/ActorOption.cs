@@ -60,8 +60,8 @@ public static class ActorOption
             + "lifting a suppression, setting or unsetting a route, granting a plugin something or taking a grant back, "
             + "and setting a role's execution profile take no default. "
             + "Inside a run every request also names its attempt in the Jason-Attempt header, whatever actor is named, "
-            + "and approving, rejecting, setting or unsetting a standing approval, answering, "
-            + "and granting or taking back a plugin's grant are refused there.",
+            + "and approving, rejecting, setting or unsetting a standing approval and answering are refused there, "
+            + "and so are granting or taking back a plugin's grant, since nothing inside a run changes Jason itself.",
         Recursive = true,
     };
 
