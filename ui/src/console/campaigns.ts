@@ -9,8 +9,8 @@ import { toCampaignRow } from './live';
 import { here } from './state';
 
 // The campaigns, with the counts the runtime keeps for each, read the way the browser's Campaigns screen reads its
-// summary table, so both say the same numbers, but held by the panel itself: the page panel can show that screen at a
-// table of its own beside this one, and neither replaces the other's list.
+// summary table, so both say the same numbers, but held by the panel itself: the console's area keeps that screen at a
+// table of its own while this panel is shown, and neither replaces the other's list.
 
 /** The campaigns the panel lists, in the order the runtime listed them. */
 export const campaigns = signal<CampaignSummary[]>([]);

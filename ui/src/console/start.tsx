@@ -175,7 +175,6 @@ async function begin(text: string): Promise<void> {
         }
     }
     here().dock.showChat(id);
-    here().dock.close('start');
     sendTurn(id, text, true);
 }
 

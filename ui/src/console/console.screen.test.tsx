@@ -15,7 +15,7 @@ import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, conversations, lines, setup, setupBusy, streamState } from './state';
+import { chats, clock, conversations, currentChat, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -44,7 +44,7 @@ function pending(fake: FakeApi): FakeApi {
         .answer('campaign.summary', 'campaign.summary/all');
 }
 
-/** Shows a panel of the dock the way a person does, from the sidebar. */
+/** Shows a panel in the area the way a person does, from the sidebar. */
 function show(name: string): void {
     const side = within(document.querySelector<HTMLElement>('.side')!);
     // What has no row of its own is under More: the menu opens, and the entry is chosen by its title.
@@ -57,6 +57,17 @@ function show(name: string): void {
 }
 
 const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
+
+/**
+ * Chooses Needs you from the sidebar once what waits was read and the chat the desktop's New chat made is shown, so
+ * neither comes in front of it afterwards; resolves with the panel.
+ */
+async function openNeeds(): Promise<HTMLElement> {
+    await waitFor(() => expect(attention.loaded.value).toBe(true));
+    await waitFor(() => expect(currentChat.value).not.toBeNull());
+    fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }));
+    return waitFor(() => panel('Needs you'));
+}
 
 beforeEach(() => {
     chats.value = {};
@@ -90,15 +101,13 @@ afterEach(() => {
 });
 
 describe('the console', () => {
-    it('opens a chat, when New chat is chosen, beside what needs the person, the campaigns and the activity, read from the runtime', async () => {
+    it('opens a chat when New chat is chosen, and reads what needs the person and the campaigns from the runtime', async () => {
         const fake = pending(new FakeApi());
         renderConsole(fake);
         // Each read answers when it answers: the approvals, the questions and the campaigns arrive in no fixed order, so the
         // screen is read once every one of them has been asked and has landed.
         await waitFor(() => {
-            expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
             expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
-            expect(screen.getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
             expect(fake.calls.map((each) => each.operation).sort()).toEqual(
                 ['approval.list', 'campaign.list', 'campaign.summary', 'decision.list', 'system.info'].sort(),
             );
@@ -108,6 +117,10 @@ describe('the console', () => {
         expect(hero.querySelector('p')?.textContent).toBe(
             'Nothing written here reaches a person without your approval.',
         );
+        // What waits is a page of its own, chosen from the sidebar.
+        const needs = await openNeeds();
+        expect(within(needs).getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+        expect(within(needs).getByText('Pause outreach to Vireo Labs until their funding news?')).toBeTruthy();
     });
 
     it('approves and rejects with a reason through the runtime, and reads the list again', async () => {
@@ -115,8 +128,8 @@ describe('the console', () => {
             .answer('approval.approve', 'approval.approve/approved')
             .answer('approval.reject', 'approval.reject/rejected');
         renderConsole(fake);
-        await waitFor(() => screen.getAllByText('Grace Hopper'));
-        const needs = panel('Needs you');
+        const needs = await openNeeds();
+        await waitFor(() => within(needs).getAllByText('Grace Hopper'));
         const row = (id: string) => needs.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
         fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(fake.sent('approval.approve')).toEqual({ approval_id: 'apr_1' }));
@@ -134,6 +147,7 @@ describe('the console', () => {
             .answer('decision.get', 'decision.get/pending-with-options')
             .answer('decision.answer', 'decision.answer/answered');
         renderConsole(fake);
+        await openNeeds();
         await waitFor(() => screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
         const row = () => panel('Needs you').querySelector<HTMLElement>('[data-id="dec_1"]')!;
         fireEvent.click(within(row()).getByRole('button', { name: 'Answer' }));
@@ -206,8 +220,12 @@ describe('the console', () => {
         const row = within(panel('Agents')).getByText(hostile).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         await waitFor(() => screen.getByRole('heading', { name: `What should Jason do in ${hostile}?` }));
-        // The only images of the page are the brand's own, at the head of the sidebar.
-        expect(Array.from(document.querySelectorAll('img')).filter((img) => !img.closest('.brand'))).toEqual([]);
+        // The only images of the page are the brand's own: the sidebar's and the start screen's mark.
+        expect(
+            Array.from(document.querySelectorAll('img')).filter(
+                (img) => !img.closest('.brand') && !img.classList.contains('start-mark'),
+            ),
+        ).toEqual([]);
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 
@@ -426,7 +444,7 @@ describe('the console', () => {
     it("draws the agent's Markdown as its subset, and everything else in it as text", async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Draft it' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -489,7 +507,7 @@ describe('the console', () => {
         /** A chat whose first turn, "Go", runs. */
         async function running(): Promise<{ desktop: StubDesktop; id: string }> {
             const { desktop } = renderConsole(pending(new FakeApi()));
-            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
             type('Go');
             fireEvent.click(screen.getByRole('button', { name: 'Send' }));
             await waitFor(() => expect(sends(desktop)).toHaveLength(1));
@@ -547,7 +565,7 @@ describe('the console', () => {
             await waitFor(() => expect(waiting()).toBeNull());
             expect(box().value).toBe('Second');
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
-            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
             expect(sends(desktop)).toHaveLength(1);
         });
 
@@ -564,7 +582,7 @@ describe('the console', () => {
             // The person types again before the stopped turn's end arrives.
             type('Something else');
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
-            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
             expect(box().value).toBe('Something else');
             expect(waiting()).toBeNull();
             expect(sends(desktop)).toHaveLength(1);
@@ -623,7 +641,7 @@ describe('the console', () => {
             expect(waiting()!.textContent).toContain('Later');
             expect(box().value).toBe('More');
             flush(() => desktop.emit(id, { kind: 'done', error: null }));
-            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
             expect(waiting()!.textContent).toContain('Later');
             expect(sends(desktop)).toHaveLength(1);
 
@@ -649,7 +667,7 @@ describe('the console', () => {
     it('answers a permission once, and says so when the desktop no longer holds it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -688,7 +706,7 @@ describe('the console', () => {
     it('shows a failed sign-in in the host own words, with how to sign in under it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -864,7 +882,7 @@ describe('the console', () => {
         it('is marked on the Connect card with the same sentence, its command as code', async () => {
             const fake = pending(new FakeApi());
             renderConsole(fake, chatDesktop(withClaude(old(), false)));
-            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
             show('Connect');
             const connect = await waitFor(() => panel('Connect'));
             const row = within(connect).getByText('Claude Code', { selector: 'b' }).closest<HTMLElement>('.setrow')!;
@@ -879,7 +897,7 @@ describe('the console', () => {
         const fake = pending(new FakeApi());
         const desktop = chatDesktop();
         renderConsole(fake, desktop);
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         show('Connect');
         const connect = await waitFor(() => panel('Connect'));
         expect(within(connect).getByText('Drives the chat')).toBeTruthy();
@@ -925,7 +943,7 @@ describe('the console', () => {
             pending(new FakeApi()),
             chatDesktop({ ...setupFound, runtimeVersion: '0.33.0', versionsDiffer: sentence }),
         );
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         show('Connect');
         const connect = await waitFor(() => panel('Connect'));
         const versions = await waitFor(() => connect.querySelector<HTMLElement>('.versions')!);
@@ -938,7 +956,7 @@ describe('the console', () => {
 
     it("draws nothing under the versions line when the runtime is the bundle's version", async () => {
         renderConsole(pending(new FakeApi()));
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         show('Connect');
         const connect = await waitFor(() => panel('Connect'));
         await waitFor(() => connect.querySelector('.versions')!);
@@ -950,7 +968,7 @@ describe('the console', () => {
         const reason = `The settings file is not valid JSON at line 3. ${hostile}`;
         const desktop = chatDesktop({ ...setupFound, settingsRefused: reason });
         renderConsole(fake, desktop);
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         show('Connect');
         const connect = await waitFor(() => panel('Connect'));
         await waitFor(() => within(connect).getByRole('alert'));
@@ -970,7 +988,7 @@ describe('the console', () => {
         const fake = pending(new FakeApi());
         const desktop = chatDesktop();
         renderConsole(fake, desktop);
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         show('Connect');
         await waitFor(() => within(panel('Connect')).getByLabelText('Topic'));
         const card = (id: string) => panel('Connect').querySelector<HTMLElement>(`.plugin[data-id="${id}"]`)!;
@@ -1009,7 +1027,7 @@ describe('the console', () => {
 
     it('sends each screen command to the address its registered screen gives', async () => {
         renderConsole(pending(new FakeApi()));
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         const screens: [DesktopCommand, string][] = [
             ['navigate.performance', 'performance'],
             ['navigate.workitems', 'workitems'],
@@ -1037,7 +1055,7 @@ describe('the console', () => {
                     'campaign.activity_by_period/replied-7-days',
                 );
             const { desktop } = renderConsole(fake);
-            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
             flush(() => desktop.command('navigate.performance'));
             await waitFor(() => expect(route.value.screen).toBe('performance'));
             await waitFor(() => expect(fake.sent('campaign.activity_by_period')).toBeTruthy());
@@ -1049,7 +1067,7 @@ describe('the console', () => {
 
     it('keeps what is typed into a plugin card through a repaint and a refusal, and forgets it once accepted', async () => {
         const { desktop } = renderConsole(pending(new FakeApi()));
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         show('Connect');
         await waitFor(() => within(panel('Connect')).getByLabelText('Chat id'));
         const input = (label: string) => within(panel('Connect')).getByLabelText<HTMLInputElement>(label);
@@ -1090,10 +1108,7 @@ describe('the console', () => {
 
     it('draws a hostile question and a hostile contact name in Needs you as text', async () => {
         renderConsole(pending(new FakeApi()));
-        await waitFor(() => expect(attention.loaded.value).toBe(true));
-        // The dock draws its panels in a render of its own once it is ready, which the runtime's answer can come before:
-        // the read having ended says nothing of the panel being there yet.
-        const needs = await waitFor(() => panel('Needs you'));
+        const needs = await openNeeds();
         // A prospect may be called anything, and an agent may ask anything; the next read brings it back.
         flush(() => {
             attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: hostile }));
@@ -1125,7 +1140,7 @@ describe('the console', () => {
         expect(asked(fake, 'campaign.list')).toBe(listed + 1);
     });
 
-    it('keeps the Campaigns page in the page panel at its own table while a journal line re-reads the panel', async () => {
+    it('keeps the Campaigns page in the area at its own table while a journal line re-reads the panel', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
         try {
@@ -1185,6 +1200,7 @@ describe('the console', () => {
     it('keeps the field a person is typing in focused, with its text and caret, through the clock and a journal line', async () => {
         const fake = pending(new FakeApi());
         const { journal } = renderConsole(fake);
+        await openNeeds();
         await waitFor(() => screen.getAllByText('Grace Hopper'));
         const reason = () =>
             within(panel('Needs you').querySelector<HTMLElement>('[data-id="apr_2"]')!).getByRole<HTMLInputElement>(
@@ -1218,7 +1234,7 @@ describe('the console', () => {
     it('gives the sidebar room for the macOS window buttons, and every control the console draws a focus ring', async () => {
         const desktop = Object.assign(chatDesktop(), { platform: 'darwin' as const });
         renderConsole(pending(new FakeApi()), desktop);
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         const side = document.querySelector('.jc-console .side')!;
         const mac = rules().filter((rule) => rule.selector.includes('desktop-mac'));
         expect(mac.length).toBeGreaterThan(0);
@@ -1271,7 +1287,7 @@ describe('the console', () => {
 
     it('says after a fresh start that lines written in between are not shown, and keeps the lines it has', async () => {
         const { journal } = renderConsole(pending(new FakeApi()));
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         flush(() => {
             journal.open();
             journal.send(journalLine({ id: 'jrn_501' }));

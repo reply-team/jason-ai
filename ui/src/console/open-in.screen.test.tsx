@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
-    it('sits in the open-in slot, left of the Demo | Live switch, above the sidebar and the dock', async () => {
+    it('sits in the open-in slot, left of the Demo | Live switch, above the sidebar and the area', async () => {
         await renderConsole(kept);
         await waitFor(() => split());
         const slot = split().closest('[data-slot="open-in"]')!;

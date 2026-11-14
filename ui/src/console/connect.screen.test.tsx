@@ -52,7 +52,7 @@ function renderConnect(status: DesktopSetup, firstReadMs = 0): StubDesktop {
 }
 
 async function openConnect(): Promise<HTMLElement> {
-    await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
     const side = within(document.querySelector<HTMLElement>('.side')!);
     fireEvent.click(side.getByRole('button', { name: 'More' }));
     fireEvent.click(side.getByRole('menuitem', { name: /^Connect/ }));

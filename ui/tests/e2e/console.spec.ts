@@ -154,14 +154,15 @@ test('inside the desktop the console mounts under the runtime policy, and follow
         "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'",
     );
     await expect(page.getByRole('heading', { name: 'Who do you want to reach?', level: 1 })).toBeVisible();
-    await expect(page.locator('.dv-dockview')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Needs you', level: 1 })).toBeVisible();
+    // One area beside the sidebar, showing Start alone: no tab strip, and what needs the person is a page of the menu.
+    await expect(page.locator('.jc-console .area > .pane:not([hidden])')).toHaveCount(1);
+    await expect(page.locator('[class*="dv-"]')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Needs you', level: 1 })).toHaveCount(0);
 
-    // The built page loads the console's stylesheets as its own chunk's: a style only console.css gives, and one only
-    // the dock's stylesheet gives, are applied. The element alone would be there unstyled.
+    // The built page loads the console's stylesheet as its own chunk's: styles only console.css gives are applied. The
+    // elements alone would be there unstyled.
     await expect(page.locator('.jc-console .shell')).toHaveCSS('display', 'flex');
     await expect(page.locator('.jc-console .side')).toHaveCSS('width', '232px');
-    await expect(page.locator('.dv-tabs-and-actions-container').first()).toHaveCSS('display', 'flex');
 
     const side = page.locator('.side');
     await side.getByRole('button', { name: 'More', exact: true }).click();
