@@ -80,6 +80,12 @@ public static class StandingApprovals
         public const string CeilingReached = "ceiling_reached";
         public const string AnotherAudience = "another_audience";
         public const string OverPerSearch = "over_per_search";
+
+        /// <summary>
+        /// Covered in every other respect, but a doubt stands about the send — its creator's <c>ask_person</c>, or a doubting
+        /// review of its text — and a doubt is the person's to answer, so no standing approval releases it.
+        /// </summary>
+        public const string Doubted = "doubted";
     }
 
     /// <summary>The newest standing-approval line of one campaign for one category, set or unset, through the kind index.</summary>
@@ -559,6 +565,16 @@ public static class StandingApprovals
         {
             errors.Add(Field, "invalid", "reply_verdict must name a verdict about the thread the reply answers in.");
         }
+    }
+
+    /// <summary>
+    /// The answer for work <paramref name="cover"/> would release but a doubt stands about: not covered, saying
+    /// <see cref="Why.Doubted"/> beside the facts the cover names — the verdict and its category for a reply.
+    /// </summary>
+    internal static Answer Doubted(Cover cover)
+    {
+        ArgumentNullException.ThrowIfNull(cover);
+        return new(null, new Uncovered(Why.Doubted, cover.Names.DeepClone().AsObject()));
     }
 
     private static Answer Miss(string why, string? verdict, string? category) =>

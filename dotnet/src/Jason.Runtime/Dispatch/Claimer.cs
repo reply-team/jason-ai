@@ -600,7 +600,8 @@ public sealed class Claimer(
             CanonicalInput.ConsumedChannel(plan.Contract, item));
 
         // Who doubted and why, where the person deciding reads it; the park clears the sentences from the row.
-        if (await Doubts.PreviewAsync(db, item, ct).ConfigureAwait(false) is { } doubts)
+        var doubts = await Doubts.PreviewAsync(db, item, ct).ConfigureAwait(false);
+        if (doubts is not null)
         {
             preview[Doubts.PreviewKey] = doubts;
         }
@@ -608,11 +609,13 @@ public sealed class Claimer(
         // Only about work nobody was ever asked about: a decision a person made, or a question already put to them, is
         // theirs, and a later standing approval never answers it — not even once the question is gone, cancelled by an
         // expiry the item was then reopened from. A standing approval decides once, here, and its row then authorises a
-        // retry of the same subject as a person's would.
+        // retry of the same subject as a person's would. A doubt that stands parks the send for the person ahead of it: a
+        // role asked a person to look, and no standing word answers that.
         if (live is null
             && !await StandingApprovals.Asked(db, item.CampaignId, item.Id).AnyAsync(ct).ConfigureAwait(false)
-            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } answer)
+            && await StandingApprovals.CoverAsync(db, item, plan, now, ct).ConfigureAwait(false) is { } covered)
         {
+            var answer = doubts is not null && covered.Cover is { } doubted ? StandingApprovals.Doubted(doubted) : covered;
             if (answer.Cover is { } cover)
             {
                 return ApprovalGate.ReleaseUnderStanding(db, journal, item, plan, subject, preview, cover, now);

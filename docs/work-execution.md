@@ -393,7 +393,9 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `standing_approval`: the verdict, its category, and the first condition that failed — `not_coverable`,
 `verdict_unknown`, `verdict_superseded`, `reaction_not_draft`, `verdict_not_authentic`, `not_the_verdicts_work`,
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
-`ceiling_reached`. A reply or a message that names no verdict is not asked about.
+`ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
+and a doubt is the person's to answer, so no standing approval releases it. A reply or a message that names no verdict
+is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
@@ -471,7 +473,9 @@ never carries the doubt's sentence. Which review stands for the send is read fro
 current hash: the newest doubt, over any pass of the same text, or else the newest pass, or none. A doubt is answered
 only by the person's decision on the approval, never by a later pass. The order between a send and its review is the
 runtime's: the send is created waiting on the review's work (`wait_on`, §Lifecycle), so it is not claimed before that
-work has ended; whatever way it ended, the claim then decides as ever.
+work has ended; whatever way it ended, the claim then decides as ever. A doubt parks the send for the person ahead of any standing
+approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying `doubted`, and
+no row is born approved; a pass is no doubt and leaves the standing approval to decide.
 
 **The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
 item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the
