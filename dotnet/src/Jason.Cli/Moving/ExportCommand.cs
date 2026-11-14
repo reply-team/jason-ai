@@ -9,6 +9,7 @@ using Jason.Cli.Commands;
 using Jason.Cli.Files;
 using Jason.Cli.Logs;
 using Jason.Cli.Skills;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Harness;
 
 namespace Jason.Cli.Moving;
@@ -94,8 +95,21 @@ public static class ExportCommand
     public const string SecretsLine =
         "The archive carries the settings file with everything in it, a token under Plugins:Config included: keep the archive as you keep that file.";
 
-    /// <summary>The trees of the data directory carried whole, by their names under it.</summary>
-    internal static readonly string[] CarriedTrees = ["config", "plugins", "skills/roles", "ui/custom", "logs"];
+    /// <summary>
+    /// The trees of the data directory carried whole, by their names under it, in the layout <paramref name="paths"/> answer
+    /// by: in layout 1 <c>config</c>, <c>plugins</c>, <c>skills/roles</c>, <c>ui/custom</c> and <c>logs</c>, as every Jason
+    /// before the layout stamp carried them; in layout 2 <c>config</c>, <c>setup</c> and <c>logs</c>, without what
+    /// <see cref="LeftOut"/> names.
+    /// </summary>
+    internal static string[] CarriedTrees(JasonPaths paths) => paths.Layout < 2
+        ? [Under(paths, paths.ConfigDirectory), Under(paths, paths.PluginsDirectory), Under(paths, paths.RoleSkillsDirectory), Under(paths, paths.UiCustomDirectory), Under(paths, paths.LogsDirectory)]
+        : [Under(paths, paths.ConfigDirectory), JasonPaths.SetupFolder, Under(paths, paths.LogsDirectory)];
+
+    /// <summary>What a carried tree holds and no archive carries: the role skills' staging, which layout 2 keeps in <c>setup/</c>.</summary>
+    internal static string[] LeftOut(JasonPaths paths) => paths.Layout < 2 ? [] : [Under(paths, paths.SkillsStagingDirectory)];
+
+    /// <summary>A path of the data directory by its name under it, with <c>/</c> between its parts, as an archive names it.</summary>
+    internal static string Under(JasonPaths paths, string path) => Path.GetRelativePath(paths.Root, path).Replace(Path.DirectorySeparatorChar, '/');
 
     /// <summary>The database's files, each carried when it is there.</summary>
     internal static readonly string[] DatabaseFiles = ["state/jason.db", "state/jason.db-wal", "state/jason.db-shm"];
@@ -122,7 +136,7 @@ public static class ExportCommand
         const string Summary = "Write this installation into one archive that 'jason import' places on another machine.";
         var command = new Command("export", Summary)
         {
-            Description = Summary + Environment.NewLine + Environment.NewLine + Contract(),
+            Description = Summary + Environment.NewLine + Environment.NewLine + Contract(env.Paths),
         };
 
         var file = new Argument<string?>("file")
@@ -255,6 +269,7 @@ public static class ExportCommand
             var manifest = new ExportManifest(
                 ExportManifest.CurrentFormat,
                 SkillsSource.BuildVersion(env),
+                env.Paths.Layout,
                 now,
                 ExportManifest.ThisSystem(),
                 env.Paths.Root,
@@ -424,7 +439,15 @@ public static class ExportCommand
             }
         }
 
-        foreach (var tree in CarriedTrees)
+        // The layout stamp, when there is one: the layout the archive carries travels with it.
+        if (File.Exists(env.Paths.LayoutFile))
+        {
+            Refuse(new FileInfo(env.Paths.LayoutFile));
+            items.Add(new Item(ExportManifest.DataPrefix + LayoutStamp.FileName, env.Paths.LayoutFile, Directory: false));
+        }
+
+        var leftOut = LeftOut(env.Paths).Select(part => ExportManifest.DataPrefix + part).ToHashSet(StringComparer.Ordinal);
+        foreach (var tree in CarriedTrees(env.Paths))
         {
             var path = Path.Combine([data, .. tree.Split('/')]);
             if (Directory.Exists(path))
@@ -434,7 +457,7 @@ public static class ExportCommand
                     Judge(path, dataReal, harnessReal);
                 }
 
-                Walk(path, ExportManifest.DataPrefix + tree, items);
+                Walk(path, ExportManifest.DataPrefix + tree, items, leftOut);
             }
         }
 
@@ -488,7 +511,7 @@ public static class ExportCommand
     /// A directory and everything in it, each name checked, every link inside refused: the top is the caller's to judge, a
     /// link there followed.
     /// </summary>
-    private static void Walk(string directory, string name, List<Item> items)
+    private static void Walk(string directory, string name, List<Item> items, IReadOnlySet<string>? leftOut = null)
     {
         items.Add(new Item(name + "/", directory, Directory: true));
 
@@ -505,6 +528,11 @@ public static class ExportCommand
         foreach (var entry in entries)
         {
             var below = name + "/" + entry.Name;
+            if (leftOut?.Contains(below) == true)
+            {
+                continue;
+            }
+
             if (!ArchiveNames.Plain(below))
             {
                 throw new ExportRefusal(
@@ -515,7 +543,7 @@ public static class ExportCommand
             Refuse(entry);
             if (entry is DirectoryInfo)
             {
-                Walk(entry.FullName, below, items);
+                Walk(entry.FullName, below, items, leftOut);
             }
             else
             {
@@ -707,14 +735,14 @@ public static class ExportCommand
     // ---- the contract ------------------------------------------------------------------------------------------------
 
     /// <summary>The contract, printed in help, every list read from the one the verb applies.</summary>
-    private static string Contract()
+    private static string Contract(JasonPaths paths)
     {
         var nl = Environment.NewLine;
-        return "Carried: " + string.Join(", ", DatabaseFiles.Select(file => "data/" + file)) + " (each when it is there); "
-            + string.Join(", ", CarriedTrees.Select(tree => "data/" + tree + "/")) + ", each whole, the role skills' record "
+        return "Carried: " + string.Join(", ", DatabaseFiles.Select(file => "data/" + file)) + " (each when it is there); data/" + LayoutStamp.FileName + " (when it is there); "
+            + string.Join(", ", CarriedTrees(paths).Select(tree => "data/" + tree + "/")) + ", each whole" + string.Concat(LeftOut(paths).Select(left => " but data/" + left + "/")) + ", the role skills' record "
             + "included; harness/, the harness root's tree as it stands, every folder in it whole, a .git included, and empty "
             + "with a warning when the root is not there; and export.json at the root, naming the Jason version, "
-            + "the moment, the operating system, the data directory, the harness root, the home directory, whether the runtime "
+            + "the layout it carries, the moment, the operating system, the data directory, the harness root, the home directory, whether the runtime "
             + "starts at logon, and every file with its size and SHA-256." + nl
             + "Never carried: " + string.Join(", ", NeverCarried) + ", and anything outside the data directory and the harness root." + nl
             + "The harness root: " + InstallationPlaces.RootVariable + ", else the Harness:Root the settings file names, else "

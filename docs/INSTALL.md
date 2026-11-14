@@ -705,8 +705,8 @@ jason status
 ```
 
 **What travels:** the database, the settings file, the plugins, the role skills with their record, a custom UI
-under `ui/custom/`, the logs, and the harness root's tree — your memory files and every project's and campaign's
-folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256. Whether the runtime started at logon travels as
+under `ui/custom/`, the logs, the layout stamp `layout.json` when there is one, and the harness root's tree — your memory files and every project's and campaign's
+folder, each whole, a `.git` included — with `export.json` listing every file's size and SHA-256 and the layout the data directory is in. Whether the runtime started at logon travels as
 a fact: the import registers it again on a machine that can, and on one that cannot says "No logon registration,
 and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
 work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an
@@ -716,7 +716,8 @@ everything in it, a token under `Plugins:Config` included: keep the archive as y
 
 **Before anything is written**, the import refuses an archive it cannot read, a name in it that would land
 outside the data directory or the harness root, a file whose size or SHA-256 is not the one `export.json` lists,
-an archive a newer Jason wrote, and an installation already here — a database, or a harness root with a folder
+an archive a newer Jason wrote, an archive whose data directory is in a layout newer than this jason runs
+(`layout_newer`), and an installation already here — a database, or a harness root with a folder
 marker in it, which a Jason that has run once on the new machine has. The refusal names what is there. Give
 `--replace` to move it aside and place the archive instead: the data directory's parts go into
 `<data>/replaced-<stamp>/` — `state/` whole, the database's `-wal` and `-shm` files and its backups with it — and

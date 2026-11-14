@@ -117,6 +117,8 @@ public sealed class ExportCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         var help = machine.Out.ToString().ReplaceLineEndings(" ");
         Assert.Contains("Carried: data/state/jason.db", help, StringComparison.Ordinal);
+        Assert.Contains("data/layout.json (when it is there)", help, StringComparison.Ordinal);
+        Assert.Contains("naming the Jason version, the layout it carries, the moment", help, StringComparison.Ordinal);
         Assert.Contains("data/logs/", help, StringComparison.Ordinal);
         Assert.Contains("Never carried: data/state/backups/", help, StringComparison.Ordinal);
         Assert.Contains("a replaced-<stamp>/ directory at the data directory's top, which an import moved aside", help, StringComparison.Ordinal);
@@ -190,7 +192,7 @@ public sealed class ExportCommandTests
     }
 
     [Fact]
-    public async Task Export_json_names_the_version_the_moment_the_system_the_places_and_the_registration()
+    public async Task Export_json_names_the_version_the_layout_the_moment_the_system_the_places_and_the_registration()
     {
         using var machine = new MovingMachine();
         machine.PlantData("state/jason.db");
@@ -203,6 +205,7 @@ public sealed class ExportCommandTests
         var root = manifest.RootElement;
         Assert.Equal(1, root.GetProperty("format").GetInt32());
         Assert.Equal(MovingMachine.Version, root.GetProperty("jason_version").GetString());
+        Assert.Equal(1, root.GetProperty("layout").GetInt32());
         Assert.Equal(Now, root.GetProperty("exported_at").GetDateTimeOffset());
         Assert.EndsWith("Z", root.GetProperty("exported_at").GetString(), StringComparison.Ordinal);
         Assert.Equal(ExportManifest.ThisSystem(), root.GetProperty("operating_system").GetString());
@@ -731,6 +734,55 @@ public sealed class ExportCommandTests
         Assert.Contains("case", error.Message, StringComparison.Ordinal);
         Assert.Contains(other, error.Message, StringComparison.Ordinal);
         Assert.Empty(Directory.EnumerateFileSystemEntries(machine.Here));
+    }
+
+    // ---- layouts -----------------------------------------------------------------------------------------------------
+
+    /// <summary>A layout stamp travels beside the database, as a file of the data directory's top.</summary>
+    [Fact]
+    public async Task A_layout_stamp_travels_beside_the_database()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.PlantData("layout.json", """{"layout":1,"written_by":"0.33.0"}""");
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var archivePath = Path.Combine(machine.Here, DefaultName);
+        Assert.Equal("""{"layout":1,"written_by":"0.33.0"}""", Read(archivePath, "data/layout.json"));
+        using var manifest = Manifest(archivePath);
+        Assert.Contains(manifest.RootElement.GetProperty("entries").EnumerateArray(), entry => entry.GetProperty("path").GetString() == "data/layout.json");
+    }
+
+    /// <summary>
+    /// Where the paths answer by layout 2, the archive carries <c>setup/</c> whole but its staging, the secrets file under
+    /// <c>config/</c>, and says layout 2; nothing of layout 1's places, which that layout no longer keeps.
+    /// </summary>
+    [Fact]
+    public async Task In_layout_two_the_archive_carries_setup_but_its_staging_and_says_layout_two()
+    {
+        using var machine = new MovingMachine();
+        string[] carried =
+        [
+            "state/jason.db", "config/secrets.json", "setup/settings.json", "setup/plugins/reply/plugin.yaml",
+            "setup/roles/manager/SKILL.md", "setup/ui/index.html", "logs/jason-20261108.log",
+        ];
+        foreach (var file in carried.Append("setup/.staging/pack/SKILL.md"))
+        {
+            machine.PlantData(file);
+        }
+
+        var env = machine.Env() with { Paths = new Contracts.Discovery.JasonPaths(machine.Data, 2) };
+        var exit = await ExportCommand.RunAsync(env, Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var archivePath = Path.Combine(machine.Here, DefaultName);
+        var data = Names(archivePath).Where(name => name.StartsWith("data/", StringComparison.Ordinal) && !name.EndsWith('/')).Order(StringComparer.Ordinal);
+        Assert.Equal(carried.Select(file => "data/" + file).Order(StringComparer.Ordinal), data);
+        Assert.DoesNotContain(Names(archivePath), name => name.StartsWith("data/setup/.staging", StringComparison.Ordinal));
+        using var manifest = Manifest(archivePath);
+        Assert.Equal(2, manifest.RootElement.GetProperty("layout").GetInt32());
     }
 
     // ---- layout 1, as it was -----------------------------------------------------------------------------------------

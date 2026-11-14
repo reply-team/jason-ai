@@ -350,6 +350,90 @@ public sealed class ImportCommandTests
         Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
     }
 
+    // ---- layouts -----------------------------------------------------------------------------------------------------
+
+    /// <summary>An archive written before the layout stamp says no layout, and carries layout 1: it is placed as it was.</summary>
+    [Fact]
+    public async Task An_archive_that_names_no_layout_is_placed_as_layout_one()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = null, Version = "0.32.0" }.Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
+    }
+
+    /// <summary>
+    /// A data directory a later layout keeps is refused by its layout, before any of its names is held to the parts this
+    /// build carries, so the refusal says why rather than naming a part no export of this build carries.
+    /// </summary>
+    [Fact]
+    public async Task An_archive_of_a_newer_layout_is_refused_as_layout_newer_before_its_names_are_read()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = 2 }.Installation().With("data/setup/plugins/reply/plugin.yaml").Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "layout_newer");
+        Assert.Contains($"laid out by Jason {MovingMachine.Version} (layout 2), newer than this jason runs (layout 1)", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nothing was written.", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task An_archive_whose_layout_is_below_one_is_unreadable_and_nothing_is_written(int layout)
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from) { Layout = layout }.Installation().Write();
+
+        var exit = await Import(to, Options(file));
+
+        var error = Refused(to, exit, "import_unreadable");
+        Assert.Contains($"gives layout {layout}, and layouts count from 1", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A stamp the archive carries is placed beside the database; a folder by its name is refused as no part.</summary>
+    [Fact]
+    public async Task A_layout_stamp_in_the_archive_is_placed_and_a_folder_of_its_name_is_refused()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from).Installation().With("data/layout.json", """{"layout":1,"written_by":"0.33.0"}""").Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("""{"layout":1,"written_by":"0.33.0"}""", File.ReadAllText(Path.Combine(to.Data, "layout.json")));
+
+        using var again = new MovingMachine();
+        var archive = new MovingArchive(from).Installation().With("data/layout.json/inside.txt").Write("jason-export-folder.zip");
+        Refused(again, await Import(again, Options(archive)), "import_refused");
+    }
+
+    /// <summary>With <c>--replace</c>, a stamp here describes the directory going aside, and goes aside with it.</summary>
+    [Fact]
+    public async Task With_replace_the_layout_stamp_here_goes_aside_with_the_parts()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        to.PlantData("state/jason.db", "the database here");
+        to.PlantData("layout.json", """{"layout":1,"written_by":"0.33.0"}""");
+        var file = new MovingArchive(from).Installation().Write();
+
+        var exit = await Import(to, Options(file) with { Replace = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("""{"layout":1,"written_by":"0.33.0"}""", File.ReadAllText(Path.Combine(to.Data, "replaced-" + Stamp, "layout.json")));
+        Assert.False(File.Exists(Path.Combine(to.Data, "layout.json")));
+    }
+
     // ---- an update in flight -----------------------------------------------------------------------------------------
 
     [Theory]
@@ -1355,6 +1439,8 @@ public sealed class ImportCommandTests
         var help = to.Out.ToString().ReplaceLineEndings(" ");
         Assert.Contains("Refused before anything is written", help, StringComparison.Ordinal);
         Assert.Contains("an archive a newer Jason wrote", help, StringComparison.Ordinal);
+        Assert.Contains("a data directory laid out in a layout newer than this jason runs (layout_newer), or a layout below 1", help, StringComparison.Ordinal);
+        Assert.Contains("ui/custom/, logs/ and layout.json", help, StringComparison.Ordinal);
         Assert.Contains("a file entry named where an import places a folder, or a folder entry named as one of the database files", help, StringComparison.Ordinal);
         Assert.Contains("Nothing is deleted", help, StringComparison.Ordinal);
         Assert.Contains("<data>/replaced-<stamp>/", help, StringComparison.Ordinal);
