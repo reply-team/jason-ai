@@ -75,7 +75,7 @@ means today.
   menu (macOS and Linux) or Windows's own uninstaller, and then the application itself. It keeps your data too.
 
 If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
-yes, or run the one-liner under "Or install it yourself" below.
+yes, or run the install line under "Or install it yourself".
 
 <details>
 <summary>Or install it yourself</summary>
@@ -115,7 +115,7 @@ through the chat. Your agent does the rest: the Reply CLI (it needs Node 20 or n
 You open Reply's web app only to sign in, create your first API key, or connect a LinkedIn account or a mailbox by single
 sign-on. Using another provider? Its plugin goes into `~/.jason/plugins/`, a grant names what it may run and reach, and a route points your campaigns at it.
 
-**Tell your agent about your first campaign.** In your own words. Want to see the whole path first? Your agent offers
+**Your first campaign.** The quick start asks one thing first: what you sell and who should buy it. Installed Jason yourself? Ask your agent to start Jason's quick-start skill. Want to see the whole path first? Your agent offers
 a [wiring check](https://github.com/reply-team/jason-ai/blob/main/docs/golden-path.md) once: one draft campaign in your account, with your own address as the only
 contact, and nothing sent.
 
