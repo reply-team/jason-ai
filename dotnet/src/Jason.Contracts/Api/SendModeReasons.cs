@@ -44,7 +44,7 @@ public static class SendModeReasons
         (AwaitingNature, "A reply from this contact was judged before Jason recorded what kind of reply it was, so nothing goes to them automatically until it is judged again."),
         (AnswersNoVerdict, "This answer names no judged reply, so it is not sent automatically."),
         (ReplyNotFromAPerson, "The reply this answers was an automatic reply, a bounce or a request to stop, which never gets an automatic answer."),
-        (Escalated, "The reply this answers was marked for you to decide."),
+        (Escalated, "A reply in this conversation was marked for you to decide."),
         (EditedAfterReview, "The text was edited after it was reviewed, so the review no longer stands for it."),
         (NotReviewed, "No critic's or person's review passed this text, so the automatic mode does not send it."),
     ];

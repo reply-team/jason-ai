@@ -363,6 +363,75 @@ public partial class ClaimerTests
     }
 
     /// <summary>
+    /// An escalation is read across the conversation, not only on the reply answered. An answer to a person's reply waits
+    /// for the person, <c>escalated</c>, where a verdict that stands on the same thread, about a reply at or after the one
+    /// answered, says escalate; an escalation of an earlier reply holds nothing, nor does one a later verdict on the same
+    /// reply replaced.
+    /// </summary>
+    [Theory]
+    [InlineData("a later reply judged escalate", "escalated")]
+    [InlineData("an earlier reply judged escalate", "automatic_mode")]
+    [InlineData("a later escalation judged again as a draft", "automatic_mode")]
+    public async Task SendMode_AnEscalationInTheConversation_HoldsTheAnswer(string meanwhile, string outcome)
+    {
+        using var harness = ModeHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        await ModeAsync(db, ColdMode, "automatic");
+        await ModeAsync(db, WarmMode, "automatic");
+        var answered = await NatureVerdictAsync(db, reading, ReplyNature.Person, message: "msg-1", minutesBefore: 30);
+        switch (meanwhile)
+        {
+            case "a later reply judged escalate":
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-2", minutesBefore: 10);
+                break;
+            case "an earlier reply judged escalate":
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-0", minutesBefore: 50);
+                break;
+            case "a later escalation judged again as a draft":
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-2", minutesBefore: 10);
+                await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Draft, message: "msg-2", minutesBefore: 10);
+                break;
+        }
+
+        var item = Drafted(db, reading, answered);
+        await db.SaveChangesAsync(Ct);
+        await CriticPassAsync(db, reading, item.PublicId, ReviewSubject.Hash(item));
+
+        var claimed = await ClaimSettledAsync(harness, db);
+
+        await using var fresh = database.Open();
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(outcome, approval.Reason);
+        Assert.Equal(outcome == "automatic_mode" ? 1 : 0, claimed.Count);
+    }
+
+    /// <summary>
+    /// A moment that is not known holds: an earlier reply's escalation holds nothing against an answer whose moment is
+    /// known, and holds it where the answered verdict carries none, since nothing tells which came first. The store refuses
+    /// a verdict line without its moment, so the read is asked directly with the answered verdict's body.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task SendMode_AnEscalationWhoseOrderIsNotKnown_Holds(bool momentKnown, bool holds)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var reading = await ReadingAsync(db);
+        var answered = await NatureVerdictAsync(db, reading, ReplyNature.Person, message: "msg-1", minutesBefore: 30);
+        await NatureVerdictAsync(db, reading, ReplyNature.Person, ReplyReaction.Escalate, message: "msg-0", minutesBefore: 50);
+        var body = (JsonObject)(await db.Journal.AsNoTracking().SingleAsync(e => e.PublicId == answered, Ct)).New!.DeepClone();
+        if (!momentKnown)
+        {
+            body.Remove("message_at");
+        }
+
+        Assert.Equal(holds, await AutomaticRelease.EscalatedSinceAsync(db, reading.Campaign.Id, body, Ct));
+    }
+
+    /// <summary>
     /// A doubt parks the send for the person before anything can release it: its creator's <c>ask_person</c>, or a doubting
     /// review of its text by anybody, stands against the critic's pass and parks it <c>doubted</c>, with the doubt on the
     /// preview and no line of the mode.
@@ -892,15 +961,17 @@ public partial class ClaimerTests
     }
 
     /// <summary>A verdict of the reading's run on the reply, saying the nature given; its line's id.</summary>
-    private static async Task<string> NatureVerdictAsync(JasonDbContext db, Reading reading, ReplyNature? nature, ReplyReaction reaction = ReplyReaction.Draft, ActorRef? by = null)
+    private static async Task<string> NatureVerdictAsync(
+        JasonDbContext db, Reading reading, ReplyNature? nature, ReplyReaction reaction = ReplyReaction.Draft, ActorRef? by = null,
+        string message = "msg-1", int minutesBefore = 30)
     {
         var line = await new ReplyService(db, new JournalWriter(new FixedClock(new DateTimeOffset(Noon)))).RecordAsync(
             new ReplyRecordRequest(
                 reading.Campaign.PublicId,
                 Provider,
                 InThread,
-                "msg-1",
-                new DateTimeOffset(Noon.AddMinutes(-30)),
+                message,
+                new DateTimeOffset(Noon.AddMinutes(-minutesBefore)),
                 "interested",
                 0.9,
                 reaction,

@@ -490,8 +490,8 @@ at the claim):
 3. the send was not written in the desktop's chat (`sent_from_chat`);
 4. no doubt stands about it (`doubted`);
 5. the contact waits on no verdict (`awaiting_judgement`, `awaiting_nature`);
-6. an answer answers a person's reply that nobody escalated (`answers_no_verdict`, `awaiting_nature`,
-   `reply_not_from_a_person`, `escalated`);
+6. an answer answers a person's reply, in a conversation nobody escalated at or after it (`answers_no_verdict`,
+   `awaiting_nature`, `reply_not_from_a_person`, `escalated`);
 7. the critic or a person passed the text as it now reads (`edited_after_review`, `not_reviewed`);
 8. released, under an approved row with the reason `automatic_mode` that names the person who set the mode.
 

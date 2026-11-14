@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
@@ -260,13 +261,52 @@ public static class AutomaticRelease
             return SendModeReasons.AnswersNoVerdict;
         }
 
-        return Text(said["nature"]) switch
+        switch (Text(said["nature"]))
         {
-            null => SendModeReasons.AwaitingNature,
-            "person" => string.Equals(Text(said["reaction"]), "escalate", StringComparison.Ordinal) ? SendModeReasons.Escalated : null,
-            _ => SendModeReasons.ReplyNotFromAPerson,
-        };
+            case null:
+                return SendModeReasons.AwaitingNature;
+            case not "person":
+                return SendModeReasons.ReplyNotFromAPerson;
+        }
+
+        return Escalates(said) || await EscalatedSinceAsync(db, item.CampaignId, said, ct).ConfigureAwait(false)
+            ? SendModeReasons.Escalated
+            : null;
     }
+
+    private static bool Escalates(JsonObject said) => string.Equals(Text(said["reaction"]), "escalate", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether a verdict that stands on the answered verdict's thread and plugin, about a reply at or after the one answered,
+    /// says escalate: the conversation was marked for the person, whichever reply of it the answer names. A moment that is
+    /// not known holds, since nothing tells the escalation is earlier.
+    /// </summary>
+    internal static async Task<bool> EscalatedSinceAsync(JasonDbContext db, int campaignId, JsonObject answered, CancellationToken ct)
+    {
+        if (Text(answered["thread"]) is not { } thread || Text(answered["plugin"]) is not { } plugin)
+        {
+            return true;
+        }
+
+        var from = Moment(answered["message_at"]);
+        var verdicts = await OnThread(db, campaignId, thread, plugin).ToListAsync(ct).ConfigureAwait(false);
+        return verdicts
+            .GroupBy(line => line.Key, StringComparer.Ordinal)
+            .Select(under => under.MaxBy(line => line.Id)!)
+            .Where(standing => standing.New is JsonObject said && Escalates(said))
+            .Any(standing => from is not { } since || Moment(standing.New!["message_at"]) is not { } at || at >= since);
+    }
+
+    private static DateTimeOffset? Moment(JsonNode? node) =>
+        Text(node) is { } text && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+
+    /// <summary>Every verdict of a campaign on one thread through one plugin, through the verdicts' thread index.</summary>
+    internal static IQueryable<JournalEntry> OnThread(JasonDbContext db, int campaignId, string thread, string plugin) =>
+        db.Journal.FromSqlInterpolated($"""
+            SELECT * FROM journal INDEXED BY ix_journal_campaign_verdict_thread
+            WHERE kind = 'reply_classified' AND campaign_id = {campaignId}
+              AND json_extract(new_json, '$.thread') = {thread} AND json_extract(new_json, '$.plugin') = {plugin}
+            """).AsNoTracking();
 
     /// <summary>The verdict that stands for the reply the named line judged: the newest of the campaign under its key.</summary>
     private static async Task<JournalEntry?> NamedAsync(JasonDbContext db, int campaignId, string cited, CancellationToken ct)

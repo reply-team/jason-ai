@@ -17,6 +17,7 @@ public class AutomaticReleasePlanTests
     [InlineData("every review of the send", "ix_journal_work_item_id_public_id (work_item_id=?)")]
     [InlineData("the newest verdict on the reply's thread", "ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=?)")]
     [InlineData("the verdict that stands for the reply an answer names", "ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=? AND key=?)")]
+    [InlineData("every verdict on the reply's thread, for an escalation", "ix_journal_campaign_verdict_thread (campaign_id=? AND <expr>=?)")]
     public async Task AutomaticRelease_EachRead_UsesTheIndexItNames(string read, string search)
     {
         using var database = new TestDatabase();
@@ -27,6 +28,7 @@ public class AutomaticReleasePlanTests
             "every review of the send" => AutomaticRelease.ReviewLines(db, "wi_01K52JR0000000000000000007"),
             "the newest verdict on the reply's thread" => AutomaticRelease.NewestOnThread(db, 3, "501", "stand-in-provider"),
             "the verdict that stands for the reply an answer names" => AutomaticRelease.StandingUnder(db, 3, "501", "sha256:verdict"),
+            "every verdict on the reply's thread, for an escalation" => AutomaticRelease.OnThread(db, 3, "501", "stand-in-provider"),
             _ => throw new ArgumentOutOfRangeException(nameof(read), read, "no such read"),
         };
 

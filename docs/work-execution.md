@@ -545,7 +545,9 @@ guard as a standing approval, and in this order:
    verdict it answers (`reply_verdict`), is held to the verdict that stands on the reply it answers: the one it names, or
    else the newest on its thread; none, `answers_no_verdict`; a verdict that does not say what kind of reply it was,
    `awaiting_nature`; a reply that is not a person's — an automatic reply, a bounce or a request to stop —
-   `reply_not_from_a_person`; a verdict whose reaction is `escalate`, `escalated`.
+   `reply_not_from_a_person`; a verdict whose reaction is `escalate`, `escalated` — and `escalated` too where a verdict
+   that stands on the same thread, through the same plugin, about a reply at or after the one answered, says escalate,
+   or where either moment is not known: the conversation was marked for the person, whichever reply the answer names.
 7. **A review that passed the text as it now reads.** The newest review under the send's review hash that passed,
    written by a running attempt of the campaign's `critic` role or by a person by name, outside a run, counts; any such
    pass counts, whatever was reviewed after it, since a doubt was asked before. A counting pass only under an earlier
