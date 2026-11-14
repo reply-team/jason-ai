@@ -13,6 +13,13 @@ namespace Jason.Cli;
 /// <remarks>
 /// <c>status</c>, <c>doctor</c> and <c>logs</c> are not here, and never will be: they are how such an installation is
 /// diagnosed, so they run on whatever the stamp says, and the first two report it.
+/// <para>
+/// <c>plugin reload</c> is here for the person's sake, not the runtime's: a person of an older jason may have put a
+/// package into the folder that jason knows, by hand or by an install it refused, and a reload answered "loaded" by a
+/// runtime that reads another folder would be a wrong answer about their package. A global route and a plugin's grant
+/// are not here: the runtime writes them, and it refused at its own start a layout it does not know, so whatever this
+/// jason's version, the write lands where the running runtime's layout says.
+/// </para>
 /// </remarks>
 public static class LayoutGatedVerbs
 {
