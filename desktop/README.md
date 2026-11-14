@@ -42,10 +42,15 @@ refused before Codex starts, with a sentence that says to update Codex.
 Connect names the person's own MCP servers under Claude Code and Codex found here (`src/own-servers.ts`): the keys of the
 top-level `mcpServers` of Claude Code's `.claude.json` (in `CLAUDE_CONFIG_DIR` where that is set, else in the home), and the
 servers of Codex's `config.toml` (in `CODEX_HOME`, else `~/.codex`) less one set `enabled = false`, read by a narrow reader
-of its own rather than a TOML package. Only the main process reads the files, whole, and only the names leave them, each
-cut at forty characters, on `setup.status()`'s host. A file that is not there lists nothing; one that cannot be read or
-parsed lists nothing either and is logged as `own_servers_unread` with the program and the kind alone. No host command is
-run to list them: `claude mcp list` connects to the servers, and `codex mcp list` can reach the network.
+of its own rather than a TOML package. Both are read from the desktop's own environment, so a desktop started from the
+Dock or the Start menu without a `CLAUDE_CONFIG_DIR` that the person's shell sets names the servers of the home's file
+instead; a wrong guess names other servers and harms nothing. Only the main process reads the files, whole, and only the
+names leave them, each made one line, its unseen characters taken out and drawn in forty characters at most, on
+`setup.status()`'s host, which a paired browser tab reads too. A file that is not there lists nothing; one that cannot be
+read or parsed lists nothing either and is logged as `own_servers_unread` with the program and the kind alone. No file
+can fail or hang the listing: only a regular file is opened, none over 64 MiB is read, and one nested more than 64 deep
+or naming more than 1,000 servers lists nothing. No host command is run to list them: `claude mcp list` connects to the
+servers, and `codex mcp list` can reach the network.
 
 On Windows every Codex turn names the elevated sandbox for the run (`codexWindowsSandbox`): the person's own choice of
 sandbox is in the config.toml the turn leaves unread, and a command in the unelevated one can read the data directory.
