@@ -473,8 +473,11 @@ an edit of the input moves the hash — a pin, a rename, the campaign's status o
 voids every review made before it: the line under the old hash no longer stands, the doubt's sentence is cleared in the
 edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or
 `waiting` is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is
-refused `not_reviewable` exactly where the claim would not read it: where an approval stands for the send's text as it
-now reads, since a retry goes under the decision already made and reads no review. Who reviews: a running attempt of the
+refused `not_reviewable` exactly where the claim would not read it: where an approval stands for the send as it would
+now go, since a retry goes under the decision already made and reads no review. The one exception fails closed:
+where the runtime cannot yet tell whether the claim would read the review, because an approval is live and the
+pre-flight would not let the send go right now (its plugin unavailable, say, or a block holding it), the review is
+refused too, and may be made again once the send can be claimed. Who reviews: a running attempt of the
 same campaign's role work, other than every attempt of the work that created the send (a retry of the composer is the
 same author), or a person by name who did not create it (`review_by_creator`); a person's own send goes to them as an
 approval, their own explicit yes. Whoever wrote the send's input since it was made is one of its authors and does not
