@@ -210,6 +210,16 @@ export function failedStartNotice(said: string, layoutRefused: boolean, previous
 }
 
 /**
+ * Settles an update's first launch that did not load the window, as `settleStart` does, but for a start `jason runtime
+ * start` refused for the data directory's layout: then the record stays as it is, since the cause is the directory and
+ * not the version, so that version is not refused, and the next start settles the same record. Returns the pending
+ * record where the person is to be told where the previous version is, null otherwise.
+ */
+export function settleFailedStart(rollback: string, currentVersion: string, layoutRefused: boolean, log: Logger): PendingUpdate | null {
+    return layoutRefused ? null : settleStart(rollback, currentVersion, false, log);
+}
+
+/**
  * Settles an update's first launch with whether the window loaded; the copy is kept either way. Returns the pending
  * record, the version it came from and its copy, when that start failed, null otherwise.
  */

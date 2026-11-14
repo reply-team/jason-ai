@@ -20,6 +20,7 @@ import {
     parseRollbackState,
     readRollback,
     rollbackStateFile,
+    settleFailedStart,
     settleStart,
     writeRollback,
 } from '../src/rollback.ts';
@@ -419,6 +420,43 @@ test('a start that failed says where the replaced version is only after an updat
         assert.equal(failedStartNotice(refused, true, { release: previousRelease('0.34.0'), file: debFile }, '/opt/Jason', platform), refused);
         assert.equal(failedStartNotice(refused, true, null, '/opt/Jason', platform), refused);
     }
+});
+
+test('a first start refused for the data directory’s layout refuses no version: the record stays, and the next start settles it', (t) => {
+    const s = scratch(t);
+    const copy = join(s.rollback, '0.34.0', 'Jason');
+    const pending = { fromVersion: '0.34.0', toVersion: '0.35.0', directory: copy };
+    const log = memoryLog();
+    mkdirSync(copy, { recursive: true });
+    writeRollback(s.rollback, { pending, rejected: ['0.33.0'] });
+    const record = readFileSync(rollbackStateFile(s.rollback), 'utf8');
+
+    assert.equal(settleFailedStart(s.rollback, '0.35.0', true, log), null, 'no going back is offered for a directory the version did not cause');
+    assert.equal(readFileSync(rollbackStateFile(s.rollback), 'utf8'), record, 'the record is as it was, byte for byte');
+    assert.equal(isRejected(readRollback(s.rollback), '0.35.0'), false);
+    assert.deepEqual(log.lines, []);
+
+    // Once the directory is put right, the start that works settles the same record.
+    assert.equal(settleStart(s.rollback, '0.35.0', true, log), null);
+    assert.deepEqual(readRollback(s.rollback), { pending: undefined, kept: { version: '0.34.0', directory: copy }, rejected: ['0.33.0'] });
+
+    // Any other failure is settled as a failed start is.
+    writeRollback(s.rollback, { pending, rejected: [] });
+    assert.deepEqual(settleFailedStart(s.rollback, '0.35.0', false, log), pending);
+    assert.equal(isRejected(readRollback(s.rollback), '0.35.0'), true);
+});
+
+test('the starting page’s failed start is wired to the layout refusal: no version refused, and the CLI’s sentence alone', () => {
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8').split(/\s+/).join(' ');
+    const from = main.indexOf("log.error('window_load_failed'");
+    assert.ok(from >= 0);
+    const failed = main.slice(from, main.indexOf('startInFlight = false;', from));
+    assert.ok(failed.includes('const layoutRefused = error instanceof LayoutRefused;'));
+    assert.ok(failed.includes('const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);'));
+    assert.ok(failed.includes('const notice = failedStartNotice( said, layoutRefused,'));
+    assert.ok(failed.includes('await showStarting(current, notice, true);'));
+    assert.equal(failed.includes('settleStart('), false, 'a failed start is settled through settleFailedStart alone');
+    assert.equal(failed.includes('keptNotice('), false, 'the notice is failedStartNotice’s alone');
 });
 
 test('the new version’s first start settles the record: a start that worked keeps the copy and says so, one that failed keeps it and refuses that version', (t) => {

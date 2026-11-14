@@ -29,7 +29,7 @@ import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type Linu
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
 import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
-import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleStart } from './rollback.ts';
+import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
@@ -808,11 +808,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
-        const kept = settleStart(rollback, app.getVersion(), false, log);
+        const layoutRefused = error instanceof LayoutRefused;
+        const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
         const said = error instanceof Error ? error.message : String(error);
         const notice = failedStartNotice(
             said,
-            error instanceof LayoutRefused,
+            layoutRefused,
             kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
             aside ?? applicationFolder(process.platform, process.execPath),
             process.platform,
