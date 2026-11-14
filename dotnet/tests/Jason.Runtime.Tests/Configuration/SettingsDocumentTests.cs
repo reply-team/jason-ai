@@ -243,6 +243,21 @@ public class SettingsDocumentTests
         Assert.Throws<SettingsFileRefusedException>(() => SettingsDocument.Verify(before, Bytes(grown), edits));
         var shrunk = good.Replace("/* default first */ \"DEFAULT\": { \"Plugin\": \"fake\" },", string.Empty, StringComparison.Ordinal);
         Assert.Throws<SettingsFileRefusedException>(() => SettingsDocument.Verify(before, Bytes(shrunk), edits));
+
+        // An empty object or a null where the edit wrote a value is no value: the parser reads both as a key without
+        // one, at the edited path itself, and that is excused only above an edited path.
+        foreach (var hollow in new[] { "{}", "null" })
+        {
+            var emptied = Kept.Replace("\"PLUGIN\": \"fake\"", "\"PLUGIN\": " + hollow, StringComparison.Ordinal);
+            Assert.Throws<SettingsFileRefusedException>(() => SettingsDocument.Verify(before, Bytes(emptied), edits));
+        }
+
+        // A removal that left an empty object where the member was has not removed it.
+        var removal = new[] { SettingsEdit.Remove("Routes:Operations:contact.find:Binding") };
+        var removed = Kept.Replace(", \"Binding\": {\"seat\": 1}", string.Empty, StringComparison.Ordinal);
+        SettingsDocument.Verify(before, Bytes(removed), removal);
+        var hollowed = Kept.Replace("\"Binding\": {\"seat\": 1}", "\"Binding\": {}", StringComparison.Ordinal);
+        Assert.Throws<SettingsFileRefusedException>(() => SettingsDocument.Verify(before, Bytes(hollowed), removal));
     }
 
     /// <summary>

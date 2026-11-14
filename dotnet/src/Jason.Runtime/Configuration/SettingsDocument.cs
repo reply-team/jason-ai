@@ -94,9 +94,11 @@ public sealed record SettingsEditResult(byte[] Bytes, bool Changed);
 /// <para>
 /// <b>The post-condition.</b> Whatever the span logic does, the result is flattened by the same parser and compared with
 /// the original: every key outside the edited paths must be there with the same value, and nothing else may have come or
-/// gone, except the empty objects on the edited paths themselves (an object composed to hold a new member, or one an
-/// edit emptied), which the parser reads as a key without a value. Under each set path the keys must be exactly the
-/// value's; under each removed path there must be none. An edit that fails this is refused whole and nothing is written:
+/// gone, except an empty object above an edited path (one composed to hold a new member, or one an edit emptied) and the
+/// empty object a removal of an empty object takes away, which the parser reads as a key without a value. At and under
+/// each set path the keys must be exactly the value's, with the value's values, so an empty object or a null where a
+/// value was written is refused; at and under each removed path there must be none, an empty object included. An edit
+/// that fails this is refused whole and nothing is written:
 /// this is the net under every case the span logic does not foresee.
 /// </para>
 /// <para>
@@ -211,13 +213,18 @@ public static class SettingsDocument
             }
         }
 
-        // An object with no member is a key without a value; one that holds the edited paths may come into being (to
-        // hold a new member) or go (when an edit emptied it), and is no setting of anybody's.
-        bool Container(string key, string? value) => value is null && edits.Any(edit => AtOrUnder(edit.Path, key));
+        // An object with no member is a key without a value; one above an edited path may come into being (to hold a new
+        // member) or go (when an edit emptied it), and is no setting of anybody's. So may the empty object a removal of
+        // an empty object names. At an edited path itself a key without a value is a value like any other, held to the
+        // expected one.
+        bool Container(string key, string? value) => value is null && edits.Any(edit =>
+            Under(edit.Path, key) || (edit is RemoveIfEmptyEdit && string.Equals(edit.Path, key, StringComparison.OrdinalIgnoreCase)));
 
-        var unexpected = after.Where(pair => !Container(pair.Key, pair.Value)
-            && !(expected.TryGetValue(pair.Key, out var value) && string.Equals(value, pair.Value, StringComparison.Ordinal)));
-        var missing = expected.Where(pair => !Container(pair.Key, pair.Value) && !after.ContainsKey(pair.Key));
+        bool Same(IReadOnlyDictionary<string, string?> keys, string key, string? value) =>
+            keys.TryGetValue(key, out var held) && string.Equals(held, value, StringComparison.Ordinal);
+
+        var unexpected = after.Where(pair => !Container(pair.Key, pair.Value) && !Same(expected, pair.Key, pair.Value));
+        var missing = expected.Where(pair => !Container(pair.Key, pair.Value) && !Same(after, pair.Key, pair.Value));
         if (unexpected.Any() || missing.Any())
         {
             throw new SettingsFileRefusedException(SettingsRefusal.CheckRefused, edits.Count > 0 ? edits[0].Path : null);
