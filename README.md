@@ -138,7 +138,7 @@ to.
 | **AI / LLM** | Runs on your subscription, with no API key and nothing to connect. Any agent with a shell can run your session through Jason's CLI and skills. Six hosts can run the nine background roles: Claude Code, measured on real runs; Codex, measured on Windows but not yet run on an account (its sandbox there needs an administrator once); Cursor CLI, GitHub Copilot CLI, Gemini CLI and Antigravity CLI, built from each host's documentation and not yet run on an account. Jason ships no model and holds no model credentials. | [Which agent does what](#runs-on-the-plan-you-already-pay-for) · [Execution profiles](https://github.com/reply-team/jason-ai/blob/main/docs/execution-profiles.md) |
 | **Search and personalization** | Find leads through Reply's Live Data API (1B+ B2B contacts, with a preview of the audience size before you spend credits), or through your own tools: anything your agent can reach, a CSV, your CRM. A Researcher and a Personalizer role work per person. Jason has no contact database of its own. | [Finding leads](#finding-leads) |
 | **Deliverability and warm-up** | Deliverability modules ship with Jason: sending and LinkedIn guardrail skills (authentication, warm-up, pacing, bounces, recovery) and a Deliverability role that reads bounces, opt-outs and failures and can pause a campaign at once. Warm-up itself runs in the provider you connect: Reply, or TrulyInbox, Lemwarm, Warmy and others. Jason has no warm-up engine of its own. | [Deliverability](#deliverability-and-warm-up) |
-| **Human in the loop** | Every operation that reaches a real person waits for a person's approval, in the chat or the browser UI. It is written into the operation's contract, not left to a setting, and there is no autopilot switch. Two things to know: enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps; and a named person can pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Every such release is logged under that person's name. | [Nothing reaches a person without you](#nothing-reaches-a-person-without-you) |
+| **Human in the loop** | Every operation that reaches a real person waits for a person's approval, in the chat or the browser UI. That every such operation can wait is written into its contract, and what lets one go unasked is a person's recorded word, never a role's. Until a person chooses otherwise, every such operation waits for them, one at a time. The choice is theirs and no role can make it: they may say, separately for people who have not answered and for people who have, that sends go automatically, or keep each one waiting; a named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. A send that a role or a reviewer doubts waits for the person whatever they chose, and the claim refuses everything about anyone who asked not to be contacted. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. Every release without a question is logged under the name of the person who allowed it. | [Nothing reaches a person without you](#nothing-reaches-a-person-without-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
 | **Installation** | One prompt pasted into your agent, or one line in a shell. One self-contained executable under your own account, with no admin rights and no Docker, Python or Node for Jason itself. Measured on a Mac: 16 seconds from nothing to `Ready`. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 20 guides, 30 operation contracts in Markdown and JSON with 928 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
@@ -262,8 +262,8 @@ Day to day, it goes like this:
    question at a time, like a new hire would.
 3. **Bring contacts or let Jason find them:** Reply's Live Data API, your own search tools, a CSV, a Google Sheet, your CRM,
    or public research.
-4. **Approve the first message.** Your feedback ("too formal", "always mention a customer result") becomes a rule.
-5. **Start small.** A pilot of ten, every message approved. Jason reports what's working; you decide whether to grow it.
+4. **Approve the first message.** Until you say otherwise, it waits for your yes. Your feedback ("too formal", "always mention a customer result") becomes a rule.
+5. **Start small.** A pilot of ten, and each message waits for you until you choose that some go automatically. Jason reports what's working; you decide whether to grow it.
 6. **It reacts.** Replies, objections, out-of-office and silence each change the plan for that one person.
 
 ---
@@ -743,8 +743,10 @@ remembered when they say no. A tool that only sends messages doesn't hold that l
 **Your AI thinks. Jason remembers. Your provider delivers.** Each part does one job, and none of them pretends to be the
 others.
 
-**Autonomous doesn't mean unsupervised.** Every operation that reaches a real person waits for a person's word, given on
-the item or, for one kind of reply, in advance. That's written into the operation's contract, and no role can give it.
+**Autonomous doesn't mean unsupervised.** Every operation that reaches a real person waits for a person's word unless a
+person has recorded, in advance, that it may go: for people who have not answered, for people who have, or for one kind
+of reply. A role that is unsure, or a reviewer that doubts, sends the item to the person anyway, and nobody who asked not
+to be contacted is written to again. Only a person records that word, and no role can give it.
 
 **Honest over smooth.** An interrupted send is never guessed at: it repeats only where the provider can't send it twice, and otherwise comes back to you. A role that isn't sure asks. The
 history is append-only, so what happened stays what happened.

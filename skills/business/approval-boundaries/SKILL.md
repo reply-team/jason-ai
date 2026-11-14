@@ -388,6 +388,30 @@ to work, and never on one nobody has judged yet: allowing a probe's audience at 
 knows whether they answer. As guidance, its searches the size of the probe and its ceiling ten probes; the numbers are
 the person's.
 
+### The automatic send mode
+
+**In Jason, a person may choose that the sends to one kind of contact go without being asked.** There are two kinds,
+**cold**, a contact who has not answered in the campaign, and **warm**, one who has, and each has its own choice:
+`every_message`, which is what an unset choice means, or `automatic`. It is set for the whole installation by the
+preferences `send_mode.cold` and `send_mode.warm`, and for one campaign's cold contacts by `jason campaign
+set-send-mode`; where a campaign sets its own, that is the one in force there. It is read when the send is claimed, not
+when it is made.
+
+**It is a person's recorded decision in advance, and it lowers no class.** The operation is still `confirm_each`; what
+changes is who has already decided. The rule on standing approvals holds here word for word: it is a person's, by name,
+and never inferred from urgency, a role's request or a person's patience; no role sets it, and a request from inside a
+run is refused. It does not cover a send that any author or reviewer doubted (`ask_person` on the send, or a review that
+doubts it), which waits for the person whatever the mode and whatever standing approval would cover it; it does not
+reach a contact whose verdict says they asked not to be written to, whom the claim refuses in every campaign; and it does
+not touch an operation that is not a message to a person: `campaign.activate`, `campaign.enroll`, `enrollment.stop` and
+a search keep their own gates. A standing approval for a category of reply is a separate, narrower decision and stays
+beside it.
+
+**Say it plainly where it applies.** Where the mode is `automatic`, nothing is shown to the person before it is sent, so
+a plan that relies on it says so, in the plan's own words, and says which kind of contact it covers. Where it is unset or
+`every_message`, a plan states that each message waits. Do not describe the first message as waiting for approval where
+the cold mode in force is `automatic`: read it from the installation's status or `jason campaign get`, never from memory.
+
 ### The disclosure link
 
 An agent will not infer this connection, so it is stated here once. **A recorded human editorial

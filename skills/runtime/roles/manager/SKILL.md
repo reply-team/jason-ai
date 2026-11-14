@@ -107,8 +107,9 @@ showed.
 `send_after` ends `capability_not_offered` or `argument_unsupported`, you may create a new item without it, with
 `not_before` set to the moment, unless the failure is `ambiguous`: then an earlier attempt of that item may have
 reached the person, and a new item is created only once the provider has said it did not. It is claimed once the
-moment has passed, and both sends are `confirm_each`, so it then waits for a person's approval; nothing goes out before
-they give it. The machine has to be awake for the item to be claimed at all.
+moment has passed, and both sends are `confirm_each`, so it then waits for a person's approval unless a person has chosen that sends
+to this kind of contact go automatically (`approval-boundaries`), which is not yours to choose; nothing goes out before
+the claim has decided which. The machine has to be awake for the item to be claimed at all.
 
 **A template the plugin does not write.** Where a `message.send` composed as a template ends `template_not_offered`,
 the plugin it is routed to writes no template on that channel. You may create a new item with the message written as
@@ -173,15 +174,20 @@ threshold the responder records its best guess and raises a question whose optio
 nothing; acting on the answer is yours, at the answered question's line, and is exactly this and nothing more:
 
 1. Record the person's category as a second verdict for the same reply, which supersedes the first. Take the reply's
-   `plugin`, `thread`, `message_id` and `message_at`, and its `contact_id` and `goal_id`, from the first verdict line,
-   never from the question, so that the line which now stands loses none of them, with the reaction that category's row in
+   `plugin`, `thread`, `message_id` and `message_at`, its `contact_id` and `goal_id` and its `nature`, from the first
+   verdict line, never from the question, so that the line which now stands loses none of them, with the reaction that category's row in
    `categories.json` gives. A person's word is no guess, so its confidence is 1. Name the answered question with
    `--decision`, so that the line carries the person's answer: the runtime refuses it unless the question is the
    campaign's, answered by a named person, the option they chose is the category you record, word for word, and the
-   question was raised by the run that recorded the verdict on this reply:
+   question was raised by the run that recorded the verdict on this reply. Copy the first line's `nature` with
+   `--nature`, as it stands: it says what the reply is, which the person's answer about its category does not change,
+   and a line that states none leaves the contact as cold as it was. Where the first line's nature is `opt_out` and the
+   person's answer names another category, the reply is a person's own, so record `--nature person`, and say in your
+   summary that the lock the guess made stays: your verdict is a run's and never lifts it, so only the person's own
+   verdict on the reply, recorded under their name outside any run with a nature other than `opt_out`, does:
 
 ```
-jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 1 --reaction draft --goal demo --decision dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the person chose interested"
+jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-1042 --message msg-77 --message-at 2026-05-04T09:30:00Z --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --category interested --confidence 1 --reaction draft --nature person --goal demo --decision dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "the person chose interested"
 ```
 
    A person who picks `other` chose one of the ids: record `--category other` with `--decision`, and it passes. Where
@@ -190,8 +196,11 @@ jason reply record cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --plugin mailbox --thread thr-
    `--decision`, with your own confidence and a reason that names the decision. The draft under that line waits for a
    person, as under any line that is nobody's answer, and your summary says why. Do not ask the person again.
 
-2. Where the responder's guess was `opt_out` and the answer names another category, the register entry the responder made
-   for that person was made on a guess: remove it, with a reason that names the decision.
+2. Where the responder's guess was `opt_out` and the answer names another category, the register entries the runtime
+   made for that person when the guess was recorded were made on a guess: remove each, with a reason that names the
+   decision. The register is only half of what the guess did: the contact stays locked, and every work item about them
+   is refused until the person's own verdict lifts it, which is not yours to record. Say so in your summary, so the
+   person is asked to record it.
 
 ```
 jason suppression remove --channel email --value marta@example.com --reason "the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD says this was not an opt-out"

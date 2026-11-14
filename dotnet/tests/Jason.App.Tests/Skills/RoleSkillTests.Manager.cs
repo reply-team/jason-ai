@@ -349,7 +349,7 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
-            "It is claimed once the moment has passed, and both sends are `confirm_each`, so it then waits for a person's approval; nothing goes out before they give it. The machine has to be awake for the item to be claimed at all.",
+            "It is claimed once the moment has passed, and both sends are `confirm_each`, so it then waits for a person's approval unless a person has chosen that sends to this kind of contact go automatically (`approval-boundaries`), which is not yours to choose; nothing goes out before the claim has decided which. The machine has to be awake for the item to be claimed at all.",
             skill,
             StringComparison.Ordinal);
     }
@@ -468,7 +468,7 @@ public partial class RoleSkillTests
         Assert.Contains("The one you do record is a person's answer.", skill, StringComparison.Ordinal);
         Assert.Contains("raises a question whose options are the category ids, and drafts nothing; acting on the answer is yours, at the answered question's line, and is exactly this and nothing more", skill, StringComparison.Ordinal);
         Assert.Contains("Record the person's category as a second verdict for the same reply, which supersedes the first.", skill, StringComparison.Ordinal);
-        Assert.Contains("`plugin`, `thread`, `message_id` and `message_at`, and its `contact_id` and `goal_id`, from the first verdict line, never from the question, so that the line which now stands loses none of them", skill, StringComparison.Ordinal);
+        Assert.Contains("`plugin`, `thread`, `message_id` and `message_at`, its `contact_id` and `goal_id` and its `nature`, from the first verdict line, never from the question, so that the line which now stands loses none of them", skill, StringComparison.Ordinal);
 
         var printed = SkillPack.PrintedCommands(SkillPack.Find("manager").File).Single(line => line.StartsWith("jason reply record ", StringComparison.Ordinal));
         foreach (var option in new[] { "--plugin", "--thread", "--message", "--message-at", "--contact", "--category", "--confidence", "--reaction", "--goal", "--decision" })
@@ -499,7 +499,7 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("manager");
 
-        Assert.Contains("Where the responder's guess was `opt_out` and the answer names another category, the register entry the responder made for that person was made on a guess: remove it, with a reason that names the decision.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the responder's guess was `opt_out` and the answer names another category, the register entries the runtime made for that person when the guess was recorded were made on a guess: remove each, with a reason that names the decision.", skill, StringComparison.Ordinal);
         Assert.Contains("Where the answered category's reaction is not `none`, queue the thread's read and a responder for it, exactly as for a line no responder names, below.", skill, StringComparison.Ordinal);
         Assert.Contains("where the answer confirmed `opt_out`, it finds the register entry already there and goes on to the provider's half", skill, StringComparison.Ordinal);
         Assert.Contains("Every other answer stays as written: you draft nothing and act on nothing on the reply yourself.", skill, StringComparison.Ordinal);

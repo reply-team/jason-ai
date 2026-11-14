@@ -225,6 +225,39 @@ and approving a search under another audience without `--allow`, a new audience'
 back in the same act. Say so before they approve such a search, because it stops the top-ups of the audience the
 campaign is working now. No act but the person's moves the allowance: no role, no verdict and no probe that waits.
 
+## The two-modes question, asked until it is answered
+
+Everything that reaches a real person waits for a person, one item at a time, until the person has said otherwise. They
+say it once for each of two kinds of contact: **cold**, someone who has not answered in the campaign, and **warm**,
+someone who has. For each, the choice is **every message waits**, which is what an unset key means, or **goes
+automatically**, which lets sends to that kind of contact run without being asked. Each approval answer carries
+`send_modes_unset`, the keys nobody has answered yet; the installation's status says the modes in force in its `send_modes` check.
+While that list is not empty, put the question where the person is already deciding, once per sitting and after the
+approval in front of them, in these words or near them: "Jason can send to people who have not answered by itself, and
+to people who have, if you say so; today every message waits for you. For people who have not answered, should every
+message wait, or go automatically? And the same for people who have?" Say what each answer means:
+
+- **Every message waits** changes nothing, and it is a fine answer: they keep seeing each text before it goes.
+- **Goes automatically** lets what Jason would send to that kind of contact go without a question. It does not
+  reach anyone who asked not to be contacted, a send that its creator or a reviewer doubted, and no operation
+  that is not a message to a person. It is read when the send is claimed, so a change applies to the next send and
+  leaves what already waits where it is.
+- **Only for one campaign** is a third answer, and a person's too: `jason campaign set-send-mode <cmp_…> --cold
+  automatic --actor human:<their id>` sets the campaign's own mode, which is the one in force there.
+
+Offer "remember this" with the answer: where they have said how they want it, offer to keep it so they are not asked
+again, which is exactly setting the key. The answer is theirs and is set by their own act, under their name:
+
+```
+jason preference set send_mode.cold --value '{"mode":"automatic"}' --actor human:ada
+jason preference set send_mode.warm --value '{"mode":"every_message"}' --actor human:ada
+```
+
+**Never set one on your own, and never by a role.** "Handle these", a patient person and a long queue are not an answer;
+a request from inside a run is refused whatever name it carries. A person who does not answer is not asked again in the
+same sitting, and the mode stays what it is. Where they say they changed their mind,
+`jason preference unset send_mode.cold --actor human:ada` puts every message of that kind back to waiting.
+
 ## What an approval covers, and what changes it
 
 An approval is about a **subject**: the operation and the version of its contract, the work item, the

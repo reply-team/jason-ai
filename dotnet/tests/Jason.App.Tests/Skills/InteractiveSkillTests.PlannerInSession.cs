@@ -343,7 +343,7 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("planner-in-session");
         Assert.Contains("show it to the person as it would go out. Change it with them until they confirm it.", skill, StringComparison.Ordinal);
-        Assert.Contains("Their confirmation is of the words; a send still waits for its own approval.", skill, StringComparison.Ordinal);
+        Assert.Contains("Their confirmation is of the words; a send still goes to its own claim, where a person's approval or the send mode they chose decides.", skill, StringComparison.Ordinal);
         Assert.Contains("into their memory file at the level it belongs to: the client's when it holds for all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign alone", skill, StringComparison.Ordinal);
         Assert.Contains("nor a role's note, which is that role's own", skill, StringComparison.Ordinal);
 
