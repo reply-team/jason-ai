@@ -474,7 +474,7 @@ voids every review made before it: the line under the old hash no longer stands,
 edit's own save, and a review sent with the old hash is refused `review_stale`. Only a send still `created` or
 `waiting` is reviewed (`not_reviewable`), so a review lands before the person is asked or not at all. A review is
 refused `not_reviewable` exactly where the claim would not read it: where an approval stands for the send as it would
-now go, since a retry goes under the decision already made and reads no review. The one exception fails closed:
+now go, since the claim would run it under the decision already made and read no review. The one exception fails closed:
 where the runtime cannot yet tell whether the claim would read the review, because an approval is live and the
 pre-flight would not let the send go right now (its plugin unavailable, say, or a block holding it), the review is
 refused too, and may be made again once the send can be claimed. Who reviews: a running attempt of the

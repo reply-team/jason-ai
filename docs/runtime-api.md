@@ -331,9 +331,9 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
   with that line. It names the send by `work_item_id` and the text it read by `review_hash`, the hash `workitem.get`
   answers on a send a person decides each one of; a send whose input moved since is refused `review_stale`, and only a
   send still `created` or `waiting` is reviewed (`not_reviewable`); a review is also refused `not_reviewable` where an
-  approval stands for the send as it would now go, since a retry goes under that approval without reading a review.
-  Where the runtime cannot yet tell whether the claim would read the review, because an approval is live and the send
-  cannot be claimed right now, the review is refused too, and may be made again once the send can be claimed.
+  approval stands for the send as it would now go, since the claim would run it under that approval without reading a
+  review. Where the runtime cannot yet tell whether the claim would read the review, because an approval is live and
+  the send cannot be claimed right now, the review is refused too, and may be made again once the send can be claimed.
   `result` is `passed` or `doubts`; a doubt carries its `code`, from the closed list the kind's document publishes, and
   may carry one `note`, a line of at most 280 characters that the line never carries and the person reads on the
   approval. The `actor` is a running attempt of the same campaign's role work or a person by name, and never the send's
