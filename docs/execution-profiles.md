@@ -189,6 +189,8 @@ skill that *was* configured and could not be given to the role — misnamed, or 
 `Roles:MaxSkillBytes` — refuses the attempt instead, because a role doing the job untaught costs a
 real launch and leaves only a log line behind.
 
+To change what a role is taught, or to add a role, ask your own AI: [Changing Jason](customising.md) says where each change takes effect, a role's new instruction applying at its next piece of work.
+
 This repository's runtime pack now contributes a `SKILL.md` for **every one of the nine roles the
 runtime seeds**, so a role launching with no skill directory is a directory an operator has not
 composed rather than a role nobody wrote for.
