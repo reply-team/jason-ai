@@ -150,17 +150,20 @@ plugins before anything is written, as a campaign's is. A route the file holds a
 too writes and activates nothing; one the file holds and no reload froze is put in force. A reload that refuses, over
 the packages as they are now, puts the file back as it was, and the answer's last detail, under the field
 `settings.json`, says whether it did: `settings_file_put_back`, or `settings_file_not_put_back` where another writer
-changed the file in between, which is left as that writer left it, or where another program held the file open, which
-is left holding what the write left, out of force. No command mends that while loads refuse, so the detail says the hand
-edit that does, or the reload that makes the file true.
+changed the file in between, which is left as that writer left it, or where another program held the file open or it
+could not be written again, which is left holding what the write left, out of force. No command mends that while loads
+refuse, so the detail says the hand edit that does — a new route taken out, a route the write replaced or took away put
+back, as the file held it before the write — or the reload that makes the file true.
 
-Five refusals write nothing, each naming the setting by its path and never a value the file holds:
+Six refusals write nothing, each naming the setting by its path and never a value the file holds:
 `settings_file_unreadable`, a file the runtime's own parser does not read, named by the line and the byte where it
 stopped; `settings_file_not_editable`, a setting the file says in a way the writer cannot change without touching what
-it does not own, such as twice in different cases; `settings_file_changed`, a file another program kept changing
-while the runtime wrote it, worth sending again; `settings_file_busy`, a file another program holds open, worth
-sending again; and `setting_shadowed`, a setting a `JASON_` environment variable gives a value, where a write to the
-file would never be in force. A binding the file would read back as something else is refused as
+it does not own, such as one it says twice, or a file that is a link to another file, which the write would
+replace with a file of its own; `settings_file_changed`, a file another program kept changing while the runtime wrote
+it, worth sending again; `settings_file_busy`, a file another program holds open, worth sending again;
+`settings_file_not_writable`, a file or folder that is read-only or that this user may not write, or a full disk, which
+sending again does not mend; and `setting_shadowed`, a setting a `JASON_` environment variable gives a value, named as
+the environment spells it, where a write to the file would never be in force. A binding the file would read back as something else is refused as
 `not_representable_globally` ("What a global binding cannot express", §4).
 
 ## 4. A campaign's own routes
@@ -486,7 +489,9 @@ about that channel's route only, never the operation's own.
 A global route write journals `global_routes_updated`, keyed the same three ways and naming no campaign, with the old
 and new routes as the reload froze them, in the same save as that reload's `plugins_reloaded`, which carries the same
 actor and reason; a reload that left the route as it was writes no such line, and a request that finds the route
-already in force in the file and in the snapshot writes nothing and journals neither.
+already in force in the file and in the snapshot writes nothing and journals neither. A runtime that stops between the
+write and the reload — a crash, a machine switched off — leaves the route in the file and out of force; the next start
+freezes it with the rest of the file, and no `global_routes_updated` line says so.
 
 ## 7. Fail-closed: every reason, and what to change
 
