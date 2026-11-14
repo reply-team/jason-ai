@@ -7,6 +7,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Manifest;
+using Jason.Runtime.Routing;
 
 namespace Jason.Runtime.Plugins.Registry;
 
@@ -158,7 +159,7 @@ public sealed class PluginGrantService(
                         token).ConfigureAwait(false);
                     return answer;
                 },
-                (refused, putBack) => PutBackSaid(refused, putBack, takenBack),
+                (refused, putBack, _) => RouteService.PutBackSaid(refused, putBack, takenBack ? GlobalRouteWrite.TakenAway : GlobalRouteWrite.Added, GrantNouns),
                 cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -331,36 +332,6 @@ public sealed class PluginGrantService(
         ["granted"] = new JsonArray([.. (plugin is null ? [] : Granted(plugin, capability)).Select(name => (JsonNode)JsonValue.Create(name))]),
     };
 
-    /// <summary>
-    /// The refusal of a write the reload refused after it, with what became of the file said in one more detail, under the
-    /// settings file's own field, and for a rejected reload in its first sentence too.
-    /// </summary>
-    internal static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack, bool takenBack)
-    {
-        var (detail, clause) = putBack switch
-        {
-            SettingsPutBack.PutBack => (
-                "The settings file was put back as it was; the grants in force are unchanged.",
-                "the settings file was put back as it was."),
-            SettingsPutBack.ChangedSince => (
-                "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the grants in force are unchanged.",
-                "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it."),
-            _ when takenBack => (
-                "Another program held the settings file open, so it was not put back: the grant this took back is gone from the file and still in force; the grants in force are unchanged. Put the grant back into the file by hand, or fix what the load refused and run jason plugin reload.",
-                "another program held the settings file open, so it was not put back: the grant this took back is gone from the file and still in force; put the grant back into the file by hand, or fix what the load refused and run jason plugin reload."),
-            _ => (
-                "Another program held the settings file open, so it was not put back: it holds the grant this wrote, which is not in force; the grants in force are unchanged. Take the grant out of the file by hand, or fix what the load refused and run jason plugin reload.",
-                "another program held the settings file open, so it was not put back: it holds the grant this wrote, which is not in force; take the grant out of the file by hand, or fix what the load refused and run jason plugin reload."),
-        };
-        var details = refused.Details ?? [];
-        var message = refused.Code == "plugin_reload_rejected"
-            ? string.Create(CultureInfo.InvariantCulture, $"The plugins were not loaded again: {details.Count} problem(s), so the grant was not changed: {clause}")
-            : refused.Message;
-        return new DomainException(
-            refused.StatusCode,
-            refused.Code,
-            message,
-            refused.Retryable,
-            [.. details, new ErrorDetail(PluginLoader.SettingsFileField, SettingsWriter.Code(putBack), detail)]);
-    }
+    /// <summary>A grant, as <c>plugin grant</c> and <c>plugin revoke</c> write it, in the put-back's sentences.</summary>
+    internal static PutBackNouns GrantNouns { get; } = new("grant", "grants", "took back", "the grant was not changed");
 }

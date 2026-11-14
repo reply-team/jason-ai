@@ -6,8 +6,10 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Routing;
 using Microsoft.Extensions.Configuration;
@@ -304,6 +306,26 @@ public class PluginGrantWriteTests
         Assert.Equal(Original, File.ReadAllText(api.Paths.UserSettingsFile));
     }
 
+    /// <summary>
+    /// A grant's reload refused after the write says what became of the file in the route writer's forms, with a grant's
+    /// words: the grants in force, the grant this wrote or took back, and the hand edit that mends a file not put back.
+    /// </summary>
+    [Theory]
+    [InlineData(SettingsPutBack.PutBack, false, "settings_file_put_back", "The settings file was put back as it was; the grants in force are unchanged.", "the settings file was put back as it was.")]
+    [InlineData(SettingsPutBack.ChangedSince, true, "settings_file_not_put_back", "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the grants in force are unchanged.", "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it.")]
+    [InlineData(SettingsPutBack.Held, false, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: it holds the grant this wrote, which is not in force; the grants in force are unchanged. Take the grant out of the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: it holds the grant this wrote, which is not in force; take the grant out of the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.NotWritable, true, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: the grant this took back is gone from the file and still in force; the grants in force are unchanged. Put the grant back into the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: the grant this took back is gone from the file and still in force; put the grant back into the file by hand, or fix what the load refused and run jason plugin reload.")]
+    public void A_refused_reload_after_a_grant_says_what_became_of_the_file(SettingsPutBack putBack, bool takenBack, string code, string detail, string clause)
+    {
+        var rejected = new DomainException(409, "plugin_reload_rejected", "The plugins were not loaded again.", false, [new ErrorDetail("plugins/x", "manifest_invalid", "A package problem.")]);
+
+        var said = RouteService.PutBackSaid(rejected, putBack, takenBack ? GlobalRouteWrite.TakenAway : GlobalRouteWrite.Added, PluginGrantService.GrantNouns);
+
+        Assert.Equal($"The plugins were not loaded again: 1 problem(s), so the grant was not changed: {clause}", said.Message);
+        var last = said.Details![^1];
+        Assert.Equal((PluginLoader.SettingsFileField, code, detail), (last.Field, last.Code, last.Message));
+    }
+
     /// <summary>A list a <c>JASON_</c> variable sets one element of is the variable's: the file's list is not the one in force.</summary>
     [Fact]
     public void A_list_an_environment_variable_sets_one_element_of_is_shadowed()
@@ -312,10 +334,10 @@ public class PluginGrantWriteTests
         Environment.SetEnvironmentVariable(prefix + "Plugins__Grants__fake-provider__Http__0", "localhost:5555");
         try
         {
-            var file = new SettingsFile(new ConfigurationBuilder().AddEnvironmentVariables(prefix).Build());
+            var file = new SettingsFile(new ConfigurationBuilder().AddEnvironmentVariables(prefix).Build(), prefix);
 
-            Assert.True(file.Shadowed("Plugins:Grants:fake-provider:Http"));
-            Assert.False(file.Shadowed("Plugins:Grants:fake-provider:Env"));
+            Assert.Equal(prefix + "Plugins__Grants__fake-provider__Http__0", file.Shadowing("Plugins:Grants:fake-provider:Http"));
+            Assert.Null(file.Shadowing("Plugins:Grants:fake-provider:Env"));
         }
         finally
         {

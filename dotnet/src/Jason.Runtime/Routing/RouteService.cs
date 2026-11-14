@@ -27,6 +27,21 @@ public enum GlobalRouteWrite
 }
 
 /// <summary>
+/// The words a refusal that could not put the settings file back uses for what the write was about: the thing written,
+/// in the singular and the plural, how the write took one away, and the clause a rejected reload's sentence ends its
+/// cause with.
+/// </summary>
+/// <param name="One">The thing in the singular: "route".</param>
+/// <param name="Many">The thing in the plural, as it is in force: "routes".</param>
+/// <param name="TookAway">How a write that took one out of the file did it: "took away".</param>
+/// <param name="NotDone">What became of the write when the reload refused: "the route was not written".</param>
+public sealed record PutBackNouns(string One, string Many, string TookAway, string NotDone)
+{
+    /// <summary>A global route, as <c>route set --global</c> and <c>route unset --global</c> write it.</summary>
+    public static PutBackNouns Route { get; } = new("route", "routes", "took away", "the route was not written");
+}
+
+/// <summary>
 /// The four <c>route.*</c> operations: where one campaign's work would go, where every campaign's work goes, and
 /// the two acts that change one campaign's mind.
 /// <para>
@@ -472,21 +487,22 @@ public sealed class RouteService(
     /// true. Which of those the write was is read from the file as it was before the write, not from the routes in force,
     /// since the file is what the hand edit mends.
     /// </remarks>
-    internal static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack, GlobalRouteWrite write)
+    internal static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack, GlobalRouteWrite write, PutBackNouns? nouns = null)
     {
+        nouns ??= PutBackNouns.Route;
         var (detail, clause) = putBack switch
         {
             SettingsPutBack.PutBack => (
-                "The settings file was put back as it was; the routes in force are unchanged.",
+                $"The settings file was put back as it was; the {nouns.Many} in force are unchanged.",
                 "the settings file was put back as it was."),
             SettingsPutBack.ChangedSince => (
-                "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.",
+                $"The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the {nouns.Many} in force are unchanged.",
                 "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it."),
-            _ => NotPutBack(putBack, write),
+            _ => NotPutBack(putBack, write, nouns),
         };
         var details = refused.Details ?? [];
         var message = refused.Code == "plugin_reload_rejected"
-            ? string.Create(CultureInfo.InvariantCulture, $"The plugins were not loaded again: {details.Count} problem(s), so the route was not written: {clause}")
+            ? string.Create(CultureInfo.InvariantCulture, $"The plugins were not loaded again: {details.Count} problem(s), so {nouns.NotDone}: {clause}")
             : refused.Message;
         return new DomainException(
             refused.StatusCode,
@@ -500,20 +516,21 @@ public sealed class RouteService(
     /// A file that still holds what the write left: why it could not be put back, what it holds, and the hand edit that
     /// mends it, as a detail's sentences and as a clause of the rejected reload's.
     /// </summary>
-    private static (string Detail, string Clause) NotPutBack(SettingsPutBack putBack, GlobalRouteWrite write)
+    private static (string Detail, string Clause) NotPutBack(SettingsPutBack putBack, GlobalRouteWrite write, PutBackNouns nouns)
     {
+        var one = nouns.One;
         var cause = putBack == SettingsPutBack.Held
             ? "another program held the settings file open"
             : "the settings file could not be written again";
         var (state, mend) = write switch
         {
-            GlobalRouteWrite.TakenAway => ("the route this took away is gone from the file and still in force", "put the route back into the file by hand"),
-            GlobalRouteWrite.Replaced => ("it holds the route this wrote, which is not in force, where it held the route this replaced", "put the route this replaced back into the file by hand"),
-            _ => ("it holds the route this wrote, which is not in force", "take the route out of the file by hand"),
+            GlobalRouteWrite.TakenAway => ($"the {one} this {nouns.TookAway} is gone from the file and still in force", $"put the {one} back into the file by hand"),
+            GlobalRouteWrite.Replaced => ($"it holds the {one} this wrote, which is not in force, where it held the {one} this replaced", $"put the {one} this replaced back into the file by hand"),
+            _ => ($"it holds the {one} this wrote, which is not in force", $"take the {one} out of the file by hand"),
         };
         mend += ", or fix what the load refused and run jason plugin reload";
         return (
-            $"{Capital(cause)}, so it was not put back: {state}; the routes in force are unchanged. {Capital(mend)}.",
+            $"{Capital(cause)}, so it was not put back: {state}; the {nouns.Many} in force are unchanged. {Capital(mend)}.",
             $"{cause}, so it was not put back: {state}; {mend}.");
 
         static string Capital(string text) => string.Concat(char.ToUpperInvariant(text[0]).ToString(), text.AsSpan(1));
