@@ -1377,7 +1377,7 @@ work let through as a trial asks the person again where the attempt the block re
 pin is a change to the input the person approved (§Approvals, what is approved is a subject). A block that is due but
 holds nothing that could run now lets the next held item the claim meets through as its trial instead. The trial of a
 sender's block that names no channel is drawn among the items it holds whose channel has no open block of that
-sender, since that channel's block governs them: the trial of a sender's block on one channel is drawn from the items
+sender, since that channel's block governs them. The trial of a sender's block on one channel is drawn from the items
 the block that names no channel holds on that channel as well as from its own, as an account's is drawn from the items
 its senders' blocks hold. A block that names no channel may therefore sit open with nothing it may draw; it still
 holds every channel that has no block of its own until a send of any channel gets past it. A sender's block on one

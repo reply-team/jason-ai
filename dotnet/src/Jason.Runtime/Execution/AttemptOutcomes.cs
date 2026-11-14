@@ -460,8 +460,9 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, L
     /// it again, and parks the item on it: a trial of the account that met a sender's block has got past the account,
     /// so the account clears and the item parks on the sender. A trial of a sender's block on every channel that met the
     /// same sender's block on one channel has got past nothing (<see cref="ProviderBlocks.OneChannelOf"/>): the item moves
-    /// onto the channel's block, and the block on every channel stays open, its next trial a cadence off; so does a trial
-    /// of a sender's block on one channel that met the same sender's block on every channel. A got-past clears
+    /// onto the channel's block, and the block on every channel stays open, its next trial a cadence off. A trial of a
+    /// sender's block on one channel that met that sender's block on every channel has got past nothing either: the item
+    /// parks on the block on every channel, and the channel's block stays open, its next trial a cadence off. A got-past clears
     /// the sender's block on the call's channel and on every channel, never one on another channel.
     /// <see cref="BlockAnswer.Undecided"/> says nothing, and a trial it was puts the block's next trial a cadence off. Every
     /// block it cleared is said to have cleared.

@@ -1333,7 +1333,7 @@ than the call: work waits on it. A sender's block names the channel the sender i
 numbers its accounts on one channel apart from those on another, as Reply numbers its mailboxes apart from its
 LinkedIn accounts: without it, one identifier's block holds and clears that identifier's work on every channel. Name
 the channel the call was asked to send on, never another, and none for a call that names none: a block naming another
-channel is refused as one outside its schema is. A block outside that page is recorded `permanent`, with what is wrong with it named
+channel, or one for a call that names none, is refused as one outside its schema is. A block outside that page is recorded `permanent`, with what is wrong with it named
 beside the failure. The events and delivery families declare no
 block, so a `blocked` answer there is an answer outside the contract, `result_invalid`.
 
