@@ -42,21 +42,12 @@ namespace Jason.Runtime.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "send_mode_cold",
-                table: "campaigns");
-
-            migrationBuilder.DropColumn(
-                name: "send_mode_cold_set_by",
-                table: "campaigns");
-
-            migrationBuilder.DropColumn(
-                name: "send_mode_warm",
-                table: "campaigns");
-
-            migrationBuilder.DropColumn(
-                name: "send_mode_warm_set_by",
-                table: "campaigns");
+            // Dropped in place rather than by rebuilding the table, which would lose the triggers an earlier migration
+            // wrote on campaigns and, with foreign keys on, the rows that are deleted with a campaign.
+            migrationBuilder.Sql("ALTER TABLE campaigns DROP COLUMN send_mode_cold;");
+            migrationBuilder.Sql("ALTER TABLE campaigns DROP COLUMN send_mode_cold_set_by;");
+            migrationBuilder.Sql("ALTER TABLE campaigns DROP COLUMN send_mode_warm;");
+            migrationBuilder.Sql("ALTER TABLE campaigns DROP COLUMN send_mode_warm_set_by;");
         }
     }
 }

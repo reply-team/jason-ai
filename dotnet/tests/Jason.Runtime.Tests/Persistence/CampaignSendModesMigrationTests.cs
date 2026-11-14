@@ -16,7 +16,7 @@ namespace Jason.Runtime.Tests.Persistence;
 /// </summary>
 public class CampaignSendModesMigrationTests
 {
-    private const string PreviousMigration = "20261113021003_JournalByThread";
+    private const string PreviousMigration = "20261114031653_JournalVerdictsByThread";
 
     [Fact]
     public async Task An_upgraded_campaign_holds_no_mode_of_its_own_and_every_send_waits_for_a_person()
