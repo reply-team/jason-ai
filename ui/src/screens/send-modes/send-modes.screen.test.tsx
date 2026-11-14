@@ -388,18 +388,24 @@ describe('why the send mode held a send, or let one go', () => {
     it.each([
         [
             'approval.get/park-sent-from-chat',
-            "This send was written in Jason's chat, so it waits for you whatever the send mode.",
+            "This message was written in Jason's chat, so it waits for you however messages are set to go.",
         ],
-        ['approval.get/park-doubted', 'A doubt was raised about this send, so it waits for you; the doubt is below.'],
+        [
+            'approval.get/park-doubted',
+            'A doubt was raised about this message, so it waits for you; the doubt is below.',
+        ],
         [
             'approval.get/park-awaiting-judgement',
-            'A reply from this contact has not been judged yet, so nothing goes to them automatically until it is.',
+            'A reply from this person has not been judged yet, so nothing goes to them automatically until it is.',
         ],
         [
             'approval.get/park-awaiting-nature',
-            'A reply from this contact was judged before Jason recorded what kind of reply it was, so nothing goes to them automatically until it is judged again.',
+            'A reply from this person was judged before Jason recorded what kind of reply it was, so nothing goes to them automatically until it is judged again.',
         ],
-        ['approval.get/park-answers-no-verdict', 'This answer names no judged reply, so it is not sent automatically.'],
+        [
+            'approval.get/park-answers-no-verdict',
+            'This answers a reply nobody has judged, so it is not sent automatically.',
+        ],
         [
             'approval.get/park-reply-not-from-a-person',
             'The reply this answers was an automatic reply, a bounce or a request to stop, which never gets an automatic answer.',
@@ -411,7 +417,7 @@ describe('why the send mode held a send, or let one go', () => {
         ],
         [
             'approval.get/park-not-reviewed',
-            "No critic's or person's review passed this text, so the automatic mode does not send it.",
+            'No review by the critic or by a person passed this text, so it does not go automatically.',
         ],
     ] as const)('%s says why it waits', async (name, sentence) => {
         const api = held();
@@ -438,7 +444,9 @@ describe('why the send mode held a send, or let one go', () => {
         const api = marta();
         mount(api, structuredClone(fixtures['approval.get/released-automatically'].response) as unknown as Approval);
 
-        expect(why()).toBe('The send mode let it go without asking you, after a review passed its text.');
+        expect(why()).toBe(
+            'It went without asking you, as these messages are set to go, after a review passed its text.',
+        );
         const card = screen.getByRole('heading', { name: 'Sent without asking you' }).closest('div')!;
         expect(
             within(card).getByText('People who have not replied yet: Goes automatically · your choice for every agent'),

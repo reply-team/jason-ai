@@ -299,23 +299,25 @@ export const en = {
     'modes.agent.apply': 'Apply',
     'modes.agent.applied': 'Applied.',
     'modes.agent.refused': 'That did not go through: {why}',
-    'modes.park.sent_from_chat': "This send was written in Jason's chat, so it waits for you whatever the send mode.",
-    'modes.park.doubted': 'A doubt was raised about this send, so it waits for you; the doubt is below.',
+    'modes.park.sent_from_chat':
+        "This message was written in Jason's chat, so it waits for you however messages are set to go.",
+    'modes.park.doubted': 'A doubt was raised about this message, so it waits for you; the doubt is below.',
     'modes.park.awaiting_judgement':
-        'A reply from this contact has not been judged yet, so nothing goes to them automatically until it is.',
+        'A reply from this person has not been judged yet, so nothing goes to them automatically until it is.',
     'modes.park.awaiting_nature':
-        'A reply from this contact was judged before Jason recorded what kind of reply it was, so nothing goes to them automatically until it is judged again.',
-    'modes.park.answers_no_verdict': 'This answer names no judged reply, so it is not sent automatically.',
+        'A reply from this person was judged before Jason recorded what kind of reply it was, so nothing goes to them automatically until it is judged again.',
+    'modes.park.answers_no_verdict': 'This answers a reply nobody has judged, so it is not sent automatically.',
     'modes.park.reply_not_from_a_person':
         'The reply this answers was an automatic reply, a bounce or a request to stop, which never gets an automatic answer.',
     'modes.park.escalated': 'A reply in this conversation was marked for you to decide.',
     'modes.park.edited_after_review':
         'The text was edited after it was reviewed, so the review no longer stands for it.',
     'modes.park.not_reviewed':
-        "No critic's or person's review passed this text, so the automatic mode does not send it.",
+        'No review by the critic or by a person passed this text, so it does not go automatically.',
     'modes.park.daily_ceiling':
-        'This campaign has reached its limit of automatic sends for today, so this one waits for you to approve it.',
-    'modes.park.automatic_mode': 'The send mode let it go without asking you, after a review passed its text.',
+        "This agent has reached today's limit of automatic messages, so this one waits for you to approve it.",
+    'modes.park.automatic_mode':
+        'It went without asking you, as these messages are set to go, after a review passed its text.',
     'modes.released.heading': 'Sent without asking you',
     'modes.released.mode': '{kind}: {mode} · {source}',
     'modes.released.review': 'A review passed its text before it went.',
