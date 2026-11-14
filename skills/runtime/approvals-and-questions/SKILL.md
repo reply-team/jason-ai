@@ -263,10 +263,13 @@ should every message wait, or go automatically? And the same for people who have
 `send_modes_unset` names. Say what each answer means:
 
 - **Every message waits** changes nothing, and it is a fine answer: they keep seeing each text before it goes.
-- **Goes automatically** lets what Jason would send to that kind of contact go without a question. It does not
-  reach anyone who asked not to be contacted, a send that its creator or a reviewer doubted, and no operation
-  that is not a message to a person. It is read when the send is claimed, so a change applies to the next send and
-  leaves what already waits where it is.
+- **Goes automatically** lets what Jason would send to that kind of contact go without a question. It never
+  reaches anyone who asked not to be contacted, and it touches no operation that is not a message to a person. A
+  message still waits for the person where its creator or a reviewer doubted it, where neither the critic nor a person
+  passed its text, where the contact has a reply not yet judged, where it answers an automatic reply, a bounce or a
+  request to stop, or a conversation marked for the person, where it was written in Jason's chat, and once the
+  campaign has sent its day's limit automatically. It is read when the send is claimed, so a change applies to the
+  next send and leaves what already waits where it is.
 - **Only for one campaign** is a third answer, and a person's too: `jason campaign set-send-mode <cmp_…> --cold
   automatic --actor human:<their id>` sets the campaign's own mode, which is the one in force there.
 
