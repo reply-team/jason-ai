@@ -784,7 +784,7 @@ Three more are a campaign's reads, made when a person or an agent asks about the
 `audience.preview` (how many people an audience holds, and a sample of them without contact details),
 `audience.filter_values` (the values one of the provider's filters takes) and `audience.availability` (whether the
 account may search now, and what it has left) — `jason audience preview`, `jason audience filter-values` and
-`jason audience availability`. **A campaign's read is routed by the campaign's route for `audience.search`**, the search
+`jason audience availability`. **A campaign's audience read is routed by the campaign's route for `audience.search`**, the search
 it serves, whatever the read's own operation resolves to: a definition is previewed, a filter's values offered and the
 account asked at the provider and account that would run the search, never one provider's audience previewed and another
 one's search approved. It is resolved as the claim resolves it (§2) and held to the same route's half of §7 for the read's
@@ -804,7 +804,7 @@ accounts a send can go from. **It is routed by the campaign's route for `sender.
 one `route resolve` and `operation describe` answer for it. It is held to the same route's half of §7 under the same
 codes; the input is composed as a work item's would be, the arguments and the campaign with the routed plugin's own pins,
 and names nobody; and the answer is held to the document. It names a campaign, and an archived one is not refused: it is
-read by the routes in force, which leave the archived campaign's own out from the next activation (§6). Nothing is
+read by the routes in force, which leave the archived campaign's own out from the next activation (§6), except while one of its searches is still followed, when they are kept (§6). Nothing is
 recorded, pinned or journaled, and the operation stays work as well.
 
 The same route answers what an operation takes for a campaign: `operation.describe` (`jason operation describe

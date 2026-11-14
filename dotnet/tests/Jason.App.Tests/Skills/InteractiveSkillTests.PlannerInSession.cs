@@ -556,10 +556,14 @@ public partial class InteractiveSkillTests
         Assert.Contains("A routed channel that holds no account is said firmly: not one message leaves on it until an account is connected", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing is started before the person's go.", skill, StringComparison.Ordinal);
         Assert.Contains("The count never holds the person up: a read that fails or is slow leaves the line without numbers, and the message goes on.", skill, StringComparison.Ordinal);
-        Assert.Contains("Count the accounts whose `status` is `active`, and the others apart.", skill, StringComparison.Ordinal);
+        Assert.Contains("Count the accounts whose `status` is `active`, and the others apart", skill, StringComparison.Ordinal);
         Assert.Contains("Where the `plugin_id` of a channel's `sender list` answer is not the provider `route resolve` named for that channel's sends, say only the provider its sends go through, and no number for it.", skill, StringComparison.Ordinal);
         Assert.Contains("no channel is connected, connecting your provider now is recommended and is one step, and until it is done not one message leaves", skill, StringComparison.Ordinal);
         Assert.Contains("That step is the person's one act, \"connect your provider\". With Reply it is one sign-in only they can do: in a terminal `reply auth login` (on Windows PowerShell, `reply.cmd auth login`), and you do the rest", skill, StringComparison.Ordinal);
+        Assert.Contains("This guard governs the first bullet below, the firm \"holds no account\" sentence included", skill, StringComparison.Ordinal);
+        Assert.Contains("say its count as \"{N} or more\"", skill, StringComparison.Ordinal);
+        Assert.Contains("Each channel's read stands alone: a channel whose read fails or does not answer drops only its own number, and the other channel's number is still said.", skill, StringComparison.Ordinal);
+        Assert.Contains("about 90 seconds", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("submit `sender.list`", skill, StringComparison.Ordinal);
         Assert.Contains("`planner-in-session` takes the plan from the campaign that exists: the brief and the goals go into its context, and no second campaign is made.", skill, StringComparison.Ordinal);
         Assert.Contains("Make a project named from what the person sells, or take the one that already holds it, and make the campaign in it, under a name drawn from what the campaign is for", skill, StringComparison.Ordinal);

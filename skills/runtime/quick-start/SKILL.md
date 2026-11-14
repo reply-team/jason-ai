@@ -55,17 +55,24 @@ and the campaign, and that both names are the person's to change. End it with ex
 carries no list of questions and uses no question tool; only when the person asks to change something do you use the
 question tool, with the recommended choice first.
 
+- **The accounts of a channel are said only for the provider its sends go through.** This guard governs the first
+  bullet below, the firm "holds no account" sentence included: a channel's count is said, and a channel is said to hold
+  no account, only where the `plugin_id` of its `sender list` answer is the provider `route resolve` named for that
+  channel's sends; an empty page from any other plugin says nothing about the channel's accounts.
 - **A channel has a route.** Say: "Email goes out through {provider}." and "LinkedIn goes out through {provider}.", or
   one sentence when both go through the same provider. Then say what the read found, in one line: "{N} mailboxes and
   {M} LinkedIn accounts are connected; you can add more at any time." With one channel routed, name only that
-  channel's accounts. Count the accounts whose `status` is `active`, and the others apart. A routed channel that holds
+  channel's accounts. Count the accounts whose `status` is `active`, and the others apart; where a channel's answer says `has_more`, say its
+  count as "{N} or more", as the skill reads one page and no further. A routed channel that holds
   no account is said firmly: not one message leaves on it until an account is connected, and name the one step as the
   last item of this list does.
 - **A channel's accounts were read at another provider.** Where the `plugin_id` of a channel's `sender list` answer is
   not the provider `route resolve` named for that channel's sends, say only the provider its sends go through, and no
   number for it.
 - **A read that fails or is slow.** The count never holds the person up: a read that fails or is slow leaves the line
-  without numbers, and the message goes on.
+  without numbers, and the message goes on. Each channel's read stands alone: a channel whose read fails or does not
+  answer drops only its own number, and the other channel's number is still said. The CLI waits up to about 90 seconds
+  for an answer; past that, go on without the number and do not wait for a second try.
 - **A channel has no route.** Say: "{Channel} is not connected."
 - **Neither has a route.** Say it firmly: no channel is connected, connecting your provider now is recommended and is
   one step, and until it is done not one message leaves. That step is the person's one act, "connect your provider".
