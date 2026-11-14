@@ -2208,6 +2208,7 @@ public partial class ClaimerTests
                 register ?? new NothingIsSuppressed(),
                 settings,
                 TestOptions.LaunchesSettings(),
+                TestOptions.SendingSettings(Sending),
                 _dir.Paths,
                 _logging.CreateLogger<Claimer>(),
                 timing);
@@ -2221,6 +2222,9 @@ public partial class ClaimerTests
         public JasonPaths Paths => _dir.Paths;
 
         public Claimer Claimer { get; }
+
+        /// <summary>The sending section the claim reads at each scan's start, which a test may change between scans.</summary>
+        public TestOptionsMonitor<SendingOptions> Sending { get; } = new(new SendingOptions());
 
         /// <summary>
         /// The harness's plugin loaded again with <paramref name="status"/>, as a reload would leave it, and its route frozen

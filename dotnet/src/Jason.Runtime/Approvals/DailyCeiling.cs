@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +17,9 @@ namespace Jason.Runtime.Approvals;
 /// </remarks>
 public static class DailyCeiling
 {
+    /// <summary>The preview's member that carries the ceiling's three numbers where a send parks at it.</summary>
+    public const string PreviewKey = "daily_ceiling";
+
     /// <summary>
     /// The partial index the count is read through: a campaign's automatic releases by the moment each was decided. It holds
     /// those rows and no other, so the count visits one campaign's releases of the day and nothing else.
@@ -31,4 +36,25 @@ public static class DailyCeiling
             SELECT count(*) AS "Value" FROM approvals INDEXED BY ix_approvals_automatic_campaign_decided_at
             WHERE reason = 'automatic_mode' AND campaign_id = {campaignId} AND decided_at >= {since}
             """);
+
+    /// <summary>
+    /// The ceiling a scan decides against: <paramref name="PerDay"/>, read from the settings once at the scan's start, and
+    /// <paramref name="Since"/>, the 00:00Z the count begins at.
+    /// </summary>
+    internal sealed record Limit(int PerDay, DateTime Since);
+
+    /// <summary>
+    /// What the preview of a send parked at the ceiling says of it: three numbers and no content — the limit in force, the
+    /// releases counted, and the moment the count began.
+    /// </summary>
+    internal static JsonObject Preview(Limit ceiling, int released)
+    {
+        ArgumentNullException.ThrowIfNull(ceiling);
+        return new JsonObject
+        {
+            ["limit"] = ceiling.PerDay,
+            ["released"] = released,
+            ["since"] = ceiling.Since.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+        };
+    }
 }

@@ -35,6 +35,12 @@ public static class SendModeReasons
     /// <summary>No pass by the critic or by a person stands for the send's text.</summary>
     public const string NotReviewed = "not_reviewed";
 
+    /// <summary>
+    /// The campaign has had as many sends released automatically since 00:00Z as <c>Sending:AutomaticMaxPerDay</c> allows; the
+    /// ceiling never slips, so no standing approval lets the send go either.
+    /// </summary>
+    public const string DailyCeiling = "daily_ceiling";
+
     /// <summary>Every reason, in the order the claim asks, with the sentence a person reads for it.</summary>
     public static IReadOnlyList<(string Code, string Sentence)> All { get; } =
     [
@@ -47,6 +53,7 @@ public static class SendModeReasons
         (Escalated, "The reply this answers was marked for you to decide."),
         (EditedAfterReview, "The text was edited after it was reviewed, so the review no longer stands for it."),
         (NotReviewed, "No critic's or person's review passed this text, so the automatic mode does not send it."),
+        (DailyCeiling, "This campaign has reached its limit of automatic sends for today, so this one waits for you to approve it."),
     ];
 
     /// <summary>The sentence a person reads for <paramref name="reason"/>, or null where it is none of these.</summary>

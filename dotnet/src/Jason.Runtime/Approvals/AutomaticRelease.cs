@@ -23,9 +23,10 @@ internal abstract record AutomaticDecision
     /// <summary>
     /// The send parks for the person with <paramref name="Why"/>, one of <see cref="SendModeReasons"/>, and the facts for the
     /// preview's <c>send_mode</c>. Where <paramref name="FallsThrough"/>, a standing approval that covers the send still
-    /// decides by its own conditions; a doubt and a send from the chat never fall through.
+    /// decides by its own conditions; a doubt, a send from the chat and the daily ceiling never fall through. At the ceiling,
+    /// <paramref name="Ceiling"/> is the preview's <c>daily_ceiling</c>: the limit, the releases counted and since when.
     /// </summary>
-    internal sealed record Park(string Why, bool FallsThrough, JsonObject Facts) : AutomaticDecision;
+    internal sealed record Park(string Why, bool FallsThrough, JsonObject Facts, JsonObject? Ceiling = null) : AutomaticDecision;
 
     /// <summary>The send goes in this claim, under a row the person who set <paramref name="Mode"/> decided.</summary>
     internal sealed record Release(ModeInForce Mode, Temperature Temperature, string Review, JsonObject Facts) : AutomaticDecision;
@@ -45,7 +46,7 @@ internal abstract record AutomaticDecision
 /// campaign; the mode in force for it, every message ending the step; a send from the chat; a doubt that stands; a reply
 /// that waits for a judgement; one that waits for its nature; for an answer, the verdict it answers, which must stand,
 /// say a nature of a person and not say <c>escalate</c>; a pass of its current text by the critic or by a person; the
-/// place for a limit on automatic releases; the release.
+/// daily ceiling, the campaign's releases since 00:00Z counted against <c>Sending:AutomaticMaxPerDay</c>; the release.
 /// </para>
 /// <para>
 /// A mode in force releases in the name of the person who set it, so a mode whose setter is not a named person releases
@@ -56,7 +57,8 @@ internal abstract record AutomaticDecision
 /// </para>
 /// <para>
 /// Every read is written SQL that names its index: the item's own lines through the journal's work item index, and a
-/// campaign's verdicts on one thread through the verdicts' thread index.
+/// campaign's verdicts on one thread through the verdicts' thread index, and the campaign's releases of the day through
+/// the partial index of automatic releases (<see cref="DailyCeiling"/>).
 /// </para>
 /// </remarks>
 public static class AutomaticRelease
@@ -71,11 +73,18 @@ public static class AutomaticRelease
     /// The decision for <paramref name="item"/>, about to park under <paramref name="plan"/>, where nobody was ever asked
     /// about it; <paramref name="doubted"/> says a doubt stands, as the park's preview reads it.
     /// </summary>
-    internal static async Task<AutomaticDecision> DecideAsync(JasonDbContext db, WorkItem item, ProviderOpPlan plan, bool doubted, CancellationToken ct)
+    internal static async Task<AutomaticDecision> DecideAsync(
+        JasonDbContext db,
+        WorkItem item,
+        ProviderOpPlan plan,
+        bool doubted,
+        DailyCeiling.Limit ceiling,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(ceiling);
         if (!ReviewSubject.IsReviewable(item) || item.ContactId is not { } contact)
         {
             return new AutomaticDecision.NotInForce(Chat: false);
@@ -135,7 +144,19 @@ public static class AutomaticRelease
             return new AutomaticDecision.Park(why!, FallsThrough: true, Facts(mode, temperature, shown));
         }
 
-        // The place for a limit on automatic releases: after the pass that would release the send, before the release.
+        // The daily ceiling, asked only here, where the mode would release the send, and inside the claim's transaction, which
+        // no other writer enters before its commit: at the ceiling the send waits for the person, and since the ceiling never
+        // slips, no standing approval lets it go either.
+        var released = await DailyCeiling.Released(db, item.CampaignId, ceiling.Since).SingleAsync(ct).ConfigureAwait(false);
+        if (released >= ceiling.PerDay)
+        {
+            return new AutomaticDecision.Park(
+                SendModeReasons.DailyCeiling,
+                FallsThrough: false,
+                Facts(mode, temperature, pass),
+                DailyCeiling.Preview(ceiling, released));
+        }
+
         return new AutomaticDecision.Release(mode!, temperature!.Value, pass, Facts(mode, temperature, pass));
     }
 
