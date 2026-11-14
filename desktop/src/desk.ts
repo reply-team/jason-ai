@@ -16,6 +16,7 @@ import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } 
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import type { DemoMenu } from './mode.ts';
 import { menuItemOf, type Updater } from './updates.ts';
+import { windowTitle } from './window-title.ts';
 
 export interface DeskDeps {
     window(): BrowserWindow | null;
@@ -91,8 +92,8 @@ export class Desk {
                 : new RemovalAct({
                       scope: () => removal.scope(),
                       remove: () => removal.remove(),
-                      ask: (question) => this.box({ type: 'question', title: 'Jason', ...question }),
-                      tell: (closing) => this.box({ type: closing.quitId === null ? 'warning' : 'info', title: 'Jason', message: closing.message, detail: closing.detail, buttons: closing.buttons, defaultId: closing.defaultId, cancelId: closing.cancelId }),
+                      ask: (question) => this.box({ type: 'question', title: windowTitle, ...question }),
+                      tell: (closing) => this.box({ type: closing.quitId === null ? 'warning' : 'info', title: windowTitle, message: closing.message, detail: closing.detail, buttons: closing.buttons, defaultId: closing.defaultId, cancelId: closing.cancelId }),
                       quit: () => app.quit(),
                       log: deps.log,
                       changed: () => this.renderMenu(),
@@ -276,7 +277,7 @@ export class Desk {
         try {
             await this.removal.run();
         } catch (error) {
-            dialog.showErrorBox('Jason', error instanceof Error ? error.message : String(error));
+            dialog.showErrorBox(windowTitle, error instanceof Error ? error.message : String(error));
         }
         await this.readAutostart().catch(() => undefined);
         this.renderMenu();

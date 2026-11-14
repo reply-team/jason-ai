@@ -64,6 +64,7 @@ import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
+import { keepWindowTitle, windowTitle } from './window-title.ts';
 
 function readText(file: string): string | null {
     try {
@@ -264,7 +265,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         height: 860,
         minWidth: 900,
         minHeight: 600,
-        title: 'Jason',
+        title: windowTitle,
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
@@ -286,6 +287,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     window.on('closed', () => {
         current = null;
     });
+    // The console's own <title> is the browser tab's: the window keeps its name.
+    keepWindowTitle(window);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
     window.setMenuBarVisibility(conduct.menuBar);
     // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it. On Linux
@@ -368,7 +371,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               log,
               // A demo runtime left running by a kill or a crash holds the carried executable as well: it is stopped too.
               stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),
-              refused: (why) => dialog.showErrorBox('Jason', why),
+              refused: (why) => dialog.showErrorBox(windowTitle, why),
               async beforeInstall() {
                   quitting = true;
                   repairer.stop();
@@ -458,7 +461,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     let sampleMaking = false;
     const back = () => {
         const refusal = applyMode('live', modeDeps, sampleMaking);
-        if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
+        if (refusal !== null) dialog.showErrorBox(windowTitle, refusal.refused);
     };
     // Start the Demo Over: one question first (everything done in the demo goes), then the demo's runtime is stopped, a
     // request is left in the person's own desktop folder and the desktop starts again. This run lives inside the demo's
@@ -472,7 +475,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         if (startInFlight) return { refused: 'The demo is still starting. Try again in a moment.' };
         if (sampleMaking) return { refused: demoPreparing };
         const parent = current;
-        const options = { type: 'question' as const, title: 'Jason', message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
+        const options = { type: 'question' as const, title: windowTitle, message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
         const { response } = parent === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(parent, options);
         if (response !== 0) return null;
         const outcome = await startDemoOver({
@@ -497,11 +500,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const startOverFromMenu = () => {
         void startOver().then(
             (refusal) => {
-                if (refusal !== null) dialog.showErrorBox('Jason', refusal.refused);
+                if (refusal !== null) dialog.showErrorBox(windowTitle, refusal.refused);
             },
             () => {
                 log.warn('demo_start_over_refused', { Cause: 'threw' });
-                dialog.showErrorBox('Jason', 'The demo could not be started over.');
+                dialog.showErrorBox(windowTitle, 'The demo could not be started over.');
             },
         );
     };
@@ -1113,7 +1116,7 @@ async function stopLeftRuntimeAndStart(log: Logger): Promise<void> {
             } catch {
                 // The record stays as it was.
             }
-            dialog.showErrorBox('Jason', demoUnopened);
+            dialog.showErrorBox(windowTitle, demoUnopened);
             again();
         },
     });

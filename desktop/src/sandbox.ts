@@ -13,6 +13,7 @@
 import type { LinuxPackage } from './linux-package.ts';
 import type { Logger } from './log.ts';
 import { debFile } from './updates.ts';
+import { windowTitle } from './window-title.ts';
 
 /** Which form a refused start ran as, for its log line, and the sentence its dialog says. */
 export interface Refusal {
@@ -48,6 +49,6 @@ export interface RefusalDeps {
 export async function refuseStart(refusal: Refusal, deps: RefusalDeps): Promise<void> {
     await deps.whenReady();
     deps.logger().warn('sandbox_refused', { Form: refusal.form });
-    deps.showErrorBox('Jason', refusal.message);
+    deps.showErrorBox(windowTitle, refusal.message);
     deps.exit(1);
 }

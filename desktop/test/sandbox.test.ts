@@ -66,7 +66,7 @@ test('a refused start waits for Electron, logs one line with no path, shows the 
     assert.deepEqual(steps, [], 'something ran before Electron was ready');
     ready();
     await done;
-    assert.deepEqual(steps, ['ready', 'logger', 'dialog Jason: m', 'exit 1']);
+    assert.deepEqual(steps, ['ready', 'logger', 'dialog Jason AI Harness: m', 'exit 1']);
     assert.deepEqual(lines, [['sandbox_refused', { Form: 'appimage' }]]);
 });
 

@@ -27,6 +27,7 @@ import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
 import { harnessRoot, stopRuntimeCode, uninstall, uninstallExit, uninstallText, updaterCache } from './uninstall.ts';
+import { windowTitle } from './window-title.ts';
 
 function readText(file: string): string | null {
     try {
@@ -106,7 +107,7 @@ export async function runUninstall(quiet: boolean): Promise<number> {
     });
     if (!quiet) {
         const { message, detail } = uninstallText(report);
-        await dialog.showMessageBox({ type: report.refused === null ? 'info' : 'warning', title: 'Jason', message, detail, buttons: ['OK'] });
+        await dialog.showMessageBox({ type: report.refused === null ? 'info' : 'warning', title: windowTitle, message, detail, buttons: ['OK'] });
     }
     return uninstallExit(report);
 }
