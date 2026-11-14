@@ -221,7 +221,7 @@ public class GlobalRouteWriteTests
             [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", new JsonArray("example.com"))],
             "Plugins",
             (wrote, _) => Task.FromResult(wrote),
-            (refused, _) => refused,
+            (refused, _, _) => refused,
             Ct);
 
         if (written)
@@ -263,7 +263,7 @@ public class GlobalRouteWriteTests
                 File.WriteAllText(path, theirs);
                 throw new DomainException(409, "refused_for_the_test", "Refused for the test.", false);
             },
-            (domain, putBack) =>
+            (domain, putBack, _) =>
             {
                 outcome = putBack;
                 return domain;
@@ -297,7 +297,7 @@ public class GlobalRouteWriteTests
                     held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
                     throw new DomainException(409, "refused_for_the_test", "Refused for the test.", false);
                 },
-                (domain, putBack) =>
+                (domain, putBack, _) =>
                 {
                     outcome = putBack;
                     return domain;
@@ -317,25 +317,70 @@ public class GlobalRouteWriteTests
     /// <summary>
     /// What a refusal says of the file after each put-back. Where the file was held, no command mends it while loads refuse
     /// — the same command again writes nothing, and the opposite one is put back — so it says the hand edit that does: a
-    /// set's route taken out, an unset's route put back, or the reload that makes the file true.
+    /// new route taken out, a replaced route or an unset's route put back, or the reload that makes the file true.
     /// </summary>
     [Theory]
-    [InlineData(SettingsPutBack.PutBack, false, "settings_file_put_back", "The settings file was put back as it was; the routes in force are unchanged.", "the settings file was put back as it was.")]
-    [InlineData(SettingsPutBack.ChangedSince, false, "settings_file_not_put_back", "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.", "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it.")]
-    [InlineData(SettingsPutBack.Held, false, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload.")]
-    [InlineData(SettingsPutBack.Held, true, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload.")]
-    [InlineData(SettingsPutBack.NotWritable, false, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload.")]
-    [InlineData(SettingsPutBack.NotWritable, true, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload.")]
-    public void A_refused_reload_says_what_became_of_the_file(SettingsPutBack putBack, bool takenAway, string code, string detail, string clause)
+    [InlineData(SettingsPutBack.PutBack, GlobalRouteWrite.Added, "settings_file_put_back", "The settings file was put back as it was; the routes in force are unchanged.", "the settings file was put back as it was.")]
+    [InlineData(SettingsPutBack.ChangedSince, GlobalRouteWrite.Added, "settings_file_not_put_back", "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.", "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it.")]
+    [InlineData(SettingsPutBack.Held, GlobalRouteWrite.Added, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.Held, GlobalRouteWrite.TakenAway, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.NotWritable, GlobalRouteWrite.Added, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force; the routes in force are unchanged. Take the route out of the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force; take the route out of the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.NotWritable, GlobalRouteWrite.TakenAway, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: the route this took away is gone from the file and still in force; the routes in force are unchanged. Put the route back into the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: the route this took away is gone from the file and still in force; put the route back into the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.Held, GlobalRouteWrite.Replaced, "settings_file_not_put_back", "Another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force, where it held the route this replaced; the routes in force are unchanged. Put the route this replaced back into the file by hand, or fix what the load refused and run jason plugin reload.", "another program held the settings file open, so it was not put back: it holds the route this wrote, which is not in force, where it held the route this replaced; put the route this replaced back into the file by hand, or fix what the load refused and run jason plugin reload.")]
+    [InlineData(SettingsPutBack.NotWritable, GlobalRouteWrite.Replaced, "settings_file_not_put_back", "The settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force, where it held the route this replaced; the routes in force are unchanged. Put the route this replaced back into the file by hand, or fix what the load refused and run jason plugin reload.", "the settings file could not be written again, so it was not put back: it holds the route this wrote, which is not in force, where it held the route this replaced; put the route this replaced back into the file by hand, or fix what the load refused and run jason plugin reload.")]
+    public void A_refused_reload_says_what_became_of_the_file(SettingsPutBack putBack, GlobalRouteWrite write, string code, string detail, string clause)
     {
         var rejected = new DomainException(409, "plugin_reload_rejected", "The plugins were not loaded again.", false, [new ErrorDetail("plugins/x", "manifest_invalid", "A package problem.")]);
 
-        var said = RouteService.PutBackSaid(rejected, putBack, takenAway);
+        var said = RouteService.PutBackSaid(rejected, putBack, write);
 
         Assert.Equal("plugin_reload_rejected", said.Code);
         Assert.Equal("The plugins were not loaded again: 1 problem(s), so the route was not written: " + clause, said.Message);
         Assert.Equal(2, said.Details!.Count);
         Assert.Equal(("settings.json", code, detail), (said.Details[^1].Field, said.Details[^1].Code, said.Details[^1].Message));
+    }
+
+    /// <summary>
+    /// Which hand edit the refusal names is read from the file as it was before the write, at the route's own path: a route
+    /// the file held there was replaced, even where no reload had put it in force; none was added; an unset took one away.
+    /// </summary>
+    [Fact]
+    public void A_write_is_told_apart_by_what_the_file_held_at_its_path_before_it()
+    {
+        var route = new Route(TestPlugins.FakeProviderId, RouteActivationTests.Workspace(), null);
+        var held = SettingsDocument.Flatten(Encoding.UTF8.GetBytes(
+            "{ \"routes\": { \"operations\": { \"campaign.get\": { \"plugin\": \"other\" } }, \"Default\": {} } }"));
+
+        Assert.Equal(GlobalRouteWrite.Replaced, RouteService.Written(route, held, "campaign.get", channel: null));
+        Assert.Equal(GlobalRouteWrite.Added, RouteService.Written(route, held, operation: null, channel: null));
+        Assert.Equal(GlobalRouteWrite.Added, RouteService.Written(route, held, "contact.find", channel: null));
+        Assert.Equal(GlobalRouteWrite.TakenAway, RouteService.Written(wanted: null, held, "campaign.get", channel: null));
+    }
+
+    /// <summary>
+    /// The refusal is told what the file held before the write, never what the write left: the settings the put-back
+    /// restores.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_after_a_write_is_told_the_files_settings_before_it()
+    {
+        await using var api = await StartAsync();
+        IReadOnlyDictionary<string, string?>? told = null;
+
+        await Assert.ThrowsAsync<DomainException>(() => api.Resolve<SettingsWriter>().WriteAsync<bool>(
+            [SettingsEdit.Set("Plugins:Grants:fake-provider:Http", new JsonArray("example.com"))],
+            "Plugins",
+            (_, _) => throw new DomainException(409, "refused_for_the_test", "Refused for the test.", false),
+            (domain, _, held) =>
+            {
+                told = held;
+                return domain;
+            },
+            Ct));
+
+        Assert.NotNull(told);
+        Assert.Equal("False", told["dispatcher:enabled"]);
+        Assert.DoesNotContain(told.Keys, key => key.StartsWith("Plugins:Grants", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>A setting an environment variable gives a value is not written to the file, where it would never be in force.</summary>

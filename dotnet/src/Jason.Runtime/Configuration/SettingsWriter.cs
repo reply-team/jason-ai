@@ -66,7 +66,8 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
     /// <summary>
     /// Edits the file and runs <paramref name="inForce"/>, which is told whether anything was written; when it throws
     /// after a write, the file is put back and the exception rethrown — a <see cref="DomainException"/> as
-    /// <paramref name="refused"/> rewrites it with the put-back's outcome, anything else as it was.
+    /// <paramref name="refused"/> rewrites it with the put-back's outcome and the file's settings before the write
+    /// (<see cref="SettingsDocument.Flatten"/>, empty for a file that was not there), anything else as it was.
     /// </summary>
     /// <param name="edits">Every path the caller owns, in order; nothing else in the file is touched.</param>
     /// <param name="section">The section the edits are in, for the log.</param>
@@ -78,7 +79,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
         IReadOnlyList<SettingsEdit> edits,
         string section,
         Func<bool, CancellationToken, Task<T>> inForce,
-        Func<DomainException, SettingsPutBack, DomainException> refused,
+        Func<DomainException, SettingsPutBack, IReadOnlyDictionary<string, string?>, DomainException> refused,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(edits);
@@ -109,7 +110,7 @@ public sealed class SettingsWriter(SettingsFile file, JasonPaths paths, ILogger<
             Restored(logger, section, Code(outcome), null);
             if (failure is DomainException domain)
             {
-                throw refused(domain, outcome);
+                throw refused(domain, outcome, before is null ? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) : SettingsDocument.Flatten(before));
             }
 
             throw;

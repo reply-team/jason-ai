@@ -13,6 +13,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Routing;
 
+/// <summary>What a global route write did to the settings file at its path, as a refusal that could not put the file back says it.</summary>
+public enum GlobalRouteWrite
+{
+    /// <summary>The file held no route there; it holds the one written.</summary>
+    Added,
+
+    /// <summary>The file held a route there; it holds the one written in its place.</summary>
+    Replaced,
+
+    /// <summary>The file held a route there; it holds none.</summary>
+    TakenAway,
+}
+
 /// <summary>
 /// The four <c>route.*</c> operations: where one campaign's work would go, where every campaign's work goes, and
 /// the two acts that change one campaign's mind.
@@ -426,7 +439,7 @@ public sealed class RouteService(
                         token).ConfigureAwait(false);
                     return ToDto(routes, only: null);
                 },
-                (refused, putBack) => PutBackSaid(refused, putBack, takenAway: wanted is null),
+                (refused, putBack, held) => PutBackSaid(refused, putBack, Written(wanted, held, operation, channel)),
                 cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -451,9 +464,11 @@ public sealed class RouteService(
     /// A file that could not be put back holds what the write left, out of force, and no command mends it while loads
     /// refuse: the same command again finds the file as it asks and writes nothing, so its reload refuses with nothing to
     /// put back, and the opposite command is put back as this one was meant to be. So the sentence says which hand edit
-    /// mends it — a set's route taken out, an unset's route put back — or the reload that makes the file true.
+    /// mends it — a new route taken out, a replaced route or an unset's route put back — or the reload that makes the file
+    /// true. Which of those the write was is read from the file as it was before the write, not from the routes in force,
+    /// since the file is what the hand edit mends.
     /// </remarks>
-    internal static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack, bool takenAway)
+    internal static DomainException PutBackSaid(DomainException refused, SettingsPutBack putBack, GlobalRouteWrite write)
     {
         var (detail, clause) = putBack switch
         {
@@ -463,7 +478,7 @@ public sealed class RouteService(
             SettingsPutBack.ChangedSince => (
                 "The settings file was changed by another writer after this one wrote it, so it was left as that writer left it; the routes in force are unchanged.",
                 "the settings file was changed by another writer after this one wrote it, so it was left as that writer left it."),
-            _ => NotPutBack(putBack, takenAway),
+            _ => NotPutBack(putBack, write),
         };
         var details = refused.Details ?? [];
         var message = refused.Code == "plugin_reload_rejected"
@@ -481,14 +496,17 @@ public sealed class RouteService(
     /// A file that still holds what the write left: why it could not be put back, what it holds, and the hand edit that
     /// mends it, as a detail's sentences and as a clause of the rejected reload's.
     /// </summary>
-    private static (string Detail, string Clause) NotPutBack(SettingsPutBack putBack, bool takenAway)
+    private static (string Detail, string Clause) NotPutBack(SettingsPutBack putBack, GlobalRouteWrite write)
     {
         var cause = putBack == SettingsPutBack.Held
             ? "another program held the settings file open"
             : "the settings file could not be written again";
-        var (state, mend) = takenAway
-            ? ("the route this took away is gone from the file and still in force", "put the route back into the file by hand")
-            : ("it holds the route this wrote, which is not in force", "take the route out of the file by hand");
+        var (state, mend) = write switch
+        {
+            GlobalRouteWrite.TakenAway => ("the route this took away is gone from the file and still in force", "put the route back into the file by hand"),
+            GlobalRouteWrite.Replaced => ("it holds the route this wrote, which is not in force, where it held the route this replaced", "put the route this replaced back into the file by hand"),
+            _ => ("it holds the route this wrote, which is not in force", "take the route out of the file by hand"),
+        };
         mend += ", or fix what the load refused and run jason plugin reload";
         return (
             $"{Capital(cause)}, so it was not put back: {state}; the routes in force are unchanged. {Capital(mend)}.",
@@ -496,6 +514,12 @@ public sealed class RouteService(
 
         static string Capital(string text) => string.Concat(char.ToUpperInvariant(text[0]).ToString(), text.AsSpan(1));
     }
+
+    /// <summary>What a global write did to the file at its path: by the file's settings before the write, where it held a plugin there.</summary>
+    internal static GlobalRouteWrite Written(Route? wanted, IReadOnlyDictionary<string, string?> held, string? operation, string? channel) =>
+        wanted is null ? GlobalRouteWrite.TakenAway
+        : held.TryGetValue($"{GlobalPath(operation, channel)}:{nameof(RouteEntry.Plugin)}", out var plugin) && plugin is not null ? GlobalRouteWrite.Replaced
+        : GlobalRouteWrite.Added;
 
     /// <summary>A global route names no campaign: one that does is a caller that meant a campaign's route, or meant both.</summary>
     private static void NoCampaign(string? campaignId, ValidationErrors errors)
