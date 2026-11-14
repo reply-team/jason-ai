@@ -39,6 +39,17 @@ internal static partial class Account
         ["directLinkedIn.weeklyLimitReached"] = "weekly",
     };
 
+    /// <summary>
+    /// Reply's two codes for a mailbox at a limit it counts on direct emails, by what a test plants on the mailbox: its daily
+    /// limit of direct emails, and the active contacts of the account's billing period. reply-cli has no word of its own for
+    /// either and prints both as <c>rate_limited</c> at 429, Reply's code and sentence carried and no wait named.
+    /// </summary>
+    private static readonly Dictionary<string, (string Code, string Detail)> MailboxLimits = new(StringComparer.Ordinal)
+    {
+        ["daily"] = ("contact.dailyLimitReached", "The mailbox has sent as many direct emails today as its daily limit allows."),
+        ["active_contacts"] = ("contact.activeContactsLimitReached", "The account has emailed as many contacts this billing period as its plan allows."),
+    };
+
     /// <summary>What a test plants on a contact the account's blacklist holds.</summary>
     private const string Blacklisted = "_blacklisted";
 
@@ -230,6 +241,11 @@ internal static partial class Account
         if (refused is not null)
         {
             return refused;
+        }
+
+        if (send.Channel == "email" && MailboxAtLimit(root, accountId, contactId, keeps && key is not null && moment is null && timedBy is null, ids) is { } limited)
+        {
+            return limited;
         }
 
         if (command == "contact linkedin-connect" && Connected(root, contactId, accountId))
@@ -445,6 +461,45 @@ internal static partial class Account
         return Refused(
             "linkedin.limit_reached", $"The LinkedIn account reached its {allowance} limit, so nothing was sent.", status: 429,
             replyCode: replyCode, ids: ids, details: details);
+    }
+
+    /// <summary>
+    /// Reply's refusal of an email from a mailbox a test planted at a limit Reply counts, or null. An email Reply dispatches
+    /// now under a key (<paramref name="recorded"/>) has its record made before the limits are counted, so the refusal names
+    /// that record, failed under Reply's code, and keeps no key with it: the same request under the same key, once the limit
+    /// has lifted, makes a record of its own. Any other email is refused before any record is made.
+    /// </summary>
+    private static Ending? MailboxAtLimit(string root, long accountId, int contactId, bool recorded, JsonObject ids)
+    {
+        if (SenderOf(root, "email", accountId) is not { } mailbox || Text(mailbox, Limit) is not { Length: > 0 } planted)
+        {
+            return null;
+        }
+
+        var (code, detail) = MailboxLimits[planted];
+        JsonObject? details = null;
+        if (recorded)
+        {
+            var sends = Read(root, DirectSendsFile);
+            var reference = "email-" + (1001 + sends.Count).ToString(CultureInfo.InvariantCulture);
+            sends.Add(new JsonObject
+            {
+                ["reference"] = reference,
+                ["channel"] = WireChannel("email"),
+                ["contactId"] = contactId,
+                ["state"] = "failed",
+                ["sendAfter"] = null,
+                ["sentAt"] = null,
+                ["messageId"] = null,
+                ["failureReason"] = detail,
+                ["failureCode"] = code,
+            });
+            Write(root, DirectSendsFile, sends);
+            details = new JsonObject { ["reference"] = reference, ["state"] = "failed" };
+        }
+
+        return Refused(
+            "rate_limited", "Reply asked for this call to be made later.", status: 429, replyCode: code, detail: detail, ids: ids, details: details);
     }
 
     /// <summary>Whether any field of the text holds a double opening brace, which Reply reads as the start of a template variable.</summary>

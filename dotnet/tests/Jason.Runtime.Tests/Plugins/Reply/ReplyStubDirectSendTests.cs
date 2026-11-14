@@ -1124,6 +1124,55 @@ public class ReplyStubDirectSendTests
         Assert.Empty(account.Sent);
     }
 
+    /// <summary>
+    /// A mailbox at a limit Reply counts — its daily limit of direct emails, or the account's active contacts for its
+    /// billing period — refuses an email at 429 under Reply's code, which reply-cli has no word of its own for and prints as
+    /// <c>rate_limited</c>, Reply's code and sentence carried and no wait named. An email that goes under no key names no
+    /// record of Reply's, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("daily", "contact.dailyLimitReached")]
+    [InlineData("active_contacts", "contact.activeContactsLimitReached")]
+    public async Task A_mailbox_at_a_limit_reply_counts_refuses_the_email_as_reply_cli_prints_it(string limit, string replyCode)
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: limit);
+
+        var (exit, _, said) = await account.RunAsync(Email("--message", "-"), """{"subject":"Tuesday","body":"Hi"}""", Ct);
+
+        var error = Error(said);
+        Assert.Equal((1, "rate_limited", 429, replyCode), (exit, (string?)error["code"], (int)error["status"]!, (string?)error["reply_code"]));
+        Assert.False(string.IsNullOrWhiteSpace((string?)error["detail"]));
+        Assert.False(error.ContainsKey("retry_after"));
+        Assert.False(error.ContainsKey("details"));
+        Assert.Empty(account.Sent);
+        Assert.Empty(account.DirectSends);
+    }
+
+    /// <summary>
+    /// Under a key, Reply makes its record of an email it sends now before it counts the mailbox's limits, so the refusal
+    /// names that record, failed, its code Reply's, as <c>direct-send get</c> reads it back. Reply released the key with it:
+    /// the same request under the same key, once the limit has lifted, makes a record of its own and goes.
+    /// </summary>
+    [Theory]
+    [InlineData("daily", "contact.dailyLimitReached")]
+    [InlineData("active_contacts", "contact.activeContactsLimitReached")]
+    public async Task A_limit_refusal_under_a_key_names_a_failed_record_and_keeps_no_key(string limit, string replyCode)
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithSender(Mailbox, "email", "Ann Owner", "ann@example.com", limit: limit);
+
+        var (refused, _, said) = await account.RunAsync(Email("--message", "-", "--idempotency-key", Key), """{"subject":"Tuesday","body":"Hi"}""", Ct);
+        var (read, readOut, _) = await account.RunAsync(Line("direct-send", "get", "email-1001"), Ct);
+        account.WithSender(Mailbox, "email", "Ann Owner", "ann@example.com");
+        var (again, againOut, _) = await account.RunAsync(Email("--message", "-", "--idempotency-key", Key), """{"subject":"Tuesday","body":"Hi"}""", Ct);
+
+        var error = Error(said);
+        Assert.Equal((1, "rate_limited", 429, replyCode), (refused, (string?)error["code"], (int)error["status"]!, (string?)error["reply_code"]));
+        Assert.Equal("""{"reference":"email-1001","state":"failed"}""", error["details"]!.ToJsonString());
+        Assert.Equal((0, "failed", replyCode), (read, (string?)JsonNode.Parse(readOut)!["state"], (string?)JsonNode.Parse(readOut)!["failure_code"]));
+        Assert.Equal((0, "email-1002", "sent"), (again, (string?)JsonNode.Parse(againOut)!["reference"], (string?)JsonNode.Parse(againOut)!["state"]));
+        Assert.Single(account.Sent);
+    }
+
     /// <summary>A send Reply refused keeps no key: the same request under it, made again once it can go, goes.</summary>
     [Fact]
     public async Task A_refused_send_keeps_no_key()
