@@ -604,6 +604,27 @@ public class WarmthTests
     }
 
     /// <summary>
+    /// The respond step creates the responder for a line that names nobody about nobody. Such a responder clears nothing:
+    /// the unnamed move on a warm contact's thread waits for a verdict about a message at or after it, or for a later
+    /// responder that names the contact, though the one about nobody was created after the line and succeeded.
+    /// </summary>
+    [Fact]
+    public async Task An_unnamed_own_line_is_not_judged_by_a_responder_about_nobody()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+        await ObservedAsync(db, seed.Campaign, contact: null, "thr-1", "2026-09-14T12:05:00.000Z");
+
+        var (item, attempt) = await ResponderAsync(db, seed, contact: null, "thr-1");
+        await FinishAsync(db, item, attempt, succeeded: true);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
     /// Inbound sync writes a line for every thread of the account that moved, most naming nobody. The read of a contact's
     /// wait visits none of them on a thread the contact's verdicts do not name: forty more such lines on other threads leave
     /// the number of steps the read takes, and of steps of a full scan, exactly as they were, and no step is a full scan's,

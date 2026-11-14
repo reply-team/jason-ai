@@ -51,7 +51,10 @@ public enum WarmthState
 /// own, never a clock. When the only verdicts that would judge a line say no
 /// nature, the contact awaits the nature rather than a judgement. A waiting reply outranks warmth: a warm contact's new
 /// reply may be a request to stop, so it is judged before anything else is sent. A provider event's <c>reply_detected</c>
-/// line is not a reply that waits. A line that names nobody makes wait only a contact a standing verdict names on its thread.
+/// line is not a reply that waits. A line that names nobody makes wait only a contact a standing verdict names on its thread,
+/// and only a responder that names that contact judges it: the responder created for the unnamed line is about nobody and
+/// clears nothing, so the contact waits for a verdict about a message at or after the move, or for a later responder that
+/// names them.
 /// </para>
 /// <para>
 /// Every read is written SQL that names its index, and a test pins each plan and the columns each search is bounded by,
