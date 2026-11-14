@@ -336,7 +336,7 @@ public static class PluginCommands
                 env,
                 revoke ? Operations.PluginRevoke : Operations.PluginGrant,
                 body,
-                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Granted(json, named, grant.Noun, entry!, revoke)),
+                new RunOptions(parseResult.GetValue(human), json => PluginRenderers.Granted(json, named, Enum.Parse<PluginGrantCapability>(grant.Capability, ignoreCase: true), grant.Noun, entry!, revoke)),
                 cancellationToken);
         });
 

@@ -538,29 +538,56 @@ public class PluginCommandsTests
         Assert.Null(cli.Url);
     }
 
-    [Fact]
-    public async Task Human_mode_says_what_is_granted_now_and_what_the_reload_activated()
+    /// <summary>
+    /// The first line is said from the body the runtime answered, the plugin's granted list, and never from what was asked
+    /// alone: where the two disagree it says so. Hosts compare without regard to case, directories after a separator at
+    /// the end is trimmed; a revoke of <c>*</c> says what a star stands for.
+    /// </summary>
+    [Theory]
+    [InlineData("grant", "--http", "api.example.com", "api.example.com", "fake-provider is granted the host api.example.com, in force now.")]
+    [InlineData("grant", "--http", "API.example.com", "api.example.com", "fake-provider is granted the host API.example.com, in force now.")]
+    [InlineData("grant", "--http", "api.example.com", null, "fake-provider is still not granted the host api.example.com: the grants in force do not hold it.")]
+    [InlineData("revoke", "--http", "api.example.com", null, "fake-provider is not granted the host api.example.com now; work already running keeps what it was started with.")]
+    [InlineData("revoke", "--http", "API.example.com", "api.example.com", "fake-provider is still granted the host API.example.com: nothing in the file matched it.")]
+    [InlineData("revoke", "--files", "/srv/lines/", "/srv/lines", "fake-provider is still granted the directory /srv/lines/: nothing in the file matched it.")]
+    [InlineData("revoke", "--http", "*", "localhost:5555", "fake-provider's grant of every host its manifest names is taken back; what is granted by name stays. Work already running keeps what it was started with.")]
+    public async Task Human_mode_says_the_grant_from_the_body_the_runtime_answered(string verb, string flag, string entry, string? granted, string said)
     {
-        using var cli = new CliRun(JsonSerializer.Serialize(TwoPlugins(), JasonJson.Options));
+        using var cli = new CliRun(JsonSerializer.Serialize(Answering(flag, granted, activated: true), JasonJson.Options));
 
-        var exit = await cli.RunAsync("plugin", "grant", "fake-provider", "--http", "api.example.com", "--actor", "human:ada", "--human");
+        var exit = await cli.RunAsync("plugin", verb, "fake-provider", flag, entry, "--actor", "human:ada", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.StartsWith("fake-provider is granted the host api.example.com, in force now." + Environment.NewLine, cli.Text, StringComparison.Ordinal);
+        Assert.StartsWith(said + Environment.NewLine + "activated snapshot snp_01J4 with 2 plugins", cli.Text, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Human_mode_after_a_revoke_says_that_running_work_keeps_what_it_started_with()
+    /// <summary>A grant already held, and a revoke of what is not granted, activate nothing, so no snapshot line follows.</summary>
+    [Theory]
+    [InlineData("grant", "fake-provider is granted the host api.example.com, in force now.", "api.example.com")]
+    [InlineData("revoke", "fake-provider is not granted the host api.example.com now; work already running keeps what it was started with.", null)]
+    public async Task Human_mode_prints_no_activated_snapshot_for_a_request_that_activated_nothing(string verb, string said, string? granted)
     {
-        using var cli = new CliRun(JsonSerializer.Serialize(TwoPlugins(), JasonJson.Options));
+        using var cli = new CliRun(JsonSerializer.Serialize(Answering("--http", granted, activated: false), JasonJson.Options));
 
-        var exit = await cli.RunAsync("plugin", "revoke", "fake-provider", "--env", "FAKE_TOKEN", "--actor", "human:ada", "--human");
+        var exit = await cli.RunAsync("plugin", verb, "fake-provider", "--http", "api.example.com", "--actor", "human:ada", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.StartsWith(
-            "fake-provider is not granted the variable FAKE_TOKEN now; work already running keeps what it was started with." + Environment.NewLine,
-            cli.Text,
-            StringComparison.Ordinal);
+        Assert.Equal(said + Environment.NewLine, cli.Text);
+    }
+
+    /// <summary><see cref="TwoPlugins"/> with fake-provider granted one entry, or nothing, of the flag's capability.</summary>
+    private static PluginRegistryDto Answering(string flag, string? granted, bool activated)
+    {
+        var registry = TwoPlugins();
+        var plugin = registry.Plugins[0];
+        IReadOnlyList<string> list = granted is null ? [] : [granted];
+        var capabilities = flag switch
+        {
+            "--http" => plugin.Capabilities with { Http = new ListCapabilityDto(["localhost:5555", "api.example.com"], list) },
+            "--files" => plugin.Capabilities with { Files = new FilesCapabilityDto(true, list) },
+            _ => throw new ArgumentOutOfRangeException(nameof(flag), flag, "a flag these rows do not use."),
+        };
+        return registry with { Plugins = [plugin with { Capabilities = capabilities }, registry.Plugins[1]], Activated = activated };
     }
 
     /// <summary>A registry the way a machine with one working plugin and one it cannot run answers.</summary>
