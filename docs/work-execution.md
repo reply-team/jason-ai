@@ -485,7 +485,8 @@ context: no journal line, no attempt's snapshot, no read of
 the item (`workitem.get`, `workitem.list`) and no log line carries it, and a diagnostic bundle, which reads the item
 pages for their metadata, never sees it. When the claim parks the send, both are moved onto the approval's preview and
 cleared from the row in the park's own save; from then on `approval.get` and `approval.list` are the reads that return
-them. The preview's `doubts` is a list, one entry per doubt that stands: `source` (`ask_person` or `review`), `by` (the
+them. A send that ends for good before a park — cancelled, failed or succeeded — takes both off the row as it ends; an
+expired one keeps them, since a reopen leads to a park. The preview's `doubts` is a list, one entry per doubt that stands: `source` (`ask_person` or `review`), `by` (the
 actor that doubted), `role` (the reviewing run's role, or null), `code`, `note` (the sentence, or null) and `line` (the
 `workitem_reviewed` line, or null for `ask_person`). A send parked again after an edit or an expiry carries the
 creator's `ask_person` sentence over from its earlier approval's preview, since the key is never taken back; a review's
