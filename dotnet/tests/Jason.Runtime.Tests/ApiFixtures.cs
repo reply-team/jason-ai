@@ -289,6 +289,7 @@ public static class ApiFixtures
         "reply.count/every-campaign",
         "reply.count/until-before-since",
         "reply.record/confidence-out-of-range",
+        "reply.record/opt-out-without-contact",
         "reply.record/recorded",
         "reply.record/recorded-with-decision",
         "reply.record/unknown-goal",

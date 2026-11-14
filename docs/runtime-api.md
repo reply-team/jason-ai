@@ -372,23 +372,27 @@ that is not that attempt does not call them.
   an optional `contact_id`; the verdict is a `category`, which the runtime holds only to being one line of up to 100
   characters, a `confidence` from 0 to 1, a `reaction` of `act`, `draft`, `escalate` or `none`, and an optional
   `goal_id`, which must name one of the campaign's goals ([the `goals` key](contracts/context/goals.md)) and whose kind
-  the line copies. The line carries no word of the reply. An archived campaign still takes one; an `actor` of type
-  `attempt` must be an attempt of the same campaign's work, and the line then names its work item and attempt. The
-  line names the reply as `plugin`, `thread`, `message_id` and `message_at`, the chronicle's names, the moment to the
-  millisecond. A `reason` is the actor's reason for the verdict, never the reply's words. Each call writes a line of
-  its own, under a key that hashes the plugin, thread and message rather than the provider's bare message id; readers
-  find a verdict by its payload, and the latest for a reply stands. Where the category is a person's answer to a question
-  about the reply, an optional `decision_id` names that question, the `dec_` decision, and the runtime checks it at the
-  call: a decision of the same campaign (`decision_not_found`, as for an id that names none), answered
-  (`decision_not_answered`), by a person who gave their name (`decision_not_human`), whose chosen option is the
-  `category` recorded (`decision_option_differs`), and raised by an attempt that has recorded a verdict on this reply —
-  a `reply_classified` line of the campaign under this reply's key whose attempt is the decision's, any such line, not
-  only the latest (`decision_not_about_reply`); a role raises a question and then ends its attempt, so a question raised
-  before its asker recorded a verdict on the reply, or one about another reply, backs no verdict. Each refusal is a 400
-  and writes nothing. One decision may back repeated records on the same reply, which supersede each other as any
-  verdicts do. The line then names the decision as `decision_id` and the person as `answered_by`, their actor; both are
-  null where no decision is named.
-  `jason reply record` sends it, and `--decision` names the question.
+  the line copies. An optional `nature` says what the reply is in the runtime's own closed words: `person` (a person's
+  answer), `automatic` (an automatic reply), `bounce` (a failed delivery) or `opt_out` (a person asking not to be
+  written to). It is the one word of a verdict the runtime itself reads, never checked against the category or the
+  reaction; the line carries it as `nature`, null where it is left out, and `opt_out` without a `contact_id` is a 400 at
+  `contact_id` (`required`), since an opt-out stops a person. The line carries no word of the reply. An archived
+  campaign still takes one; an `actor` of type `attempt` must be an attempt of the same campaign's work, and the line
+  then names its work item and attempt. The line names the reply as `plugin`, `thread`, `message_id` and `message_at`,
+  the chronicle's names, the moment to the millisecond. A `reason` is the actor's reason for the verdict, never the
+  reply's words. Each call writes a line of its own, under a key that hashes the plugin, thread and message rather than
+  the provider's bare message id; readers find a verdict by its payload, and the latest for a reply stands. Where the
+  category is a person's answer to a question about the reply, an optional `decision_id` names that question, the `dec_`
+  decision, and the runtime checks it at the call: a decision of the same campaign (`decision_not_found`, as for an id
+  that names none), answered (`decision_not_answered`), by a person who gave their name (`decision_not_human`), whose
+  chosen option is the `category` recorded (`decision_option_differs`), and raised by an attempt that has recorded a
+  verdict on this reply — a `reply_classified` line of the campaign under this reply's key whose attempt is the
+  decision's, any such line, not only the latest (`decision_not_about_reply`); a role raises a question and then ends
+  its attempt, so a question raised before its asker recorded a verdict on the reply, or one about another reply, backs
+  no verdict. Each refusal is a 400 and writes nothing. One decision may back repeated records on the same reply, which
+  supersede each other as any verdicts do. The line then names the decision as `decision_id` and the person as
+  `answered_by`, their actor; both are null where no decision is named.
+  `jason reply record` sends it, `--decision` names the question and `--nature` states the nature.
 - `reply.count`: how many replies roles have judged, by the category word each verdict names, for each campaign asked
   and in total. It counts verdicts, not replies as they arrive: a reply nobody has judged yet is not in it, and the
   category is the skills' word, which the runtime counts as written and never interprets. So its `replies` is not
@@ -601,7 +605,8 @@ interrupted.
   was created, unless a person's standing approval covers it: a drafted reply that names, under `reply_verdict`, the
   verdict it answers. A search, which spends, waits the same way unless the campaign's allowance covers it.
 - **A verdict on a reply**, through `reply.record`: what kind of reply it is, how sure the role is, what it decided to
-  do and which goal that steers to, kept as the line `reply_classified`, which `journal.append` refuses to anyone else.
+  do and which goal that steers to, and, in the runtime's own words, whether it is a person's answer, an automatic
+  reply, a bounce or an opt-out, kept as the line `reply_classified`, which `journal.append` refuses to anyone else.
 - **A nudge**: `events.signal` asks the runtime to read one account's events sooner, for a program that receives a
   provider's webhooks. It names the account by its id from `events.sources` and carries nothing the webhook said;
   what is read is what the account's own read finds.

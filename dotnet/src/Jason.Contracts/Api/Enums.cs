@@ -396,6 +396,19 @@ public enum ReviewResult
 }
 
 /// <summary>
+/// What a reply is, in the runtime's own closed words: a person's answer, an automatic reply, a failed delivery, or a
+/// person asking not to be written to. Unlike a verdict's category, which the skills own and the runtime never reads,
+/// this is the runtime's to read: <c>person</c> is what makes a contact warm in the campaign.
+/// </summary>
+public enum ReplyNature
+{
+    Person,
+    Automatic,
+    Bounce,
+    OptOut,
+}
+
+/// <summary>
 /// Where the chain started for one journal line stands. <c>Running</c> while its handlers run or one waits to be tried
 /// again; <c>succeeded</c> when every handler answered; <c>failed</c> when one ended it; <c>superseded</c> when its kind's
 /// position moved under it — a rewind, or the kind left without a subscriber — so its end recorded nothing further.
