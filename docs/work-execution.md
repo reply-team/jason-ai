@@ -339,15 +339,16 @@ attempt that asked it and whose answer wakes the review that carries the work on
   patch; an edit that leaves the input as it was touches nothing of the approval. Nothing is asked at the update: Jason
   asks again when it next takes the work, at once where dispatch runs and when the campaign runs again where it is
   paused, under what the item now says and with the reason `approval_required` that any first question carries. A
-  standing approval or the campaign's allowance never lets such an item go: they answer only work nobody was ever asked
-  about. An approval or a rejection that names the withdrawn question afterwards answers `approval_not_pending` and
+  standing approval, the campaign's allowance or a send mode never lets such an item go: they answer only work nobody
+  was ever asked about. An approval or a rejection that names the withdrawn question afterwards answers `approval_not_pending` and
   approves nothing, whichever request arrived first, by the same guards: an edit that read the item before an approval
   committed writes nothing and answers `concurrent_update`, and sent again it meets work that is approved and has not
   run, whose approval the next claim supersedes as above.
 
 Journal: `workitem_awaiting_approval`, `approval_requested`, `approval_approved`, `approval_rejected`,
-`approval_superseded`, `approval_cancelled`, `approval_standing_applied`. Those lines carry identifiers only — the approval, the
-work item, the campaign, the operation, the subject hash, the actor and the reason. The subject and the
+`approval_superseded`, `approval_cancelled`, `approval_standing_applied`, `approval_automatic_applied`. Those lines
+carry identifiers only — the approval, the work item, the campaign, the operation, the subject hash, the actor and
+the reason. The subject and the
 preview live on the row and in what `approval.get` answers, which is where somebody entitled to read
 them reads them.
 
@@ -403,8 +404,9 @@ Nobody is asked, so nothing is notified. Not covered, the work parks as any repl
 `verdict_unknown`, `verdict_superseded`, `reaction_not_draft`, `verdict_not_authentic`, `not_the_verdicts_work`,
 `edited`, `plugin_differs`, `thread_differs`, `no_standing_approval`, `operation_not_covered`, `expired` or
 `ceiling_reached` — or, where every condition holds, `doubted`: a doubt stands about the send (§Doubts about a send),
-and a doubt is the person's to answer, so no standing approval releases it. A reply or a message that names no verdict
-is not asked about.
+and a doubt is the person's to answer, so no standing approval releases it; or `sent_from_chat`: the send was written
+in the desktop's chat, which always waits for the person (§The send mode at the claim). A reply or a message that
+names no verdict is not asked about.
 
 **A standing approval decides once.** Its row is an approval like any other: a retry of the same subject runs under it
 even after the standing approval was taken back, and a subject that changed parks with `input_changed` for a person;
@@ -522,6 +524,71 @@ stands: `source` (`ask_person` or `review`), `by` (the actor that doubted), `rol
 `code`, `note` (the sentence, or null) and `line` (the `workitem_reviewed` line, or null for `ask_person`). A send
 parked again after an edit or an expiry carries the creator's `ask_person` sentence over from its earlier approval's
 preview, since the key is never taken back; a review's is not carried, because the text it was about no longer stands.
+
+### The send mode at the claim
+
+A send a person decides each one of may go without being asked where a person said so for the kind of contact it
+reaches: the send mode, `automatic` or `every_message`, for a cold contact and for a warm one, set for the installation
+by the named preferences `send_mode.cold` and `send_mode.warm`, and for one campaign by `campaign.set_send_mode`, whose
+own mode is the one in force where it sets one. Unset, a mode is `every_message`, and every such send parks as above. A
+mode releases only in the name of the person who set it: a mode whose line names no person by name releases nothing.
+A contact is **warm** in a campaign once a verdict that stands there judged a reply of theirs a person's answer, and
+**cold** before; while a reply of theirs the campaign's own read saw waits for a verdict, or was judged without saying
+what kind of reply it is, they are neither, and nothing goes to them automatically.
+
+**It is asked at the claim, where nothing has been decided about the work yet**, in the same place and on the same
+guard as a standing approval, and in this order:
+
+1. **Is a mode in force?** The send is one a person decides each one of and names a contact, and a mode of `automatic`
+   set by a named person stands for its campaign, for cold or for warm. Where none does, nothing below is asked, warmth
+   is not read, and the send parks as it always did.
+2. **The contact's warmth**, read from the campaign's chronicle. Where the mode for the contact's warmth is
+   `every_message`, the send parks as it always did.
+3. **Written in the chat?** A send created, or whose input was edited, by a call the desktop's chat made parks for the
+   person: `sent_from_chat`.
+4. **A doubt** stands about the send (§Doubts about a send), whoever raised it: `doubted`.
+5. **The contact waits on a verdict**: `awaiting_judgement` where a reply of theirs has not been judged since it moved,
+   `awaiting_nature` where it was judged without saying what kind of reply it is.
+6. **An answer goes only to a person's reply nobody escalated.** A `conversation.reply`, or any send that names the
+   verdict it answers (`reply_verdict`), is held to the verdict that stands on the reply it answers: the one it names, or
+   else the newest on its thread; none, `answers_no_verdict`; a verdict that does not say what kind of reply it was,
+   `awaiting_nature`; a reply that is not a person's — an automatic reply, a bounce or a request to stop —
+   `reply_not_from_a_person`; a verdict whose reaction is `escalate`, `escalated`.
+7. **A review that passed the text as it now reads.** The newest review under the send's review hash that passed,
+   written by a running attempt of the campaign's `critic` role or by a person by name, outside a run, counts; any such
+   pass counts, whatever was reviewed after it, since a doubt was asked before. A counting pass only under an earlier
+   hash is `edited_after_review`; none at all, `not_reviewed`. A copywriter's pass, a pass on a line a run wrote in a
+   person's name, or one naming an attempt other than its own, does not count.
+8. **Released.** The work runs in the same claim, under an `apr_` row written `approved`, with the reason
+   `automatic_mode`, requested and decided at the claim's moment, decided by the person who set the mode in force.
+
+A park of steps 3 to 7 makes no attempt and waits in `approval.list` as any approval does; its row's reason is the code
+above, and its preview carries `send_mode`, the facts and never the code: the `mode`, its `source` (`preference` or
+`campaign`) and the contact's `temperature` (`cold` or `warm`), all three null while the contact waits on a verdict,
+and the `review` line the step read — the pass, the pass under the earlier text, or another role's — or null. Where
+no mode is in force the reason is what it always was. The parks of steps 5 to 7 **fall through to a standing
+approval**: where one covers the send, it runs under the standing approval's row as before. A send written in the chat
+and a doubted one do not: they park even where a standing approval would have covered it, and its preview's
+`standing_approval` says `sent_from_chat` or `doubted`. A send written in the desktop's chat always waits for the person,
+whatever the send mode, `every_message` included.
+
+**A release decides once, but warmth is read again.** A retry of the same subject runs under the row the mode wrote, and
+reads no review again, so a review sent then is refused `not_reviewable`. It reads the contact's warmth once more: where
+a reply of theirs landed since and waits for a verdict, the row is superseded and the send parks for the person with
+`awaiting_judgement` or `awaiting_nature`. A subject that changed parks with `input_changed`, as under any decision.
+Whatever the pre-flight refuses is refused before the mode is asked, and work released under it is still held by an
+open block of its account.
+
+**The chat's mark.** Every request a confined call of the CLI sends (`JASON_CONFINED`, which the desktop's chat sets on
+every turn) carries the header `Jason-Confined`. The runtime records it on the work it creates under it, as
+`confined: true` on the `workitem_created` line, and on the first edit of its input made under it, as a
+`workitem_updated` line keyed `confined`; the claim reads the mark through the item's own lines, and nothing takes it
+back. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, so a program
+that leaves the header off is not marked.
+
+Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperature (`cold` or `warm`), names the row, the
+operation, the subject hash, the mode's source, the temperature and the review line, and carries no text. Nobody is
+asked, so nothing is notified.
 
 ## Leases and heartbeats
 
