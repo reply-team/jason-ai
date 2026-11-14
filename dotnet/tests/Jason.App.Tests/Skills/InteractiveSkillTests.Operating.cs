@@ -509,6 +509,7 @@ public partial class InteractiveSkillTests
         Assert.Contains("1. Install the package: `jason plugin install reply`", skill, StringComparison.Ordinal);
         Assert.Contains("2. Grant it what it asks for, under `Plugins:Grants:<id>`", skill, StringComparison.Ordinal);
         Assert.Contains("3. Route its work, under `Routes`", skill, StringComparison.Ordinal);
+        Assert.Contains("On a running installation `jason route set --global --plugin <id> --binding '<account>' --actor human:<Name>` writes the same route there and puts it in force at once", skill, StringComparison.Ordinal);
         Assert.Contains("4. Reload: `jason plugin reload`", skill, StringComparison.Ordinal);
         Assert.Contains(
             "name each capability a plugin asks for and is granted nothing of, with the key that grants it and the settings file: that sentence is what to ask the person to allow.",

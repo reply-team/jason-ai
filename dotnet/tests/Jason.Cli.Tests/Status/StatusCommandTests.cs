@@ -67,6 +67,27 @@ public class StatusCommandTests
         return Assert.Single(Read(output).Checks, check => check.Name == "autostart");
     }
 
+    /// <summary>
+    /// Nothing routed is told with the two commands that route it, every campaign's and one campaign's, and no repair:
+    /// the plugin a route names is the person's to choose, so no command fits as printed.
+    /// </summary>
+    [Fact]
+    public async Task Nothing_routed_names_the_two_commands_that_route_work()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "route");
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.Equal(
+            "Nothing is routed anywhere yet: route every campaign with jason route set --global, or one campaign with jason route set --campaign.",
+            check.Fact);
+        Assert.Null(check.Fix);
+    }
+
     /// <summary>No registration is told as what happens at the next sign-in, and the repair stays the same.</summary>
     [Fact]
     public async Task No_registration_says_the_runtime_stays_off_at_the_next_sign_in()

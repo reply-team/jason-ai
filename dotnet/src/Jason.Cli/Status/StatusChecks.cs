@@ -1222,11 +1222,11 @@ internal static class StatusChecks
                 "route",
                 false,
                 CheckState.Absent,
-                // No repair, because there is no command. A global default route is written in the settings
-                // file and frozen by a reload; `route set` needs --campaign and refuses without it, so the
-                // line printed here was itself a usage error -- verbatim the failure the guard beside this
-                // one exists to prevent.
-                "Nothing is routed anywhere yet: set Routes in the settings file, or route one campaign.",
+                // No repair, because no one command fits every installation: the route names a plugin only the
+                // person can choose, and a repair is a command typed as printed. The fact names the two commands
+                // instead; `route set` with neither --campaign nor --global is itself a usage error, the failure
+                // the guard beside this one exists to prevent.
+                "Nothing is routed anywhere yet: route every campaign with jason route set --global, or one campaign with jason route set --campaign.",
                 null);
     }
 

@@ -368,6 +368,27 @@ public class GlobalRouteWriteTests
         Assert.Contains(lines, line => line.New is null && line.Old is not null);
     }
 
+    /// <summary>
+    /// Every refusal that finds nothing routed names the two ways to route it, a campaign's and every campaign's, as the
+    /// operation that writes each: a global route is no longer something to write by hand.
+    /// </summary>
+    [Theory]
+    [InlineData(Operations.RouteResolve, "campaign.get")]
+    [InlineData(Operations.OperationDescribe, "campaign.get")]
+    [InlineData(Operations.AudienceAvailability, null)]
+    public async Task A_refusal_that_finds_nothing_routed_names_the_global_scope_of_route_set(string operation, string? routed)
+    {
+        await using var api = await StartAsync();
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed nowhere" }, Ct)).Id;
+        object body = routed is null ? new { campaign_id = campaign } : new { campaign_id = campaign, operation = routed };
+
+        var error = await api.PostErrorAsync(operation, body, HttpStatusCode.NotFound, Ct);
+
+        Assert.Equal("no_route", error.Code);
+        Assert.EndsWith("Write one with route.set, or a global one with route.set and scope global.", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("settings file", error.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A route that is in neither the file nor the routes in force is the state asked for.</summary>
     [Fact]
     public async Task Unsetting_a_global_route_there_is_not_writes_nothing()
