@@ -552,7 +552,8 @@ guard as a standing approval, and in this order:
    wrote it, outside a run and outside the desktop's chat, or where the critic the runtime created for this send did:
    the `critic` work the runtime makes for a send created under an automatic mode, which it creates under its own
    actor, names the send and its operation in the reserved context key `send_review` (`{"work_item_id", "operation"}`),
-   and whose context nobody but the runtime changed since, its own attempt included. Any such pass counts, whatever was
+   and whose context nobody but Jason itself changed since: not a person, and not the critic's own attempt. Any such
+   pass counts, whatever was
    reviewed after it, since a doubt was asked before. A counting pass only under an earlier hash is
    `edited_after_review`; none at all, `not_reviewed`. Another critic's pass does not count: one somebody queued by
    hand, or the runtime's critic of another send. Nor does a pass by another role, on a line a run wrote in a person's
@@ -587,7 +588,8 @@ that leaves the header off is not marked.
 **A line written under the mark is the chat's, never a person's own word**, as a line that carries an attempt is the
 run's. Besides a send's lines, the mark is recorded, as `confined: true`, on a verdict (`reply_classified`), on a
 review (`workitem_reviewed`) and on a standing approval's set line (`standing_approval_set`) written under the header.
-A verdict so marked lifts no opt-out and vouches for no draft under a standing approval (`verdict_not_authentic`), a
+A verdict so marked lifts no opt-out, and under a standing approval it vouches for no draft as a person's verdict
+(`verdict_not_authentic`), while a decision's answer it carries is read as the decision records it; a
 review so marked is no person's pass, and a set line so marked sets nothing (`no_standing_approval`).
 
 Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperature (`cold` or `warm`), names the row, the
