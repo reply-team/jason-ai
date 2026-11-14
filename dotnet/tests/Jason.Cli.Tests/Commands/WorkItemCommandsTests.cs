@@ -59,6 +59,23 @@ public class WorkItemCommandsTests
                 + "\"context\":{\"icp\":\"founders\"},\"result_format\":{\"type\":\"object\"},\"reason\":\"the plan asks for it\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
     }
 
+    /// <summary>The items a create waits on are named one option each, in the order given, as the API's list.</summary>
+    [Fact]
+    public async Task Create_sends_each_item_to_wait_on_as_the_wait_on_list()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "message.send",
+            "--wait-on", "wi_REVIEW", "--wait-on", "wi_OTHER", "--actor", "role:composer");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemCreate,
+            "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"message.send\",\"wait_on\":[\"wi_REVIEW\",\"wi_OTHER\"],"
+                + "\"actor\":{\"type\":\"role\",\"id\":\"composer\"}}");
+    }
+
     /// <summary>
     /// Two namespaces use the same kind of words: the canonical operations a provider performs, and the verbs a
     /// person types at Jason. The help for <c>--operation</c> says which one it takes, so `campaign.get` is never

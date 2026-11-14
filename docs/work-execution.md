@@ -136,6 +136,8 @@ created | processing ──► waiting ──► created           (a provider b
 
 created ──► waiting ──► created                        (a limit held it at the claim, with no attempt of its own: its moment came, or somebody resumed it)
 
+(new) ──► waiting ──► created                          (created waiting on other work with wait_on: that work ended, the ceiling came, or somebody resumed it)
+
 created | awaiting_approval | scheduled | processing | waiting | expired ──► cancelled
 created | awaiting_approval | waiting ──► expired      (the due date passed before anyone claimed or answered it, or while it waited)
 ```
@@ -165,7 +167,13 @@ created | awaiting_approval | waiting ──► expired      (the due date passe
   wait: the claim parks it before any attempt exists, or the attempt that met the block ends `blocked`. Its wait
   names the block rather than items or a moment, is bounded by the item's `due_at` alone, and is released with
   `block_cleared` or `block_trial` (§Provider blocks). A responder its campaign's daily limit holds waits here as well,
-  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule).
+  held at the claim with no attempt of its own, until the next 00:00Z (§The claim rule). An item created with
+  `wait_on` is written waiting from its first moment, on the items of its campaign the create names (at most 100, each
+  once; another campaign's item or one that does not exist is refused at `wait_on[i]`): it is never claimed before
+  every one of them has ended, in any final state, or `Dispatcher:AiRole:MaxWaitSeconds` has passed, and spends no
+  launch waiting. The wait only orders: once it is over the item is ordinary queued work, and the claim decides about it
+  as about any other. A send created waiting on the work that reviews it is how a review lands before the send is
+  claimed (§Approvals, "Reviews of a send").
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
 - **`expired`** — the due date passed before anyone claimed it, before anyone answered the

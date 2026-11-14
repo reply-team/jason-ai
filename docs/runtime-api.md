@@ -292,7 +292,9 @@ journaled or pinned ([docs/routing.md](routing.md), "A read on request").
 
 ### `workitem`
 
-- `workitem.create`: takes a caller's `idempotency_key`.
+- `workitem.create`: takes a caller's `idempotency_key`, and `wait_on`, the items of the same campaign the new item
+  waits on from its creation: it is written `waiting` and is not claimed until every one of them has ended, in any
+  final state.
 - `workitem.get`
 - `workitem.list`
 - `workitem.count`

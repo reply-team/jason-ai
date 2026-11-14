@@ -65,10 +65,14 @@ public static class WorkItemCommands
             Description = "The arguments of a provider operation, as a JSON object. Written into the context under input, the one key an operation's arguments travel in.",
         };
         var resultFormat = new Option<string?>("--result-format") { Description = "What the result should look like, as any JSON value." };
+        var waitOn = VerbOptions.Repeatable(
+            "--wait-on",
+            "A work item of the same campaign, as wi_..., that this one waits on from its creation: it is not claimed until every one named "
+            + "has ended, whichever way, or the wait's ceiling has come. Repeat the option for more than one.");
         var idempotencyKey = VerbOptions.IdempotencyKey();
         var file = VerbOptions.File(
             "The object holds campaign_id, kind, role or operation, contact_id, execution_profile, priority, not_before, due_at, "
-            + "timeout_seconds, heartbeat_seconds, max_attempts, context, result_format and idempotency_key.");
+            + "timeout_seconds, heartbeat_seconds, max_attempts, context, result_format, wait_on and idempotency_key.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -86,6 +90,7 @@ public static class WorkItemCommands
         command.Options.Add(context);
         command.Options.Add(input);
         command.Options.Add(resultFormat);
+        command.Options.Add(waitOn);
         command.Options.Add(idempotencyKey);
         command.Options.Add(file);
         command.Options.Add(reason);
@@ -108,6 +113,7 @@ public static class WorkItemCommands
                 .Set("max_attempts", parseResult.GetValue(maxAttempts))
                 .Set("context", Context(body, parseResult.GetValue(context), parseResult.GetValue(input)))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
+                .Set("wait_on", VerbOptions.Strings(parseResult.GetValue(waitOn)))
                 .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
