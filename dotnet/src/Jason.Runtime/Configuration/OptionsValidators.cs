@@ -585,6 +585,28 @@ public sealed partial class LaunchesOptionsValidator(IConfiguration configuratio
 }
 
 /// <summary>
+/// The daily ceiling of automatic sends, within its bounds: at least one, since a person who wants none sets the mode to
+/// every message, and at most a thousand, since the ceiling never slips.
+/// </summary>
+public sealed class SendingOptionsValidator : IValidateOptions<SendingOptions>
+{
+    public ValidateOptionsResult Validate(string? name, SendingOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        OptionRules.Range(
+            failures,
+            SendingOptions.Section + ":" + nameof(SendingOptions.AutomaticMaxPerDay),
+            options.AutomaticMaxPerDay,
+            SendingOptions.MinimumPerDay,
+            SendingOptions.MaximumPerDay);
+
+        return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
 /// The respond step's numbers, each within its bounds: the queue's range, the time a check-in is held to and an age
 /// between an hour and thirty days.
 /// </summary>
