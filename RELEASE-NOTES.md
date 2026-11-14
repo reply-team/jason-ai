@@ -23,11 +23,12 @@ replaces the title and the body together.
 
 ## What is new since 0.41.0
 
-This release is about how much of the sending you keep in your own hands, and what Jason holds to whatever you say: you
-state how the messages to people who have not answered, and to people who have, are to go; Jason now knows which of the
-two a person is, and knows when a reply of theirs has not been judged yet; a doubt about a message goes to you before a
-standing approval can release it; and a person who asks not to be written to is never written to again, on
-any address.
+This release is about how much of the sending you keep in your own hands. You say, for people who have not answered and
+for people who have, whether each message waits for your yes or goes on its own. Where it goes on its own, a critic reads
+it first, and a doubt, a text nobody passed, a reply not yet judged, a message written in the desktop's chat and the
+day's limit still bring it to you. Jason now knows which of the two kinds a person is, and waits for a reply to be judged
+before it writes on its own to someone who just wrote; and a person who asks not to be written to is never written to
+again, on any address.
 
 - **Say how sends go, for people who have not answered and for people who have.** Two named preferences,
   [`send_mode.cold`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/preferences/send_mode.cold.md) and
@@ -37,26 +38,64 @@ any address.
   installation's preference with `--clear`; naming neither mode, and an archived campaign, are refused. `jason status`
   says which mode is in force for each kind of contact and where it comes from, and `jason campaign get --human` says
   the campaign's own. A mode nobody has set reads as `every_message`, so installing this release changes nothing about
-  how your sends go, and every approval names the preferences still unset. See
-  [the send modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#send-modes).
+  how your sends go, and every approval names the preferences still unset. No role sets a mode, and a request from
+  inside a run is refused.
+- **Under `automatic`, a message goes without asking you, and some still come to you.** Where the mode for a contact's
+  kind is `automatic` and a named person set it, the claim releases a message, a reply or an invitation under an
+  approval born approved, with the reason `automatic_mode`, decided in the name of the person who set the mode, and
+  writes an `approval_automatic_applied` line. It goes only once the runtime's critic, or a person by name, has passed
+  the text as it now reads. It waits for you instead, under an approval whose reason says why in one sentence, where it
+  was written or edited in the desktop's chat; where its creator or a reviewer doubted it; where the contact has a reply
+  not judged yet, or one judged before Jason recorded what kind of reply it was; where it answers no judged reply, or an
+  automatic reply, a bounce or a request to stop, or a conversation a role marked for you; where nobody passed its text,
+  or it was edited after the pass; and once the campaign has reached the day's ceiling. A standing approval still lets
+  a reply go where it waits only for its contact's reply, for what it answers or for a review, as before; it never lets
+  go one written in the chat, a doubted one or one past the ceiling. A retry reads the contact again, so a reply that
+  landed in the meantime brings the message back to you. See
+  [the send mode at the claim](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#the-send-mode-at-the-claim).
+- **The critic reads each automatic message first.** When a send to a person is created while the mode for its
+  contact's kind is `automatic`, the runtime creates a `critic` work item for it in the same save, naming the send in
+  the reserved context key `send_review`, and the send waits on it. Only that critic's pass, or a person's, lets the send
+  go: a critic somebody queued by hand, or the critic of another send, is shown to you and releases nothing. Nothing is
+  created under `every_message`, for a send that carries its creator's doubt, for one written in the desktop's chat, or
+  where no critic could be launched; a critic that fails or ends without a review leaves the send to you, unless a
+  standing approval covers it. The critic's skill knows that under an automatic mode its pass is the last look.
+- **A daily ceiling of automatic sends.** `Sending:AutomaticMaxPerDay`, 100 unless you set it, from 1 to 1000, is the
+  most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote,
+  whatever became of each. At the ceiling the next send waits for you with the reason `daily_ceiling`, and its preview
+  says the limit, the count and since when; a standing approval does not let it go either, and a new day does not
+  release it on its own. There is no 0 and no unlimited: to send nothing automatically, set the mode to
+  `every_message`.
+- **The desktop's chat is never a person's word.** Every request the chat's CLI sends carries the header
+  `Jason-Confined`, and the runtime records it on the work, the edits, the verdicts, the reviews and the standing
+  approvals made under it: a send written there always waits for you, a verdict there lifts no opt-out, a review there
+  is no person's pass, and a standing approval set there sets nothing. The chat refuses a campaign's send mode and the
+  send-mode preferences in every access mode and on every platform, refuses `workitem.review`, refuses a denied verb in
+  any letter case, and can neither claim to be a run nor inherit being one.
+- **Send modes in the console.** An approval card asks "How should messages go?" while a mode is unset, for people who
+  have not replied yet and for people who have: **Every message waits for you** or **Goes automatically**, with
+  **Remember this**. Settings sets the choice for every agent, an agent's own Settings tab sets its own, and System says
+  which mode is in force and where it comes from. A doubted message shows on its card who doubted it and why, in their
+  own words, and a held message says why it waits.
 - **Jason knows whether a person has answered.** `jason reply record` takes `--nature`: `person`, `automatic`, `bounce`
   or `opt_out`, in the runtime's own words. A contact is cold until a verdict that stands judges a reply of theirs, in
   that campaign, a person's answer; from then on they are warm. A reply nobody has judged yet makes the contact wait,
   even a warm one, since a new reply may be a request to stop; and where Jason cannot prove a reply judged, because a
   thread runs past one page or a read did not finish, the contact keeps waiting rather than being taken for warm or
-  cold. See [the send modes](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#send-modes) and
+  cold. See [cold, warm or waiting](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#cold-warm-or-waiting) and
   [the Runtime API](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/runtime-api.md#reply).
 - **A person who asks not to be written to is stopped on every address.** A verdict whose nature is `opt_out` puts every
   address and profile the contact has on the do-not-contact register in the same act, by the runtime's own actor, and
   the claim refuses work about that contact in every campaign, including for a value they gain later. Only a person's
-  own later verdict, under their name and outside any run, lifts it; a role's verdict, or a person named from inside a
-  run, never does. A claim that refuses for this says `opted_out`. See
+  own later verdict, under their name and outside any run and the desktop's chat, lifts it; a role's verdict, or a
+  person named from inside a run, never does. A claim that refuses for this says `opted_out`. See
   [the claim's checks](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/routing.md).
 - **A doubt about a message reaches you before anything can release it.** The one composing a message can say at
   creation, with `--ask-person` and a code, that you should look at it, and a role that reviews a message can pass it or
   doubt it with `jason workitem review`, bound to the text it read; an edit voids the review. A send can be created
-  waiting on its review with `--wait-on`. A doubt goes ahead of a standing approval too, so a category you let go
-  without a question still brings a doubted message to you. Nobody reviews a message they wrote or edited. See
+  waiting on its review with `--wait-on`. A doubt goes ahead of a standing approval and of the automatic mode, so
+  neither lets a doubted message go without you. Nobody reviews a message they wrote or edited, and a message edited
+  under no name is reviewed only by a person by name. See
   [doubts about a send](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#doubts-about-a-send).
 - **The quick-start skill reads your accounts before you say go.** It tells you how many mailboxes and LinkedIn
   accounts are connected through the provider your sends go through, in the same message as the plan, and a read that
@@ -72,20 +111,31 @@ any address.
 
 ## Upgrading from 0.41.0
 
-Nothing stops and no setting is renamed. Three database migrations run on the first start, after the backup the runtime
-already takes: an index for reading a thread's verdicts, the campaign's own send modes, and room for a send's doubt
-notes.
+Nothing stops and no setting is renamed. Four database migrations run on the first start, after the backup the runtime
+already takes: an index for reading a thread's verdicts, the campaign's own send modes, room for a send's doubt notes,
+and an index for counting a campaign's automatic sends of the day.
 
-- **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` brings this
-  release's skills.
+- **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` and
+  `jason ui install` follow: the first brings this release's skills, the critic's among them, and the second the
+  console's send modes.
+- **The packages:** reply 0.15.1, journal-forwarder 1.3.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0, each the same as
+  in 0.41.0, so there is nothing to replace with `jason plugin install`.
 - **Your sends go as before.** Neither send mode is set by an update, so every send to a person still waits for a person
   until you set one; `jason status` says so.
+- **The desktop's chat:** a send written in the desktop's chat always waits for the person, even where a standing
+  approval would have covered it.
+- **What automatic costs.** Where a send mode is automatic, each message to a contact of that kind costs one more AI run,
+  the critic's, and the critics share the campaign's one slot with its other role work.
 - **An opt-out before this release is held as before,** by the register entries made for it then. The new opt-out lock
   reads only verdicts that state the nature `opt_out`, which no verdict recorded before this release carries, so an
   address such a contact gains after the update is refused only once it is put on the register by hand.
 - **A contact whose last reply was judged before this release waits for its nature,** since such a verdict states none,
   until a verdict that does is recorded on that thread.
-- **The desktop is a separate install,** as before: `jason update` does not install it.
+- **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the
+  disk image for your machine from this release, or let an installed desktop offer the update.
+- **Update the desktop and Jason together.** This release's desktop carries the chat's refusals of the send modes, and
+  its console the send modes' card and settings.
+- **From 0.40.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
 
@@ -93,12 +143,11 @@ The opt-out lock holds by the contact's record: another contact record of the sa
 record never had, is not covered, since Jason does not merge contacts. The register still holds every value the
 opted-out record had.
 
-A reply the provider could not tie to one of the campaign's contacts makes nobody wait, and neither does a reply the
-campaign heard of only through a contact's pin; until a verdict names the person, a first message to them is not held
-back by it.
+Where a provider does not say which person a reply is from, Jason cannot hold an automatic message to that person until
+the reply is judged: until a verdict names them, a first message to them may still go.
 
-An edit of a send's text made under no name is never matched as an editor of that send, so it does not stop anybody
-reviewing it.
+A reply this campaign heard of only because another campaign knows the same person neither makes that person warm here
+nor holds a message to them here.
 
 The demo has limits: it is email only, with no LinkedIn channel; it raises no question; a person whose message waits for your approval never answers it, because a reply is attributed once, when it is stored; and no AI role runs in the demo's runtime, so no reply there is judged, and Interested, Meetings booked and **Replies by category** have nothing to count. The sample's story began when the release was built, with no past before it, so the Dashboard's 30 days hold it for thirty days after. Where the sample is placed, the replies the story wrote are already in when the demo opens; where it is made at the start instead, its story starts that day and its replies arrive within minutes. After that, a kept demo shows nothing new of the story until **Start the Demo Over**. In a placed demo the Dashboard's daily trends read ±0 at first, since nothing of the story falls in the last 24 hours.
 
