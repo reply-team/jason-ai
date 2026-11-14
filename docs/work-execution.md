@@ -519,10 +519,6 @@ work has ended; whatever way it ended, the claim then decides as ever. A doubt p
 any standing approval: where one would cover it, the send parks all the same, its preview's `standing_approval` saying
 `doubted`, and no row is born approved; a pass is no doubt and leaves the standing approval to decide.
 
-An edit made under no name, or as `role:<name>` outside a run, names no author a review could tell apart and is never
-matched as an editor of a send: only a person who gave their name and an attempt are, so such an edit stops nobody
-reviewing the send.
-
 **The sentence is kept out of every record that lasts.** Each is a person's or an agent's text, so it is stored on the
 item's own row (`work_items.ask_person_note`, `work_items.review_note`, the newest doubting review's), outside the
 context: no journal line, no attempt's snapshot, no read of
@@ -553,7 +549,7 @@ guard as a standing approval, and in this order:
 1. **Is a mode in force?** The send is a send to a person and names a contact, and a mode of `automatic`
    set by a named person stands for its campaign, for cold or for warm. Where none does, nothing below is asked, warmth
    is not read, and the send parks as it always did.
-2. **The contact's warmth**, read from the campaign's chronicle. Where the mode for the contact's warmth is
+2. **The contact's warmth**, read from the campaign's chronicle (§Cold, warm or waiting). Where the mode for the contact's warmth is
    `every_message`, the send parks as it always did.
 3. **Written in the chat?** A send created, or whose input was edited, by a call the desktop's chat made parks for the
    person: `sent_from_chat`.
@@ -618,16 +614,9 @@ Journal: `approval_automatic_applied`, by the dispatcher, keyed by the temperatu
 operation, the subject hash, the mode's source, the temperature and the review line, and carries no text. Nobody is
 asked, so nothing is notified.
 
-### Send modes
+### Cold, warm or waiting
 
-A send to a person goes under one of two send modes, `automatic` or `every_message`: one for a contact who has not
-answered in the campaign, cold, and one for a contact who has, warm. The mode in force is the campaign's own where it
-sets one, else the installation's preference `send_mode.cold` or `send_mode.warm`, else `every_message`
-([`send_mode.cold`](contracts/preferences/send_mode.cold.md),
-[`send_mode.warm`](contracts/preferences/send_mode.warm.md)). It is read when a send is claimed, never frozen when the
-work is made.
-
-**Cold, warm or waiting.** Where a contact stands in a campaign is read from that campaign's own chronicle alone — its
+Where a contact stands in a campaign is read from that campaign's own chronicle alone — its
 `inbound_reply_observed` lines and its `reply_classified` verdicts — and from the responders the runtime made for a
 thread. Nothing is stored for it, another campaign's verdicts are never read, and nothing here reads a category, a
 reaction or the words of a reply.
@@ -656,14 +645,26 @@ reaction or the words of a reply.
   reply of it at once. In practice this heals at the thread's next move.
 - A responder or a read whose context anyone but the runtime changed judges nothing, since `workitem.update` may rewrite
   any key of an open item's context.
-- A reply the campaign heard of only through the contact's pin makes nobody wait, and a verdict on its thread warms
-  nobody: the contact stays as they were.
 - A move on a thread that names no contact makes wait only a contact a standing verdict names on that thread, and only a
   responder that names that contact judges it: the responder made for the unnamed move is about nobody and clears
   nothing, so the contact waits for a verdict about a message at or after the move, or for a later responder that names
   them.
 - A contact whose last reply was judged by a verdict recorded before 0.42.0 waits for its nature, since such a verdict
   states none, until a verdict with a nature is recorded on that thread.
+- A send of the campaign's own into a thread that has a reply moves the thread, so the contact waits until the
+  responder made for that move has read the whole thread and succeeded: the verdict already standing then judges the
+  move. Where no
+  responder is made for it — `Responder:OnReply` false, or no responder that could be launched
+  ([docs/inbound-sync.md](inbound-sync.md)) — nothing ends the wait but a later verdict, and a send to the contact
+  parks for the person meanwhile.
+
+**Where it holds nothing back.** Two replies make nobody wait, so an automatic send to the person who wrote them may
+still go:
+
+- A reply the provider could not tie to one of the campaign's contacts, on a thread no verdict that stands names
+  anybody on: until a verdict names the person, nothing holds a first message to them.
+- A reply the campaign heard of only through the contact's pin, because another campaign knows the same person; a verdict
+  on its thread warms nobody here either, and the contact stays as they were.
 
 ## Leases and heartbeats
 
