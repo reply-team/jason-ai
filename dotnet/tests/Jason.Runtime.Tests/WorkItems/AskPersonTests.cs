@@ -44,6 +44,9 @@ public class AskPersonTests
         Assert.DoesNotContain("SENTINEL_ASK_4d1e", JsonSerializer.Serialize(made, JasonJson.Options), StringComparison.Ordinal);
         var read = await Service(db).GetAsync(new WorkItemGetRequest(made.Id, IncludeSnapshots: true), Ct);
         Assert.DoesNotContain("SENTINEL_ASK_4d1e", JsonSerializer.Serialize(read, JasonJson.Options), StringComparison.Ordinal);
+        var listed = await Service(db).ListAsync(new WorkItemListRequest(seed.Campaign.PublicId, null, null, null, null, null, null, null), Ct);
+        Assert.Equal(made.Id, Assert.Single(listed.Items).Id);
+        Assert.DoesNotContain("SENTINEL_ASK_4d1e", JsonSerializer.Serialize(listed, JasonJson.Options), StringComparison.Ordinal);
         var lines = await db.Journal.AsNoTracking().ToListAsync(Ct);
         Assert.NotEmpty(lines);
         Assert.All(lines, line => Assert.DoesNotContain("SENTINEL_ASK_4d1e", JsonSerializer.Serialize(JournalWriter.ToDto(line, null), JasonJson.Options), StringComparison.Ordinal));
