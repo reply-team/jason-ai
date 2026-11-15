@@ -2,13 +2,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// One build, two shells (`src/main.tsx`): the classic shell, which any other browser loads, shares only four small
+// One build, two shells (`src/main.tsx`): the classic shell, which any other browser loads, shares only five small
 // modules of the console with it. Whatever `classic.tsx` imports, directly or through the modules it imports, may not
-// reach another file under `src/console/`: the console's state, its Connect and its desktop seam belong to its own chunk.
+// reach another file under `src/console/`: the console's Connect, chat and desktop seam belong to its own chunk.
 
 const src = join(import.meta.dirname, '..', '..', 'src');
-// `console/state.ts` is read by the send-modes' `open-settings.ts` and is the one file beyond the four that the classic
-// chunk already held; the console's Connect, chat and desktop seam stay out. Dynamic imports (the browser chat tab) are
+// `console/state.ts` is the fifth: the send-modes' `open-settings.ts` reads it, and the classic chunk already held it;
+// the console's Connect, chat and desktop seam stay out. Dynamic imports (the browser chat tab) are
 // chunks of their own and are not followed.
 const shared = ['console/html.ts', 'console/painted.tsx', 'console/icons.ts', 'console/live.ts', 'console/state.ts'];
 
