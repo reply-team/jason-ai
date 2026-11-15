@@ -1,0 +1,35 @@
+{
+  "operation": "approval.list",
+  "case": "panel-doubted",
+  "request": {
+    "work_item_id": "wi_1",
+    "statuses": [
+      "pending"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_1",
+        "work_item_id": "wi_1",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "doubted",
+        "subject_hash": "sha256:recorded-2",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}

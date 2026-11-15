@@ -404,6 +404,36 @@ import personWorkitemGetResearcherFinding from '../../../docs/api/fixtures/worki
 import personWorkitemGetResearcherFindingSecond from '../../../docs/api/fixtures/workitem.get/researcher-finding-second.json';
 import personWorkitemListResearcherFindings from '../../../docs/api/fixtures/workitem.list/researcher-findings.json';
 import personWorkitemListResearcherFindingsTwo from '../../../docs/api/fixtures/workitem.list/researcher-findings-two.json';
+import approvalApprovePanelDoubted from '../../../docs/api/fixtures/approval.approve/panel-doubted.json';
+import approvalGetPanelDoubted from '../../../docs/api/fixtures/approval.get/panel-doubted.json';
+import approvalGetPanelMoved from '../../../docs/api/fixtures/approval.get/panel-moved.json';
+import approvalListPanelDoubted from '../../../docs/api/fixtures/approval.list/panel-doubted.json';
+import approvalListPanelMoved from '../../../docs/api/fixtures/approval.list/panel-moved.json';
+import journalListPanelDoubted from '../../../docs/api/fixtures/journal.list/panel-doubted.json';
+import journalListPanelDoubtedApproved from '../../../docs/api/fixtures/journal.list/panel-doubted-approved.json';
+import journalListPanelMoved from '../../../docs/api/fixtures/journal.list/panel-moved.json';
+import journalListPanelMovedEdited from '../../../docs/api/fixtures/journal.list/panel-moved-edited.json';
+import workitemCountPanelDoubtedApprovedDone from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-done.json';
+import workitemCountPanelDoubtedApprovedNow from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-now.json';
+import workitemCountPanelDoubtedApprovedPlanned from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-planned.json';
+import workitemCountPanelDoubtedDone from '../../../docs/api/fixtures/workitem.count/panel-doubted-done.json';
+import workitemCountPanelDoubtedNow from '../../../docs/api/fixtures/workitem.count/panel-doubted-now.json';
+import workitemCountPanelDoubtedPlanned from '../../../docs/api/fixtures/workitem.count/panel-doubted-planned.json';
+import workitemCountPanelMovedDone from '../../../docs/api/fixtures/workitem.count/panel-moved-done.json';
+import workitemCountPanelMovedNow from '../../../docs/api/fixtures/workitem.count/panel-moved-now.json';
+import workitemCountPanelMovedPlanned from '../../../docs/api/fixtures/workitem.count/panel-moved-planned.json';
+import workitemGetPanelDoubted from '../../../docs/api/fixtures/workitem.get/panel-doubted.json';
+import workitemGetPanelDoubtedApproved from '../../../docs/api/fixtures/workitem.get/panel-doubted-approved.json';
+import workitemGetPanelMoved from '../../../docs/api/fixtures/workitem.get/panel-moved.json';
+import workitemGetPanelMovedEdited from '../../../docs/api/fixtures/workitem.get/panel-moved-edited.json';
+import workitemListPanelDoubtedApprovedNow from '../../../docs/api/fixtures/workitem.list/panel-doubted-approved-now.json';
+import workitemListPanelDoubtedNow from '../../../docs/api/fixtures/workitem.list/panel-doubted-now.json';
+import workitemListPanelMovedNow from '../../../docs/api/fixtures/workitem.list/panel-moved-now.json';
+import workitemCountPanelMovedEditedDone from '../../../docs/api/fixtures/workitem.count/panel-moved-edited-done.json';
+import workitemCountPanelMovedEditedNow from '../../../docs/api/fixtures/workitem.count/panel-moved-edited-now.json';
+import workitemCountPanelMovedEditedPlanned from '../../../docs/api/fixtures/workitem.count/panel-moved-edited-planned.json';
+import workitemListPanelMovedEditedNow from '../../../docs/api/fixtures/workitem.list/panel-moved-edited-now.json';
+import approvalGetByWorkItem from '../../../docs/api/fixtures/approval.get/by-work-item.json';
 
 import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
@@ -1267,6 +1297,99 @@ export const fixtures = {
         WorkItemListRequest,
         Page<WorkItemSummary>
     >,
+    'approval.approve/panel-doubted': approvalApprovePanelDoubted satisfies Exchange<ApprovalDecisionRequest, Approval>,
+    'approval.get/panel-doubted': approvalGetPanelDoubted satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/panel-moved': approvalGetPanelMoved satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.list/panel-doubted': approvalListPanelDoubted satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/panel-moved': approvalListPanelMoved satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
+    'journal.list/panel-doubted': journalListPanelDoubted satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'journal.list/panel-doubted-approved': journalListPanelDoubtedApproved satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/panel-moved': journalListPanelMoved satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'journal.list/panel-moved-edited': journalListPanelMovedEdited satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'workitem.count/panel-doubted-approved-done': workitemCountPanelDoubtedApprovedDone satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-doubted-approved-now': workitemCountPanelDoubtedApprovedNow satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-doubted-approved-planned': workitemCountPanelDoubtedApprovedPlanned satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-doubted-done': workitemCountPanelDoubtedDone satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-doubted-now': workitemCountPanelDoubtedNow satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-doubted-planned': workitemCountPanelDoubtedPlanned satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-moved-done': workitemCountPanelMovedDone satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-moved-now': workitemCountPanelMovedNow satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-moved-planned': workitemCountPanelMovedPlanned satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.get/panel-doubted': workitemGetPanelDoubted satisfies Exchange<{ work_item_id: string }, WorkItem>,
+    'workitem.get/panel-doubted-approved': workitemGetPanelDoubtedApproved satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/panel-moved': workitemGetPanelMoved satisfies Exchange<{ work_item_id: string }, WorkItem>,
+    'workitem.get/panel-moved-edited': workitemGetPanelMovedEdited satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.list/panel-doubted-approved-now': workitemListPanelDoubtedApprovedNow satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/panel-doubted-now': workitemListPanelDoubtedNow satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/panel-moved-now': workitemListPanelMovedNow satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.count/panel-moved-edited-done': workitemCountPanelMovedEditedDone satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-moved-edited-now': workitemCountPanelMovedEditedNow satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.count/panel-moved-edited-planned': workitemCountPanelMovedEditedPlanned satisfies Exchange<
+        WorkItemFilterRequest,
+        WorkItemCount
+    >,
+    'workitem.list/panel-moved-edited-now': workitemListPanelMovedEditedNow satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'approval.get/by-work-item': approvalGetByWorkItem satisfies Exchange<{ approval_id: string }, Approval>,
 } as const;
 
 export type FixtureName = keyof typeof fixtures;
