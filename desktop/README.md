@@ -537,8 +537,12 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
 - On macOS the window has no title bar (`src/window-frame.ts`): its three buttons sit in a band of 26 pixels over the top
   of the console's sidebar, which the console leaves empty in the desktop's own window (its `desktop-mac` class), and the
-  window is dragged by that band and by the console's top strip, every control on them excepted. The page shown while
-  Jason starts has a drag band of its own across its top. Windows and Linux keep the native frame.
+  window is dragged by that band and by the console's top strip, every control on them excepted. So that the window
+  stays movable whatever it shows (a console older than this desktop, a custom one, a page that failed to load), the
+  desktop also adds a band of its own to every document the window loads: an empty element at the end of the document,
+  drawn over those 284 by 26 pixels as a drag region by a stylesheet of the user's origin whose every declaration is
+  important, which no stylesheet of a page outranks. The page shown while Jason starts has a drag band across its top.
+  Windows and Linux keep the native frame, and none of this is added there.
 
 ## Links
 
