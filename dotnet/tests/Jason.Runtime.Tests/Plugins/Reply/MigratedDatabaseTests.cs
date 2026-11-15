@@ -4,8 +4,9 @@ using Microsoft.Data.Sqlite;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// The copy a Reply test's runtime starts on is what a fresh start would have made: the same schema, the same migrations
-/// recorded, and the same rows in every table — none left over from anything that ran before.
+/// The copy a Reply test's runtime starts on is what a fresh start would have made: the same schema and triggers, the same
+/// migrations recorded, and the same row count in every table — none left over from anything that ran before. Row
+/// content is not compared: the default project's id and moments are made when the template migrates, one per process.
 /// </summary>
 public class MigratedDatabaseTests
 {
