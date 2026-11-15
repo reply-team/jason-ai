@@ -39,7 +39,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.15.2", plugin.Version);
+        Assert.Equal("0.16.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["audience.availability", "audience.filter_values", "audience.preview", "audience.search", "audience.search_cancel", "audience.search_status", "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "message.cancel", "message.send", "message.status", "optout.record", "schedule.list", "sender.list", "social_invitation.send"],
@@ -298,7 +298,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.15.2", result.Provenance.Version);
+        Assert.Equal("0.16.0", result.Provenance.Version);
     }
 
     /// <summary>
@@ -1420,23 +1420,52 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The changelog opens with 0.15.2: every sender's block names the channel the send went on, since Reply numbers its
-    /// mailboxes apart from its LinkedIn accounts, and the runtime it needs to keep a block per channel. The README says the
-    /// same where the sends' endings are explained.
+    /// The changelog opens with 0.16.0, a bounce notice read as a <c>bounce</c> and not as the other side's move: the flag it
+    /// is read from, the event's members, the moment that keeps it one event, the line the events read no longer says and
+    /// the read of the threads that is unchanged, the thread with a bounce and another flag that stays a moved thread, the
+    /// line a bounce with no contact says, and the feed with no flag that reads as before. The README says the same.
     /// </summary>
     [Fact]
-    public void The_changelog_opens_with_0_15_2_a_senders_block_on_the_channel_the_send_went_on()
+    public void The_changelog_opens_with_0_16_0_a_bounce_notice_read_as_a_bounce_and_the_readme_says_so()
     {
         var section = Flat(ChangelogSection(0));
         var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
 
-        Assert.StartsWith(" ## 0.15.2 ", section, StringComparison.Ordinal);
-        Assert.All(["`channel`", "mailbox 12 and LinkedIn account 12", "Jason 0.43.0"], word => Assert.Contains(word, section, StringComparison.Ordinal));
-        Assert.Contains("Every sender's block this package reports names the channel the send went on", readme, StringComparison.Ordinal);
+        Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            [
+                "`flags.hasBounce`", "one `bounce` event", "`message` and `bounce` null", "the notice's own moment", "stored once",
+                "the events read no longer says `inbound_reply_observed` for a bounce", "`conversation.list`, is unchanged",
+                "none of a reply, an automatic reply or an absence", "stays a moved thread", "one line on stderr by the thread's and the sequence's identifiers",
+                "never sets the flag reads as before",
+            ],
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.Contains("A bounce notice is read as a `bounce`, never as the other side's move.", readme, StringComparison.Ordinal);
+        Assert.Contains("A Reply whose feed never sets the flag reads exactly as before.", readme, StringComparison.Ordinal);
+        Assert.Contains("An item is a bounce only where the bounce is the one of Reply's four reply flags that is set:", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("and `bounce` — are never produced", readme, StringComparison.Ordinal);
+        Assert.StartsWith(" ## 0.15.1 ", Flat(ChangelogSection(1)), StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The changelog's next section is 0.15.1, which names the two things this package gives a search that a later version reads
+    /// The same section, 0.16.0, also says every sender's block names the channel the send went on, since Reply numbers its
+    /// mailboxes apart from its LinkedIn accounts, and the runtime it needs to keep a block per channel. The README says the
+    /// same where the sends' endings are explained.
+    /// </summary>
+    [Fact]
+    public void The_changelog_s_0_16_0_says_a_senders_block_is_on_the_channel_the_send_went_on()
+    {
+        var section = Flat(ChangelogSection(0));
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
+        Assert.All(["`channel`", "mailbox 12 and LinkedIn account 12", "Jason 0.43.0"], word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.Contains("Every sender's block this package reports names the channel the send went on", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("## 0.15.2", File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "CHANGELOG.md")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Below it, 0.15.1, which names the two things this package gives a search that a later version reads
     /// back — the list's name and the search's reference — and says they never change; then 0.15.0, the audience family over
     /// Reply's Live Data as this package performs it: the six
     /// operations, the definition the manifest declares, a preview with no way to reach anybody, the list a search makes

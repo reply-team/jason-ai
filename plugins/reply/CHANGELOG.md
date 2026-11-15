@@ -3,8 +3,19 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
-## 0.15.2
+## 0.16.0
 
+- `events.read` reads a bounce notice as a `bounce` event rather than as the other side's move. When an email the
+  account sent bounces, the notice lands on its thread as an inbound message, and Reply's change feed flags that thread
+  as holding a bounce (`flags.hasBounce`). An item flagged as holding a bounce and none of a reply, an automatic reply
+  or an absence, whose last message is inbound, is now one `bounce` event: the thread's contact and sequence, `message`
+  and `bounce` null because the feed names neither, and the notice's own moment, so a bounce read twice is stored once.
+  No `thread_moved` is read from that item, so the events read no longer says `inbound_reply_observed` for a bounce or
+  raises a responder for it; the campaign's manager is woken by `provider_event_observed` instead. The read of the
+  account's threads, `conversation.list`, is unchanged. An item flagged with a bounce and any of the other three stays a
+  moved thread; a bounce on a thread Reply names no contact for is left out, and the package says so in one line on
+  stderr by the thread's and the sequence's identifiers and the thread's last activity; and a feed that never sets the
+  flag reads as before. Update the package (`jason update apply`) to have it.
 - Every sender's block the package reports names the `channel` the send went on, `email` or `linkedin`, beside the
   sender's number: a mailbox turned off or disconnected, and a LinkedIn account turned off, disconnected or at its
   daily or weekly allowance. Reply numbers its mailboxes apart from its LinkedIn accounts, so mailbox 12 and LinkedIn
