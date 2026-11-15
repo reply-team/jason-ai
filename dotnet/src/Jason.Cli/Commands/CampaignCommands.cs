@@ -442,7 +442,7 @@ public static class CampaignCommands
         var activity = Choice<CampaignActivityFilter>.Only(new Option<string?>("--activity")
         {
             Description = "Only the people one count of campaign activity counts in the period of --since and --until: "
-                + "people (anything at all), added, worked_on, contacted, replied, opted_out or removed. Removed people are included.",
+                + "people (anything at all), added, worked_on, contacted, replied, bounced, opted_out or removed. Removed people are included.",
         });
         var since = VerbOptions.Moment("--since", "With --activity: the period's start, included, as ISO-8601 UTC, or now.");
         var until = VerbOptions.Moment("--until", "With --activity: the period's end, not included, as ISO-8601 UTC, or now.");
@@ -518,7 +518,7 @@ public static class CampaignCommands
         var command = new Command(
             "activity",
             "How many of each campaign's people had anything happen to them, were added, worked on, contacted, replied for the first time, "
-            + "opted out or removed in a period. "
+            + "bounced, opted out or removed in a period. "
             + "A person may be in several counts; campaign list-contacts --activity lists who.");
         var ids = CampaignIds();
         var since = VerbOptions.Moment("--since", "The period's start, included, as ISO-8601 UTC, or now.");
@@ -560,7 +560,7 @@ public static class CampaignCommands
         var ids = CampaignIds();
         var count = Choice<CampaignActivityFilter>.Only(new Option<string?>("--count")
         {
-            Description = "The count: people (anything at all), added, worked_on, contacted, replied, opted_out or removed.",
+            Description = "The count: people (anything at all), added, worked_on, contacted, replied, bounced, opted_out or removed.",
             Required = true,
         });
         var period = Choice<ActivityPeriod>.Only(new Option<string?>("--period") { Description = "What each bucket is: hour, day or week (Monday to Sunday).", Required = true });

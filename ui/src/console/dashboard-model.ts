@@ -83,10 +83,10 @@ export function needsSubline(approvals: number, questions: number): string | nul
     return parts.length === 0 ? null : parts.join(' · ');
 }
 
-/** Replied over contacted as a percentage to one decimal, dropped when whole; null when nobody was contacted. */
-export function rateOf(replied: number, contacted: number): string | null {
+/** One count over contacted as a percentage to one decimal, dropped when whole; null when nobody was contacted. */
+export function rateOf(count: number, contacted: number): string | null {
     if (contacted <= 0) return null;
-    return `${Math.round((replied / contacted) * 1000) / 10}%`;
+    return `${Math.round((count / contacted) * 1000) / 10}%`;
 }
 
 /** Contacted over people, between 0 and 1; null for an agent with no people. */
@@ -103,6 +103,7 @@ export function cut(text: string, max: number): string {
 export interface ActivityRead {
     contacted: number;
     replied: number;
+    bounced: number;
 }
 
 /** What `reply.count` says over the window: replies a role judged, by the word of the verdict. */
@@ -198,16 +199,38 @@ export function tileTrendsOf(reads: TrendReads | null): TileTrends {
 
 export interface Tile {
     label: string;
-    /** The number, or null where no fact stands behind it. */
-    value: number | null;
+    /** The number, a rate already written as one, or null where no fact stands behind it. */
+    value: number | string | null;
+    /** The line under the number; under a dash, what is known though the number is not, or null for "no data yet". */
     sub: string | null;
+    /** What the dash says to a screen reader where a line under it says what is known; "no data yet" when absent. */
+    none?: string;
     /** What the number is, said on hover; absent for a tile that needs none. */
     hint?: string;
     /** How the number moved over the last 24 hours; absent where no trend is shown. */
     trend?: Trend | null;
 }
 
-/** The six tiles in order. Interested and Meetings booked count conversations judged so; Bounce rate has no fact yet. */
+/**
+ * The Bounce rate tile: the window's bounced over its contacted as a percentage, with how many bounced under it; a dash
+ * where nobody was contacted, with the count under it still when somebody bounced. No trend. Both are numbers of people
+ * of the one window, so a bounce of a message sent before the window counts against the window's contacted: where more
+ * bounced than were contacted, the share means nothing, and the tile shows the dash and the count rather than a rate
+ * above a hundred percent.
+ */
+export function bounceTile(activity: ActivityRead | null): Tile {
+    const rate =
+        activity && activity.bounced <= activity.contacted ? rateOf(activity.bounced, activity.contacted) : null;
+    const known = activity !== null && (rate !== null || activity.bounced > 0);
+    return {
+        label: t('dash.tile.bounce'),
+        value: rate,
+        sub: known ? t('dash.bounced', { n: String(activity.bounced) }) : null,
+        ...(known && rate === null ? { none: t('dash.tile.bounce.none') } : {}),
+    };
+}
+
+/** The six tiles in order. Interested and Meetings booked count conversations judged so. */
 export function tilesOf(input: {
     approvals: number;
     questions: number;
@@ -251,7 +274,7 @@ export function tilesOf(input: {
             hint: t('dash.tile.meetings.hint'),
             trend: input.trends?.meetings ?? null,
         },
-        { label: t('dash.tile.bounce'), value: null, sub: null },
+        bounceTile(activity),
     ];
 }
 

@@ -58,19 +58,19 @@ public class ArchivedContactsLeftOutTests
         // Absent: the answer of a world where nobody is archived, Rae replied and Hal worked on in both campaigns.
         Assert.Equal(
             [
-                new CampaignActivityRow(world.Spring.PublicId, 15, 2, 10, 4, 2, 2, Removed: 1),
-                new CampaignActivityRow(world.Autumn.PublicId, 1, 0, 1, 0, 0, 0, Removed: 0),
+                new CampaignActivityRow(world.Spring.PublicId, 17, 2, 10, 4, 2, 2, 2, Removed: 1),
+                new CampaignActivityRow(world.Autumn.PublicId, 1, 0, 1, 0, 0, 0, 0, Removed: 0),
             ],
             counted.Campaigns);
-        Assert.Equal(new CampaignActivityTotal(15, 2, 10, 4, 2, 2, Removed: 1), counted.Total);
+        Assert.Equal(new CampaignActivityTotal(17, 2, 10, 4, 2, 2, 2, Removed: 1), counted.Total);
         // Left out: Spring loses Rae's reply and Hal's work, and Autumn, whose only happening was Hal's, keeps its row of zeros.
         Assert.Equal(
             [
-                new CampaignActivityRow(world.Spring.PublicId, 13, 2, 9, 4, 1, 2, Removed: 1),
-                new CampaignActivityRow(world.Autumn.PublicId, 0, 0, 0, 0, 0, 0, Removed: 0),
+                new CampaignActivityRow(world.Spring.PublicId, 15, 2, 9, 4, 1, 2, 2, Removed: 1),
+                new CampaignActivityRow(world.Autumn.PublicId, 0, 0, 0, 0, 0, 0, 0, Removed: 0),
             ],
             left.Campaigns);
-        Assert.Equal(new CampaignActivityTotal(13, 2, 9, 4, 1, 2, Removed: 1), left.Total);
+        Assert.Equal(new CampaignActivityTotal(15, 2, 9, 4, 1, 2, 2, Removed: 1), left.Total);
     }
 
     [Fact]
@@ -166,6 +166,7 @@ public class ArchivedContactsLeftOutTests
             [CampaignActivityFilter.WorkedOn] = week.WorkedOn,
             [CampaignActivityFilter.Contacted] = week.Contacted,
             [CampaignActivityFilter.Replied] = week.Replied,
+            [CampaignActivityFilter.Bounced] = week.Bounced,
             [CampaignActivityFilter.OptedOut] = week.OptedOut,
             [CampaignActivityFilter.Removed] = week.Removed,
         };
@@ -240,6 +241,7 @@ public class ArchivedContactsLeftOutTests
             [CampaignActivityFilter.WorkedOn] = week.WorkedOn,
             [CampaignActivityFilter.Contacted] = week.Contacted,
             [CampaignActivityFilter.Replied] = week.Replied,
+            [CampaignActivityFilter.Bounced] = week.Bounced,
             [CampaignActivityFilter.OptedOut] = week.OptedOut,
             [CampaignActivityFilter.Removed] = week.Removed,
         };

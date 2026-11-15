@@ -4,7 +4,7 @@ import { number } from '../../time/format';
 import { counts, shareOfContacted } from './labels';
 
 /**
- * The period's seven counts; each opens its people under the tiles, and the one open is marked. While the numbers are on
+ * The period's eight counts; each opens its people under the tiles, and the one open is marked. While the numbers are on
  * their way, the tiles keep their places, empty.
  */
 export function Tiles({
@@ -22,7 +22,7 @@ export function Tiles({
                 const value = total?.[key] ?? null;
                 const on = chosen === key;
                 const share =
-                    total && value !== null && (key === 'replied' || key === 'opted_out')
+                    total && value !== null && (key === 'replied' || key === 'bounced' || key === 'opted_out')
                         ? shareOfContacted(value, total.contacted)
                         : null;
                 return (

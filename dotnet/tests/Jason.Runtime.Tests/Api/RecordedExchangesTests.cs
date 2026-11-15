@@ -544,16 +544,16 @@ public class RecordedExchangesTests
         Assert.True(unasked.Total.People < unasked.Campaigns.Sum(c => c.People), "A person in several campaigns would count once per campaign.");
 
         var week = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "last-7-days", new { campaign_ids = listed, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct);
-        Assert.Equal(new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1), week.Campaigns[0]);
+        Assert.Equal(new CampaignActivityRow(seed.Spring, 16, 2, 9, 4, 2, 2, 2, Removed: 1), week.Campaigns[0]);
         var today = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "today", new { campaign_ids = listed, since = "2026-10-16T00:00:00.000Z", until = Now, exclude_archived_contacts = true }, Ct);
-        Assert.Equal(new CampaignActivityRow(seed.Spring, 0, 0, 0, 0, 0, 0, Removed: 0), today.Campaigns[0]);
+        Assert.Equal(new CampaignActivityRow(seed.Spring, 0, 0, 0, 0, 0, 0, 0, Removed: 0), today.Campaigns[0]);
         Assert.Equal(
-            new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1),
+            new CampaignActivityRow(seed.Spring, 16, 2, 9, 4, 2, 2, 2, Removed: 1),
             Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "one", new { campaign_ids = new[] { seed.Spring }, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Campaigns));
         // The same read with no exclude_archived_contacts in the request, as the CLI and an agent send it unless asked:
         // archived people are counted, and this world archives nobody, so the row is the one above.
         Assert.Equal(
-            new CampaignActivityRow(seed.Spring, 14, 2, 9, 4, 2, 2, Removed: 1),
+            new CampaignActivityRow(seed.Spring, 16, 2, 9, 4, 2, 2, 2, Removed: 1),
             Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "one-archived-not-left-out", new { campaign_ids = new[] { seed.Spring }, since = WeekStart, until = Now }, Ct)).Campaigns));
 
         async Task<string[]> PeopleAsync(string @case, object body) =>
@@ -565,7 +565,7 @@ public class RecordedExchangesTests
         Assert.Equal(22, (await PeopleAsync("everyone", new { campaign_id = seed.Spring, limit = 50, exclude_archived_contacts = true })).Length);
         Assert.Equal(["Ada"], await PeopleAsync("query", new { campaign_id = seed.Spring, query = "ada", limit = 50, exclude_archived_contacts = true }));
         Assert.Equal(["Oli"], await PeopleAsync("summary-removed", new { campaign_id = seed.Spring, summary = "removed", limit = 50, exclude_archived_contacts = true }));
-        Assert.Equal(14, (await PeopleAsync("activity-people", new { campaign_id = seed.Spring, activity = "people", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true })).Length);
+        Assert.Equal(16, (await PeopleAsync("activity-people", new { campaign_id = seed.Spring, activity = "people", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true })).Length);
         Assert.Equal(["Oli"], await PeopleAsync("activity-removed", new { campaign_id = seed.Spring, activity = "removed", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true }));
         Assert.Equal("validation_failed", (await api.RecordErrorAsync(Operations.CampaignListContacts, "query-too-long", new { campaign_id = seed.Spring, query = new string('a', 201), limit = 50, exclude_archived_contacts = true }, HttpStatusCode.BadRequest, Ct)).Code);
         Assert.False(Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "unlinked", new { campaign_ids = new[] { seed.Autumn }, exclude_archived_contacts = true }, Ct)).Campaigns).SequenceLinked);
@@ -651,17 +651,17 @@ public class RecordedExchangesTests
         const string Today = "2026-10-16T00:00:00.000Z";
         string[] two = [seed.Spring, seed.Autumn];
         Assert.Equal(
-            new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1),
+            new CampaignActivityTotal(16, 2, 9, 4, 2, 2, 2, Removed: 1),
             (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-7-days", new { since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Total);
         Assert.Equal(
-            new CampaignActivityTotal(0, 0, 0, 0, 0, 0, Removed: 0),
+            new CampaignActivityTotal(0, 0, 0, 0, 0, 0, 0, Removed: 0),
             (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-today", new { since = Today, until = Now, exclude_archived_contacts = true }, Ct)).Total);
         // The Dashboard's tiles: thirty days, from the midnight twenty-nine days back, across the agents not archived.
         var month = await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "all-30-days", new { since = "2026-09-17T00:00:00.000Z", until = Now, exclude_archived_contacts = true }, Ct);
-        Assert.True(month.Total.Contacted > 0 && month.Total.Replied > 0);
+        Assert.True(month.Total.Contacted > 0 && month.Total.Replied > 0 && month.Total.Bounced > 0);
         Assert.Contains(month.Campaigns, row => row.CampaignId == seed.Spring && row.Contacted > 0);
         Assert.Equal(
-            new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1),
+            new CampaignActivityTotal(16, 2, 9, 4, 2, 2, 2, Removed: 1),
             (await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "two", new { campaign_ids = two, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Total);
 
         async Task<int[]> SeriesAsync(string @case, object body) =>
@@ -681,7 +681,7 @@ public class RecordedExchangesTests
         async Task<string[]> CountedAsync(string @case, object body) =>
             [.. (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, @case, body, Ct)).Items.Select(item => item.Contact.FirstName!)];
         Assert.Equal(["Oli", "Rae"], await CountedAsync("activity-replied-all", new { activity = "replied", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true }));
-        Assert.Equal(14, (await CountedAsync("activity-people-all", new { activity = "people", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true })).Length);
+        Assert.Equal(16, (await CountedAsync("activity-people-all", new { activity = "people", since = WeekStart, until = Now, limit = 50, exclude_archived_contacts = true })).Length);
         Assert.Equal(["Rae"], await CountedAsync("activity-replied-day", new { activity = "replied", since = "2026-10-12T00:00:00.000Z", until = "2026-10-13T00:00:00.000Z", limit = 50, exclude_archived_contacts = true }));
         Assert.Empty(await CountedAsync("activity-replied-today", new { activity = "replied", since = Today, until = Now, limit = 50, exclude_archived_contacts = true }));
         // Performance counts an archived campaign as any other, so its picker offers them all.
@@ -701,7 +701,7 @@ public class RecordedExchangesTests
 
         // The quieter campaign's Results: its people now are its summary above, and nothing happened to any of them this week.
         Assert.Equal(
-            new CampaignActivityRow(summer, 0, 0, 0, 0, 0, 0, Removed: 0),
+            new CampaignActivityRow(summer, 0, 0, 0, 0, 0, 0, 0, Removed: 0),
             Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "summer", new { campaign_ids = new[] { summer }, since = WeekStart, until = Now, exclude_archived_contacts = true }, Ct)).Campaigns));
     }
 

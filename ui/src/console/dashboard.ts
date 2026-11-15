@@ -88,7 +88,7 @@ async function reloadTrends(): Promise<void> {
                 ...archivedLeftOut,
                 ...window,
             });
-            return { contacted: read.total.contacted, replied: read.total.replied };
+            return { contacted: read.total.contacted, replied: read.total.replied, bounced: read.total.bounced };
         } catch {
             return null;
         }
@@ -150,9 +150,12 @@ export async function reload(withTrends = true): Promise<void> {
             });
             if (mine !== generation) return;
             activity.value = {
-                total: { contacted: read.total.contacted, replied: read.total.replied },
+                total: { contacted: read.total.contacted, replied: read.total.replied, bounced: read.total.bounced },
                 byCampaign: Object.fromEntries(
-                    read.campaigns.map((row) => [row.campaign_id, { contacted: row.contacted, replied: row.replied }]),
+                    read.campaigns.map((row) => [
+                        row.campaign_id,
+                        { contacted: row.contacted, replied: row.replied, bounced: row.bounced },
+                    ]),
                 ),
             };
         } catch {
@@ -381,8 +384,9 @@ function tiles(): Html {
                     <span class="label">${tile.label}</span>
                     ${
                         tile.value === null
-                            ? html`<b class="dash-none" aria-label="${t('dash.tile.none')}">${t('dash.dash')}</b
-                                  ><span class="rel">${t('dash.tile.none')}</span>`
+                            ? html`<b class="dash-none" aria-label="${tile.none ?? t('dash.tile.none')}"
+                                      >${t('dash.dash')}</b
+                                  ><span class="rel">${tile.sub ?? t('dash.tile.none')}</span>`
                             : html`<b>${tile.value}</b
                                   >${trendView(tile.trend ?? null)}${tile.sub === null ? null : html`<span class="rel">${tile.sub}</span>`}`
                     }

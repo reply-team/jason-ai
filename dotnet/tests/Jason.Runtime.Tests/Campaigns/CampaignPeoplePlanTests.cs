@@ -25,7 +25,7 @@ public partial class CampaignPeoplePlanTests
         await db.Database.OpenConnectionAsync(Ct);
         var scans = new StringBuilder();
 
-        string[] why = [CampaignWhy.FirstReplies, CampaignWhy.FinishedWork, CampaignWhy.Additions, CampaignWhy.Removals, CampaignWhy.OptOuts];
+        string[] why = [CampaignWhy.FirstReplies, CampaignWhy.Bounces, CampaignWhy.FinishedWork, CampaignWhy.Additions, CampaignWhy.Removals, CampaignWhy.OptOuts];
         foreach (var sql in CampaignPeople.Everyone.All.Concat(CampaignPeople.OneAudience.All).Append(CampaignPeople.UntouchedCountSql).Append(CampaignPeople.StandingSql).Concat(why))
         {
             // {0} is the campaigns asked (or the one campaign), {1} and {2} the period, or {1} the page's people and {2}
@@ -186,6 +186,37 @@ public partial class CampaignPeoplePlanTests
                 "w ix_work_items_public_id",
             ],
             read);
+    }
+
+    /// <summary>
+    /// A campaign's bounces are found by its campaign and the events' kind, through the partial index of event lines, in
+    /// the count, the happenings and the list alike; a page's whys find their people's bounces by the person.
+    /// </summary>
+    [Fact]
+    public async Task Bounces_are_read_through_the_index_of_a_campaign_s_event_lines()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await db.Database.OpenConnectionAsync(Ct);
+
+        async Task<string[]> JournalReadAsync(string sql)
+        {
+            await using var command = db.Database.GetDbConnection().CreateCommand();
+            command.CommandText = sql.Replace("{0}", "'[1]'", StringComparison.Ordinal)
+                .Replace("{1}", "'2026-10-09 00:00:00'", StringComparison.Ordinal)
+                .Replace("{2}", "'2026-10-16 09:00:00'", StringComparison.Ordinal);
+            return [.. (await StepsAsync(command))
+                .Select(step => Read().Match(step))
+                .Where(match => match.Success && match.Groups[1].Value is "jl" or "j")
+                .Select(match => $"{match.Groups[1].Value} {match.Groups.Values.Skip(2).FirstOrDefault(group => group.Success)?.Value ?? "whole"}")
+                .Distinct()];
+        }
+
+        Assert.Equal(["jl ix_journal_campaign_kind_key_events"], await JournalReadAsync(CampaignPeople.Everyone.Moments[CampaignActivityFilter.Bounced]));
+        Assert.Equal(["jl ix_journal_campaign_kind_key_events"], await JournalReadAsync(CampaignPeople.Everyone.PeopleByMoment[CampaignActivityFilter.Bounced]));
+        Assert.Equal(
+            ["j ix_journal_contact_id_public_id"],
+            await JournalReadAsync(CampaignWhy.Bounces.Replace("json_each({1})", "json_each('[1]')", StringComparison.Ordinal)));
     }
 
     private static async Task<List<string>> StepsAsync(DbCommand command)

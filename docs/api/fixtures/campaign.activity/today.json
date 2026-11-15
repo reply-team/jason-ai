@@ -21,6 +21,7 @@
         "worked_on": 0,
         "contacted": 0,
         "replied": 0,
+        "bounced": 0,
         "opted_out": 0,
         "removed": 0
       },
@@ -31,6 +32,7 @@
         "worked_on": 0,
         "contacted": 0,
         "replied": 0,
+        "bounced": 0,
         "opted_out": 0,
         "removed": 0
       },
@@ -41,6 +43,7 @@
         "worked_on": 0,
         "contacted": 0,
         "replied": 0,
+        "bounced": 0,
         "opted_out": 0,
         "removed": 0
       }
@@ -51,6 +54,7 @@
       "worked_on": 0,
       "contacted": 0,
       "replied": 0,
+      "bounced": 0,
       "opted_out": 0,
       "removed": 0
     }
