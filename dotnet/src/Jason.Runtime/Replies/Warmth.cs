@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Jason.Runtime.Dispatch;
+using Jason.Runtime.Events;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
@@ -34,12 +35,15 @@ public enum WarmthState
 /// <remarks>
 /// <para>
 /// WARM: a verdict that stands in the campaign (no later verdict under its key), whose nature is <c>person</c>, which
-/// names the contact itself in its body, on a thread the campaign's own read saw move: a line the inbound read wrote, or
-/// one the events store said by the campaign's own pin. A verdict on a thread the campaign heard of only through the
-/// contact's pin, or of no observed thread at all (a verdict recorded by hand included), warms nobody; nor does a verdict
-/// whose body names nobody or another person, whatever the journal's contact column holds: the body must name this very
-/// contact. Once warm, always warm: no moment is read. Channels
-/// are one bucket, and another campaign's verdicts are never read.
+/// names the contact itself in its body, on a thread the campaign's own read saw move: a line the inbound read wrote,
+/// one the events store said by the campaign's own pin, or one it said by the contact's pin and marked
+/// <c>campaign_own</c>, because the thread was already the campaign's own or, where no campaign the reply was found in
+/// held it yet and the reply named no provider campaign, this campaign was the only one that had written to the person
+/// through the plugin before the reply (<see cref="CampaignOwnThreads"/>). A verdict on a thread the campaign heard of
+/// only through the contact's pin, unmarked, or of no observed thread at all (a verdict recorded by hand included),
+/// warms nobody; nor does a verdict whose body names nobody or another person, whatever the journal's contact column
+/// holds: the body must name this very contact. Once warm, always warm: no moment is read. Channels are one bucket, and
+/// another campaign's verdicts are never read.
 /// </para>
 /// <para>
 /// AWAITING: a line of the campaign's own read that names the contact and that no standing verdict on its thread has
@@ -127,7 +131,7 @@ public static class Warmth
                 SELECT CASE WHEN {{Judged("o", "IS NULL", "o.contact_id")}} THEN {{WaitsForNature}} ELSE {{WaitsForJudgement}} END AS w
                 FROM journal AS o INDEXED BY ix_journal_contact_id_public_id
                 WHERE o.contact_id = {0} AND o.campaign_id = {1} AND o.kind = 'inbound_reply_observed'
-                  AND coalesce(json_extract(o.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin'
+                  AND {{Own("o")}}
                   AND NOT {{Judged("o", "IS NOT NULL", "o.contact_id")}}
                 UNION ALL
                 SELECT CASE WHEN {{Judged("u", "IS NULL", "{0}")}} THEN {{WaitsForNature}} ELSE {{WaitsForJudgement}} END AS w
@@ -140,7 +144,7 @@ public static class Warmth
                   AND json_extract(u.new_json, '$.thread') = json_extract(n.new_json, '$.thread')
                   AND json_extract(u.new_json, '$.plugin') = json_extract(n.new_json, '$.plugin')
                   AND u.contact_id IS NULL AND json_extract(u.new_json, '$.contact_id') IS NULL
-                  AND coalesce(json_extract(u.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin'
+                  AND {{Own("u")}}
                   AND NOT {{Judged("u", "IS NOT NULL", "{0}")}})
             """,
             contactId,
@@ -161,11 +165,17 @@ public static class Warmth
                   WHERE o.campaign_id = v.campaign_id AND o.kind = 'inbound_reply_observed'
                     AND json_extract(o.new_json, '$.thread') = json_extract(v.new_json, '$.thread')
                     AND json_extract(o.new_json, '$.plugin') = json_extract(v.new_json, '$.plugin')
-                    AND coalesce(json_extract(o.new_json, '$.attributed_by'), 'campaign_pin') = 'campaign_pin')
+                    AND {{Own("o")}})
             LIMIT 1
             """,
             contactId,
             campaignId));
+
+    /// <summary>
+    /// Whether the observed line <paramref name="line"/> is about a thread the campaign's own read saw move, as the events
+    /// store reads it when it marks a line (<see cref="CampaignOwnThreads.Own"/>).
+    /// </summary>
+    private static string Own(string line) => CampaignOwnThreads.Own(line);
 
     /// <summary>
     /// Whether the verdict <paramref name="verdict"/> stands: no later verdict of its campaign under its key, read by the

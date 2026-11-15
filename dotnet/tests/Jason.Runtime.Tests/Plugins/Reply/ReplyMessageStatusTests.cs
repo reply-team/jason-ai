@@ -315,6 +315,29 @@ public class ReplyMessageStatusTests
             ((string?)read["state"], (bool)read["cancelable"]!, (string?)read["failure_reason"], (string?)read["failure_code"]));
     }
 
+    /// <summary>
+    /// An email Reply held and then could not send for a limit it counts — the mailbox's daily limit of direct emails, or
+    /// the account's active contacts for its billing period — is that send's fate: <c>failed</c>, Reply's code passed on as
+    /// Reply gave it. A read opens no block; the mailbox's block is the send's to say, when Reply refuses one.
+    /// </summary>
+    [Theory]
+    [InlineData("contact.dailyLimitReached")]
+    [InlineData("contact.activeContactsLimitReached")]
+    public async Task An_email_that_failed_for_a_limit_reply_counts_is_failed_with_reply_s_code(string code)
+    {
+        using var account = new ReplyAccount().WithDirectSend(Reference, "failed", sendAfter: "2026-11-18T09:00:00Z", failureReason: "Reply's sentence.", failureCode: code);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct);
+        var read = ReplyOperations.Succeeded(Operation, result);
+
+        Assert.Equal(
+            ("failed", "email", false, code),
+            ((string?)read["state"], (string?)read["channel"], (bool)read["cancelable"]!, (string?)read["failure_code"]));
+        Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+    }
+
     /// <summary>A code past the document's bound, or one not written as text, is none given rather than cut.</summary>
     [Theory]
     [InlineData(129)]

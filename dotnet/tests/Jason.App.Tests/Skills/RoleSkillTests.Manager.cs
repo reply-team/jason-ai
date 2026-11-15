@@ -145,6 +145,23 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// A line found by the person and marked <c>campaign_own</c> is the campaign's own, and the runtime raises its
+    /// responder; one without the mark is the manager's, as before. The skill says both plainly.
+    /// </summary>
+    [Fact]
+    public void The_manager_defers_a_marked_line_to_the_runtime_and_keeps_an_unmarked_one()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("and for a line found by the person's pin that says `campaign_own` `true`, the runtime queues the read of the thread and the responder by itself", skill, StringComparison.Ordinal);
+        Assert.Contains("A line found by the person's pin without `campaign_own` is yours, as below: the runtime raises nothing for it.", skill, StringComparison.Ordinal);
+        Assert.Contains("Without `campaign_own`, the thread is yours: queue the read alone", skill, StringComparison.Ordinal);
+        Assert.Contains("a provider event's line never says `campaign_own`", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the line also says `campaign_own` `true`, the thread is this campaign's own: when the line was written, it already was, or no campaign the reply was found in held it yet and this campaign was the only one", skill, StringComparison.Ordinal);
+        Assert.Contains("that had written to the person through that plugin before the reply — a message, an invitation or an answer that succeeded — and the reply named no provider campaign.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The read of a thread found by the person follows this campaign's route, which may lead elsewhere than the plugin the
     /// line came from: it is queued only where the two agree, and otherwise the manager asks.
     /// </summary>
@@ -153,7 +170,7 @@ public partial class RoleSkillTests
     {
         var skill = Flattened("manager");
 
-        Assert.Contains("Then queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
+        Assert.Contains("Without `campaign_own`, the thread is yours: queue the read alone, and only where this campaign reads conversations at the plugin the line names under `plugin`", skill, StringComparison.Ordinal);
         Assert.Contains("jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get", skill, StringComparison.Ordinal);
         Assert.Contains("Where it names another plugin, or none, queue nothing, say so in your note and raise one question instead.", skill, StringComparison.Ordinal);
     }

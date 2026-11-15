@@ -682,6 +682,192 @@
       },
       {
         "contact": {
+          "id": "cnt_16",
+          "first_name": "Max",
+          "last_name": "Example",
+          "company": "Max Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "max@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "out"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_7",
+            "ts": "2026-10-13T10:00:00.000Z",
+            "actor": {
+              "type": "system",
+              "id": null
+            },
+            "kind": "provider_event_observed",
+            "campaign_id": "cmp_1",
+            "work_item_id": null,
+            "attempt_id": null,
+            "key": "sha256:recorded-5",
+            "old": null,
+            "new": {
+              "kind": "bounce",
+              "plugin": "reply",
+              "event_id": "evt_2",
+              "occurred_at": "2026-10-13T07:00:00.000Z",
+              "channel": null,
+              "contact_id": "cnt_16",
+              "attributed_by": "campaign_pin",
+              "message": "m-Max",
+              "bounce": "hard"
+            },
+            "reason": null,
+            "contact_id": "cnt_16",
+            "campaign_name": "Spring",
+            "contact_name": "Max Example",
+            "work_item_kind": null,
+            "work_item_role": null,
+            "work_item_operation": null,
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "why": {
+          "kind": "activity",
+          "text": "bounced",
+          "code": null,
+          "at": "2026-10-13T07:00:00.000Z",
+          "approval_id": null,
+          "decision_id": null
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": "bounced",
+              "code": null,
+              "at": "2026-10-13T07:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
+      },
+      {
+        "contact": {
+          "id": "cnt_17",
+          "first_name": "Ned",
+          "last_name": "Example",
+          "company": "Ned Labs",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "ned@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-01T10:00:00.000Z",
+          "updated_at": "2026-10-01T10:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring",
+              "state": "enrolled",
+              "added_at": "2026-10-01T10:00:00.000Z",
+              "updated_at": "2026-10-01T10:00:00.000Z",
+              "standing": [
+                "sequence"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_8",
+            "ts": "2026-10-13T10:00:00.000Z",
+            "actor": {
+              "type": "system",
+              "id": null
+            },
+            "kind": "provider_event_observed",
+            "campaign_id": "cmp_1",
+            "work_item_id": null,
+            "attempt_id": null,
+            "key": "sha256:recorded-6",
+            "old": null,
+            "new": {
+              "kind": "bounce",
+              "plugin": "reply",
+              "event_id": "evt_3",
+              "occurred_at": "2026-10-13T07:00:00.000Z",
+              "channel": null,
+              "contact_id": "cnt_17",
+              "attributed_by": "campaign_pin",
+              "message": "m-Ned",
+              "bounce": "soft"
+            },
+            "reason": null,
+            "contact_id": "cnt_17",
+            "campaign_name": "Spring",
+            "contact_name": "Ned Example",
+            "work_item_kind": null,
+            "work_item_role": null,
+            "work_item_operation": null,
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-01T10:00:00.000Z",
+        "updated_at": "2026-10-01T10:00:00.000Z",
+        "why": {
+          "kind": "activity",
+          "text": "bounced",
+          "code": null,
+          "at": "2026-10-13T07:00:00.000Z",
+          "approval_id": null,
+          "decision_id": null
+        },
+        "counted": [
+          {
+            "campaign_id": "cmp_1",
+            "why": {
+              "kind": "activity",
+              "text": "bounced",
+              "code": null,
+              "at": "2026-10-13T07:00:00.000Z",
+              "approval_id": null,
+              "decision_id": null
+            }
+          }
+        ]
+      },
+      {
+        "contact": {
           "id": "cnt_12",
           "first_name": "Ivy",
           "last_name": "Example",

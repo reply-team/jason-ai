@@ -57,11 +57,12 @@ describe('Performance', () => {
         release();
 
         for (const [label, n] of [
-            ['People', 14],
+            ['People', 16],
             ['Added', 2],
             ['Worked on', 9],
             ['Contacted', 4],
             ['Replied', 2],
+            ['Bounced', 2],
             ['Opted out', 2],
             ['Removed', 1],
         ] as const) {
@@ -70,6 +71,9 @@ describe('Performance', () => {
             );
         }
         expect(screen.getByRole('button', { name: 'Replied, 2' }).textContent).toContain(
+            '50.0% of the period’s contacted',
+        );
+        expect(screen.getByRole('button', { name: 'Bounced, 2' }).textContent).toContain(
             '50.0% of the period’s contacted',
         );
         // Contacted: Ivy and Tess on the 12th, Uma on the 13th, Vic on the 14th; the last day is today.
@@ -126,15 +130,15 @@ describe('Performance', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Replied, 2' }));
         await screen.findByText('2 people in the last 7 days, by the day they replied');
 
-        fireEvent.click(screen.getByRole('button', { name: 'People, 14' }));
+        fireEvent.click(screen.getByRole('button', { name: 'People, 16' }));
 
         expect(
-            await screen.findByText('14 people in the last 7 days, by the day something happened to them'),
+            await screen.findByText('16 people in the last 7 days, by the day something happened to them'),
         ).toBeTruthy();
         expect((await rowOf('Uma Example')).textContent).toContain('conversation.reply');
         expect(screen.getByRole('button', { name: 'Replied, 2' }).getAttribute('aria-pressed')).toBe('false');
-        fireEvent.click(screen.getByRole('button', { name: 'People, 14' }));
-        expect(screen.getByText('14 people in the last 7 days, by the day something happened to them')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'People, 16' }));
+        expect(screen.getByText('16 people in the last 7 days, by the day something happened to them')).toBeTruthy();
         expect(location.hash).toBe('#/performance?count=people');
     });
 

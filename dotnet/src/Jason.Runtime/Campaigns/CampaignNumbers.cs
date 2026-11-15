@@ -54,9 +54,9 @@ public sealed class CampaignNumbers(JasonDbContext db)
         var t = await CampaignPeople.ActivityTotalAsync(db, ids, since, until, audience, withoutArchived, cancellationToken).ConfigureAwait(false);
         return new CampaignActivityResponse(
             [.. campaigns.Select(campaign => counts.TryGetValue(campaign.Id, out var c)
-                ? new CampaignActivityRow(campaign.PublicId, c.People, c.Added, c.WorkedOn, c.Contacted, c.Replied, c.OptedOut, c.Removed)
-                : new CampaignActivityRow(campaign.PublicId, 0, 0, 0, 0, 0, 0, 0))],
-            new CampaignActivityTotal(t.People, t.Added, t.WorkedOn, t.Contacted, t.Replied, t.OptedOut, t.Removed));
+                ? new CampaignActivityRow(campaign.PublicId, c.People, c.Added, c.WorkedOn, c.Contacted, c.Replied, c.Bounced, c.OptedOut, c.Removed)
+                : new CampaignActivityRow(campaign.PublicId, 0, 0, 0, 0, 0, 0, 0, 0))],
+            new CampaignActivityTotal(t.People, t.Added, t.WorkedOn, t.Contacted, t.Replied, t.Bounced, t.OptedOut, t.Removed));
     }
 
     /// <summary>

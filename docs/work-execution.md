@@ -223,12 +223,13 @@ under way, and once its reads have landed nobody for the stall bound it ends the
 A search the provider holds is read on the slower cadence of a held search and stalls only at its own, longer bound; and
 for a search of a campaign archived while it ran, poll makes the one stop the archive owes it
 ([docs/campaign-manager.md](campaign-manager.md) §10). Respond reads those lines, whichever writer said them, and
-for a thread the campaign holds by its own pin queues a `conversation.get` of the thread and a responder created
-waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Bounce
-reads the provider events a campaign was told of and, for a bounce of one of its people, queues a `message.status` read
-of each of the campaign's own sends to that person the bounce could be of, at most three; the read that finds the send
-bounced is what records it and, for a hard bounce or one the provider named no kind for, puts the contact's email on the
-do-not-contact register as `system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+for a thread that is the campaign's own — one it holds by its own pin, or one found by the person's pin whose line says
+`campaign_own` — queues a `conversation.get` of the thread and a responder created waiting on it, or records the move on
+the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Bounce reads the provider events a campaign
+was told of and, for a bounce of one of its people, queues a `message.status` read of each of the campaign's own sends
+to that person the bounce could be of, at most three; the read that finds the send bounced is what records it and, for
+a hard bounce or one the provider named no kind for, puts the contact's email on the do-not-contact register as
+`system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
 the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
 recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
@@ -641,7 +642,11 @@ asked, so nothing is notified.
 Where a contact stands in a campaign is read from that campaign's own chronicle alone — its
 `inbound_reply_observed` lines and its `reply_classified` verdicts — and from the responders the runtime made for a
 thread. Nothing is stored for it, another campaign's verdicts are never read, and nothing here reads a category, a
-reaction or the words of a reply.
+reaction or the words of a reply. A thread the campaign's own read saw move is one its `inbound_reply_observed` lines
+say by the campaign's own read or its own pin, or by the person's pin where the line says `campaign_own`: when the line
+was written, the thread was already the campaign's own by such a line, or no campaign the reply was found in held it yet,
+the reply named no provider campaign, and this campaign was the only one, of those not archived, that had written to the
+person through that plugin before the reply ([events](events.md) §4).
 
 - **Warm** is a verdict that stands in the campaign (no later verdict under its key), whose `nature` is `person`, whose
   body names this contact, on a thread the campaign's own read saw move. Once warm, always warm: no moment is read.
@@ -685,8 +690,15 @@ still go:
 
 - A reply the provider could not tie to one of the campaign's contacts, on a thread no verdict that stands names
   anybody on: until a verdict names the person, nothing holds a first message to them.
-- A reply the campaign heard of only through the contact's pin, because another campaign knows the same person; a verdict
-  on its thread warms nobody here either, and the contact stays as they were.
+- A reply the campaign heard of only through the contact's pin and whose line does not say `campaign_own`, because when
+  it was written the thread was not already the campaign's own, and either another campaign the reply was found in held
+  it, or the reply named a provider campaign, or this campaign was not the only one, of those not archived, that had
+  written to the person through that plugin before the reply, one that has since excluded the person counting too; a
+  verdict on its thread warms nobody here either, and the contact stays as they were. So once two campaigns have written
+  to a person, a reply on a thread that is neither's own holds nobody in either, a person already warm in one of them
+  included: automatic sends to them go on while the reply is not judged, and only an opt-out verdict on it stops them,
+  everywhere; the managers are woken by the reply. Nothing is marked after the fact: a line written before 0.43.0 stays
+  unmarked; only a later reply, marked when it is said, can make the person warm.
 
 ## Leases and heartbeats
 
@@ -823,6 +835,9 @@ In a period, removed people included, so a past period does not change when some
   an enrollment into a provider campaign not live yet; research never counts.
 - `replied` — Their first reply in this campaign came in the period. A reply is dated by the moment the provider gives
   it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
+- `bounced` — A provider's event said in the period that a message to them bounced, hard or soft: an event does not
+  always say which, so each counts. A bounce is dated by the moment the provider gives it, as a reply is, and a person
+  who bounced twice counts once; only the provider's events are read, and an event that names nobody counts nobody.
 - `opted_out` — One of their addresses was put on the do-not-contact register in the period, other than by the runtime
   for a bounce. It is read from the journal, so an entry lifted since still counts; an entry the runtime wrote for a
   bounce (`system:bounce`) says the address is dead, not that the person asked to be left alone, and never counts. An

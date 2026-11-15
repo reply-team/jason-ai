@@ -5,6 +5,35 @@ absorbed by a release of this package alone.
 
 ## 0.16.0
 
+- `events.read` reads a bounce notice as a `bounce` event rather than as the other side's move. When an email the
+  account sent bounces, the notice lands on its thread as an inbound message, and Reply's change feed flags that thread
+  as holding a bounce (`flags.hasBounce`). An item flagged as holding a bounce and none of a reply, an automatic reply
+  or an absence, whose last message is inbound, is now one `bounce` event: the thread's contact and sequence, `message`
+  and `bounce` null because the feed names neither, and the notice's own moment, so a bounce read twice is stored once.
+  No `thread_moved` is read from that item, so the events read no longer says `inbound_reply_observed` for a bounce or
+  raises a responder for it; the campaign's manager is woken by `provider_event_observed` instead. The read of the
+  account's threads, `conversation.list`, is unchanged. An item flagged with a bounce and any of the other three stays a
+  moved thread; a bounce on a thread Reply names no contact for is left out, and the package says so in one line on
+  stderr by the thread's and the sequence's identifiers and the thread's last activity; and a feed that never sets the
+  flag reads as before. Update the package (`jason update apply`) to have it.
+- Every sender's block the package reports names the `channel` the send went on, `email` or `linkedin`, beside the
+  sender's number: a mailbox turned off or disconnected, and a LinkedIn account turned off, disconnected or at its
+  daily or weekly allowance. Reply numbers its mailboxes apart from its LinkedIn accounts, so mailbox 12 and LinkedIn
+  account 12 are two accounts; without the channel, a block of one held the other's sends too, and a send of one that
+  got past cleared the other's block.
+- Needs Jason 0.43.0 or newer, the release that keeps a sender's block per channel: an older one refuses a block that
+  names a channel, and the send it met ends `permanent` instead of waiting on the block.
+- Reply's two limits on a direct email, the mailbox's daily limit (`contact.dailyLimitReached`) and the account's active
+  contacts for its billing period (`contact.activeContactsLimitReached`), are read on `message.send` by Reply's own code,
+  on every refusal reply-cli explains, whatever its status and whatever code reply-cli prints for them (`rate_limited`
+  today), as the mailbox's block for its `limit` on the `email` channel, never as a wait on a busy Reply repeated blind.
+  The daily block clears at the next midnight UTC, when Reply counts a new day, or as long after the answer as the CLI
+  said to wait; the active-contacts block only at such a wait, and is otherwise tried at the runtime's cadence. Reply
+  gives the daily code too to an email held for later while the mailbox already holds as many held emails as its daily
+  limit, and the block then holds every email from that mailbox until midnight UTC, or longer while it holds that many.
+  A refusal that names a record of the send names a dead one, which is no longer kept as the work item's `send`; the
+  send a later trial makes is. A command run from no sending account ends `sender_limit_reached`, permanent. Against a
+  Reply that never answers these codes nothing changes.
 - `message.status` also says whether an email came back as a bounce, of which kind, when, and Reply's own word for the
   kind. Only a dead address is a `hard` bounce; a full mailbox, a limit of the sender's own and the receiving server's
   refusal of the message are `soft`, and so is a word this package does not know, since a stop comes only from what
@@ -13,16 +42,6 @@ absorbed by a release of this package alone.
   way. Reply's word is given only where it is one word, never a server's text.
 - The README says a global route can be set with `jason route set --global`, which writes the settings file and reloads
   in one act, as it can since Jason 0.42.0; it said the CLI refused a global route.
-
-## 0.15.2
-
-- Every sender's block the package reports names the `channel` the send went on, `email` or `linkedin`, beside the
-  sender's number: a mailbox turned off or disconnected, and a LinkedIn account turned off, disconnected or at its
-  daily or weekly allowance. Reply numbers its mailboxes apart from its LinkedIn accounts, so mailbox 12 and LinkedIn
-  account 12 are two accounts; without the channel, a block of one held the other's sends too, and a send of one that
-  got past cleared the other's block.
-- Needs Jason 0.43.0 or newer, the release that keeps a sender's block per channel: an older one refuses a block that
-  names a channel, and the send it met ends `permanent` instead of waiting on the block.
 
 ## 0.15.1
 

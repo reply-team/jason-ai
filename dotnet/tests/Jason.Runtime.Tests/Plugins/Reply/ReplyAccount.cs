@@ -475,7 +475,9 @@ public sealed class ReplyAccount : IDisposable
     /// An account a send can go from, as Reply lists it: a mailbox (<c>email</c>) or a LinkedIn account, with its name, its
     /// address — the mailbox's email or the LinkedIn profile — the Reply user whose it is, and Reply's own word for its
     /// state (<c>connected</c>, <c>disconnected</c>, <c>unknown</c>; <c>enabled</c>, <c>disabled</c>, <c>cookieInvalid</c>,
-    /// <c>dailyLimitReached</c>). <paramref name="limit"/> plants a LinkedIn account whose daily or weekly allowance is spent.
+    /// <c>dailyLimitReached</c>). <paramref name="limit"/> plants a LinkedIn account whose daily or weekly allowance is spent,
+    /// or a mailbox at a limit Reply counts on direct emails: <c>daily</c>, its daily limit, or <c>active_contacts</c>, the
+    /// active contacts of the account's billing period.
     /// </summary>
     public ReplyAccount WithSender(
         long id,

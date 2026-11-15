@@ -38,7 +38,15 @@ export type CampaignFilters = {
 
 /** The counts of each view, by the names the runtime takes: a People tab's filter is one of its view's. */
 export const summaryCounts = ['waiting', 'failed', 'working', 'new', 'idle', 'sequence', 'out', 'removed'] as const;
-export const activityCounts = ['added', 'worked_on', 'contacted', 'replied', 'opted_out', 'removed'] as const;
+export const activityCounts = [
+    'added',
+    'worked_on',
+    'contacted',
+    'replied',
+    'bounced',
+    'opted_out',
+    'removed',
+] as const;
 /** What Performance's tiles count: everyone something happened to, then each of Activity's counts. */
 export const performanceCounts = ['people', ...activityCounts] as const;
 export type ActivityCount = (typeof performanceCounts)[number];
