@@ -42,7 +42,7 @@ import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './pa
 import { applyMode, demoMenu, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
-import { demoMacFrame, demoSchemes } from './demo-page.ts';
+import { demoBeforeReady } from './demo-page.ts';
 import { openDemo, type DemoViews } from './demo-window.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
@@ -737,8 +737,8 @@ async function runDemo(_links: LinkPost): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
-        // On macOS the title bar is hidden into our band above the page (demo-page.ts, demoMacFrame); elsewhere the frame is the system's.
-        ...(process.platform === 'darwin' ? demoMacFrame : {}),
+        // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); elsewhere the system's.
+        ...frameOf(process.platform),
         show: !atLogin || conduct.atLogin === 'minimized',
         backgroundColor: lightBackground,
         webPreferences: {
@@ -943,8 +943,9 @@ function startDesktop(): void {
         app.on('window-all-closed', () => app.quit());
         // However the run ends, and as the application quits, every line still held is written (`log.ts`).
         releaseAtQuit(app, logHold);
-        // The Demo's two schemes, its page's and our switch's, are known to Electron before it is ready (`demo-page.ts`).
-        if (runOn.mode === 'demo') protocol.registerSchemesAsPrivileged(demoSchemes());
+        // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
+        // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
+        if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
         void app.whenReady().then(() => releasedAfter(logHold, () => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew))));
     }
 }

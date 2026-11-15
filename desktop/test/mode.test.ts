@@ -182,9 +182,9 @@ test('a Demo start shows the page and nothing else: no jason, no runtime, no fol
     // The run is chosen by the mode once Electron is ready: the Demo's own, or the window onto the installation.
     const start = main.slice(main.indexOf('function startDesktop('));
     assert.ok(start.includes("void app.whenReady().then(() => releasedAfter(logHold, () => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew))));"));
-    // The two schemes are registered before Electron is ready, for a Demo start alone.
-    assert.ok(start.includes("if (runOn.mode === 'demo') protocol.registerSchemesAsPrivileged(demoSchemes());"));
-    assert.ok(start.indexOf('protocol.registerSchemesAsPrivileged(') < start.indexOf('void app.whenReady().then(() => releasedAfter('));
+    // The two schemes are registered, and no host name resolved, before Electron is ready, for a Demo start alone.
+    assert.ok(start.includes("if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);"));
+    assert.ok(start.indexOf('demoBeforeReady(') > 0 && start.indexOf('demoBeforeReady(') < start.indexOf('void app.whenReady().then(() => releasedAfter('));
     // The Demo's run makes no jason, starts no runtime and asks no program anything.
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
     assert.ok(demo.length > 0);

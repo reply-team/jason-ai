@@ -292,8 +292,12 @@ still answered in this window." The runtime gains no route for it and knows noth
 The demo is a page: a mock of Jason at work on sample data, so you can see what Jason does before you connect anything of
 your own. The application carries it as one static file ([`desktop/demo/`](../desktop/demo/README.md)), and the window
 shows it as it was built. It is not an installation and has nothing to do with the runtime: in Demo no runtime is
-started, no folder is made and nothing of your own installation is read or written. Nothing the page shows is sent
-anywhere, and nothing you do in it is kept; the page starts from its beginning each time it is shown.
+started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
+writes only its own records in your data directory (the record of the mode, Electron's profile under `desktop/electron/`
+and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
+reaches the network there: Demo runs no runtime, checks for no update and loads nothing but the application's own files,
+and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
+beginning each time it is shown.
 
 **How you meet it.** A new installation opens on the demo, at once: the first start of a desktop that finds no data
 directory of yours, or one holding nothing but the desktop's own records (the record of the mode, Electron's profile and
@@ -302,8 +306,9 @@ installation is made until you choose **Live**. An installation that already exi
 updated from an earlier version open where they did.
 
 **The switch.** The page's top strip, right of its sidebar, is drawn by the desktop over the page's own, in the page's
-colours, with the **Demo | Live** switch on its right, so you see one; you move the window by it. On macOS the window
-has no title bar of its own: a band of the page's colours above the page holds the window's buttons and moves the window. Choosing **Live** writes the mode and starts the
+colours, with the **Demo | Live** switch on its right, so you see one. On Windows and Linux the window keeps the system's
+title bar, which moves it. On macOS the window has no title bar of its own: a band of the page's colours above the page
+holds the window's buttons, and the band and the desktop's strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu, does the same. Your own installation's top bar
 carries the same switch, with **Demo** to come back.
@@ -311,10 +316,14 @@ carries the same switch, with **Demo** to come back.
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
 a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The view loads the
 page's own file and nothing else: every other request the page makes, to the network, to a file or to this computer, is
-refused, and a link, a form, a pop-up, a download, a dropped file and any other way to leave the page are refused too.
-Every permission it asks for is denied: the camera, the microphone, your location, notifications, reading the clipboard,
-the screen and any device. Its content policy lets it run only the script and the styles written inside it, with the fonts
-and the pictures it carries. What you type into it stays in it.
+refused, and a link, a form, a pop-up, a download and any other way to leave the page are refused too; a move to a blank
+page, which nothing is asked about, is undone by loading the page again. No host name is resolved for it, or for anything
+else of the desktop in Demo, so it cannot even ask your network's name server about one. Every permission it asks for is
+denied: the camera, the microphone, your location, notifications, reading the clipboard, the screen and any device. Its
+content policy lets it run only the script and the styles written inside it, with the fonts and the pictures it carries.
+What you give it stays in it: what you type, a file you drop onto it or pick in a file chooser it opens on your click,
+and the colour of a point of the screen you pick with a colour picker it opens on your click reach the page's own script
+and nothing beyond it, since the page has no way out of its view to send them anywhere.
 
 **What is not in the demo.** The demo has no chat, no Connect, no Open in and no browser tab, and the Jason menu and the
 tray offer no update, no start of the runtime at logon, no `jason` command on the PATH and no Remove What Jason Placed:

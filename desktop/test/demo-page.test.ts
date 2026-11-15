@@ -24,11 +24,14 @@ import {
     sealView,
     demoGeometry,
     demoLayout,
-    demoMacFrame,
+    demoBeforeReady,
+    demoResolverRule,
+    noDragSheet,
     switchChoice,
     type DemoRefusal,
 } from '../src/demo-page.ts';
 import { persists } from '../src/window-pairing.ts';
+import { titleBand } from '../src/window-frame.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pageBytes = new TextEncoder().encode('<!doctype html><title>page</title>');
@@ -219,6 +222,12 @@ function stand(): Stand {
         setWindowOpenHandler: set('setWindowOpenHandler'),
         setWebRTCIPHandlingPolicy: (policy: string) => void calls.push(`setWebRTCIPHandlingPolicy:${policy}`),
         closeDevTools: () => void calls.push('closeDevTools'),
+        insertCSS: async (css: string, options?: { cssOrigin?: string }) => {
+            calls.push(`insertCSS:${options?.cssOrigin}:${css}`);
+            return 'key';
+        },
+        loadURL: async (url: string) => void calls.push(`loadURL:${url}`),
+        isDestroyed: () => false,
     };
     return {
         contents: contents as unknown as WebContents,
@@ -244,7 +253,12 @@ async function sealed(view = demoPage) {
     const made = stand();
     const refused: DemoRefusal[] = [];
     const asked: string[] = [];
-    await sealView(made.contents, view, { read: () => pageBytes, refused: (kind) => refused.push(kind), asked: (url) => asked.push(url) });
+    // As the window's reader does: only our switch's Live is a choice.
+    const ask = (url: string) => {
+        asked.push(url);
+        return view === demoSwitch && switchChoice(url) !== null;
+    };
+    await sealView(made.contents, view, { read: () => pageBytes, refused: (kind) => refused.push(kind), asked: ask });
     return { ...made, refused, asked };
 }
 
@@ -255,7 +269,7 @@ const call = (handler: Handler | undefined, ...args: unknown[]): unknown => {
 
 test('every handler of the seal is installed on the contents and the session, the proxy last', async () => {
     const view = await sealed();
-    assert.deepEqual([...view.on.keys()].sort(), ['certificate-error', 'devtools-opened', 'login', 'select-bluetooth-device', 'will-attach-webview', 'will-frame-navigate', 'will-navigate', 'will-prevent-unload', 'will-redirect']);
+    assert.deepEqual([...view.on.keys()].sort(), ['certificate-error', 'devtools-opened', 'did-navigate', 'dom-ready', 'login', 'select-bluetooth-device', 'will-attach-webview', 'will-frame-navigate', 'will-navigate', 'will-prevent-unload', 'will-redirect']);
     assert.deepEqual([...view.sessionOn.keys()].sort(), ['select-hid-device', 'select-serial-port', 'select-usb-device', 'will-download']);
     assert.deepEqual([...view.protocols.keys()].sort(), ['file', 'http', 'https', 'jason-demo']);
     for (const name of ['onBeforeRequest', 'setPermissionRequestHandler', 'setPermissionCheckHandler', 'setDevicePermissionHandler', 'setDisplayMediaRequestHandler', 'setBluetoothPairingHandler', 'setWindowOpenHandler', 'setSpellCheckerEnabled:false', 'setWebRTCIPHandlingPolicy:disable_non_proxied_udp']) {
@@ -396,12 +410,75 @@ test('our switch reads the person’s choice from the navigation its view refuse
     assert.ok(live.stopped, 'the view stays where it is');
     assert.deepEqual(view.asked, ['jason-switch://switch/live']);
     assert.equal(switchChoice(view.asked[0] ?? ''), 'live');
+    // The person's own click is a choice, not a refusal: nothing is told to the log as one.
+    assert.deepEqual(view.refused, []);
+    const elsewhere = event({ url: 'https://example.com/', isMainFrame: true });
+    call(view.on.get('will-navigate'), elsewhere);
+    assert.ok(elsewhere.stopped);
+    assert.deepEqual(view.refused, ['navigation'], 'any other navigation of the switch is still a refusal');
+});
+
+test('a navigation that ends anywhere but the view’s own address, as about:blank does with no will-navigate, loads the page again', async () => {
+    for (const view of [demoPage, demoSwitch]) {
+        const sealedView = await sealed(view);
+        call(sealedView.on.get('did-navigate'), event(), view.url, 200, 'OK');
+        assert.ok(!sealedView.calls.some((name) => name.startsWith('loadURL:')), 'its own address stays');
+        assert.deepEqual(sealedView.refused, []);
+        for (const url of ['about:blank', 'about:srcdoc', 'data:text/html,x']) call(sealedView.on.get('did-navigate'), event(), url, 200, 'OK');
+        assert.deepEqual(
+            sealedView.calls.filter((name) => name.startsWith('loadURL:')),
+            [`loadURL:${view.url}`, `loadURL:${view.url}`, `loadURL:${view.url}`],
+        );
+        assert.deepEqual(sealedView.refused, ['navigation', 'navigation', 'navigation'], 'each told (the window tells a kind once)');
+    }
+});
+
+test('no drag region the page draws is the window’s: a user sheet makes every element of each of its documents no-drag', async () => {
+    const view = await sealed(demoPage);
+    call(view.on.get('dom-ready'));
+    call(view.on.get('dom-ready'));
+    assert.deepEqual(
+        view.calls.filter((name) => name.startsWith('insertCSS:')),
+        [`insertCSS:user:${noDragSheet}`, `insertCSS:user:${noDragSheet}`],
+    );
+    assert.equal(noDragSheet, '*, *::before, *::after { -webkit-app-region: no-drag !important; }');
+    // Our switch keeps its own: its strip is the window's drag region, its control is not.
+    const ours = await sealed(demoSwitch);
+    assert.equal(ours.on.has('dom-ready'), false);
+});
+
+// ---- Before Electron is ready: the Demo's schemes, and no host name resolved --------------------------------------------
+
+test('a Demo start registers the two schemes and maps every host name to nothing before Electron is ready', () => {
+    const done: unknown[] = [];
+    demoBeforeReady(
+        { appendSwitch: (name: string, value?: string) => void done.push(['switch', name, value]) },
+        { registerSchemesAsPrivileged: (schemes: unknown) => void done.push(['schemes', schemes]) },
+    );
+    assert.deepEqual(demoResolverRule, ['host-resolver-rules', 'MAP * ~NOTFOUND']);
+    assert.deepEqual(done, [
+        ['switch', 'host-resolver-rules', 'MAP * ~NOTFOUND'],
+        ['schemes', demoSchemes()],
+    ]);
+});
+
+test('the host-resolver rule is set by a Demo start alone, before ready, and a Live start never sets it', () => {
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    const start = main.slice(main.indexOf('function startDesktop('));
+    const set = start.indexOf("if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);");
+    assert.ok(set > 0, 'the Demo start sets it');
+    assert.ok(set < start.indexOf('void app.whenReady().then(() => releasedAfter('), 'before ready');
+    assert.equal(main.split('demoBeforeReady(').length - 1, 1, 'once, in the Demo start');
+    assert.ok(!/appendSwitch|host-resolver-rules|registerSchemesAsPrivileged/.test(main), 'nothing else in main.ts sets a switch or a scheme');
+    // Live is a start of its own: the relaunch hands it its arguments, never the switches this run appended.
+    assert.ok(main.includes('app.relaunch(relaunchOptions(process.argv,'));
 });
 
 // ---- Our switch's place and page --------------------------------------------------------------------------------------
 
-test('the page’s strip is fixed: right of its 284-pixel sidebar, 38 high; on macOS a band of 26 lies above the page', () => {
+test('the page’s strip is fixed: right of its 284-pixel sidebar, 38 high; on macOS the window’s band of 26 lies above the page', () => {
     assert.deepEqual(demoGeometry, { sidebar: 284, strip: 38, macBand: 26 });
+    assert.equal(demoGeometry.macBand, titleBand, 'the band is the window frame’s own');
 });
 
 test('elsewhere than macOS the page fills the content and our switch covers the strip, at every width the window allows', () => {
@@ -443,14 +520,14 @@ test('our band on macOS holds no script and nothing to click, is the sidebar’s
     assert.ok(!/no-drag/.test(css), 'all of it drags');
 });
 
-test('the Demo window on macOS hides its title bar into our band, loads the band under its views, and elsewhere keeps its frame', () => {
+test('the Demo window takes the window’s own frame, loads our band under its views on macOS, and elsewhere keeps its frame', () => {
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
-    assert.ok(demo.includes("...(process.platform === 'darwin' ? demoMacFrame : {}),"));
+    assert.ok(demo.includes('...frameOf(process.platform),'));
+    assert.ok(!/demoMacFrame/.test(main));
     const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
     assert.ok(window.includes("if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);"));
     assert.ok(window.includes('const at = demoLayout(deps.platform, width, height);'));
-    assert.deepEqual(demoMacFrame.titleBarStyle, 'hidden');
 });
 
 // ---- What the Demo reaches --------------------------------------------------------------------------------------------
@@ -468,7 +545,7 @@ test('the Demo’s two modules reach no jason, no runtime, no program, no proces
         assert.ok(imports.length > 0, file);
         for (const name of imports) assert.ok(!refused.test(name), `${file} imports ${name}`);
     }
-    assert.deepEqual(importsOf('demo-page.ts'), ['electron']);
+    assert.deepEqual(importsOf('demo-page.ts'), ['electron', './window-frame.ts']);
     assert.deepEqual(importsOf('demo-window.ts'), ['electron', 'node:fs', 'node:path', './demo-page.ts']);
     // demo-page.ts takes Electron's types alone, so its code runs here without Electron.
     assert.match(readFileSync(join(root, 'src', 'demo-page.ts'), 'utf8'), /^import type \{[^}]*\} from 'electron';$/m);

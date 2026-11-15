@@ -19,7 +19,7 @@ that a person needs.
 | Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries |
 | Carry the demo provider | every build carries `plugins/demo` as `resources/bundle/plugins/demo`, the package's files exactly as the tree holds them (`scripts/prepare.mjs`; a pack refuses a bundle without it). The demo of 0.44 and earlier placed a copy of it in its own installation (`src/demo-plugin.ts`); since the demo became a page nothing places it, and it goes with that demo's code. The person's installation never receives it |
 | Carry the prepared demo's archive | a release's package still carries `bundle/demo/jason-demo.zip`, which the demo of 0.44 and earlier placed with `jason import` (`src/demo-archive.ts`); since the demo became a page nothing places it |
-| Show the demo | `demo/index.html`, the page the application carries ([`demo/README.md`](demo/README.md)), in a sealed view of the window with the desktop's own Demo \| Live switch in a second view over it (`src/demo-page.ts`, `src/demo-window.ts`); no `jason` is run, no runtime started and no folder made |
+| Show the demo | `demo/index.html`, the page the application carries ([`demo/README.md`](demo/README.md)), in a sealed view of the window with the desktop's own Demo \| Live switch in a second view over it (`src/demo-page.ts`, `src/demo-window.ts`); no `jason` is run, no runtime started, no folder of an installation made and no host name resolved |
 | Load the window | the link `jason ui open --no-open` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
@@ -558,16 +558,26 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   and style, `data:` fonts and images, nothing else); `http`, `https` and `file` answer 403 there, every request but
   the page's own address or a `data:` one is cancelled, and a proxy that leads nowhere stands behind them; WebRTC keeps
   to the proxy. Pop-ups, navigation, redirects, frames' navigation, webviews, downloads, devtools, a login, a
-  certificate error and an unload prompt are refused or cancelled, and every permission request and check, device chooser
-  and screen capture is denied. Each kind refused is logged once a run (`demo_refused`), by its name alone.
-  `test/demo-page.test.ts` holds each seal on stand-ins for the contents and the session.
+  certificate error and an unload prompt are refused or cancelled, a main frame that ends anywhere but its own address
+  (`about:blank`, which no handler is asked about) is loaded with it again, and every permission request and check,
+  device chooser and screen capture is denied. Every document of the page's view gets a sheet of the user's origin that
+  makes each element no-drag (`noDragSheet`), so no region the page marks is the window's drag region, which in a window
+  without a frame would take the clicks of our switch over it. Each kind refused is logged once a run (`demo_refused`), by
+  its name alone; the person's click on Live is a choice and is not. A Demo start appends, before Electron is ready, the
+  Chromium switch `host-resolver-rules` with `MAP * ~NOTFOUND` (`demoBeforeReady`), so the run resolves no host name at
+  all: a name the page names ahead (`<link rel="dns-prefetch">`) is looked up below every guard above, and this is what
+  stops it. Nothing of the desktop in Demo needs a name: no runtime, no update check, no deep-link registration, only the
+  application's own files. A Live start is a start of its own, relaunched with its own arguments, and never has the switch.
+  `test/demo-page.test.ts` holds each seal on stand-ins for the contents and the session, and holds the switch to the
+  Demo start, before ready.
 - The switch's view covers the page's top strip on the page's own numbers (`demoLayout`): right of its 284-pixel sidebar
   to the window's right edge, 38 high, the strip's colours, the window's drag region but for the switch. It is laid out
   again at each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
-  Demo window hides its title bar (`demoMacFrame`) and both views start 26 pixels lower: the window's own contents show
-  our band above them (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's
-  beyond, all of it a drag region, where the traffic lights stand. On Windows and Linux the frame is the system's and the
-  views start at the top of the content.
+  Demo window takes the window's own frame (`frameOf`, above: no title bar, the buttons in a band of `titleBand`, 26
+  pixels) and both views start below that band, which they leave to the window's own contents: our band
+  (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, all of it a
+  drag region, where the traffic lights stand. The page's strip, 26 to 64 pixels down the window there, is covered whole by
+  our switch's view. On Windows and Linux the frame is the system's and the views start at the top of the content.
 
 ## Links
 

@@ -13,6 +13,7 @@
  */
 
 import type { Rectangle, Session, WebContents, WebPreferences } from 'electron';
+import { titleBand } from './window-frame.ts';
 
 /** A view of the Demo: the scheme its one file is served by, that file's address, and its session's name. */
 export interface DemoView {
@@ -20,13 +21,44 @@ export interface DemoView {
     url: string;
     /** A partition named without the persistent prefix: Electron keeps the session in memory only, so nothing of it reaches the disk. */
     partition: string;
+    /** Whether the regions the view's page marks as the window's drag region stay so: ours alone; the page's never do. */
+    drags: boolean;
 }
 
 /** The page the application carries. */
-export const demoPage: DemoView = { scheme: 'jason-demo', url: 'jason-demo://page/index.html', partition: 'jason-demo-page' };
+export const demoPage: DemoView = { scheme: 'jason-demo', url: 'jason-demo://page/index.html', partition: 'jason-demo-page', drags: false };
 
 /** The desktop's own switch, drawn over the page's own. */
-export const demoSwitch: DemoView = { scheme: 'jason-switch', url: 'jason-switch://switch/index.html', partition: 'jason-demo-switch' };
+export const demoSwitch: DemoView = { scheme: 'jason-switch', url: 'jason-switch://switch/index.html', partition: 'jason-demo-switch', drags: true };
+
+/**
+ * The Chromium switch a Demo start appends before Electron is ready: every host name maps to nothing, so this run resolves
+ * none, through the system's resolver or any other. A page reaches no address through the content policy and the
+ * session's guards, but a host name it names ahead (`<link rel="dns-prefetch">`) is looked up below all of them; with this
+ * rule nothing is. The Demo needs no name: it runs no runtime, offers no update and loads nothing but the application's
+ * own files. A Live start is a start of its own, made with its own arguments (`relaunchOptions`), and never has it.
+ */
+export const demoResolverRule = ['host-resolver-rules', 'MAP * ~NOTFOUND'] as const;
+
+/** What of Electron a Demo start uses before it is ready: its command line and its protocol registry. */
+export interface BeforeReady {
+    commandLine: { appendSwitch(name: string, value?: string): void };
+    protocol: { registerSchemesAsPrivileged(schemes: ReturnType<typeof demoSchemes>): void };
+}
+
+/** A Demo start, before Electron is ready: no host name resolved, and the Demo's two schemes known. */
+export function demoBeforeReady(commandLine: BeforeReady['commandLine'], protocol: BeforeReady['protocol']): void {
+    commandLine.appendSwitch(...demoResolverRule);
+    protocol.registerSchemesAsPrivileged(demoSchemes());
+}
+
+/**
+ * The sheet put into each document of a view whose page's drag regions are not kept: of the user's origin, every
+ * element and pseudo-element no-drag and important, which no rule of a page outranks, an inline one included. In a
+ * window without a frame (macOS) a region a lower view marks as drag takes the clicks of a view drawn over it, so the
+ * page could otherwise take the clicks meant for our switch; the window is moved by our band and our strip.
+ */
+export const noDragSheet = '*, *::before, *::after { -webkit-app-region: no-drag !important; }';
 
 /**
  * How the two schemes are registered before Electron is ready: standard, so a page has an origin of its own and its
@@ -90,7 +122,6 @@ export const demoPolicy = [
 /** The browser features a page may ask for, each allowed to no origin, its own included. */
 export const deniedFeatures = [
     'accelerometer',
-    
     'autoplay',
     'bluetooth',
     'camera',
@@ -118,7 +149,6 @@ export const deniedFeatures = [
     'serial',
     'storage-access',
     'usb',
-
     'window-management',
     'xr-spatial-tracking',
 ];
@@ -182,8 +212,11 @@ export interface SealDeps {
     read(): Uint8Array;
     /** Told what was refused, each kind at most once (`onceEach`). */
     refused(kind: DemoRefusal): void;
-    /** A navigation the view asked for, after it has been refused: the switch reads the person's choice from it. */
-    asked?(url: string): void;
+    /**
+     * A navigation the view asked for, after it has been stopped: the switch reads the person's choice from it, and
+     * answers true when it was one, which is then not told as a refusal.
+     */
+    asked?(url: string): boolean;
 }
 
 /** A refusal hook that passes each kind on once, so a page that asks again and again cannot fill the log. */
@@ -272,17 +305,33 @@ export async function sealView(contents: WebContents, view: DemoView, deps: Seal
     await session.setProxy({ ...deadProxy });
 }
 
-/** The view's own contents: navigation, pop-ups, webviews, unload, DevTools, sign-in boxes, certificates, Bluetooth, WebRTC. */
+/**
+ * The view's own contents: navigation, pop-ups, webviews, unload, DevTools, sign-in boxes, certificates, Bluetooth, WebRTC,
+ * and the page's drag regions.
+ */
 function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, refuse: (kind: DemoRefusal) => void): void {
     const guard = (event: Stoppable, url: string, isMainFrame: boolean) => {
         if (navigationAllowed(view, url, isMainFrame)) return;
         event.preventDefault();
+        if (deps.asked?.(url) === true) return;
         refuse('navigation');
-        deps.asked?.(url);
     };
     contents.on('will-navigate', (event) => guard(event, event.url, event.isMainFrame));
     contents.on('will-frame-navigate', (event) => guard(event, event.url, event.isMainFrame));
     contents.on('will-redirect', (event) => guard(event, event.url, event.isMainFrame));
+    // A navigation Electron asks no handler about, `about:blank` from the page's script, is undone once it is made: the
+    // main frame shows its own address or is loaded with it again.
+    contents.on('did-navigate', (_event, url) => {
+        if (url === view.url) return;
+        refuse('navigation');
+        if (!contents.isDestroyed()) contents.loadURL(view.url).catch(() => undefined);
+    });
+    if (!view.drags) {
+        contents.on('dom-ready', () => {
+            // A document gone before the sheet lands refuses it; the next document gets its own.
+            contents.insertCSS(noDragSheet, { cssOrigin: 'user' }).catch(() => undefined);
+        });
+    }
     contents.setWindowOpenHandler(() => {
         refuse('popup');
         return { action: 'deny' };
@@ -329,13 +378,7 @@ export function switchChoice(url: string): 'live' | null {
  * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
  * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`).
  */
-export const demoGeometry = { sidebar: 284, strip: 38, macBand: 26 } as const;
-
-/**
- * The Demo window's frame on macOS: the title bar hidden into our band, with the traffic lights inside it. Elsewhere the
- * window keeps its native frame and none of this applies.
- */
-export const demoMacFrame = { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 7 } } as const;
+export const demoGeometry = { sidebar: 284, strip: 38, macBand: titleBand } as const;
 
 export interface DemoLayout {
     page: Rectangle;

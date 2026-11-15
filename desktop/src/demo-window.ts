@@ -54,7 +54,9 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
         read: fileOf(switchFile),
         refused: onceEach((kind) => deps.refused('switch', kind)),
         asked: (url) => {
-            if (switchChoice(url) === 'live') deps.live();
+            if (switchChoice(url) !== 'live') return false;
+            deps.live();
+            return true;
         },
     });
     // The page first, then ours: a view added later is drawn over the ones before it.
