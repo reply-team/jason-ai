@@ -40,8 +40,8 @@ questions come to you in the agent's chat, and an approval is approved only afte
   item, and a refused act keeps the runtime's code and words above the cards.
 - **An approval is approved only once it has been read whole.** On a card and on a row of Needs you alike, Approve waits
   until the approval has been read in full, whatever its kind: a message, an invitation or an enrolment. Until then the
-  card or row says it is being read; if the read fails or does not answer within 30 seconds, it says so and gives what
-  the runtime said, and the read is sent again at the next reload. A send that was doubted shows who doubted it and why,
+  card or row says it is being read; if the read fails or does not answer within 30 seconds, it says so, with the
+  runtime's own words where the read failed, and the read is sent again at the next reload. A send that was doubted shows who doubted it and why,
   above Approve. At the press, a message is checked against its work item, and one whose text changed since the approval
   was asked is not approved.
 - **The agent's type in its header.** Beside the state badge, an agent's page says **Sequence** where a provider campaign
@@ -58,7 +58,7 @@ questions come to you in the agent's chat, and an approval is approved only afte
 - **A crash's temporary settings file is swept, and never exported.** A writer that stopped between writing a temporary
   copy of the settings and renaming it left that copy behind, secrets included. A start of the runtime now removes such
   files, `settings.json.<id>.tmp` and, with the secrets kept apart, `secrets.json.<id>.tmp`, once they are ten minutes
-  old and no program holds them; it logs only their counts. `jason export` never carries one, and `jason import` leaves
+  old, and on Windows only when no program holds them (on Linux and macOS age alone decides); it logs only their counts. `jason export` never carries one, and `jason import` leaves
   out one an older export carried, saying how many on stderr. See
   [the install guide](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/INSTALL.md).
 
@@ -103,6 +103,9 @@ so that a busy agent's header costs one read. An agent with more unfinished prov
 campaign's creation is not among the first of them, reads **Adaptive** while a provider campaign is still being made,
 until that creation is reached. If that read fails, no type is shown.
 
+The Work items page still offers Approve on an item that waits for approval without that read: it shows no doubt and
+does not check a message against its work item. Approve on Needs you and on the agent's chat, where the approval is read
+whole first.
 
 Through Reply, the stop after a bounce works only once a release of Reply reports a direct send's bounce on the send's
 own record and a release of reply-cli prints it; neither is out yet. Until then, a bounce is recorded, counted in the
