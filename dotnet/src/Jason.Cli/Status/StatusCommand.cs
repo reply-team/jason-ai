@@ -84,7 +84,8 @@ public static class StatusCommand
         registration makes. An update ledger that cannot be read fails the runtime check and names the file.
 
         The roles check reads the same profiles, and Roles:DefaultExecutionProfile as the runtime would:
-        JASON_Roles__DefaultExecutionProfile over the settings file, a blank value naming none. It is ok only
+        JASON_Roles__DefaultExecutionProfile over the settings file, the value as written, with nothing trimmed;
+        a padded, capitalised or blank value is one the runtime refuses, and the check says so. It is ok only
         where that default names an enabled profile, since a role's work that nothing else names a profile
         for runs on it and otherwise fails at its claim: role_not_launchable where none is named and the role
         has no entry command, profile_not_found or profile_disabled where the profile named is not there or

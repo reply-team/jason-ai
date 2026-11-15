@@ -138,6 +138,46 @@ public sealed class RolesLaunchableCheckTests
         Assert.Null(line.Fix);
     }
 
+    /// <summary>
+    /// A value the runtime's options refuse: they read it with nothing trimmed and hold it to a profile name's shape, so a
+    /// default padded with a space, spelt in capitals or blank refuses a start and is kept out of a running runtime by its
+    /// last good settings, and every role's work still fails. The check is not ok there, shows the value as written, and
+    /// names the line with the profile the value meant where one is enabled, and with ours otherwise.
+    /// </summary>
+    [Fact]
+    public void A_default_the_runtime_refuses_is_absent_shows_the_value_and_names_the_line()
+    {
+        const string Refused =
+            "which the runtime refuses: it reads the value with nothing trimmed, and a profile's name is lowercase letters, "
+            + "digits and hyphens, starting with a letter, at most 64 characters. A runtime does not start with it, and a "
+            + "running one keeps the settings it read before, so no role's work runs on this value. ";
+
+        var padded = StatusChecks.RolesLaunchableCheck([new("claude-code", "claude_code")], unread: null, SettingsFile, Named(" claude-code"));
+        Assert.Equal(CheckState.Absent, padded.State);
+        Assert.Equal(
+            "Roles:DefaultExecutionProfile gives \" claude-code\", " + Refused
+            + "`\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}` in /data/config/settings.json in place of the name it "
+            + "gives, which the runtime reads without a restart, runs the roles on claude-code. " + NotRead,
+            padded.Fact);
+        Assert.Null(padded.Fix);
+
+        var capitals = StatusChecks.RolesLaunchableCheck([new("night-run", "codex")], unread: null, SettingsFile, Named("Night-Run"));
+        Assert.Equal(CheckState.Absent, capitals.State);
+        Assert.StartsWith("Roles:DefaultExecutionProfile gives \"Night-Run\", " + Refused + "`jason profile create claude-code", capitals.Fact, StringComparison.Ordinal);
+        Assert.Equal(Create, capitals.Fix);
+
+        foreach (var blank in new[] { "", "  ", "night-run\n" })
+        {
+            var check = StatusChecks.RolesLaunchableCheck([new("night-run", "codex")], unread: null, SettingsFile, Named(blank));
+            Assert.Equal(CheckState.Absent, check.State);
+            Assert.StartsWith("Roles:DefaultExecutionProfile gives " + System.Text.Json.JsonSerializer.Serialize(blank) + ", " + Refused, check.Fact, StringComparison.Ordinal);
+        }
+
+        var hidden = StatusChecks.RolesLaunchableCheck([new("sentinel-mine", "codex")], unread: null, SettingsFile, Named(" sentinel-mine"), names: false);
+        Assert.DoesNotContain("sentinel-mine", hidden.Fact, StringComparison.Ordinal);
+        Assert.StartsWith("Roles:DefaultExecutionProfile gives <name>, " + Refused, hidden.Fact, StringComparison.Ordinal);
+    }
+
     /// <summary>As the doctor's bundle composes it: a profile's name is the person's, so none is named but the repair's own.</summary>
     [Fact]
     public void Without_names_no_profile_is_named_but_claude_code()
@@ -183,8 +223,9 @@ public sealed class RolesLaunchableCheckTests
 
     /// <summary>
     /// The default as the runtime's configuration reads it: <c>JASON_Roles__DefaultExecutionProfile</c> over the settings
-    /// file, keys compared without case, a key spelt with a colon the same as the section it names, comments allowed, and a
-    /// blank value no value — a blank variable included, which hides the file's.
+    /// file, keys compared without case, a key spelt with a colon the same as the section it names, comments allowed, and the
+    /// value as written, nothing trimmed: a blank one is a value the runtime refuses, a blank variable's included, which
+    /// hides the file's. Only a key that is not there, or is null, names none.
     /// </summary>
     [Fact]
     public void The_default_is_read_from_the_variable_over_the_settings_file_as_the_runtime_reads_it()
@@ -199,16 +240,19 @@ public sealed class RolesLaunchableCheckTests
         Assert.Equal(Named("claude-code"), StatusChecks.DefaultProfileOf(env));
 
         File.WriteAllText(dir.Paths.UserSettingsFile, """{ "Roles:DefaultExecutionProfile": " night-run " }""");
-        Assert.Equal(Named("night-run"), StatusChecks.DefaultProfileOf(env));
+        Assert.Equal(Named(" night-run "), StatusChecks.DefaultProfileOf(env));
 
         File.WriteAllText(dir.Paths.UserSettingsFile, """{ "Roles": { "DefaultExecutionProfile": "  " } }""");
+        Assert.Equal(Named("  "), StatusChecks.DefaultProfileOf(env));
+
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{ "Roles": { "DefaultExecutionProfile": null } }""");
         Assert.Equal(None, StatusChecks.DefaultProfileOf(env));
 
         File.WriteAllText(dir.Paths.UserSettingsFile, """{ "Roles": { "DefaultExecutionProfile": "claude-code" } }""");
         var variable = env with { Variables = new Dictionary<string, string> { ["jason_roles__defaultexecutionprofile"] = "codex" } };
         Assert.Equal(Named("codex"), StatusChecks.DefaultProfileOf(variable));
         var blank = env with { Variables = new Dictionary<string, string> { ["JASON_Roles__DefaultExecutionProfile"] = "" } };
-        Assert.Equal(None, StatusChecks.DefaultProfileOf(blank));
+        Assert.Equal(Named(""), StatusChecks.DefaultProfileOf(blank));
 
         File.WriteAllText(dir.Paths.UserSettingsFile, "{ not json");
         var unread = StatusChecks.DefaultProfileOf(env);
@@ -252,6 +296,11 @@ public sealed class RolesLaunchableCheckTests
         var after = await StatusAsync(made);
         Assert.Equal(CheckState.Ok, Assert.Single(after.Checks, check => check.Name == "roles_launchable").State);
         Assert.Equal(report.Ready, after.Ready);
+
+        // Padded with a space, the line is one the runtime refuses, and every role's work still fails: not ok.
+        File.WriteAllText(made.Paths.UserSettingsFile, """{"Roles": {"DefaultExecutionProfile": " claude-code"}}""");
+        var padded = await StatusAsync(made);
+        Assert.Equal(CheckState.Absent, Assert.Single(padded.Checks, check => check.Name == "roles_launchable").State);
     }
 
     private static async Task<StatusReport> StatusAsync(TempPaths dir)
@@ -277,6 +326,8 @@ public sealed class RolesLaunchableCheckTests
             help,
             StringComparison.Ordinal);
         Assert.Contains("JASON_Roles__DefaultExecutionProfile", help, StringComparison.Ordinal);
+        Assert.Contains("the value as written, with nothing trimmed", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("a blank value naming none", help, StringComparison.Ordinal);
         Assert.Contains("It is ok only where that default names an enabled profile", help, StringComparison.Ordinal);
     }
 }
