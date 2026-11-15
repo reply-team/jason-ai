@@ -65,6 +65,7 @@ import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from 
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 import { keepWindowTitle, windowTitle } from './window-title.ts';
+import { frameOf } from './window-frame.ts';
 
 function readText(file: string): string | null {
     try {
@@ -266,6 +267,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
+        // On macOS no title bar: the page leaves the window's buttons their band and marks where it is dragged by.
+        ...frameOf(process.platform),
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',

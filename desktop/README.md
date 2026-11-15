@@ -535,6 +535,10 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   for only `clipboard-sanitized-write` is granted, to the runtime's origin alone, so a Copy button works.
 - The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
   of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+- On macOS the window has no title bar (`src/window-frame.ts`): its three buttons sit in a band of 26 pixels over the top
+  of the console's sidebar, which the console leaves empty in the desktop's own window (its `desktop-mac` class), and the
+  window is dragged by that band and by the console's top strip, every control on them excepted. The page shown while
+  Jason starts has a drag band of its own across its top. Windows and Linux keep the native frame.
 
 ## Links
 

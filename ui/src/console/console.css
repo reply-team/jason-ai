@@ -975,8 +975,28 @@
 .jc-console [hidden] {
     display: none;
 }
+/* The Mac desktop's window has no title bar: its buttons sit in the sidebar's top 26 px, and the window is dragged by the
+   band over them as by the strip. A drag region takes every click in it, so whatever floats over one says it is none. */
 .jc-console.desktop-mac .side {
     padding-top: 26px;
+}
+.jc-console > .title-drag {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 284px;
+    height: 26px;
+    z-index: 30;
+    -webkit-app-region: drag;
+}
+.jc-console .menu,
+.jc-console .menu-away,
+.jc-console .palette-away,
+.jc-console .palette,
+.jc-console .overlay,
+.jc-console .dialog,
+.jc-console .act-dialog {
+    -webkit-app-region: no-drag;
 }
 .jc-console .hero {
     display: flex;

@@ -4,7 +4,7 @@ import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
-import { can, earlier } from '../platform/places';
+import { can, earlier, placeKind } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { consoleShell } from '../platform/console-shell';
@@ -363,8 +363,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         };
     }, [api, desktop, dock, stream]);
 
+    // The Mac desktop's own window has no title bar: its buttons sit over the sidebar's top, and the window is dragged by
+    // a band there and by the strip. A browser tab, and the desktop's window on Windows and Linux, keep their own frame.
+    const mac = desktop.platform === 'darwin' && placeKind() === 'window';
     return (
-        <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
+        <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}`}>
+            {mac && <div className="title-drag" aria-hidden="true" />}
             {bound && (
                 <>
                     {/* The sidebar runs the window's height; the strip heads the column right of it, over the area. */}

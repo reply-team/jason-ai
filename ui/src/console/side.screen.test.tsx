@@ -1,9 +1,10 @@
-import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { registry } from '../platform/slots';
+import { setPlace } from '../platform/places';
 import { mode, type Mode } from '../platform/mode';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
@@ -397,5 +398,66 @@ describe('the sidebar’s look', () => {
         expect(scroll.contains(menu())).toBe(true);
         expect(scroll.contains(side().getByRole('navigation', { name: 'Conversations' }))).toBe(true);
         expect(body.lastElementChild?.classList.contains('sfoot')).toBe(true);
+    });
+});
+
+describe('the sidebar in the Mac desktop’s window, which has no title bar', () => {
+    const mac = () => Object.assign(stubDesktop(), { platform: 'darwin' as const });
+    const band = () => document.querySelector<HTMLElement>('.jc-console > .title-drag');
+
+    it('leaves the window’s buttons 26 px over the sidebar and drags the window by a 284 x 26 band there', async () => {
+        renderConsole(mac(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const root = document.querySelector<HTMLElement>('.jc-console')!;
+        expect(root.classList.contains('desktop-mac')).toBe(true);
+        expect(styleOf(document.querySelector('.jc-console .side')!)).toMatchObject({ 'padding-top': '26px' });
+        expect(band()).not.toBeNull();
+        expect(band()!.getAttribute('aria-hidden')).toBe('true');
+        expect(band()!.childElementCount).toBe(0);
+        expect(styleOf(band()!)).toMatchObject({
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '284px',
+            height: '26px',
+            '-webkit-app-region': 'drag',
+        });
+        // The strip beside it is the rest of the window's drag region.
+        expect(styleOf(screen.getByRole('region', { name: 'Mode bar' }))['-webkit-app-region']).toBe('drag');
+    });
+
+    it('keeps whatever floats over the drag regions out of them: menus, the palette and dialogs', async () => {
+        renderConsole(mac(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        fireEvent.click(caret());
+        const floating = [
+            side().getByRole('menu', { name: 'Create' }),
+            document.querySelector('.jc-console .menu-away')!,
+        ];
+        for (const each of floating) expect(styleOf(each)['-webkit-app-region'], each.className).toBe('no-drag');
+        for (const name of ['palette-away', 'palette', 'overlay', 'dialog', 'act-dialog']) {
+            const made = document.createElement('div');
+            made.className = name;
+            document.querySelector('.jc-console .area')!.append(made);
+            expect(styleOf(made)['-webkit-app-region'], name).toBe('no-drag');
+        }
+    });
+
+    it('draws no band and no room in a browser tab on a Mac, which keeps its own title bar', async () => {
+        setPlace('tab', mac());
+        renderConsole(mac(), 'live');
+        await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
+        expect(document.querySelector('.jc-console')!.classList.contains('desktop-mac')).toBe(false);
+        expect(band()).toBeNull();
+    });
+
+    it('draws no band on Windows and Linux, whose windows keep their frame', async () => {
+        for (const platform of ['win32', 'linux'] as const) {
+            renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
+            await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+            expect(document.querySelector('.jc-console')!.classList.contains('desktop-mac')).toBe(false);
+            expect(band()).toBeNull();
+            cleanup();
+        }
     });
 });
