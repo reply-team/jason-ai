@@ -587,7 +587,7 @@ Beside them, and no operation, the journal's stream, `GET /v1/journal.stream`: t
   pair answers with the entry already there. The runtime adds entries of its own: an `opt_out` verdict (`reply.record`
   above) puts every value of the contact on the list, written by `system:opt_out` with the verdict's id in the reason;
   a read of a send that says the email bounced hard, or with no kind
-  ([`message.status`](contracts/operations/message.status.md)), puts the contact's email on it, written by
+  ([the read's contract](contracts/operations/message.status.md)), puts the contact's email on it, written by
   `system:bounce` with the bounce line's id in the reason.
 - `suppression.remove`: lifts a suppression; the reason is mandatory. It lifts that one entry: a contact an opt-out
   verdict stands for is still refused by the claim's `opted_out` lock, which only a person's own later verdict on that
