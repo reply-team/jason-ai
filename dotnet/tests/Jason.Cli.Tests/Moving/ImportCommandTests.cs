@@ -377,7 +377,7 @@ public sealed class ImportCommandTests
         var said = to.Error.ToString();
         Assert.Contains(ImportCommand.SettingsTemporarySkipped(2) + Environment.NewLine, said, StringComparison.Ordinal);
         Assert.Equal(
-            "2 temporary files a write of the settings left beside the settings file, carried by an export before 0.44.0, were held to their listed digests and not placed.",
+            "2 temporary files a write of the settings left beside the settings file or the secrets file, carried by an export before 0.44.0, were held to their listed digests and not placed.",
             ImportCommand.SettingsTemporarySkipped(2));
         Assert.DoesNotContain("4242", said, StringComparison.Ordinal);
         Assert.DoesNotContain("fake-token-not-a-secret", said, StringComparison.Ordinal);
@@ -1650,7 +1650,7 @@ public sealed class ImportCommandTests
         Assert.Contains("A project folder outside the harness root does not travel", help, StringComparison.Ordinal);
         Assert.Contains("needs the source harness root moved aside first", help, StringComparison.Ordinal);
         Assert.Contains("'jason project link <id> --path <folder>'", help, StringComparison.Ordinal);
-        Assert.Contains("A temporary file a write of the settings file left beside it (settings.json.<id>.tmp), which an export before 0.44.0 could carry, is held to its listed digest and not placed.", help, StringComparison.Ordinal);
+        Assert.Contains("A temporary file a write of the settings file left beside it (settings.json.<id>.tmp, or secrets.json.<id>.tmp where the secrets are a file of their own), which an export before 0.44.0 could carry, is held to its listed digest and not placed.", help, StringComparison.Ordinal);
     }
 
     // ---- helpers -----------------------------------------------------------------------------------------------------

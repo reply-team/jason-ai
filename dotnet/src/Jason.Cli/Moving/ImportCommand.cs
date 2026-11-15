@@ -955,7 +955,7 @@ public static class ImportCommand
     internal static string SettingsTemporarySkipped(int count) =>
         count.ToString(CultureInfo.InvariantCulture)
         + (count == 1 ? " temporary file" : " temporary files")
-        + " a write of the settings left beside the settings file, carried by an export before 0.44.0, "
+        + " a write of the settings left beside the settings file or the secrets file, carried by an export before 0.44.0, "
         + (count == 1 ? "was held to its listed digest and not placed." : "were held to their listed digests and not placed.");
 
     /// <summary>The archive, read whole and checked before anything is written.</summary>
@@ -1413,7 +1413,7 @@ public static class ImportCommand
             + "to the runtime's rule for a root before anything is placed, and the placed settings file names it. A project "
             + "folder outside the harness root does not travel: each project whose recorded folder is not here is said, and "
             + "listed as folders_not_here." + nl
-            + "A temporary file a write of the settings file left beside it (settings.json.<id>.tmp), which an export before 0.44.0 "
+            + "A temporary file a write of the settings file left beside it (settings.json.<id>.tmp, or secrets.json.<id>.tmp where the secrets are a file of their own), which an export before 0.44.0 "
             + "could carry, is held to its listed digest and not placed." + nl
             + "The settings file: every absolute path under the other machine's home directory, data directory or harness root "
             + "is rewritten to the same path here, each rewrite said, Harness:Root first; a path outside those three that is not "

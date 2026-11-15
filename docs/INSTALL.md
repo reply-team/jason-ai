@@ -712,7 +712,7 @@ a fact: the import registers it again on a machine that can, and on one that can
 and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
 work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an
 earlier import moved aside, the skills deployed into agent hosts (`jason skills install` deploys them again), a
-temporary file a write of the settings file left beside it (`settings.json.<id>.tmp`, whatever its age; the runtime
+temporary file a write of the settings file left beside it (`settings.json.<id>.tmp`, or `secrets.json.<id>.tmp` where the secrets are a file of their own, whatever its age; the runtime
 removes one at its start once it is ten minutes old and no writer holds it, and an import does not place one an older
 export carried), and anything outside the data directory and the harness root. **The archive carries the settings file with
 everything in it, a token under `Plugins:Config` included: keep the archive as you keep that file.**

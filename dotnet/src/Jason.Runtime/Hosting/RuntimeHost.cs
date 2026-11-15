@@ -140,7 +140,7 @@ public static class RuntimeHost
                 // By counts and the shapes alone: a name carries the writer's id, and a byte of the file a secret.
                 logger.Write(
                     swept.Refused > 0 ? LogEventLevel.Warning : LogEventLevel.Information,
-                    "Temporary files writes of the settings left beside their files (settings.json.<id>.tmp, secrets.json.<id>.tmp) swept at start: {Removed} removed, {Kept} kept as younger than ten minutes, held open or a link, {Refused} could not be removed",
+                    "Temporary files writes of the settings left beside their files (settings.json.<id>.tmp, and secrets.json.<id>.tmp where the secrets are a file of their own) swept at start: {Removed} removed, {Kept} kept as younger than ten minutes, held open or a link, {Refused} could not be removed",
                     swept.Removed,
                     swept.Kept,
                     swept.Refused);

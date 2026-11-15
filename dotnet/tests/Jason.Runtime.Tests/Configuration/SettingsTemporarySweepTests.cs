@@ -327,7 +327,7 @@ public sealed class SettingsTemporarySweepTests
                     line.GetProperty("Refused").GetInt32())),
         ];
 
-    private const string SweepTemplateStart = "Temporary files writes of the settings left beside their files (settings.json.<id>.tmp, secrets.json.<id>.tmp) swept at start:";
+    private const string SweepTemplateStart = "Temporary files writes of the settings left beside their files (settings.json.<id>.tmp, and secrets.json.<id>.tmp where the secrets are a file of their own) swept at start:";
 
     private static async Task<HttpStatusCode> SystemInfoAsync(RunningRuntime runtime)
     {
