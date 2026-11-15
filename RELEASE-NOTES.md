@@ -63,6 +63,8 @@ Codex.
   below `Responder:Priority`, so a person's reply is read before a mail server's notice, and both before the sends. See
   [inbound sync](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/inbound-sync.md#1-where-it-runs) and
   [`message.status`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/operations/message.status.md).
+  Through Reply, this waits for releases of Reply and of reply-cli that are not out yet: until then each read answers
+  that it cannot say, and nothing is stopped (Known issues).
 - **A bounce is not an opt-out.** The activity's `opted_out` leaves out the register entries the runtime writes for a
   bounce, in the count, its moments, the people it lists and the counts over time, so a list with bad addresses does not
   read as one whose people asked to be left alone. An opt-out, and a person's own `jason suppression add`, count as
