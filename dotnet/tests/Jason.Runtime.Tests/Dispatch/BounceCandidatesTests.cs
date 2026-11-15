@@ -10,7 +10,7 @@ namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
 /// Rule 6's query: the sends of a campaign one bounce of its contact could be of. The campaign's own emails to that contact
-/// through the plugin the bounce was read at, succeeded with a reference, finished in the 45 days before the bounce, with
+/// through the plugin the bounce was read at, succeeded with a reference, finished no earlier than 45 days before the bounce, with
 /// no bounce said of them yet; newest first, at most three. A send of another campaign, another person, another plugin or
 /// channel, one with no reference, one older than the window, or one already said bounced is none of them.
 /// </summary>
@@ -76,7 +76,27 @@ public class BounceCandidatesTests
         Assert.Equal([kept.PublicId], found.Select(candidate => candidate.WorkItem));
     }
 
-    /// <summary>The window is 45 days before the bounce, its first moment included.</summary>
+    /// <summary>
+    /// A send finished after the bounce's moment is one of them: that moment is another clock's, the provider's or a mail
+    /// server's, a send is never left out for a clock's difference, and a read of a send that did not bounce decides
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_send_finished_after_the_bounce_s_moment_is_one_of_them()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var scene = await SceneAsync(db);
+        var later = Send(db, scene.Campaign, scene.Ada, Bounced.AddMinutes(3));
+        var earlier = Send(db, scene.Campaign, scene.Ada, Bounced.AddDays(-1));
+        await db.SaveChangesAsync(Ct);
+
+        var found = await BounceCandidates.ReadAsync(db, scene.Campaign.Id, scene.Ada.Id, "reply", Bounced, Ct);
+
+        Assert.Equal([later.PublicId, earlier.PublicId], found.Select(candidate => candidate.WorkItem));
+    }
+
+    /// <summary>The window opens 45 days before the bounce, its first moment included.</summary>
     [Fact]
     public async Task The_window_opens_forty_five_days_before_the_bounce()
     {

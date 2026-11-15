@@ -454,11 +454,17 @@ public class ReplyMessageStatusTests
         }
     }
 
-    /// <summary>A bounce word past the document's bound is none given, never cut, and the kind is none either.</summary>
-    [Fact]
-    public async Task A_bounce_word_the_document_cannot_carry_whole_is_none_given()
+    /// <summary>
+    /// A bounce word the document cannot carry is none given, never cut or cleaned, and the kind is none either: one past
+    /// the document's bound, and a mail server's text, which is not one word and may name an address.
+    /// </summary>
+    [Theory]
+    [InlineData(129, null)]
+    [InlineData(0, "550 5.1.1 <ada@example.com>: user unknown")]
+    [InlineData(0, "mailbox full")]
+    public async Task A_bounce_word_the_document_cannot_carry_whole_is_none_given(int length, string? text)
     {
-        using var account = new ReplyAccount().WithDirectSend(Reference, "sent", bounced: true, bounceType: new string('w', 129));
+        using var account = new ReplyAccount().WithDirectSend(Reference, "sent", bounced: true, bounceType: text ?? new string('w', length));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 

@@ -56,12 +56,13 @@ internal static class CampaignWhy
         """;
 
     // The page's people's opt-outs of the period ({0} to {1}; {2} the people), through their own index, as the count
-    // reads them: each line found among the people's channels by its value.
+    // reads them: each line found among the people's channels by its value, and none the runtime wrote for a bounce.
     internal const string OptOuts = """
         SELECT ch.contact_id AS ContactId, j.ts AS Ts, ch.channel AS Channel
         FROM journal AS j INDEXED BY ix_journal_suppression_added_ts
         JOIN contact_channels AS ch ON ch.channel = json_extract(j.new_json, '$.channel') AND ch.value = json_extract(j.new_json, '$.value')
         WHERE j.kind = 'suppression_added' AND j.ts >= {0} AND j.ts < {1} AND ch.contact_id IN (SELECT value FROM json_each({2}))
+          AND NOT (j.actor_type = 'system' AND j.actor_id IS 'bounce')
         ORDER BY j.id DESC
         """;
 

@@ -167,7 +167,8 @@
         "type": ["string", "null"],
         "minLength": 1,
         "maxLength": 128,
-        "description": "The provider's own word for the kind of bounce, as it gives it and uninterpreted, or null where it gives none. Absent reads as null."
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+        "description": "The provider's own word for the kind of bounce, uninterpreted: one word of the provider's vocabulary, a letter or digit first and then letters, digits, dots, underscores and hyphens, never a server's text; null where it gives none. Absent reads as null."
       }
     }
   },

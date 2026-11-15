@@ -63,6 +63,9 @@ const LONGEST_BODY = 100000;
 const LONGEST_REASON = 512;
 const LONGEST_CODE = 128;
 
+// The document's word for a bounce's kind: a letter or digit first, then letters, digits, dots, underscores and hyphens.
+const WORD = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 export function messageStatus(input, context) {
   const reference = input.send.reference;
   const record = run(context, { operation: STATUS, command: GET, operands: [reference], pins: false });
@@ -142,8 +145,9 @@ function bounceOf(record) {
     bounced: true,
     bounce: word === null ? null : lookup(BOUNCES, word) ?? null,
     bounced_at: momentOrNull(record.bounced_at),
-    // Reply's own word, as given and never interpreted; one the document cannot carry whole is none.
-    bounce_code: word === null ? null : copyOf(word, LONGEST_CODE),
+    // Reply's own word, as given and never interpreted: one word of its vocabulary, never a server's text, so anything
+    // else, and one the document cannot carry whole, is none.
+    bounce_code: word === null || !WORD.test(word) ? null : copyOf(word, LONGEST_CODE),
   };
 }
 

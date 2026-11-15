@@ -227,8 +227,8 @@ for a thread the campaign holds by its own pin queues a `conversation.get` of th
 waiting on it, or records the move on the thread's open responder ([docs/inbound-sync.md](inbound-sync.md) §1). Bounce
 reads the provider events a campaign was told of and, for a bounce of one of its people, queues a `message.status` read
 of each of the campaign's own sends to that person the bounce could be of, at most three; the read that finds the send
-bounced is what records it and, for a hard bounce, puts the address on the do-not-contact register as `system:bounce`
-([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
+bounced is what records it and, for a hard bounce or one the provider named no kind for, puts the contact's email on the
+do-not-contact register as `system:bounce` ([docs/inbound-sync.md](inbound-sync.md) §1). Reserve
 counts, for an active campaign that set a threshold, the people nobody has started on yet, when a line that can change
 the number was written since its last look, and says once per crossing that the reserve fell under the threshold or
 recovered ([docs/campaign-manager.md](campaign-manager.md) §9); it runs before summon, so a low reserve summons the
@@ -823,8 +823,9 @@ In a period, removed people included, so a past period does not change when some
   an enrollment into a provider campaign not live yet; research never counts.
 - `replied` — Their first reply in this campaign came in the period. A reply is dated by the moment the provider gives
   it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
-- `opted_out` — One of their addresses was put on the do-not-contact register in the period. It is read from the
-  journal, so an entry lifted since still counts.
+- `opted_out` — One of their addresses was put on the do-not-contact register in the period, other than by the runtime
+  for a bounce. It is read from the journal, so an entry lifted since still counts; an entry the runtime wrote for a
+  bounce (`system:bounce`) says the address is dead, not that the person asked to be left alone, and never counts.
 - `removed` — They were taken out of the campaign in the period, whether added back since or not.
 
 The same counts over time: `jason campaign activity-by-period` (`campaign.activity_by_period`) takes the campaigns named
@@ -1518,7 +1519,7 @@ mistyped one.
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
 | `Responder:OnReply` | `true` | — | whether a reply about a campaign's own thread wakes its responder; off, the respond step still moves past the lines and creates nothing |
-| `Responder:Priority` | `50` | -1000..1000 | the priority of the thread's read and the responder, and of the reads of sends a bounce asks for; the inbound read's `conversation.list` items sit ten above it |
+| `Responder:Priority` | `50` | -1000..1000 | the priority of the thread's read and the responder; the reads of sends a bounce asks for sit one below it, and the inbound read's `conversation.list` items ten above it |
 | `Responder:TimeoutSeconds` | `900` | 30..86400 | how long one responder run may take |
 | `Responder:MaxAttempts` | `1` | 1..10 | how many failures a responder is worth; a second run would draft a second answer |
 | `Responder:MaxAgeSeconds` | `259200` | 3600..2592000 | how old a reply may be, by the thread's last activity, and still wake a responder (three days) |

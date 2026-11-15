@@ -28,7 +28,7 @@
           "channel": { "type": "string", "enum": ["email", "linkedin"] },
           "message_id": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier for the message that went, or null where it gives none." },
           "bounce": { "type": ["null", "string"], "enum": ["hard", "soft", null], "description": "The kind of bounce: `hard` where the address does not take mail, `soft` where it may still, null where the provider named no kind the plugin can tell." },
-          "bounce_code": { "type": ["null", "string"], "minLength": 1, "maxLength": 128, "description": "The provider's own word for the kind, uninterpreted, or null where it gives none." },
+          "bounce_code": { "type": ["null", "string"], "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$", "description": "The provider's own word for the kind, uninterpreted: one word of the provider's vocabulary, never a server's text; null where it gives none." },
           "bounced_at": { "type": ["null", "string"], "format": "date-time", "description": "When the bounce notice came, or null where the provider gives no moment." },
           "read_work_item": { "type": "string", "pattern": "^wi_", "description": "The work item that read the send's status." }
         }

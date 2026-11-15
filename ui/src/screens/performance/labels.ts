@@ -26,7 +26,7 @@ export const counts: readonly { key: ActivityCount; label: string; hint: string 
     {
         key: 'opted_out',
         label: 'Opted out',
-        hint: 'One of their addresses was put on the do-not-contact register in the period.',
+        hint: 'One of their addresses was put on the do-not-contact register in the period, other than by the runtime for a bounce.',
     },
     {
         key: 'removed',

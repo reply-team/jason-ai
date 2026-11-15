@@ -21,9 +21,10 @@ namespace Jason.Runtime.Dispatch;
 /// The step of a scan right after respond: a bounce a provider's events said of one of a campaign's people asks for the
 /// detail of the campaign's own sends that could be the one. For each <c>provider_event_observed</c> line of kind
 /// <c>bounce</c> above the campaign's own watermark it queues a read of each such send (<c>message.status</c>): the
-/// campaign's emails to that contact through the plugin the bounce was read at, succeeded with a reference, in the 45
-/// days before the bounce, with no bounce said of them yet, newest first, at most three, and never a second read for a
-/// send that already has an open read the runtime made.
+/// campaign's emails to that contact through the plugin the bounce was read at, succeeded with a reference, finished no
+/// earlier than 45 days before the bounce, with no bounce said of them yet, newest first, at most three, and never a
+/// second read for a send that already has an open read the runtime made. One finished after the bounce's moment is not
+/// left out, since that moment is another clock's and a read of a send that did not bounce decides nothing.
 /// <para>
 /// It writes no line and no register entry: each read decides alone, at its own end (<see cref="Execution.SentFacts"/>).
 /// A campaign with no send the bounce could be of does nothing with its line: a bounce of a provider's own sequence, of
@@ -32,6 +33,11 @@ namespace Jason.Runtime.Dispatch;
 /// <para>
 /// One line, one short transaction, as in the respond step: the reads and the watermark's guarded move commit together.
 /// A paused campaign holds its watermark until it resumes, so its lines wait, and so do its reads.
+/// </para>
+/// <para>
+/// The reads sit <see cref="BelowResponders"/> below <c>Responder:Priority</c>: a person's reply is read and answered
+/// before a mail server's notice, and both before the sends. With one claim per campaign per scan, a resumed campaign's
+/// bounces could otherwise queue a few hundred reads ahead of every reply's read.
 /// </para>
 /// </summary>
 public sealed class BounceStep(
@@ -44,6 +50,9 @@ public sealed class BounceStep(
 {
     /// <summary>The kind of provider event this step reads.</summary>
     public const string EventKind = "bounce";
+
+    /// <summary>How far below <c>Responder:Priority</c> the reads of sends sit, so a reply's read is claimed first.</summary>
+    public const int BelowResponders = 1;
 
     /// <summary>How many lines one scan reads of one campaign at most; the rest are read by the scans after it.</summary>
     public const int LinesPerScan = 100;
@@ -240,7 +249,7 @@ public sealed class BounceStep(
                     BounceCandidates.StatusOperation,
                     ContactId: null,
                     ExecutionProfile: null,
-                    options.Priority,
+                    options.Priority - BelowResponders,
                     NotBefore: null,
                     DueAt: null,
                     TimeoutSeconds: null,

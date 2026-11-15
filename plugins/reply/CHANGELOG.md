@@ -8,7 +8,8 @@ absorbed by a release of this package alone.
 - `message.status` also says whether an email came back as a bounce, of which kind, when, and Reply's own word for the
   kind. Only a dead address is a `hard` bounce; a full mailbox, a limit of the sender's own and the receiving server's
   refusal of the message are `soft`; a kind Reply does not name, or one this package does not know, is none. Each of
-  the four is null where the installed reply-cli does not print them, which says nothing either way.
+  the four is null where the installed reply-cli does not print them, which says nothing either way. Reply's word is
+  given only where it is one word, never a server's text.
 - The README says a global route can be set with `jason route set --global`, which writes the settings file and reloads
   in one act, as it can since Jason 0.42.0; it said the CLI refused a global route.
 

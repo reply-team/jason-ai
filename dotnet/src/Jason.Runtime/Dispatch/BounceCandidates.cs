@@ -10,9 +10,11 @@ namespace Jason.Runtime.Dispatch;
 
 /// <summary>
 /// The sends of a campaign a bounce of one of its people could be of: the campaign's own emails to that contact through the
-/// plugin the bounce was read at, which succeeded with the provider's reference, finished in the window before the bounce,
-/// and of which no bounce has been said yet; newest first, at most <see cref="Most"/>. A send of a provider's own sequence,
-/// one written by hand or one older than the window is none of them, so a bounce of it finds nothing here.
+/// plugin the bounce was read at, which succeeded with the provider's reference, finished no earlier than the window
+/// before the bounce, and of which no bounce has been said yet; newest first, at most <see cref="Most"/>. A send of a
+/// provider's own sequence, one written by hand or one older than the window is none of them, so a bounce of it finds
+/// nothing here. One finished after the bounce's moment is not left out, since that moment is another clock's and a read
+/// of a send that did not bounce decides nothing.
 /// </summary>
 /// <remarks>
 /// A send's record never holds its address, its reference or where it ran in a column of its own: the reference and the
@@ -24,7 +26,12 @@ internal static class BounceCandidates
     /// <summary>How many sends one bounce asks to be read at most: the newest.</summary>
     public const int Most = 3;
 
-    /// <summary>How far back from the bounce a send can be the one that bounced.</summary>
+    /// <summary>
+    /// How far back from the bounce a send can be the one that bounced. The window has no end after the bounce: its moment
+    /// is the provider's clock, or a mail server's own date, and a send is never left out for a clock's difference. The
+    /// cost: for a bounce read long after it happened, a span read again, the newest three may be sends made after it, and
+    /// the send that bounced is not read.
+    /// </summary>
     public static TimeSpan Window { get; } = TimeSpan.FromDays(45);
 
     /// <summary>The operation whose sends a bounce can be of: an email is a message.</summary>

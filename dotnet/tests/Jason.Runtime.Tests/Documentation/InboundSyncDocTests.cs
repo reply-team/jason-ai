@@ -129,8 +129,10 @@ public partial class InboundSyncDocTests
         Assert.Equal(codes.Count, Regex.Matches(section, @"\| `[a-z_]+` \|").Count);
         Assert.Contains($"at most {BounceStep.LinesPerScan} a campaign a scan", section, StringComparison.Ordinal);
         Assert.Contains($"at most {BounceCandidates.Most} of them", section, StringComparison.Ordinal);
-        Assert.Contains($"in the {BounceCandidates.Window.TotalDays.ToString(CultureInfo.InvariantCulture)} days before the bounce", section, StringComparison.Ordinal);
-        Assert.Contains("at `Responder:Priority`", section, StringComparison.Ordinal);
+        Assert.Contains($"finished no earlier than {BounceCandidates.Window.TotalDays.ToString(CultureInfo.InvariantCulture)} days before the bounce", section, StringComparison.Ordinal);
+        Assert.Contains("one finished after the bounce's moment is not left out", section, StringComparison.Ordinal);
+        Assert.Equal(1, BounceStep.BelowResponders);
+        Assert.Contains("one below `Responder:Priority`", section, StringComparison.Ordinal);
         Assert.Contains("A paused campaign's bounces wait, and so do the reads they ask for", section, StringComparison.Ordinal);
     }
 

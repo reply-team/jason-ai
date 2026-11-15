@@ -52,7 +52,7 @@ public class BounceStepTests
             Assert.Equal(sends.Take(3), reads.Select(read => (string?)read.Context["input"]!["send"]));
             Assert.All(reads, read =>
             {
-                Assert.Equal((WorkItemKind.ProviderOp, ActorType.System, harness.Responder.CurrentValue.Priority, (int?)null), (read.Kind, read.CreatedByType, read.Priority, read.ContactId));
+                Assert.Equal((WorkItemKind.ProviderOp, ActorType.System, harness.Responder.CurrentValue.Priority - BounceStep.BelowResponders, (int?)null), (read.Kind, read.CreatedByType, read.Priority, read.ContactId));
                 Assert.Equal(WorkItemStatus.Created, read.Status);
             });
             Assert.False(await db.Journal.AnyAsync(entry => entry.Kind == JournalKinds.MessageBounceObserved, Ct));
@@ -62,6 +62,28 @@ public class BounceStepTests
         // The claim takes a read where its send ran: the plugin and the account of the send's attempt.
         var claimed = Assert.Single(await harness.ClaimAsync(Ct));
         Assert.Equal(("message.status", Reply, Seat), (claimed.Plan!.Contract.Id, claimed.Plan.Plugin.Manifest.Id, claimed.Plan.BindingIdentity));
+    }
+
+    /// <summary>
+    /// The reads a bounce asks for sit one below the respond step's: a person's reply is read before a mail server's
+    /// notice, so a reply's read made after a bounce's reads is claimed first.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_s_read_made_after_a_bounce_s_reads_is_claimed_first()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Routed(harness);
+        var (campaign, ada) = await SceneAsync(harness);
+        await SendAsync(harness, campaign, ada, Noon.AddDays(-1));
+        await SendAsync(harness, campaign, ada, Noon.AddDays(-2));
+        await BounceAsync(harness, campaign, ada);
+        Assert.Equal(2, await harness.BounceAsync(Ct));
+        await RepliedAsync(harness, campaign, "th-ada");
+        Assert.Equal(1, await harness.RespondAsync(Ct));
+
+        var claimed = Assert.Single(await harness.ClaimAsync(Ct));
+
+        Assert.Equal(Responder.ReadOperation, claimed.Plan!.Contract.Id);
     }
 
     /// <summary>
@@ -189,7 +211,7 @@ public class BounceStepTests
     /// <summary>The routed plugin performs sends and their reads, at one account, by default.</summary>
     private static void Routed(DispatchHarness harness)
     {
-        string[] operations = ["message.send", "message.status"];
+        string[] operations = ["message.send", "message.status", "conversation.list", Responder.ReadOperation];
         var plugins = harness.Resolve<PluginRegistry>();
         plugins.Replace(
             new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [TestPlugins.Loaded(Reply, operations)]),
@@ -268,6 +290,40 @@ public class BounceStepTests
         db.Attach(campaign);
         new JournalWriter(harness.Clock).Append(
             db, Actors.Dispatcher, JournalKinds.ProviderEventObserved, campaign, key: "sha256:" + PublicId.New("key"), updated: said, contactId: contact?.Id);
+        await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>A reply the inbound read saw on a thread of the campaign's own, at the routed plugin and account.</summary>
+    private static async Task RepliedAsync(DispatchHarness harness, Campaign campaign, string thread)
+    {
+        await using var db = harness.Open();
+        db.Attach(campaign);
+        var read = WorkItemFactory.NewProviderOp(campaign, InboundSync.Operation, Noon.AddMinutes(-10));
+        read.Status = WorkItemStatus.Succeeded;
+        read.FinishedAt = Noon.AddMinutes(-10);
+        db.WorkItems.Add(read);
+        var attempt = WorkItemFactory.NewAttempt(read, 1, AttemptStatus.Succeeded, Noon.AddMinutes(-10));
+        attempt.Provenance = new AttemptProvenanceDto(
+            Reply, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
+            InboundSync.Operation, 1, null, null, RouteScope.GlobalDefault, Seat);
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(Ct);
+
+        new JournalWriter(harness.Clock).Append(
+            db, Actors.Dispatcher, JournalKinds.InboundReplyObserved, campaign,
+            key: InboundSync.ObservationKey(Reply, thread, "2026-11-14T11:55:00.000Z"),
+            updated: new JsonObject
+            {
+                ["plugin"] = Reply,
+                ["thread"] = thread,
+                ["channel"] = "email",
+                ["last_activity_at"] = "2026-11-14T11:55:00.000Z",
+                ["unread"] = true,
+                ["has_meeting_intent"] = null,
+                ["contact_id"] = null,
+            },
+            workItem: read,
+            attempt: attempt);
         await db.SaveChangesAsync(Ct);
     }
 
