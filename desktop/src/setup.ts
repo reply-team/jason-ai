@@ -1025,8 +1025,7 @@ export class Setup {
     #nameDefault(name: string): boolean {
         try {
             const { file, settings } = this.#readForEdit();
-            if (!defaultProfileOf(settings).named) writeAtomically(file, `${JSON.stringify(withDefaultProfile(settings, name), null, 2)}
-`);
+            if (!defaultProfileOf(settings).named) writeAtomically(file, `${JSON.stringify(withDefaultProfile(settings, name), null, 2)}\n`);
         } catch {
             return false;
         }

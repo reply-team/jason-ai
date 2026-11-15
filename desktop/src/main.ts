@@ -577,41 +577,41 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
     const setup = new Setup({
-            paths,
-            cli,
-            programs,
-            keys,
-            log,
-            bundleVersion: version ?? 'unprepared',
-            runtimeVersion: () => runtimeVersion,
-            runtimeIsOurs: () => runtimeIsOurs,
-            settings: () => settings,
-            // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
-            saveSettings: (next) => {
-                settings = next;
-                writeSettings(paths.settings, next);
-            },
-            models,
-            // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
-            ownServers: { env: process.env, home },
-            // A demo run offers no Full access (`demoFullAccess`).
-            demo: runOn.mode === 'demo',
-            // A box is closed, and read as a no, when its window is hidden or closed.
-            confirm: (box) =>
-                askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
-                    window.once('hide', abort);
-                    window.once('close', abort);
-                    return () => {
-                        window.removeListener('hide', abort);
-                        window.removeListener('close', abort);
-                    };
-                }),
-            // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
-            // kept nowhere.
-            openLink: toBrowser,
-            // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
-            copyLink: (link) => clipboard.writeText(link),
-        });
+        paths,
+        cli,
+        programs,
+        keys,
+        log,
+        bundleVersion: version ?? 'unprepared',
+        runtimeVersion: () => runtimeVersion,
+        runtimeIsOurs: () => runtimeIsOurs,
+        settings: () => settings,
+        // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
+        saveSettings: (next) => {
+            settings = next;
+            writeSettings(paths.settings, next);
+        },
+        models,
+        // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
+        ownServers: { env: process.env, home },
+        // A demo run offers no Full access (`demoFullAccess`).
+        demo: runOn.mode === 'demo',
+        // A box is closed, and read as a no, when its window is hidden or closed.
+        confirm: (box) =>
+            askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
+                window.once('hide', abort);
+                window.once('close', abort);
+                return () => {
+                    window.removeListener('hide', abort);
+                    window.removeListener('close', abort);
+                };
+            }),
+        // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
+        // kept nowhere.
+        openLink: toBrowser,
+        // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
+        copyLink: (link) => clipboard.writeText(link),
+    });
     registerSetup(seam, setup, origin, log, () => toPage('setup.changed'));
     // The agents' roles are put on the AI the chat runs on, in Live alone: at a start once the runtime is up, and as each
     // turn starts on its host (`Setup.connectRoles`). Nothing it meets stops the start or the turn.
