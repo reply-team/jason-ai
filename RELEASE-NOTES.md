@@ -109,7 +109,7 @@ is when the whole message is open, once the approval has been read whole.
 
 The status check `roles_launchable` reads the default execution profile alone. It does not look at a profile a work
 item, a campaign's policy or a role's policy names, nor at an entry command, so it can say `ok` for a role that is
-
+launched on another profile that fails.
 
 A Needs you row can still be approved without opening the message: its subject and body show only in Details. Approve
 is live once the approval has been read whole, whether or not Details was opened.
