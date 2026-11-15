@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { stubDesktop, stubStream } from '../test/desktop';
+import { whyWords } from '../screens/send-modes/doubts';
+import { journalLine, stubDesktop, stubStream, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
@@ -14,7 +15,7 @@ import { chats, lines } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
-async function renderConsole(fake: FakeApi): Promise<void> {
+async function renderConsole(fake: FakeApi, journal: StubStream = stubStream()): Promise<void> {
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -28,7 +29,7 @@ async function renderConsole(fake: FakeApi): Promise<void> {
     fake.answer('system.info', 'system.info/with-ui')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    render(<Console api={fake} desktop={stubDesktop()} stream={stubStream().stream} />);
+    render(<Console api={fake} desktop={stubDesktop()} stream={journal.stream} />);
     // Needs you is a page of the sidebar's menu, chosen as a person chooses it once the window has read what waits.
     await waitFor(() => expect(attention.loaded.value).toBe(true));
     fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }));
@@ -248,5 +249,99 @@ describe('Needs you', () => {
         await waitFor(() => expect(within(row('apr_1')).getAllByText(hostile).length).toBe(3));
         expect(needs().querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    describe('approves only what it has read whole', () => {
+        const approve = (id: string) => within(row(id)).getByRole('button', { name: 'Approve' });
+        const details = (id: string) => within(row(id)).getByRole('button', { name: 'Details' });
+        const live = (button: HTMLElement) => !button.hasAttribute('disabled');
+        const sent = (fake: FakeApi, operation: string) =>
+            fake.calls.filter((each) => each.operation === operation).map((each) => each.body);
+        const reads = (fake: FakeApi, id: string) =>
+            sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === id);
+        /** A journal line, as the runtime writes one when something waits: the console reads what waits again. */
+        const line = (journal: StubStream, id: string) =>
+            flush(() => {
+                journal.open();
+                journal.send(journalLine({ id, kind: 'approval_requested' }));
+            });
+        const messages = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/messages-pending')
+                .answer('decision.list', 'decision.list/empty');
+
+        it('holds Approve on a doubted message until the doubt is drawn on its row, above Approve', async () => {
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/park-doubted',
+                'approval.get/linkedin-message',
+            );
+            await renderConsole(fake);
+            await waitFor(() => expect(row('apr_1')).toBeTruthy());
+            const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
+            const doubted = `The critic role doubted this: ${whyWords('unsupported_claim')}`;
+            // Whenever Approve is live, the doubt already stands on the row.
+            if (live(approve('apr_1'))) expect(within(row('apr_1')).queryByText(doubted)).not.toBeNull();
+            const doubt = await waitFor(() => within(row('apr_1')).getByText(doubted));
+            expect(within(row('apr_1')).getByText(`Their words: ${doubts[0]!.note}`)).toBeTruthy();
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            expect(doubt.compareDocumentPosition(approve('apr_1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
+
+        it('says why a message it could not read cannot be approved, keeps Details, and reads it again at the next reload', async () => {
+            const journal = stubStream();
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/linkedin-message',
+            );
+            const reachable = fake.unreachable(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(row('apr_1')).toBeTruthy());
+            const said = await waitFor(() =>
+                within(row('apr_1')).getByText(/could not be read, so it cannot be approved here/),
+            );
+            expect(words(said)).toContain('Failed to fetch');
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(live(details('apr_1'))).toBe(true);
+            fireEvent.click(approve('apr_1'));
+            await flush(() => Promise.resolve());
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+
+            reachable();
+            line(journal, 'jrn_301');
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true), { timeout: 3000 });
+            expect(within(row('apr_1')).queryByText(/could not be read/)).toBeNull();
+        });
+
+        it('says a message is being read while its read is unanswered, keeps Details, and asks again at the next reload', async () => {
+            const journal = stubStream();
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/linkedin-message',
+            );
+            const release = fake.hold(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
+            expect(words(row('apr_1'))).toContain('cannot be approved until it is shown here whole');
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(live(details('apr_1'))).toBe(true);
+            fireEvent.click(approve('apr_1'));
+            await flush(() => Promise.resolve());
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
+
+            line(journal, 'jrn_302');
+            await waitFor(() => expect(reads(fake, 'apr_1')).toHaveLength(2), { timeout: 3000 });
+            release();
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+        });
     });
 });
