@@ -21,6 +21,7 @@ import {
     type CampaignView,
     type Period,
     type Route,
+    firstCampaignTab,
 } from '../../router';
 import { AddPeopleDialog } from './add-dialog';
 import { views } from './labels';
@@ -50,7 +51,7 @@ export function CampaignsScreen() {
             ? current
             : { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} };
     const table: store.Table = { view: at.view, period: at.period, filters: at.filters };
-    const key = href({ screen: 'campaigns', tab: 'sequence', ...table });
+    const key = href({ screen: 'campaigns', tab: firstCampaignTab.value, ...table });
     const countedUnder = store.numbersKey(table);
     const selected = at.id ?? null;
 
@@ -80,7 +81,7 @@ export function CampaignsScreen() {
         void store.open(api, selected, table, new Date(), zone, at.tab !== 'people').then((known) => {
             if (known) return;
             store.notice.value = 'The agent in this address no longer exists; it was closed.';
-            replace({ screen: 'campaigns', tab: 'sequence', ...table });
+            replace({ screen: 'campaigns', tab: firstCampaignTab.value, ...table });
         });
     }, [api, selected]);
 
@@ -94,7 +95,7 @@ export function CampaignsScreen() {
         }
     }, [countedUnder]);
 
-    const close = () => navigate({ screen: 'campaigns', tab: 'sequence', ...table });
+    const close = () => navigate({ screen: 'campaigns', tab: firstCampaignTab.value, ...table });
 
     // The dialog open, with the campaign it belongs to: it never shows over another one.
     const [act, setAct] = useState<{ id: string | null; what: Act } | null>(null);

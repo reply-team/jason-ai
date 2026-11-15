@@ -30,8 +30,9 @@ export const campaignTabs = ['sequence', 'people', 'inbox', 'results', 'settings
 export type CampaignTab = (typeof campaignTabs)[number];
 
 /**
- * The tab an agent's address opens when it names none or an older one: Sequence, and in Live, which draws People first
- * and no Sequence, People (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
+ * The ONE place of the first-tab rule: the tab an agent opens on, whether its address names none, an older one, or it
+ * is opened from the table, a link or a close. Sequence, and in the console's Live, which draws People first and no
+ * Sequence, People (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
  */
 export const firstCampaignTab: { value: CampaignTab } = { value: 'sequence' };
 export type CampaignView = 'summary' | 'activity';
@@ -160,7 +161,7 @@ function campaigns(segments: string[], query: string): Route {
     const q = params.get('q');
     if (q) filters.q = q;
     if (params.get('archived') === '1') filters.archived = true;
-    if (id === null) return { screen: 'campaigns', tab: 'sequence', view, period, filters };
+    if (id === null) return { screen: 'campaigns', tab: firstCampaignTab.value, view, period, filters };
     // An older address's Details opens Settings; its Timeline, any other tab or none opens the first.
     const named = segments[1] === 'details' ? 'settings' : segments[1];
     const tab: CampaignTab = campaignTabs.find((each) => each === named) ?? firstCampaignTab.value;
