@@ -138,6 +138,28 @@ public sealed class RolesLaunchableCheckTests
         Assert.Null(line.Fix);
     }
 
+    /// <summary>As the doctor's bundle composes it: a profile's name is the person's, so none is named but the repair's own.</summary>
+    [Fact]
+    public void Without_names_no_profile_is_named_but_claude_code()
+    {
+        string[] mine = ["sentinel-mine", "sentinel-night"];
+        foreach (var check in new[]
+        {
+            StatusChecks.RolesLaunchableCheck([new(mine[0], "codex")], unread: null, SettingsFile, None, names: false),
+            StatusChecks.RolesLaunchableCheck([new(mine[0], "codex"), new(mine[1], "codex")], unread: null, SettingsFile, None, names: false),
+            StatusChecks.RolesLaunchableCheck([new(mine[0], "codex")], unread: null, SettingsFile, Named(mine[0]), names: false),
+            StatusChecks.RolesLaunchableCheck([], unread: null, SettingsFile, Named(mine[1]), names: false),
+        })
+        {
+            Assert.DoesNotContain(mine[0], check.Fact + check.Fix, StringComparison.Ordinal);
+            Assert.DoesNotContain(mine[1], check.Fact + check.Fix, StringComparison.Ordinal);
+            Assert.Contains("<name>", check.Fact, StringComparison.Ordinal);
+        }
+
+        var ours = StatusChecks.RolesLaunchableCheck([new("claude-code", "claude_code")], unread: null, SettingsFile, Named("claude-code"), names: false);
+        Assert.StartsWith("Roles:DefaultExecutionProfile names claude-code, an enabled", ours.Fact, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Profiles_or_settings_that_could_not_be_read_are_unknown_and_say_why()
     {

@@ -173,9 +173,7 @@ internal static class StatusChecks
         public const string CreateRolesProfile = "jason profile create claude-code --host claude_code --program claude";
 
         /// <summary>The line of settings, printed in a fact, that names a profile the default.</summary>
-        public static string RolesDefaultLine(string profile) => $$"""
-            "Roles": {"DefaultExecutionProfile": "{{profile}}"}
-            """;
+        public static string RolesDefaultLine(string profile) => "\"Roles\": {\"DefaultExecutionProfile\": \"" + profile + "\"}";
 
         /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
@@ -289,7 +287,7 @@ internal static class StatusChecks
             checks.Add(Harnesses(env));
             var profiles = client is null ? default : await ProfilesAsync(client, cancellationToken).ConfigureAwait(false);
             checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), profiles.Profiles, profileNames, profiles.Unread));
-            checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile, DefaultProfileOf(env)));
+            checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile, DefaultProfileOf(env), profileNames));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
@@ -1804,9 +1802,11 @@ internal static class StatusChecks
     /// <paramref name="settingsFile"/> that names it, or the name of the person's own profile where they have one and name
     /// none — with the fix null where only the line is missing, since a line is no command. It does not read a profile a work
     /// item, a campaign's policy or a role's policy names, nor an entry command, and says so. Never required: <c>ready</c>
-    /// says whether the installation can start work, and a role is one kind of work.
+    /// says whether the installation can start work, and a role is one kind of work. Without <paramref name="names"/>, as the
+    /// doctor's bundle composes it, no profile is named but <c>claude-code</c>, the repair's own: a profile's name is the
+    /// person's.
     /// </summary>
-    internal static StatusCheck RolesLaunchableCheck(IReadOnlyList<ProfileHost>? profiles, string? unread, string settingsFile, DefaultProfileSetting named)
+    internal static StatusCheck RolesLaunchableCheck(IReadOnlyList<ProfileHost>? profiles, string? unread, string settingsFile, DefaultProfileSetting named, bool names = true)
     {
         const string Name = "roles_launchable";
         const string Ours = "claude-code";
@@ -1821,17 +1821,19 @@ internal static class StatusChecks
             return new StatusCheck(Name, false, CheckState.Unknown, $"Whether a role can run is not known: the settings file at {settingsFile} cannot be read ({why}), so the default profile it may name is not known.", null);
         }
 
+        string Shown(string profile) => names || profile == Ours ? profile : "<name>";
+
         // Compared as the claim looks a profile up, by its exact name.
         var enabled = profiles.Select(profile => profile.Name).ToList();
         if (named.Name is { } name && enabled.Contains(name, StringComparer.Ordinal))
         {
-            return new StatusCheck(Name, false, CheckState.Ok, $"Roles:DefaultExecutionProfile names {name}, an enabled execution profile, so a role's work that nothing else names a profile for runs on it. {NotRead}", null);
+            return new StatusCheck(Name, false, CheckState.Ok, $"Roles:DefaultExecutionProfile names {Shown(name)}, an enabled execution profile, so a role's work that nothing else names a profile for runs on it. {NotRead}", null);
         }
 
         string said;
         if (named.Name is { } absent)
         {
-            said = $"Roles:DefaultExecutionProfile names {absent}, which is not an enabled execution profile here, so a role's work that nothing else names a profile for fails at its claim with profile_not_found or profile_disabled.";
+            said = $"Roles:DefaultExecutionProfile names {Shown(absent)}, which is not an enabled execution profile here, so a role's work that nothing else names a profile for fails at its claim with profile_not_found or profile_disabled.";
         }
         else
         {
@@ -1864,14 +1866,19 @@ internal static class StatusChecks
         }
         else if (target is null)
         {
-            repair = $"`{Repair.RolesDefaultLine("<name>")}` in {settingsFile}, with the name of one of them ({string.Join(", ", enabled)}), which the runtime reads without a restart, runs the roles on it.";
+            var which = names ? $" ({string.Join(", ", enabled)})" : string.Empty;
+            repair = $"`{Repair.RolesDefaultLine("<name>")}` in {settingsFile}, with the name of one of them{which}, which the runtime reads without a restart, runs the roles on it.";
         }
         else
         {
-            repair = $"`{Repair.RolesDefaultLine(target)}` in {settingsFile}{instead}, which the runtime reads without a restart, runs the roles on {target}.";
+            repair = $"`{Repair.RolesDefaultLine(Shown(target))}` in {settingsFile}{instead}, which the runtime reads without a restart, runs the roles on {Shown(target)}.";
         }
 
-        return new StatusCheck(Name, false, CheckState.Absent, $"{said} {repair} {NotRead}", make ? Repair.CreateRolesProfile : null);
+        // The fix is the command alone, and only where the command is the step missing: a line of settings is no command.
+        var fact = $"{said} {repair} {NotRead}";
+        return make
+            ? new StatusCheck(Name, false, CheckState.Absent, fact, Repair.CreateRolesProfile)
+            : new StatusCheck(Name, false, CheckState.Absent, fact, null);
     }
 
     /// <summary>
