@@ -100,4 +100,18 @@ describe('when an approval may be approved where it is drawn', () => {
         for (const where of ['chat', 'needs'] as const)
             expect(unreadSentence(where)).toMatch(/^This approval could not be read, so it cannot be approved here; /);
     });
+
+    it('says nothing of what the runtime said when its time ran out with no answer', () => {
+        const unanswered = {
+            code: null,
+            message: 'The runtime did not answer within 30 seconds.',
+            unanswered: true,
+        } as const;
+        for (const where of ['chat', 'needs'] as const) {
+            expect(unreadSentence(where)).toMatch(/\. The runtime said:$/);
+            expect(unreadSentence(where, { code: 'not_found', message: 'gone' })).toMatch(/\. The runtime said:$/);
+            expect(unreadSentence(where, unanswered)).toMatch(/^This approval could not be read, .*\.$/);
+            expect(unreadSentence(where, unanswered)).not.toContain('The runtime said');
+        }
+    });
 });

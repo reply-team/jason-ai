@@ -100,8 +100,8 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                         readingSentence('chat')
                     ) : (
                         <>
-                            {unreadSentence('chat')} {gate.unread.code !== null && <code>{gate.unread.code}</code>}{' '}
-                            {gate.unread.message}
+                            {unreadSentence('chat', gate.unread)}{' '}
+                            {gate.unread.code !== null && <code>{gate.unread.code}</code>} {gate.unread.message}
                         </>
                     )}
                 </div>

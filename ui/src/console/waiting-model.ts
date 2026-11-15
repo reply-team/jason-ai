@@ -10,6 +10,8 @@ import { ageOf, operationWords, toApprovalDetail } from './live';
 export interface Said {
     code: string | null;
     message: string;
+    /** Set when the runtime said nothing, its time having run out: `message` is then the UI's own words saying so. */
+    unanswered?: true;
 }
 
 /**
@@ -35,13 +37,14 @@ export const readingSentence = (where: 'chat' | 'needs'): string =>
     }.`;
 
 /**
- * What a held Approve says when its approval could not be read, before what the runtime said; and where the person can
- * still open it: in a chat, Details opens it in Needs you; on Needs you's row, Details reads it again.
+ * What a held Approve says when its approval could not be read, before what the runtime said, or before the words that
+ * say it did not answer in time; and where the person can still open it: in a chat, Details opens it in Needs you; on
+ * Needs you's row, Details reads it again.
  */
-export const unreadSentence = (where: 'chat' | 'needs'): string =>
+export const unreadSentence = (where: 'chat' | 'needs', said?: Said): string =>
     `This approval could not be read, so it cannot be approved here; ${
         where === 'chat' ? 'Details opens it in Needs you' : 'Details reads it again'
-    }. The runtime said:`;
+    }.${said?.unanswered === true ? '' : ' The runtime said:'}`;
 
 export interface ApprovalCard {
     id: string;

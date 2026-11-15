@@ -192,7 +192,7 @@ function heldNote(gate: ApprovalGate): Html | null {
     if ('reading' in gate) return html`<div class="note am" role="status">${readingSentence('needs')}</div>`;
     const { code, message } = gate.unread;
     return html`<div class="note am" role="status">
-        ${unreadSentence('needs')} ${code === null ? null : html`<code>${code}</code>`} ${message}
+        ${unreadSentence('needs', gate.unread)} ${code === null ? null : html`<code>${code}</code>`} ${message}
     </div>`;
 }
 

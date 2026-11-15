@@ -1,6 +1,7 @@
 import { signal, type Signal } from '@preact/signals-react';
 import { ApiError, Unpaired, type Api } from '../api/client';
 import type { Approval, Decision } from '../api/types';
+import { t } from '../platform/i18n';
 import { STALE_SENTENCE, checkMessage, isMessage, uncheckedSentence } from '../screens/attention/message-edit';
 import { attentionStore, type AttentionStore } from '../screens/attention/store';
 import { keptAndMissing, stillAsking, type Reasked, type Said } from './waiting-model';
@@ -56,6 +57,16 @@ const reading = new Map<string, object>();
 /** How many approvals one fill reads whole at once: a long list is read a few rows at a time, in turn. */
 const READS_AT_ONCE = 8;
 
+/** How long a whole read may go unanswered before it counts as not answered: the UI's API client has no limit of its own. */
+export const READ_LIMIT_MS = 30_000;
+
+/** What is kept beside an item whose read was not answered within the limit: the runtime said nothing. */
+const unanswered = (): Said => ({
+    code: null,
+    message: t('waiting.unanswered', { seconds: String(READ_LIMIT_MS / 1000) }),
+    unanswered: true,
+});
+
 export function waitingOf(campaignId: string): Waiting {
     let waiting = held.get(campaignId);
     if (waiting === undefined) {
@@ -83,8 +94,10 @@ const without = <T>(record: Readonly<Record<string, T>>, id: string): Record<str
 /**
  * One whole read of a listed item, never sent while another read of it is under way: what it read is kept while the
  * lists still hold the item, and what the runtime said when it failed is kept beside the item until a read of it
- * succeeds. A read the runtime has not answered holds its item until it is answered; a failed one is sent again by the
- * next fill.
+ * succeeds. A read the runtime has not answered holds its item until it is answered or `READ_LIMIT_MS` has passed;
+ * then it counts as not answered, and like a failed one it is sent again by the next fill. Only the read under way
+ * writes: one whose time ran out keeps nothing it later answers, so a late answer never overwrites a newer read, and
+ * never makes an Approve live.
  */
 function readOnce<T>(
     reads: WholeReads,
@@ -97,20 +110,31 @@ function readOnce<T>(
     if (reading.has(key)) return Promise.resolve();
     const mark = {};
     reading.set(key, mark);
-    return read()
-        .then(
+    return new Promise<void>((done) => {
+        /** Whether this read still writes: it is the one under way, and its time has not run out. */
+        const current = (): boolean => {
+            if (reading.get(key) !== mark) return false;
+            reading.delete(key);
+            clearTimeout(limit);
+            done();
+            return true;
+        };
+        const limit = setTimeout(() => {
+            if (current() && listedIds(reads.store).has(id))
+                reads.unread.value = { ...reads.unread.value, [id]: unanswered() };
+        }, READ_LIMIT_MS);
+        read().then(
             (item) => {
+                if (!current()) return;
                 if (Object.hasOwn(reads.unread.value, id)) reads.unread.value = without(reads.unread.value, id);
                 keep(item);
             },
             (error: unknown) => {
-                if (!(error instanceof Unpaired) && listedIds(reads.store).has(id))
+                if (current() && !(error instanceof Unpaired) && listedIds(reads.store).has(id))
                     reads.unread.value = { ...reads.unread.value, [id]: said(error) };
             },
-        )
-        .finally(() => {
-            if (reading.get(key) === mark) reading.delete(key);
-        });
+        );
+    });
 }
 
 /** Does each id's work, at most `READS_AT_ONCE` of them at a time, in the order given. */
@@ -183,7 +207,7 @@ export async function approveWhole(
 /**
  * Reads whole each row the lists hold and this chat has not read yet, and lets go of the rows they no longer hold. A
  * read that fails leaves its card drawn from the list's row with what the runtime said, and is sent again by the next
- * fill; one the runtime has not answered is not sent again while it is under way.
+ * fill; one the runtime has not answered is not sent again while it is under way, until its time runs out.
  */
 async function fill(api: Api, waiting: Waiting): Promise<void> {
     const questions = keptAndMissing(

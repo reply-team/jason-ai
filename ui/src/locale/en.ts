@@ -344,6 +344,7 @@ export const en = {
     'agent.kind.sequence': 'Sequence',
     'agent.kind.adaptive': 'Adaptive',
     'agent.kind.paths': 'Paths',
+    'waiting.unanswered': 'The runtime did not answer within {seconds} seconds.',
 } as const;
 
 export type MessageKey = keyof typeof en;

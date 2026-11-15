@@ -1,5 +1,5 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import type { ApprovalSummary } from '../api/types';
 import { activatePlugins } from '../platform/plugin';
@@ -14,7 +14,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention, filter, reads } from './needs';
 import { chats, lines } from './state';
-import { fillApprovals, forgetWaiting, wholeReads } from './waiting';
+import { READ_LIMIT_MS, fillApprovals, forgetWaiting, wholeReads } from './waiting';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -59,6 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     delete (window as { hit?: number }).hit;
 });
 
@@ -340,7 +341,9 @@ describe('Needs you', () => {
             expect(within(row('apr_1')).queryByText(/could not be read/)).toBeNull();
         });
 
-        it('says a message is being read while its read is unanswered, keeps Details, and does not ask again while it is', async () => {
+        // The clock is a fake one that also moves on its own, so waiting for the page still works and the limit is jumped.
+        it('says a message is being read while its read is unanswered, keeps Details, does not ask again while it is, and asks once at the next reload after its time ran out', async () => {
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
             const journal = stubStream();
             const fake = messages().answer(
                 'approval.get',
@@ -367,6 +370,19 @@ describe('Needs you', () => {
             await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(listed), { timeout: 3000 });
             await settle();
             expect(reads(fake, 'apr_1')).toHaveLength(1);
+
+            await flush(() => vi.advanceTimersByTimeAsync(READ_LIMIT_MS));
+            expect(words(row('apr_1'))).toContain(
+                'This approval could not be read, so it cannot be approved here; Details reads it again. The runtime did not answer within 30 seconds.',
+            );
+            expect(words(row('apr_1'))).not.toContain('The runtime said');
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(live(details('apr_1'))).toBe(true);
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
+            line(journal, 'jrn_303');
+            await waitFor(() => expect(reads(fake, 'apr_1')).toHaveLength(2), { timeout: 3000 });
+            await settle();
+            expect(reads(fake, 'apr_1')).toHaveLength(2);
             release();
             await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
         });
@@ -508,6 +524,65 @@ describe('Needs you', () => {
             expect(sent(fake, 'approval.get').map((body) => (body as { approval_id: string }).approval_id)).toEqual(
                 Array.from({ length: 20 }, (_, index) => `apr_${index + 1}`),
             );
+        });
+
+        // The limit, staged on a fake clock: the first read is held past it, the read sent after it answers at once, and
+        // the first answers last. Only the read under way may write; one whose time ran out writes nothing, ever.
+        it('lets a read unanswered within the limit hold its row, counts it not answered after, sends it once again, and keeps no late answer', async () => {
+            vi.useFakeTimers();
+            const fake = new FakeApi().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/park-doubted',
+            );
+            let calls = 0;
+            const release = fake.hold('approval.get', () => ++calls === 1);
+            const store = attentionStore();
+            const [first] = fixtures['approval.list/messages-pending'].response.items as ApprovalSummary[];
+            store.approvals.value = [first!];
+            const held = wholeReads('limit', store);
+            let filled = false;
+            void fillApprovals(fake, held).then(() => (filled = true));
+            await vi.advanceTimersByTimeAsync(READ_LIMIT_MS - 1);
+            await fillApprovals(fake, held);
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
+            expect(held.unread.value).toEqual({});
+            expect(filled).toBe(false);
+
+            await vi.advanceTimersByTimeAsync(1);
+            expect(filled).toBe(true);
+            expect(held.unread.value['apr_1']).toMatchObject({
+                code: null,
+                message: 'The runtime did not answer within 30 seconds.',
+                unanswered: true,
+            });
+            expect(held.approvals.value).toEqual({});
+
+            await fillApprovals(fake, held);
+            expect(reads(fake, 'apr_1')).toHaveLength(2);
+            expect(held.approvals.value['apr_1']).toEqual(fixtures['approval.get/email-message'].response);
+            expect(held.unread.value).toEqual({});
+
+            release();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(held.approvals.value['apr_1']).toEqual(fixtures['approval.get/email-message'].response);
+            expect(held.unread.value).toEqual({});
+        });
+
+        it('never makes Approve live on an answer that came after its time ran out', async () => {
+            vi.useFakeTimers();
+            const fake = new FakeApi().answer('approval.get', 'approval.get/email-message');
+            const release = fake.hold('approval.get');
+            const store = attentionStore();
+            const [first] = fixtures['approval.list/messages-pending'].response.items as ApprovalSummary[];
+            store.approvals.value = [first!];
+            const held = wholeReads('late', store);
+            void fillApprovals(fake, held);
+            await vi.advanceTimersByTimeAsync(READ_LIMIT_MS);
+            release();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(held.approvals.value).toEqual({});
+            expect(held.unread.value['apr_1']?.unanswered).toBe(true);
         });
     });
 });
